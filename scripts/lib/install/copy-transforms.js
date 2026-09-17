@@ -16,8 +16,15 @@ const CLAUDE_AGENT_FRONTMATTER_TRANSFORM = 'claude-agent-frontmatter';
 const CLAUDE_MODEL_ALIASES = new Set(['sonnet', 'opus', 'haiku', 'fable', 'inherit']);
 const CLAUDE_DROPPED_KEYS = new Set(['stack']);
 
+// A source may reach the installer with CRLF line endings (a Windows
+// checkout) or a byte order mark; the frontmatter is recognized either way
+// and the transformed file is written with LF, like the repository.
+function stripByteOrderMark(text) {
+  return text.codePointAt(0) === 0xFEFF ? text.slice(1) : text;
+}
+
 function splitFrontmatter(text) {
-  const lines = text.split('\n');
+  const lines = text.split(/\r?\n/);
   if (lines[0] !== '---') {
     return null;
   }
@@ -39,8 +46,16 @@ function parseFlowSequence(value) {
   return trimmed
     .slice(1, -1)
     .split(',')
-    .map(item => item.trim().replace(/^["']|["']$/g, ''))
+    .map(item => stripQuotes(item.trim()))
     .filter(Boolean);
+}
+
+function stripQuotes(value) {
+  const first = value[0];
+  if (value.length >= 2 && (first === '"' || first === "'") && value.endsWith(first)) {
+    return value.slice(1, -1);
+  }
+  return value;
 }
 
 function rewriteClaudeAgentLine(line) {
@@ -66,7 +81,7 @@ function rewriteClaudeAgentLine(line) {
 }
 
 function toClaudeAgentFrontmatter(text) {
-  const parts = splitFrontmatter(text);
+  const parts = splitFrontmatter(stripByteOrderMark(text));
   if (!parts) {
     return text;
   }
@@ -83,7 +98,7 @@ const TRANSFORMS = Object.freeze({
 function transformContent(content, transform) {
   const apply = TRANSFORMS[transform];
   if (typeof apply !== 'function') {
-    throw new Error(`Unknown copy transform: ${transform}`);
+    throw new TypeError(`Unknown copy transform: ${transform}`);
   }
   return apply(content);
 }

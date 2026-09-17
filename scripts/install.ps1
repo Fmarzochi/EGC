@@ -339,6 +339,7 @@ if ($hasInstallArgs) {
 # skip is announced.
 $isInteractive = [Environment]::UserInteractive -and -not $env:CI -and -not [Console]::IsInputRedirected
 $installLibrary = $false
+$libraryFailed = $false
 if (-not $DryRun) {
     if ($PromptLibrary -eq $true) {
         $installLibrary = $true
@@ -357,6 +358,9 @@ if ($installLibrary) {
     # scripts/lib/install/prompt-library.js applies the full profile to each
     # detected home target and runs the remaining per-tool shell scripts.
     node (Join-Path $RootDir (Join-Path "scripts" "install-prompt-library.js"))
+    # A tool that did not get the library is reported at the end and turns
+    # the exit status non-zero, after the engine steps below have all run.
+    if ($LASTEXITCODE -ne 0) { $libraryFailed = $true }
 }
 if (-not $DryRun) {
     # MCP auto-registration
@@ -438,4 +442,8 @@ if (-not $DryRun) {
         & node (Join-Path $RootDir "scripts/lib/dashboard-launch-cli.js") $RootDir
     }
     Write-Host "Re-check anytime with 'egc doctor'."
+    if ($libraryFailed) {
+        Write-Host "  prompt library: one or more detected tools did not get it (see the notes above)." -ForegroundColor Yellow
+        exit 1
+    }
 }

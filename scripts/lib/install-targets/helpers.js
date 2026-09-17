@@ -576,18 +576,22 @@ function planGenericRetirements(input, adapter) {
     const source = normalizeRelativePath(String(operation.sourceRelativePath || ''));
     if (!source) continue;
     boundaries.seen.add(resolved);
-    retirements.push({
-      destinationPath: resolved,
-      sourceRelativePath: source,
-      // The file EGC copied there, for the apply to compare against: a
-      // file the person replaced since is theirs and stays.
-      sourcePath: path.join(repoRoot, ...source.split('/')),
-      // A transformed copy is compared against the transformed source.
-      ...(operation.transform ? { transform: operation.transform } : {}),
-      reason: 'file left the install plan',
-    });
+    retirements.push(retirementOf(operation, resolved, source, repoRoot));
   }
   return retirements;
+}
+
+// The file EGC copied there, for the apply to compare against: a file the
+// person replaced since is theirs and stays. A transformed copy is compared
+// against the transformed source.
+function retirementOf(operation, destinationPath, source, repoRoot) {
+  return {
+    destinationPath,
+    sourceRelativePath: source,
+    sourcePath: path.join(repoRoot, ...source.split('/')),
+    ...(operation.transform ? { transform: operation.transform } : {}),
+    reason: 'file left the install plan',
+  };
 }
 
 function createInstallTargetAdapter(config) {

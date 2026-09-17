@@ -78,6 +78,14 @@ function runTests() {
     assert.ok(output.includes('\ntools: Read, Grep\n'), output);
   })) passed++; else failed++;
 
+  if (test('recognizes the frontmatter through a byte order mark and CRLF line endings', () => {
+    const windowsAgent = '\uFEFF' + AGENT.replaceAll('\n', '\r\n');
+    const output = toClaudeAgentFrontmatter(windowsAgent);
+    assert.ok(output.includes('\ntools: Read, Grep, Glob, Bash\n'), output);
+    assert.ok(!output.includes('gemini-3.1-pro') && !output.includes('stack:'), output);
+    assert.ok(!output.includes('\uFEFF') && !output.includes('\r'), 'the transformed file is written with LF and no mark');
+  })) passed++; else failed++;
+
   if (test('returns text without frontmatter unchanged', () => {
     const plain = '# No frontmatter\n\ntools: [x]\n';
     assert.strictEqual(toClaudeAgentFrontmatter(plain), plain);

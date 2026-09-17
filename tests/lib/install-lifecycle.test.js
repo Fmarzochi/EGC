@@ -33,6 +33,7 @@ const {
   MERGE_MARKDOWN_INDEX_KIND,
   mergeSkillIndexEntry,
 } = require('../../scripts/lib/warp-agents-merge');
+const { shellQuote } = require('../../scripts/lib/doctor-summary');
 const {
   ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
   GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -2630,7 +2631,7 @@ function runTests() {
       const issue = result.issues.find(entry => entry.code === 'profile-selected-nothing');
       assert.ok(issue, `expected profile-selected-nothing, got ${result.issues.map(entry => entry.code).join(', ')}`);
       assert.strictEqual(issue.severity, 'warning');
-      assert.ok(issue.message.includes('--profile full'), issue.message);
+      assert.ok(issue.message.includes(`--profile ${shellQuote('full')}`), issue.message);
     } finally {
       cleanup(projectRoot);
     }

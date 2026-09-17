@@ -102,7 +102,7 @@ Install the complete managed content set for a specific target when you want rul
 egc install --target <target> --profile full
 ```
 
-`egc install --prompt-library` does the same for every detected tool at once, without the question: every home target whose config directory or command is present, plus the per-tool scripts of Kiro, Trae and CodeBuddy. Claude Code receives the agents in `~/.claude/agents`, the commands in `~/.claude/commands` and the rules in `~/.claude/rules`, all in the format Claude Code reads.
+`egc install --prompt-library` does the same for every detected tool at once, without the question: every home target whose config directory or command is present, plus the per-tool scripts of Kiro, Trae and CodeBuddy when Bash is available. Claude Code receives the agents in `~/.claude/agents`, the commands in `~/.claude/commands` and the rules in `~/.claude/rules`, all in the format Claude Code reads.
 
 Use `egc catalog` to inspect available targets, profiles, and components before installing.
 

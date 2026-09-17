@@ -93,6 +93,7 @@ done
 # interactive terminal, default no. --prompt-library adds it without
 # asking; --no-prompt-library skips the question (CI, provisioning).
 PROMPT_LIBRARY=""
+_library_failed=false
 for _arg in "$@"; do
   case "$_arg" in
     --prompt-library)
@@ -312,7 +313,9 @@ if [[ "$_install_ans" = "Y" || "$_install_ans" = "y" ]]; then
   # One detection list for every tool, shared with the Windows installer:
   # scripts/lib/install/prompt-library.js applies the full profile to each
   # detected home target and runs the remaining per-tool shell scripts.
-  node "$ROOT_DIR/scripts/install-prompt-library.js" || true
+  # A tool that did not get the library is reported at the end and turns the
+  # exit status non-zero, after the engine steps below have all run.
+  node "$ROOT_DIR/scripts/install-prompt-library.js" || _library_failed=true
 fi
 
 # ── MCP auto-registration ─────────────────────────────────────────────────────
@@ -376,3 +379,7 @@ if [[ "$_has_install_args" = false ]]; then
   node "$ROOT_DIR/scripts/lib/dashboard-launch-cli.js" "$ROOT_DIR" || true
 fi
 echo "Re-check anytime with 'egc doctor'."
+if [[ "$_library_failed" = true ]]; then
+  echo "  prompt library: one or more detected tools did not get it (see the notes above)." >&2
+  exit 1
+fi

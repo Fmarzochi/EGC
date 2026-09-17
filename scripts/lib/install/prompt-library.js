@@ -4,13 +4,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { listInstallTargetAdapters } = require('../install-targets/registry');
+const { getInstallTargetAdapter, listInstallTargetAdapters } = require('../install-targets/registry');
 const { commandExists: defaultCommandExists } = require('../utils');
 
-// The prompt library goes to every tool detected on the machine: a home
-// target counts as detected when its config directory exists or one of its
-// commands is on PATH. Project targets are never installed from here, since
-// the bare install runs from whatever directory the person happens to be in.
+// The prompt library goes to every tool detected on the machine: a target
+// counts as detected when one of its own directories exists or one of its
+// commands is on PATH. Only targets whose default adapter installs under the
+// home directory take part: the bare install runs from whatever directory
+// the person happens to be in, so a project target (Amazon Q, Cursor, Trae)
+// would land in the wrong place.
 const HOME_TARGET_COMMANDS = Object.freeze({
   egc: ['gemini', 'agy'],
   claude: ['claude'],
@@ -24,7 +26,15 @@ const HOME_TARGET_COMMANDS = Object.freeze({
   junie: ['junie'],
   goose: ['goose'],
   openhands: ['openhands'],
-  amazonq: ['q'],
+});
+
+// Codex, Goose and OpenHands share the ~/.agents root, so that root says
+// nothing about which of the three is present; each is recognized by a
+// directory of its own instead.
+const HOME_TARGET_DIRS = Object.freeze({
+  codex: ['.codex'],
+  goose: ['.config/goose'],
+  openhands: ['.openhands'],
 });
 
 const TARGET_LABELS = Object.freeze({
@@ -40,7 +50,6 @@ const TARGET_LABELS = Object.freeze({
   junie: 'JetBrains Junie',
   goose: 'Goose',
   openhands: 'OpenHands',
-  amazonq: 'Amazon Q Developer CLI',
   trae: 'Trae',
   codebuddy: 'CodeBuddy',
 });
@@ -56,26 +65,34 @@ function labelFor(target) {
   return TARGET_LABELS[target] || target;
 }
 
-function homeAdapters(adapters) {
-  return (Array.isArray(adapters) ? adapters : listInstallTargetAdapters())
-    .filter(adapter => adapter.kind === 'home');
-}
-
-function detectPromptLibraryTargets({ homeDir, commandExists = defaultCommandExists, adapters } = {}) {
-  const seen = new Set();
+function homeTargets() {
   const targets = [];
-  for (const adapter of homeAdapters(adapters)) {
-    if (seen.has(adapter.target)) {
+  for (const adapter of listInstallTargetAdapters()) {
+    if (targets.includes(adapter.target)) {
       continue;
     }
-    const root = adapter.resolveRoot({ homeDir });
-    const commands = HOME_TARGET_COMMANDS[adapter.target] || [];
-    if (fs.existsSync(root) || commands.some(command => commandExists(command))) {
-      seen.add(adapter.target);
+    if (getInstallTargetAdapter(adapter.target).kind === 'home') {
       targets.push(adapter.target);
     }
   }
   return targets;
+}
+
+function detectionDirs(target, homeDir) {
+  const own = HOME_TARGET_DIRS[target];
+  if (own) {
+    return own.map(dir => path.join(homeDir, ...dir.split('/')));
+  }
+  return [getInstallTargetAdapter(target).resolveRoot({ homeDir })];
+}
+
+function isDetected(target, { homeDir, commandExists }) {
+  return detectionDirs(target, homeDir).some(dir => fs.existsSync(dir))
+    || (HOME_TARGET_COMMANDS[target] || []).some(command => commandExists(command));
+}
+
+function detectPromptLibraryTargets({ homeDir, commandExists = defaultCommandExists } = {}) {
+  return homeTargets().filter(target => isDetected(target, { homeDir, commandExists }));
 }
 
 function detectLegacyScripts({ homeDir, commandExists = defaultCommandExists }) {
@@ -85,10 +102,10 @@ function detectLegacyScripts({ homeDir, commandExists = defaultCommandExists }) 
   ));
 }
 
-function planPromptLibraryInstall({ homeDir, commandExists = defaultCommandExists, bashAvailable, adapters } = {}) {
+function planPromptLibraryInstall({ homeDir, commandExists = defaultCommandExists, bashAvailable } = {}) {
   const legacy = detectLegacyScripts({ homeDir, commandExists }).map(entry => ({ target: entry.target, script: entry.script }));
   return {
-    targets: detectPromptLibraryTargets({ homeDir, commandExists, adapters }),
+    targets: detectPromptLibraryTargets({ homeDir, commandExists }),
     legacyScripts: bashAvailable ? legacy : [],
     skippedLegacyScripts: bashAvailable ? [] : legacy,
   };
@@ -99,11 +116,10 @@ function runPromptLibraryInstall({
   homeDir,
   commandExists = defaultCommandExists,
   bashAvailable = defaultCommandExists('bash'),
-  adapters,
   spawn = spawnSync,
   log = console.log,
 } = {}) {
-  const plan = planPromptLibraryInstall({ homeDir, commandExists, bashAvailable, adapters });
+  const plan = planPromptLibraryInstall({ homeDir, commandExists, bashAvailable });
   const installApply = path.join(repoRoot, 'scripts', 'install-apply.js');
   const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir };
   const installed = [];
@@ -122,7 +138,7 @@ function runPromptLibraryInstall({
       env,
       stdio: 'inherit',
     });
-    if (result && result.status === 0) {
+    if (result?.status === 0) {
       installed.push(target);
     } else {
       failed.push(target);
@@ -137,7 +153,9 @@ function runPromptLibraryInstall({
       env,
       stdio: 'inherit',
     });
-    if (!result || result.status !== 0) {
+    if (result?.status === 0) {
+      installed.push(entry.target);
+    } else {
       failed.push(entry.target);
       log(`  note: the ${labelFor(entry.target)} script did not finish. Run 'bash ${entry.script} ~' to retry.`);
     }
@@ -157,6 +175,7 @@ function runPromptLibraryInstall({
 
 module.exports = {
   HOME_TARGET_COMMANDS,
+  HOME_TARGET_DIRS,
   LEGACY_LIBRARY_SCRIPTS,
   detectPromptLibraryTargets,
   planPromptLibraryInstall,

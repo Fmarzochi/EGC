@@ -8,12 +8,14 @@ const os = require('os');
 const path = require('path');
 
 const {
+  HOME_TARGET_COMMANDS,
+  HOME_TARGET_DIRS,
   LEGACY_LIBRARY_SCRIPTS,
   detectPromptLibraryTargets,
   planPromptLibraryInstall,
   runPromptLibraryInstall,
 } = require('../../scripts/lib/install/prompt-library');
-const { listInstallTargetAdapters } = require('../../scripts/lib/install-targets/registry');
+const { getInstallTargetAdapter, listInstallTargetAdapters } = require('../../scripts/lib/install-targets/registry');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 
@@ -37,8 +39,9 @@ function makeHome(dirs) {
   return homeDir;
 }
 
-function homeTargets() {
-  return [...new Set(listInstallTargetAdapters().filter(adapter => adapter.kind === 'home').map(adapter => adapter.target))];
+function defaultHomeTargets() {
+  return [...new Set(listInstallTargetAdapters().map(adapter => adapter.target))]
+    .filter(target => getInstallTargetAdapter(target).kind === 'home');
 }
 
 function runTests() {
@@ -60,16 +63,15 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('never lists a project-only target: the bare install runs from any directory', () => {
-    const homeDir = makeHome(['.cursor', '.trae', '.claude']);
+  if (test('never lists a target whose default adapter installs into a project: the bare install runs from any directory', () => {
+    const homeDir = makeHome(['.cursor', '.trae', '.claude', '.amazonq/rules', '.aws/amazonq']);
     try {
       const targets = detectPromptLibraryTargets({ homeDir, commandExists: () => true });
-      const projectOnly = listInstallTargetAdapters()
-        .filter(adapter => adapter.kind === 'project')
-        .map(adapter => adapter.target)
-        .filter(target => !homeTargets().includes(target));
-      for (const target of projectOnly) {
-        assert.ok(!targets.includes(target), `${target} is project-only and must not be installed from the bare path`);
+      for (const target of targets) {
+        assert.strictEqual(getInstallTargetAdapter(target).kind, 'home', `${target} resolves to a project adapter by default and must stay out`);
+      }
+      for (const projectFirst of ['cursor', 'trae', 'amazonq', 'antigravity', 'codebuddy', 'qwen', 'cline', 'aider', 'warp']) {
+        assert.ok(!targets.includes(projectFirst), `${projectFirst} must not be installed from the bare path`);
       }
       assert.ok(targets.includes('claude'));
     } finally {
@@ -77,16 +79,36 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('with every command present, every home target is detected once', () => {
+  if (test('each home target is detected by its own command and by nothing else', () => {
     const homeDir = makeHome([]);
     try {
-      const targets = detectPromptLibraryTargets({ homeDir, commandExists: () => true });
-      for (const target of homeTargets()) {
-        assert.ok(targets.includes(target), `${target} has a home adapter and a command hint but was not detected`);
+      for (const target of defaultHomeTargets()) {
+        const commands = HOME_TARGET_COMMANDS[target];
+        assert.ok(Array.isArray(commands) && commands.length > 0, `${target} needs a command hint`);
+        for (const command of commands) {
+          const targets = detectPromptLibraryTargets({ homeDir, commandExists: name => name === command });
+          assert.deepStrictEqual(targets, [target], `command ${command} detected ${targets.join(', ')}`);
+        }
       }
-      assert.strictEqual(new Set(targets).size, targets.length, 'targets must be unique');
+      assert.deepStrictEqual(detectPromptLibraryTargets({ homeDir, commandExists: () => false }), []);
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('a shared ~/.agents root does not detect Codex, Goose and OpenHands together', () => {
+    const cases = [['.agents', []], ['.codex', ['codex']], ['.config/goose', ['goose']], ['.openhands', ['openhands']]];
+    for (const [dir, expected] of cases) {
+      const homeDir = makeHome([dir]);
+      try {
+        const targets = detectPromptLibraryTargets({ homeDir, commandExists: () => false });
+        assert.deepStrictEqual(targets, expected, `${dir} detected ${targets.join(', ')}`);
+      } finally {
+        fs.rmSync(homeDir, { recursive: true, force: true });
+      }
+    }
+    for (const target of Object.keys(HOME_TARGET_DIRS)) {
+      assert.strictEqual(getInstallTargetAdapter(target).resolveRoot({ homeDir: '/h' }), path.join('/h', '.agents'), `${target} shares the .agents root`);
     }
   })) passed++; else failed++;
 
@@ -109,7 +131,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('runs install-apply with the full profile for every detected target, then the legacy scripts', () => {
+  if (test('runs install-apply with the full profile for every detected target, then the legacy scripts, and counts both as installed', () => {
     const homeDir = makeHome(['.claude', '.amp', '.trae']);
     const calls = [];
     const logs = [];
@@ -134,6 +156,7 @@ function runTests() {
       ]);
       const legacy = calls.filter(call => call.command === 'bash').map(call => call.args);
       assert.deepStrictEqual(legacy, [[path.join(REPO_ROOT, '.trae', 'install.sh'), homeDir]]);
+      assert.deepStrictEqual(result.installed, ['claude', 'amp', 'trae']);
       assert.deepStrictEqual(result.failed, []);
       assert.ok(logs.some(line => line.includes('Claude Code')), logs.join('\n'));
     } finally {
@@ -142,18 +165,18 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('reports the targets whose install failed instead of stopping at the first one', () => {
-    const homeDir = makeHome(['.claude', '.amp']);
+    const homeDir = makeHome(['.claude', '.amp', '.trae']);
     try {
       const result = runPromptLibraryInstall({
         repoRoot: REPO_ROOT,
         homeDir,
         commandExists: () => false,
-        bashAvailable: false,
-        spawn: (command, args) => ({ status: args.includes('claude') ? 1 : 0 }),
+        bashAvailable: true,
+        spawn: (command, args) => ({ status: args.includes('claude') || command === 'bash' ? 1 : 0 }),
         log: () => {},
       });
       assert.deepStrictEqual(result.installed, ['amp']);
-      assert.deepStrictEqual(result.failed, ['claude']);
+      assert.deepStrictEqual(result.failed, ['claude', 'trae']);
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
@@ -173,6 +196,33 @@ function runTests() {
       });
       assert.deepStrictEqual(result.installed, []);
       assert.ok(logs.some(line => /no supported tool/i.test(line)), logs.join('\n'));
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('the CLI says so and exits 0 when no tool is detected, and exits 1 when a target fails', () => {
+    const { execFileSync, spawnSync } = require('child_process');
+    const cli = path.join(REPO_ROOT, 'scripts', 'install-prompt-library.js');
+    const homeDir = makeHome([]);
+    try {
+      const output = execFileSync(process.execPath, [cli], {
+        env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, PATH: homeDir },
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      assert.ok(/no supported tool/i.test(output), output);
+
+      // A detected tool whose install fails: the Windsurf root is a file, so
+      // it is detected but nothing can be written under it.
+      fs.mkdirSync(path.join(homeDir, '.codeium'), { recursive: true });
+      fs.writeFileSync(path.join(homeDir, '.codeium', 'windsurf'), 'not a directory');
+      const failing = spawnSync(process.execPath, [cli], {
+        env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, PATH: homeDir },
+        encoding: 'utf8',
+      });
+      assert.notStrictEqual(failing.status, 0, `${failing.stdout}\n${failing.stderr}`);
+      assert.ok(/not installed to: windsurf/.test(failing.stderr), failing.stderr);
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }

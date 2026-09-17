@@ -176,19 +176,33 @@ function areFilesEqual(leftPath, rightPath) {
       return false;
     }
 
-    const left = fs.readFileSync(leftPath);
-    const right = fs.readFileSync(rightPath);
-    if (left.equals(right)) {
-      return true;
-    }
+    return areBuffersEqual(fs.readFileSync(leftPath), fs.readFileSync(rightPath));
+  } catch (_error) { // NOSONAR: unreadable files are treated as different
+    return false;
+  }
+}
 
-    // A byte mismatch that disappears once CRLF/LF are normalized is a
-    // line-ending artifact of the install pipeline (e.g. Windows
-    // core.autocrlf rewriting the repo's LF source on checkout, or a
-    // rewrite step like buildResolvedClaudeHooks() that always emits LF via
-    // JSON.stringify), not a real edit to the managed file -- never flag it
-    // as drift.
-    return left.toString('utf8').replaceAll('\r\n', '\n') === right.toString('utf8').replaceAll('\r\n', '\n');
+// A byte mismatch that disappears once CRLF/LF are normalized is a
+// line-ending artifact of the install pipeline (e.g. Windows core.autocrlf
+// rewriting the repo's LF source on checkout, or a rewrite step like
+// buildResolvedClaudeHooks() that always emits LF via JSON.stringify), not
+// a real edit to the managed file -- never flag it as drift.
+function areBuffersEqual(left, right) {
+  if (left.equals(right)) {
+    return true;
+  }
+  return left.toString('utf8').replaceAll('\r\n', '\n') === right.toString('utf8').replaceAll('\r\n', '\n');
+}
+
+// The destination of a transformed copy is compared against the transformed
+// source, with the same guards as areFilesEqual: a destination that became a
+// directory or cannot be read is drift, not a crash of the doctor.
+function areFilesEqualAfterTransform(sourcePath, destinationPath, transform) {
+  try {
+    if (!fs.statSync(destinationPath).isFile()) {
+      return false;
+    }
+    return areBuffersEqual(plannedFileContent(sourcePath, transform), fs.readFileSync(destinationPath));
   } catch (_error) { // NOSONAR: unreadable files are treated as different
     return false;
   }
@@ -362,6 +376,7 @@ function deepRemoveJsonSubset(currentValue, managedValue) {
 }
 
 const { plannedFileContent } = require('./install/copy-transforms');
+const { shellQuote } = require('./doctor-summary');
 
 function hydrateRecordedOperations(repoRoot, operations) {
   return operations.map(operation => {
@@ -644,7 +659,7 @@ function inspectCopyFileOperation(repoRoot, operation, destinationPath) {
     return inspectResult('missing-source', operation, destinationPath, { sourcePath });
   }
   const equal = operation.transform
-    ? plannedFileContent(sourcePath, operation.transform).equals(fs.readFileSync(destinationPath))
+    ? areFilesEqualAfterTransform(sourcePath, destinationPath, operation.transform)
     : areFilesEqual(sourcePath, destinationPath);
   if (!equal) {
     return inspectResult('drifted', operation, destinationPath, { sourcePath });
@@ -1003,7 +1018,7 @@ function checkProfileSelection(state, record) {
   return [buildIssue(
     'warning',
     'profile-selected-nothing',
-    `Profile ${profile} selected no module for ${target}, so the tool has the engine only. Run 'egc install --target ${target} --profile ${profile}' with this version to install what the profile names`,
+    `Profile ${profile} selected no module for ${target}, so the tool has the engine only. Run egc install --target ${shellQuote(target)} --profile ${shellQuote(profile)} with this version to install what the profile names`,
     {
       profile,
       skippedModules: state.resolution && Array.isArray(state.resolution.skippedModules)
