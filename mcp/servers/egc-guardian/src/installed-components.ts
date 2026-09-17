@@ -103,7 +103,9 @@ export function installedComponentSources(options: { environment?: NodeJS.Proces
     states += 1;
     for (const source of found.sources) sources.add(source);
   }
-  return { known: states + unreadable > 0, harnessRoot, sources, unreadable };
+  // A tool named by the environment with no install state at all is a bare
+  // install: known, with nothing installed.
+  return { known: harnessRoot !== null || states + unreadable > 0, harnessRoot, sources, unreadable };
 }
 
 // Entries without a recorded source (an older index) stay available, the

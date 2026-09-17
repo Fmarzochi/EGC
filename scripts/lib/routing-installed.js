@@ -67,10 +67,11 @@ function stateFilesFor({ environment, cwd, homeDir }) {
 }
 
 // What the active tool has installed, as the source paths the install state
-// recorded. known is false when no install state was found at all, in which
-// case nothing can be said about what is installed; an unreadable state
-// counts as found (known) and adds no source, so its components read as not
-// installed rather than as available.
+// recorded. A tool named by the environment with no install state at all is
+// a bare install: known, with nothing installed. Without a harness variable
+// every known state is read, and none at all leaves the split unknown. An
+// unreadable state counts as found (known) and adds no source, so its
+// components read as not installed rather than as available.
 function installedComponentSources(options = {}) {
   const environment = options.environment || process.env;
   const cwd = options.cwd || process.cwd();
@@ -89,7 +90,7 @@ function installedComponentSources(options = {}) {
     states += 1;
     for (const source of sourcesOf(read.state)) sources.add(source);
   }
-  return { known: states + unreadable > 0, harnessRoot, sources, unreadable };
+  return { known: harnessRoot !== null || states + unreadable > 0, harnessRoot, sources, unreadable };
 }
 
 // Splits catalog entries into what the tool can invoke and what only exists
