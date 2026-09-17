@@ -170,6 +170,49 @@ function runTests() {
         }
       }
     })) passed++; else failed++;
+
+    if (test('targets that share the ~/.agents root plan one source per destination (Codex, Goose, OpenHands)', () => {
+      const plans = {};
+      for (const target of ['codex', 'goose', 'openhands']) {
+        const plan = createManifestInstallPlan({ sourceRoot: REPO_ROOT, projectRoot, homeDir, target, profileId: 'full' });
+        const copies = plan.operations.filter(operation => operation.kind === 'copy-file');
+        const destinations = copies.map(operation => path.normalize(operation.destinationPath));
+        assert.strictEqual(new Set(destinations).size, destinations.length, `${target} plans one owner per destination`);
+        plans[target] = new Map(copies.map(operation => [path.normalize(operation.destinationPath), operation.sourceRelativePath.replaceAll('\\', '/')]));
+      }
+      const conflicts = [];
+      for (const [a, b] of [['codex', 'goose'], ['codex', 'openhands'], ['goose', 'openhands']]) {
+        for (const [destination, source] of plans[a]) {
+          const other = plans[b].get(destination);
+          if (other !== undefined && other !== source) {
+            conflicts.push(`${path.relative(homeDir, destination)}: ${a}=${source} ${b}=${other}`);
+          }
+        }
+      }
+      assert.deepStrictEqual(conflicts, [], `the last install would overwrite what the others recorded:\n${conflicts.slice(0, 5).join('\n')}`);
+    })) passed++; else failed++;
+
+    if (test('on the shared ~/.agents root the mirror ships only what the catalog does not carry: a catalog file always wins the destination', () => {
+      const categories = fs.readdirSync(path.join(REPO_ROOT, 'skills'), { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name);
+      const inCatalog = relative => categories.some(category => fs.existsSync(path.join(REPO_ROOT, 'skills', category, ...relative.split('/'))));
+      const shipped = [];
+      let mirrorOnly = 0;
+      for (const target of ['codex', 'goose', 'openhands']) {
+        const plan = createManifestInstallPlan({ sourceRoot: REPO_ROOT, projectRoot, homeDir, target, profileId: 'full' });
+        for (const operation of plan.operations) {
+          if (operation.kind !== 'copy-file') continue;
+          const source = operation.sourceRelativePath.replaceAll('\\', '/');
+          if (!source.startsWith('.agents/skills/')) continue;
+          if (inCatalog(source.slice('.agents/skills/'.length))) {
+            shipped.push(`${target}: ${source}`);
+          } else {
+            mirrorOnly++;
+          }
+        }
+      }
+      assert.deepStrictEqual(shipped, [], `mirror copies planned where the catalog has the file:\n${shipped.slice(0, 5).join('\n')}`);
+      assert.ok(mirrorOnly > 0, 'the Codex metadata the catalog lacks still ships');
+    })) passed++; else failed++;
   } finally {
     fs.rmSync(homeDir, { recursive: true, force: true });
     fs.rmSync(projectRoot, { recursive: true, force: true });

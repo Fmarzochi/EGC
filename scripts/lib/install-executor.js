@@ -122,6 +122,21 @@ function isGeneratedRuntimeSourcePath(sourceRelativePath) {
   return EXCLUDED_GENERATED_SOURCE_SUFFIXES.some(suffix => normalizedPath.endsWith(suffix));
 }
 
+// The repository's .agents/skills directory is the Codex-facing copy of the
+// catalog: a SKILL.md per skill in the shape Codex accepts, plus files the
+// catalog does not carry (the openai.yaml metadata, the egc skill). Codex,
+// Goose and OpenHands share the ~/.agents root, and Goose and OpenHands
+// receive the catalog skills there, so at a destination both deliver the
+// catalog copy wins whatever the manifest order: one source per file, and
+// the last install no longer overwrites what the others recorded. What only
+// the mirror has still ships.
+const CATALOG_MIRROR_SOURCE_DIRS = Object.freeze(['.agents/skills']);
+
+function isCatalogMirrorSourcePath(sourceRelativePath) {
+  const normalizedPath = String(sourceRelativePath || '').replaceAll('\\', '/');
+  return CATALOG_MIRROR_SOURCE_DIRS.some(dir => normalizedPath === dir || normalizedPath.startsWith(`${dir}/`));
+}
+
 function createStatePreview(options) {
   const { createInstallState } = require('./install-state');
   return createInstallState(options);
@@ -698,7 +713,14 @@ function dedupeCopyFileDestinations(operations, nativeRootRelativePath) {
       continue;
     }
 
-    if (isNativeSource(operation) && !isNativeSource(result[winnerIndex])) {
+    // A mirror copy never displaces another owner, and any other source
+    // displaces a mirror copy; between two other sources the native tree
+    // keeps its preference.
+    const winner = result[winnerIndex];
+    if (isCatalogMirrorSourcePath(operation.sourceRelativePath)) {
+      continue;
+    }
+    if (isCatalogMirrorSourcePath(winner.sourceRelativePath) || (isNativeSource(operation) && !isNativeSource(winner))) {
       result[winnerIndex] = operation;
     }
   }

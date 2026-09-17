@@ -159,8 +159,8 @@ function runTests() {
     );
   })) passed++; else failed++;
 
-  // The native .agents tree and the flattened skills/<category> catalog both
-  // cover <root>/skills/<name>/SKILL.md on the codex target with sources that
+  // The native .agents tree and the catalog rules both cover
+  // <root>/rules/common/demo.md on the codex target with sources that
   // differ, so without plan-time dedupe the same destination gets two
   // copy-file owners and doctor/repair disagree about which one the file
   // should match. The plan must keep exactly one owner per destination and
@@ -181,9 +181,9 @@ function runTests() {
         modules: [
           {
             id: 'fixture-catalog',
-            kind: 'skills',
+            kind: 'rules',
             description: 'Catalog fixture',
-            paths: ['skills/testing/demo'],
+            paths: ['rules'],
             targets: ['codex'],
             dependencies: [],
             defaultInstall: true,
@@ -212,8 +212,8 @@ function runTests() {
           },
         },
       });
-      writeFile(sourceRoot, path.join('.agents', 'skills', 'demo', 'SKILL.md'), 'native flavor\n');
-      writeFile(sourceRoot, path.join('skills', 'testing', 'demo', 'SKILL.md'), 'catalog flavor\n');
+      writeFile(sourceRoot, path.join('.agents', 'rules', 'common', 'demo.md'), 'native flavor\n');
+      writeFile(sourceRoot, path.join('rules', 'common', 'demo.md'), 'catalog flavor\n');
       fs.mkdirSync(path.join(homeDir, '.agents'), { recursive: true });
 
       const plan = createManifestInstallPlan({
@@ -224,15 +224,15 @@ function runTests() {
         profileId: 'fixture',
       });
 
-      const skillOperations = plan.operations.filter(operation => (
+      const ruleOperations = plan.operations.filter(operation => (
         operation.kind === 'copy-file'
-        && operation.destinationPath === path.join(homeDir, '.agents', 'skills', 'demo', 'SKILL.md')
+        && operation.destinationPath === path.join(homeDir, '.agents', 'rules', 'common', 'demo.md')
       ));
-      assert.strictEqual(skillOperations.length, 1);
-      assert.strictEqual(skillOperations[0].moduleId, 'fixture-native-tree');
+      assert.strictEqual(ruleOperations.length, 1);
+      assert.strictEqual(ruleOperations[0].moduleId, 'fixture-native-tree');
       assert.strictEqual(
-        skillOperations[0].sourceRelativePath.split(path.sep).join('/'),
-        '.agents/skills/demo/SKILL.md'
+        ruleOperations[0].sourceRelativePath.split(path.sep).join('/'),
+        '.agents/rules/common/demo.md'
       );
 
       const copyDestinations = plan.operations
@@ -246,6 +246,48 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  // The repository's .agents/skills directory is the Codex-facing copy of
+  // the catalog. Codex, Goose and OpenHands share the ~/.agents root, so at
+  // a destination the catalog also delivers the catalog copy must win,
+  // whatever the manifest order; what only the mirror has still ships
+  // (#1471).
+  if (test('the catalog wins over the .agents/skills mirror at the same destination, in either order, and mirror-only files still ship', () => {
+    for (const mirrorFirst of [true, false]) {
+      const sourceRoot = createTempDir('install-executor-source-');
+      const homeDir = createTempDir('install-executor-home-');
+      const projectRoot = createTempDir('install-executor-project-');
+      try {
+        writeJson(sourceRoot, 'package.json', { version: '1.2.3' });
+        const native = { id: 'fixture-native-tree', kind: 'agents', description: 'Native tree fixture', paths: ['.agents'], targets: ['codex'], dependencies: [], defaultInstall: true, cost: 'light', stability: 'stable' };
+        const catalog = { id: 'fixture-catalog', kind: 'skills', description: 'Catalog fixture', paths: ['skills/testing/demo'], targets: ['codex'], dependencies: [], defaultInstall: true, cost: 'light', stability: 'stable' };
+        writeJson(sourceRoot, path.join('manifests', 'install-modules.json'), { version: 7, modules: mirrorFirst ? [native, catalog] : [catalog, native] });
+        writeJson(sourceRoot, path.join('manifests', 'install-profiles.json'), { version: 1, profiles: { fixture: { description: 'Fixture profile', modules: mirrorFirst ? ['fixture-native-tree', 'fixture-catalog'] : ['fixture-catalog', 'fixture-native-tree'] } } });
+        writeFile(sourceRoot, path.join('.agents', 'AGENTS.md'), '# native instructions\n');
+        writeFile(sourceRoot, path.join('.agents', 'skills', 'demo', 'SKILL.md'), 'codex copy\n');
+        writeFile(sourceRoot, path.join('.agents', 'skills', 'demo', 'agents', 'openai.yaml'), 'interface: {}\n');
+        writeFile(sourceRoot, path.join('.agents', 'skills', 'lone', 'SKILL.md'), 'only in the mirror\n');
+        writeFile(sourceRoot, path.join('skills', 'testing', 'demo', 'SKILL.md'), 'catalog flavor\n');
+        fs.mkdirSync(path.join(homeDir, '.agents'), { recursive: true });
+
+        const plan = createManifestInstallPlan({ sourceRoot, homeDir, projectRoot, target: 'codex', profileId: 'fixture' });
+        const copies = plan.operations.filter(operation => operation.kind === 'copy-file');
+        const byDestination = destination => copies.filter(operation => operation.destinationPath === destination);
+        const owners = byDestination(path.join(homeDir, '.agents', 'skills', 'demo', 'SKILL.md'));
+        assert.strictEqual(owners.length, 1, `mirror first: ${mirrorFirst}`);
+        assert.strictEqual(owners[0].moduleId, 'fixture-catalog', `mirror first: ${mirrorFirst}`);
+        assert.strictEqual(owners[0].sourceRelativePath.split(path.sep).join('/'), 'skills/testing/demo/SKILL.md');
+        assert.strictEqual(byDestination(path.join(homeDir, '.agents', 'skills', 'demo', 'agents', 'openai.yaml')).length, 1, 'the Codex metadata still ships');
+        assert.strictEqual(byDestination(path.join(homeDir, '.agents', 'skills', 'lone', 'SKILL.md')).length, 1, 'a skill only the mirror has still ships');
+        assert.strictEqual(byDestination(path.join(homeDir, '.agents', 'AGENTS.md')).length, 1, 'the rest of the native tree still ships');
+        const destinations = copies.map(operation => operation.destinationPath);
+        assert.strictEqual(new Set(destinations).size, destinations.length);
+      } finally {
+        cleanup(sourceRoot);
+        cleanup(homeDir);
+        cleanup(projectRoot);
+      }
+    }
+  })) passed++; else failed++;
   if (test('plans Gemini legacy rules with warnings and state preview', () => {
     const sourceRoot = createTempDir('install-executor-source-');
     const homeDir = createTempDir('install-executor-home-');
