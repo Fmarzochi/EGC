@@ -58,12 +58,28 @@ function stripQuotes(value) {
   return value;
 }
 
+// A frontmatter line splits at its first colon; the key is a YAML-style
+// identifier and the value is whatever follows, trimmed. Done by hand rather
+// than by one regular expression so no pattern has to backtrack over the
+// value.
+function splitFrontmatterLine(line) {
+  const colon = line.indexOf(':');
+  if (colon <= 0) {
+    return null;
+  }
+  const key = line.slice(0, colon);
+  if (!/^[A-Za-z_][\w-]*$/.test(key)) {
+    return null;
+  }
+  return { key, value: line.slice(colon + 1).trim() };
+}
+
 function rewriteClaudeAgentLine(line) {
-  const match = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+  const match = splitFrontmatterLine(line);
   if (!match) {
     return line;
   }
-  const [, key, value] = match;
+  const { key, value } = match;
   if (CLAUDE_DROPPED_KEYS.has(key)) {
     return null;
   }

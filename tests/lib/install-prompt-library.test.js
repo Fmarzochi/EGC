@@ -16,6 +16,7 @@ const {
   runPromptLibraryInstall,
 } = require('../../scripts/lib/install/prompt-library');
 const { getInstallTargetAdapter, listInstallTargetAdapters } = require('../../scripts/lib/install-targets/registry');
+const { CLI_TIMEOUT_MS, FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 
@@ -110,6 +111,13 @@ function runTests() {
     for (const target of Object.keys(HOME_TARGET_DIRS)) {
       assert.strictEqual(getInstallTargetAdapter(target).resolveRoot({ homeDir: '/h' }), path.join('/h', '.agents'), `${target} shares the .agents root`);
     }
+  })) passed++; else failed++;
+
+  if (test('a call without homeDir reads the real home instead of throwing', () => {
+    const targets = detectPromptLibraryTargets({ commandExists: () => false });
+    assert.ok(Array.isArray(targets));
+    const plan = planPromptLibraryInstall({ commandExists: () => false, bashAvailable: false });
+    assert.ok(Array.isArray(plan.targets) && Array.isArray(plan.skippedLegacyScripts));
   })) passed++; else failed++;
 
   if (test('plans the legacy scripts for the tools that still have one, only when bash is available', () => {
@@ -210,6 +218,7 @@ function runTests() {
         env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, PATH: homeDir },
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: CLI_TIMEOUT_MS,
       });
       assert.ok(/no supported tool/i.test(output), output);
 
@@ -220,6 +229,7 @@ function runTests() {
       const failing = spawnSync(process.execPath, [cli], {
         env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, PATH: homeDir },
         encoding: 'utf8',
+        timeout: FULL_INSTALL_TIMEOUT_MS,
       });
       assert.notStrictEqual(failing.status, 0, `${failing.stdout}\n${failing.stderr}`);
       assert.ok(/not installed to: windsurf/.test(failing.stderr), failing.stderr);

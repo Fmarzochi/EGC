@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -91,13 +92,19 @@ function isDetected(target, { homeDir, commandExists }) {
     || (HOME_TARGET_COMMANDS[target] || []).some(command => commandExists(command));
 }
 
+function resolveHomeDir(homeDir) {
+  return typeof homeDir === 'string' && homeDir.length > 0 ? homeDir : os.homedir();
+}
+
 function detectPromptLibraryTargets({ homeDir, commandExists = defaultCommandExists } = {}) {
-  return homeTargets().filter(target => isDetected(target, { homeDir, commandExists }));
+  const base = resolveHomeDir(homeDir);
+  return homeTargets().filter(target => isDetected(target, { homeDir: base, commandExists }));
 }
 
 function detectLegacyScripts({ homeDir, commandExists = defaultCommandExists }) {
+  const base = resolveHomeDir(homeDir);
   return LEGACY_LIBRARY_SCRIPTS.filter(entry => (
-    entry.dirs.some(dir => fs.existsSync(path.join(homeDir, dir)))
+    entry.dirs.some(dir => fs.existsSync(path.join(base, dir)))
     || entry.commands.some(command => commandExists(command))
   ));
 }
@@ -119,9 +126,10 @@ function runPromptLibraryInstall({
   spawn = spawnSync,
   log = console.log,
 } = {}) {
-  const plan = planPromptLibraryInstall({ homeDir, commandExists, bashAvailable });
+  const base = resolveHomeDir(homeDir);
+  const plan = planPromptLibraryInstall({ homeDir: base, commandExists, bashAvailable });
   const installApply = path.join(repoRoot, 'scripts', 'install-apply.js');
-  const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir };
+  const env = { ...process.env, HOME: base, USERPROFILE: base };
   const installed = [];
   const failed = [];
 
@@ -148,7 +156,7 @@ function runPromptLibraryInstall({
 
   for (const entry of plan.legacyScripts) {
     log(`  installing the prompt library to ${labelFor(entry.target)}...`);
-    const result = spawn('bash', [path.join(repoRoot, ...entry.script.split('/')), homeDir], {
+    const result = spawn('bash', [path.join(repoRoot, ...entry.script.split('/')), base], {
       cwd: repoRoot,
       env,
       stdio: 'inherit',

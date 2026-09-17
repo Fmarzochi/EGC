@@ -14,9 +14,9 @@ const { buildDoctorReport, repairInstalledStates } = require('../../scripts/lib/
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 
-function test(name, fn) {
+async function test(name, fn) {
   try {
-    fn();
+    await fn();
     console.log(`  ✓ ${name}`);
     return true;
   } catch (error) {
@@ -33,13 +33,13 @@ function claudeIssues(homeDir, projectRoot) {
   return result.issues;
 }
 
-function runTests() {
+async function runTests() {
   console.log('\n=== Testing the copy transform end to end ===\n');
 
   let passed = 0;
   let failed = 0;
 
-  if (test('a transformed agent is installed, verified, flagged when edited and restored by repair', () => {
+  if (await test('a transformed agent is installed, verified, flagged when edited and restored by repair', async () => {
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'transform-e2e-home-'));
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'transform-e2e-project-'));
     try {
@@ -50,7 +50,9 @@ function runTests() {
         target: 'claude',
         moduleIds: ['agents-core'],
       });
-      applyInstallPlan(plan, { homeDir });
+      // The install-state also syncs to the SQLite store in the background;
+      // the temporary home must outlive that write.
+      await applyInstallPlan(plan, { homeDir }).syncPromise;
 
       const installed = path.join(homeDir, '.claude', 'agents', 'code-reviewer.md');
       const text = fs.readFileSync(installed, 'utf8');
@@ -80,12 +82,12 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('a transformed destination that turned into a directory is drift, not a crash', () => {
+  if (await test('a transformed destination that turned into a directory is drift, not a crash', async () => {
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'transform-e2e-home-'));
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'transform-e2e-project-'));
     try {
       const plan = createManifestInstallPlan({ sourceRoot: REPO_ROOT, projectRoot, homeDir, target: 'claude', moduleIds: ['agents-core'] });
-      applyInstallPlan(plan, { homeDir });
+      await applyInstallPlan(plan, { homeDir }).syncPromise;
       const installed = path.join(homeDir, '.claude', 'agents', 'code-reviewer.md');
       fs.rmSync(installed);
       fs.mkdirSync(installed);
@@ -105,7 +107,10 @@ function runTests() {
 }
 
 if (require.main === module) {
-  runTests();
+  runTests().catch(error => {
+    console.error(error);
+    process.exit(1);
+  });
 }
 
 module.exports = { runTests };
