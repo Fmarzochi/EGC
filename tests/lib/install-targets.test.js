@@ -4242,18 +4242,29 @@ function runTests() {
 
   if (test('the .kiro directory is a Kiro platform path: foreign everywhere else, native on Kiro, and the catalog agent of the same name yields to the Kiro-shaped one', () => {
     const REPO_ROOT = path.join(__dirname, '..', '..');
+    const fs = require('fs');
     const { isForeignPlatformPath } = require('../../scripts/lib/install-targets/helpers');
     assert.strictEqual(isForeignPlatformPath('.kiro', 'kiro'), false);
     assert.strictEqual(isForeignPlatformPath('.kiro/agents', 'cursor'), true);
     assert.strictEqual(isForeignPlatformPath('.kiro', 'egc'), true);
     const { createManifestInstallPlan } = require('../../scripts/lib/install-executor');
-    const materialized = createManifestInstallPlan({ sourceRoot: REPO_ROOT, target: 'kiro', profileId: 'full', homeDir: '/home/u', projectRoot: '/proj' });
+    // Real directories: the planner checks every destination against its
+    // root with resolved paths, and a bare '/home/u' has no drive on Windows.
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kiro-platform-home-'));
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kiro-platform-project-'));
+    let materialized;
+    try {
+      materialized = createManifestInstallPlan({ sourceRoot: REPO_ROOT, target: 'kiro', profileId: 'full', homeDir, projectRoot });
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
     const same = (a, b) => path.normalize(a) === path.normalize(b);
     const posix = value => String(value).replaceAll('\\', '/');
-    const planner = materialized.operations.filter(op => op.kind === 'copy-file' && same(op.destinationPath, path.join('/home/u', '.kiro', 'agents', 'planner.md')));
+    const planner = materialized.operations.filter(op => op.kind === 'copy-file' && same(op.destinationPath, path.join(homeDir, '.kiro', 'agents', 'planner.md')));
     assert.strictEqual(planner.length, 1, `one planner.md lands: ${planner.map(op => op.sourceRelativePath).join(', ')}`);
     assert.strictEqual(posix(planner[0].sourceRelativePath), '.kiro/agents/planner.md', 'the Kiro-shaped agent wins over the catalog one (source paths carry the platform separator)');
-    const jsonAgent = materialized.operations.find(op => op.kind === 'copy-file' && same(op.destinationPath, path.join('/home/u', '.kiro', 'agents', 'planner.json')));
+    const jsonAgent = materialized.operations.find(op => op.kind === 'copy-file' && same(op.destinationPath, path.join(homeDir, '.kiro', 'agents', 'planner.json')));
     assert.ok(jsonAgent, 'the Kiro JSON agent lands too');
     const stray = materialized.operations.filter(op => /(^|\/)\.kiro\/(README\.md|docs\/|skills\/|install\.sh)/.test(posix(op.sourceRelativePath)));
     assert.deepStrictEqual(stray, [], 'the README, the docs, the hand-curated skills and the retired script stay out');
