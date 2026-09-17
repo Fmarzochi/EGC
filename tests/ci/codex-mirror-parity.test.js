@@ -84,7 +84,7 @@ function run() {
     const skills = listMirrorSkills(REPO_ROOT);
     assert.ok(skills.length > 0, 'the mirror has catalog-backed entries');
     for (const skill of skills) {
-      assert.ok(skill.files.includes('SKILL.md'), `${skill.name} carries a SKILL.md`);
+      assert.ok(fs.existsSync(path.join(skill.mirrorDir, 'SKILL.md')), `${skill.name} carries a SKILL.md on disk`);
     }
     const { drifted } = checkCodexMirror(REPO_ROOT);
     assert.deepStrictEqual(drifted, [], `run 'node scripts/ci/codex-mirror.js --write' to regenerate:\n${drifted.join('\n')}`);
@@ -98,6 +98,12 @@ function run() {
       const lone = path.join(root, '.agents', 'skills', 'lone');
       const fresh = path.join(root, '.agents', 'skills', 'fresh');
       const freshCatalog = path.join(root, 'skills', 'testing', 'fresh');
+      const flat = path.join(root, '.agents', 'skills', 'flat');
+      const flatCatalog = path.join(root, 'skills', 'flat');
+      const linked = path.join(root, '.agents', 'skills', 'linked');
+      const linkedCatalog = path.join(root, 'skills', 'testing', 'linked');
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-mirror-outside-'));
+      const outsideFile = path.join(outside, 'SKILL.md');
       fs.mkdirSync(catalog, { recursive: true });
       fs.mkdirSync(path.join(mirror, 'agents'), { recursive: true });
       fs.mkdirSync(path.join(lone, 'agents'), { recursive: true });
@@ -105,6 +111,17 @@ function run() {
       fs.mkdirSync(freshCatalog, { recursive: true });
       fs.writeFileSync(path.join(freshCatalog, 'SKILL.md'), '---\r\nname: fresh\r\ndescription: new\r\norigin: EGC\r\n---\r\nfresh body\r\n');
       fs.writeFileSync(path.join(fresh, 'agents', 'openai.yaml'), 'interface: {}\n');
+      fs.mkdirSync(path.join(flat, 'agents'), { recursive: true });
+      fs.mkdirSync(flatCatalog, { recursive: true });
+      fs.writeFileSync(path.join(flatCatalog, 'SKILL.md'), '---\nname: flat\ndescription: flat layout\norigin: EGC\n---\nflat body\n');
+      fs.writeFileSync(path.join(flat, 'SKILL.md'), '---\nname: flat\ndescription: flat layout\n---\nstale\n');
+      fs.writeFileSync(path.join(flat, 'agents', 'openai.yaml'), 'interface: {}\n');
+      fs.mkdirSync(path.join(linked, 'agents'), { recursive: true });
+      fs.mkdirSync(linkedCatalog, { recursive: true });
+      fs.writeFileSync(path.join(linkedCatalog, 'SKILL.md'), '---\nname: linked\ndescription: l\norigin: EGC\n---\nlinked body\n');
+      fs.writeFileSync(outsideFile, 'outside the checkout\n');
+      fs.symlinkSync(outsideFile, path.join(linked, 'SKILL.md'));
+      fs.writeFileSync(path.join(linked, 'agents', 'openai.yaml'), 'interface: {}\n');
       fs.writeFileSync(path.join(catalog, 'SKILL.md'), '---\nname: demo\ndescription: d\norigin: EGC\n---\nnew body\n');
       fs.writeFileSync(path.join(catalog, 'NOTES.md'), 'notes v2\n');
       fs.writeFileSync(path.join(mirror, 'SKILL.md'), '---\nname: demo\ndescription: d\n---\nold body\n');
@@ -113,12 +130,17 @@ function run() {
       fs.writeFileSync(path.join(lone, 'SKILL.md'), '---\nname: lone\ndescription: only here\n---\nkept\n');
       fs.writeFileSync(path.join(lone, 'agents', 'openai.yaml'), 'interface: {}\n');
 
-      assert.deepStrictEqual(checkCodexMirror(root).drifted, ['.agents/skills/demo/NOTES.md', '.agents/skills/demo/SKILL.md', '.agents/skills/fresh/SKILL.md'], 'a directory that has only the Codex metadata is missing its SKILL.md');
+      assert.deepStrictEqual([...checkCodexMirror(root).drifted].sort(), ['.agents/skills/demo/NOTES.md', '.agents/skills/demo/SKILL.md', '.agents/skills/flat/SKILL.md', '.agents/skills/fresh/SKILL.md', '.agents/skills/linked/SKILL.md'], 'a directory that has only the Codex metadata is missing its SKILL.md');
       const { written } = writeCodexMirror(root);
-      assert.deepStrictEqual(written, ['.agents/skills/demo/NOTES.md', '.agents/skills/demo/SKILL.md', '.agents/skills/fresh/SKILL.md']);
+      assert.deepStrictEqual([...written].sort(), ['.agents/skills/demo/NOTES.md', '.agents/skills/demo/SKILL.md', '.agents/skills/flat/SKILL.md', '.agents/skills/fresh/SKILL.md', '.agents/skills/linked/SKILL.md']);
       assert.strictEqual(fs.readFileSync(path.join(fresh, 'SKILL.md'), 'utf8'), '---\r\nname: fresh\r\ndescription: new\r\n---\r\nfresh body\r\n', 'the first copy is created from the catalog, line endings kept');
       fs.writeFileSync(path.join(fresh, 'SKILL.md'), '---\nname: fresh\ndescription: new\n---\nfresh body\n');
       assert.deepStrictEqual(checkCodexMirror(root).drifted, [], 'a copy that differs only by line endings is current');
+      assert.strictEqual(fs.readFileSync(path.join(flat, 'SKILL.md'), 'utf8'), '---\nname: flat\ndescription: flat layout\n---\nflat body\n', 'a catalog skill in the flat layout is found');
+      assert.strictEqual(fs.readFileSync(outsideFile, 'utf8'), 'outside the checkout\n', 'a linked destination is never written through');
+      assert.ok(fs.lstatSync(path.join(linked, 'SKILL.md')).isFile() && !fs.lstatSync(path.join(linked, 'SKILL.md')).isSymbolicLink(), 'the link is replaced by a regular file');
+      assert.strictEqual(fs.readFileSync(path.join(linked, 'SKILL.md'), 'utf8'), '---\nname: linked\ndescription: l\n---\nlinked body\n');
+      fs.rmSync(outside, { recursive: true, force: true });
       assert.strictEqual(fs.readFileSync(path.join(mirror, 'SKILL.md'), 'utf8'), '---\nname: demo\ndescription: d\n---\nnew body\n');
       assert.strictEqual(fs.readFileSync(path.join(mirror, 'NOTES.md'), 'utf8'), 'notes v2\n');
       assert.strictEqual(fs.readFileSync(path.join(mirror, 'agents', 'openai.yaml'), 'utf8'), 'interface: {}\n', 'the Codex metadata is not the catalog\'s to write');

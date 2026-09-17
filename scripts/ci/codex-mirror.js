@@ -57,8 +57,13 @@ function normalizeNewlines(text) {
   return text.replace(/\r\n/g, '\n');
 }
 
+// The catalog keeps a skill at skills/<category>/<name>/ or, for the flat
+// layout the installer also supports, at skills/<name>/.
 function catalogSkillDir(repoRoot, skillName) {
   const skillsRoot = path.join(repoRoot, 'skills');
+  if (fs.existsSync(path.join(skillsRoot, skillName, 'SKILL.md'))) {
+    return path.join(skillsRoot, skillName);
+  }
   for (const category of fs.readdirSync(skillsRoot, { withFileTypes: true })) {
     if (!category.isDirectory()) continue;
     const candidate = path.join(skillsRoot, category.name, skillName);
@@ -89,7 +94,8 @@ function listFilesRecursive(dir) {
 function listMirrorSkills(repoRoot) {
   const mirrorRoot = path.join(repoRoot, '.agents', 'skills');
   const skills = [];
-  for (const entry of fs.readdirSync(mirrorRoot, { withFileTypes: true })) {
+  const entries = fs.readdirSync(mirrorRoot, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+  for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const catalogDir = catalogSkillDir(repoRoot, entry.name);
     if (!catalogDir) continue;
@@ -117,6 +123,20 @@ function isCurrent(target, expected) {
   return normalizeNewlines(fs.readFileSync(target, 'utf8')) === normalizeNewlines(expected);
 }
 
+// The copy is written to an exclusively created sibling and renamed over the
+// destination, so a destination that is a link (to anywhere) is replaced by
+// a regular file instead of being written through.
+function writeFileReplacing(target, content) {
+  const temporary = `${target}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, content, { flag: 'wx' });
+  try {
+    fs.renameSync(temporary, target);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw error;
+  }
+}
+
 function checkCodexMirror(repoRoot) {
   const drifted = [];
   for (const skill of listMirrorSkills(repoRoot)) {
@@ -137,7 +157,7 @@ function writeCodexMirror(repoRoot) {
       const expected = expectedContent(skill.catalogDir, relative);
       if (isCurrent(target, expected)) continue;
       fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, expected);
+      writeFileReplacing(target, expected);
       written.push(mirrorPath(skill.name, relative));
     }
   }
