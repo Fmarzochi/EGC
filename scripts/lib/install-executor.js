@@ -122,21 +122,19 @@ function isGeneratedRuntimeSourcePath(sourceRelativePath) {
   return EXCLUDED_GENERATED_SOURCE_SUFFIXES.some(suffix => normalizedPath.endsWith(suffix));
 }
 
-// The repository's .agents/skills directory is a stale mirror of the catalog
-// (a few real copies, symlinks for the rest, untouched since July 2026).
-// Skills ship through the catalog modules on every target, so the mirror
-// never leaves the package: on the ~/.agents root that Codex, Goose and
-// OpenHands share it would give one destination two sources, and the last
-// install would overwrite what the others recorded.
-const EXCLUDED_MIRROR_SOURCE_DIRS = Object.freeze(['.agents/skills']);
+// The repository's .agents/skills directory is the Codex-facing copy of the
+// catalog: a SKILL.md per skill in the shape Codex accepts, plus files the
+// catalog does not carry (the openai.yaml metadata, the egc skill). Codex,
+// Goose and OpenHands share the ~/.agents root, and Goose and OpenHands
+// receive the catalog skills there, so at a destination both deliver the
+// catalog copy wins whatever the manifest order: one source per file, and
+// the last install no longer overwrites what the others recorded. What only
+// the mirror has still ships.
+const CATALOG_MIRROR_SOURCE_DIRS = Object.freeze(['.agents/skills']);
 
-function isExcludedMirrorSourcePath(sourceRelativePath) {
+function isCatalogMirrorSourcePath(sourceRelativePath) {
   const normalizedPath = String(sourceRelativePath || '').replaceAll('\\', '/');
-  return EXCLUDED_MIRROR_SOURCE_DIRS.some(dir => normalizedPath === dir || normalizedPath.startsWith(`${dir}/`));
-}
-
-function isExcludedSourcePath(sourceRelativePath) {
-  return isGeneratedRuntimeSourcePath(sourceRelativePath) || isExcludedMirrorSourcePath(sourceRelativePath);
+  return CATALOG_MIRROR_SOURCE_DIRS.some(dir => normalizedPath === dir || normalizedPath.startsWith(`${dir}/`));
 }
 
 function createStatePreview(options) {
@@ -642,7 +640,7 @@ function materializeScaffoldOperation(sourceRoot, operation) {
     return [];
   }
 
-  if (isExcludedSourcePath(operation.sourceRelativePath)) {
+  if (isGeneratedRuntimeSourcePath(operation.sourceRelativePath)) {
     return [];
   }
 
@@ -660,7 +658,7 @@ function materializeScaffoldOperation(sourceRoot, operation) {
 
   const relativeFiles = listFilesRecursive(sourcePath).filter(relativeFile => {
     const sourceRelativePath = path.join(operation.sourceRelativePath, relativeFile);
-    return !isExcludedSourcePath(sourceRelativePath);
+    return !isGeneratedRuntimeSourcePath(sourceRelativePath);
   });
   return relativeFiles.map(relativeFile => {
     const sourceRelativePath = path.join(operation.sourceRelativePath, relativeFile);
@@ -715,7 +713,14 @@ function dedupeCopyFileDestinations(operations, nativeRootRelativePath) {
       continue;
     }
 
-    if (isNativeSource(operation) && !isNativeSource(result[winnerIndex])) {
+    // A mirror copy never displaces another owner, and any other source
+    // displaces a mirror copy; between two other sources the native tree
+    // keeps its preference.
+    const winner = result[winnerIndex];
+    if (isCatalogMirrorSourcePath(operation.sourceRelativePath)) {
+      continue;
+    }
+    if (isCatalogMirrorSourcePath(winner.sourceRelativePath) || (isNativeSource(operation) && !isNativeSource(winner))) {
       result[winnerIndex] = operation;
     }
   }
