@@ -6,17 +6,18 @@
 // the catalog does not carry. Codex accepts only a few frontmatter keys, so the
 // SKILL.md there is the catalog file with the other keys removed. This script
 // derives those files from the catalog instead of leaving them to hand copies
-// (which drifted for months): --check lists the ones that differ, --write
-// regenerates them. Directories without a catalog counterpart (the egc skill)
-// and the symlinked entries are left alone.
+// (which drifted for months): --check lists the ones that differ or are
+// missing, --write creates or regenerates them. Directories without a catalog
+// counterpart (the egc skill) and the symlinked entries are left alone.
 
 const fs = require('node:fs');
 const path = require('node:path');
 
 const CODEX_FRONTMATTER_KEYS = Object.freeze(['allowed-tools', 'description', 'license', 'metadata', 'name']);
+const BYTE_ORDER_MARK = /^\uFEFF/;
 
 function splitFrontmatter(content) {
-  const text = content.replace(/^/, '');
+  const text = content.replace(BYTE_ORDER_MARK, '');
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/);
   if (!match) {
     return null;
@@ -38,15 +39,22 @@ function filterFrontmatter(frontmatter) {
       kept.push(line);
     }
   }
-  return kept.join('\n');
+  return kept;
 }
 
+// The line ending of the source file is kept, so a checkout that converts
+// line endings compares equal to what it would write.
 function toCodexSkill(content) {
   const parts = splitFrontmatter(content);
   if (!parts) {
-    return content.replace(/^/, '');
+    return content.replace(BYTE_ORDER_MARK, '');
   }
-  return `---\n${filterFrontmatter(parts.frontmatter)}\n---${parts.newline}${parts.body}`;
+  const newline = parts.frontmatter.includes('\r\n') || parts.newline === '\r\n' ? '\r\n' : '\n';
+  return `---${newline}${filterFrontmatter(parts.frontmatter).join(newline)}${newline}---${parts.newline}${parts.body}`;
+}
+
+function normalizeNewlines(text) {
+  return text.replace(/\r\n/g, '\n');
 }
 
 function catalogSkillDir(repoRoot, skillName) {
@@ -75,8 +83,9 @@ function listFilesRecursive(dir) {
 }
 
 // The mirror entries the catalog governs: real directories whose skill exists
-// in the catalog. Each carries the files it already has, so a contributor who
-// adds one decides what the Codex surface shows; the catalog decides content.
+// in the catalog. Each carries SKILL.md plus the files it already has that the
+// catalog also has, so a contributor who adds one decides what the Codex
+// surface shows; the catalog decides content.
 function listMirrorSkills(repoRoot) {
   const mirrorRoot = path.join(repoRoot, '.agents', 'skills');
   const skills = [];
@@ -85,9 +94,10 @@ function listMirrorSkills(repoRoot) {
     const catalogDir = catalogSkillDir(repoRoot, entry.name);
     if (!catalogDir) continue;
     const mirrorDir = path.join(mirrorRoot, entry.name);
-    const files = listFilesRecursive(mirrorDir)
+    const present = listFilesRecursive(mirrorDir)
       .filter(relative => relative.split(path.sep)[0] !== 'agents')
       .filter(relative => fs.existsSync(path.join(catalogDir, relative)));
+    const files = [...new Set(['SKILL.md', ...present])].sort((a, b) => a.localeCompare(b));
     skills.push({ name: entry.name, mirrorDir, catalogDir, files });
   }
   return skills;
@@ -102,12 +112,16 @@ function mirrorPath(skillName, relative) {
   return path.posix.join('.agents', 'skills', skillName, relative.split(path.sep).join('/'));
 }
 
+function isCurrent(target, expected) {
+  if (!fs.existsSync(target)) return false;
+  return normalizeNewlines(fs.readFileSync(target, 'utf8')) === normalizeNewlines(expected);
+}
+
 function checkCodexMirror(repoRoot) {
   const drifted = [];
   for (const skill of listMirrorSkills(repoRoot)) {
     for (const relative of skill.files) {
-      const actual = fs.readFileSync(path.join(skill.mirrorDir, relative), 'utf8');
-      if (actual !== expectedContent(skill.catalogDir, relative)) {
+      if (!isCurrent(path.join(skill.mirrorDir, relative), expectedContent(skill.catalogDir, relative))) {
         drifted.push(mirrorPath(skill.name, relative));
       }
     }
@@ -121,10 +135,10 @@ function writeCodexMirror(repoRoot) {
     for (const relative of skill.files) {
       const target = path.join(skill.mirrorDir, relative);
       const expected = expectedContent(skill.catalogDir, relative);
-      if (fs.readFileSync(target, 'utf8') !== expected) {
-        fs.writeFileSync(target, expected);
-        written.push(mirrorPath(skill.name, relative));
-      }
+      if (isCurrent(target, expected)) continue;
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, expected);
+      written.push(mirrorPath(skill.name, relative));
     }
   }
   return { written };
@@ -134,7 +148,7 @@ function main(argv) {
   const repoRoot = path.join(__dirname, '..', '..');
   if (argv.includes('--write')) {
     const { written } = writeCodexMirror(repoRoot);
-    console.log(written.length === 0 ? 'codex mirror: up to date' : `codex mirror: ${written.length} file(s) regenerated\n  ${written.join('\n  ')}`);
+    console.log(written.length === 0 ? 'codex mirror: up to date' : `codex mirror: ${written.length} file(s) written\n  ${written.join('\n  ')}`);
     return 0;
   }
   const { drifted } = checkCodexMirror(repoRoot);
@@ -142,7 +156,7 @@ function main(argv) {
     console.log('codex mirror: up to date');
     return 0;
   }
-  console.error(`codex mirror: ${drifted.length} file(s) differ from the catalog; run 'node scripts/ci/codex-mirror.js --write'\n  ${drifted.join('\n  ')}`);
+  console.error(`codex mirror: ${drifted.length} file(s) differ from the catalog or are missing; run 'node scripts/ci/codex-mirror.js --write'\n  ${drifted.join('\n  ')}`);
   return 1;
 }
 

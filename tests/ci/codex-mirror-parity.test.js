@@ -38,7 +38,7 @@ function run() {
 
   if (test('toCodexSkill keeps the Codex keys with their nested lines and drops the others, body untouched', () => {
     const source = [
-      '---',
+      '\uFEFF---',
       'name: demo',
       'description: >',
       '  a folded',
@@ -76,7 +76,7 @@ function run() {
     ].join('\n');
     assert.strictEqual(toCodexSkill(source), expected);
     assert.strictEqual(toCodexSkill('no frontmatter\n'), 'no frontmatter\n');
-    assert.strictEqual(toCodexSkill('---\r\nname: crlf\r\norigin: EGC\r\n---\r\nbody\r\n'), '---\nname: crlf\n---\r\nbody\r\n');
+    assert.strictEqual(toCodexSkill('---\r\nname: crlf\r\norigin: EGC\r\n---\r\nbody\r\n'), '---\r\nname: crlf\r\n---\r\nbody\r\n', 'the line ending of the source is kept');
     assert.deepStrictEqual([...CODEX_FRONTMATTER_KEYS].sort(), ['allowed-tools', 'description', 'license', 'metadata', 'name']);
   })) passed++; else failed++;
 
@@ -96,9 +96,15 @@ function run() {
       const catalog = path.join(root, 'skills', 'testing', 'demo');
       const mirror = path.join(root, '.agents', 'skills', 'demo');
       const lone = path.join(root, '.agents', 'skills', 'lone');
+      const fresh = path.join(root, '.agents', 'skills', 'fresh');
+      const freshCatalog = path.join(root, 'skills', 'testing', 'fresh');
       fs.mkdirSync(catalog, { recursive: true });
       fs.mkdirSync(path.join(mirror, 'agents'), { recursive: true });
       fs.mkdirSync(path.join(lone, 'agents'), { recursive: true });
+      fs.mkdirSync(path.join(fresh, 'agents'), { recursive: true });
+      fs.mkdirSync(freshCatalog, { recursive: true });
+      fs.writeFileSync(path.join(freshCatalog, 'SKILL.md'), '---\r\nname: fresh\r\ndescription: new\r\norigin: EGC\r\n---\r\nfresh body\r\n');
+      fs.writeFileSync(path.join(fresh, 'agents', 'openai.yaml'), 'interface: {}\n');
       fs.writeFileSync(path.join(catalog, 'SKILL.md'), '---\nname: demo\ndescription: d\norigin: EGC\n---\nnew body\n');
       fs.writeFileSync(path.join(catalog, 'NOTES.md'), 'notes v2\n');
       fs.writeFileSync(path.join(mirror, 'SKILL.md'), '---\nname: demo\ndescription: d\n---\nold body\n');
@@ -107,9 +113,12 @@ function run() {
       fs.writeFileSync(path.join(lone, 'SKILL.md'), '---\nname: lone\ndescription: only here\n---\nkept\n');
       fs.writeFileSync(path.join(lone, 'agents', 'openai.yaml'), 'interface: {}\n');
 
-      assert.deepStrictEqual(checkCodexMirror(root).drifted, ['.agents/skills/demo/NOTES.md', '.agents/skills/demo/SKILL.md']);
+      assert.deepStrictEqual(checkCodexMirror(root).drifted, ['.agents/skills/demo/NOTES.md', '.agents/skills/demo/SKILL.md', '.agents/skills/fresh/SKILL.md'], 'a directory that has only the Codex metadata is missing its SKILL.md');
       const { written } = writeCodexMirror(root);
-      assert.deepStrictEqual(written, ['.agents/skills/demo/NOTES.md', '.agents/skills/demo/SKILL.md']);
+      assert.deepStrictEqual(written, ['.agents/skills/demo/NOTES.md', '.agents/skills/demo/SKILL.md', '.agents/skills/fresh/SKILL.md']);
+      assert.strictEqual(fs.readFileSync(path.join(fresh, 'SKILL.md'), 'utf8'), '---\r\nname: fresh\r\ndescription: new\r\n---\r\nfresh body\r\n', 'the first copy is created from the catalog, line endings kept');
+      fs.writeFileSync(path.join(fresh, 'SKILL.md'), '---\nname: fresh\ndescription: new\n---\nfresh body\n');
+      assert.deepStrictEqual(checkCodexMirror(root).drifted, [], 'a copy that differs only by line endings is current');
       assert.strictEqual(fs.readFileSync(path.join(mirror, 'SKILL.md'), 'utf8'), '---\nname: demo\ndescription: d\n---\nnew body\n');
       assert.strictEqual(fs.readFileSync(path.join(mirror, 'NOTES.md'), 'utf8'), 'notes v2\n');
       assert.strictEqual(fs.readFileSync(path.join(mirror, 'agents', 'openai.yaml'), 'utf8'), 'interface: {}\n', 'the Codex metadata is not the catalog\'s to write');

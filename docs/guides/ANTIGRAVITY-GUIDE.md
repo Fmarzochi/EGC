@@ -112,7 +112,7 @@ If you're contributing a new skill and want it available on Antigravity:
 1. Create the skill under `skills/your-skill-name/SKILL.md` as usual
 2. Add an agent definition at `agents/your-skill-name.md`: this is the path the installer maps to `.agent/skills/` at runtime, making your skill available in the Antigravity harness
 3. Add the Codex interface metadata at `.agents/skills/your-skill-name/agents/openai.yaml`: this is a static repo layout consumed by Codex for implicit invocation metadata
-4. Run `node scripts/ci/codex-mirror.js --write`: it derives `.agents/skills/your-skill-name/SKILL.md` from your catalog `SKILL.md` with the frontmatter reduced to the keys Codex accepts (`name`, `description`, `license`, `metadata`, `allowed-tools`). Never edit that copy by hand: `tests/ci/codex-mirror-parity.test.js` fails when it differs from the catalog
+4. Run `node scripts/ci/codex-mirror.js --write`: it creates `.agents/skills/your-skill-name/SKILL.md` (or regenerates it) from your catalog `SKILL.md` with the frontmatter reduced to the keys Codex accepts (`name`, `description`, `license`, `metadata`, `allowed-tools`). Never edit that copy by hand: `tests/ci/codex-mirror-parity.test.js` fails when it differs from the catalog
 5. Mention in your PR that you added Antigravity support
 
 > **Key distinction**: The installer deploys `agents/` (no dot) → `.agent/skills/`: this is what makes skills available at runtime. The `.agents/` (dot-prefixed) directory is a separate static layout for Codex `openai.yaml` configs and is not auto-deployed by the installer.
