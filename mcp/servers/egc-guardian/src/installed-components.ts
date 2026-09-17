@@ -41,30 +41,39 @@ function harnessDirFromEnv(env: NodeJS.ProcessEnv, homeDir: string): string | nu
 
 // The tool behind a routing call when its environment carries no variable:
 // the client name of the MCP initialize handshake, matched loosely, since
-// each tool names its client its own way. A name that matches nothing
-// leaves the harness unknown, as before.
-const CLIENT_NAME_HARNESS_DIRS: ReadonlyArray<readonly [RegExp, ReadonlyArray<string>]> = [
-  [/claude/i, ['.claude']],
-  [/gemini|antigravity/i, ['.gemini']],
-  [/codebuddy/i, ['.codebuddy']],
+// each tool names its client its own way. Each entry carries the home root
+// (none for a project-only tool) and the project directories its install
+// state can live in, so a project-scoped library still counts. A name that
+// matches nothing leaves the harness unknown, as before.
+export interface ClientHarness {
+  homeRoot: string | null;
+  projectDirs: string[];
+}
+
+const CLIENT_NAME_HARNESSES: ReadonlyArray<readonly [RegExp, ReadonlyArray<string> | null, ReadonlyArray<string>]> = [
+  [/claude/i, ['.claude'], ['.claude']],
+  [/gemini|antigravity/i, ['.gemini'], ['.gemini', '.agents']],
+  [/codebuddy/i, ['.codebuddy'], ['.codebuddy']],
   // The VS Code forks name themselves before the generic VS Code rule
   // catches them.
-  [/cursor/i, ['.cursor']],
-  [/windsurf|codeium/i, ['.codeium', 'windsurf']],
-  [/copilot|vscode|visual studio/i, ['.github']],
-  [/kiro/i, ['.kiro']],
-  [/trae/i, ['.trae']],
-  [/opencode/i, ['.config', 'opencode']],
-  [/zed/i, ['.config', 'zed']],
-  [/codex|goose|openhands/i, ['.agents']],
-  [/\bamp\b/i, ['.amp']],
-  [/junie|jetbrains/i, ['.junie']],
+  [/cursor/i, null, ['.cursor']],
+  [/windsurf|codeium/i, ['.codeium', 'windsurf'], ['.windsurf']],
+  [/copilot|vscode|visual studio/i, ['.github'], ['.github']],
+  [/kiro/i, ['.kiro'], ['.kiro']],
+  [/trae/i, ['.trae'], ['.trae', '.trae-cn']],
+  [/opencode/i, ['.config', 'opencode'], ['.opencode']],
+  [/zed/i, ['.config', 'zed'], ['.zed']],
+  [/codex|goose|openhands/i, ['.agents'], ['.agents', '.codex']],
+  [/\bamp\b/i, ['.amp'], ['.amp']],
+  [/junie|jetbrains/i, ['.junie'], ['.junie']],
 ];
 
-export function harnessDirFromClientName(clientName: string | undefined, homeDir: string): string | null {
+export function harnessFromClientName(clientName: string | undefined, homeDir: string): ClientHarness | null {
   if (typeof clientName !== 'string' || clientName.length === 0) return null;
-  for (const [pattern, segments] of CLIENT_NAME_HARNESS_DIRS) {
-    if (pattern.test(clientName)) return path.join(homeDir, ...segments);
+  for (const [pattern, home, projectDirs] of CLIENT_NAME_HARNESSES) {
+    if (pattern.test(clientName)) {
+      return { homeRoot: home ? path.join(homeDir, ...home) : null, projectDirs: [...projectDirs] };
+    }
   }
   return null;
 }
@@ -110,13 +119,24 @@ function projectDirFrom(env: NodeJS.ProcessEnv): string {
   return env.CLAUDE_PROJECT_DIR || env.GEMINI_PROJECT_DIR || env.CODEBUDDY_PROJECT_DIR || process.cwd();
 }
 
+// Where the install states of the active tool can live: its own roots when
+// the environment or the client name identified it, every known root
+// otherwise.
+function stateRootsFor(envRoot: string | null, client: ClientHarness | null, homeDir: string): { homeRoots: string[]; projectDirs: string[] } {
+  if (envRoot) return { homeRoots: [envRoot], projectDirs: [path.basename(envRoot)] };
+  if (client) return { homeRoots: client.homeRoot ? [client.homeRoot] : [], projectDirs: client.projectDirs };
+  return { homeRoots: KNOWN_HARNESS_DIRS.map(parts => path.join(homeDir, ...parts)), projectDirs: PROJECT_STATE_DIRS };
+}
+
 export function installedComponentSources(options: { environment?: NodeJS.ProcessEnv; cwd?: string; homeDir?: string; clientName?: string } = {}): InstalledComponents {
   const env = options.environment ?? process.env;
   const cwd = options.cwd ?? projectDirFrom(env);
   const homeDir = options.homeDir ?? (env.HOME || env.USERPROFILE || os.homedir());
-  const harnessRoot = harnessDirFromEnv(env, homeDir) ?? harnessDirFromClientName(options.clientName, homeDir);
-  const homeRoots = harnessRoot ? [harnessRoot] : KNOWN_HARNESS_DIRS.map(parts => path.join(homeDir, ...parts));
-  const projectDirs = harnessRoot ? [path.basename(harnessRoot)] : PROJECT_STATE_DIRS;
+  const envRoot = harnessDirFromEnv(env, homeDir);
+  const client = envRoot ? null : harnessFromClientName(options.clientName, homeDir);
+  const harnessRoot = envRoot ?? client?.homeRoot ?? null;
+  const identified = envRoot !== null || client !== null;
+  const { homeRoots, projectDirs } = stateRootsFor(envRoot, client, homeDir);
   const files = new Set<string>();
   for (const root of homeRoots) for (const file of homeStateFiles(root)) files.add(file);
   for (const dir of projectDirs) files.add(path.join(cwd, dir, PROJECT_STATE));
@@ -133,9 +153,9 @@ export function installedComponentSources(options: { environment?: NodeJS.Proces
     states += 1;
     for (const source of found.sources) sources.add(source);
   }
-  // A tool named by the environment with no install state at all is a bare
-  // install: known, with nothing installed.
-  return { known: harnessRoot !== null || states + unreadable > 0, harnessRoot, sources, unreadable };
+  // A tool identified by its environment or its client name with no install
+  // state at all is a bare install: known, with nothing installed.
+  return { known: identified || states + unreadable > 0, harnessRoot, sources, unreadable };
 }
 
 // Entries without a recorded source (an older index) stay available, the
