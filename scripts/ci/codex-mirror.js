@@ -54,7 +54,7 @@ function toCodexSkill(content) {
 }
 
 function normalizeNewlines(text) {
-  return text.replace(/\r\n/g, '\n');
+  return text.replaceAll('\r\n', '\n');
 }
 
 // The catalog keeps a skill at skills/<category>/<name>/ or, for the flat

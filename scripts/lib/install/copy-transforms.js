@@ -123,7 +123,8 @@ function toOpenCodeToolId(name) {
 }
 
 // An item of a block-style YAML list: an indented line whose first
-// non-blank character is a dash. Parsed by hand so no pattern backtracks.
+// non-blank character is a dash followed by text. Parsed by hand so no
+// pattern backtracks; a bare dash is not an item and ends the list.
 function blockListItem(line) {
   if (line.length === 0 || (line[0] !== ' ' && line[0] !== '\t')) {
     return null;
@@ -132,7 +133,8 @@ function blockListItem(line) {
   if (!trimmed.startsWith('-')) {
     return null;
   }
-  return stripQuotes(trimmed.slice(1).trim());
+  const item = stripQuotes(trimmed.slice(1).trim());
+  return item.length > 0 ? item : null;
 }
 
 // Collects the items of a block-style YAML list that follows a key with no
@@ -143,7 +145,7 @@ function collectBlockListItems(lines, start) {
   while (index < lines.length) {
     const item = blockListItem(lines[index]);
     if (item === null) break;
-    if (item) items.push(item);
+    items.push(item);
     index += 1;
   }
   return { items, next: index };
