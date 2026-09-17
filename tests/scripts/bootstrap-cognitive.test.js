@@ -139,21 +139,25 @@ async function runClaudeCodeAndGeminiCliTests() {
       assert.ok(block.includes('encrypted at rest'), 'the block must say the files are encrypted');
       assert.ok(block.includes('say so and point at `egc init`'), 'the block must say what to do when get_state is missing');
       assert.ok(!block.includes('plain Markdown'), 'the block must no longer call the state files plain Markdown');
+      assert.ok(block.includes('when the prompt library is installed for this tool'), 'the review line must depend on the library being installed');
 
       const toml = fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8');
       assert.ok(toml.includes('never read or write those files directly'), 'the Codex line must carry the same rule');
       assert.ok(toml.includes('say the server is not registered and point at egc init'), 'and the same fallback');
       assert.ok(!toml.includes('State lives at'), 'the Codex line must no longer point at a state file path');
+      assert.ok(toml.includes('review PR->review-pr agents when the prompt library is installed'), 'the Codex line must carry the same condition');
 
       const standalone = fs.readFileSync(path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'), 'utf8');
       assert.ok(standalone.includes('never read or write those files directly'), 'the standalone file must carry the same rule');
       assert.ok(standalone.includes('say the server is not registered and point at `egc init`'), 'and the same fallback');
       assert.ok(!standalone.includes('State lives at') && !standalone.includes('plain Markdown'), 'the standalone file must not carry the old wording');
+      assert.ok(standalone.includes('when the prompt library is installed for this tool'), 'the standalone file must carry the same condition');
 
       const cursorRules = JSON.parse(fs.readFileSync(path.join(cursorSettingsDir, 'settings.json'), 'utf8'))['cursor.rules'];
       assert.ok(cursorRules.includes('never read or write those files directly'), 'the Cursor rules must carry the same rule');
       assert.ok(cursorRules.includes('say the server is not registered and point at egc init'), 'and the same fallback');
       assert.ok(!cursorRules.includes('State lives at'), 'the Cursor rules must no longer point at a state file path');
+      assert.ok(cursorRules.includes('review PR->review-pr agents when the prompt library is installed'), 'the Cursor rules must carry the same condition');
     } finally {
       cleanup(home);
     }

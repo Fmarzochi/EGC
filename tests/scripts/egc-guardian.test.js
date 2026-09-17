@@ -638,6 +638,10 @@ async function runTests() {
       const emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'guardian-routing-empty-'));
       try {
         assert.strictEqual(installedModule.installedComponentSources({ environment: {}, cwd: emptyHome, homeDir: emptyHome }).known, false);
+        const bare = installedModule.installedComponentSources({ environment: { CLAUDE_PROJECT_DIR: emptyHome }, cwd: emptyHome, homeDir: emptyHome });
+        assert.strictEqual(bare.known, true, 'a tool named by the environment with no state at all has nothing installed');
+        assert.strictEqual(bare.sources.size, 0);
+        assert.deepStrictEqual(installedModule.splitByInstallation([{ name: 'github-ops', source: 'skills/devops/github-ops/SKILL.md' }], bare).missing.map(e => e.name), ['github-ops']);
       } finally {
         fs.rmSync(emptyHome, { recursive: true, force: true });
       }

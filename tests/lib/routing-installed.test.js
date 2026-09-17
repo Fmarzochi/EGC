@@ -107,5 +107,22 @@ if (test('tool-specific state names under a shared root count, and an unreadable
   }
 })) passed++; else failed++;
 
+if (test('a harness named by the environment with no install state at all has nothing installed', () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-routing-home-'));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-routing-project-'));
+  try {
+    const result = installedComponentSources({ environment: { CLAUDE_PROJECT_DIR: cwd }, cwd, homeDir });
+    assert.strictEqual(result.known, true, 'a bare install of a known tool is a known, empty installation');
+    assert.strictEqual(result.harnessRoot, path.join(homeDir, '.claude'));
+    assert.strictEqual(result.sources.size, 0);
+    const split = splitByInstallation([{ name: 'code-reviewer', source: 'agents/code-reviewer.md' }, { name: 'legacy-entry' }], result);
+    assert.deepStrictEqual(split.available.map((e) => e.name), ['legacy-entry'], 'nothing with a recorded source is offered');
+    assert.deepStrictEqual(split.missing.map((e) => e.name), ['code-reviewer']);
+  } finally {
+    fs.rmSync(homeDir, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
