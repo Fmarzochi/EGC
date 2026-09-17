@@ -2,11 +2,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const {
-  createFlatFileOperations,
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
   normalizeRelativePath,
+  planFlatAgentOperations,
   resolveModulesPlan,
 } = require('./helpers');
 const { OPENCODE_AGENT_FRONTMATTER_TRANSFORM } = require('../install/copy-transforms');
@@ -43,27 +43,8 @@ const OPENCODE_PACKAGE_SHIPPED_DIRS = ['commands', 'instructions', 'prompts'];
 // they and the MCP registration put in it since.
 const OPENCODE_PACKAGE_KEPT_FILES = new Set(['opencode.json']);
 
-function withOpenCodeAgentTransform(operation) {
-  return { ...operation, transform: OPENCODE_AGENT_FRONTMATTER_TRANSFORM };
-}
-
 function planOpenCodeAgentOperations(adapter, moduleId, sourceRelativePath, planningInput, targetRoot) {
-  const normalized = normalizeRelativePath(sourceRelativePath);
-  if (normalized === 'agents') {
-    return createFlatFileOperations({
-      moduleId,
-      repoRoot: planningInput.repoRoot,
-      sourceRelativePath,
-      destinationDir: path.join(targetRoot, 'agents'),
-    }).map(withOpenCodeAgentTransform);
-  }
-  return [withOpenCodeAgentTransform(createRemappedOperation(
-    adapter,
-    moduleId,
-    sourceRelativePath,
-    path.join(targetRoot, 'agents', ...normalized.slice('agents/'.length).split('/')),
-    { strategy: 'preserve-relative-path' }
-  ))];
+  return planFlatAgentOperations(adapter, moduleId, sourceRelativePath, planningInput, targetRoot, OPENCODE_AGENT_FRONTMATTER_TRANSFORM);
 }
 
 function isOpenCodePackagePath(normalizedPath) {

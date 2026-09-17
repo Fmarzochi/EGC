@@ -116,20 +116,63 @@ function toClaudeAgentFrontmatter(text) {
 // OpenCode offers it through @ and the task tool.
 const OPENCODE_DROPPED_KEYS = new Set(['model', 'stack', 'color']);
 
-function rewriteOpenCodeAgentLines(line) {
-  const match = splitFrontmatterLine(line);
-  if (!match) {
-    return [line];
+// OpenCode names its tools in lowercase (read, grep, bash, webfetch); the
+// catalog writes them the way Claude Code does. An MCP tool keeps its name.
+function toOpenCodeToolId(name) {
+  return name.trim().toLowerCase();
+}
+
+// Collects the items of a block-style YAML list that follows a key with no
+// inline value, returning them with the index of the first line after them.
+function collectBlockListItems(lines, start) {
+  const items = [];
+  let index = start;
+  while (index < lines.length) {
+    const item = lines[index].match(/^\s+-\s*(.+?)\s*$/);
+    if (!item) break;
+    items.push(stripQuotes(item[1]));
+    index += 1;
   }
-  const { key, value } = match;
-  if (OPENCODE_DROPPED_KEYS.has(key)) {
-    return [];
+  return { items, next: index };
+}
+
+function toOpenCodeToolsBlock(items) {
+  return ['tools:', ...items.map(item => `  ${toOpenCodeToolId(item)}: true`)];
+}
+
+function rewriteOpenCodeAgentFrontmatter(lines) {
+  const output = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    const match = splitFrontmatterLine(line);
+    index += 1;
+    if (!match) {
+      output.push(line);
+      continue;
+    }
+    const { key, value } = match;
+    if (OPENCODE_DROPPED_KEYS.has(key)) {
+      continue;
+    }
+    if (key !== 'tools') {
+      output.push(line);
+      continue;
+    }
+    const flow = parseFlowSequence(value);
+    if (flow) {
+      output.push(...toOpenCodeToolsBlock(flow));
+      continue;
+    }
+    if (value === '') {
+      const block = collectBlockListItems(lines, index);
+      output.push(...toOpenCodeToolsBlock(block.items));
+      index = block.next;
+      continue;
+    }
+    output.push(line);
   }
-  if (key === 'tools') {
-    const items = parseFlowSequence(value);
-    return items ? ['tools:', ...items.map(item => `  ${item}: true`)] : [line];
-  }
-  return [line];
+  return output;
 }
 
 function toOpenCodeAgentFrontmatter(text) {
@@ -137,7 +180,7 @@ function toOpenCodeAgentFrontmatter(text) {
   if (!parts) {
     return text;
   }
-  const frontmatter = parts.frontmatter.flatMap(rewriteOpenCodeAgentLines);
+  const frontmatter = rewriteOpenCodeAgentFrontmatter(parts.frontmatter);
   if (!frontmatter.some(line => splitFrontmatterLine(line)?.key === 'mode')) {
     frontmatter.push('mode: subagent');
   }

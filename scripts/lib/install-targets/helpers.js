@@ -314,6 +314,29 @@ function createFlatFileOperations({ // NOSONAR: directory walk building install 
   return operations;
 }
 
+// The catalog agents flat under <root>/agents, each through the target's
+// frontmatter transform when it has one (Claude Code and OpenCode read
+// their own shapes). A single agent file keeps its name.
+function planFlatAgentOperations(adapter, moduleId, sourceRelativePath, planningInput, targetRoot, transform) {
+  const normalized = normalizeRelativePath(sourceRelativePath);
+  const withTransform = operation => (transform ? { ...operation, transform } : operation);
+  if (normalized === 'agents') {
+    return createFlatFileOperations({
+      moduleId,
+      repoRoot: planningInput.repoRoot,
+      sourceRelativePath,
+      destinationDir: path.join(targetRoot, 'agents'),
+    }).map(withTransform);
+  }
+  return [withTransform(createRemappedOperation(
+    adapter,
+    moduleId,
+    sourceRelativePath,
+    path.join(targetRoot, 'agents', ...normalized.slice('agents/'.length).split('/')),
+    { strategy: 'preserve-relative-path' }
+  ))];
+}
+
 function createFlatRuleOperations(options) {
   return createFlatFileOperations(options);
 }
@@ -721,6 +744,7 @@ module.exports = {
   isForeignPlatformPath,
   normalizeModulesInput,
   normalizeRelativePath,
+  planFlatAgentOperations,
   planFlatSkillOperation,
   planGenericRetirements,
   resolveAdapterManagedRoots,

@@ -4156,7 +4156,7 @@ function runTests() {
       target: 'claude',
       repoRoot,
       homeDir,
-      modules: [{ id: 'engineering-auditor', paths: ['agents/engineering-auditor.md', 'commands/engineering-fix.md', 'commands/engineering-audit.md'] }],
+      modules: [{ id: 'engineering-auditor', paths: ['agents/engineering-auditor.md', 'commands/engineering-fix.md', 'commands/engineering-audit.md'] }, { id: 'skills-fixture', paths: ['skills/general/engineering-audit'] }],
     });
     const agent = plan.operations.find(op => normalizedRelativePath(op.sourceRelativePath) === 'agents/engineering-auditor.md');
     assert.ok(agent, 'the agent file must be planned');
@@ -4165,7 +4165,7 @@ function runTests() {
     const command = plan.operations.find(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/engineering-fix.md');
     assert.ok(command, 'the command file must be planned');
     assert.strictEqual(command.destinationPath, path.join(homeDir, '.claude', 'commands', 'engineering-fix.md'));
-    assert.ok(!plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/engineering-audit.md'), 'a single-file command shadowed by the engineering-audit skill stays out');
+    assert.ok(!plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/engineering-audit.md'), 'a single-file command shadowed by the engineering-audit skill of the same plan stays out');
     assert.strictEqual(command.transform, undefined);
   })) passed++; else failed++;
 
@@ -4208,17 +4208,24 @@ function runTests() {
     assert.ok(plans.some(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/plan.md' && op.destinationPath === path.join(homeDir, '.claude', 'commands', 'plan.md')));
   })) passed++; else failed++;
 
-  if (test('claude adapter leaves out a command whose name is also a catalog skill: Claude Code would list the slash command twice', () => {
+  if (test('claude adapter leaves out a command whose name is also a skill of the same plan: Claude Code would list the slash command twice', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
-    const plan = planInstallTargetScaffold({ target: 'claude', repoRoot, homeDir, modules: [{ id: 'commands-core', paths: ['commands'] }] });
-    const commands = plan.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('commands/'));
-    const names = new Set(commands.map(op => path.basename(op.destinationPath, '.md')));
+    const commandNames = plan => new Set(plan.operations
+      .filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('commands/'))
+      .map(op => path.basename(op.destinationPath, '.md')));
+    const withSkills = planInstallTargetScaffold({ target: 'claude', repoRoot, homeDir, modules: [
+      { id: 'commands-core', paths: ['commands'] },
+      { id: 'skills-fixture', paths: ['skills/security/security-scan', 'skills/ai', 'skills/general/engineering-audit'] },
+    ] });
+    const names = commandNames(withSkills);
     assert.ok(names.has('plan') && names.has('review-pr'), 'ordinary commands still land');
     for (const shadowed of ['autonomous-lesson-learning', 'engineering-audit', 'security-scan']) {
-      assert.ok(!names.has(shadowed), `${shadowed} is a catalog skill and its command stays out`);
+      assert.ok(!names.has(shadowed), `${shadowed} is a skill of this plan and its command stays out`);
     }
-    assert.ok(commands.every(op => path.dirname(op.destinationPath) === path.join(homeDir, '.claude', 'commands')));
+    const withoutSkills = commandNames(planInstallTargetScaffold({ target: 'claude', repoRoot, homeDir, modules: [{ id: 'commands-core', paths: ['commands'] }] }));
+    assert.ok(withoutSkills.has('security-scan') && withoutSkills.has('engineering-audit'), 'a plan without the skill keeps the command');
+    assert.ok(withSkills.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('commands/')).every(op => path.dirname(op.destinationPath) === path.join(homeDir, '.claude', 'commands')));
   })) passed++; else failed++;
 
   if (test('opencode adapter installs the catalog agents flat under ~/.config/opencode/agents in the shape OpenCode validates', () => {
@@ -4230,10 +4237,17 @@ function runTests() {
     assert.ok(agents.length >= 60, `${agents.length} agent files planned`);
     assert.ok(agents.every(op => op.transform === OPENCODE_AGENT_FRONTMATTER_TRANSFORM), 'every agent goes through the OpenCode transform');
     assert.ok(agents.every(op => path.dirname(op.destinationPath) === path.join(homeDir, '.config', 'opencode', 'agents')));
-    const architect = agents.find(op => normalizedRelativePath(op.sourceRelativePath) === 'agents/architect.md');
-    const content = plannedFileContent(path.join(repoRoot, 'agents', 'architect.md'), architect.transform).toString('utf8');
-    assert.ok(/^tools:\n( {2}\w+: true\n)+/m.test(content), 'tools is an object of name to true');
-    assert.ok(/^mode: subagent$/m.test(content) && !/^model:/m.test(content) && !/^stack:/m.test(content), 'subagent, no Gemini model, no stack');
+    const fs = require('fs');
+    for (const op of agents) {
+      const source = fs.readFileSync(path.join(repoRoot, normalizedRelativePath(op.sourceRelativePath)), 'utf8');
+      const content = plannedFileContent(path.join(repoRoot, normalizedRelativePath(op.sourceRelativePath)), op.transform).toString('utf8');
+      const head = content.split('\n---\n')[0];
+      if (/^tools:/m.test(source)) {
+        assert.ok(/^tools:\n( {2}[a-z][\w-]*: true\n)+/m.test(head), `${op.sourceRelativePath}: tools is an object of lowercase id to true`);
+      }
+      assert.ok(/^mode: subagent$/m.test(head), `${op.sourceRelativePath}: subagent`);
+      assert.ok(!/^(model|stack|color):/m.test(head), `${op.sourceRelativePath}: no model, stack or color`);
+    }
   })) passed++; else failed++;
 
   if (test('kiro adapters plan the Kiro platform assets from the repository .kiro directory at the Kiro root and skip the files other targets keep (retired .kiro/install.sh)', () => {
