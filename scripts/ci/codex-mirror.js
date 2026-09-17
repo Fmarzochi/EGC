@@ -118,8 +118,16 @@ function mirrorPath(skillName, relative) {
   return path.posix.join('.agents', 'skills', skillName, relative.split(path.sep).join('/'));
 }
 
+// A copy is current only as a regular file with the expected content: a
+// link at that path, whatever it points at, is replaced.
 function isCurrent(target, expected) {
-  if (!fs.existsSync(target)) return false;
+  let stat;
+  try {
+    stat = fs.lstatSync(target);
+  } catch {
+    return false;
+  }
+  if (!stat.isFile()) return false;
   return normalizeNewlines(fs.readFileSync(target, 'utf8')) === normalizeNewlines(expected);
 }
 
@@ -128,8 +136,8 @@ function isCurrent(target, expected) {
 // a regular file instead of being written through.
 function writeFileReplacing(target, content) {
   const temporary = `${target}.${process.pid}.tmp`;
-  fs.writeFileSync(temporary, content, { flag: 'wx' });
   try {
+    fs.writeFileSync(temporary, content, { flag: 'wx' });
     fs.renameSync(temporary, target);
   } catch (error) {
     fs.rmSync(temporary, { force: true });

@@ -92,6 +92,7 @@ function run() {
 
   if (test('the generator regenerates a drifted copy in place and leaves the rest alone', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-mirror-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-mirror-outside-'));
     try {
       const catalog = path.join(root, 'skills', 'testing', 'demo');
       const mirror = path.join(root, '.agents', 'skills', 'demo');
@@ -102,7 +103,6 @@ function run() {
       const flatCatalog = path.join(root, 'skills', 'flat');
       const linked = path.join(root, '.agents', 'skills', 'linked');
       const linkedCatalog = path.join(root, 'skills', 'testing', 'linked');
-      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-mirror-outside-'));
       const outsideFile = path.join(outside, 'SKILL.md');
       fs.mkdirSync(catalog, { recursive: true });
       fs.mkdirSync(path.join(mirror, 'agents'), { recursive: true });
@@ -120,7 +120,15 @@ function run() {
       fs.mkdirSync(linkedCatalog, { recursive: true });
       fs.writeFileSync(path.join(linkedCatalog, 'SKILL.md'), '---\nname: linked\ndescription: l\norigin: EGC\n---\nlinked body\n');
       fs.writeFileSync(outsideFile, 'outside the checkout\n');
-      fs.symlinkSync(outsideFile, path.join(linked, 'SKILL.md'));
+      // A checkout without symlink privileges (Windows) keeps the link case
+      // out; the destination is then simply missing and gets created.
+      let linkedFixture = true;
+      try {
+        fs.symlinkSync(outsideFile, path.join(linked, 'SKILL.md'));
+      } catch (error) {
+        if (!['EPERM', 'EACCES', 'ENOSYS'].includes(error.code)) throw error;
+        linkedFixture = false;
+      }
       fs.writeFileSync(path.join(linked, 'agents', 'openai.yaml'), 'interface: {}\n');
       fs.writeFileSync(path.join(catalog, 'SKILL.md'), '---\nname: demo\ndescription: d\norigin: EGC\n---\nnew body\n');
       fs.writeFileSync(path.join(catalog, 'NOTES.md'), 'notes v2\n');
@@ -137,10 +145,16 @@ function run() {
       fs.writeFileSync(path.join(fresh, 'SKILL.md'), '---\nname: fresh\ndescription: new\n---\nfresh body\n');
       assert.deepStrictEqual(checkCodexMirror(root).drifted, [], 'a copy that differs only by line endings is current');
       assert.strictEqual(fs.readFileSync(path.join(flat, 'SKILL.md'), 'utf8'), '---\nname: flat\ndescription: flat layout\n---\nflat body\n', 'a catalog skill in the flat layout is found');
-      assert.strictEqual(fs.readFileSync(outsideFile, 'utf8'), 'outside the checkout\n', 'a linked destination is never written through');
-      assert.ok(fs.lstatSync(path.join(linked, 'SKILL.md')).isFile() && !fs.lstatSync(path.join(linked, 'SKILL.md')).isSymbolicLink(), 'the link is replaced by a regular file');
+      if (linkedFixture) {
+        assert.strictEqual(fs.readFileSync(outsideFile, 'utf8'), 'outside the checkout\n', 'a linked destination is never written through');
+        fs.writeFileSync(outsideFile, '---\nname: linked\ndescription: l\n---\nlinked body\n');
+        fs.rmSync(path.join(linked, 'SKILL.md'));
+        fs.symlinkSync(outsideFile, path.join(linked, 'SKILL.md'));
+        assert.deepStrictEqual(checkCodexMirror(root).drifted, ['.agents/skills/linked/SKILL.md'], 'a link whose target already has the expected bytes is still not current');
+        writeCodexMirror(root);
+      }
+      assert.ok(fs.lstatSync(path.join(linked, 'SKILL.md')).isFile() && !fs.lstatSync(path.join(linked, 'SKILL.md')).isSymbolicLink(), 'the destination is a regular file');
       assert.strictEqual(fs.readFileSync(path.join(linked, 'SKILL.md'), 'utf8'), '---\nname: linked\ndescription: l\n---\nlinked body\n');
-      fs.rmSync(outside, { recursive: true, force: true });
       assert.strictEqual(fs.readFileSync(path.join(mirror, 'SKILL.md'), 'utf8'), '---\nname: demo\ndescription: d\n---\nnew body\n');
       assert.strictEqual(fs.readFileSync(path.join(mirror, 'NOTES.md'), 'utf8'), 'notes v2\n');
       assert.strictEqual(fs.readFileSync(path.join(mirror, 'agents', 'openai.yaml'), 'utf8'), 'interface: {}\n', 'the Codex metadata is not the catalog\'s to write');
@@ -148,6 +162,7 @@ function run() {
       assert.deepStrictEqual(checkCodexMirror(root).drifted, []);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 
