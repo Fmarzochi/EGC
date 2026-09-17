@@ -95,8 +95,36 @@ Understanding what persists helps you compact with confidence:
 5. **Write before compacting**: Save important context to files or memory before compacting
 6. **Use `/compact` with a summary**: Add a custom message: `/compact Focus on implementing auth middleware next`
 
+## Token Optimization Patterns
+
+### Trigger-Table Lazy Loading
+Instead of loading full skill content at session start, use a trigger table that maps keywords to skill paths. Skills load only when triggered, reducing baseline context by 50%+:
+
+| Trigger | Skill | Load When |
+|---------|-------|-----------|
+| "test", "tdd", "coverage" | tdd-workflow | User mentions testing |
+| "security", "auth", "xss" | security-review | Security-related work |
+| "deploy", "ci/cd" | deployment-patterns | Deployment context |
+
+### Context Composition Awareness
+Monitor what's consuming your context window:
+- **GEMINI.md files**: Always loaded, keep lean
+- **Loaded skills**: Each skill adds 1-5K tokens
+- **Conversation history**: Grows with each exchange
+- **Tool results**: File reads, search results add bulk
+
+### Duplicate Instruction Detection
+Common sources of duplicate context:
+- Same rules in both `~/.gemini/rules/` and project `.gemini/rules/`
+- Skills that repeat GEMINI.md instructions
+- Multiple skills covering overlapping domains
+
+### Context Optimization Tools
+- `token-optimizer` MCP: Automated 95%+ token reduction via content deduplication
+- `context-mode`: Context virtualization (315KB to 5.4KB demonstrated)
+
 ## Related
 
-- [The Longform Guide](https://x.com/example_user/status/2014040193557471352): Token optimization section
+- [Felipe Marzochi](https://x.com/MarzochiFelipe): Token optimization section
 - Memory persistence hooks: For state that survives compaction
 - `continuous-learning` skill: Extracts patterns before session ends

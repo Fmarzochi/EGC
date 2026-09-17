@@ -57,8 +57,12 @@ ALWAYS write tests first, then implement code to make tests pass.
 - The preferred compact workflow is:
   - one commit for failing test added and RED validated
   - one commit for minimal fix applied and GREEN validated
-  - one optional commit for refactor complete
+  - one commit for refactor complete, whenever a refactor happened
 - Separate evidence-only commits are not required if the test commit clearly corresponds to RED and the fix commit clearly corresponds to GREEN
+- Stage only the files of the task for each checkpoint (`git add <paths>`), never a blanket add: an index that already holds unrelated or sensitive changes is left out of the checkpoint, or stashed first
+- When a pre-commit hook runs the test suite, the RED checkpoint cannot pass it: keep the RED evidence (the failing run output) and create that checkpoint together with the fix commit, naming the RED result in the message; never bypass the hook
+- Stage only the files of the task for each checkpoint (`git add <paths>`), never a blanket add: an index that already holds unrelated or sensitive changes is left out of the checkpoint, or stashed first
+- When a pre-commit hook runs the test suite, the RED checkpoint cannot pass it: keep the RED evidence (the failing run output) and create that checkpoint together with the fix commit, naming the RED result in the message; never bypass the hook
 
 ## TDD Workflow Steps
 
@@ -122,6 +126,8 @@ Recommended commit message format:
 - `test: add reproducer for <feature or bug>`
 - This commit may also serve as the RED validation checkpoint if the reproducer was compiled and executed and failed for the intended reason
 - Verify that this checkpoint commit is on the current active branch before continuing
+- If a pre-commit hook runs the test suite, this commit cannot pass it while the test is RED: keep the failing run output as the RED evidence and create the checkpoint together with the fix commit in Step 5, naming the RED result in its message
+- If a pre-commit hook runs the test suite, this commit cannot pass it while the test is RED: keep the failing run output as the RED evidence and create the checkpoint together with the fix commit in Step 5, naming the RED result in its message
 
 ### Step 4: Implement Code
 Write minimal code to make tests pass:
