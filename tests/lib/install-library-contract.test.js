@@ -170,6 +170,39 @@ function runTests() {
         }
       }
     })) passed++; else failed++;
+
+    if (test('targets that share the ~/.agents root plan one source per destination (Codex, Goose, OpenHands)', () => {
+      const plans = {};
+      for (const target of ['codex', 'goose', 'openhands']) {
+        const plan = createManifestInstallPlan({ sourceRoot: REPO_ROOT, projectRoot, homeDir, target, profileId: 'full' });
+        plans[target] = new Map(plan.operations
+          .filter(operation => operation.kind === 'copy-file')
+          .map(operation => [path.normalize(operation.destinationPath), operation.sourceRelativePath.replaceAll('\\', '/')]));
+      }
+      const conflicts = [];
+      for (const [a, b] of [['codex', 'goose'], ['codex', 'openhands'], ['goose', 'openhands']]) {
+        for (const [destination, source] of plans[a]) {
+          const other = plans[b].get(destination);
+          if (other !== undefined && other !== source) {
+            conflicts.push(`${path.relative(homeDir, destination)}: ${a}=${source} ${b}=${other}`);
+          }
+        }
+      }
+      assert.deepStrictEqual(conflicts, [], `the last install would overwrite what the others recorded:\n${conflicts.slice(0, 5).join('\n')}`);
+    })) passed++; else failed++;
+
+    if (test('the .agents/skills mirror of the repository never ships: skills come from the catalog on every target', () => {
+      const shipped = [];
+      for (const target of SUPPORTED_INSTALL_TARGETS) {
+        const plan = createManifestInstallPlan({ sourceRoot: REPO_ROOT, projectRoot, homeDir, target, profileId: 'full' });
+        for (const operation of plan.operations) {
+          if (operation.kind === 'copy-file' && /^\.agents\/skills\//.test(operation.sourceRelativePath.replaceAll('\\', '/'))) {
+            shipped.push(`${target}: ${operation.sourceRelativePath}`);
+          }
+        }
+      }
+      assert.deepStrictEqual(shipped, [], `stale mirror files planned:\n${shipped.slice(0, 5).join('\n')}`);
+    })) passed++; else failed++;
   } finally {
     fs.rmSync(homeDir, { recursive: true, force: true });
     fs.rmSync(projectRoot, { recursive: true, force: true });

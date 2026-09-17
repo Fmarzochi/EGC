@@ -122,6 +122,23 @@ function isGeneratedRuntimeSourcePath(sourceRelativePath) {
   return EXCLUDED_GENERATED_SOURCE_SUFFIXES.some(suffix => normalizedPath.endsWith(suffix));
 }
 
+// The repository's .agents/skills directory is a stale mirror of the catalog
+// (a few real copies, symlinks for the rest, untouched since July 2026).
+// Skills ship through the catalog modules on every target, so the mirror
+// never leaves the package: on the ~/.agents root that Codex, Goose and
+// OpenHands share it would give one destination two sources, and the last
+// install would overwrite what the others recorded.
+const EXCLUDED_MIRROR_SOURCE_DIRS = Object.freeze(['.agents/skills']);
+
+function isExcludedMirrorSourcePath(sourceRelativePath) {
+  const normalizedPath = String(sourceRelativePath || '').replaceAll('\\', '/');
+  return EXCLUDED_MIRROR_SOURCE_DIRS.some(dir => normalizedPath === dir || normalizedPath.startsWith(`${dir}/`));
+}
+
+function isExcludedSourcePath(sourceRelativePath) {
+  return isGeneratedRuntimeSourcePath(sourceRelativePath) || isExcludedMirrorSourcePath(sourceRelativePath);
+}
+
 function createStatePreview(options) {
   const { createInstallState } = require('./install-state');
   return createInstallState(options);
@@ -625,7 +642,7 @@ function materializeScaffoldOperation(sourceRoot, operation) {
     return [];
   }
 
-  if (isGeneratedRuntimeSourcePath(operation.sourceRelativePath)) {
+  if (isExcludedSourcePath(operation.sourceRelativePath)) {
     return [];
   }
 
@@ -643,7 +660,7 @@ function materializeScaffoldOperation(sourceRoot, operation) {
 
   const relativeFiles = listFilesRecursive(sourcePath).filter(relativeFile => {
     const sourceRelativePath = path.join(operation.sourceRelativePath, relativeFile);
-    return !isGeneratedRuntimeSourcePath(sourceRelativePath);
+    return !isExcludedSourcePath(sourceRelativePath);
   });
   return relativeFiles.map(relativeFile => {
     const sourceRelativePath = path.join(operation.sourceRelativePath, relativeFile);
