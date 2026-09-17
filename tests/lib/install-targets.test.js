@@ -4249,14 +4249,15 @@ function runTests() {
     const { createManifestInstallPlan } = require('../../scripts/lib/install-executor');
     const materialized = createManifestInstallPlan({ sourceRoot: REPO_ROOT, target: 'kiro', profileId: 'full', homeDir: '/home/u', projectRoot: '/proj' });
     const same = (a, b) => path.normalize(a) === path.normalize(b);
+    const posix = value => String(value).replaceAll('\\', '/');
     const planner = materialized.operations.filter(op => op.kind === 'copy-file' && same(op.destinationPath, path.join('/home/u', '.kiro', 'agents', 'planner.md')));
     assert.strictEqual(planner.length, 1, `one planner.md lands: ${planner.map(op => op.sourceRelativePath).join(', ')}`);
-    assert.strictEqual(planner[0].sourceRelativePath, '.kiro/agents/planner.md');
+    assert.strictEqual(posix(planner[0].sourceRelativePath), '.kiro/agents/planner.md', 'the Kiro-shaped agent wins over the catalog one (source paths carry the platform separator)');
     const jsonAgent = materialized.operations.find(op => op.kind === 'copy-file' && same(op.destinationPath, path.join('/home/u', '.kiro', 'agents', 'planner.json')));
     assert.ok(jsonAgent, 'the Kiro JSON agent lands too');
-    const stray = materialized.operations.filter(op => /(^|\/)\.kiro\/(README\.md|docs\/|skills\/|install\.sh)/.test(op.sourceRelativePath));
+    const stray = materialized.operations.filter(op => /(^|\/)\.kiro\/(README\.md|docs\/|skills\/|install\.sh)/.test(posix(op.sourceRelativePath)));
     assert.deepStrictEqual(stray, [], 'the README, the docs, the hand-curated skills and the retired script stay out');
-    const foreign = materialized.operations.filter(op => /^(mcp-configs|scripts\/auto-update\.js|scripts\/setup-package-manager\.js)/.test(op.sourceRelativePath));
+    const foreign = materialized.operations.filter(op => /^(mcp-configs|scripts\/auto-update\.js|scripts\/setup-package-manager\.js)/.test(posix(op.sourceRelativePath)));
     assert.deepStrictEqual(foreign, [], 'files other targets keep on their roots stay out of Kiro');
   })) passed++; else failed++;
 
