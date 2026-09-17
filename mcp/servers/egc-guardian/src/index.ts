@@ -89,7 +89,9 @@ interface RoutingResult {
 // A name can belong to more than one catalog entry (a skill and a rule of
 // the same name): the name is available when any of its entries is.
 function withInstallation(routing: { agents: string[]; skills: string[]; scores: Record<string, number>; rejected: string[]; provider: string }): RoutingResult {
-  const installed = installedComponentSources();
+  // The tool is known from its environment variables or, failing that, from
+  // the client name it sent in the MCP initialize handshake.
+  const installed = installedComponentSources({ clientName: server.getClientVersion()?.name });
   const entriesByName = new Map<string, Array<(typeof CATALOG)[number]>>();
   for (const entry of CATALOG) {
     const group = entriesByName.get(entry.name) ?? [];

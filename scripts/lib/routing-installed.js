@@ -15,6 +15,36 @@ const HOME_STATE_DIR = 'egc';
 const STATE_SUFFIX = 'install-state.json';
 const PROJECT_STATE = 'egc-install-state.json';
 
+// The tool behind a routing call when its environment carries no variable:
+// the client name of the MCP initialize handshake, matched loosely, since
+// each tool names its client its own way. A name that matches nothing
+// leaves the harness unknown, as before.
+const CLIENT_NAME_HARNESS_DIRS = Object.freeze([
+  [/claude/i, ['.claude']],
+  [/gemini|antigravity/i, ['.gemini']],
+  [/codebuddy/i, ['.codebuddy']],
+  // The VS Code forks name themselves before the generic VS Code rule
+  // catches them.
+  [/cursor/i, ['.cursor']],
+  [/windsurf|codeium/i, ['.codeium', 'windsurf']],
+  [/copilot|vscode|visual studio/i, ['.github']],
+  [/kiro/i, ['.kiro']],
+  [/trae/i, ['.trae']],
+  [/opencode/i, ['.config', 'opencode']],
+  [/zed/i, ['.config', 'zed']],
+  [/codex|goose|openhands/i, ['.agents']],
+  [/\bamp\b/i, ['.amp']],
+  [/junie|jetbrains/i, ['.junie']],
+]);
+
+function harnessDirFromClientName(clientName, homeDir) {
+  if (typeof clientName !== 'string' || clientName.length === 0) return null;
+  for (const [pattern, segments] of CLIENT_NAME_HARNESS_DIRS) {
+    if (pattern.test(clientName)) return path.join(homeDir, ...segments);
+  }
+  return null;
+}
+
 // A state file that is missing is simply absent; one that exists but cannot
 // be read or parsed is reported as unreadable and contributes nothing, so a
 // corrupt state never turns into "everything is installed".
@@ -56,8 +86,8 @@ function sourcesOf(state) {
 // harness variable in the environment, only that harness counts (its home
 // state and its project state under cwd); without one, every known harness
 // state is read, which can only over-approximate what is installed.
-function stateFilesFor({ environment, cwd, homeDir }) {
-  const harnessRoot = resolveHarnessDirFromEnv(environment, homeDir);
+function stateFilesFor({ environment, cwd, homeDir, clientName }) {
+  const harnessRoot = resolveHarnessDirFromEnv(environment, homeDir) || harnessDirFromClientName(clientName, homeDir);
   const homeRoots = harnessRoot ? [harnessRoot] : getKnownHarnessDirs(homeDir);
   const projectDirs = harnessRoot ? [path.basename(harnessRoot)] : PROJECT_STATE_DIRS;
   const files = [];
@@ -76,7 +106,7 @@ function installedComponentSources(options = {}) {
   const environment = options.environment || process.env;
   const cwd = options.cwd || process.cwd();
   const homeDir = options.homeDir || getHomeDir();
-  const { harnessRoot, files } = stateFilesFor({ environment, cwd, homeDir });
+  const { harnessRoot, files } = stateFilesFor({ environment, cwd, homeDir, clientName: options.clientName });
   const sources = new Set();
   let states = 0;
   let unreadable = 0;
@@ -108,4 +138,4 @@ function splitByInstallation(entries, installed) {
 
 const INSTALL_HINT = 'egc install --prompt-library (every detected tool) or egc install --target <tool> --profile full';
 
-module.exports = { installedComponentSources, splitByInstallation, INSTALL_HINT, PROJECT_STATE_DIRS };
+module.exports = { harnessDirFromClientName, installedComponentSources, splitByInstallation, INSTALL_HINT, PROJECT_STATE_DIRS };

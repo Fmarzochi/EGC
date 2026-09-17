@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { installedComponentSources, splitByInstallation } = require('../../scripts/lib/routing-installed');
+const { harnessDirFromClientName, installedComponentSources, splitByInstallation } = require('../../scripts/lib/routing-installed');
 
 const HOME_STATE = ['egc', 'install-state.json'];
 const CODEX_STATE = ['egc', 'codex-install-state.json'];
@@ -118,6 +118,29 @@ if (test('a harness named by the environment with no install state at all has no
     const split = splitByInstallation([{ name: 'code-reviewer', source: 'agents/code-reviewer.md' }, { name: 'legacy-entry' }], result);
     assert.deepStrictEqual(split.available.map((e) => e.name), ['legacy-entry'], 'nothing with a recorded source is offered');
     assert.deepStrictEqual(split.missing.map((e) => e.name), ['code-reviewer']);
+  } finally {
+    fs.rmSync(homeDir, { recursive: true, force: true });
+    fs.rmSync(cwd, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('the MCP client name identifies the tool when the environment says nothing, so another tool\'s library is not offered', () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-routing-home-'));
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-routing-project-'));
+  try {
+    writeState(path.join(homeDir, '.gemini', ...HOME_STATE), ['agents/code-reviewer.md']);
+    const windsurf = installedComponentSources({ environment: {}, cwd, homeDir, clientName: 'windsurf-mcp-client' });
+    assert.strictEqual(windsurf.harnessRoot, path.join(homeDir, '.codeium', 'windsurf'));
+    assert.strictEqual(windsurf.known, true, 'Windsurf is identified and has no state: a known, empty installation');
+    assert.strictEqual(windsurf.sources.size, 0, 'the Gemini library is not offered to Windsurf');
+    const gemini = installedComponentSources({ environment: {}, cwd, homeDir, clientName: 'gemini-cli' });
+    assert.ok(gemini.sources.has('agents/code-reviewer.md'));
+    const unknown = installedComponentSources({ environment: {}, cwd, homeDir, clientName: 'some-new-tool' });
+    assert.strictEqual(unknown.harnessRoot, null, 'an unrecognized client name leaves the harness unknown');
+    assert.ok(unknown.sources.has('agents/code-reviewer.md'), 'and every known state still counts, as before');
+    assert.strictEqual(harnessDirFromClientName('Claude Code', '/h'), path.join('/h', '.claude'));
+    assert.strictEqual(harnessDirFromClientName('cursor-vscode', '/h'), path.join('/h', '.cursor'));
+    assert.strictEqual(harnessDirFromClientName('', '/h'), null);
   } finally {
     fs.rmSync(homeDir, { recursive: true, force: true });
     fs.rmSync(cwd, { recursive: true, force: true });

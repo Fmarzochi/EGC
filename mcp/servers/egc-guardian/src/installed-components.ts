@@ -39,6 +39,36 @@ function harnessDirFromEnv(env: NodeJS.ProcessEnv, homeDir: string): string | nu
   return null;
 }
 
+// The tool behind a routing call when its environment carries no variable:
+// the client name of the MCP initialize handshake, matched loosely, since
+// each tool names its client its own way. A name that matches nothing
+// leaves the harness unknown, as before.
+const CLIENT_NAME_HARNESS_DIRS: ReadonlyArray<readonly [RegExp, ReadonlyArray<string>]> = [
+  [/claude/i, ['.claude']],
+  [/gemini|antigravity/i, ['.gemini']],
+  [/codebuddy/i, ['.codebuddy']],
+  // The VS Code forks name themselves before the generic VS Code rule
+  // catches them.
+  [/cursor/i, ['.cursor']],
+  [/windsurf|codeium/i, ['.codeium', 'windsurf']],
+  [/copilot|vscode|visual studio/i, ['.github']],
+  [/kiro/i, ['.kiro']],
+  [/trae/i, ['.trae']],
+  [/opencode/i, ['.config', 'opencode']],
+  [/zed/i, ['.config', 'zed']],
+  [/codex|goose|openhands/i, ['.agents']],
+  [/\bamp\b/i, ['.amp']],
+  [/junie|jetbrains/i, ['.junie']],
+];
+
+export function harnessDirFromClientName(clientName: string | undefined, homeDir: string): string | null {
+  if (typeof clientName !== 'string' || clientName.length === 0) return null;
+  for (const [pattern, segments] of CLIENT_NAME_HARNESS_DIRS) {
+    if (pattern.test(clientName)) return path.join(homeDir, ...segments);
+  }
+  return null;
+}
+
 type StateRead = { sources: string[] } | { unreadable: true } | null;
 
 // A state file that is missing is simply absent; one that exists but cannot
@@ -80,11 +110,11 @@ function projectDirFrom(env: NodeJS.ProcessEnv): string {
   return env.CLAUDE_PROJECT_DIR || env.GEMINI_PROJECT_DIR || env.CODEBUDDY_PROJECT_DIR || process.cwd();
 }
 
-export function installedComponentSources(options: { environment?: NodeJS.ProcessEnv; cwd?: string; homeDir?: string } = {}): InstalledComponents {
+export function installedComponentSources(options: { environment?: NodeJS.ProcessEnv; cwd?: string; homeDir?: string; clientName?: string } = {}): InstalledComponents {
   const env = options.environment ?? process.env;
   const cwd = options.cwd ?? projectDirFrom(env);
   const homeDir = options.homeDir ?? (env.HOME || env.USERPROFILE || os.homedir());
-  const harnessRoot = harnessDirFromEnv(env, homeDir);
+  const harnessRoot = harnessDirFromEnv(env, homeDir) ?? harnessDirFromClientName(options.clientName, homeDir);
   const homeRoots = harnessRoot ? [harnessRoot] : KNOWN_HARNESS_DIRS.map(parts => path.join(homeDir, ...parts));
   const projectDirs = harnessRoot ? [path.basename(harnessRoot)] : PROJECT_STATE_DIRS;
   const files = new Set<string>();

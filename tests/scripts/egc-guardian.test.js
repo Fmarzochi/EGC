@@ -642,6 +642,12 @@ async function runTests() {
         assert.strictEqual(bare.known, true, 'a tool named by the environment with no state at all has nothing installed');
         assert.strictEqual(bare.sources.size, 0);
         assert.deepStrictEqual(installedModule.splitByInstallation([{ name: 'github-ops', source: 'skills/devops/github-ops/SKILL.md' }], bare).missing.map(e => e.name), ['github-ops']);
+        // No variable, but the MCP client named itself: another tool's state does not count.
+        const named = installedModule.installedComponentSources({ environment: {}, cwd: emptyHome, homeDir, clientName: 'Windsurf' });
+        assert.strictEqual(named.harnessRoot, path.join(homeDir, '.codeium', 'windsurf'));
+        assert.strictEqual(named.known, true);
+        assert.strictEqual(named.sources.size, 0, 'the Claude state under the same home is not offered to Windsurf');
+        assert.strictEqual(installedModule.harnessDirFromClientName('claude-code', homeDir), path.join(homeDir, '.claude'));
       } finally {
         fs.rmSync(emptyHome, { recursive: true, force: true });
       }
