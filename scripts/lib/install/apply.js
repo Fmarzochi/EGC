@@ -9,6 +9,7 @@ const { readInstallState, writeInstallState } = require('../install-state');
 const { syncInstallStateToStore } = require('../install-state-store-sync');
 const { assertSafeMcpConfig, filterMcpConfig, isMcpConfigPath, parseDisabledMcpServers, parseMcpConfigText } = require('../mcp-config');
 const { copyFileKeepingMode, replaceFileWith, writeTextKeepingMode } = require('./preserving-write');
+const { plannedFileContent } = require('./copy-transforms');
 const { cloneJsonValue, deepMergeJson } = require('../json-merge');
 
 
@@ -336,7 +337,7 @@ function retirableEntries(plan) {
     const filePath = path.resolve(retirement.destinationPath);
     const root = roots.find(candidate => filePath.startsWith(candidate + path.sep));
     if (!root) continue;
-    if (!isRetirableFile(filePath, root, retirement.sourcePath, plan)) continue;
+    if (!isRetirableFile(filePath, root, retirement.sourcePath, plan, retirement.transform)) continue;
     result.push({ retirement: { ...retirement, destinationPath: filePath }, root });
   }
   return result;
@@ -366,7 +367,7 @@ function plannedContentHashes(plan) {
   for (const operation of Array.isArray(plan.operations) ? plan.operations : []) {
     if (operation.kind !== 'copy-file' || typeof operation.sourcePath !== 'string') continue;
     try {
-      hashes.add(sha256(fs.readFileSync(operation.sourcePath)));
+      hashes.add(sha256(plannedFileContent(operation.sourcePath, operation.transform)));
     } catch {
       // An unreadable source vouches for nothing.
     }
@@ -387,7 +388,7 @@ function sha256(buffer) {
 // file the plan copies today. A file the person replaced since is theirs, and
 // a file whose source is gone and matches nothing the plan writes cannot be
 // told apart from one, so both stay.
-function isRetirableFile(filePath, root, sourcePath, plan = {}) {
+function isRetirableFile(filePath, root, sourcePath, plan = {}, transform = undefined) {
   let stat;
   try {
     stat = fs.lstatSync(filePath);
@@ -408,7 +409,7 @@ function isRetirableFile(filePath, root, sourcePath, plan = {}) {
   try {
     const source = fs.statSync(sourcePath);
     if (!source.isFile()) return false;
-    return fs.readFileSync(sourcePath).equals(content);
+    return plannedFileContent(sourcePath, transform).equals(content);
   } catch (error) {
     // Only a source that is gone falls through to the content match; any
     // other failure to read it keeps the file.
@@ -950,9 +951,14 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
       applyMergeMarkdownIndexOperation(operation);
     } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
       applyMcpCopyFileOperation(operation, disabledServers);
+    } else if (operation.kind === 'copy-file' && operation.transform) {
+      writeTextKeepingMode(
+        operation.destinationPath,
+        plannedFileContent(operation.sourcePath, operation.transform).toString('utf8'),
+        operation.sourcePath
+      );
     } else {
       copyFileKeepingMode(operation.sourcePath, operation.destinationPath);
-
     }
   }
 

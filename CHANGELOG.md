@@ -4,6 +4,11 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The full profile delivers the prompt library on every target it names** (#1465): `egc install --target <tool> --profile full` promised 61 agents, 232 skills, 77 commands and 109 rules, but only Gemini, Antigravity, Cursor and CodeBuddy received them. Every skills module depended on `platform-configs`, which names seven targets, and the resolver skipped the whole module wherever that dependency did not apply, so Windsurf, Amp, Copilot and Zed got no skill at all and Claude Code, Codex and OpenCode lost the 38 language and framework skills; the skills modules did not name Kiro, Trae, Junie, Goose, OpenHands, Amazon Q, Qwen, Cline, Aider or Warp; `rules-core`, `agents-core` and `commands-core` did not name Claude Code and most other tools; and the install-state recorded the profile with an empty selection while `egc doctor` called it healthy. Skills modules now stand on their own and name every target; the three library modules name every tool that can hold them (Kiro and Trae keep their own scripts for agents and rules, Aider and Warp keep the memory rule only, by design); the `.agents` tree and the root `AGENTS.md` stay with the tools that own them. Claude Code receives the agents in `~/.claude/agents` with the frontmatter Claude Code reads (the tools list as a comma-separated string, a model it cannot run dropped), the commands in `~/.claude/commands`, and the rules flattened in `~/.claude/rules` with their path scopes, without the Chinese mirror of the common rules that would load into every session. `egc doctor` warns when a recorded profile selected no module for its target. A contract test resolves the full profile on all 21 targets and counts what lands.
+- **`egc install --prompt-library` reaches every detected tool** (#1465): the shell installers only installed the library to Gemini, Codex, OpenCode, Kiro, Trae and CodeBuddy. One Node script now detects every home target by its config directory or its command, applies the full profile to each, reports the ones that failed instead of stopping at the first, and runs the remaining per-tool scripts when bash is available; both installers call it.
+
 ## [1.1.22] - 2026-09-16
 
 ### Fixed

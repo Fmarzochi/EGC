@@ -361,6 +361,8 @@ function deepRemoveJsonSubset(currentValue, managedValue) {
   return currentValue === managedValue ? JSON_REMOVE_SENTINEL : currentValue;
 }
 
+const { plannedFileContent } = require('./install/copy-transforms');
+
 function hydrateRecordedOperations(repoRoot, operations) {
   return operations.map(operation => {
     if (operation.kind !== 'copy-file') {
@@ -404,6 +406,14 @@ function repairCopyFile(repoRoot, operation) {
     const text = fs.readFileSync(sourcePath, 'utf8');
     assertSafeMcpConfig(parseMcpConfigText(text, sourcePath), sourcePath);
     writeTextKeepingMode(operation.destinationPath, text, sourcePath);
+    return;
+  }
+  if (operation.transform) {
+    writeTextKeepingMode(
+      operation.destinationPath,
+      plannedFileContent(sourcePath, operation.transform).toString('utf8'),
+      sourcePath
+    );
     return;
   }
   copyFileKeepingMode(sourcePath, operation.destinationPath);
@@ -633,7 +643,10 @@ function inspectCopyFileOperation(repoRoot, operation, destinationPath) {
   if (!sourcePath || !fs.existsSync(sourcePath)) {
     return inspectResult('missing-source', operation, destinationPath, { sourcePath });
   }
-  if (!areFilesEqual(sourcePath, destinationPath)) {
+  const equal = operation.transform
+    ? plannedFileContent(sourcePath, operation.transform).equals(fs.readFileSync(destinationPath))
+    : areFilesEqual(sourcePath, destinationPath);
+  if (!equal) {
     return inspectResult('drifted', operation, destinationPath, { sourcePath });
   }
   return inspectResult('ok', operation, destinationPath, { sourcePath });
@@ -975,6 +988,31 @@ function checkTargetRootHealth(state, record) {
   return issues;
 }
 
+// A profile that resolved to no module at all left the tool with the engine
+// only, whatever the profile promised. Doctor used to call that healthy.
+function checkProfileSelection(state, record) {
+  const profile = state.request ? state.request.profile : null;
+  const selectedModules = state.resolution && Array.isArray(state.resolution.selectedModules)
+    ? state.resolution.selectedModules
+    : [];
+  if (!profile || selectedModules.length > 0) {
+    return [];
+  }
+
+  const target = record.adapter.target;
+  return [buildIssue(
+    'warning',
+    'profile-selected-nothing',
+    `Profile ${profile} selected no module for ${target}, so the tool has the engine only. Run 'egc install --target ${target} --profile ${profile}' with this version to install what the profile names`,
+    {
+      profile,
+      skippedModules: state.resolution && Array.isArray(state.resolution.skippedModules)
+        ? [...state.resolution.skippedModules]
+        : [],
+    }
+  )];
+}
+
 function checkManagedOperationHealth(state, context) {
   const issues = [];
   const managedOperations = getManagedOperations(state);
@@ -1114,6 +1152,7 @@ function analyzeRecord(record, context) {
 
   const issues = [
     ...checkTargetRootHealth(state, record),
+    ...checkProfileSelection(state, record),
     ...checkManagedOperationHealth(state, context),
     ...checkVersionDrift(state, context),
     ...checkResolutionDrift(record, state, context),

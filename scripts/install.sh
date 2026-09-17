@@ -309,31 +309,10 @@ if [[ "$DRY_RUN" = false ]]; then
   fi
 fi
 if [[ "$_install_ans" = "Y" || "$_install_ans" = "y" ]]; then
-  if [[ -d "$HOME/.gemini" ]] || command -v gemini >/dev/null 2>&1 || command -v agy >/dev/null 2>&1; then
-    echo "  installing to Gemini / AGY..."
-    node "$ROOT_DIR/scripts/install-apply.js" --target egc --profile full
-  fi
-  if [[ -d "$HOME/.codex" ]] || command -v codex >/dev/null 2>&1; then
-    echo "  installing to Codex..."
-    node "$ROOT_DIR/scripts/install-apply.js" --target codex --profile full
-  fi
-  if [[ -d "$HOME/.opencode" ]] || command -v opencode >/dev/null 2>&1; then
-    echo "  installing to OpenCode..."
-    node "$ROOT_DIR/scripts/install-apply.js" --target opencode --profile full
-  fi
-  if [[ -d "$HOME/.kiro" ]] || command -v kiro >/dev/null 2>&1; then
-    echo "  installing to Kiro..."
-    node "$ROOT_DIR/scripts/install-apply.js" --target kiro --profile full
-    bash "$ROOT_DIR/.kiro/install.sh" ~
-  fi
-  if [[ -d "$HOME/.trae" || -d "$HOME/.trae-cn" ]] || command -v trae >/dev/null 2>&1; then
-    echo "  installing to Trae..."
-    bash "$ROOT_DIR/.trae/install.sh" ~
-  fi
-  if [[ -d "$HOME/.codebuddy" ]] || command -v codebuddy >/dev/null 2>&1; then
-    echo "  installing to CodeBuddy..."
-    bash "$ROOT_DIR/.codebuddy/install.sh" ~
-  fi
+  # One detection list for every tool, shared with the Windows installer:
+  # scripts/lib/install/prompt-library.js applies the full profile to each
+  # detected home target and runs the remaining per-tool shell scripts.
+  node "$ROOT_DIR/scripts/install-prompt-library.js" || true
 fi
 
 # ── MCP auto-registration ─────────────────────────────────────────────────────

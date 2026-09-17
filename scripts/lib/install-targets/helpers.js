@@ -20,12 +20,27 @@ function normalizeRelativePath(relativePath) {
     .replace(/\/+$/, ''); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
 }
 
+// Paths that carry a platform identity rather than library content. Every
+// target that takes agents-core receives agents/; only the ones listed here
+// also take the Codex and Antigravity .agents tree and the root AGENTS.md,
+// so a home root such as ~/.amp or ~/.claude never grows either.
+const IDENTITY_SOURCE_PATH_OWNERS = Object.freeze({
+  '.agents': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
+  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
+});
+
 function isForeignPlatformPath(sourceRelativePath, adapterTarget) {
   const normalizedPath = normalizeRelativePath(sourceRelativePath);
 
   for (const [prefix, ownerTarget] of Object.entries(PLATFORM_SOURCE_PATH_OWNERS)) {
     if (normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`)) {
       return ownerTarget !== adapterTarget;
+    }
+  }
+
+  for (const [prefix, owners] of Object.entries(IDENTITY_SOURCE_PATH_OWNERS)) {
+    if (normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`)) {
+      return !owners.includes(adapterTarget);
     }
   }
 
@@ -567,6 +582,8 @@ function planGenericRetirements(input, adapter) {
       // The file EGC copied there, for the apply to compare against: a
       // file the person replaced since is theirs and stays.
       sourcePath: path.join(repoRoot, ...source.split('/')),
+      // A transformed copy is compared against the transformed source.
+      ...(operation.transform ? { transform: operation.transform } : {}),
       reason: 'file left the install plan',
     });
   }

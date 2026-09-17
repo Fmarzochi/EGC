@@ -132,7 +132,7 @@ function applyInstallPlan(plan) {
   return applyPlan(plan);
 }
 
-function buildCopyFileOperation({ moduleId, sourcePath, sourceRelativePath, destinationPath, strategy }) {
+function buildCopyFileOperation({ moduleId, sourcePath, sourceRelativePath, destinationPath, strategy, transform }) {
   return {
     kind: 'copy-file',
     moduleId,
@@ -142,6 +142,7 @@ function buildCopyFileOperation({ moduleId, sourcePath, sourceRelativePath, dest
     strategy,
     ownership: 'managed',
     scaffoldOnly: false,
+    ...(transform ? { transform } : {}),
   };
 }
 
@@ -636,6 +637,7 @@ function materializeScaffoldOperation(sourceRoot, operation) {
       sourceRelativePath: operation.sourceRelativePath,
       destinationPath: operation.destinationPath,
       strategy: operation.strategy,
+      transform: operation.transform,
     })];
   }
 
@@ -651,6 +653,7 @@ function materializeScaffoldOperation(sourceRoot, operation) {
       sourceRelativePath,
       destinationPath: path.join(operation.destinationPath, relativeFile),
       strategy: operation.strategy,
+      transform: operation.transform,
     });
   });
 }

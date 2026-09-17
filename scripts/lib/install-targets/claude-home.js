@@ -1,6 +1,8 @@
 const path = require('node:path');
 
 const {
+  createFlatFileOperations,
+  createFlatRuleOperations,
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
@@ -8,6 +10,70 @@ const {
   planFlatSkillOperation,
   resolveModulesPlan,
 } = require('./helpers');
+const { CLAUDE_AGENT_FRONTMATTER_TRANSFORM } = require('../install/copy-transforms');
+
+// Library families with a native home under ~/.claude. Rules are flattened
+// like Cursor's (the folder becomes the file name prefix) and keep their
+// paths frontmatter, so Claude Code scopes the language rules to matching
+// files and loads only rules/common everywhere. rules/zh mirrors
+// rules/common in Chinese and would load into every session alongside it,
+// so it stays out. Agents go through the frontmatter transform: the
+// catalog's tools list becomes the comma-separated string Claude Code
+// reads and a model it cannot run is dropped.
+const CLAUDE_EXCLUDED_RULE_NAMESPACES = new Set(['zh']);
+
+function toClaudeRuleFileName(fileName, sourceRelativeFile) {
+  const normalized = normalizeRelativePath(sourceRelativeFile);
+  const namespace = normalized.split('/')[1];
+  if (CLAUDE_EXCLUDED_RULE_NAMESPACES.has(namespace) || path.basename(normalized).toLowerCase() === 'readme.md') {
+    return null;
+  }
+  return fileName;
+}
+
+function planClaudeRuleOperations(moduleId, sourceRelativePath, planningInput, targetRoot) {
+  return createFlatRuleOperations({
+    moduleId,
+    repoRoot: planningInput.repoRoot,
+    sourceRelativePath,
+    destinationDir: path.join(targetRoot, 'rules'),
+    destinationNameTransform: toClaudeRuleFileName,
+  });
+}
+
+function withClaudeAgentTransform(operation) {
+  return { ...operation, transform: CLAUDE_AGENT_FRONTMATTER_TRANSFORM };
+}
+
+function planClaudeAgentOperations(adapter, moduleId, sourceRelativePath, planningInput, targetRoot) {
+  const normalized = normalizeRelativePath(sourceRelativePath);
+  if (normalized === 'agents') {
+    return createFlatFileOperations({
+      moduleId,
+      repoRoot: planningInput.repoRoot,
+      sourceRelativePath,
+      destinationDir: path.join(targetRoot, 'agents'),
+    }).map(withClaudeAgentTransform);
+  }
+  return [withClaudeAgentTransform(createRemappedOperation(
+    adapter,
+    moduleId,
+    sourceRelativePath,
+    path.join(targetRoot, 'agents', ...normalized.slice('agents/'.length).split('/')),
+    { strategy: 'preserve-relative-path' }
+  ))];
+}
+
+function planClaudeModuleOperations(adapter, moduleId, sourceRelativePath, planningInput, targetRoot) {
+  const normalized = normalizeRelativePath(sourceRelativePath);
+  if (normalized === 'rules') {
+    return planClaudeRuleOperations(moduleId, sourceRelativePath, planningInput, targetRoot);
+  }
+  if (normalized === 'agents' || normalized.startsWith('agents/')) {
+    return planClaudeAgentOperations(adapter, moduleId, sourceRelativePath, planningInput, targetRoot);
+  }
+  return [planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningInput, targetRoot)];
+}
 
 const CLAUDE_EXCLUDED_SOURCE_PREFIXES = [
   'mcp-configs',
@@ -153,7 +219,7 @@ module.exports = createInstallTargetAdapter({
       const paths = Array.isArray(module.paths) ? module.paths : [];
       return paths
         .filter(p => !isForeignPlatformPath(p, adapter.target) && !isClaudeExcludedPath(p))
-        .map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot));
+        .flatMap(sourceRelativePath => planClaudeModuleOperations(adapter, module.id, sourceRelativePath, planningInput, targetRoot));
     });
 
     // Deterministic memory loading: every Claude Code install registers the
