@@ -33,10 +33,31 @@ function run(name, fn) {
 console.log('\n=== Testing egc gain --history and egc discover ===\n');
 
 run('gain --history --json returns the raw ledger entries', () => {
-  const res = spawnSync('node', [GAIN, '--history', '--json'], { encoding: 'utf8' });
+  // Point the spawned child at a synthetic HOME so --json reports exactly the
+  // seeded ledger instead of the real ~/.egc ledger, whose size would exceed
+  // the spawn buffer and kill the child with status === null.
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-gain-home-'));
+  const ledgerDir = path.join(home, '.egc', 'metrics');
+  fs.mkdirSync(ledgerDir, { recursive: true });
+  const entry = { ts: '2026-07-26T04:00:00Z', kind: 'git-log', cmd: 'git log --stat', tokensSaved: 5000, bytesIn: 100000, bytesOut: 2000 };
+  fs.writeFileSync(path.join(ledgerDir, 'crusher.jsonl'), `${JSON.stringify(entry)}\n`);
+
+  const res = spawnSync('node', [GAIN, '--history', '--json'], {
+    encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
+    env: {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+      EGC_CRUSHER_METRICS_FILE: path.join(ledgerDir, 'crusher.jsonl'),
+    },
+  });
   assert.strictEqual(res.status, 0, res.stderr);
   const entries = JSON.parse(res.stdout);
   assert.ok(Array.isArray(entries), 'history is an array');
+  assert.strictEqual(entries.length, 1, 'exactly the seeded entry is reported');
+  assert.strictEqual(entries[0].cmd, entry.cmd, 'the raw ledger entry is returned verbatim');
+  assert.strictEqual(entries[0].tokensSaved, entry.tokensSaved, 'savings carry through');
 });
 
 run('gain summary prints the biggest crush with its command', () => {
