@@ -767,6 +767,21 @@ async function runTests() {
   run('git config -f cfg core.hooksPath hook',  () => assertDeniedWith('git config -f /tmp/cfg core.hooksPath /tmp/x', 'hook'));
   run('git worktree remove -f protected',       () => assertDeniedWith(`git worktree remove -f ${home}/.ssh`, 'protected'));
 
+  // git also accepts the file operand attached to -f and an abbreviated
+  // --file, reads -n as a pathspec after --, lets --no-dry-run cancel -n,
+  // abbreviates --exclude, and resolves a relative path against the cwd.
+  run('git config -f attached protected',       () => assertDeniedWith(`git config -f${home}/.ssh/config --list`, 'protected'));
+  run('git config --fil= protected',            () => assertDeniedWith(`git config --fil=${home}/.ssh/config --list`, 'protected'));
+  run('git clean -n --no-dry-run',              () => assertDeniedWith('git clean -n --no-dry-run', CLEAN_FRAGMENT));
+  run('git clean -- -n',                        () => assertDeniedWith('git clean -- -n', CLEAN_FRAGMENT));
+  run('git clean -fd --excl=n',                 () => assertDeniedWith('git clean -fd --excl=n', CLEAN_FRAGMENT));
+  run('git clean -fd --excl n',                 () => assertDeniedWith('git clean -fd --excl n', CLEAN_FRAGMENT));
+  run('git clean -n -- -f is a dry run',        () => assertAllowed('git clean -n -- -f'));
+  run('git grep -f protected pattern file',     () => assertDeniedWith(`git grep -f ${home}/.ssh/config needle`, 'protected'));
+  run('git grep -f attached protected',         () => assertDeniedWith(`git grep -f${home}/.ssh/config needle`, 'protected'));
+  run('git worktree remove -f -- protected',    () => assertDeniedWith(`git worktree remove -f -- ${home}/.ssh`, 'protected'));
+  run('alias worktree path resolves in cwd',    () => assert.strictEqual(validateCommand("git -c alias.wt='worktree remove -f .ssh' wt", home).allowed, false));
+
   // ── Routing: installation-aware, keyless ─────────────────
   console.log('\n=== routing: installed components ===');
   run('installed components come from the install state of the harness named by the environment', () => {
