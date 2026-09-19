@@ -1,37 +1,18 @@
 # Token Optimization
 
-EGC spends tokens in four places: shell output that reaches the model, files loaded into context, memory the agent has to re-read, and the instructions every session carries. This page lists the controls the package ships for each, the setting to reach for first, and what each one trades away. Every command below exists in this repository; nothing here needs an API key.
+EGC spends tokens in five places: shell output that reaches the model, files loaded into context, memory the agent has to re-read, the instructions every session carries, and the tool definitions of MCP servers. This page maps each of them to the control the package ships and to what that control trades away. The settings, the model choice and the compaction commands are covered step by step in the [guide](guides/token-optimization.md); this page does not repeat them.
 
 ## 1. Shell output: the Token Crusher
 
-Noisy commands (long `git log` and `git diff`, test runners, package installs, large `gh --json` payloads) are the biggest single source of wasted tokens. The Token Crusher compresses that output before the model sees it, by up to 90 percent, and always keeps errors, warnings and failures.
+The Token Crusher compresses noisy command output (long `git log` and `git diff`, test runners, package installs, large `gh --json` payloads) by up to 90 percent before the model sees it, and always keeps errors, warnings and failures. `egc run <command>` is the door, `egc run --raw <command>` the escape hatch, `egc saved`, `egc gain` and `egc gain --history` the ledger, `egc discover` the scan for output that skipped the crusher, and `egc crusher-shim install` the PATH-level shim for the common binaries. The guide's [Token Crusher](guides/token-optimization.md#token-crusher-built-into-egc) section and the [installation page](installation.md#token-crusher) carry the details.
 
-| Control | What it does | When to use it |
-|---|---|---|
-| `egc run <command>` | Runs any command and returns the crushed output | Default for git, tests, installs, `gh` |
-| `egc run --raw <command>` | Same command, full output | Debugging a failure the summary hides |
-| `egc saved` | Accumulated savings, computed locally | A quick answer to "how much did I save?" |
-| `egc gain` | Full savings panel: totals, efficiency, breakdown by command kind | Weekly review |
-| `egc gain --history` | The run-by-run savings log | Auditing a specific session |
-| `egc discover` | Scans recent transcripts for crushable output that skipped the crusher | Finding commands that still run uncrushed |
-| `egc crusher-shim install` | PATH-level shim for git, npm, pnpm, yarn, bun, pip, poetry, uv, composer, bundle and gh | Harnesses where the hook rewrite does not fire |
+Tradeoff: crushed output is a summary. When a failure hides behind it, rerun the same command once with `--raw` instead of switching the crusher off. On Claude Code the hook runs on every Bash call, but the rewritten command is applied only when a person typed it, so for a command the assistant issues the assistant prefixes `egc run` itself; the shim covers the common binaries either way.
 
-Target setting: keep the crusher hook enabled and the shim installed. On hook-capable harnesses the bash dispatcher routes simple commands through `egc run` on its own; the rewrite is fail-open, so pipelines, chaining, redirection and already-wrapped commands pass through untouched.
+## 2. Files in context: `reduce_context`
 
-Tradeoff: crushed output is a summary. When a test fails for a reason the summary does not show, rerun the same command with `--raw` once rather than switching the crusher off. On Claude Code the hook rewrite applies only to commands a human types, not to commands the assistant issues through its Bash tool; the assistant has to prefix `egc run` itself, and the shim covers the common binaries either way (see [installation.md](installation.md#token-crusher)).
+The Guardian MCP server exposes `reduce_context`, which loads the files a task needs and trims each payload before it enters the context window; `orchestrate_task` reports the same reduction metrics for any file paths passed to it. Use it instead of reading large files whole. For the window itself, the `strategic-compact` skill suggests manual compaction at logical boundaries of the work, `context-budget` audits what agents, skills, MCP servers and rules consume in every session, `token-budget-advisor` sizes a task before it starts, and `cost-aware-llm-pipeline` covers routing, budgets and prompt caching for applications built with LLM APIs.
 
-## 2. Files in context: `reduce_context` and the budget skills
-
-The Guardian MCP server exposes `reduce_context`, which loads the files a task needs and trims each payload before it enters the context window; `orchestrate_task` reports the same reduction metrics for any file paths passed to it. Use it instead of reading large files whole.
-
-Skills that manage the window itself:
-
-- `strategic-compact` suggests manual compaction at logical boundaries of the work (after a plan is approved, after a suite goes green) instead of waiting for automatic compaction mid-task.
-- `context-budget` audits what agents, skills, MCP servers and rules consume in every session and lists what to trim.
-- `token-budget-advisor` sizes a task's budget before it starts.
-- `cost-aware-llm-pipeline` covers model routing, budget tracking and prompt caching for applications built with LLM APIs.
-
-Target setting: compact at a boundary you choose. Tradeoff: compaction summarizes the transcript; the project memory below is what keeps decisions from being lost when it happens.
+Tradeoff: compaction summarizes the transcript; the project memory below is what keeps decisions from being lost when it happens.
 
 ## 3. Memory: read state instead of re-explaining
 
@@ -43,11 +24,9 @@ Tradeoff: state files grow with the project. Keep the sections short and let `up
 
 Every rule file installed in a tool's rules directory loads into every session. The full profile therefore installs the common rules once per tool and leaves the Chinese mirror of those rules out of the Claude Code target, where each duplicate would have cost several thousand tokens per session for no gain. When you add rules of your own, prefer path-scoped rules (the `paths:` frontmatter) so a rule loads only when a matching file is in play.
 
-Model choice is a budget lever too: `/model-route` recommends the cheapest tier that fits the task's complexity and risk, and `/cost-report` reads the local cost-tracker database when that hook is enabled.
-
 ## 5. MCP servers
 
-EGC registers two local MCP servers in each tool it installs into, `egc-guardian` and `egc-memory`, and nothing else. Every other MCP server a tool has enabled adds its tool definitions to every session, whether or not a task uses them, so an unused server is a fixed cost on every prompt. Disable the servers you do not use in the tool's own MCP settings; each tool keeps its own list, and EGC never edits it. Prefer a CLI that is already on the machine over an MCP server that wraps the same service (`gh` over a GitHub server, for example): the command costs tokens only when it runs.
+Every MCP server a tool has enabled adds its tool definitions to every session, whether or not a task uses them, so an unused server is a fixed cost on every prompt. `egc init` writes its own two entries, `egc-guardian` and `egc-memory`, into each tool's MCP settings and leaves every other entry alone. Disable the servers you do not use in that same settings file, or with the tool's own command for it; the guide's [MCP Server Management](guides/token-optimization.md#mcp-server-management) section names the command per tool. `EGC_DISABLED_MCPS` filters the EGC entries the installer and the Codex merge write; it never touches a server the tool loaded at runtime. Prefer a CLI that is already on the machine over an MCP server that wraps the same service (`gh` over a GitHub server, for example): the command costs tokens only when it runs.
 
 ## Measuring
 

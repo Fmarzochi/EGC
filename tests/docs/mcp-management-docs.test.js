@@ -30,24 +30,41 @@ function read(relativePath) {
 
 console.log('\n=== Testing MCP management docs ===\n');
 
-test('token optimization guide keeps MCP disables in the tool and names the two EGC servers', () => {
+test('token optimization guide separates Gemini MCP disables from EGC config filters', () => {
+  const source = read('docs/guides/token-optimization.md');
+
+  assert.ok(
+    source.includes('Use `/mcp` to disable Gemini Code MCP servers'),
+    'Token guide should direct Gemini Code users to /mcp for runtime MCP disables'
+  );
+  assert.ok(
+    source.includes('Gemini Code persists those runtime disables in `~/.gemini.json`'),
+    'Token guide should name ~/.gemini.json as the observed runtime disable store'
+  );
+  assert.ok(
+    source.includes('`EGC_DISABLED_MCPS` only affects EGC-generated MCP config output'),
+    'Token guide should scope EGC_DISABLED_MCPS to config generation'
+  );
+  assert.ok(
+    !source.includes('Use `disabledMcpServers` in project config to disable servers per-project'),
+    'Token guide should not tell users that project settings disable Gemini runtime MCP servers'
+  );
+});
+
+test('token optimization overview points at the guide and scopes EGC_DISABLED_MCPS to install time', () => {
   const source = read('docs/token-optimization.md');
 
   assert.ok(
-    source.includes('EGC registers two local MCP servers in each tool it installs into, `egc-guardian` and `egc-memory`, and nothing else.'),
-    'Token guide should name the two servers EGC registers and no other'
+    source.includes('[guide](guides/token-optimization.md)'),
+    'Token overview should link to the guide instead of repeating it'
   );
   assert.ok(
-    source.includes('Disable the servers you do not use in the tool\'s own MCP settings; each tool keeps its own list, and EGC never edits it.'),
-    'Token guide should send MCP disables to the tool\'s own settings, not to EGC'
+    source.includes('`EGC_DISABLED_MCPS` filters the EGC entries the installer and the Codex merge write; it never touches a server the tool loaded at runtime.'),
+    'Token overview should scope EGC_DISABLED_MCPS to install and sync time'
   );
   assert.ok(
     !source.includes('disabledMcpServers'),
-    'Token guide should not tell users that a project setting disables runtime MCP servers'
-  );
-  assert.ok(
-    !source.includes('EGC_DISABLED_MCPS'),
-    'Token guide should not document an EGC filter that does not exist'
+    'Token overview should not tell users that a project setting disables runtime MCP servers'
   );
 });
 
@@ -59,8 +76,8 @@ test('README MCP guidance avoids settings.json disable instructions', () => {
     'README should say EGC registers its two local MCP servers and no other'
   );
   assert.ok(
-    !source.includes('EGC_DISABLED_MCPS'),
-    'README should not document an EGC filter that does not exist'
+    !source.includes('`EGC_DISABLED_MCPS` is a live'),
+    'README should not present EGC_DISABLED_MCPS as a live runtime toggle'
   );
   assert.ok(
     !source.includes('// In your project\'s .gemini/settings.json\n{\n  "disabledMcpServers"'),

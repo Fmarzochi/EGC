@@ -176,8 +176,8 @@
             "timeout": 5
           }
         ],
-        "description": "Block modifications to linter/formatter config files. Steers agent to fix code instead of weakening configs.",
-        "id": "pre:config-protection"
+        "description": "Mine the session transcript for decisions, failures, preferences and next steps before compaction and merge them into the project state",
+        "id": "pre:compact:memory-miner"
       }
     ],
     "SessionStart": [
@@ -476,8 +476,8 @@
             "timeout": 5
           }
         ],
-        "description": "Block modifications to linter/formatter config files. Steers agent to fix code instead of weakening configs.",
-        "id": "pre:config-protection"
+        "description": "Mine the session transcript for decisions, failures, preferences and next steps at session end and merge them into the project state",
+        "id": "session:end:memory-miner"
       },
       {
         "matcher": "*",
@@ -488,8 +488,8 @@
             "timeout": 5
           }
         ],
-        "description": "Block modifications to linter/formatter config files. Steers agent to fix code instead of weakening configs.",
-        "id": "pre:config-protection"
+        "description": "Turn the recurring tool failures of the session into recommendations in the project AI config files",
+        "id": "session:end:auto-learn"
       }
     ],
     "UserPromptSubmit": [
@@ -502,8 +502,8 @@
             "timeout": 5
           }
         ],
-        "description": "Block modifications to linter/formatter config files. Steers agent to fix code instead of weakening configs.",
-        "id": "pre:config-protection"
+        "description": "Shortlist skill and agent candidates for the prompt from the installed index",
+        "id": "prompt:router"
       },
       {
         "matcher": "*",
@@ -514,8 +514,8 @@
             "timeout": 5
           }
         ],
-        "description": "Block modifications to linter/formatter config files. Steers agent to fix code instead of weakening configs.",
-        "id": "pre:config-protection"
+        "description": "Detect the session intent semantically and act on it (save, resume, remember, recall)",
+        "id": "prompt:intuition"
       },
       {
         "matcher": "*",
