@@ -51,6 +51,14 @@ function verdictForCommand(segment) {
   if (base === 'git' && /\bpush\b/.test(segment) && /(\s--force\b|\s-f\b)/.test(segment)) {
     return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
   }
+  // Probes for the advisory field: a hard block whose reason happens to carry
+  // an advisory phrase, and an advisory verdict whose reason carries none.
+  if (base === 'advisory-probe-hard') {
+    return { allowed: false, reason: "'advisory-probe-hard' is not in the allowlist, says the input", trust_level: 'DANGEROUS', advisory: false };
+  }
+  if (base === 'advisory-probe-soft') {
+    return { allowed: false, reason: 'nothing to see here', trust_level: 'SAFE_READONLY', advisory: true };
+  }
   return { allowed: true, trust_level: 'SAFE_READONLY' };
 }
 

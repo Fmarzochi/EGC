@@ -78,6 +78,16 @@ function runTests() {
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
   })) passed++; else failed++;
 
+  if (test('a verdict that says advisory is false blocks even when its reason carries an advisory phrase', () => {
+    const result = runHook('advisory-probe-hard');
+    assert.strictEqual(result.code, 2, `Expected block, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('a verdict that says advisory is true never blocks even without an advisory phrase', () => {
+    const result = runHook('advisory-probe-soft');
+    assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
   if (test('blocks a destructive command', () => {
     const result = runHook('rm -rf /');
     assert.strictEqual(result.code, 2, 'Expected rm to be blocked');
