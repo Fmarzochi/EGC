@@ -566,11 +566,24 @@ async function runTests() {
           GEMINI_HOOK_EVENT_NAME: 'PreToolUse',
           ECC_MCP_CONFIG_PATH: configPath,
           ECC_MCP_HEALTH_STATE_PATH: statePath,
-          ECC_MCP_HEALTH_TIMEOUT_MS: '100'
+          // 1000 ms, matching the sibling unhealthy cases rather than the 100 ms
+          // the healthy cases use. probeCommandServer waits timeoutMs and then
+          // arms a grace window of another timeoutMs before declaring a
+          // still-running child healthy, so a 100 ms budget gave this server
+          // only 200 ms to spawn Node and exit; a cold macos-latest runner can
+          // take longer and the probe then declares the failing server healthy
+          // (#1460). The server exits immediately, so the case stays as fast as
+          // before — only the ceiling moves. Healthy assertions can keep 100 ms:
+          // a short window can only make a healthy verdict arrive sooner.
+          ECC_MCP_HEALTH_TIMEOUT_MS: '1000'
         }
       );
 
-      assert.strictEqual(result.code, 2, 'Expected stderr probe failure to block');
+      assert.strictEqual(
+        result.code,
+        2,
+        `Expected stderr probe failure to block, got ${result.code}: ${result.stderr}`
+      );
       assert.ok(result.stderr.includes('marker-from-config'), `Expected command stderr in reason, got: ${result.stderr}`);
 
       const state = readState(statePath);
