@@ -277,6 +277,33 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('skips npm link for an npm install under a non-default prefix, matching install.sh (#1464)', () => {
+    // `npm install -g --prefix <other> @egchq/egc` lands the tree under
+    // <other>/lib/node_modules/@egchq/egc, which is not the default global
+    // npm install (#1218 guard passes it), but is also not a checkout. Both
+    // installers must detect it as an npm install and never link it into a
+    // global prefix it does not belong to. Parity-checked so the two
+    // installers cannot drift.
+    for (const [label, source] of [['install.ps1', scriptSource], ['install.sh', bashSource]]) {
+      assert.ok(
+        /is_checkout\(\)/.test(source) || /Test-IsCheckout/.test(source),
+        `${label} must define a checkout test`
+      );
+      assert.ok(
+        (/\.git/.test(source) && /node_modules/.test(source)),
+        `${label} must detect a checkout by .git and an npm install by node_modules`
+      );
+      assert.ok(
+        source.includes('skipping npm link: this tree is an npm install, not a git checkout'),
+        `${label} must announce the npm-install skip instead of linking`
+      );
+      assert.ok(
+        /linked: egc ->/.test(source),
+        `${label} must name the created link on success`
+      );
+    }
+  })) passed++; else failed++;
+
   if (test('correctly classifies timeouts, signals, and exit codes in describeFailure', () => {
     const timeoutResult = describeFailure({ code: 'ETIMEDOUT', signal: 'SIGTERM', status: null }, 100);
     assert.strictEqual(timeoutResult.timedOut, true);

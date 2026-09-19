@@ -171,15 +171,43 @@ if [[ "$DRY_RUN" = false ]]; then
   # prefix (distro Node) the link can only fail and print a note about a
   # checkout the person does not have (#1218 Linux report). Both sides
   # resolve symlinks (pwd -P, matching ROOT_DIR above), so an nvm/mise-style
-  # symlinked prefix still compares equal. Best-effort: some environments
-  # lack permission to the global npm prefix, and that must not abort the
-  # rest of the install.
+  # symlinked prefix still compares equal. Also skipped for an npm-installed
+  # package under any OTHER prefix (a one-off --prefix, NPM_CONFIG_PREFIX, a
+  # version manager switched after installing): its tree sits inside a
+  # node_modules directory, so it is not a checkout and must never be linked
+  # into a global prefix it does not belong to (#1464). A checkout carries
+  # its own .git directory (or .git file in a worktree), which no npm install
+  # ever has. Best-effort: some environments lack permission to the global
+  # npm prefix, and that must not abort the rest of the install.
   GLOBAL_PKG_DIR="$(npm root -g 2>/dev/null || true)/@egchq/egc"
+  is_checkout() {
+    # -e rather than -d so a git worktree (whose .git is a file) counts too.
+    [[ -e "$ROOT_DIR/.git" ]] && return 0
+    # Same resolved-path logic as GLOBAL_PKG_DIR: an npm install always lands
+    # inside a node_modules directory, a checkout never does. This is what
+    # catches a --prefix/NPM_CONFIG_PREFIX install or a version manager
+    # switched after installing, without needing npm's own notion of the
+    # global prefix.
+    case "$ROOT_DIR" in
+      */node_modules/*|*/node_modules) return 1 ;;
+      *) return 0 ;;
+    esac
+  }
   if [[ -d "$GLOBAL_PKG_DIR" && "$(cd "$GLOBAL_PKG_DIR" && pwd -P)" == "$ROOT_DIR" ]]; then
     echo "  egc command already provided by the global npm install"
+  elif ! is_checkout; then
+    echo "  skipping npm link: this tree is an npm install, not a git checkout"
   else
     echo "  linking the egc command to this checkout..."
-    npm link --silent 2>/dev/null || echo "  note: npm link failed (no permission to the global npm prefix?). Run 'npm link' manually, or use 'node scripts/egc.js <command>' from this checkout."
+    if npm link --silent 2>/dev/null; then
+      # Name the link so the person can see what was created without reading
+      # the whole install log (npm --silent shows nothing). The global-bin
+      # lookup (`npm bin`) was removed in npm 11, so name the command and its
+      # target instead of guessing the platform bin directory.
+      echo "  linked: egc -> $ROOT_DIR"
+    else
+      echo "  note: npm link failed (no permission to the global npm prefix?). Run 'npm link' manually, or use 'node scripts/egc.js <command>' from this checkout."
+    fi
   fi
 
   # egc-guardian

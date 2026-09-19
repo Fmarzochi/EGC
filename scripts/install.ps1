@@ -218,7 +218,29 @@ if (-not $DryRun) {
     # fail and print a note about a checkout the person does not have
     # (#1218 Linux report). Best-effort: some environments lack permission
     # to the global npm prefix, and that must not abort the rest of the
-    # install.
+    # install. Also skipped for an npm-installed package under any OTHER
+    # prefix (a one-off --prefix, NPM_CONFIG_PREFIX, a version manager
+    # switched after installing): its tree sits inside a node_modules
+    # directory, so it is not a checkout and must never be linked into a
+    # global prefix it does not belong to (#1464). A checkout carries its own
+    # .git directory (or .git file in a worktree), which no npm install ever
+    # has.
+    function Test-IsCheckout {
+        # Test-Path (no -PathType) also covers a git worktree, whose .git is a
+        # file.
+        if (Test-Path (Join-Path $RootDir ".git")) {
+            return $true
+        }
+        # Matches both separators (the installer also runs from Git Bash) and
+        # a trailing node_modules with no child. This is what catches a
+        # --prefix/NPM_CONFIG_PREFIX install or a version manager switched
+        # after installing, without needing npm's own notion of the global
+        # prefix.
+        if ($RootDir -match '[\\/]node_modules([\\/]|$)') {
+            return $false
+        }
+        return $true
+    }
     $GlobalNpmRoot = (& npm root -g 2>$null)
     $IsGlobalNpmInstall = $false
     if ($GlobalNpmRoot) {
@@ -229,6 +251,8 @@ if (-not $DryRun) {
     }
     if ($IsGlobalNpmInstall) {
         Write-Host "  egc command already provided by the global npm install"
+    } elseif (-not (Test-IsCheckout)) {
+        Write-Host "  skipping npm link: this tree is an npm install, not a git checkout"
     } else {
         Write-Host "  linking the egc command to this checkout..."
         # PowerShell does not treat a non-zero exit code from a native command as
@@ -238,6 +262,13 @@ if (-not $DryRun) {
         npm link --silent 2>$null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  note: npm link failed (no permission to the global npm prefix?). Run 'npm link' manually, or use 'node scripts\egc.js <command>' from this checkout." -ForegroundColor Yellow
+        } else {
+            # Name the link so the person can see what was created without
+            # reading the whole install log (npm --silent shows nothing). The
+            # global-bin lookup (`npm bin`) was removed in npm 11, so name the
+            # command and its target instead of guessing the platform bin
+            # directory.
+            Write-Host "  linked: egc -> $RootDir"
         }
     }
 
