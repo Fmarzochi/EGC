@@ -1029,13 +1029,13 @@ const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir
 
 const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
 
-function isDangerousAliasValue(value: string): boolean {
+function isDangerousAliasValue(value: string, cwd?: string): boolean {
   const trimmed = stripEnclosingQuotes(value);
   if (stripQuotes(trimmed).startsWith('!')) return true;
   const words = tokenizeWords(trimmed);
   // An alias is judged by the git command it expands to: one that hides
   // a refused force or a clean is as dangerous as typing it.
-  if (!validateGitArgs(words).allowed) return true;
+  if (!validateGitArgs(words, cwd).allowed) return true;
 
   let i = 0;
   while (i < words.length) {
@@ -1169,23 +1169,23 @@ function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
   return { readOnly, positionals, editDenial: null };
 }
 
-function isDangerousGitConfigWrite(key: string, value: string): boolean {
+function isDangerousGitConfigWrite(key: string, value: string, cwd?: string): boolean {
   const lowerKey = key.toLowerCase();
   return DANGEROUS_GIT_CONFIG_KEYS.has(lowerKey)
     || GIT_CONFIG_MERGE_DRIVER_KEY_RE.test(lowerKey)
     || GIT_CONFIG_FILTER_KEY_RE.test(lowerKey)
     || GIT_CONFIG_DIFF_COMMAND_KEY_RE.test(lowerKey)
     || GIT_CONFIG_INCLUDEIF_KEY_RE.test(lowerKey)
-    || (GIT_CONFIG_ALIAS_KEY_RE.test(lowerKey) && isDangerousAliasValue(value));
+    || (GIT_CONFIG_ALIAS_KEY_RE.test(lowerKey) && isDangerousAliasValue(value, cwd));
 }
 
-function checkGitConfigWrite(args: string[]): ValidationResult | null {
+function checkGitConfigWrite(args: string[], cwd?: string): ValidationResult | null {
   const scan = scanGitConfigArgs(args.slice(1));
   if (scan.editDenial) return scan.editDenial;
   if (scan.readOnly || scan.positionals.length < 2) return null;
 
   const [key, value] = scan.positionals;
-  if (!isDangerousGitConfigWrite(key, value)) return null;
+  if (!isDangerousGitConfigWrite(key, value, cwd)) return null;
   return {
     allowed: false,
     reason: `git config write to '${key}' persists a hook/execution-bypass override and is forbidden`,
@@ -1237,14 +1237,14 @@ function parseInlineConfigToken(token: string, nextToken: string | undefined): {
   return { key, value, consumedNext };
 }
 
-function checkInlineGitConfigOverrides(args: string[]): ValidationResult | null {
+function checkInlineGitConfigOverrides(args: string[], cwd?: string): ValidationResult | null {
   const subIdx = findGitSubcommandIndex(args);
   const limit = subIdx >= 0 ? subIdx : args.length;
   for (let i = 0; i < limit; i++) {
     const pair = parseInlineConfigToken(args[i], args[i + 1]);
     if (!pair) continue;
     if (pair.consumedNext) i += 1;
-    if (isDangerousGitConfigWrite(pair.key, pair.value)) {
+    if (isDangerousGitConfigWrite(pair.key, pair.value, cwd)) {
       return {
         allowed: false,
         reason: `git inline config override for '${pair.key}' persists a hook/execution-bypass override and is forbidden`,
@@ -1319,14 +1319,24 @@ function hasShortForceCluster(token: string): boolean {
   return /^-[a-zA-Z]*f/.test(token);
 }
 
-// -n is a dry run only when git reads it as a flag: inside a cluster the
-// first e turns the rest of the cluster into the exclude pattern, and a
-// separate -e or --exclude consumes the next token.
+// -n is a dry run only when git reads it as a flag, and the last word wins:
+// --no-dry-run cancels it, nothing after -- is an option, inside a cluster
+// the first e turns the rest of the cluster into the exclude pattern, and a
+// separate -e or --exclude (abbreviations included) consumes the next token.
 function isGitCleanDryRun(rest: string[]): boolean {
+  let dryRun = false;
   for (let i = 0; i < rest.length; i++) {
     const token = rest[i];
-    if (token === '--dry-run') return true;
-    if (token === '-e' || token === '--exclude') {
+    if (token === '--') break;
+    if (abbreviates(token, '--dry-run')) {
+      dryRun = true;
+      continue;
+    }
+    if (abbreviates(token, '--no-dry-run')) {
+      dryRun = false;
+      continue;
+    }
+    if (token === '-e' || (abbreviates(token, '--exclude') && !token.includes('='))) {
       i += 1;
       continue;
     }
@@ -1334,10 +1344,10 @@ function isGitCleanDryRun(rest: string[]): boolean {
     const letters = token.slice(1);
     const excludeAt = letters.indexOf('e');
     const flags = excludeAt >= 0 ? letters.slice(0, excludeAt) : letters;
-    if (flags.includes('n')) return true;
+    if (flags.includes('n')) dryRun = true;
     if (excludeAt === letters.length - 1) i += 1;
   }
-  return false;
+  return dryRun;
 }
 
 function checkGitClean(rest: string[]): ValidationResult | null {
@@ -1346,7 +1356,11 @@ function checkGitClean(rest: string[]): ValidationResult | null {
 }
 
 function checkGitWorktreePaths(rest: string[], cwd?: string): ValidationResult | null {
-  const target = rest.find(a => !a.startsWith('-') && isProtectedPath(a, cwd));
+  const terminator = rest.indexOf('--');
+  const operands = terminator >= 0
+    ? [...rest.slice(0, terminator).filter(a => !a.startsWith('-')), ...rest.slice(terminator + 1)]
+    : rest.filter(a => !a.startsWith('-'));
+  const target = operands.find(a => isProtectedPath(a, cwd));
   if (target === undefined) return null;
   return {
     allowed: false,
@@ -1391,20 +1405,45 @@ function checkGitForceFlag(args: string[], subcommandIdx: number, cwd?: string):
   };
 }
 
-// The file operands of git config: the value of -f, --file or --blob, in
-// either spelling. Reading one of them is reading that file.
-function gitConfigFileOperands(rest: string[]): string[] {
+// Subcommands whose short f names a file git will read: config (-f, --file,
+// --blob) and grep (-f, the pattern file). Reading one of them is reading
+// that file.
+const GIT_FILE_OPERAND_FLAGS = new Map<string, { short: string; long: string[] }>([
+  ['config', { short: '-f', long: ['--file', '--blob'] }],
+  ['grep', { short: '-f', long: [] }],
+]);
+
+// The file operands of a short flag and its long forms, in every spelling
+// git accepts: separate (-f x, --file x), attached (-fx), with a value
+// (--file=x) and abbreviated (--fil=x). Nothing after -- is an option.
+function fileOperandsOf(rest: string[], shortFlag: string, longFlags: string[]): string[] {
   const files: string[] = [];
   for (let i = 0; i < rest.length; i++) {
     const token = rest[i];
-    if (token === '-f' || token === '--file' || token === '--blob') {
+    if (token === '--') break;
+    const isLong = longFlags.some(flag => abbreviates(token, flag));
+    if (token === shortFlag || (isLong && !token.includes('='))) {
       if (rest[i + 1] !== undefined) files.push(rest[i + 1]);
       i += 1;
-    } else if (token.startsWith('--file=') || token.startsWith('--blob=')) {
+    } else if (isLong) {
       files.push(token.slice(token.indexOf('=') + 1));
+    } else if (token.startsWith(shortFlag) && token.length > shortFlag.length && !token.startsWith('--')) {
+      files.push(token.slice(shortFlag.length));
     }
   }
   return files;
+}
+
+function checkGitFileOperands(subcommand: string, rest: string[], cwd?: string): ValidationResult | null {
+  const spelling = GIT_FILE_OPERAND_FLAGS.get(subcommand);
+  if (spelling === undefined) return null;
+  const protectedFile = fileOperandsOf(rest, spelling.short, spelling.long).find(p => isReadDeniedPath(p, cwd));
+  if (protectedFile === undefined) return null;
+  return {
+    allowed: false,
+    reason: `git ${subcommand} would read the protected file '${protectedFile}' and is forbidden.`,
+    trust_level: 'DANGEROUS',
+  };
 }
 
 function validateGitArgs(args: string[], cwd?: string): ValidationResult {
@@ -1412,20 +1451,16 @@ function validateGitArgs(args: string[], cwd?: string): ValidationResult {
   const forceDenial = checkGitForceFlag(args, subcommandIdx, cwd);
   if (forceDenial) return forceDenial;
 
-  const inlineOverrideDenial = checkInlineGitConfigOverrides(args);
+  const inlineOverrideDenial = checkInlineGitConfigOverrides(args, cwd);
   if (inlineOverrideDenial) return inlineOverrideDenial;
 
-  if (subcommandIdx >= 0 && bareToken(args[subcommandIdx]) === 'config') {
-    const rest = args.slice(subcommandIdx + 1).map(stripQuotes);
-    const protectedFile = gitConfigFileOperands(rest).find(p => isReadDeniedPath(p, cwd));
-    if (protectedFile !== undefined) {
-      return {
-        allowed: false,
-        reason: `git config would read the protected file '${protectedFile}' and is forbidden.`,
-        trust_level: 'DANGEROUS',
-      };
-    }
-    const configDenial = checkGitConfigWrite(args.slice(subcommandIdx));
+  if (subcommandIdx < 0) return { allowed: true, trust_level: 'SAFE_READONLY' };
+  const subcommand = bareToken(args[subcommandIdx]);
+  const rest = args.slice(subcommandIdx + 1).map(stripQuotes);
+  const fileDenial = checkGitFileOperands(subcommand, rest, cwd);
+  if (fileDenial) return fileDenial;
+  if (subcommand === 'config') {
+    const configDenial = checkGitConfigWrite(args.slice(subcommandIdx), cwd);
     if (configDenial) return configDenial;
   }
   return { allowed: true, trust_level: 'SAFE_READONLY' };
