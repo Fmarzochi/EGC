@@ -45,6 +45,10 @@ Every rule file installed in a tool's rules directory loads into every session. 
 
 Model choice is a budget lever too: `/model-route` recommends the cheapest tier that fits the task's complexity and risk, and `/cost-report` reads the local cost-tracker database when that hook is enabled.
 
+## 5. MCP servers
+
+EGC registers two local MCP servers in each tool it installs into, `egc-guardian` and `egc-memory`, and nothing else. Every other MCP server a tool has enabled adds its tool definitions to every session, whether or not a task uses them, so an unused server is a fixed cost on every prompt. Disable the servers you do not use in the tool's own MCP settings; each tool keeps its own list, and EGC never edits it. Prefer a CLI that is already on the machine over an MCP server that wraps the same service (`gh` over a GitHub server, for example): the command costs tokens only when it runs.
+
 ## Measuring
 
 `egc gain` is the ledger. Run it before and after changing any setting on this page; a setting that does not move the numbers is not worth keeping.
