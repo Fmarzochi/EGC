@@ -979,6 +979,10 @@ export interface ValidationResult {
   allowed: boolean;
   reason?: string;
   trust_level?: 'SAFE_READONLY' | 'SAFE_DEV' | 'DANGEROUS' | 'BLOCKED';
+  // True only for the two verdicts the enforcement hook may treat as advice
+  // (allowlist miss, shell metacharacters). The hook reads this field, so
+  // whatever text a command puts into a reason cannot soften a hard block.
+  advisory?: boolean;
 }
 
 /**
@@ -1386,13 +1390,16 @@ function checkGitForceFlag(args: string[], subcommandIdx: number, cwd?: string):
   if (GIT_FORCE_NOT_APPLICABLE.has(subcommand)) return null;
   if (GIT_FORCE_ALLOWED.has(subcommand)) return checkGitWorktreePaths(rest, cwd);
 
-  const hasLongForce = rest.some(isLongGitForceFlag);
-  const hasShortForce = rest.some(a => a === '-f' || hasShortForceCluster(a));
+  // Nothing after the option terminator is an option.
+  const terminator = rest.indexOf('--');
+  const options = terminator >= 0 ? rest.slice(0, terminator) : rest;
+  const hasLongForce = options.some(isLongGitForceFlag);
+  const hasShortForce = options.some(a => a === '-f' || hasShortForceCluster(a));
   const refused = GIT_FORCE_REFUSED.get(subcommand);
   if (refused !== undefined) {
     const extra = refused.extraFlags ?? [];
     const hasForce = hasLongForce || hasShortForce
-      || rest.some(a => extra.some(flag => abbreviates(a, flag)))
+      || options.some(a => extra.some(flag => abbreviates(a, flag)))
       || (subcommand === 'push' && rest.some(a => a.startsWith('+') && a.length > 1));
     return hasForce ? { allowed: false, reason: refused.reason, trust_level: 'DANGEROUS' } : null;
   }
@@ -1666,6 +1673,11 @@ export function validateCommandArgs(
 }
 
 export function validateCommand(command: string, cwd?: string): ValidationResult {
+  const verdict = validateCommandVerdict(command, cwd);
+  return { ...verdict, advisory: verdict.advisory === true };
+}
+
+function validateCommandVerdict(command: string, cwd?: string): ValidationResult {
   // 1. Tokenize quote-aware (so a quoted wrapper-flag value with embedded
   // whitespace can't misalign the unwrap below), then peel off leading
   // environment-variable assignments and known wrapper commands (sudo,
@@ -1770,6 +1782,7 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
       allowed: false,
       reason: 'Shell chaining/metacharacters are forbidden',
       trust_level: 'BLOCKED',
+      advisory: true,
     };
   }
 
@@ -1844,6 +1857,7 @@ function validateAgainstAllowlist(baseCommand: string, args: string[], cwd?: str
   return {
     allowed: false,
     reason: `Command '${baseCommand}' ${ALLOWLIST_MISS_MARKER}`,
+    advisory: true,
     trust_level: 'BLOCKED',
   };
 }

@@ -483,7 +483,10 @@ function extractSegments(rawCommand, depth = 0) {
   return [...topLevel, ...nested];
 }
 
+// A validator that knows the field says so itself; the marker scan only
+// serves a verdict from an older build, which has no such field.
 function isAdvisory(verdict) {
+  if (typeof verdict.advisory === 'boolean') return verdict.advisory;
   const reason = String(verdict.reason || '');
   return ADVISORY_REASONS.some(marker => reason.includes(marker));
 }
