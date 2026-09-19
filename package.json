@@ -35,7 +35,7 @@
   },
   "scripts": {
     "preinstall": "node scripts/preinstall.js",
-    "test": "node tests/run-all.js",
+    "test": "node scripts/ci/validate-commands.js && node tests/run-all.js",
     "test:state-store": "node tests/lib/state-store.test.js",
     "test:hooks": "node tests/hooks/hooks.test.js",
     "lint": "eslint .",

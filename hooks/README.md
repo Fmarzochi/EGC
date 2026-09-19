@@ -75,6 +75,8 @@ That installs resolved hooks to `~/.gemini/hooks/hooks.json`. On Windows, the Ge
 | **Desktop notify** | `Stop` | Sends macOS desktop notification with task summary (standard+) |
 | **Session end marker** | `SessionEnd` | Lifecycle marker and cleanup log |
 
+The lifecycle entries that load and save project memory (`SessionStart`, `PreCompact`, `Stop`, `SessionEnd`) are also published on their own in [memory-persistence/hooks.json](memory-persistence/hooks.json), a verbatim slice of this file kept in sync by a parity test, for a project that wants only the memory guarantees.
+
 ## Customizing Hooks
 
 ### Disabling a Hook
