@@ -1252,26 +1252,98 @@ function checkInlineGitConfigOverrides(args: string[]): ValidationResult | null 
   return null;
 }
 
+// Force flags are judged per git subcommand. The refusal names what the
+// command would actually do, so a reader who never opened the git manual
+// knows why it stopped and what to do instead. Subcommands absent from both
+// tables keep the flag refused: the policy fails closed.
+const GIT_LONG_FORCE_FLAGS = ['--force', '--force-with-lease', '--force-if-includes'];
+
+interface GitForceRefusal {
+  reason: string;
+  extraFlags?: string[];
+}
+
+const GIT_FORCE_REFUSED: Record<string, GitForceRefusal> = {
+  push: {
+    reason: 'git force-push is forbidden: it would overwrite the shared history on the server and other people could lose their work. Push normally, or ask the maintainer.',
+  },
+  checkout: {
+    reason: 'git checkout with force is forbidden: it would throw away changes you have not committed. Save them first with git stash, then try again.',
+  },
+  switch: {
+    reason: 'git switch with force is forbidden: it would throw away changes you have not committed. Save them first with git stash, then try again.',
+    extraFlags: ['--discard-changes'],
+  },
+  rm: {
+    reason: 'git rm with force is forbidden: it would delete files you changed but did not commit. Commit or stash them first.',
+  },
+  mv: {
+    reason: 'git mv with force is forbidden: it would overwrite the destination file. Pick another name, or remove the destination first.',
+  },
+  submodule: {
+    reason: 'git submodule with force is forbidden: it would discard changes inside the submodule. Commit or stash them there first.',
+  },
+};
+
+// Disposable working copies: removing or adding one touches no history and
+// no remote, so the force flag is the honest way to drop one that still holds
+// untracked files.
+const GIT_FORCE_ALLOWED = new Set(['worktree']);
+
+// Where the short flag names a file, not a force.
+const GIT_SHORT_F_IS_A_FILE = new Set(['grep', 'config']);
+
+const GIT_CLEAN_REASON = 'git clean is forbidden unless it is a dry run: it would permanently delete files git is not tracking, with no way to get them back. To only list what would be deleted, run git clean -n.';
+
+// --force is matched exactly so --force-rebase is not caught; the two
+// lease flags carry a value after '=' and are matched by prefix.
+function isLongGitForceFlag(token: string): boolean {
+  return token === GIT_LONG_FORCE_FLAGS[0] || token.startsWith(GIT_LONG_FORCE_FLAGS[1]) || token.startsWith(GIT_LONG_FORCE_FLAGS[2]);
+}
+
+function hasShortForceCluster(token: string): boolean {
+  return /^-[a-zA-Z]*f/.test(token);
+}
+
+function checkGitClean(rest: string[]): ValidationResult | null {
+  const isDryRun = rest.some(a => a === '--dry-run' || (/^-[a-zA-Z]+$/.test(a) && a.includes('n')));
+  if (isDryRun) return null;
+  return { allowed: false, reason: GIT_CLEAN_REASON, trust_level: 'DANGEROUS' };
+}
+
+function checkGitForceFlag(args: string[], tokens: string[]): ValidationResult | null {
+  const subcommandIdx = findGitSubcommandIndex(args);
+  const subcommand = subcommandIdx >= 0 ? tokens[subcommandIdx] : '';
+  // Flags keep their case: -F names a file on commit and grep, only -f forces.
+  const rest = (subcommandIdx >= 0 ? args.slice(subcommandIdx + 1) : args).map(stripQuotes);
+
+  if (subcommand === 'clean') return checkGitClean(rest);
+  if (GIT_FORCE_ALLOWED.has(subcommand)) return null;
+
+  const hasLongForce = rest.some(isLongGitForceFlag);
+  const refused = GIT_FORCE_REFUSED[subcommand];
+  if (refused) {
+    const extra = refused.extraFlags ?? [];
+    const hasForce = hasLongForce
+      || rest.some(a => a === '-f' || hasShortForceCluster(a) || extra.includes(a))
+      || (subcommand === 'push' && rest.some(a => a.startsWith('+') && a.length > 1));
+    return hasForce ? { allowed: false, reason: refused.reason, trust_level: 'DANGEROUS' } : null;
+  }
+
+  const hasShortForce = !GIT_SHORT_F_IS_A_FILE.has(subcommand) && rest.includes('-f');
+  if (!hasLongForce && !hasShortForce) return null;
+  const name = subcommand || 'git';
+  return {
+    allowed: false,
+    reason: `git ${name} with force is not on the safe list, so it was blocked. If you believe it is safe, ask the maintainer to allow it.`,
+    trust_level: 'DANGEROUS',
+  };
+}
+
 function validateGitArgs(args: string[]): ValidationResult {
   const tokens = args.map(bareToken);
-  // Block force pushes, including --force-with-lease/--force-if-includes
-  // (startsWith, not includes, so these are caught even though their
-  // second character is '-' and they carry a value after '=').
-  const hasForceFlag = tokens.some(
-    a => a === '--force' || a === '-f' || a.startsWith('--force-with-lease') || a.startsWith('--force-if-includes'),
-  );
-  if (hasForceFlag) {
-    return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'DANGEROUS' };
-  }
-  // Additional check for combined short flags like -fu used destructively or forced refspecs (+ref)
-  if (tokens.includes('push')) {
-    if (tokens.some(a => /^-[a-zA-Z]*f/.test(a))) {
-      return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'DANGEROUS' };
-    }
-    if (tokens.some(a => a.startsWith('+') && a.length > 1)) {
-      return { allowed: false, reason: 'git force-push via forced refspec (+) is forbidden', trust_level: 'DANGEROUS' };
-    }
-  }
+  const forceDenial = checkGitForceFlag(args, tokens);
+  if (forceDenial) return forceDenial;
 
   const inlineOverrideDenial = checkInlineGitConfigOverrides(args);
   if (inlineOverrideDenial) return inlineOverrideDenial;
