@@ -54,7 +54,19 @@ jobs:
         shell: bash
         run: |
           corepack enable
-          corepack prepare yarn@stable --activate
+          # Resolving "stable" makes corepack poll repo.yarnpkg.com/tags, a
+          # fetch that is occasionally flaky on cold runners and killed the
+          # yarn lanes before any test ran. Keep the latest-stable intent but
+          # give the network a few bounded attempts instead of one shot.
+          for attempt in 1 2 3; do
+            if corepack prepare yarn@stable --activate; then
+              exit 0
+            fi
+            echo "corepack prepare yarn@stable failed (attempt ${attempt}/3), retrying in 5s..." >&2
+            sleep 5
+          done
+          echo "corepack prepare yarn@stable failed after 3 attempts" >&2
+          exit 1
 
       - name: Setup Bun
         if: matrix.pm == 'bun'
