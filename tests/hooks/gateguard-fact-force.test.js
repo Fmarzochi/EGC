@@ -302,8 +302,17 @@ function runTests() {
   const IS_A_COMMAND = [
     ['rm "-rf" /tmp/x', 'a quoted flag'],
     ['sudo rm -rf /tmp/x', 'a wrapper in front'],
+    ['sudo -u root rm -rf /tmp/x', 'a wrapper carrying its own option'],
+    ['timeout 30 rm -rf /tmp/x', 'a wrapper carrying a value'],
     ['env FOO=bar rm -rf /tmp/x', 'an environment assignment in front'],
     ['git status && rm -rf /tmp/x', 'a second segment'],
+    ['echo x | rm -rf /tmp/x', 'a later pipeline stage'],
+    ['cat f | xargs rm -rf', 'a command built by xargs'],
+    ['echo $(rm -rf /tmp/x)', 'a command substitution'],
+    ['rm \\\n  -rf /tmp/x', 'a line continuation'],
+    ['git checkout --ours file.txt', 'the ours side of a merge'],
+    ['git checkout --theirs file.txt', 'the theirs side of a merge'],
+    ['git checkout -- file.txt', 'a pathspec checkout'],
     ['psql -c "DROP TABLE users"', 'SQL inside a quoted argument'],
     ["psql <<'EOF'\nDROP TABLE users;\nEOF", 'SQL inside a heredoc body'],
   ];

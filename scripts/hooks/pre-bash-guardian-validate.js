@@ -465,17 +465,39 @@ function joinContinuations(text) {
 // command, the parts before it included. The exception is an interpreter
 // reading its script from the heredoc, where the body is code and keeps the
 // analysis it already had.
-const HEREDOC_OPERATOR_RE = /(^|[^<])<<(?!<)-?\s*(['"]?)[A-Za-z_][A-Za-z0-9_]*\2/;
+// A delimiter is any word the shell can quote, not only an identifier:
+// EOF-1 and v1.0 are as valid as EOF.
+const HEREDOC_OPERATOR_RE = /(^|[^<])<<(?!<)-?\s*(['"]?)[^\s'"<>|&;()]+\2/;
 
-function stripHeredocBody(segment) {
+// A segment split at its heredoc: `command` is the line the shell runs and
+// `body` is the data it reads on stdin, or null when there is no heredoc.
+function splitHeredoc(segment) {
   const newline = segment.indexOf('\n');
-  if (newline === -1) return segment;
+  if (newline === -1) return { command: segment, body: null };
   const firstLine = segment.slice(0, newline);
-  if (!HEREDOC_OPERATOR_RE.test(firstLine)) return segment;
-  const head = firstLine.trim().split(/\s+/)[0] || '';
-  const name = path.basename(head.replace(/^['"]|['"]$/g, ''));
-  if (SHELL_INTERPRETERS.has(name)) return segment;
-  return firstLine;
+  if (!HEREDOC_OPERATOR_RE.test(firstLine)) return { command: segment, body: null };
+  return { command: firstLine, body: segment.slice(newline + 1) };
+}
+
+// Whether the command of a line is a shell reading its input as code, after
+// the same environment assignments and wrappers the interpreter-operand scan
+// peels: `sudo bash <<EOF` reads the body exactly as `bash <<EOF` does.
+function readsItsInputAsCode(line) {
+  const words = shellWords(line);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index].value;
+    if (/^[A-Za-z_]\w*=/.test(word)) {
+      index += 1;
+      continue;
+    }
+    const wrapper = WRAPPER_SPECS[word.split(/[\\/]/).pop()];
+    if (!wrapper) break;
+    index = skipWrapperOptions(words, index + 1, wrapper, { cwd: null, chroot: null, unsure: false });
+  }
+  const head = words[index];
+  if (!head) return false;
+  return head.value.startsWith('$') || SHELL_INTERPRETERS.has(head.value.split(/[\\/]/).pop().toLowerCase());
 }
 
 function extractSegments(rawCommand, depth = 0) {
@@ -488,10 +510,20 @@ function extractSegments(rawCommand, depth = 0) {
   // the caller blocks instead of silently accepting an unanalyzed command.
   if (bodies.length > 0 && depth >= MAX_SUBSTITUTION_DEPTH) return null;
 
-  const topLevel = splitShellSegments(command, { splitOnPipe: true })
-    .map(stripHeredocBody)
-    .map(s => s.trim())
-    .filter(Boolean);
+  const topLevel = [];
+  for (const raw of splitShellSegments(command, { splitOnPipe: true })) {
+    const { command: line, body } = splitHeredoc(raw);
+    const trimmed = line.trim();
+    if (trimmed) topLevel.push(trimmed);
+    if (body === null) continue;
+    // The body is stdin data, except when a shell is the one reading it:
+    // there it is a script, and it is judged like any other script.
+    if (!readsItsInputAsCode(line)) continue;
+    if (depth >= MAX_SUBSTITUTION_DEPTH) return null;
+    const nested = extractSegments(body, depth + 1);
+    if (nested === null) return null;
+    topLevel.push(...nested);
+  }
 
   const nested = [];
   for (const body of bodies) {

@@ -106,7 +106,8 @@ function normalizeInstallState(raw, root) {
     .split(escapedRoot).join('<ROOT>')
     .replace(/"installedAt": "[^"]*"/g, '"installedAt": "<TIMESTAMP>"')
     .replace(/"lastValidatedAt": "[^"]*"/g, '"lastValidatedAt": "<TIMESTAMP>"')
-    .replace(/"repoCommit": "[^"]*"/g, '"repoCommit": "<COMMIT>"');
+    // The commit is null when git is unavailable, so both shapes fold.
+    .replace(/"repoCommit": (?:"[^"]*"|null)/g, '"repoCommit": "<COMMIT>"');
 }
 
 test('normalizeInstallState folds the paths, the timestamps and the commit', () => {
@@ -117,8 +118,10 @@ test('normalizeInstallState folds the paths, the timestamps and the commit', () 
     target: { root: `${root}/.cursor` },
     source: { repoCommit: 'e80c0bb841d59150406925ef2ce4498f0939a347' }
   }, null, 2);
+  // The fixture escapes its root the way the normalizer does, so a root with
+  // a backslash or a quote is folded by the same text on both sides.
   const other = state
-    .split(root).join('/tmp/scratch-2')
+    .split(JSON.stringify(root).slice(1, -1)).join(JSON.stringify('/tmp/scratch-2').slice(1, -1))
     .replace('2026-09-19T23:00:00.000Z', '2026-09-20T01:02:03.000Z')
     .replace('2026-09-19T23:00:01.000Z', '2026-09-20T01:02:04.000Z')
     .replace('e80c0bb841d59150406925ef2ce4498f0939a347', '4f003fe7a001033c648ec710254a7c58f18e6cf0');
@@ -129,6 +132,13 @@ test('normalizeInstallState folds the paths, the timestamps and the commit', () 
     'two installs differing only in scratch directory, timestamps and commit must normalize to the same text'
   );
   assert.ok(normalizeInstallState(state, root).includes('"repoCommit": "<COMMIT>"'));
+
+  const withoutGit = state.replace(/"repoCommit": "[^"]*"/, '"repoCommit": null');
+  assert.strictEqual(
+    normalizeInstallState(withoutGit, root),
+    normalizeInstallState(state, root),
+    'a state written where git was unavailable normalizes like one written where it was'
+  );
 });
 
 // ---------------------------------------------------------------------------

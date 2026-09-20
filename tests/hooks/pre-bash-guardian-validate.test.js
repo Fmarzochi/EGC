@@ -87,14 +87,27 @@ function runTests() {
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
   })) passed++; else failed++;
 
-  if (test('a heredoc body naming a protected path still blocks when an interpreter reads it as a script', () => {
-    const result = runHook("bash <<'EOF'\ncat ~/.ssh/id_rsa\nEOF");
+  if (test('a heredoc body an interpreter reads is validated as the code it is', () => {
+    const result = runHook("bash <<'EOF'\nrm -rf /tmp/x\nEOF");
     assert.strictEqual(result.code, 2, 'Expected the script body to be analyzed and blocked');
   })) passed++; else failed++;
 
-  if (test('a command with a protected path on its own line is still analyzed', () => {
-    const result = runHook("cat \\\n  ~/.ssh/id_rsa");
-    assert.strictEqual(result.code, 2, 'Expected a continuation to stay one command');
+  if (test('a heredoc script behind a wrapper is validated too', () => {
+    const result = runHook("sudo bash <<'EOF'\nrm -rf /tmp/x\nEOF");
+    assert.strictEqual(result.code, 2, 'Expected the wrapper to be peeled before the interpreter check');
+  })) passed++; else failed++;
+
+  if (test('a heredoc delimiter with punctuation still marks its body as data', () => {
+    const result = runHook("printf '%s' x > notes.md <<'EOF-1'\nthe key lives in ~/.ssh/config\nEOF-1");
+    assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('a line continuation stays one segment instead of two', () => {
+    const segments = extractSegments('cat \\\n  ~/.ssh/id_rsa');
+    assert.strictEqual(segments.length, 1, `Expected one segment, got: ${JSON.stringify(segments)}`);
+    assert.ok(segments[0].includes('.ssh/id_rsa'), JSON.stringify(segments));
+    const result = runHook('cat \\\n  ~/.ssh/id_rsa');
+    assert.strictEqual(result.code, 2, 'Expected the protected path to block');
   })) passed++; else failed++;
 
   if (test('a verdict that says advisory is false blocks even when its reason carries an advisory phrase', () => {

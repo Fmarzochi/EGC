@@ -293,7 +293,8 @@ function refuseUnpresentedFacts(key, required, traceMeta, options = {}) {
 const DESTRUCTIVE_COMMAND_PATTERNS = [
   /^rm\s+-rf\b/i,
   /^git\s+reset\s+--hard\b/i,
-  /^git\s+checkout\s+--(\s|$)/i,
+  // The pathspec form and the two merge sides all overwrite the working file.
+  /^git\s+checkout\s+(--(\s|$)|--ours\b|--theirs\b|-f\b|--force\b)/i,
   /^git\s+clean\s+-f/i,
   /^git\s+push\s+--force(?!-with-lease)\b/i,
   /^git\s+commit\s+--amend\b/i,
@@ -312,6 +313,11 @@ const DESTRUCTIVE_CONTENT_PATTERNS = [
 // Words that stand in front of the command they run.
 const COMMAND_WRAPPERS = new Set(['sudo', 'doas', 'command', 'nice', 'ionice', 'nohup', 'setsid', 'timeout', 'env', 'xargs', 'time', 'stdbuf']);
 const WRAPPERS_TAKING_A_VALUE = new Set(['timeout', 'nice', 'ionice']);
+// Wrapper options that consume the word after them.
+const WRAPPER_VALUE_FLAGS = new Set([
+  '-u', '--user', '-g', '--group', '-C', '--chdir', '-n', '--max-args', '-I', '-i', '-L', '-P', '--max-procs',
+  '-d', '--delimiter', '-a', '--arg-file', '-E', '-s', '--signal', '-k', '--kill-after', '-o', '--output', '-f', '--format',
+]);
 const ENV_ASSIGNMENT_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
 // The words of a line as the shell would see them: quotes group and then
@@ -341,11 +347,13 @@ function shellWordsOf(line) {
   return words;
 }
 
-// What a segment actually runs: its first line (a heredoc body follows the
-// newline and is data), dequoted, with leading environment assignments and
-// wrapper commands dropped so the real command sits at position zero.
+// What a segment actually runs: its command line (a backslash-newline is a
+// continuation and joins; a heredoc body follows a real newline and is data),
+// dequoted, with leading environment assignments and wrapper commands dropped,
+// options and values included, so the real command sits at position zero.
 function commandLineOf(segment) {
-  const words = shellWordsOf(segment.split('\n', 1)[0]);
+  const joined = segment.replace(/\\\n\s*/g, ' ');
+  const words = shellWordsOf(joined.split('\n', 1)[0]);
   let i = 0;
   while (i < words.length) {
     const word = words[i];
@@ -353,9 +361,28 @@ function commandLineOf(segment) {
     const name = path.basename(word);
     if (!COMMAND_WRAPPERS.has(name)) break;
     i += 1;
+    // A wrapper carries its own options (`sudo -u root`, `xargs -n1 -I{}`)
+    // and sometimes a mandatory value (`timeout 30`): skipping only the word
+    // itself left the wrapper's first option in command position and the real
+    // command unread.
+    while (i < words.length && words[i].startsWith('-')) {
+      const flag = words[i];
+      i += 1;
+      if (WRAPPER_VALUE_FLAGS.has(flag) && words[i] !== undefined && !words[i].startsWith('-')) i += 1;
+    }
     if (WRAPPERS_TAKING_A_VALUE.has(name) && words[i] && !words[i].startsWith('-')) i += 1;
   }
   return words.slice(i).join(' ');
+}
+
+// Every place a segment can hide a command the shell runs: the pipeline
+// stages, and the bodies of command substitutions.
+function commandLinesOf(command) {
+  const segments = [
+    ...splitShellSegments(command, { splitOnPipe: true }),
+    ...extractSubstitutionBodies(command).flatMap((body) => splitShellSegments(body, { splitOnPipe: true })),
+  ];
+  return segments.map(commandLineOf);
 }
 
 // The wording of the destructive gate's own messages: what anchors a
@@ -365,8 +392,7 @@ const DESTRUCTIVE_ANCHORS = ['destructive command detected', 'retry for this com
 
 function isDestructiveBash(command) {
   if (DESTRUCTIVE_CONTENT_PATTERNS.some((pattern) => pattern.test(command))) return true;
-  return splitShellSegments(command)
-    .map(commandLineOf)
+  return commandLinesOf(command)
     .some((line) => DESTRUCTIVE_COMMAND_PATTERNS.some((pattern) => pattern.test(line)));
 }
 
@@ -746,7 +772,7 @@ function allowWithStateWarning() {
 }
 
 const { trace } = require('../lib/utils');
-const { splitShellSegments } = require('../lib/shell-split');
+const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
 
 // --- Per-tool gate handlers ---
 
