@@ -39,11 +39,11 @@ function runTests() {
       'README should warn against unsupported raw hook copying'
     );
     assert.ok(
-      readme.includes('bash ./install.sh --target egc --modules hooks-runtime'),
+      readme.includes('sh scripts/install.sh --target egc --modules hooks-runtime'),
       'README should document the supported Bash hook install path'
     );
     assert.ok(
-      readme.includes('pwsh -File .\\install.ps1 --target egc --modules hooks-runtime'),
+      readme.includes('pwsh -File scripts/install.ps1 --target egc --modules hooks-runtime'),
       'README should document the supported PowerShell hook install path'
     );
     assert.ok(
@@ -58,11 +58,11 @@ function runTests() {
       'hooks/README should warn against unsupported raw hook copying'
     );
     assert.ok(
-      hooksReadme.includes('bash ./install.sh --target egc --modules hooks-runtime'),
+      hooksReadme.includes('sh scripts/install.sh --target egc --modules hooks-runtime'),
       'hooks/README should document the supported Bash hook install path'
     );
     assert.ok(
-      hooksReadme.includes('pwsh -File .\\install.ps1 --target egc --modules hooks-runtime'),
+      hooksReadme.includes('pwsh -File scripts/install.ps1 --target egc --modules hooks-runtime'),
       'hooks/README should document the supported PowerShell hook install path'
     );
   })) passed++; else failed++;

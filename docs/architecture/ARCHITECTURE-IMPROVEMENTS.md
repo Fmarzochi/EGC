@@ -1,5 +1,9 @@
 # Architecture Improvement Recommendations
 
+> **Historical document.** This is the architecture review written in an earlier phase of the project, kept for the
+> reasoning it records. Its numbers describe the repository as it was then (16 agents, 65 skills, 40 commands); today
+> the catalog holds 61 agents, 232 skills, 77 commands and 109 rules. Read the recommendations, not the counts.
+
 This document captures architect-level improvements for the EGC - Extended Global Context project. It is written from the perspective of a EGC coding architect aiming to improve maintainability, consistency, and long-term quality.
 
 ---

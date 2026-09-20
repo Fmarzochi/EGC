@@ -19,7 +19,7 @@ These rules govern contributions to **Extended Global Context (EGC)**: a local-f
 ## 2. Runtime Integrity
 
 - **MCP servers are the core:** Changes to `mcp/servers/egc-guardian/` or `mcp/servers/egc-memory/` require higher validation standards: both servers must build and pass tests before merging.
-- **State schema:** Do not break the egc-memory state file format (`~/.egc/state/<slug>.md`). Existing state files must remain readable after any change.
+- **State schema:** Do not break the egc-memory state file format (`~/.egc/state/<slug>/<branch>.md`, encrypted at rest with AES-256-GCM; the flat `<slug>.md` layout is legacy and read-only). Existing state files must remain readable after any change.
 - **No Silent Failures:** Never swallow exceptions silently. Always preserve error observability so failures are traceable.
 
 ## 3. Cross-Platform Enforcement
@@ -52,6 +52,6 @@ These rules govern contributions to **Extended Global Context (EGC)**: a local-f
 ## 5. Code Quality & Commit Standards
 
 - **Immutable Updates:** Prefer immutable updates over mutating shared state.
-- **Test Before Merging:** Run `npm test` and verify all 2156 tests pass before submitting changes.
+- **Test Before Merging:** Run `npm test` and verify all 5125 tests pass before submitting changes.
 - **Security:** Never include API keys, tokens, or secrets in output or commit history.
 - **Commits:** Use conventional commits (`feat(mcp):`, `fix(hooks):`, `docs(rules):`). Keep changes modular.

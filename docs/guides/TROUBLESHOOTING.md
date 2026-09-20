@@ -70,6 +70,6 @@ exit 2
 ## Related egc Docs
 
 - [hook-bug-workarounds.md](./hook-bug-workarounds.md) for the shorter hook/compaction/MCP recovery checklist.
-- [hooks/README.md](../hooks/README.md) for egc's documented hook lifecycle and exit-code behavior.
+- [hooks/README.md](../../hooks/README.md) for egc's documented hook lifecycle and exit-code behavior.
 - [token-optimization.md](./token-optimization.md) for cost and context management settings.
 - [issue #644](https://github.com/Fmarzochi/EGC-code/issues/644) for the original report and tested environment.

@@ -58,7 +58,7 @@ Secrets and credentials used by the project are managed as follows:
 
 ## Additional Resources
 
-- [Threat Model](docs/security/THREAT-MODEL.md)
-- [Security Assessment](docs/security/SECURITY-ASSESSMENT.md)
-- [Release Verification](docs/security/RELEASE-VERIFICATION.md)
-- [SCA Policy](docs/security/SCA-POLICY.md)
+- [Threat Model](../docs/security/THREAT-MODEL.md)
+- [Security Assessment](../docs/security/SECURITY-ASSESSMENT.md)
+- [Release Verification](../docs/security/RELEASE-VERIFICATION.md)
+- [SCA Policy](../docs/security/SCA-POLICY.md)

@@ -6,10 +6,10 @@ Google's [Antigravity](https://antigravity.dev) is an AI coding IDE that uses a 
 
 ```bash
 # Install egc with Antigravity target
-./install.sh --target antigravity typescript
+sh scripts/install.sh --target antigravity typescript
 
 # Or with multiple language modules
-./install.sh --target antigravity typescript python go
+sh scripts/install.sh --target antigravity typescript python go
 ```
 
 This installs egc components into your project's `.agent/` directory, ready for Antigravity to pick up.

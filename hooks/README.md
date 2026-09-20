@@ -23,11 +23,11 @@ For Gemini Code manual installs, do not paste the raw repo `hooks.json` into `~/
 Use the installer instead so hook commands are rewritten against your actual Gemini root:
 
 ```bash
-bash ./install.sh --target egc --modules hooks-runtime
+sh scripts/install.sh --target egc --modules hooks-runtime
 ```
 
 ```powershell
-pwsh -File .\install.ps1 --target egc --modules hooks-runtime
+pwsh -File scripts/install.ps1 --target egc --modules hooks-runtime
 ```
 
 That installs resolved hooks to `~/.gemini/hooks/hooks.json`. On Windows, the Gemini config root is `%USERPROFILE%\\.gemini`.

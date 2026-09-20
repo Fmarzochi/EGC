@@ -568,7 +568,7 @@ node tests/run-all.js
 
 The MCP servers (`egc-guardian`, `egc-memory`) are TypeScript projects compiled with `tsc`. Build output goes to `dist/` inside each server directory.
 
-See the [installation guide](docs/installation/) for platform-specific instructions.
+See the [installation guide](../docs/installation.md) for platform-specific instructions.
 
 ---
 

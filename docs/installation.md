@@ -30,7 +30,7 @@ egc install --target copilot
 
 The Copilot target installs EGC skills under `~/.github/skills/`. VS Code Copilot discovers that directory automatically.
 
-Memory is shared across EGC targets. Context saved while using Copilot is the same state used by Claude Code, Cursor, Gemini CLI, Windsurf, and the rest of the supported tools.
+Memory is shared across EGC targets. Context saved while using Copilot is the same state used by Claude Code, Cursor, Antigravity, Windsurf, and the rest of the supported tools.
 
 ---
 
@@ -51,18 +51,15 @@ egc init
 
 ---
 
-### Continue.dev
+### Continue.dev, Gemini CLI and Roo Code
 
-EGC registers both MCP servers as standalone YAML block files in `~/.continue/mcpServers/`. If you already have Continue.dev installed, re-run `egc install` to pick it up automatically.
-
-```bash
-npm install -g @egchq/egc
-egc install
-```
-
-No `--target` flag is needed -- Continue.dev is auto-detected during install.
+These three were retired on 2026-08-16 and no longer receive an install. The ids are still recognized, so `egc install`,
+`egc doctor`, `egc repair` and `egc auto-update` explain the retirement instead of failing on an id that used to be valid.
+Nothing is written to `~/.continue/`, `~/.gemini/` for the standalone Gemini CLI, or the Roo Code settings any more.
+On Windows, Antigravity is the replacement path for what Gemini CLI used to cover.
 
 ---
+
 
 ## Installation lifecycle
 
@@ -134,7 +131,7 @@ sh scripts/install.sh
 2. Initializes the local SQLite database
 3. Runs the cognitive bootstrap: writes the memory protocol into `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, and equivalent files for each detected tool
 
-> **Note:** Gemini CLI free tier was discontinued on June 18, 2026 for individual users. The `~/.gemini/GEMINI.md` target still works for paid Google accounts. For free-tier users, [Antigravity CLI](https://antigravity.dev) is the recommended alternative: EGC supports it via `egc install --target antigravity`.
+> **Note:** the standalone Gemini CLI stopped serving on June 18, 2026 and was retired from EGC on August 16, 2026. The `~/.gemini/` tree EGC still writes belongs to Antigravity, not to that CLI. For free-tier users, [Antigravity CLI](https://antigravity.dev) is the recommended alternative: EGC supports it via `egc install --target antigravity`.
 4. Registers both MCP servers in every detected tool's config file
 5. Asks whether to install the prompt library (61 agents, 232 skills, 77 commands), default no; `--prompt-library` answers yes without asking, `--no-prompt-library` skips the question, and a headless run (CI) skips it with a note
 6. Installs the Token Crusher binary shim (`~/.egc/bin`): a best-effort, non-fatal step, see [Token Crusher](#token-crusher) below
@@ -196,7 +193,7 @@ cd EGC
   Invoke-WebRequest -Uri https://antigravity.dev/install/agy.exe -OutFile agy.exe
   ```
 - **Antigravity free tier**: the starter quota is limited. Expect to exhaust it within a few exchanges. Upgrade or use Claude Code / Cursor for longer sessions.
-- **Gemini CLI**: free tier discontinued June 18, 2026. Use Antigravity CLI as a replacement on Windows.
+- **Gemini CLI**: stopped serving June 18, 2026 and retired from EGC on August 16, 2026. Antigravity is the replacement.
 - **Upgrading with `npm install -g @egchq/egc@latest`**: close the AI tools and terminals that run EGC first. npm renames the package folder during the update, and Windows refuses the rename while any process holds a file inside it (an AI tool running the EGC MCP servers, a terminal with a hook mid-run). The failure reads `EBUSY: resource busy or locked` on a path under `node_modules\@egchq\egc`. A reboot clears the lock too. See [Troubleshooting](TROUBLESHOOTING.md#ebusy-resource-busy-or-locked-during-npm-install--g-on-windows).
 
 ---

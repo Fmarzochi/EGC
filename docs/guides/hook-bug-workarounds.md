@@ -70,5 +70,5 @@ What helps:
 
 - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
 - [token-optimization.md](./token-optimization.md)
-- [hooks/README.md](../hooks/README.md)
+- [hooks/README.md](../../hooks/README.md)
 - [issue #644](https://github.com/Fmarzochi/EGC-code/issues/644)
