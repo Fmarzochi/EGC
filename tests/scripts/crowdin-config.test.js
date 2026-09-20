@@ -129,6 +129,14 @@ function runTests() {
       /Pre-translation request refused[^\n]*\n\s+exit 1/.test(syncWorkflow),
       'a refused pre-translation must fail the run instead of skipping with a warning'
     );
+    assert.ok(
+      syncWorkflow.includes('find translations -mindepth 1 -maxdepth 1 -type d'),
+      'the pre-translation must be limited to the languages the repository ships: adding a language is a decision, not a download'
+    );
+    assert.ok(
+      syncWorkflow.includes('if [ -z "$(git ls-files "$dir")" ]'),
+      'a language directory the repository does not track must be dropped after the download'
+    );
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

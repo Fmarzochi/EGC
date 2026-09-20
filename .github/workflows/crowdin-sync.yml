@@ -63,7 +63,13 @@ jobs:
           supported=$(echo "$engines" | jq -c '.data[0].data.supportedLanguagePairs.en // []')
           project=$(curl -sf -H "$auth" "$api/projects/${CROWDIN_PROJECT_ID}" || echo '{}')
           targets=$(echo "$project" | jq -c '.data.targetLanguageIds // []')
-          language_ids=$(jq -cn --argjson supported "$supported" --argjson targets "$targets" '$targets - ($targets - $supported)')
+          # Only the languages this repository ships are translated: a language
+          # the panel targets but translations/ does not carry is a decision to
+          # add it, not a sync. pt-PT and pt-BR map to pt, es-ES to es.
+          shipped=$(find translations -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | jq -R . | jq -sc .)
+          language_ids=$(jq -cn --argjson supported "$supported" --argjson targets "$targets" --argjson shipped "$shipped" \
+            '[($targets - ($targets - $supported))[] | select((. as $id | $shipped | index($id)) != null or ((split("-")[0]) as $two | $shipped | index($two)) != null)]')
+          echo "Shipped languages: $shipped"
           files=$(curl -sf -H "$auth" "$api/projects/${CROWDIN_PROJECT_ID}/files?limit=500" || echo '{}')
           file_ids=$(echo "$files" | jq -c '[.data[].data.id]')
           echo "Project target languages: $targets"
@@ -145,6 +151,14 @@ jobs:
             cp -a translations/zh/. translations/zh-CN/
             rm -rf translations/zh
           fi
+          # A language that is fully translated in the panel but has no
+          # directory in the repository is not synced: adding a language is a
+          # decision, not a download. Untracked directories are dropped.
+          for dir in translations/*/; do
+            if [ -z "$(git ls-files "$dir")" ]; then
+              rm -rf "$dir"
+            fi
+          done
           # Crowdin exports translations of source strings whose links are
           # root-relative (assets/..., docs/..., .github/..., translations/...),
           # but translation files live two levels down, so those links 404 on
