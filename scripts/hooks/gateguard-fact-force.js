@@ -58,6 +58,20 @@ function presentedKey(key) {
   return `presented:${key}`;
 }
 
+// How many times one operation may be refused for missing facts before the
+// gate concludes it cannot read them and steps aside.
+const MAX_FACT_DENIALS = 3;
+
+function denialKey(key, attempt) {
+  return `denied:${attempt}:${key}`;
+}
+
+function denialCount(key) {
+  let attempts = 0;
+  while (attempts < MAX_FACT_DENIALS && isChecked(denialKey(key, attempts + 1))) attempts += 1;
+  return attempts;
+}
+
 // The assistant text read from the harness transcript when one is named in
 // the hook input (see assistantTextSinceDenial for which text is judged).
 // Null when no transcript can be read, so a harness without transcripts
@@ -252,24 +266,97 @@ function refuseUnpresentedFacts(key, required, traceMeta, options = {}) {
     markChecked(presentedKey(key));
     return null;
   }
-  trace('governance:denied:facts_missing', { ...traceMeta, missing });
+  // A gate that cannot be satisfied is not a guardrail. The facts of a
+  // subagent never reach the transcript this gate reads (the harness names
+  // the parent session's), so the same retry was refused forever. After
+  // three refusals for one operation the gate says so and steps aside,
+  // leaving the Guardian, which judges the operation itself, in place.
+  const denials = denialCount(key) + 1;
+  if (denials > MAX_FACT_DENIALS) {
+    trace('governance:allowed:facts_unreachable', { ...traceMeta, missing, denials });
+    markChecked(presentedKey(key));
+    return {
+      stderr: `[Fact-Forcing Gate] The facts for ${target} were refused ${MAX_FACT_DENIALS} times and the retry text still does not carry them (${missing.join(', ')}). Allowing it so the gate cannot block forever. If this ran inside a subagent, its text never reaches the transcript the gate reads.`,
+      exitCode: 0
+    };
+  }
+  markChecked(denialKey(key, denials));
+  trace('governance:denied:facts_missing', { ...traceMeta, missing, denials });
   return denyResult(factsMissingMsg(missing, target), { includeRecoveryHint: false });
 }
 
-// One pattern per destructive command; each keeps the same word boundaries
-// the former single alternation applied around the matched command.
-const DESTRUCTIVE_BASH_PATTERNS = [
-  /\brm\s+-rf\b/i,
-  /\bgit\s+reset\s+--hard\b/i,
-  /\bgit\s+checkout\s+--\b/i,
-  /\bgit\s+clean\s+-f\b/i,
+// One pattern per destructive command, anchored: these name the command being
+// run, so they only count at the head of a segment, after wrappers and with
+// quotes removed. Tested against the raw text, as they were before, they also
+// fired on a grep pattern, a commit message and a heredoc body that merely
+// named the command, and a gate that cries wolf is one people walk around.
+const DESTRUCTIVE_COMMAND_PATTERNS = [
+  /^rm\s+-rf\b/i,
+  /^git\s+reset\s+--hard\b/i,
+  /^git\s+checkout\s+--(\s|$)/i,
+  /^git\s+clean\s+-f/i,
+  /^git\s+push\s+--force(?!-with-lease)\b/i,
+  /^git\s+commit\s+--amend\b/i,
+  /^dd\s+if=/i,
+];
+
+// These name what a command carries rather than the command itself: SQL
+// reaches the database as an argument or through a heredoc, so it is read
+// wherever it sits.
+const DESTRUCTIVE_CONTENT_PATTERNS = [
   /\bdrop\s+table\b/i,
   /\bdelete\s+from\b/i,
   /\btruncate\b/i,
-  /\bgit\s+push\s+--force(?!-with-lease)\b/i,
-  /\bgit\s+commit\s+--amend\b/i,
-  /\bdd\s+if=\b/i,
 ];
+
+// Words that stand in front of the command they run.
+const COMMAND_WRAPPERS = new Set(['sudo', 'doas', 'command', 'nice', 'ionice', 'nohup', 'setsid', 'timeout', 'env', 'xargs', 'time', 'stdbuf']);
+const WRAPPERS_TAKING_A_VALUE = new Set(['timeout', 'nice', 'ionice']);
+const ENV_ASSIGNMENT_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+// The words of a line as the shell would see them: quotes group and then
+// disappear, a backslash escapes the next character.
+function shellWordsOf(line) {
+  const words = [];
+  let word = '';
+  let quote = null;
+  let open = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      else word += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; open = true; continue; }
+    if (ch === '\\' && i + 1 < line.length) { word += line[i + 1]; i += 1; open = true; continue; }
+    if (/\s/.test(ch)) {
+      if (open || word) { words.push(word); word = ''; open = false; }
+      continue;
+    }
+    word += ch;
+    open = true;
+  }
+  if (open || word) words.push(word);
+  return words;
+}
+
+// What a segment actually runs: its first line (a heredoc body follows the
+// newline and is data), dequoted, with leading environment assignments and
+// wrapper commands dropped so the real command sits at position zero.
+function commandLineOf(segment) {
+  const words = shellWordsOf(segment.split('\n', 1)[0]);
+  let i = 0;
+  while (i < words.length) {
+    const word = words[i];
+    if (ENV_ASSIGNMENT_RE.test(word)) { i += 1; continue; }
+    const name = path.basename(word);
+    if (!COMMAND_WRAPPERS.has(name)) break;
+    i += 1;
+    if (WRAPPERS_TAKING_A_VALUE.has(name) && words[i] && !words[i].startsWith('-')) i += 1;
+  }
+  return words.slice(i).join(' ');
+}
 
 // The wording of the destructive gate's own messages: what anchors a
 // destructive retry, so a file denial that happens to mention a rollback
@@ -277,7 +364,10 @@ const DESTRUCTIVE_BASH_PATTERNS = [
 const DESTRUCTIVE_ANCHORS = ['destructive command detected', 'retry for this command'];
 
 function isDestructiveBash(command) {
-  return DESTRUCTIVE_BASH_PATTERNS.some((pattern) => pattern.test(command));
+  if (DESTRUCTIVE_CONTENT_PATTERNS.some((pattern) => pattern.test(command))) return true;
+  return splitShellSegments(command)
+    .map(commandLineOf)
+    .some((line) => DESTRUCTIVE_COMMAND_PATTERNS.some((pattern) => pattern.test(line)));
 }
 
 // --- State management (per-session, atomic writes, bounded) ---
@@ -526,7 +616,36 @@ function isReadOnlyGitIntrospection(command) {
 
 // --- Gate messages ---
 
+// A document has readers, not importers. Asking a note or a piece of
+// documentation which files require it, and which public functions it
+// exports, spends a round on questions that have no answer and teaches
+// whoever reads the gate that it is not paying attention.
+const PROSE_EXTENSIONS = new Set(['.md', '.markdown', '.txt', '.rst', '.adoc', '.org']);
+
+function isProseFile(filePath) {
+  return PROSE_EXTENSIONS.has(path.extname(String(filePath || '')).toLowerCase());
+}
+
+function gateMsg(action, filePath, questions) {
+  return [
+    '[Fact-Forcing Gate]',
+    '',
+    `Before ${action} ${sanitizePath(filePath)}, present these facts:`,
+    '',
+    ...questions,
+    '',
+    'Present the facts, then retry the same operation.'
+  ].join('\n');
+}
+
 function editGateMsg(filePath) {
+  if (isProseFile(filePath)) {
+    return gateMsg('editing', filePath, [
+      '1. Say what this document is for and who reads it',
+      '2. Say what changes in it and why it changes now',
+      "3. Quote the user's current instruction verbatim"
+    ]);
+  }
   const safe = sanitizePath(filePath);
   return [
     '[Fact-Forcing Gate]',
@@ -543,6 +662,14 @@ function editGateMsg(filePath) {
 }
 
 function writeGateMsg(filePath) {
+  if (isProseFile(filePath)) {
+    return gateMsg('creating', filePath, [
+      '1. Say what this document is for and who reads it',
+      '2. Confirm no existing document already covers it (use Glob)',
+      '3. Say where it will be linked from, or that it stands on its own',
+      "4. Quote the user's current instruction verbatim"
+    ]);
+  }
   const safe = sanitizePath(filePath);
   return [
     '[Fact-Forcing Gate]',
@@ -619,6 +746,7 @@ function allowWithStateWarning() {
 }
 
 const { trace } = require('../lib/utils');
+const { splitShellSegments } = require('../lib/shell-split');
 
 // --- Per-tool gate handlers ---
 

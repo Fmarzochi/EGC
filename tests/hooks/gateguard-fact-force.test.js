@@ -18,6 +18,7 @@ const TEST_SESSION_ID = 'gateguard-test-session';
 const stateFile = path.join(stateDir, `state-${TEST_SESSION_ID}.json`);
 const READ_HEARTBEAT_MS = 60 * 1000;
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // must match gateguard-fact-force.js
+const MAX_FACT_DENIALS = 3; // must match gateguard-fact-force.js
 
 function test(name, fn) {
   try {
@@ -268,6 +269,111 @@ function runTests() {
     } else {
       assert.strictEqual(output2.tool_name, 'Bash', 'pass-through should preserve input');
     }
+  })) passed++; else failed++;
+
+  // --- A destructive command is one being run, not one being quoted ---
+  // The classifier used to test its patterns against the raw command text, so
+  // a grep pattern, a message being written to a file or a heredoc body that
+  // merely named a destructive command was gated as if it were one. What
+  // decides is command position: the head of a segment, after wrappers.
+  function destructiveReasonFor(command) {
+    clearState();
+    const result = runBashHook({ tool_name: 'Bash', tool_input: { command } });
+    const output = parseOutput(result.stdout);
+    return output?.hookSpecificOutput?.permissionDecisionReason || '';
+  }
+
+  const NOT_A_COMMAND = [
+    ["grep -rn 'git clean -f' src", 'a search pattern naming a destructive command'],
+    ["printf '%s\\n' 'git reset --hard undoes work' >> notes.md", 'a line of prose being written to a file'],
+    ["git commit -q -F - <<'EOF'\nfix: never rm -rf the cache\nEOF", 'a heredoc commit message naming one'],
+    ['echo "dd if=/dev/zero is how you wipe a disk"', 'a sentence about one'],
+  ];
+  for (const [command, what] of NOT_A_COMMAND) {
+    if (test(`the destructive gate ignores ${what}`, () => {
+      const reason = destructiveReasonFor(command);
+      assert.ok(
+        !reason.includes('Destructive command detected'),
+        `expected no destructive gate for: ${command}\n  got: ${reason.slice(0, 120)}`
+      );
+    })) passed++; else failed++;
+  }
+
+  const IS_A_COMMAND = [
+    ['rm "-rf" /tmp/x', 'a quoted flag'],
+    ['sudo rm -rf /tmp/x', 'a wrapper in front'],
+    ['env FOO=bar rm -rf /tmp/x', 'an environment assignment in front'],
+    ['git status && rm -rf /tmp/x', 'a second segment'],
+    ['psql -c "DROP TABLE users"', 'SQL inside a quoted argument'],
+    ["psql <<'EOF'\nDROP TABLE users;\nEOF", 'SQL inside a heredoc body'],
+  ];
+  for (const [command, what] of IS_A_COMMAND) {
+    if (test(`the destructive gate still catches it behind ${what}`, () => {
+      const reason = destructiveReasonFor(command);
+      assert.ok(
+        reason.includes('Destructive command detected'),
+        `expected the destructive gate for: ${command}\n  got: ${reason.slice(0, 120)}`
+      );
+    })) passed++; else failed++;
+  }
+
+  // --- A document is asked about its readers, not its importers ---
+  clearState();
+  if (test('the gate asks a document what it is for, not which files import it', () => {
+    const doc = path.join(stateDir, 'notes', 'decision.md');
+    const created = runHook({ tool_name: 'Write', tool_input: { file_path: doc, content: 'x' } });
+    const createReason = parseOutput(created.stdout).hookSpecificOutput.permissionDecisionReason;
+    assert.ok(!createReason.includes('will call this new file'), createReason);
+    assert.ok(createReason.includes('who reads it'), createReason);
+
+    clearState();
+    const edited = runHook({ tool_name: 'Edit', tool_input: { file_path: doc, old_string: 'a', new_string: 'b' } });
+    const editReason = parseOutput(edited.stdout).hookSpecificOutput.permissionDecisionReason;
+    assert.ok(!editReason.includes('import/require'), editReason);
+    assert.ok(editReason.includes('who reads it'), editReason);
+  })) passed++; else failed++;
+
+  clearState();
+  if (test('the gate still asks a source file which files import it', () => {
+    const source = path.join(stateDir, 'src', 'billing.js');
+    const edited = runHook({ tool_name: 'Edit', tool_input: { file_path: source, old_string: 'a', new_string: 'b' } });
+    const reason = parseOutput(edited.stdout).hookSpecificOutput.permissionDecisionReason;
+    assert.ok(reason.includes('import/require'), reason);
+  })) passed++; else failed++;
+
+  // --- A gate that cannot read the facts gives up instead of blocking ---
+  clearState();
+  if (test('an operation refused three times for facts the transcript never carries is allowed with a warning', () => {
+    const transcript = path.join(stateDir, 'unreachable-transcript.jsonl');
+    const session = 'facts-unreachable-' + Date.now();
+    const target = path.join(stateDir, 'src', 'stuck.js');
+    const call = { tool_name: 'Edit', tool_input: { file_path: target, old_string: 'a', new_string: 'b' }, transcript_path: transcript };
+    const first = runHook(call, { EGC_SESSION_ID: session });
+    assert.strictEqual(parseOutput(first.stdout).hookSpecificOutput.permissionDecision, 'deny');
+
+    // What a subagent writes never lands here: the gate only ever sees the
+    // parent session's text, which is about something else.
+    const parentSaid = (text) => fs.writeFileSync(transcript, [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'go' } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } })
+    ].join('\n') + '\n');
+
+    let last;
+    for (let attempt = 1; attempt <= MAX_FACT_DENIALS + 1; attempt++) {
+      parentSaid(`waiting on the subagent, attempt ${attempt}`);
+      last = runHook(call, { EGC_SESSION_ID: session });
+      if (attempt <= MAX_FACT_DENIALS) {
+        assert.strictEqual(
+          parseOutput(last.stdout)?.hookSpecificOutput?.permissionDecision,
+          'deny',
+          `attempt ${attempt} should still be refused: ${last.stdout}`
+        );
+      }
+    }
+    assert.strictEqual(last.code, 0, last.stderr);
+    assert.ok(!last.stdout.includes('"deny"'), last.stdout);
+    assert.ok(last.stderr.includes('cannot block forever'), last.stderr);
+    assert.ok(last.stderr.includes('subagent'), last.stderr);
   })) passed++; else failed++;
 
   // --- Test 5: denies first routine Bash, allows second ---

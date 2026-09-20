@@ -78,6 +78,25 @@ function runTests() {
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
   })) passed++; else failed++;
 
+  // A heredoc body is stdin data, not words the shell hands the command: a
+  // commit message, a log line or a document that names a protected path is
+  // not an argument. An interpreter reading its script from the heredoc is
+  // the exception, because there the body is code.
+  if (test('a heredoc body naming a protected path is data, not an argument', () => {
+    const result = runHook("printf '%s' x > notes.md <<'EOF'\nwe keep the key in ~/.ssh/config\nEOF");
+    assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('a heredoc body naming a protected path still blocks when an interpreter reads it as a script', () => {
+    const result = runHook("bash <<'EOF'\ncat ~/.ssh/id_rsa\nEOF");
+    assert.strictEqual(result.code, 2, 'Expected the script body to be analyzed and blocked');
+  })) passed++; else failed++;
+
+  if (test('a command with a protected path on its own line is still analyzed', () => {
+    const result = runHook("cat \\\n  ~/.ssh/id_rsa");
+    assert.strictEqual(result.code, 2, 'Expected a continuation to stay one command');
+  })) passed++; else failed++;
+
   if (test('a verdict that says advisory is false blocks even when its reason carries an advisory phrase', () => {
     const result = runHook('advisory-probe-hard');
     assert.strictEqual(result.code, 2, `Expected block, got: ${result.stderr}`);

@@ -459,6 +459,25 @@ function joinContinuations(text) {
 
 
 
+// A heredoc body is stdin data for the command, not words the shell hands it:
+// a commit message, a log line or a document that happens to name a protected
+// path or a flag is not an argument, and reading it as one blocked the whole
+// command, the parts before it included. The exception is an interpreter
+// reading its script from the heredoc, where the body is code and keeps the
+// analysis it already had.
+const HEREDOC_OPERATOR_RE = /(^|[^<])<<(?!<)-?\s*(['"]?)[A-Za-z_][A-Za-z0-9_]*\2/;
+
+function stripHeredocBody(segment) {
+  const newline = segment.indexOf('\n');
+  if (newline === -1) return segment;
+  const firstLine = segment.slice(0, newline);
+  if (!HEREDOC_OPERATOR_RE.test(firstLine)) return segment;
+  const head = firstLine.trim().split(/\s+/)[0] || '';
+  const name = path.basename(head.replace(/^['"]|['"]$/g, ''));
+  if (SHELL_INTERPRETERS.has(name)) return segment;
+  return firstLine;
+}
+
 function extractSegments(rawCommand, depth = 0) {
   const command = joinContinuations(String(rawCommand));
 
@@ -470,6 +489,7 @@ function extractSegments(rawCommand, depth = 0) {
   if (bodies.length > 0 && depth >= MAX_SUBSTITUTION_DEPTH) return null;
 
   const topLevel = splitShellSegments(command, { splitOnPipe: true })
+    .map(stripHeredocBody)
     .map(s => s.trim())
     .filter(Boolean);
 
