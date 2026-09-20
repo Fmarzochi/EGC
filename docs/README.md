@@ -11,9 +11,9 @@ for the formal classification of every subsystem.
 | Folder | Purpose | Start here |
 |---|---|---|
 | `architecture/` | Long-form architecture, current and target | `architecture/README.md` |
-| `hooks/` | Documented slices of the shared hooks file, guarded by parity tests | `hooks/memory-persistence/README.md` |
 | `governance/` | Subsystem classification, skill/agent policies | `governance/README.md` |
 | `guides/` | Operational and contributor walk-throughs | `guides/README.md` |
+| `hooks/` | Documented slices of the shared hooks file, guarded by parity tests | `hooks/memory-persistence/README.md` |
 | `security/` | Threat model, SCA policy, release verification | `security/THREAT-MODEL.md` |
 | `spec/` | Formal specs (integration tiers, agent memory interchange) | `spec/README.md` |
 | `installation.md` | Setup playbook for downstream stacks | direct file |
