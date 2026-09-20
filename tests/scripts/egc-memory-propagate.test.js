@@ -344,97 +344,28 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('upserts egc section in .roorules when .roo/rules/ has no content (fallback)', () => {
-    const dir = mktemp();
-    try {
-      const rooPath = path.join(dir, '.roorules');
-      fs.writeFileSync(rooPath, '# Roo rules\n', 'utf-8');
-      const result = propagateStateToTools({ projectPath: dir, ...args });
-      assert.ok(result.roo, 'roo path should be returned');
-      assert.strictEqual(result.roo, rooPath, 'should fall back to flat .roorules when .roo/rules/ is absent');
-      const content = fs.readFileSync(result.roo, 'utf-8');
-      assert.ok(content.includes('<!-- egc:start -->'), 'egc block added');
-    } finally {
-      cleanup(dir);
-    }
-  })) passed++; else failed++;
-
-  if (await test('writes .roo/rules/egc-context.md when .roo/ exists and no .roorules', () => {
+  if (await test('leaves .roo/ and .roorules alone: Roo Code was retired in #1279', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.roo'));
-      const result = propagateStateToTools({ projectPath: dir, ...args });
-      assert.ok(result.roo, 'roo path should be returned');
-      assert.ok(result.roo.endsWith(path.join('.roo', 'rules', 'egc-context.md')), 'should write under .roo/rules/');
-      const content = fs.readFileSync(result.roo, 'utf-8');
-      assert.ok(content.includes('<!-- egc:start -->'), 'egc block added');
-    } finally {
-      cleanup(dir);
-    }
-  })) passed++; else failed++;
-
-  if (await test('prefers populated .roo/rules/ over legacy .roorules when both exist', () => {
-    const dir = mktemp();
-    try {
       const rooRulesPath = path.join(dir, '.roorules');
-      fs.writeFileSync(rooRulesPath, '# legacy roo rules\n', 'utf-8');
-      const rulesDir = path.join(dir, '.roo', 'rules');
-      fs.mkdirSync(rulesDir, { recursive: true });
-      fs.writeFileSync(path.join(rulesDir, 'custom.md'), '# custom rule\n', 'utf-8');
-
+      fs.writeFileSync(rooRulesPath, '# Roo rules\n', 'utf-8');
       const result = propagateStateToTools({ projectPath: dir, ...args });
-      assert.ok(result.roo.endsWith(path.join('.roo', 'rules', 'egc-context.md')), 'should prefer the populated directory');
-      const legacyContent = fs.readFileSync(rooRulesPath, 'utf-8');
-      assert.ok(!legacyContent.includes('<!-- egc:start -->'), 'legacy .roorules must be left untouched');
+      assert.ok(!('roo' in result), 'roo is no longer a propagation destination');
+      assert.ok(!fs.existsSync(path.join(dir, '.roo', 'rules')), '.roo/rules/ must not be created');
+      assert.strictEqual(fs.readFileSync(rooRulesPath, 'utf-8'), '# Roo rules\n', '.roorules must be left untouched');
     } finally {
       cleanup(dir);
     }
   })) passed++; else failed++;
 
-  if (await test('returns null instead of throwing when .roorules is structurally unreadable', () => {
-    const dir = mktemp();
-    try {
-      // .roorules is a directory, not a file: readFileSync on it fails
-      // (EISDIR) on every OS. update_state must not crash because Roo
-      // Code propagation hit a bad path -- it should just skip it.
-      fs.mkdirSync(path.join(dir, '.roorules'));
-      assert.doesNotThrow(() => {
-        const result = propagateStateToTools({ projectPath: dir, ...args });
-        assert.strictEqual(result.roo, null, 'roo should be null, not throw, on a structural read error');
-      });
-    } finally {
-      cleanup(dir);
-    }
-  })) passed++; else failed++;
-
-  if (await test('skips Roo Code when neither .roorules nor .roo/ exist', () => {
-    const dir = mktemp();
-    try {
-      const result = propagateStateToTools({ projectPath: dir, ...args });
-      assert.strictEqual(result.roo, null, 'roo should be null when nothing exists');
-    } finally {
-      cleanup(dir);
-    }
-  })) passed++; else failed++;
-
-  if (await test('writes .continue/rules/egc-context.md when .continue/ exists', () => {
+  if (await test('leaves .continue/ alone: Continue.dev was retired in #1279', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.continue'));
       const result = propagateStateToTools({ projectPath: dir, ...args });
-      assert.ok(result.continue, 'continue path should be returned');
-      const content = fs.readFileSync(result.continue, 'utf-8');
-      assert.ok(content.includes('<!-- egc:start -->'), 'egc block added');
-    } finally {
-      cleanup(dir);
-    }
-  })) passed++; else failed++;
-
-  if (await test('skips Continue.dev when .continue/ does not exist', () => {
-    const dir = mktemp();
-    try {
-      const result = propagateStateToTools({ projectPath: dir, ...args });
-      assert.strictEqual(result.continue, null, 'continue should be null when dir absent');
+      assert.ok(!('continue' in result), 'continue is no longer a propagation destination');
+      assert.ok(!fs.existsSync(path.join(dir, '.continue', 'rules')), '.continue/rules/ must not be created');
     } finally {
       cleanup(dir);
     }

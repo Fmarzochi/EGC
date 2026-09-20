@@ -95,18 +95,14 @@ function openCodeConfigPath(homeDir) {
   return documented;
 }
 
+// Gemini CLI and Continue.dev left this list with their retirement (their
+// adapters went in #1279); the ~/.gemini tree below belongs to Antigravity.
 function buildMcpRegistrationTargets(homeDir) {
   return [
     {
       name: 'Antigravity CLI',
       path: path.join(homeDir, '.gemini', 'antigravity-cli', 'mcp_config.json'),
       gate: () => fs.existsSync(path.join(homeDir, '.gemini', 'antigravity-cli')),
-      format: 'json',
-    },
-    {
-      name: 'Gemini CLI',
-      path: path.join(homeDir, '.gemini', 'config', 'mcp_config.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.gemini', 'config')),
       format: 'json',
     },
     {
@@ -127,28 +123,6 @@ function buildMcpRegistrationTargets(homeDir) {
       path: path.join(homeDir, '.cursor', 'mcp.json'),
       gate: () => fs.existsSync(path.join(homeDir, '.cursor')) || commandExists('cursor'),
       format: 'json',
-    },
-    {
-      name: 'Continue.dev',
-      // Continue's config.json is deprecated in favor of config.yaml, and
-      // editing either directly risks clobbering unrelated model/prompt
-      // config, so this doesn't touch either. It also doesn't use the
-      // plain-JSON drop-in some docs mention for .continue/mcpServers/,
-      // because that claim isn't scoped to global vs. workspace anywhere
-      // official. What *is* confirmed at the source level: loadYaml.ts
-      // calls getAllDotContinueDefinitionFiles(ide, { includeGlobal: true,
-      // includeWorkspace: true, fileExtType: "yaml" }, blockType) for every
-      // block type, and mcpServers is confirmed (via the published
-      // @continuedev/config-yaml package's BLOCK_TYPES export) to be one of
-      // them. So this writes standalone YAML block files instead - same
-      // drop-in folder, format Continue's own loader is confirmed to scan
-      // globally. path is the directory itself: registerContinueYaml
-      // writes two files into it (one server per file - a single block's
-      // mcpServers array is capped at one entry by Continue's own schema).
-      // See https://docs.continue.dev/customize/deep-dives/mcp
-      path: path.join(homeDir, '.continue', 'mcpServers'),
-      gate: () => fs.existsSync(path.join(homeDir, '.continue')),
-      format: 'continue-yaml',
     },
     {
       name: 'Kiro',
@@ -272,69 +246,6 @@ function registerToml(targetPath, bins) {
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(targetPath, content);
   return true;
-}
-
-/**
- * Writes standalone Continue.dev YAML block files (the format documented
- * at https://docs.continue.dev/customize/deep-dives/mcp, with required
- * name/version/schema metadata) registering egc-guardian and egc-memory.
- *
- * IMPORTANT: Continue's real schema (verified against the published
- * @continuedev/config-yaml package's parseBlock/blockSchema, not just
- * eyeballed) rejects a single block file whose mcpServers array has more
- * than one entry - "Array must contain exactly 1 element(s)". So this
- * writes two files, one server each, rather than one file with both.
- *
- * targetDir is the .continue/mcpServers/ folder itself, not a single file.
- * Unlike registerJson/registerToml this doesn't merge into files that
- * might hold unrelated user content - these are dedicated, EGC-owned
- * filenames, so each is just regenerated wholesale. Returns true if either
- * file was created or changed, false if both already matched exactly
- * (idempotent no-op).
- */
-function registerContinueYaml(targetDir, bins) {
-  const { guardianBin, memoryBin } = bins;
-  const files = {
-    'egc-guardian.yaml': [
-      'name: EGC Guardian',
-      'version: 0.0.1',
-      'schema: v1',
-      'mcpServers:',
-      '  - name: egc-guardian',
-      '    command: node',
-      '    args:',
-      // JSON.stringify produces a double-quoted scalar with the backslash/
-      // quote escaping YAML expects. Needed because a bare scalar breaks on
-      // paths containing "#" (starts a comment) or ": " (a mapping
-      // separator) - both legal in a directory name.
-      `      - ${JSON.stringify(guardianBin)}`,
-      '',
-    ].join('\n'),
-    'egc-memory.yaml': [
-      'name: EGC Memory',
-      'version: 0.0.1',
-      'schema: v1',
-      'mcpServers:',
-      '  - name: egc-memory',
-      '    command: node',
-      '    args:',
-      `      - ${JSON.stringify(memoryBin)}`,
-      '',
-    ].join('\n'),
-  };
-
-  let changed = false;
-  for (const [filename, desired] of Object.entries(files)) {
-    const targetPath = path.join(targetDir, filename);
-    if (fs.existsSync(targetPath)) {
-      const existing = fs.readFileSync(targetPath, 'utf8');
-      if (existing === desired) continue;
-    }
-    fs.mkdirSync(targetDir, { recursive: true });
-    fs.writeFileSync(targetPath, desired);
-    changed = true;
-  }
-  return changed;
 }
 
 /**
@@ -531,7 +442,6 @@ function retireStaleLegacySibling(targetPath) {
 const FORMAT_HANDLERS = {
   'json': registerJson,
   'toml': registerToml,
-  'continue-yaml': registerContinueYaml,
   'zed-context-servers': registerZedContextServers,
   'opencode-mcp': registerOpenCodeMcp,
   'claude-cli': registerClaudeCli,
@@ -581,7 +491,6 @@ module.exports = {
   parseJsonObject,
   registerJson,
   registerToml,
-  registerContinueYaml,
   registerZedContextServers,
   registerOpenCodeMcp,
   openCodeConfigPath,
