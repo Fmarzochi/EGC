@@ -126,6 +126,30 @@ function runTests() {
     assert.strictEqual(result.code, 2, 'Expected the protected path to block');
   })) passed++; else failed++;
 
+  // `egc run --shell` hands its words to a shell as one script, so the
+  // script is judged segment by segment, like a heredoc a shell reads.
+  if (test('a compound script handed to egc run --shell is validated segment by segment', () => {
+    const result = runHook('egc run --shell "ls && rm -rf /tmp/x"');
+    assert.strictEqual(result.code, 2, `Expected the second segment to block, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('a safe script handed to egc run --shell still runs', () => {
+    const result = runHook('egc run --shell "git status | head"');
+    assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('egc run --raw --shell is read the same way, behind a wrapper too', () => {
+    const result = runHook('env FOO=bar egc run --raw --shell "git status; rm -rf /tmp/x"');
+    assert.strictEqual(result.code, 2, `Expected the second segment to block, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('egc run without --shell keeps the wrapped command as it is', () => {
+    const result = runHook('egc run git log --oneline');
+    assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
+    const segments = extractSegments('egc run --shell "git status && git diff"');
+    assert.deepStrictEqual(segments, ['egc run --shell "git status && git diff"', 'git status', 'git diff']);
+  })) passed++; else failed++;
+
   if (test('a verdict that says advisory is false blocks even when its reason carries an advisory phrase', () => {
     const result = runHook('advisory-probe-hard');
     assert.strictEqual(result.code, 2, `Expected block, got: ${result.stderr}`);

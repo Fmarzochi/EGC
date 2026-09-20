@@ -523,7 +523,48 @@ function readsItsInputAsCode(line) {
   return true;
 }
 
+// `egc run --shell` joins the words after its options and hands them to a
+// shell, so a whole script can arrive as one quoted token. The validator
+// judges that token as one command and calls its metacharacters advisory,
+// which is exactly where a compound script would hide a refused command.
+// The script is read as the command line it is: its segments are extracted
+// and validated like the body of a heredoc a shell reads.
+function egcShellScriptOf(line) {
+  const words = shellWords(line);
+  let index = 0;
+  while (index < words.length) {
+    const word = words[index].value;
+    if (/^[A-Za-z_]\w*=/.test(word)) {
+      index += 1;
+      continue;
+    }
+    const wrapper = WRAPPER_SPECS[word.split(/[\\/]/).pop()];
+    if (!wrapper) break;
+    index = skipWrapperOptions(words, index + 1, wrapper, { cwd: null, chroot: null, unsure: false });
+  }
+  const head = words[index];
+  if (!head || head.value.split(/[\\/]/).pop() !== 'egc') return null;
+  index += 1;
+  while (index < words.length && words[index].value.startsWith('-')) index += 1;
+  if (words[index]?.value !== 'run') return null;
+  index += 1;
+  let viaShell = false;
+  while (index < words.length) {
+    const word = words[index].value;
+    if (word === '--') {
+      index += 1;
+      break;
+    }
+    if (!word.startsWith('-')) break;
+    if (word === '--shell') viaShell = true;
+    index += 1;
+  }
+  if (!viaShell || index >= words.length) return null;
+  return words.slice(index).map(word => word.value).join(' ');
+}
+
 function extractSegments(rawCommand, depth = 0) {
+
   const command = joinContinuations(String(rawCommand));
 
   const bodies = extractSubstitutionBodies(command);
@@ -538,6 +579,15 @@ function extractSegments(rawCommand, depth = 0) {
     const { command: line, body } = splitHeredoc(raw);
     const trimmed = line.trim();
     if (trimmed) topLevel.push(trimmed);
+    // A script handed to `egc run --shell` runs in a shell of its own, so
+    // its segments are judged like the body of a heredoc a shell reads.
+    const script = egcShellScriptOf(line);
+    if (script !== null) {
+      if (depth >= MAX_SUBSTITUTION_DEPTH) return null;
+      const inner = extractSegments(script, depth + 1);
+      if (inner === null) return null;
+      topLevel.push(...inner);
+    }
     if (body === null) continue;
     // The body is stdin data, except when a shell is the one reading it:
     // there it is a script, and it is judged like any other script.
