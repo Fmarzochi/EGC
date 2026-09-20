@@ -1791,8 +1791,13 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
 
 const ALLOWLIST_MISS_MARKER = 'is not in the allowlist';
 
+// The allowlist miss is the one denial the step above may look past, so that
+// the metacharacter check still gets to speak. The verdict says so through
+// its advisory field: a reason quotes the path, alias key or file name the
+// command carried, and scanning that text for the marker let any of them
+// impersonate the miss and walk out of the hard denial it had just earned.
 function isAllowlistMissVerdict(verdict: ValidationResult): boolean {
-  return !verdict.allowed && String(verdict.reason ?? '').includes(ALLOWLIST_MISS_MARKER);
+  return !verdict.allowed && verdict.advisory === true;
 }
 
 // Filesystem targets an argument can carry: a bare operand (URIs excluded,
