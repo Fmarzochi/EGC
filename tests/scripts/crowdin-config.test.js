@@ -129,6 +129,15 @@ function runTests() {
       /Pre-translation request refused[^\n]*\n\s+exit 1/.test(syncWorkflow),
       'a refused pre-translation must fail the run instead of skipping with a warning'
     );
+    for (const [pattern, what] of [
+      [/Crowdin refused GET[^\n]*\n\s+exit 1/, 'a lookup of the engine, the project or the files that the API refuses'],
+      [/Pre-translation ended as \$status[^\n]*\n\s+exit 1/, 'a pre-translation that ends failed or canceled'],
+      [/did not finish within six minutes[^\n]*\n\s+exit 1/, 'a pre-translation that does not finish in time'],
+    ]) {
+      assert.ok(pattern.test(syncWorkflow), `${what} must fail the run, not skip with a warning`);
+    }
+    const lookups = syncWorkflow.split('\n').filter(line => line.includes('curl -sf') && line.includes("|| echo '{}'"));
+    assert.deepStrictEqual(lookups, [], 'no API lookup may swallow its failure into an empty object');
     assert.ok(
       syncWorkflow.includes('find translations -mindepth 1 -maxdepth 1 -type d'),
       'the pre-translation must be limited to the languages the repository ships: adding a language is a decision, not a download'

@@ -52,17 +52,30 @@ jobs:
         run: |
           api="https://api.crowdin.com/api/v2"
           auth="Authorization: Bearer $CROWDIN_PERSONAL_TOKEN"
-          engines=$(curl -sf -H "$auth" "$api/mts?limit=1" || echo '{}')
-          engine_id=$(echo "$engines" | jq -r '.data[0].data.id // empty')
+          response="$RUNNER_TEMP/crowdin-response.json"
+          # One reader for every lookup: an answer outside 2xx (an expired
+          # token, a 403, a 5xx) fails the run with its status and body,
+          # instead of turning into an empty object that reads as "nothing
+          # configured" and a green skip.
+          crowdin_get() {
+            local status
+            status=$(curl -s -o "$response" -w '%{http_code}' -H "$auth" "$api/$1")
+            if [ "${status#2}" = "$status" ]; then
+              echo "::error::Crowdin refused GET $1 (HTTP $status): $(cat "$response")"
+              exit 1
+            fi
+          }
+          crowdin_get "mts?limit=1"
+          engine_id=$(jq -r '.data[0].data.id // empty' "$response")
           if [ -z "$engine_id" ]; then
             echo "::notice::No MT engine configured. Skipping pre-translation."
             echo "skipped=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "MT engine: $engine_id"
-          supported=$(echo "$engines" | jq -c '.data[0].data.supportedLanguagePairs.en // []')
-          project=$(curl -sf -H "$auth" "$api/projects/${CROWDIN_PROJECT_ID}" || echo '{}')
-          targets=$(echo "$project" | jq -c '.data.targetLanguageIds // []')
+          supported=$(jq -c '.data[0].data.supportedLanguagePairs.en // []' "$response")
+          crowdin_get "projects/${CROWDIN_PROJECT_ID}"
+          targets=$(jq -c '.data.targetLanguageIds // []' "$response")
           # Only the languages this repository ships are translated: a language
           # the panel targets but translations/ does not carry is a decision to
           # add it, not a sync. pt-PT and pt-BR map to pt, es-ES to es.
@@ -70,8 +83,8 @@ jobs:
           language_ids=$(jq -cn --argjson supported "$supported" --argjson targets "$targets" --argjson shipped "$shipped" \
             '[($targets - ($targets - $supported))[] | select((. as $id | $shipped | index($id)) != null or ((split("-")[0]) as $two | $shipped | index($two)) != null)]')
           echo "Shipped languages: $shipped"
-          files=$(curl -sf -H "$auth" "$api/projects/${CROWDIN_PROJECT_ID}/files?limit=500" || echo '{}')
-          file_ids=$(echo "$files" | jq -c '[.data[].data.id]')
+          crowdin_get "projects/${CROWDIN_PROJECT_ID}/files?limit=500"
+          file_ids=$(jq -c '[.data[].data.id]' "$response")
           echo "Project target languages: $targets"
           echo "Languages the engine covers: $language_ids"
           echo "Source files: $file_ids"
@@ -81,7 +94,6 @@ jobs:
           fi
           body=$(jq -cn --argjson engine "$engine_id" --argjson languages "$language_ids" --argjson files "$file_ids" \
             '{method: "mt", engineId: $engine, languageIds: $languages, fileIds: $files, autoApproveOption: "all", scope: "untranslated", duplicateTranslations: false}')
-          response="$RUNNER_TEMP/pretranslate-response.json"
           http_status=$(curl -s -o "$response" -w '%{http_code}' -X POST \
             -H "$auth" -H "Content-Type: application/json" \
             "$api/projects/${CROWDIN_PROJECT_ID}/pre-translations" -d "$body")
