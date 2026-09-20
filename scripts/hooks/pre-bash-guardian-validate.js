@@ -499,9 +499,11 @@ function readsItsInputAsCode(line) {
   if (!head) return false;
   const isShell = head.value.startsWith('$') || SHELL_INTERPRETERS.has(head.value.split(/[\\/]/).pop().toLowerCase());
   if (!isShell) return false;
-  // A shell reads its script from stdin only when it was not given one
-  // elsewhere: -c carries the script in the argument, and a file operand
-  // names it. In both cases the heredoc is ordinary input data.
+  // A file operand names the script the shell will run, and its standard
+  // input is then that script's data. Anything else keeps the body as code:
+  // -c does not make it data, because the script it carries can read standard
+  // input and execute it (`bash -c 'sh' <<EOF`), which is exactly the shape
+  // worth hiding a destructive command in.
   const rest = words.slice(index + 1).map(word => word.value);
   for (let i = 0; i < rest.length; i++) {
     const value = rest[i];
@@ -510,9 +512,13 @@ function readsItsInputAsCode(line) {
       if (/^\d*[<>]+$/.test(value)) i += 1;
       continue;
     }
-    if (value === '--') return false;
+    if (value === '--') {
+      return rest.slice(i + 1).every(word => /^\d*[<>]/.test(word) || word.startsWith('&>'));
+    }
     if (!value.startsWith('-')) return false;
-    if (value.slice(1).includes('c')) return false;
+    // -c takes the script it carries as the next word, and -o an option name:
+    // neither is the script file that would make the heredoc data.
+    if (/^-[a-zA-Z]*c$/.test(value) || value === '--command' || value === '-o' || value === '+o') i += 1;
   }
   return true;
 }

@@ -97,9 +97,20 @@ function runTests() {
     assert.strictEqual(result.code, 2, 'Expected the wrapper to be peeled before the interpreter check');
   })) passed++; else failed++;
 
-  if (test('a heredoc is data again when the interpreter took its script elsewhere', () => {
-    const result = runHook("bash -c 'echo hi' <<'EOF'\nrm -rf /tmp/x\nEOF");
-    assert.strictEqual(result.code, 0, `Expected allow: with -c the body is stdin data, got: ${result.stderr}`);
+  if (test('a heredoc body stays code when the shell got its script through -c, which can read stdin', () => {
+    const result = runHook("bash -c 'sh' <<'EOF'\nrm -rf /tmp/x\nEOF");
+    assert.strictEqual(result.code, 2, `Expected block: the -c script can execute its input, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('a heredoc is data when the shell was given a script file to run', () => {
+    const scriptFile = path.join(os.tmpdir(), `egc-heredoc-script-${Date.now()}.sh`);
+    fs.writeFileSync(scriptFile, 'echo hi\n');
+    try {
+      const result = runHook(`bash ${scriptFile} <<'EOF'\nthe key lives in ~/.ssh/config\nEOF`);
+      assert.strictEqual(result.code, 0, `Expected allow: the body is that script's input, got: ${result.stderr}`);
+    } finally {
+      try { fs.rmSync(scriptFile, { force: true }); } catch { /* best-effort cleanup */ }
+    }
   })) passed++; else failed++;
 
   if (test('a heredoc delimiter with punctuation still marks its body as data', () => {
