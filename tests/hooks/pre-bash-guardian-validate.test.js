@@ -156,8 +156,25 @@ function runTests() {
   if (test('egc run without --shell keeps the wrapped command as it is', () => {
     const result = runHook('egc run git log --oneline');
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
-    const segments = extractSegments('egc run --shell "git status && git diff"');
-    assert.deepStrictEqual(segments, ['egc run --shell "git status && git diff"', 'git status', 'git diff']);
+  })) passed++; else failed++;
+
+  if (test('a heredoc inside a script handed to egc run --shell is read as the shell reads it', () => {
+    const result = runHook('egc run --shell "bash <<EOF\nrm -rf /tmp/x\nEOF"');
+    assert.strictEqual(result.code, 2, `Expected the heredoc body to block, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('a heredoc fed to egc run --shell reaches the shell the script names', () => {
+    const result = runHook("egc run --shell bash <<'EOF'\nrm -rf /tmp/x\nEOF");
+    assert.strictEqual(result.code, 2, `Expected the heredoc body to block, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('the segments of egc run --shell are the command plus the script split up, heredoc body included', () => {
+    assert.deepStrictEqual(
+      extractSegments('egc run --shell "git status && git diff"'),
+      ['egc run --shell "git status && git diff"', 'git status', 'git diff']
+    );
+    const withHeredoc = extractSegments('egc run --shell "bash <<EOF\nrm -rf /tmp/x\nEOF"');
+    assert.ok(withHeredoc.includes('rm -rf /tmp/x'), `the heredoc body inside the script must be a segment, got: ${JSON.stringify(withHeredoc)}`);
   })) passed++; else failed++;
 
   if (test('a verdict that says advisory is false blocks even when its reason carries an advisory phrase', () => {
