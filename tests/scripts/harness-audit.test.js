@@ -219,6 +219,38 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('the memory and token checks read the capability, and the memory one is not satisfied by an event name alone', () => {
+    const projectRoot = createTempDir('harness-audit-capability-');
+    try {
+      const hooksDir = path.join(projectRoot, 'hooks');
+      const docsDir = path.join(projectRoot, 'docs', 'guides');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      fs.mkdirSync(docsDir, { recursive: true });
+      fs.writeFileSync(path.join(docsDir, 'token-optimization.md'), '# Token Optimization\n');
+      // The repository checks only run in repo mode, which the package name
+      // declares.
+      fs.writeFileSync(path.join(projectRoot, 'package.json'), JSON.stringify({ name: 'everything-gemini' }, null, 2));
+
+      // The event is named, but nothing under it loads or saves memory.
+      const namedOnly = { hooks: { SessionStart: [{ hooks: [{ command: 'node scripts/hooks/prompt-router.js' }] }], PreCompact: [{ hooks: [{ command: 'node scripts/hooks/suggest-compact.js' }] }] } };
+      fs.writeFileSync(path.join(hooksDir, 'hooks.json'), JSON.stringify(namedOnly, null, 2));
+      const bare = JSON.parse(run(['repo', '--format', 'json', `--root=${projectRoot}`]));
+      const memoryOf = (parsed) => parsed.checks.find((check) => check.id === 'memory-hooks-dir');
+      const tokenChecks = (parsed) => parsed.checks.filter((check) => check.path === 'docs/token-optimization.md');
+      assert.strictEqual(memoryOf(bare).pass, false, 'an event name with no memory hook under it is not the capability');
+      assert.ok(tokenChecks(bare).length >= 2, 'both documentation checks should be present');
+      assert.ok(tokenChecks(bare).every((check) => check.pass), 'the guide alone answers both documentation checks');
+
+      // Now the events carry the hooks that actually load and save state.
+      const withMemory = { hooks: { SessionStart: [{ hooks: [{ command: 'node scripts/hooks/egc-memory-load.js' }] }], PreCompact: [{ hooks: [{ command: 'node scripts/hooks/egc-memory-save.js' }] }] } };
+      fs.writeFileSync(path.join(hooksDir, 'hooks.json'), JSON.stringify(withMemory, null, 2));
+      const declared = JSON.parse(run(['repo', '--format', 'json', `--root=${projectRoot}`]));
+      assert.strictEqual(memoryOf(declared).pass, true, 'the lifecycle hooks of the root file are the capability');
+    } finally {
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('scores empty consumer projects without plugin or harness signals as failing checks', () => {
     const homeDir = createTempDir('harness-audit-empty-home-');
     const projectRoot = createTempDir('harness-audit-empty-project-');
