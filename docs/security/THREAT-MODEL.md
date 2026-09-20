@@ -8,7 +8,7 @@ EGC is a local-first AI memory and orchestration runtime. It has no network serv
 2. The MCP servers running as local stdio processes
 3. The GitHub Actions CI/CD pipeline
 4. Session hooks that process transcript data
-5. The 23 supported AI harnesses' own config/instruction files, which EGC writes to (see `docs/spec/integration-tiers.md`)
+5. The 20 supported AI harnesses' own config/instruction files, which EGC writes to (see `docs/spec/integration-tiers.md`)
 
 ## Actors
 

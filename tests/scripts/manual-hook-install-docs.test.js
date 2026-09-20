@@ -8,7 +8,6 @@ const { maybeSkipBaselineAbsent } = require('../lib/baseline-absent');
 const fs = require('fs');
 const path = require('path');
 
-const README = path.join(__dirname, '..', '..', 'README.md');
 const HOOKS_README = path.join(__dirname, '..', '..', 'hooks', 'README.md');
 
 function test(name, fn) {
@@ -30,28 +29,11 @@ function runTests() {
   let passed = 0;
   let failed = 0;
 
-  const readme = fs.readFileSync(README, 'utf8');
   const hooksReadme = fs.readFileSync(HOOKS_README, 'utf8');
 
-  if (test('README warns against raw hook file copying', () => {
-    assert.ok(
-      readme.includes('Do not copy the raw repo `hooks/hooks.json` into `~/.gemini/settings.json` or `~/.gemini/hooks/hooks.json`'),
-      'README should warn against unsupported raw hook copying'
-    );
-    assert.ok(
-      readme.includes('sh scripts/install.sh --target egc --modules hooks-runtime'),
-      'README should document the supported Bash hook install path'
-    );
-    assert.ok(
-      readme.includes('pwsh -File scripts/install.ps1 --target egc --modules hooks-runtime'),
-      'README should document the supported PowerShell hook install path'
-    );
-    assert.ok(
-      readme.includes('%USERPROFILE%\\\\.gemini'),
-      'README should call out the correct Windows Gemini config root'
-    );
-  })) passed++; else failed++;
-
+  // The root README no longer documents the manual hook install: that guidance lives in
+  // hooks/README.md, which the case below guards. A case for a document that stopped
+  // carrying the text asserts nothing, so it was removed rather than left skipping.
   if (test('hooks/README mirrors supported manual install guidance', () => {
     assert.ok(
       hooksReadme.includes('do not paste the raw repo `hooks.json` into `~/.gemini/settings.json` or copy it directly into `~/.gemini/hooks/hooks.json`'),
