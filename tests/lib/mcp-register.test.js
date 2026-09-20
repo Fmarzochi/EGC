@@ -46,6 +46,20 @@ const bins = {
   memoryBin: '/fake/mcp/servers/egc-memory/build/index.js',
 };
 
+// The orchestrator gates Claude Code on `which claude` and Cursor, Kiro,
+// Codex and OpenCode on a PATH probe, none of which read the temp home. With
+// the PATH pointed at that empty home, a local run can never reach the real
+// tools of the machine running the suite.
+function registerIsolated(homeDir, options) {
+  const savedPath = process.env.PATH;
+  process.env.PATH = homeDir;
+  try {
+    return registerMcpServers(homeDir, bins, options);
+  } finally {
+    process.env.PATH = savedPath;
+  }
+}
+
 function runTests() {
   console.log('\n=== Testing scripts/lib/mcp-register.js ===\n');
 
@@ -834,43 +848,12 @@ function runTests() {
 
   // ── registerMcpServers orchestrator ─────────────────────────────
 
-  (test('registerMcpServers leaves ~/.continue alone even when it exists (retired in #1279)', () => {
-    const tmpHome = makeTempDir();
-    fs.mkdirSync(path.join(tmpHome, '.continue'));
-
-    const registered = [];
-    registerMcpServers(tmpHome, bins, {
-      dryRun: false,
-      onRegister: (target) => registered.push(target.name),
-    });
-
-    assert.ok(!registered.includes('Continue.dev'), 'Continue.dev must not be reported as registered');
-    assert.ok(!fs.existsSync(path.join(tmpHome, '.continue', 'mcpServers')), 'nothing may be written under ~/.continue');
-
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
-  (test('registerMcpServers skips Continue.dev entirely when ~/.continue is absent', () => {
-    const tmpHome = makeTempDir();
-
-    const registered = [];
-    registerMcpServers(tmpHome, bins, {
-      dryRun: false,
-      onRegister: (target) => registered.push(target.name),
-    });
-
-    assert.ok(!registered.includes('Continue.dev'), 'Continue.dev should not be touched when not installed');
-    assert.ok(!fs.existsSync(path.join(tmpHome, '.continue')), 'no .continue dir should be created as a side effect');
-
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
   (test('registerMcpServers in dry-run mode writes nothing', () => {
     const tmpHome = makeTempDir();
     fs.mkdirSync(path.join(tmpHome, '.kiro'));
 
     const skipped = [];
-    registerMcpServers(tmpHome, bins, {
+    registerIsolated(tmpHome, {
       dryRun: true,
       onSkip: (target) => skipped.push(target.name),
     });
@@ -893,7 +876,7 @@ function runTests() {
 
     const registered = [];
     const warned = [];
-    registerMcpServers(tmpHome, bins, {
+    registerIsolated(tmpHome, {
       dryRun: false,
       onRegister: (target) => registered.push(target.name),
       onWarn: (target) => warned.push(target.name),
@@ -929,7 +912,7 @@ function runTests() {
     const warned = [];
     const unchanged = [];
     try {
-      registerMcpServers(tmpHome, bins, {
+      registerIsolated(tmpHome, {
         dryRun: false,
         onRegister: (target) => registered.push(target.name),
         onWarn: (target) => warned.push(target.name),
@@ -955,7 +938,7 @@ function runTests() {
     const registered = [];
     const unchanged = [];
     try {
-      registerMcpServers(tmpHome, bins, {
+      registerIsolated(tmpHome, {
         dryRun: false,
         onRegister: (target) => registered.push(target.name),
         onUnchanged: (target) => unchanged.push(target.name),

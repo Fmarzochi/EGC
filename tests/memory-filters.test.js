@@ -270,7 +270,7 @@ run('hardening a pre-smudge-fix install adds smudge=cat, not just required=true 
   assert.strictEqual(smudge, 'cat', 'hardening to required=true must not skip smudge, or checkout breaks on this repo');
 });
 
-run('no longer binds the Roo Code and Continue.dev files nothing writes any more (retired in #1279)', () => {
+run('no longer binds the Roo Code and Continue.dev files, which nothing writes any more (retired in #1279)', () => {
   const { dir } = makeRepo();
   const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
   assert.strictEqual(plan.configured, true);

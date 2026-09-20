@@ -347,12 +347,16 @@ async function runTests() {
   if (await test('leaves .roo/ and .roorules alone: Roo Code was retired in #1279', () => {
     const dir = mktemp();
     try {
-      fs.mkdirSync(path.join(dir, '.roo'));
+      const rulesDir = path.join(dir, '.roo', 'rules');
+      fs.mkdirSync(rulesDir, { recursive: true });
+      const legacy = '<!-- egc:start -->\n# EGC Project Memory\nold block\n<!-- egc:end -->\n';
+      const leftoverPath = path.join(rulesDir, 'egc-context.md');
+      fs.writeFileSync(leftoverPath, legacy, 'utf-8');
       const rooRulesPath = path.join(dir, '.roorules');
       fs.writeFileSync(rooRulesPath, '# Roo rules\n', 'utf-8');
       const result = propagateStateToTools({ projectPath: dir, ...args });
       assert.ok(!('roo' in result), 'roo is no longer a propagation destination');
-      assert.ok(!fs.existsSync(path.join(dir, '.roo', 'rules')), '.roo/rules/ must not be created');
+      assert.strictEqual(fs.readFileSync(leftoverPath, 'utf-8'), legacy, 'a leftover of the retired writer is neither rewritten nor removed');
       assert.strictEqual(fs.readFileSync(rooRulesPath, 'utf-8'), '# Roo rules\n', '.roorules must be left untouched');
     } finally {
       cleanup(dir);
@@ -362,10 +366,14 @@ async function runTests() {
   if (await test('leaves .continue/ alone: Continue.dev was retired in #1279', () => {
     const dir = mktemp();
     try {
-      fs.mkdirSync(path.join(dir, '.continue'));
+      const rulesDir = path.join(dir, '.continue', 'rules');
+      fs.mkdirSync(rulesDir, { recursive: true });
+      const legacy = '<!-- egc:start -->\n# EGC Project Memory\nold block\n<!-- egc:end -->\n';
+      const leftoverPath = path.join(rulesDir, 'egc-context.md');
+      fs.writeFileSync(leftoverPath, legacy, 'utf-8');
       const result = propagateStateToTools({ projectPath: dir, ...args });
       assert.ok(!('continue' in result), 'continue is no longer a propagation destination');
-      assert.ok(!fs.existsSync(path.join(dir, '.continue', 'rules')), '.continue/rules/ must not be created');
+      assert.strictEqual(fs.readFileSync(leftoverPath, 'utf-8'), legacy, 'a leftover of the retired writer is neither rewritten nor removed');
     } finally {
       cleanup(dir);
     }

@@ -618,7 +618,7 @@ function runFreshnessGuardTests() {
     }
   })) passed++; else failed++;
 
-  if (test('no longer binds the Roo Code and Continue.dev files nothing writes any more (retired in #1279)', () => {
+  if (test('no longer binds the Roo Code and Continue.dev files, which nothing writes any more (retired in #1279)', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
