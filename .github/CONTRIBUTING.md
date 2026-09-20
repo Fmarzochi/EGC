@@ -424,11 +424,23 @@ EGC uses [Crowdin](https://crowdin.com/project/egc) for community translations. 
 
 ### Current translations
 
-| Language | Progress | File |
-|---|---|---|
-| English | Source | [README.md](../README.md) |
-| Español | 100% | [translations/es/README.md](../translations/es/README.md) |
-| Português (Brasil) | 100% | [translations/pt/README.md](../translations/pt/README.md) |
+Every file under `translations/` is a complete translation of the README as it stood at that language's last sync: the workflow only downloads a language once every string is translated, and machine translation fills the gaps for the languages the engine covers. Progress per language lives in Crowdin, not here.
+
+| Language | File |
+|---|---|
+| English | Source: [README.md](../README.md) |
+| العربية | [translations/ar/README.md](../translations/ar/README.md) |
+| Deutsch | [translations/de/README.md](../translations/de/README.md) |
+| Español | [translations/es/README.md](../translations/es/README.md) |
+| Français | [translations/fr/README.md](../translations/fr/README.md) |
+| हिन्दी | [translations/hi/README.md](../translations/hi/README.md) |
+| Italiano | [translations/it/README.md](../translations/it/README.md) |
+| 日本語 | [translations/ja/README.md](../translations/ja/README.md) |
+| 한국어 | [translations/ko/README.md](../translations/ko/README.md) |
+| Português (Brasil) | [translations/pt/README.md](../translations/pt/README.md) |
+| Русский | [translations/ru/README.md](../translations/ru/README.md) |
+| Türkçe | [translations/tr/README.md](../translations/tr/README.md) |
+| 简体中文 | [translations/zh-CN/README.md](../translations/zh-CN/README.md) |
 
 ---
 
