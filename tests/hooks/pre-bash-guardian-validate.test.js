@@ -138,9 +138,19 @@ function runTests() {
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
   })) passed++; else failed++;
 
-  if (test('egc run --raw --shell is read the same way, behind a wrapper too', () => {
-    const result = runHook('env FOO=bar egc run --raw --shell "git status; rm -rf /tmp/x"');
+  if (test('a script handed to egc run --shell behind a wrapper is read the same way', () => {
+    const result = runHook('env FOO=bar egc run --shell "git status; rm -rf /tmp/x"');
     assert.strictEqual(result.code, 2, `Expected the second segment to block, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('a script that starts with a dash is still the script, not an option', () => {
+    const result = runHook('egc run --shell "-x && rm -rf /tmp/y"');
+    assert.strictEqual(result.code, 2, `Expected the second segment to block, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
+  if (test('egc run reads one option only: after --raw, --shell is the program it would run', () => {
+    const segments = extractSegments('egc run --raw --shell "a && b"');
+    assert.deepStrictEqual(segments, ['egc run --raw --shell "a && b"']);
   })) passed++; else failed++;
 
   if (test('egc run without --shell keeps the wrapped command as it is', () => {

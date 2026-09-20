@@ -527,26 +527,19 @@ function readsItsInputAsCode(line) {
 // which is exactly where a compound script would hide a refused command.
 // The script is read as the command line it is: its segments are extracted
 // and validated like the body of a heredoc a shell reads.
-// The words of the script `egc run --shell` hands to a shell: after the
-// `run` verb and its options (`--raw`, `--shell`, an optional `--`), or
-// null when the line is not that command or the script would be empty.
+// The words of the script `egc run --shell` hands to a shell, or null when
+// the line is not that command or the script would be empty.
 function egcRunShellScriptWords(words, start) {
   let index = start;
   while (index < words.length && words[index].value.startsWith('-')) index += 1;
   if (words[index]?.value !== 'run') return null;
-  index += 1;
-  let viaShell = false;
-  while (index < words.length) {
-    const word = words[index].value;
-    if (word === '--') {
-      index += 1;
-      break;
-    }
-    if (!word.startsWith('-')) break;
-    if (word === '--shell') viaShell = true;
-    index += 1;
-  }
-  return viaShell && index < words.length ? words.slice(index) : null;
+  // egc run reads one option, and only as its first argument (`--raw` or
+  // `--shell`, see scripts/crush-run.js); everything after it is the
+  // command, whatever it starts with, so a script beginning with a dash is
+  // still the script.
+  if (words[index + 1]?.value !== '--shell') return null;
+  const script = words.slice(index + 2);
+  return script.length > 0 ? script : null;
 }
 
 function egcShellScriptOf(line) {
