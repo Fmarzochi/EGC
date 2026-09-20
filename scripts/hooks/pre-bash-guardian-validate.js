@@ -497,7 +497,24 @@ function readsItsInputAsCode(line) {
   }
   const head = words[index];
   if (!head) return false;
-  return head.value.startsWith('$') || SHELL_INTERPRETERS.has(head.value.split(/[\\/]/).pop().toLowerCase());
+  const isShell = head.value.startsWith('$') || SHELL_INTERPRETERS.has(head.value.split(/[\\/]/).pop().toLowerCase());
+  if (!isShell) return false;
+  // A shell reads its script from stdin only when it was not given one
+  // elsewhere: -c carries the script in the argument, and a file operand
+  // names it. In both cases the heredoc is ordinary input data.
+  const rest = words.slice(index + 1).map(word => word.value);
+  for (let i = 0; i < rest.length; i++) {
+    const value = rest[i];
+    // A redirection is not a script operand; a bare one takes the next word.
+    if (/^\d*[<>]/.test(value) || value.startsWith('&>')) {
+      if (/^\d*[<>]+$/.test(value)) i += 1;
+      continue;
+    }
+    if (value === '--') return false;
+    if (!value.startsWith('-')) return false;
+    if (value.slice(1).includes('c')) return false;
+  }
+  return true;
 }
 
 function extractSegments(rawCommand, depth = 0) {

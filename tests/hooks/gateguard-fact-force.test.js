@@ -288,6 +288,9 @@ function runTests() {
     ["printf '%s\\n' 'git reset --hard undoes work' >> notes.md", 'a line of prose being written to a file'],
     ["git commit -q -F - <<'EOF'\nfix: never rm -rf the cache\nEOF", 'a heredoc commit message naming one'],
     ['echo "dd if=/dev/zero is how you wipe a disk"', 'a sentence about one'],
+    ['sudo -V rm -rf /tmp/x', 'a wrapper asked for its version, which runs nothing'],
+    ['sudo -v rm -rf /tmp/x', 'a wrapper asked to validate, which runs nothing'],
+    ['command -v rm', 'a wrapper asked where a command lives'],
   ];
   for (const [command, what] of NOT_A_COMMAND) {
     if (test(`the destructive gate ignores ${what}`, () => {

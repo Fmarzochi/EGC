@@ -313,6 +313,11 @@ const DESTRUCTIVE_CONTENT_PATTERNS = [
 // Words that stand in front of the command they run.
 const COMMAND_WRAPPERS = new Set(['sudo', 'doas', 'command', 'nice', 'ionice', 'nohup', 'setsid', 'timeout', 'env', 'xargs', 'time', 'stdbuf']);
 const WRAPPERS_TAKING_A_VALUE = new Set(['timeout', 'nice', 'ionice']);
+// Wrapper options that make the wrapper answer for itself and exit, so the
+// words after them are never executed and classify nothing.
+const TERMINATING_WRAPPER_FLAGS = new Set(['-V', '--version', '--help']);
+const TERMINATING_BY_WRAPPER = { sudo: new Set(['-v', '--validate', '-l', '--list']), command: new Set(['-v', '-V']), doas: new Set(['-L']) };
+
 // Wrapper options that consume the word after them.
 const WRAPPER_VALUE_FLAGS = new Set([
   '-u', '--user', '-g', '--group', '-C', '--chdir', '-n', '--max-args', '-I', '-i', '-L', '-P', '--max-procs',
@@ -367,6 +372,7 @@ function commandLineOf(segment) {
     // command unread.
     while (i < words.length && words[i].startsWith('-')) {
       const flag = words[i];
+      if (TERMINATING_WRAPPER_FLAGS.has(flag) || TERMINATING_BY_WRAPPER[name]?.has(flag)) return '';
       i += 1;
       if (WRAPPER_VALUE_FLAGS.has(flag) && words[i] !== undefined && !words[i].startsWith('-')) i += 1;
     }

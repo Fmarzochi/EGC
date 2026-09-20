@@ -97,6 +97,11 @@ function runTests() {
     assert.strictEqual(result.code, 2, 'Expected the wrapper to be peeled before the interpreter check');
   })) passed++; else failed++;
 
+  if (test('a heredoc is data again when the interpreter took its script elsewhere', () => {
+    const result = runHook("bash -c 'echo hi' <<'EOF'\nrm -rf /tmp/x\nEOF");
+    assert.strictEqual(result.code, 0, `Expected allow: with -c the body is stdin data, got: ${result.stderr}`);
+  })) passed++; else failed++;
+
   if (test('a heredoc delimiter with punctuation still marks its body as data', () => {
     const result = runHook("printf '%s' x > notes.md <<'EOF-1'\nthe key lives in ~/.ssh/config\nEOF-1");
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
