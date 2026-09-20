@@ -113,6 +113,24 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('crowdin-sync.yml names the files and only project languages in the pre-translation request, and fails loudly when it is refused', () => {
+    assert.ok(
+      syncWorkflow.includes('fileIds: $files'),
+      'the pre-translation request must carry fileIds: the API refuses a request without them, and that refusal stayed hidden behind a warning for months'
+    );
+    assert.ok(
+      syncWorkflow.includes('.data.targetLanguageIds'),
+      'the languages must be read from the project: an MT pair the project does not target is refused too'
+    );
+    const postLine = syncWorkflow.split('\n').find(line => line.includes('/pre-translations" -d "$body"'));
+    assert.ok(postLine, 'the pre-translation POST must send the body built from the project');
+    assert.ok(!postLine.includes("|| echo '{}'"), 'the pre-translation POST must not swallow its failure into an empty object');
+    assert.ok(
+      /Pre-translation request refused[^\n]*\n\s+exit 1/.test(syncWorkflow),
+      'a refused pre-translation must fail the run instead of skipping with a warning'
+    );
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

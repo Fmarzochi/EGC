@@ -40,15 +40,19 @@ jobs:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
 
+      # The API refuses a pre-translation that names no file, and one that names
+      # a language the project does not have as a target, so both lists come
+      # from the project itself. A refused request fails the run: this step
+      # skipped in silence for months while every run stayed green.
       - name: Pre-translate via Machine Translation
         id: pretranslate
         env:
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
         run: |
-          engines=$(curl -sf \
-            -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
-            "https://api.crowdin.com/api/v2/mts?limit=1" || echo '{}')
+          api="https://api.crowdin.com/api/v2"
+          auth="Authorization: Bearer $CROWDIN_PERSONAL_TOKEN"
+          engines=$(curl -sf -H "$auth" "$api/mts?limit=1" || echo '{}')
           engine_id=$(echo "$engines" | jq -r '.data[0].data.id // empty')
           if [ -z "$engine_id" ]; then
             echo "::notice::No MT engine configured. Skipping pre-translation."
@@ -56,24 +60,29 @@ jobs:
             exit 0
           fi
           echo "MT engine: $engine_id"
-          supported=$(echo "$engines" | jq -r '.data[0].data.supportedLanguagePairs.en // [] | @json')
-          if [ "$supported" = "[]" ]; then
-            echo "::notice::MT engine has no en->X pairs. Skipping pre-translation."
-            echo "skipped=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          supported=$(echo "$engines" | jq -c '.data[0].data.supportedLanguagePairs.en // []')
+          project=$(curl -sf -H "$auth" "$api/projects/${CROWDIN_PROJECT_ID}" || echo '{}')
+          targets=$(echo "$project" | jq -c '.data.targetLanguageIds // []')
+          language_ids=$(jq -cn --argjson supported "$supported" --argjson targets "$targets" '$targets - ($targets - $supported)')
+          files=$(curl -sf -H "$auth" "$api/projects/${CROWDIN_PROJECT_ID}/files?limit=500" || echo '{}')
+          file_ids=$(echo "$files" | jq -c '[.data[].data.id]')
+          echo "Project target languages: $targets"
+          echo "Languages the engine covers: $language_ids"
+          echo "Source files: $file_ids"
+          if [ "$language_ids" = "[]" ] || [ "$file_ids" = "[]" ]; then
+            echo "::error::Nothing to pre-translate: the project reports no target language the engine covers, or no source file."
+            exit 1
           fi
-          echo "Supported target languages: $supported"
-          pt_response=$(curl -sf -X POST \
-            -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
-            -H "Content-Type: application/json" \
-            "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/pre-translations" \
-            -d "{\"method\":\"mt\",\"engineId\":${engine_id},\"languageIds\":${supported},\"autoApproveOption\":\"all\",\"translateUntranslatedOnly\":true,\"duplicateTranslations\":false}" \
-            || echo '{}')
-          pre_id=$(echo "$pt_response" | jq -r '.data.identifier // empty')
+          body=$(jq -cn --argjson engine "$engine_id" --argjson languages "$language_ids" --argjson files "$file_ids" \
+            '{method: "mt", engineId: $engine, languageIds: $languages, fileIds: $files, autoApproveOption: "all", scope: "untranslated", duplicateTranslations: false}')
+          response="$RUNNER_TEMP/pretranslate-response.json"
+          http_status=$(curl -s -o "$response" -w '%{http_code}' -X POST \
+            -H "$auth" -H "Content-Type: application/json" \
+            "$api/projects/${CROWDIN_PROJECT_ID}/pre-translations" -d "$body")
+          pre_id=$(jq -r '.data.identifier // empty' "$response")
           if [ -z "$pre_id" ]; then
-            echo "::warning::Pre-translation request failed. Skipping."
-            echo "skipped=true" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::Pre-translation request refused (HTTP $http_status): $(cat "$response")"
+            exit 1
           fi
           echo "Pre-translation started: $pre_id"
           echo "pre_id=${pre_id}" >> "$GITHUB_OUTPUT"
@@ -86,6 +95,7 @@ jobs:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           PRE_ID: ${{ steps.pretranslate.outputs.pre_id }}
         run: |
+          status=unknown
           for i in $(seq 1 36); do
             result=$(curl -sf \
               -H "Authorization: Bearer $CROWDIN_PERSONAL_TOKEN" \
@@ -94,14 +104,19 @@ jobs:
             echo "Status: $status (attempt $i/36)"
             if [ "$status" = "finished" ]; then
               break
-            elif [ "$status" = "failed" ]; then
-              echo "::warning::Pre-translation failed. Proceeding with existing translations."
-              break
+            elif [ "$status" = "failed" ] || [ "$status" = "canceled" ]; then
+              echo "::error::Pre-translation ended as $status, so the translations were not updated."
+              exit 1
             fi
             sleep 10
           done
+          if [ "$status" != "finished" ]; then
+            echo "::error::Pre-translation did not finish within six minutes (last status: $status)."
+            exit 1
+          fi
 
       - name: Download translations
+
         uses: crowdin/github-action@0d5670f539973aea2f01abce61a8989934df0025 # v3.0.2
         with:
           upload_sources: false
