@@ -1,5 +1,7 @@
 <!-- LANGUAGE-SELECTOR-START -->
+
 🌐 [English](../../README.md) · [العربية](../ar/README.md) · [Deutsch](../de/README.md) · [Español](../es/README.md) · [Français](../fr/README.md) · [हिन्दी](../hi/README.md) · [Italiano](../it/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · **Русский** · [Türkçe](../tr/README.md) · [简体中文](../zh-CN/README.md)
+
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -124,7 +126,6 @@ EGC создан одним разработчиком, поддерживает
 <br>
 
 <a href="https://bestpractices.dev/projects/13099"><img src="../../assets/images/openssf-best-practices-badge.svg" alt="OpenSSF Best Practices" width="110" /></a>
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
-<a href="https://www.linkedin.com/in/felipemarzochi"><img src="../../assets/images/egc-logo.png" alt="EGC" width="110" /></a>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; <a href="https://www.linkedin.com/in/felipemarzochi"><img src="../../assets/images/egc-logo.png" alt="EGC" width="110" /></a>
 
 </div>
