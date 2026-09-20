@@ -74,6 +74,37 @@ async function runTests() {
     );
   }
 
+  function assertDeniedWith(cmd, fragment) {
+    const result = validateCommand(cmd);
+    assert.strictEqual(
+      result.allowed,
+      false,
+      `Expected DENIED for: ${cmd}\n  Got: ${JSON.stringify(result)}`
+    );
+    assert.strictEqual(
+      typeof result.reason,
+      'string',
+      `Expected a reason string for: ${cmd}\n  Got: ${JSON.stringify(result)}`
+    );
+    assert.ok(
+      result.reason.includes(fragment),
+      `Expected the reason for: ${cmd}\n  to contain: ${fragment}\n  Got: ${JSON.stringify(result)}`
+    );
+  }
+
+  function assertReasonLacks(cmd, fragment) {
+    const result = validateCommand(cmd);
+    assert.strictEqual(
+      result.allowed,
+      false,
+      `Expected DENIED for: ${cmd}\n  Got: ${JSON.stringify(result)}`
+    );
+    assert.ok(
+      !String(result.reason || '').includes(fragment),
+      `Reason for: ${cmd}\n  must not mention: ${fragment}\n  Got: ${JSON.stringify(result)}`
+    );
+  }
+
   function assertWriteDenied(filepath) {
     const result = validateWrite(filepath);
     assert.strictEqual(
@@ -466,18 +497,31 @@ async function runTests() {
 
   console.log('\n=== new denials are not advisory (would hard-block via the hook) ===');
 
-  const ADVISORY_MARKERS = ['Shell chaining/metacharacters are forbidden', 'is not in the allowlist'];
+  // The hook blocks on the advisory field, not on the wording of the reason.
   function assertHardBlocking(cmd) {
     const result = validateCommand(cmd);
     assert.strictEqual(result.allowed, false, `Expected DENIED for: ${cmd}`);
-    const reason = String(result.reason || '');
-    for (const marker of ADVISORY_MARKERS) {
-      assert.ok(
-        !reason.includes(marker),
-        `Reason for '${cmd}' matches an advisory marker ('${marker}') and would never actually block: ${reason}`,
-      );
-    }
+    assert.strictEqual(
+      result.advisory,
+      false,
+      `Verdict for '${cmd}' is advisory and would never actually block: ${JSON.stringify(result)}`,
+    );
   }
+  run('allowlist miss is advisory',            () => assert.strictEqual(validateCommand('docker ps').advisory, true));
+  run('shell metacharacters are advisory',     () => assert.strictEqual(validateCommand('ls && id').advisory, true));
+  run('an allowed command is not advisory',    () => assert.strictEqual(validateCommand('git status').advisory, false));
+  // A hard denial quotes what the command carried, so its reason can hold
+  // the words of the advisory verdict. Only the advisory field decides, here
+  // as at the hook, or a path could step past the denial it just earned.
+  run('marker in a wget target plus a pipe',   () => assertHardBlocking(`wget -O "${home}/is not in the allowlist/.bashrc" "https://x.tld/a|b"`));
+  run('marker in a worktree path plus a pipe', () => assertHardBlocking(`git worktree add "${home}/.ssh/is not in the allowlist|x"`));
+  run('marker in an alias key plus a pipe',    () => assertHardBlocking('git config "alias.is not in the allowlist|x" "!id"'));
+  run('a real allowlist miss still yields to the metacharacter verdict', () => {
+    const result = validateCommand('docker ps | head');
+    assert.strictEqual(result.allowed, false);
+    assert.strictEqual(result.advisory, true);
+    assert.ok(result.reason.includes('metacharacters'), JSON.stringify(result));
+  });
   run('python3 -c is hard-blocking',   () => assertHardBlocking(`python3 -c "os.system('rm -rf ~')"`));
   run('node -e is hard-blocking',      () => assertHardBlocking(`node -e "1"`));
   run('find -delete is hard-blocking', () => assertHardBlocking('find . -delete'));
@@ -615,6 +659,151 @@ async function runTests() {
     }
   });
 
+
+  // ── validate_command: the git force flag read per subcommand ─────────────
+  // A force flag means a different thing in every git subcommand: on push it
+  // rewrites history other people already have, on worktree remove it drops a
+  // throwaway checkout, and on grep or config the same letter names a file.
+  // The refusal has to say what that particular command would do. git clean
+  // is the one subcommand refused with no force flag spelled out: once
+  // clean.requireForce is off it deletes untracked files on its own, so only
+  // a dry run passes.
+
+  console.log('\n=== validate_command: git force flag by subcommand ===');
+
+  const CLEAN_FRAGMENT = 'permanently delete files git is not tracking';
+  const CHECKOUT_FRAGMENT = 'throw away changes you have not committed';
+  const RM_FRAGMENT = 'delete files you changed but did not commit';
+  const SUBMODULE_FRAGMENT = 'discard changes inside the submodule';
+  const UNLISTED_FRAGMENT = 'not on the safe list';
+
+  run('git worktree remove --force',            () => assertAllowed('git worktree remove --force /tmp/wt'));
+  run('git worktree remove -f',                 () => assertAllowed('git worktree remove -f /tmp/wt'));
+  run('git -C repo worktree remove -f',         () => assertAllowed('git -C /tmp/repo worktree remove -f wt'));
+  run('git worktree add -f',                    () => assertAllowed('git worktree add -f ../wt feature'));
+  run('git clean -n',                           () => assertAllowed('git clean -n'));
+  run('git clean -nd',                          () => assertAllowed('git clean -nd'));
+  run('git clean --dry-run -x',                 () => assertAllowed('git clean --dry-run -x'));
+  run('git grep -f patterns.txt',               () => assertAllowed('git grep -f patterns.txt'));
+  run('git config -f cfg user.name',            () => assertAllowed('git config -f /tmp/cfg user.name Felipe'));
+  run('git commit -F message file',             () => assertAllowed('git commit -F /tmp/message.txt'));
+  run('git commit -a -F - reads stdin',         () => assertAllowed('git commit -q -a -F -'));
+  run('git grep -F literal',                    () => assertAllowed('git grep -F needle src'));
+  run('git commit -sF still not a force',       () => assertAllowed('git commit -sF /tmp/message.txt'));
+
+  run('git push --force',                       () => assertDeniedWith('git push --force', 'force-push is forbidden'));
+  run('git push --force names the history',     () => assertDeniedWith('git push --force', 'overwrite the shared history'));
+  run('git push -fu origin main',               () => assertDeniedWith('git push -fu origin main', 'force-push'));
+  run('git clean -f',                           () => assertDeniedWith('git clean -f', CLEAN_FRAGMENT));
+  run('git clean -fdx',                         () => assertDeniedWith('git clean -fdx', CLEAN_FRAGMENT));
+  run('git clean -xdf',                         () => assertDeniedWith('git clean -xdf', CLEAN_FRAGMENT));
+  run('git clean -df',                          () => assertDeniedWith('git clean -df', CLEAN_FRAGMENT));
+  run('git clean --force -d',                   () => assertDeniedWith('git clean --force -d', CLEAN_FRAGMENT));
+  run('git clean with no flags',                () => assertDeniedWith('git clean', CLEAN_FRAGMENT));
+  run('git clean -d',                           () => assertDeniedWith('git clean -d', CLEAN_FRAGMENT));
+  run('git -c clean.requireForce=false clean',  () => assertDeniedWith('git -c clean.requireForce=false clean', CLEAN_FRAGMENT));
+  run('git checkout -f main',                   () => assertDeniedWith('git checkout -f main', CHECKOUT_FRAGMENT));
+  run('git checkout --force main',              () => assertDeniedWith('git checkout --force main', CHECKOUT_FRAGMENT));
+  run('git switch -f main',                     () => assertDeniedWith('git switch -f main', CHECKOUT_FRAGMENT));
+  run('git switch --discard-changes main',      () => assertDeniedWith('git switch --discard-changes main', CHECKOUT_FRAGMENT));
+  run('git rm -f file.txt',                     () => assertDeniedWith('git rm -f file.txt', RM_FRAGMENT));
+  run('git rm -rf dir',                         () => assertDeniedWith('git rm -rf dir', RM_FRAGMENT));
+  run('git rm --force file.txt',                () => assertDeniedWith('git rm --force file.txt', RM_FRAGMENT));
+  run('git mv -f a b',                          () => assertDeniedWith('git mv -f a b', 'overwrite'));
+  run('git submodule update --force',           () => assertDeniedWith('git submodule update --force', SUBMODULE_FRAGMENT));
+  run('git submodule deinit -f sub',            () => assertDeniedWith('git submodule deinit -f sub', SUBMODULE_FRAGMENT));
+  run('git branch -f main HEAD~1',              () => assertDeniedWith('git branch -f main HEAD~1', UNLISTED_FRAGMENT));
+  run('git tag -f v1',                          () => assertDeniedWith('git tag -f v1', UNLISTED_FRAGMENT));
+  run('git fetch --force',                      () => assertDeniedWith('git fetch --force', UNLISTED_FRAGMENT));
+  run('git madeup --force',                     () => assertDeniedWith('git madeup --force', UNLISTED_FRAGMENT));
+  run('git config -f cfg core.hooksPath',       () => assertDenied('git config -f /tmp/cfg core.hooksPath /tmp/x'));
+
+  run('git clean -f is not a force-push',       () => assertReasonLacks('git clean -f', 'force-push'));
+  run('git checkout -f main is not a force-push', () => assertReasonLacks('git checkout -f main', 'force-push'));
+  run('git madeup --force is not a force-push', () => assertReasonLacks('git madeup --force', 'force-push'));
+
+  run('git clean -f with 2>/dev/null',          () => assertHardBlocking('git clean -f 2>/dev/null'));
+  run('git checkout -f main with 2>/dev/null',  () => assertHardBlocking('git checkout -f main 2>/dev/null'));
+
+  // git accepts any unique prefix of a long option, so the abbreviation has
+  // to be read as the option it stands for.
+  run('git checkout --forc main',               () => assertDeniedWith('git checkout --forc main', CHECKOUT_FRAGMENT));
+  run('git push --force-with-leas',             () => assertDeniedWith('git push --force-with-leas origin main', 'force-push'));
+  run('git push --force-with-lease=main:abc',   () => assertDeniedWith('git push --force-with-lease=main:abc origin main', 'force-push'));
+  run('git push --force-if-includes origin',    () => assertDeniedWith('git push --force-if-includes origin main', 'force-push'));
+  run('git push --force names the lease',       () => assertDeniedWith('git push --force-with-lease origin main', 'lease'));
+  run('git rm --forc file.txt',                 () => assertDeniedWith('git rm --forc file.txt', RM_FRAGMENT));
+  run('git switch --discard-change main',       () => assertDeniedWith('git switch --discard-change main', CHECKOUT_FRAGMENT));
+  run('git rebase --force-rebase stays allowed', () => assertAllowed('git rebase --force-rebase main'));
+  run('git push --no-force-with-lease allowed', () => assertAllowed('git push --no-force-with-lease origin main'));
+
+  // A short cluster on a subcommand outside both tables is still a force.
+  run('git tag -fa v1',                         () => assertDeniedWith('git tag -fa v1 -m x', UNLISTED_FRAGMENT));
+  run('git branch -fM old new',                 () => assertDeniedWith('git branch -fM old new', UNLISTED_FRAGMENT));
+  run('git madeup -fd',                         () => assertDeniedWith('git madeup -fd', UNLISTED_FRAGMENT));
+  run('git clea -fd under autocorrect',         () => assertDeniedWith('git -c help.autocorrect=immediate clea -fd', UNLISTED_FRAGMENT));
+  run('git log -Sfoo is not a force',           () => assertAllowed('git log -Sfoo'));
+  run('git blame -f file.c is not a force',     () => assertAllowed('git blame -f file.c'));
+  run('git --version has no subcommand',        () => assertAllowed('git --version'));
+
+  // The dry-run flag counts only when it is a flag, not the value of -e.
+  run('git clean -fden',                        () => assertDeniedWith('git clean -fden', CLEAN_FRAGMENT));
+  run('git clean -fd -e -n',                    () => assertDeniedWith('git clean -fd -e -n', CLEAN_FRAGMENT));
+  run('git clean -fd --exclude=n',              () => assertDeniedWith('git clean -fd --exclude=n', CLEAN_FRAGMENT));
+  run('git -c clean.requireForce=false clean -den', () => assertDeniedWith('git -c clean.requireForce=false clean -den', CLEAN_FRAGMENT));
+  run('git clean -i',                           () => assertDeniedWith('git clean -i', CLEAN_FRAGMENT));
+  run('git clean -nf is a dry run',             () => assertAllowed('git clean -nf'));
+  run('git clean -n -e n is a dry run',         () => assertAllowed('git clean -n -e n'));
+  run('git clean reason names the dry run',     () => assertDeniedWith('git clean -f', 'git clean -nd'));
+  run('git checkout reason names git stash',    () => assertDeniedWith('git checkout -f main', 'git stash'));
+  run('git clean -f is DANGEROUS',              () => assert.strictEqual(validateCommand('git clean -f').trust_level, 'DANGEROUS'));
+
+  // The reason is always a string and never carries the caller's own words.
+  run('git constructor --force',                () => assertDeniedWith('git constructor --force', UNLISTED_FRAGMENT));
+  run('git __proto__ -f',                       () => assertDeniedWith('git __proto__ -f', UNLISTED_FRAGMENT));
+  run('git --force names git once',             () => assertDeniedWith('git --force', 'git with force'));
+  run('git --force never says git git',         () => assertReasonLacks('git --force', 'git git'));
+  run('advisory marker in a subcommand name',   () => assertHardBlocking('git "is not in the allowlist" -f'));
+
+  // Global flags before a refused subcommand still reach its own reason.
+  run('git -C repo checkout -f main',           () => assertDeniedWith('git -C /tmp/repo checkout -f main', CHECKOUT_FRAGMENT));
+  run('git -C repo push origin +main',          () => assertDeniedWith('git -C /tmp/repo push origin +main', 'force-push'));
+
+  // An alias is judged by what it would run.
+  run('git -c alias.wt=clean -fd wt',           () => assertDenied("git -c alias.wt='clean -fd' wt"));
+  run('git -c alias.wt=push --force wt',        () => assertDenied("git -c alias.wt='push --force' wt"));
+  run('git config alias.wt clean -fd',          () => assertDenied('git config alias.wt "clean -fd"'));
+  run('git config alias.co checkout allowed',   () => assertAllowed('git config alias.co checkout'));
+
+  // The file operand of config -f and the path of a worktree are still paths.
+  run('git config -f protected --list',         () => assertDeniedWith(`git config -f ${home}/.ssh/config --list`, 'protected'));
+  run('git config -f cfg core.hooksPath hook',  () => assertDeniedWith('git config -f /tmp/cfg core.hooksPath /tmp/x', 'hook'));
+  run('git worktree remove -f protected',       () => assertDeniedWith(`git worktree remove -f ${home}/.ssh`, 'protected'));
+
+  // git also accepts the file operand attached to -f and an abbreviated
+  // --file, reads -n as a pathspec after --, lets --no-dry-run cancel -n,
+  // abbreviates --exclude, and resolves a relative path against the cwd.
+  run('git config -f attached protected',       () => assertDeniedWith(`git config -f${home}/.ssh/config --list`, 'protected'));
+  run('git config --fil= protected',            () => assertDeniedWith(`git config --fil=${home}/.ssh/config --list`, 'protected'));
+  run('git clean -n --no-dry-run',              () => assertDeniedWith('git clean -n --no-dry-run', CLEAN_FRAGMENT));
+  run('git clean -- -n',                        () => assertDeniedWith('git clean -- -n', CLEAN_FRAGMENT));
+  run('git clean -fd --excl=n',                 () => assertDeniedWith('git clean -fd --excl=n', CLEAN_FRAGMENT));
+  run('git clean -fd --excl n',                 () => assertDeniedWith('git clean -fd --excl n', CLEAN_FRAGMENT));
+  run('git clean -n -- -f is a dry run',        () => assertAllowed('git clean -n -- -f'));
+  run('git grep -f protected pattern file',     () => assertDeniedWith(`git grep -f ${home}/.ssh/config needle`, 'protected'));
+  run('git grep -f attached protected',         () => assertDeniedWith(`git grep -f${home}/.ssh/config needle`, 'protected'));
+  run('git worktree remove -f -- protected',    () => assertDeniedWith(`git worktree remove -f -- ${home}/.ssh`, 'protected'));
+  run('alias worktree path resolves in cwd',    () => assert.strictEqual(validateCommand("git -c alias.wt='worktree remove -f .ssh' wt", home).allowed, false));
+
+  // The reason quotes what the command carried, so a path, an alias key or a
+  // file name can hold the very words of an advisory verdict. What decides is
+  // the advisory field, never the wording. Options end at the terminator, so
+  // a pathspec spelled like a flag is not a force.
+  run('advisory marker in an alias key',        () => assertHardBlocking('git config "alias.is not in the allowlist" "!id"'));
+  run('advisory marker in a worktree path',     () => assertHardBlocking(`git worktree add "${home}/.ssh/is not in the allowlist"`));
+  run('advisory marker in a config file path',  () => assertHardBlocking(`git config -f "${home}/.ssh/is not in the allowlist" --list`));
+  run('git checkout main -- -f is a pathspec',  () => assertAllowed('git checkout main -- -f'));
+  run('git rm -- -f is a pathspec',             () => assertAllowed('git rm -- -f'));
 
   // ── Routing: installation-aware, keyless ─────────────────
   console.log('\n=== routing: installed components ===');

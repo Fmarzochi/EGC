@@ -979,6 +979,10 @@ export interface ValidationResult {
   allowed: boolean;
   reason?: string;
   trust_level?: 'SAFE_READONLY' | 'SAFE_DEV' | 'DANGEROUS' | 'BLOCKED';
+  // True only for the two verdicts the enforcement hook may treat as advice
+  // (allowlist miss, shell metacharacters). The hook reads this field, so
+  // whatever text a command puts into a reason cannot soften a hard block.
+  advisory?: boolean;
 }
 
 /**
@@ -1029,10 +1033,13 @@ const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir
 
 const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
 
-function isDangerousAliasValue(value: string): boolean {
+function isDangerousAliasValue(value: string, cwd?: string): boolean {
   const trimmed = stripEnclosingQuotes(value);
   if (stripQuotes(trimmed).startsWith('!')) return true;
   const words = tokenizeWords(trimmed);
+  // An alias is judged by the git command it expands to: one that hides
+  // a refused force or a clean is as dangerous as typing it.
+  if (!validateGitArgs(words, cwd).allowed) return true;
 
   let i = 0;
   while (i < words.length) {
@@ -1166,23 +1173,23 @@ function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
   return { readOnly, positionals, editDenial: null };
 }
 
-function isDangerousGitConfigWrite(key: string, value: string): boolean {
+function isDangerousGitConfigWrite(key: string, value: string, cwd?: string): boolean {
   const lowerKey = key.toLowerCase();
   return DANGEROUS_GIT_CONFIG_KEYS.has(lowerKey)
     || GIT_CONFIG_MERGE_DRIVER_KEY_RE.test(lowerKey)
     || GIT_CONFIG_FILTER_KEY_RE.test(lowerKey)
     || GIT_CONFIG_DIFF_COMMAND_KEY_RE.test(lowerKey)
     || GIT_CONFIG_INCLUDEIF_KEY_RE.test(lowerKey)
-    || (GIT_CONFIG_ALIAS_KEY_RE.test(lowerKey) && isDangerousAliasValue(value));
+    || (GIT_CONFIG_ALIAS_KEY_RE.test(lowerKey) && isDangerousAliasValue(value, cwd));
 }
 
-function checkGitConfigWrite(args: string[]): ValidationResult | null {
+function checkGitConfigWrite(args: string[], cwd?: string): ValidationResult | null {
   const scan = scanGitConfigArgs(args.slice(1));
   if (scan.editDenial) return scan.editDenial;
   if (scan.readOnly || scan.positionals.length < 2) return null;
 
   const [key, value] = scan.positionals;
-  if (!isDangerousGitConfigWrite(key, value)) return null;
+  if (!isDangerousGitConfigWrite(key, value, cwd)) return null;
   return {
     allowed: false,
     reason: `git config write to '${key}' persists a hook/execution-bypass override and is forbidden`,
@@ -1234,14 +1241,14 @@ function parseInlineConfigToken(token: string, nextToken: string | undefined): {
   return { key, value, consumedNext };
 }
 
-function checkInlineGitConfigOverrides(args: string[]): ValidationResult | null {
+function checkInlineGitConfigOverrides(args: string[], cwd?: string): ValidationResult | null {
   const subIdx = findGitSubcommandIndex(args);
   const limit = subIdx >= 0 ? subIdx : args.length;
   for (let i = 0; i < limit; i++) {
     const pair = parseInlineConfigToken(args[i], args[i + 1]);
     if (!pair) continue;
     if (pair.consumedNext) i += 1;
-    if (isDangerousGitConfigWrite(pair.key, pair.value)) {
+    if (isDangerousGitConfigWrite(pair.key, pair.value, cwd)) {
       return {
         allowed: false,
         reason: `git inline config override for '${pair.key}' persists a hook/execution-bypass override and is forbidden`,
@@ -1252,33 +1259,215 @@ function checkInlineGitConfigOverrides(args: string[]): ValidationResult | null 
   return null;
 }
 
-function validateGitArgs(args: string[]): ValidationResult {
-  const tokens = args.map(bareToken);
-  // Block force pushes, including --force-with-lease/--force-if-includes
-  // (startsWith, not includes, so these are caught even though their
-  // second character is '-' and they carry a value after '=').
-  const hasForceFlag = tokens.some(
-    a => a === '--force' || a === '-f' || a.startsWith('--force-with-lease') || a.startsWith('--force-if-includes'),
-  );
-  if (hasForceFlag) {
-    return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'DANGEROUS' };
+// Force flags are judged per git subcommand. The refusal names what the
+// command would actually do, so a reader who never opened the git manual
+// knows why it stopped and what to do instead. Subcommands absent from every
+// table keep the flag refused: the policy fails closed.
+interface GitForceRefusal {
+  reason: string;
+  extraFlags?: string[];
+}
+
+const GIT_FORCE_REFUSED = new Map<string, GitForceRefusal>([
+  ['push', {
+    reason: 'git force-push is forbidden: it would overwrite the shared history on the server and other people could lose their work. Even with a lease it rewrites commits other people already pulled. Push normally, or ask the maintainer.',
+  }],
+  ['checkout', {
+    reason: 'git checkout with force is forbidden: it would throw away changes you have not committed. Save them first with git stash, then try again.',
+  }],
+  ['switch', {
+    reason: 'git switch with force is forbidden: it would throw away changes you have not committed. Save them first with git stash, then try again.',
+    extraFlags: ['--discard-changes'],
+  }],
+  ['rm', {
+    reason: 'git rm with force is forbidden: it would delete files you changed but did not commit. Commit or stash them first.',
+  }],
+  ['mv', {
+    reason: 'git mv with force is forbidden: it would overwrite the destination file. Pick another name, or remove the destination first.',
+  }],
+  ['submodule', {
+    reason: 'git submodule with force is forbidden: it would discard changes inside the submodule. Commit or stash them there first.',
+  }],
+]);
+
+// Disposable working copies: removing or adding one touches no history and
+// no remote, so the force flag is the honest way to drop one that still holds
+// untracked files. The path itself is still checked against protected paths.
+const GIT_FORCE_ALLOWED = new Set(['worktree']);
+
+// Read-only subcommands where a short f names a file or a format and no
+// force option exists, so neither spelling is a force.
+const GIT_FORCE_NOT_APPLICABLE = new Set([
+  'grep', 'config', 'log', 'diff', 'show', 'blame', 'status', 'shortlog',
+  'rev-list', 'rev-parse', 'ls-files', 'ls-tree', 'ls-remote', 'cat-file', 'describe',
+]);
+
+const GIT_FORCE_LONG_FLAGS = ['--force', '--force-with-lease', '--force-if-includes'];
+const GIT_LONG_FLAG_MIN_ABBREVIATION = 4;
+
+const GIT_CLEAN_REASON = 'git clean is forbidden unless it is a dry run: it can permanently delete files git is not tracking, with no way to get them back. To only list what would be deleted, run git clean -nd.';
+
+// git accepts any unique prefix of a long option (--forc, --force-with-leas),
+// so a token is read as the option it abbreviates. Only prefixes of the full
+// name count, which leaves --force-rebase and --no-force-with-lease out.
+function abbreviates(token: string, fullFlag: string): boolean {
+  const base = token.split('=')[0];
+  return base.length >= GIT_LONG_FLAG_MIN_ABBREVIATION && fullFlag.startsWith(base);
+}
+
+function isLongGitForceFlag(token: string): boolean {
+  return GIT_FORCE_LONG_FLAGS.some(flag => abbreviates(token, flag));
+}
+
+function hasShortForceCluster(token: string): boolean {
+  return /^-[a-zA-Z]*f/.test(token);
+}
+
+// -n is a dry run only when git reads it as a flag, and the last word wins:
+// --no-dry-run cancels it, nothing after -- is an option, inside a cluster
+// the first e turns the rest of the cluster into the exclude pattern, and a
+// separate -e or --exclude (abbreviations included) consumes the next token.
+function isGitCleanDryRun(rest: string[]): boolean {
+  let dryRun = false;
+  for (let i = 0; i < rest.length; i++) {
+    const token = rest[i];
+    if (token === '--') break;
+    if (abbreviates(token, '--dry-run')) {
+      dryRun = true;
+      continue;
+    }
+    if (abbreviates(token, '--no-dry-run')) {
+      dryRun = false;
+      continue;
+    }
+    if (token === '-e' || (abbreviates(token, '--exclude') && !token.includes('='))) {
+      i += 1;
+      continue;
+    }
+    if (!/^-[a-zA-Z]+$/.test(token)) continue;
+    const letters = token.slice(1);
+    const excludeAt = letters.indexOf('e');
+    const flags = excludeAt >= 0 ? letters.slice(0, excludeAt) : letters;
+    if (flags.includes('n')) dryRun = true;
+    if (excludeAt === letters.length - 1) i += 1;
   }
-  // Additional check for combined short flags like -fu used destructively or forced refspecs (+ref)
-  if (tokens.includes('push')) {
-    if (tokens.some(a => /^-[a-zA-Z]*f/.test(a))) {
-      return { allowed: false, reason: 'git push with force flag is forbidden', trust_level: 'DANGEROUS' };
-    }
-    if (tokens.some(a => a.startsWith('+') && a.length > 1)) {
-      return { allowed: false, reason: 'git force-push via forced refspec (+) is forbidden', trust_level: 'DANGEROUS' };
-    }
+  return dryRun;
+}
+
+function checkGitClean(rest: string[]): ValidationResult | null {
+  if (isGitCleanDryRun(rest)) return null;
+  return { allowed: false, reason: GIT_CLEAN_REASON, trust_level: 'DANGEROUS' };
+}
+
+function checkGitWorktreePaths(rest: string[], cwd?: string): ValidationResult | null {
+  const terminator = rest.indexOf('--');
+  const operands = terminator >= 0
+    ? [...rest.slice(0, terminator).filter(a => !a.startsWith('-')), ...rest.slice(terminator + 1)]
+    : rest.filter(a => !a.startsWith('-'));
+  const target = operands.find(a => isProtectedPath(a, cwd));
+  if (target === undefined) return null;
+  return {
+    allowed: false,
+    reason: `git worktree would touch the protected path '${target}' and is forbidden. Keep worktrees inside the project.`,
+    trust_level: 'DANGEROUS',
+  };
+}
+
+// The subcommand name goes into the refusal text, so it is reduced to the
+// characters a git subcommand can have: a name carrying an advisory marker
+// would otherwise turn the hard block into advice at the hook layer.
+function gitSubcommandLabel(subcommand: string): string {
+  const name = subcommand.replace(/[^a-z0-9-]/g, '').slice(0, 32);
+  return name ? `git ${name}` : 'git';
+}
+
+function checkGitForceFlag(args: string[], subcommandIdx: number, cwd?: string): ValidationResult | null {
+  const subcommand = subcommandIdx >= 0 ? bareToken(args[subcommandIdx]) : '';
+  // Flags keep their case: -F names a file on commit and grep, only -f forces.
+  const rest = (subcommandIdx >= 0 ? args.slice(subcommandIdx + 1) : args).map(stripQuotes);
+
+  if (subcommand === 'clean') return checkGitClean(rest);
+  if (GIT_FORCE_NOT_APPLICABLE.has(subcommand)) return null;
+  if (GIT_FORCE_ALLOWED.has(subcommand)) return checkGitWorktreePaths(rest, cwd);
+
+  // Nothing after the option terminator is an option.
+  const terminator = rest.indexOf('--');
+  const options = terminator >= 0 ? rest.slice(0, terminator) : rest;
+  const hasLongForce = options.some(isLongGitForceFlag);
+  const hasShortForce = options.some(a => a === '-f' || hasShortForceCluster(a));
+  const refused = GIT_FORCE_REFUSED.get(subcommand);
+  if (refused !== undefined) {
+    const extra = refused.extraFlags ?? [];
+    const hasForce = hasLongForce || hasShortForce
+      || options.some(a => extra.some(flag => abbreviates(a, flag)))
+      || (subcommand === 'push' && rest.some(a => a.startsWith('+') && a.length > 1));
+    return hasForce ? { allowed: false, reason: refused.reason, trust_level: 'DANGEROUS' } : null;
   }
 
-  const inlineOverrideDenial = checkInlineGitConfigOverrides(args);
+  if (!hasLongForce && !hasShortForce) return null;
+  return {
+    allowed: false,
+    reason: `${gitSubcommandLabel(subcommand)} with force is not on the safe list, so it was blocked. If you believe it is safe, ask the maintainer to allow it.`,
+    trust_level: 'DANGEROUS',
+  };
+}
+
+// Subcommands whose short f names a file git will read: config (-f, --file,
+// --blob) and grep (-f, the pattern file). Reading one of them is reading
+// that file.
+const GIT_FILE_OPERAND_FLAGS = new Map<string, { short: string; long: string[] }>([
+  ['config', { short: '-f', long: ['--file', '--blob'] }],
+  ['grep', { short: '-f', long: [] }],
+]);
+
+// The file operands of a short flag and its long forms, in every spelling
+// git accepts: separate (-f x, --file x), attached (-fx), with a value
+// (--file=x) and abbreviated (--fil=x). Nothing after -- is an option.
+function fileOperandsOf(rest: string[], shortFlag: string, longFlags: string[]): string[] {
+  const files: string[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    const token = rest[i];
+    if (token === '--') break;
+    const isLong = longFlags.some(flag => abbreviates(token, flag));
+    if (token === shortFlag || (isLong && !token.includes('='))) {
+      if (rest[i + 1] !== undefined) files.push(rest[i + 1]);
+      i += 1;
+    } else if (isLong) {
+      files.push(token.slice(token.indexOf('=') + 1));
+    } else if (token.startsWith(shortFlag) && token.length > shortFlag.length && !token.startsWith('--')) {
+      files.push(token.slice(shortFlag.length));
+    }
+  }
+  return files;
+}
+
+function checkGitFileOperands(subcommand: string, rest: string[], cwd?: string): ValidationResult | null {
+  const spelling = GIT_FILE_OPERAND_FLAGS.get(subcommand);
+  if (spelling === undefined) return null;
+  const protectedFile = fileOperandsOf(rest, spelling.short, spelling.long).find(p => isReadDeniedPath(p, cwd));
+  if (protectedFile === undefined) return null;
+  return {
+    allowed: false,
+    reason: `git ${subcommand} would read the protected file '${protectedFile}' and is forbidden.`,
+    trust_level: 'DANGEROUS',
+  };
+}
+
+function validateGitArgs(args: string[], cwd?: string): ValidationResult {
+  const subcommandIdx = findGitSubcommandIndex(args);
+  const forceDenial = checkGitForceFlag(args, subcommandIdx, cwd);
+  if (forceDenial) return forceDenial;
+
+  const inlineOverrideDenial = checkInlineGitConfigOverrides(args, cwd);
   if (inlineOverrideDenial) return inlineOverrideDenial;
 
-  const subcommandIdx = findGitSubcommandIndex(args);
-  if (subcommandIdx >= 0 && bareToken(args[subcommandIdx]) === 'config') {
-    const configDenial = checkGitConfigWrite(args.slice(subcommandIdx));
+  if (subcommandIdx < 0) return { allowed: true, trust_level: 'SAFE_READONLY' };
+  const subcommand = bareToken(args[subcommandIdx]);
+  const rest = args.slice(subcommandIdx + 1).map(stripQuotes);
+  const fileDenial = checkGitFileOperands(subcommand, rest, cwd);
+  if (fileDenial) return fileDenial;
+  if (subcommand === 'config') {
+    const configDenial = checkGitConfigWrite(args.slice(subcommandIdx), cwd);
     if (configDenial) return configDenial;
   }
   return { allowed: true, trust_level: 'SAFE_READONLY' };
@@ -1467,7 +1656,7 @@ export function validateCommandArgs(
   cwd?: string,
 ): ValidationResult {
   switch (baseCommand) {
-    case 'git': return validateGitArgs(args);
+    case 'git': return validateGitArgs(args, cwd);
     case 'grep': return validateGrepArgs(args, cwd);
     case 'cat': return validateCatArgs(args, cwd);
     case 'find': return validateFindArgs(args, cwd);
@@ -1484,6 +1673,11 @@ export function validateCommandArgs(
 }
 
 export function validateCommand(command: string, cwd?: string): ValidationResult {
+  const verdict = validateCommandVerdict(command, cwd);
+  return { ...verdict, advisory: verdict.advisory === true };
+}
+
+function validateCommandVerdict(command: string, cwd?: string): ValidationResult {
   // 1. Tokenize quote-aware (so a quoted wrapper-flag value with embedded
   // whitespace can't misalign the unwrap below), then peel off leading
   // environment-variable assignments and known wrapper commands (sudo,
@@ -1588,6 +1782,7 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
       allowed: false,
       reason: 'Shell chaining/metacharacters are forbidden',
       trust_level: 'BLOCKED',
+      advisory: true,
     };
   }
 
@@ -1596,8 +1791,13 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
 
 const ALLOWLIST_MISS_MARKER = 'is not in the allowlist';
 
+// The allowlist miss is the one denial the step above may look past, so that
+// the metacharacter check still gets to speak. The verdict says so through
+// its advisory field: a reason quotes the path, alias key or file name the
+// command carried, and scanning that text for the marker let any of them
+// impersonate the miss and walk out of the hard denial it had just earned.
 function isAllowlistMissVerdict(verdict: ValidationResult): boolean {
-  return !verdict.allowed && String(verdict.reason ?? '').includes(ALLOWLIST_MISS_MARKER);
+  return !verdict.allowed && verdict.advisory === true;
 }
 
 // Filesystem targets an argument can carry: a bare operand (URIs excluded,
@@ -1662,6 +1862,7 @@ function validateAgainstAllowlist(baseCommand: string, args: string[], cwd?: str
   return {
     allowed: false,
     reason: `Command '${baseCommand}' ${ALLOWLIST_MISS_MARKER}`,
+    advisory: true,
     trust_level: 'BLOCKED',
   };
 }
