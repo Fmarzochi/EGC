@@ -26,9 +26,6 @@ const COMMIT_PRIVACY_FILES = [
   'CONVENTIONS.md',
   'llms.txt',
   'CLAUDE.md',
-  '.roo/rules/egc-context.md',
-  '.roorules',
-  '.continue/rules/egc-context.md',
 ];
 
 // Ensures populated memory can never reach a commit for this project, before

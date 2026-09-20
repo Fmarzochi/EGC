@@ -90,8 +90,6 @@ export interface PropagateResult {
   agents: string | null;
   llms: string | null;
   claude: string | null;
-  roo: string | null;
-  continue: string | null;
 }
 
 const EGC_START = '<!-- egc:start -->';
@@ -205,59 +203,6 @@ function writeClaudeContext(projectPath: string, block: string): string | null {
     return null;
   }
 
-  return upsertFileSection(filePath, block);
-}
-
-function writeRooCodeContext(projectPath: string, block: string): string | null {
-  const rooDir = path.join(projectPath, '.roo');
-  const rulesDir = path.join(rooDir, 'rules');
-  let rulesDirHasContent: boolean;
-  try {
-    rulesDirHasContent = fs.existsSync(rulesDir) && fs.statSync(rulesDir).isDirectory() && fs.readdirSync(rulesDir).length > 0;
-  } catch {
-    rulesDirHasContent = false;
-  }
-
-  let rooRulesExists: boolean;
-  const rooRulesPath = path.join(projectPath, '.roorules');
-  try {
-    rooRulesExists = fs.existsSync(rooRulesPath);
-  } catch {
-    rooRulesExists = false;
-  }
-
-  // Roo Code discovers .roo/rules/ over the legacy flat .roorules file when
-  // both exist -- .roorules is the documented fallback, not the default.
-  if (!rulesDirHasContent && rooRulesExists) {
-    try {
-      return upsertFileSection(rooRulesPath, block);
-    } catch {
-      return null;
-    }
-  }
-
-  try {
-    if (!fs.existsSync(rooDir) || !fs.statSync(rooDir).isDirectory()) return null;
-  } catch {
-    return null;
-  }
-
-  fs.mkdirSync(rulesDir, { recursive: true });
-  const filePath = path.join(rulesDir, 'egc-context.md');
-  return upsertFileSection(filePath, block);
-}
-
-function writeContinueContext(projectPath: string, block: string): string | null {
-  const continueDir = path.join(projectPath, '.continue');
-  try {
-    if (!fs.existsSync(continueDir) || !fs.statSync(continueDir).isDirectory()) return null;
-  } catch {
-    return null;
-  }
-
-  const rulesDir = path.join(continueDir, 'rules');
-  fs.mkdirSync(rulesDir, { recursive: true });
-  const filePath = path.join(rulesDir, 'egc-context.md');
   return upsertFileSection(filePath, block);
 }
 
@@ -423,7 +368,5 @@ export function propagateStateToTools(args: PropagateArgs): PropagateResult {
     agents: writeAgentsContext(args.projectPath, block),
     llms: writeLlmsTxt(args.projectPath, args),
     claude: writeClaudeContext(args.projectPath, block),
-    roo: writeRooCodeContext(args.projectPath, block),
-    continue: writeContinueContext(args.projectPath, block),
   };
 }

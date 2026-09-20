@@ -52,6 +52,6 @@ These rules govern contributions to **Extended Global Context (EGC)**: a local-f
 ## 5. Code Quality & Commit Standards
 
 - **Immutable Updates:** Prefer immutable updates over mutating shared state.
-- **Test Before Merging:** Run `npm test` and verify all 5125 tests pass before submitting changes.
+- **Test Before Merging:** Run `npm test` and verify every test passes before submitting changes.
 - **Security:** Never include API keys, tokens, or secrets in output or commit history.
 - **Commits:** Use conventional commits (`feat(mcp):`, `fix(hooks):`, `docs(rules):`). Keep changes modular.
