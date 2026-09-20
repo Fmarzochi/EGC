@@ -113,6 +113,41 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('crowdin-sync.yml names the files and only project languages in the pre-translation request, and fails loudly when it is refused', () => {
+    assert.ok(
+      syncWorkflow.includes('fileIds: $files'),
+      'the pre-translation request must carry fileIds: the API refuses a request without them, and that refusal stayed hidden behind a warning for months'
+    );
+    assert.ok(
+      syncWorkflow.includes('.data.targetLanguageIds'),
+      'the languages must be read from the project: an MT pair the project does not target is refused too'
+    );
+    const postLine = syncWorkflow.split('\n').find(line => line.includes('/pre-translations" -d "$body"'));
+    assert.ok(postLine, 'the pre-translation POST must send the body built from the project');
+    assert.ok(!postLine.includes("|| echo '{}'"), 'the pre-translation POST must not swallow its failure into an empty object');
+    assert.ok(
+      /Pre-translation request refused[^\n]*\n\s+exit 1/.test(syncWorkflow),
+      'a refused pre-translation must fail the run instead of skipping with a warning'
+    );
+    for (const [pattern, what] of [
+      [/Crowdin refused GET[^\n]*\n\s+exit 1/, 'a lookup of the engine, the project or the files that the API refuses'],
+      [/Pre-translation ended as \$status[^\n]*\n\s+exit 1/, 'a pre-translation that ends failed or canceled'],
+      [/did not finish within six minutes[^\n]*\n\s+exit 1/, 'a pre-translation that does not finish in time'],
+    ]) {
+      assert.ok(pattern.test(syncWorkflow), `${what} must fail the run, not skip with a warning`);
+    }
+    const lookups = syncWorkflow.split('\n').filter(line => line.includes('curl -sf') && line.includes("|| echo '{}'"));
+    assert.deepStrictEqual(lookups, [], 'no API lookup may swallow its failure into an empty object');
+    assert.ok(
+      syncWorkflow.includes('find translations -mindepth 1 -maxdepth 1 -type d'),
+      'the pre-translation must be limited to the languages the repository ships: adding a language is a decision, not a download'
+    );
+    assert.ok(
+      syncWorkflow.includes('if [ -z "$(git ls-files "$dir")" ]'),
+      'a language directory the repository does not track must be dropped after the download'
+    );
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
