@@ -121,7 +121,7 @@ Ferramentas de programação com IA que se integram nativamente com o EGC. Os pa
 
 <div align="center">
 
-[![OpenSSF Melhores Práticas](https://www.bestpractices.dev/projects/13099/badge)](https://www.bestpractices.dev/projects/13099) [![OpenSSF Baseline Level 1](https://www.bestpractices.dev/projects/13099/badge?level=baseline-1)]](https://www.bestpractices.dev/projects/13099?level=baseline-1) [! Baseline do OpenSSF Nível 2](https://www.bestpractices.dev/projects/13099/badge?level=baseline-2)](https://www.bestpractices.dev/projects/13099?level=baseline-2) [![OpenSSF Baseline Level 3](https://www.bestpractices.dev/projects/13099/badge?level=baseline-3)](https://www.bestpractices.dev/projects/13099?level=baseline-3)
+[![OpenSSF Melhores Práticas](https://www.bestpractices.dev/projects/13099/badge)](https://www.bestpractices.dev/projects/13099) [![OpenSSF Baseline Level 1](https://www.bestpractices.dev/projects/13099/badge?level=baseline-1)]](https://www.bestpractices.dev/projects/13099?level=baseline-1) [![Baseline do OpenSSF Nível 2](https://www.bestpractices.dev/projects/13099/badge?level=baseline-2)](https://www.bestpractices.dev/projects/13099?level=baseline-2) [![OpenSSF Baseline Level 3](https://www.bestpractices.dev/projects/13099/badge?level=baseline-3)](https://www.bestpractices.dev/projects/13099?level=baseline-3)
 
 <br>
 
