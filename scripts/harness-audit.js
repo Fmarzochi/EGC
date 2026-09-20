@@ -372,13 +372,13 @@ function getRepoChecks(rootDir) {
       category: 'Memory Persistence',
       points: 4,
       scopes: ['repo', 'hooks'],
-      path: 'hooks/memory-persistence/',
+      path: 'docs/hooks/memory-persistence/',
       description: 'Memory persistence hooks are declared, as a directory or in the root hooks file',
       // The capability is what matters: lifecycle hooks that save and load
       // state. A repository that declares them in hooks/hooks.json passes
       // without also keeping a directory of that exact name.
-      pass: fileExists(rootDir, 'hooks/memory-persistence') || declaresMemoryLifecycle(hooksJson),
-      fix: 'Add hooks/memory-persistence, or declare SessionStart and PreCompact hooks in hooks/hooks.json.',
+      pass: fileExists(rootDir, 'docs/hooks/memory-persistence') || fileExists(rootDir, 'hooks/memory-persistence') || declaresMemoryLifecycle(hooksJson),
+      fix: 'Document the slice under docs/hooks/memory-persistence, or declare SessionStart and PreCompact hooks in hooks/hooks.json.',
     },
     {
       id: 'memory-session-hooks',

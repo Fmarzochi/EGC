@@ -59,7 +59,7 @@ function label(entry) {
   return commandOf(entry).slice(0, 120);
 }
 
-console.log('\n=== hooks/memory-persistence parity ===');
+console.log('\n=== docs/hooks/memory-persistence parity ===');
 
 const root = readJson(ROOT_HOOKS);
 const slice = readJson(SLICE_HOOKS);
