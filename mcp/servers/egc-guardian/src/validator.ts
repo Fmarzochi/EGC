@@ -398,18 +398,35 @@ function tryUnwrapShellKeyword(current: string[]): UnwrapStep | null {
   return tryUnwrapCommandCarrier(current);
 }
 
-// `egc run <command>` and `egc run --raw <command>` send the command through
-// the Token Crusher and run it: the wrapped command is what executes, so it
-// is judged as if it had been typed. Every other egc subcommand is the CLI
-// itself and falls through to the ordinary allowlist handling.
-function tryUnwrapEgcRun(current: string[]): UnwrapStep | null {
+// The egc subcommands that run a command the caller hands them: `run` sends
+// it through the Token Crusher and `verify` runs the project's verification
+// command after `--`. Both execute what follows, so the wrapped command is
+// judged as if it had been typed. Every other subcommand is the CLI itself
+// and falls through to the ordinary allowlist handling.
+const EGC_EXECUTOR_SUBCOMMANDS = new Set(['run', 'verify']);
+
+function tryUnwrapEgcExecutor(current: string[]): UnwrapStep | null {
   if (path.basename(bareToken(current[0])) !== 'egc') return null;
   let i = 1;
   while (i < current.length && bareToken(current[i]).startsWith('-')) i += 1;
-  if (bareToken(current[i] ?? '') !== 'run') return null;
+  if (!EGC_EXECUTOR_SUBCOMMANDS.has(bareToken(current[i] ?? ''))) return null;
+
   i += 1;
-  while (i < current.length && bareToken(current[i]).startsWith('-')) i += 1;
-  return i < current.length ? { remaining: current.slice(i) } : null;
+  let viaShell = false;
+  while (i < current.length) {
+    const token = bareToken(current[i]);
+    if (token === '--') { i += 1; break; }
+    if (!token.startsWith('-')) break;
+    if (token === '--shell') viaShell = true;
+    i += 1;
+  }
+
+  const rest = current.slice(i);
+  if (rest.length === 0) return null;
+  // --shell joins the words and hands them to a shell, so a whole script can
+  // arrive as one quoted token: it is re-read as the command line it is.
+  if (viaShell) return { remaining: tokenizeWords(rest.map(stripQuotes).join(' ')) };
+  return { remaining: rest };
 }
 
 function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
@@ -418,7 +435,7 @@ function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
   while (changed && current.length > 0) {
     changed = false;
 
-    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapEgcRun(current) ?? tryUnwrapWrapper(current) ?? tryUnwrapShellKeyword(current);
+    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapEgcExecutor(current) ?? tryUnwrapWrapper(current) ?? tryUnwrapShellKeyword(current);
     if (step) {
       if (step.blocked) return { tokens: [], blocked: step.blocked };
       current = step.remaining as string[];
@@ -568,9 +585,30 @@ function checkDockerDestructive(args: string[]): ValidationResult | null {
   return null;
 }
 
+// gh options that take the next word: without skipping their values, a
+// global option in front (`gh -R owner/repo repo delete`) shifts the verb out
+// of the position the subcommand check reads.
+const GH_VALUE_FLAGS = new Set([
+  '-r', '--repo', '--hostname', '-t', '--template', '-q', '--jq', '-h', '--header',
+  '-f', '--field', '--raw-field', '-x', '--method', '--input', '--cache', '-p', '--preview', '--json',
+]);
+
+function ghPositionals(tokens: string[]): string[] {
+  const positionals: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (!token.startsWith('-')) {
+      positionals.push(token);
+      continue;
+    }
+    if (!token.includes('=') && GH_VALUE_FLAGS.has(token)) i += 1;
+  }
+  return positionals;
+}
+
 function checkGhDestructive(args: string[]): ValidationResult | null {
   const tokens = args.map(bareToken);
-  const positionals = positionalsOf(tokens);
+  const positionals = ghPositionals(tokens);
   // `gh <resource> delete` always puts the verb in the second positional;
   // a later token spelled delete (an issue title word, a repo actually
   // named delete in `gh repo view delete`) is data, not a subcommand. gh
@@ -1685,7 +1723,13 @@ export function validateCommandArgs(
     case 'npm':
     case 'npx':
     case 'node':
-    case 'tsc': return validateDevToolArgs(baseCommand, args, cwd);
+    case 'tsc':
+    case 'egc':
+    case 'gh':
+      // egc and gh joined the safe list, so they need the protected-path
+      // check the generic allowlist-miss path used to run for them, and the
+      // trust level of the tier they are on.
+      return validateDevToolArgs(baseCommand, args, cwd);
     default:
       return { allowed: true, trust_level: 'SAFE_READONLY' };
   }
