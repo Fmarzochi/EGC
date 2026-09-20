@@ -36,7 +36,10 @@ module.exports = [
         }
     },
     {
-        files: ['**/*.mjs', 'scripts/hooks/opencode-egc-plugin.js'],
+        // The guardian package declares "type": "module", so the .js files of
+        // its build scripts are modules; parsing them as CommonJS made
+        // `npm run lint` fail on two files the CI lint globs never reached.
+        files: ['**/*.mjs', 'scripts/hooks/opencode-egc-plugin.js', 'mcp/servers/egc-guardian/scripts/**/*.js'],
         languageOptions: {
             sourceType: 'module'
         }

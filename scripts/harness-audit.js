@@ -298,7 +298,10 @@ function getRepoChecks(rootDir) {
       scopes: ['repo'],
       path: 'docs/token-optimization.md',
       description: 'Token optimization documentation exists',
-      pass: fileExists(rootDir, 'docs/token-optimization.md'),
+      // Either the overview or the guide answers the question this check
+      // asks, so a repository that keeps only one of them is not failed for
+      // the name of a file.
+      pass: fileExists(rootDir, 'docs/token-optimization.md') || fileExists(rootDir, 'docs/guides/token-optimization.md'),
       fix: 'Add docs/token-optimization.md with concrete context-cost controls.',
     },
     {
@@ -347,9 +350,12 @@ function getRepoChecks(rootDir) {
       points: 4,
       scopes: ['repo', 'hooks'],
       path: 'hooks/memory-persistence/',
-      description: 'Memory persistence hooks directory exists',
-      pass: fileExists(rootDir, 'hooks/memory-persistence'),
-      fix: 'Add hooks/memory-persistence with lifecycle hook definitions.',
+      description: 'Memory persistence hooks are declared, as a directory or in the root hooks file',
+      // The capability is what matters: lifecycle hooks that save and load
+      // state. A repository that declares them in hooks/hooks.json passes
+      // without also keeping a directory of that exact name.
+      pass: fileExists(rootDir, 'hooks/memory-persistence') || /"(SessionStart|PreCompact)"/.test(hooksJson),
+      fix: 'Add hooks/memory-persistence, or declare SessionStart and PreCompact hooks in hooks/hooks.json.',
     },
     {
       id: 'memory-session-hooks',

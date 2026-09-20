@@ -94,17 +94,42 @@ async function postOps(server, operation, { token, body, origin, method } = {}) 
 }
 
 /**
- * An install-state file records absolute paths and two timestamps. Fold both
- * away so two installs into different scratch directories can be compared
- * byte for byte.
+ * An install-state file records absolute paths, two timestamps and the commit
+ * the install was cut from. Fold all of them away so two installs into
+ * different scratch directories can be compared byte for byte, and so a
+ * commit landing between the two installs (a suite running while someone
+ * commits) does not read as a difference between the panel and the CLI.
  */
 function normalizeInstallState(raw, root) {
   const escapedRoot = JSON.stringify(root).slice(1, -1);
   return raw
     .split(escapedRoot).join('<ROOT>')
     .replace(/"installedAt": "[^"]*"/g, '"installedAt": "<TIMESTAMP>"')
-    .replace(/"lastValidatedAt": "[^"]*"/g, '"lastValidatedAt": "<TIMESTAMP>"');
+    .replace(/"lastValidatedAt": "[^"]*"/g, '"lastValidatedAt": "<TIMESTAMP>"')
+    .replace(/"repoCommit": "[^"]*"/g, '"repoCommit": "<COMMIT>"');
 }
+
+test('normalizeInstallState folds the paths, the timestamps and the commit', () => {
+  const root = '/tmp/scratch-1';
+  const state = JSON.stringify({
+    installedAt: '2026-09-19T23:00:00.000Z',
+    lastValidatedAt: '2026-09-19T23:00:01.000Z',
+    target: { root: `${root}/.cursor` },
+    source: { repoCommit: 'e80c0bb841d59150406925ef2ce4498f0939a347' }
+  }, null, 2);
+  const other = state
+    .split(root).join('/tmp/scratch-2')
+    .replace('2026-09-19T23:00:00.000Z', '2026-09-20T01:02:03.000Z')
+    .replace('2026-09-19T23:00:01.000Z', '2026-09-20T01:02:04.000Z')
+    .replace('e80c0bb841d59150406925ef2ce4498f0939a347', '4f003fe7a001033c648ec710254a7c58f18e6cf0');
+
+  assert.strictEqual(
+    normalizeInstallState(state, root),
+    normalizeInstallState(other, '/tmp/scratch-2'),
+    'two installs differing only in scratch directory, timestamps and commit must normalize to the same text'
+  );
+  assert.ok(normalizeInstallState(state, root).includes('"repoCommit": "<COMMIT>"'));
+});
 
 // ---------------------------------------------------------------------------
 // Token gate
