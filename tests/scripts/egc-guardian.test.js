@@ -805,6 +805,34 @@ async function runTests() {
   run('git checkout main -- -f is a pathspec',  () => assertAllowed('git checkout main -- -f'));
   run('git rm -- -f is a pathspec',             () => assertAllowed('git rm -- -f'));
 
+  // ── The tools the flow itself runs ───────────────────────────────────────
+  // egc is this package's own CLI and gh is how every review and merge
+  // happens, yet both answered "is not in the allowlist", which reads as a
+  // block. They are on the list now, and egc run, which executes whatever
+  // follows it, is unwrapped so the wrapped command is the one judged.
+
+  console.log('\n=== validate_command: the tools of the flow ===');
+
+  run('egc doctor',                             () => assertAllowed('egc doctor'));
+  run('egc gain --history',                     () => assertAllowed('egc gain --history'));
+  run('egc install --profile full',             () => assertAllowed('egc install --profile full'));
+  run('egc run git log --oneline',              () => assertAllowed('egc run git log --oneline'));
+  run('egc run --raw npm test',                 () => assertAllowed('egc run --raw npm test'));
+  run('egc run rm -rf /tmp/x',                  () => assertDenied('egc run rm -rf /tmp/x'));
+  run('egc run --raw rm -rf /tmp/x',            () => assertDenied('egc run --raw rm -rf /tmp/x'));
+  run('egc run git push --force',               () => assertDeniedWith('egc run git push --force', 'force-push'));
+  run('egc run cat protected',                  () => assertDenied(`egc run cat ${home}/.ssh/id_rsa`));
+  run('gh pr view 1483',                        () => assertAllowed('gh pr view 1483'));
+  run('gh api repos/o/r/pulls',                 () => assertAllowed('gh api repos/o/r/pulls'));
+  run('gh repo delete stays forbidden',         () => assertDenied('gh repo delete o/r'));
+  run('gh api -X DELETE stays forbidden',       () => assertDenied('gh api -X DELETE repos/o/r/issues/1'));
+  run('an unknown command says it was flagged', () => {
+    const result = validateCommand('some-unknown-tool --version');
+    assert.strictEqual(result.allowed, false);
+    assert.strictEqual(result.advisory, true);
+    assert.ok(result.reason.includes('flagged, not blocked'), result.reason);
+  });
+
   // ── Routing: installation-aware, keyless ─────────────────
   console.log('\n=== routing: installed components ===');
   run('installed components come from the install state of the harness named by the environment', () => {

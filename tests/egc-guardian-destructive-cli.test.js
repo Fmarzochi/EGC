@@ -50,6 +50,11 @@ function assertHardBlocked(command) {
 
 // Benign forms keep today's behavior: denied only by the advisory
 // allowlist miss, which the enforcement hook never blocks on.
+function assertAllowed(command) {
+  const v = validateCommand(command);
+  assert.strictEqual(v.allowed, true, `${command} should be allowed, got: ${v.reason}`);
+}
+
 function assertAdvisoryOnly(command) {
   const v = validateCommand(command);
   assert.strictEqual(v.allowed, false, `${command} stays outside the allowlist`);
@@ -138,9 +143,11 @@ run('docker compose run web rm -rf cache stays advisory', () => assertAdvisoryOn
 run('docker build -t prune . stays advisory', () => assertAdvisoryOnly('docker build -t prune .'));
 run('docker tag my-image rm stays advisory', () => assertAdvisoryOnly('docker tag my-image rm'));
 run('docker run img tar -xvf a.tar stays advisory (flags after the image)', () => assertAdvisoryOnly('docker run img tar -xvf a.tar'));
-run('gh issue list --search delete stays advisory', () => assertAdvisoryOnly('gh issue list --search delete'));
-run('gh issue create --title "delete old keys" stays advisory', () => assertAdvisoryOnly('gh issue create --title "delete old keys"'));
-run('gh repo view delete stays advisory (repo named delete)', () => assertAdvisoryOnly('gh repo view delete'));
+// gh joined the allowlist once its delete forms were covered here, so the
+// benign shapes are allowed outright instead of landing as advisory misses.
+run('gh issue list --search delete is allowed', () => assertAllowed('gh issue list --search delete'));
+run('gh issue create --title "delete old keys" is allowed', () => assertAllowed('gh issue create --title "delete old keys"'));
+run('gh repo view delete is allowed (repo named delete)', () => assertAllowed('gh repo view delete'));
 run('prisma migrate dev --name reset stays advisory (migration named reset)', () => assertAdvisoryOnly('prisma migrate dev --name reset'));
 
 // Benign forms stay advisory: the hook keeps letting them run.
@@ -148,8 +155,8 @@ run('docker ps stays advisory', () => assertAdvisoryOnly('docker ps'));
 run('docker build stays advisory', () => assertAdvisoryOnly('docker build -t img .'));
 run('docker compose up stays advisory', () => assertAdvisoryOnly('docker compose up -d'));
 run('docker run without mounts stays advisory', () => assertAdvisoryOnly('docker run img'));
-run('gh pr list stays advisory', () => assertAdvisoryOnly('gh pr list'));
-run('gh api GET stays advisory', () => assertAdvisoryOnly('gh api repos/o/r'));
+run('gh pr list is allowed', () => assertAllowed('gh pr list'));
+run('gh api GET is allowed', () => assertAllowed('gh api repos/o/r'));
 run('prisma migrate dev stays advisory', () => assertAdvisoryOnly('prisma migrate dev'));
 run('prisma generate stays advisory', () => assertAdvisoryOnly('prisma generate'));
 

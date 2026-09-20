@@ -4,7 +4,12 @@ import fs from 'node:fs';
 
 // Trust level tiers
 export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git'];
-export const SAFE_DEV = ['npm', 'npx', 'node', 'tsc'];
+// egc is this package's own CLI and gh is how reviews, checks and merges
+// happen: answering "is not in the allowlist" for either reads as a block on
+// the tools the work runs on. Their destructive forms are covered where it
+// counts, by checkGhDestructive for gh and by unwrapping `egc run`, which
+// executes whatever follows it, so the wrapped command is the one judged.
+export const SAFE_DEV = ['npm', 'npx', 'node', 'tsc', 'egc', 'gh'];
 // dd/shred/truncate have no legitimate small/safe use in an agent workflow
 // (unlike e.g. chmod, which is mostly benign and only dangerous with
 // specific destructive flags — a blanket ban there would be a false-positive
@@ -393,13 +398,27 @@ function tryUnwrapShellKeyword(current: string[]): UnwrapStep | null {
   return tryUnwrapCommandCarrier(current);
 }
 
+// `egc run <command>` and `egc run --raw <command>` send the command through
+// the Token Crusher and run it: the wrapped command is what executes, so it
+// is judged as if it had been typed. Every other egc subcommand is the CLI
+// itself and falls through to the ordinary allowlist handling.
+function tryUnwrapEgcRun(current: string[]): UnwrapStep | null {
+  if (path.basename(bareToken(current[0])) !== 'egc') return null;
+  let i = 1;
+  while (i < current.length && bareToken(current[i]).startsWith('-')) i += 1;
+  if (bareToken(current[i] ?? '') !== 'run') return null;
+  i += 1;
+  while (i < current.length && bareToken(current[i]).startsWith('-')) i += 1;
+  return i < current.length ? { remaining: current.slice(i) } : null;
+}
+
 function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
   let current = tokens;
   let changed = true;
   while (changed && current.length > 0) {
     changed = false;
 
-    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapWrapper(current) ?? tryUnwrapShellKeyword(current);
+    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapEgcRun(current) ?? tryUnwrapWrapper(current) ?? tryUnwrapShellKeyword(current);
     if (step) {
       if (step.blocked) return { tokens: [], blocked: step.blocked };
       current = step.remaining as string[];
@@ -1861,7 +1880,9 @@ function validateAgainstAllowlist(baseCommand: string, args: string[], cwd?: str
   }
   return {
     allowed: false,
-    reason: `Command '${baseCommand}' ${ALLOWLIST_MISS_MARKER}`,
+    // The marker phrase stays inside the sentence: an enforcement hook from
+    // an older build still recognizes an advisory verdict by it.
+    reason: `Command '${baseCommand}' ${ALLOWLIST_MISS_MARKER} of commands the Guardian knows, so it was flagged, not blocked. If it should be trusted here, ask the maintainer to add it.`,
     advisory: true,
     trust_level: 'BLOCKED',
   };
