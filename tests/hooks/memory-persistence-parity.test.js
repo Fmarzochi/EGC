@@ -1,5 +1,5 @@
 /**
- * hooks/memory-persistence/hooks.json is a verbatim subset of hooks/hooks.json:
+ * docs/hooks/memory-persistence/hooks.json is a verbatim subset of hooks/hooks.json:
  * the lifecycle entries that load and save project memory. This test keeps the
  * slice from drifting in either direction: every hook in the slice, with the
  * fields of its group (id, matcher, description) and its own fields (command,
@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT_HOOKS = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
-const SLICE_HOOKS = path.join(__dirname, '..', '..', 'hooks', 'memory-persistence', 'hooks.json');
+const SLICE_HOOKS = path.join(__dirname, '..', '..', 'docs', 'hooks', 'memory-persistence', 'hooks.json');
 const MEMORY_EVENTS = ['SessionStart', 'PreCompact', 'Stop', 'SessionEnd'];
 const MEMORY_SCRIPT_RE = /session-start-bootstrap|egc-memory-load|egc-memory-save|pre-compact\.js|session-memory-miner|session-end-marker|session-auto-learn|session-end\.js/;
 

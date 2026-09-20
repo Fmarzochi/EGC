@@ -16,7 +16,7 @@ Tradeoff: compaction summarizes the transcript; the project memory below is what
 
 ## 3. Memory: read state instead of re-explaining
 
-The memory server persists decisions, failures, preferences and next steps per project and branch. `get_state` at session start restores them in one call; `update_state` at the end writes what changed. The lifecycle hooks in [hooks/memory-persistence](../hooks/memory-persistence/) load that state on `SessionStart` and save it on `PreCompact`, `Stop` and `SessionEnd`, so a compaction or an abrupt exit never costs a re-explanation.
+The memory server persists decisions, failures, preferences and next steps per project and branch. `get_state` at session start restores them in one call; `update_state` at the end writes what changed. The lifecycle hooks in [docs/hooks/memory-persistence](hooks/memory-persistence/) load that state on `SessionStart` and save it on `PreCompact`, `Stop` and `SessionEnd`, so a compaction or an abrupt exit never costs a re-explanation.
 
 Tradeoff: state files grow with the project. Keep the sections short and let `update_state` merge instead of appending transcripts.
 
