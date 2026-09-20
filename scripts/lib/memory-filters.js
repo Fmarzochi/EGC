@@ -44,9 +44,6 @@ const PROPAGATION_FILES = [
   'CONVENTIONS.md',
   'llms.txt',
   'CLAUDE.md',
-  '.roo/rules/egc-context.md',
-  '.roorules',
-  '.continue/rules/egc-context.md',
 ];
 
 // --git-path (not --git-dir + a manual join) resolves correctly for linked

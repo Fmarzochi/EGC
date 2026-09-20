@@ -270,12 +270,15 @@ run('hardening a pre-smudge-fix install adds smudge=cat, not just required=true 
   assert.strictEqual(smudge, 'cat', 'hardening to required=true must not skip smudge, or checkout breaks on this repo');
 });
 
-run('binds .roorules, the legacy Roo Code fallback, to the filter (audit EGC-547, privacy gap)', () => {
+run('no longer binds the Roo Code and Continue.dev files, which nothing writes any more (retired in #1279)', () => {
   const { dir } = makeRepo();
   const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
   assert.strictEqual(plan.configured, true);
   const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf8');
-  assert.ok(attrs.includes(`.roorules filter=${FILTER_NAME}`), '.roorules must be bound, not just .roo/rules/egc-context.md');
+  assert.ok(attrs.includes(`AGENTS.md filter=${FILTER_NAME}`), 'the live propagation files stay bound');
+  for (const retired of ['.roorules', '.roo/rules/egc-context.md', '.continue/rules/egc-context.md']) {
+    assert.ok(!attrs.includes(`${retired} filter=${FILTER_NAME}`), `${retired} is not written any more and must not be bound`);
+  }
 });
 
 run('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {

@@ -1,8 +1,8 @@
 /**
  * Tests for scripts/lib/mcp-register.js (issue #550)
  *
- * Covers the target list (including the new Continue.dev entry, which
- * writes a Continue YAML block file rather than JSON), the JSON/TOML merge
+ * Covers the target list (the retired Gemini CLI and Continue.dev entries
+ * stay out of it, whatever directories exist), the JSON/TOML merge
  * behavior, and the registerMcpServers() orchestrator that scripts/init.js
  * delegates to.
  *
@@ -18,7 +18,6 @@ const {
   buildMcpRegistrationTargets,
   registerJson,
   registerToml,
-  registerContinueYaml,
   registerZedContextServers,
   registerOpenCodeMcp,
   openCodeConfigPath,
@@ -47,6 +46,20 @@ const bins = {
   memoryBin: '/fake/mcp/servers/egc-memory/build/index.js',
 };
 
+// The orchestrator gates Claude Code on `which claude` and Cursor, Kiro,
+// Codex and OpenCode on a PATH probe, none of which read the temp home. With
+// the PATH pointed at that empty home, a local run can never reach the real
+// tools of the machine running the suite.
+function registerIsolated(homeDir, options) {
+  const savedPath = process.env.PATH;
+  process.env.PATH = homeDir;
+  try {
+    return registerMcpServers(homeDir, bins, options);
+  } finally {
+    process.env.PATH = savedPath;
+  }
+}
+
 function runTests() {
   console.log('\n=== Testing scripts/lib/mcp-register.js ===\n');
 
@@ -55,44 +68,28 @@ function runTests() {
 
   // ── buildMcpRegistrationTargets ──────────────────────────────────
 
-  (test('includes a Continue.dev target pointed at the mcpServers directory', () => {
-    const targets = buildMcpRegistrationTargets('/home/person');
-    const continueTarget = targets.find(t => t.name === 'Continue.dev');
-    assert.ok(continueTarget, 'Continue.dev target should exist');
-    assert.strictEqual(
-      continueTarget.path,
-      path.join('/home/person', '.continue', 'mcpServers'),
-      'Continue.dev should write into the mcpServers folder, not a single file or config.json'
-    );
-    assert.strictEqual(continueTarget.format, 'continue-yaml');
-  }) ? passed++ : failed++);
-
-  (test('Continue.dev gate is false when ~/.continue does not exist', () => {
+  (test('the retired tools are not registration targets, even when their directories exist', () => {
     const tmpHome = makeTempDir();
+    fs.mkdirSync(path.join(tmpHome, '.continue', 'mcpServers'), { recursive: true });
+    fs.mkdirSync(path.join(tmpHome, '.gemini', 'config'), { recursive: true });
     const targets = buildMcpRegistrationTargets(tmpHome);
-    const continueTarget = targets.find(t => t.name === 'Continue.dev');
-    assert.strictEqual(continueTarget.gate(), false);
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
-  (test('Continue.dev gate is true when ~/.continue exists', () => {
-    const tmpHome = makeTempDir();
-    fs.mkdirSync(path.join(tmpHome, '.continue'));
-    const targets = buildMcpRegistrationTargets(tmpHome);
-    const continueTarget = targets.find(t => t.name === 'Continue.dev');
-    assert.strictEqual(continueTarget.gate(), true);
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
-  (test('does not drop any of the pre-existing targets', () => {
-    const targets = buildMcpRegistrationTargets('/home/person');
     const names = targets.map(t => t.name);
-    for (const expected of [
-      'Antigravity CLI', 'Gemini CLI', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode',
-    ]) {
-      assert.ok(names.includes(expected), `${expected} should still be a target`);
+    assert.ok(!names.includes('Gemini CLI'), 'Gemini CLI was retired in #1279 and must not be registered');
+    assert.ok(!names.includes('Continue.dev'), 'Continue.dev was retired in #1279 and must not be registered');
+    assert.ok(!targets.some(t => t.format === 'continue-yaml'), 'no target may use the Continue YAML format');
+    for (const target of targets) {
+      assert.ok(!target.path.startsWith(path.join(tmpHome, '.continue')), `${target.name} must not write under ~/.continue`);
+      assert.notStrictEqual(target.path, path.join(tmpHome, '.gemini', 'config', 'mcp_config.json'), `${target.name} must not write the standalone Gemini CLI config`);
     }
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('the registration list is the seven tools the documentation names, in order', () => {
+    const targets = buildMcpRegistrationTargets('/home/person');
+    assert.deepStrictEqual(targets.map(t => t.name), [
+      'Antigravity CLI', 'Claude Code (user scope)', 'Cursor',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed',
+    ]);
   }) ? passed++ : failed++);
 
   (test('OpenCode: a fresh install gets opencode.json with both servers under mcp in OpenCode\'s own shape', () => {
@@ -766,138 +763,6 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
 
-  // ── registerContinueYaml ─────────────────────────────────────────
-
-  (test('registerContinueYaml writes two files, one server each', () => {
-    const tmpHome = makeTempDir();
-    const targetDir = path.join(tmpHome, '.continue', 'mcpServers');
-    const changed = registerContinueYaml(targetDir, bins);
-
-    assert.strictEqual(changed, true);
-    const guardianContent = fs.readFileSync(path.join(targetDir, 'egc-guardian.yaml'), 'utf8');
-    const memoryContent = fs.readFileSync(path.join(targetDir, 'egc-memory.yaml'), 'utf8');
-
-    // Required top-level block metadata per Continue's docs
-    assert.ok(/^name: .+/m.test(guardianContent) && /^version: .+/m.test(guardianContent) && /^schema: v1$/m.test(guardianContent));
-    assert.ok(/^name: .+/m.test(memoryContent) && /^version: .+/m.test(memoryContent) && /^schema: v1$/m.test(memoryContent));
-
-    // Each file defines exactly one server - Continue's real schema rejects
-    // a block file with more than one mcpServers entry, confirmed against
-    // the actual @continuedev/config-yaml package below.
-    assert.ok(guardianContent.includes('- name: egc-guardian'));
-    assert.ok(!guardianContent.includes('egc-memory'), 'guardian file should not also define memory');
-    assert.ok(memoryContent.includes('- name: egc-memory'));
-    assert.ok(!memoryContent.includes('egc-guardian'), 'memory file should not also define guardian');
-    assert.ok(guardianContent.includes(bins.guardianBin));
-    assert.ok(memoryContent.includes(bins.memoryBin));
-
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
-  (test('registerContinueYaml is idempotent: second run reports no change', () => {
-    const tmpHome = makeTempDir();
-    const targetDir = path.join(tmpHome, '.continue', 'mcpServers');
-
-    const firstRun = registerContinueYaml(targetDir, bins);
-    const secondRun = registerContinueYaml(targetDir, bins);
-
-    assert.strictEqual(firstRun, true, 'first run should report a change');
-    assert.strictEqual(secondRun, false, 'second run should report no change (content identical)');
-
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
-  (test('registerContinueYaml regenerates a file if its bin path changes', () => {
-    const tmpHome = makeTempDir();
-    const targetDir = path.join(tmpHome, '.continue', 'mcpServers');
-
-    registerContinueYaml(targetDir, bins);
-    const changed = registerContinueYaml(targetDir, {
-      guardianBin: '/new/path/egc-guardian/index.js',
-      memoryBin: bins.memoryBin,
-    });
-
-    assert.strictEqual(changed, true, 'a changed bin path should be treated as a real change');
-    const guardianContent = fs.readFileSync(path.join(targetDir, 'egc-guardian.yaml'), 'utf8');
-    assert.ok(guardianContent.includes('/new/path/egc-guardian/index.js'));
-
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
-  (test('registerContinueYaml double-quotes bin paths with YAML-special characters', () => {
-    const tmpHome = makeTempDir();
-    const targetDir = path.join(tmpHome, '.continue', 'mcpServers');
-    // "#" starts a YAML comment, ": " is a mapping key/value separator -
-    // both are legal in a real directory name and both break a bare
-    // (unquoted) scalar.
-    const trickyPath = '/home/person/my #projects/egc: guardian/index.js';
-
-    registerContinueYaml(targetDir, { guardianBin: trickyPath, memoryBin: bins.memoryBin });
-
-    const content = fs.readFileSync(path.join(targetDir, 'egc-guardian.yaml'), 'utf8');
-    assert.ok(
-      content.includes(`      - ${JSON.stringify(trickyPath)}`),
-      'path should be wrapped in a double-quoted scalar, not inserted bare'
-    );
-
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
-  (test('registerContinueYaml output with tricky characters round-trips through the real Continue parser', () => {
-    let parseBlock;
-    try {
-      parseBlock = require('@continuedev/config-yaml').parseBlock;
-    } catch (_) {
-      console.log('    (skipped: @continuedev/config-yaml not installed)');
-      return;
-    }
-
-    const tmpHome = makeTempDir();
-    const targetDir = path.join(tmpHome, '.continue', 'mcpServers');
-    const trickyPath = '/home/person/my #projects/egc: guardian/index.js';
-
-    registerContinueYaml(targetDir, { guardianBin: trickyPath, memoryBin: bins.memoryBin });
-
-    const content = fs.readFileSync(path.join(targetDir, 'egc-guardian.yaml'), 'utf8');
-    const parsed = parseBlock(content);
-    assert.strictEqual(
-      parsed.mcpServers[0].args[0],
-      trickyPath,
-      'path should round-trip exactly through the real block schema parser'
-    );
-
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
-  // Real schema validation, not just "is this valid YAML" - uses the
-  // actual published @continuedev/config-yaml package (the same one
-  // Continue's own core imports) to parse what we generate. Skips itself
-  // gracefully if the package isn't installed, e.g. offline CI, rather
-  // than failing the whole suite over an optional cross-check.
-  (test('registerContinueYaml output validates against the real Continue block schema', () => {
-    let parseBlock;
-    try {
-      parseBlock = require('@continuedev/config-yaml').parseBlock;
-    } catch (_) {
-      console.log('    (skipped: @continuedev/config-yaml not installed)');
-      return;
-    }
-
-    const tmpHome = makeTempDir();
-    const targetDir = path.join(tmpHome, '.continue', 'mcpServers');
-    registerContinueYaml(targetDir, bins);
-
-    const guardianContent = fs.readFileSync(path.join(targetDir, 'egc-guardian.yaml'), 'utf8');
-    const memoryContent = fs.readFileSync(path.join(targetDir, 'egc-memory.yaml'), 'utf8');
-
-    const guardianParsed = parseBlock(guardianContent);
-    const memoryParsed = parseBlock(memoryContent);
-    assert.strictEqual(guardianParsed.mcpServers[0].name, 'egc-guardian');
-    assert.strictEqual(memoryParsed.mcpServers[0].name, 'egc-memory');
-
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
   // ── registerZedContextServers ───────────────────────────────────
 
   (test('registerZedContextServers keeps a Windows bin path valid JSON (backslash escape)', () => {
@@ -983,51 +848,18 @@ function runTests() {
 
   // ── registerMcpServers orchestrator ─────────────────────────────
 
-  (test('registerMcpServers writes Continue.dev config when ~/.continue exists', () => {
-    const tmpHome = makeTempDir();
-    fs.mkdirSync(path.join(tmpHome, '.continue'));
-
-    const registered = [];
-    registerMcpServers(tmpHome, bins, {
-      dryRun: false,
-      onRegister: (target) => registered.push(target.name),
-    });
-
-    assert.ok(registered.includes('Continue.dev'), 'Continue.dev should be reported as registered');
-    const dir = path.join(tmpHome, '.continue', 'mcpServers');
-    assert.ok(fs.readFileSync(path.join(dir, 'egc-guardian.yaml'), 'utf8').includes('- name: egc-guardian'));
-    assert.ok(fs.readFileSync(path.join(dir, 'egc-memory.yaml'), 'utf8').includes('- name: egc-memory'));
-
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
-  (test('registerMcpServers skips Continue.dev entirely when ~/.continue is absent', () => {
-    const tmpHome = makeTempDir();
-
-    const registered = [];
-    registerMcpServers(tmpHome, bins, {
-      dryRun: false,
-      onRegister: (target) => registered.push(target.name),
-    });
-
-    assert.ok(!registered.includes('Continue.dev'), 'Continue.dev should not be touched when not installed');
-    assert.ok(!fs.existsSync(path.join(tmpHome, '.continue')), 'no .continue dir should be created as a side effect');
-
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
-
   (test('registerMcpServers in dry-run mode writes nothing', () => {
     const tmpHome = makeTempDir();
-    fs.mkdirSync(path.join(tmpHome, '.continue'));
+    fs.mkdirSync(path.join(tmpHome, '.kiro'));
 
     const skipped = [];
-    registerMcpServers(tmpHome, bins, {
+    registerIsolated(tmpHome, {
       dryRun: true,
       onSkip: (target) => skipped.push(target.name),
     });
 
-    assert.ok(skipped.includes('Continue.dev'));
-    assert.ok(!fs.existsSync(path.join(tmpHome, '.continue', 'mcpServers')), 'dry-run must not write any files');
+    assert.ok(skipped.includes('Kiro'));
+    assert.ok(!fs.existsSync(path.join(tmpHome, '.kiro', 'settings')), 'dry-run must not write any files');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
@@ -1044,7 +876,7 @@ function runTests() {
 
     const registered = [];
     const warned = [];
-    registerMcpServers(tmpHome, bins, {
+    registerIsolated(tmpHome, {
       dryRun: false,
       onRegister: (target) => registered.push(target.name),
       onWarn: (target) => warned.push(target.name),
@@ -1080,7 +912,7 @@ function runTests() {
     const warned = [];
     const unchanged = [];
     try {
-      registerMcpServers(tmpHome, bins, {
+      registerIsolated(tmpHome, {
         dryRun: false,
         onRegister: (target) => registered.push(target.name),
         onWarn: (target) => warned.push(target.name),
@@ -1106,7 +938,7 @@ function runTests() {
     const registered = [];
     const unchanged = [];
     try {
-      registerMcpServers(tmpHome, bins, {
+      registerIsolated(tmpHome, {
         dryRun: false,
         onRegister: (target) => registered.push(target.name),
         onUnchanged: (target) => unchanged.push(target.name),

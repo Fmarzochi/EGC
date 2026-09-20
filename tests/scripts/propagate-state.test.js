@@ -308,7 +308,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('propagates to .clinerules when it exists (Cline/Roo)', () => {
+  if (test('propagates to .clinerules when it exists (Cline)', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, '.clinerules'), '# Cline rules\n');
@@ -618,13 +618,16 @@ function runFreshnessGuardTests() {
     }
   })) passed++; else failed++;
 
-  if (test('binds .roorules, the legacy Roo Code fallback, to the filter (audit EGC-547, privacy gap)', () => {
+  if (test('no longer binds the Roo Code and Continue.dev files, which nothing writes any more (retired in #1279)', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
       propagateStateContent(dir, SAMPLE_STATE);
       const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf-8');
-      assert.ok(attrs.includes('.roorules filter=egc-memory'), '.roorules must be bound, not just .roo/rules/egc-context.md');
+      assert.ok(attrs.includes('AGENTS.md filter=egc-memory'), 'the live propagation files stay bound');
+      for (const retired of ['.roorules', '.roo/rules/egc-context.md', '.continue/rules/egc-context.md']) {
+        assert.ok(!attrs.includes(`${retired} filter=egc-memory`), `${retired} is not written any more and must not be bound`);
+      }
     } finally {
       cleanup(dir);
     }
