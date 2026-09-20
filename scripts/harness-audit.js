@@ -79,6 +79,32 @@ function parseArgs(argv) {
   return parsed;
 }
 
+// The memory capability is a hook that loads state when a session starts and
+// one that saves it before the context is compacted. Naming the events is not
+// enough: a hooks file can carry either event with nothing of the sort under
+// it, so the commands are read.
+const MEMORY_COMMAND_RE = /egc-memory-load|egc-memory-save|session-start-bootstrap|pre-compact|session-memory-miner|session-end/;
+
+function declaresMemoryLifecycle(hooksJson) {
+  let parsed;
+  try {
+    parsed = JSON.parse(hooksJson);
+  } catch {
+    return false;
+  }
+  const events = parsed?.hooks ?? {};
+  const carriesMemoryHook = (event) => (Array.isArray(events[event]) ? events[event] : [])
+    .some((group) => (Array.isArray(group?.hooks) ? group.hooks : [])
+      .some((hook) => MEMORY_COMMAND_RE.test(String(hook?.command ?? ''))));
+  return carriesMemoryHook('SessionStart') && carriesMemoryHook('PreCompact');
+}
+
+// Either the overview or the guide answers what these two checks ask, so a
+// repository that keeps only one of them is not failed for the name of a file.
+function hasTokenOptimizationDoc(rootDir) {
+  return fileExists(rootDir, 'docs/token-optimization.md') || fileExists(rootDir, 'docs/guides/token-optimization.md');
+}
+
 function fileExists(rootDir, relativePath) {
   return fs.existsSync(path.join(rootDir, relativePath));
 }
@@ -298,10 +324,7 @@ function getRepoChecks(rootDir) {
       scopes: ['repo'],
       path: 'docs/token-optimization.md',
       description: 'Token optimization documentation exists',
-      // Either the overview or the guide answers the question this check
-      // asks, so a repository that keeps only one of them is not failed for
-      // the name of a file.
-      pass: fileExists(rootDir, 'docs/token-optimization.md') || fileExists(rootDir, 'docs/guides/token-optimization.md'),
+      pass: hasTokenOptimizationDoc(rootDir),
       fix: 'Add docs/token-optimization.md with concrete context-cost controls.',
     },
     {
@@ -354,7 +377,7 @@ function getRepoChecks(rootDir) {
       // The capability is what matters: lifecycle hooks that save and load
       // state. A repository that declares them in hooks/hooks.json passes
       // without also keeping a directory of that exact name.
-      pass: fileExists(rootDir, 'hooks/memory-persistence') || /"(SessionStart|PreCompact)"/.test(hooksJson),
+      pass: fileExists(rootDir, 'hooks/memory-persistence') || declaresMemoryLifecycle(hooksJson),
       fix: 'Add hooks/memory-persistence, or declare SessionStart and PreCompact hooks in hooks/hooks.json.',
     },
     {
@@ -464,7 +487,7 @@ function getRepoChecks(rootDir) {
       scopes: ['repo'],
       path: 'docs/token-optimization.md',
       description: 'Cost optimization documentation exists',
-      pass: fileExists(rootDir, 'docs/token-optimization.md'),
+      pass: hasTokenOptimizationDoc(rootDir),
       fix: 'Create docs/token-optimization.md with target settings and tradeoffs.',
     },
     {
