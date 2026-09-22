@@ -1427,7 +1427,7 @@ function checkGitWorktreePaths(rest: string[], cwd?: string): ValidationResult |
   const operands = terminator >= 0
     ? [...rest.slice(0, terminator).filter(a => !a.startsWith('-')), ...rest.slice(terminator + 1)]
     : rest.filter(a => !a.startsWith('-'));
-  const target = operands.find(a => isProtectedPath(a, cwd));
+  const target = operands.find(a => isProtectedOperand(a, cwd));
   if (target === undefined) return null;
   return {
     allowed: false,
@@ -1507,7 +1507,7 @@ function fileOperandsOf(rest: string[], shortFlag: string, longFlags: string[]):
 function checkGitFileOperands(subcommand: string, rest: string[], cwd?: string): ValidationResult | null {
   const spelling = GIT_FILE_OPERAND_FLAGS.get(subcommand);
   if (spelling === undefined) return null;
-  const protectedFile = fileOperandsOf(rest, spelling.short, spelling.long).find(p => isReadDeniedPath(p, cwd));
+  const protectedFile = fileOperandsOf(rest, spelling.short, spelling.long).find(p => isReadDeniedOperand(p, cwd));
   if (protectedFile === undefined) return null;
   return {
     allowed: false,
@@ -1581,13 +1581,13 @@ function denyGrepTarget(reason: string): ValidationResult {
 function checkRecursiveGrepPaths(pathArgs: string[], positionalArgs: string[], cwd?: string): ValidationResult | null {
   const home = os.homedir();
   for (const p of pathArgs) {
-    if (p === '/' || p === home || isProtectedPath(p, cwd)) {
+    if (pathSpellings(p).some(s => s === '/' || s === home) || isProtectedOperand(p, cwd)) {
       return denyGrepTarget(`grep recursive over protected path '${p}' is forbidden`);
     }
   }
   // If no explicit path args, grep defaults to '.', which is fine.
   // But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
-  if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0], cwd))) {
+  if (positionalArgs.length === 1 && (pathSpellings(positionalArgs[0]).includes('/') || isProtectedOperand(positionalArgs[0], cwd))) {
     return denyGrepTarget(`grep over protected path '${positionalArgs[0]}' is forbidden`);
   }
   return null;
@@ -1596,7 +1596,7 @@ function checkRecursiveGrepPaths(pathArgs: string[], positionalArgs: string[], c
 function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
   const { fileFlagValues, patternViaFlag } = collectGrepPatternFlags(args);
   for (const p of fileFlagValues) {
-    if (isReadDeniedPath(p, cwd)) return denyGrepTarget(`grep pattern file '${p}' is a protected path`);
+    if (isReadDeniedOperand(p, cwd)) return denyGrepTarget(`grep pattern file '${p}' is a protected path`);
   }
 
   // Non-flag, non-empty args are candidates for pattern or path.
@@ -1616,7 +1616,7 @@ function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
 
   // Even without -r, block explicit protected paths
   for (const p of pathArgs) {
-    if (isReadDeniedPath(p, cwd)) return denyGrepTarget(`grep over protected path '${p}' is forbidden`);
+    if (isReadDeniedOperand(p, cwd)) return denyGrepTarget(`grep over protected path '${p}' is forbidden`);
   }
 
   return { allowed: true, trust_level: 'SAFE_READONLY' };
@@ -1625,7 +1625,7 @@ function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
 function validateCatArgs(args: string[], cwd?: string): ValidationResult {
   for (const arg of args) {
 const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isReadDeniedPath(candidate, cwd)) {
+if (candidate !== null && isReadDeniedOperand(candidate, cwd)) {
   return {
     allowed: false,
     reason: `cat of protected path '${arg}' is forbidden`,
@@ -1655,7 +1655,7 @@ return {
     .map(a => (a.startsWith('-') ? embeddedPathCandidate(a) : a))
     .filter((a): a is string => a !== null);
   for (const p of pathArgs) {
-if (isProtectedPath(p, cwd)) {
+if (isProtectedOperand(p, cwd)) {
   return {
     allowed: false,
     reason: `find over protected path '${p}' is forbidden`,
@@ -1670,7 +1670,7 @@ function validateReadOnlyPathArgs(baseCommand: string, args: string[], cwd?: str
   // These are read-only but we still block protected paths
   for (const arg of args) {
 const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isReadDeniedPath(candidate, cwd)) {
+if (candidate !== null && isReadDeniedOperand(candidate, cwd)) {
   return {
     allowed: false,
     reason: `${baseCommand} on protected path '${arg}' is forbidden`,
@@ -1701,7 +1701,7 @@ return {
   // being in SAFE_DEV means "safe to run", not "exempt from path checks".
   for (const arg of args) {
 const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isProtectedPath(candidate, cwd)) {
+if (candidate !== null && isProtectedOperand(candidate, cwd)) {
   return {
     allowed: false,
     reason: `${baseCommand} on protected path '${arg}' is forbidden`,
@@ -1904,21 +1904,67 @@ function unwrapFileUri(arg: string): string {
   return /^\/[A-Za-z]:/.test(decoded) ? decoded.slice(1) : decoded;
 }
 
-function pathCandidatesOf(args: string[]): string[] {
-  return args.flatMap(rawArg => {
-    const arg = bareToken(rawArg);
-    const cased = stripQuotes(rawArg);
-    if (!arg.startsWith('-')) {
-      const unwrapped = unwrapFileUri(cased);
-      if (unwrapped !== cased) return [unwrapped];
-      return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [cased];
+// The spellings of an argument that may name a file: what the shell hands
+// the command (quotes removed, backslash escapes resolved) and, on Windows,
+// where a backslash separates path components rather than escaping the next
+// character, the argument with only its quotes removed. Every path check
+// judges an argument through these, so a quoted or escaped spelling of a
+// protected path meets the same denial as the plain one.
+function unquoteWord(token: string): string {
+  let value = '';
+  let i = 0;
+  while (i < token.length) {
+    const ch = token[i];
+    if (ch === '"' || ch === "'") {
+      const quoted = readQuoted(token, i);
+      value += quoted.value;
+      i = quoted.end;
+    } else if (ch === '\\' && i + 1 < token.length) {
+      value += token[i + 1];
+      i += 2;
+    } else {
+      value += ch;
+      i += 1;
     }
-    const eq = cased.indexOf('=');
-    if (eq > 0) return [unwrapFileUri(cased.slice(eq + 1))];
-    if (!arg.startsWith('--') && arg.length > 2) return [unwrapFileUri(cased.slice(2))];
-    return [];
-  });
+  }
+  return value;
 }
+
+function pathSpellings(arg: string): string[] {
+  const value = unquoteWord(arg);
+  if (process.platform !== 'win32') return [value];
+  const typed = arg.replaceAll(/["']/g, '');
+  return typed === value ? [value] : [value, typed];
+}
+
+function isProtectedOperand(arg: string, cwd?: string): boolean {
+  return pathSpellings(arg).some(spelling => isProtectedPath(spelling, cwd));
+}
+
+function isReadDeniedOperand(arg: string, cwd?: string): boolean {
+  return pathSpellings(arg).some(spelling => isReadDeniedPath(spelling, cwd));
+}
+
+// The filesystem targets one spelling of an argument can carry: a bare
+// operand (URIs excluded, they are download targets, not local paths), a
+// --flag=value value, or a value glued to a short flag (`-o~/.bashrc`).
+function candidatesOfSpelling(cased: string): string[] {
+  const arg = cased.toLowerCase();
+  if (!arg.startsWith('-')) {
+    const unwrapped = unwrapFileUri(cased);
+    if (unwrapped !== cased) return [unwrapped];
+    return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [cased];
+  }
+  const eq = cased.indexOf('=');
+  if (eq > 0) return [unwrapFileUri(cased.slice(eq + 1))];
+  if (!arg.startsWith('--') && arg.length > 2) return [unwrapFileUri(cased.slice(2))];
+  return [];
+}
+
+function pathCandidatesOf(args: string[]): string[] {
+  return args.flatMap(rawArg => pathSpellings(rawArg).flatMap(candidatesOfSpelling));
+}
+
 
 // A redirection names a file the shell opens on the command's behalf:
 // `> file` writes over it and `< file` reads it, whatever command stands in
