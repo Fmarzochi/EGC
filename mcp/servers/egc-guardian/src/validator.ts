@@ -1826,6 +1826,15 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   const destructiveDenial = destructiveVerdict(baseCommand, args);
   if (destructiveDenial) return destructiveDenial;
 
+  // 5b. A redirection target is a file the shell opens for the command,
+  // written (`>`, `>>`, `&>`) or read (`<`), and is judged against the
+  // protected paths here, before the per-command checks, which only see
+  // the argument the operator was glued to. The raw tokens are scanned,
+  // since the shell accepts a redirection before the command and after a
+  // wrapper or an environment assignment.
+  const redirected = redirectionVerdict(rawTokens, cwd);
+  if (redirected) return redirected;
+
   // 6. Per-command checks (protected paths, destructive git/find forms,
   // dev-tool targets) and the allowlist verdict, always. They used to sit
   // behind the metacharacter step below, so any `2>/dev/null`, pipe or `$`
@@ -1902,6 +1911,89 @@ function pathCandidatesOf(args: string[]): string[] {
     if (!arg.startsWith('--') && arg.length > 2) return [unwrapFileUri(cased.slice(2))];
     return [];
   });
+}
+
+// A redirection names a file the shell opens on the command's behalf:
+// `> file` writes over it and `< file` reads it, whatever command stands in
+// front, and the shell reads the operator glued to its target (`>file`,
+// `word>file`) exactly as it reads it spaced (`> file`). The target is
+// therefore a filesystem operand like any other and is judged against the
+// same protected paths, before the per-command checks, which only see the
+// argument the operator was glued to. A heredoc or a here-string carries
+// text, not a path, and a descriptor duplication (`2>&1`, `>&-`) names no
+// file, so those are left alone; a quoted or escaped operator is literal
+// text to the shell and is left alone too.
+const REDIRECTION_OPERATORS = ['<<<', '<<', '>>', '>|', '>&', '<>', '<&', '>', '<'];
+
+interface Redirection {
+  target: string;
+  writes: boolean;
+}
+
+// Position of the first `<` or `>` the shell reads as an operator: outside
+// quotes and not escaped. The tokens keep their quote and backslash
+// characters (see tokenizeWords), which is what makes this decidable here.
+function firstOperatorIndex(token: string): number {
+  let quote: string | null = null;
+  for (let i = 0; i < token.length; i++) {
+    const ch = token[i];
+    if (quote !== null) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === '<' || ch === '>') return i;
+  }
+  return -1;
+}
+
+// The file a redirection word names once the shell is done with it: the
+// quotes come off, and so do the backslash escapes on POSIX, where the
+// shell removes them before opening the file; on Windows a backslash
+// separates path components and stays.
+function redirectionTarget(word: string): string {
+  const unquoted = word.replaceAll(/["']/g, '');
+  return process.platform === 'win32' ? unquoted : unquoted.replaceAll('\\', '');
+}
+
+// The redirection a token starts or carries, with its target: the rest of
+// the token when the operator is glued to it, the next token otherwise.
+function redirectionAt(tokens: string[], index: number): Redirection | null {
+  const token = tokens[index];
+  const at = firstOperatorIndex(token);
+  if (at === -1) return null;
+  const operator = REDIRECTION_OPERATORS.find(op => token.startsWith(op, at));
+  if (operator === undefined || operator === '<<<' || operator === '<<' || operator === '<&') return null;
+  const glued = token.slice(at + operator.length);
+  const operand = redirectionTarget(glued.length > 0 ? glued : (tokens[index + 1] ?? ''));
+  if (operand.length === 0) return null;
+  if (operator === '>&' && /^(?:\d+|-)$/.test(operand)) return null;
+  return { target: operand, writes: operator !== '<' };
+}
+
+function redirectionVerdict(tokens: string[], cwd?: string): ValidationResult | null {
+  for (let i = 0; i < tokens.length; i++) {
+    const redirection = redirectionAt(tokens, i);
+    if (redirection === null) continue;
+    const { target, writes } = redirection;
+    if (writes ? isProtectedPath(target, cwd) : isReadDeniedPath(target, cwd)) {
+      return {
+        allowed: false,
+        reason: writes
+          ? `redirecting output onto protected file '${target}' is forbidden: the command would write over it, so send the output to another path`
+          : `redirecting input from protected file '${target}' is forbidden: it would hand the command a credential, so read another file`,
+        trust_level: 'DANGEROUS',
+      };
+    }
+  }
+  return null;
 }
 
 // Catalogued commands (SAFE_READONLY/SAFE_DEV) get their own per-command
