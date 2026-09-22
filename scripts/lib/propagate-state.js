@@ -212,17 +212,19 @@ function ensureCommitPrivacy(projectPath) {
       throw new Error(`the clean-filter script is not at ${scriptPath}`);
     }
     const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
-    const smudgeCommand = `node ${shSingleQuote(scriptPath)} --filter-smudge %f || cat`;
+    const smudgeCommand = `if command -v node >/dev/null 2>&1 && [ -f ${shSingleQuote(scriptPath)} ]; then node ${shSingleQuote(scriptPath)} --filter-smudge %f; else cat; fi`;
 
     writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`, cleanCommand);
     // The smudge side puts the memory back: git hands it the zeroed blob it
     // is checking out and gets the block of the local state in return, so a
     // pull, a branch switch or a stash pop never leaves the working tree
-    // without the memory. It never fails a checkout: whatever stands in the
-    // way, the content goes out as it came. Setting it explicitly also
-    // matters for required=true (below), which turns an *unconfigured*
-    // smudge side into a hard checkout failure instead of the passthru git
-    // defaults to when a filter driver is missing entirely (gitattributes(5)).
+    // without the memory. Where node or the script is not there the blob
+    // goes through as committed, decided before anything reads stdin, and
+    // inside the script whatever stands in the way the content goes out as
+    // it came. Setting it explicitly also matters for required=true (below),
+    // which turns an *unconfigured* smudge side into a hard checkout failure
+    // instead of the passthru git defaults to when a filter driver is missing
+    // entirely (gitattributes(5)).
     writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, smudgeCommand);
     // required=true makes git refuse to stage a file through this filter if
     // the clean command itself fails or is missing, instead of the git
@@ -280,6 +282,14 @@ Detect user intent in any language and call the matching EGC tool — no keyword
 - User asks to organize a complex task → \`orchestrate_task\`
 - User asks AI to learn from session errors → \`auto_learn\``;
 
+// A marker inside a recorded line would end the block early for every
+// reader of the file, so the text of a marker never travels inside it.
+const MARKER_TEXT_RE = /<!--\s*egc:(start|end)\s*-->/gi;
+
+function withoutMarkers(text) {
+  return text.replace(MARKER_TEXT_RE, '');
+}
+
 function parseStateContent(content) {
   const result = { context: '', decisions: [], next: [], updated: '' };
   const updatedMatch = content.match(/^updated:\s*(\S+)\s*$/m);
@@ -290,7 +300,7 @@ function parseStateContent(content) {
     const h2 = line.match(/^## (.+)/);
     if (h2) { section = h2[1].trim(); continue; }
 
-    const item = line.replace(/^- /, '').trim();
+    const item = withoutMarkers(line.replace(/^- /, '')).trim();
     if (!item) continue;
 
     if (section === 'Context') result.context = item;

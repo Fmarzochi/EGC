@@ -170,9 +170,10 @@ function readLocalConfig(projectDir, key) {
 // unconditional "never gets committed to git" promise. The smudge side puts
 // the memory back: git hands it the zeroed blob it is checking out and gets
 // the block of the local state in return, so a pull, a branch switch or a
-// stash pop never leaves the working tree without the memory; it never
-// fails a checkout, since whatever stands in the way the content goes out
-// as it came. Setting it explicitly also matters because required=true
+// stash pop never leaves the working tree without the memory; where node or
+// the script is not there the blob goes through as committed, decided
+// before anything reads stdin, and inside the script whatever stands in the
+// way the content goes out as it came. Setting it explicitly also matters because required=true
 // turns an *unconfigured* smudge side into a hard failure instead of the
 // passthru git defaults to when a filter driver is missing entirely
 // (gitattributes(5)): once clean is set, checkout/worktree/clone on this
@@ -231,7 +232,7 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   }
 
   const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
-  const smudgeCommand = `node ${shSingleQuote(scriptPath)} --filter-smudge %f || cat`;
+  const smudgeCommand = `if command -v node >/dev/null 2>&1 && [ -f ${shSingleQuote(scriptPath)} ]; then node ${shSingleQuote(scriptPath)} --filter-smudge %f; else cat; fi`;
   const missingConfig = computeMissingConfig(projectDir, cleanCommand, smudgeCommand);
   const actions = missingConfig.map(entry => `git config ${entry.key} ${entry.shown} (local repo config)`);
 

@@ -367,13 +367,14 @@ run('the filter runs from a repository whose path carries spaces', () => {
   assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), '');
 });
 
-run('memory that carries the text of a marker still cleans back to the committed blob', () => {
+run('the text of a marker in the memory never travels inside the block', () => {
   const { dir, home, skeleton } = seedRepo();
   fs.writeFileSync(stateFileFor(home, dir), STATE.replace('- decision kept in the local state', '- a decision that quotes <!-- egc:end --> in its text'));
   const res = smudge(dir, home, 'AGENTS.md', skeleton);
   assert.strictEqual(res.status, 0, res.stderr);
-  assert.ok(res.stdout.includes('a decision that quotes <!-- egc:end --> in its text'), res.stdout);
-  assert.strictEqual(clean(dir, res.stdout), skeleton, 'the clean side strips by section, whatever the text says');
+  assert.ok(res.stdout.includes('- a decision that quotes  in its text'), res.stdout);
+  assert.strictEqual((res.stdout.match(/<!-- egc:end -->/g) || []).length, 1, 'one end marker');
+  assert.strictEqual(clean(dir, res.stdout), skeleton, 'the clean side takes it back to the committed blob');
 });
 
 run('a linked worktree gets the block of its own branch', () => {

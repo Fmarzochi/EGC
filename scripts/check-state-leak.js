@@ -258,14 +258,15 @@ function main() {
   // in the way, the content goes out exactly as it came, because a checkout
   // must never fail on this filter's account. stdout carries the content
   // and nothing else: a line a library would print for a terminal goes to
-  // stderr, and a pipe git has already closed ends the run quietly. Bytes
-  // that are not UTF-8 go out untouched, since only text carries the block.
-  // A blob that cannot be read from git is the one failure left loud, since
-  // writing nothing would leave the file empty; git then holds the checkout.
+  // stderr, and a pipe git has already closed ends the run quietly, while
+  // any other failure to write is loud, so git holds the checkout instead
+  // of keeping a truncated file. Bytes that are not UTF-8 go out untouched,
+  // since only text carries the block. A blob that cannot be read from git
+  // is loud for the same reason.
   if (mode === '--filter-smudge') {
     console.log = (...lines) => console.error(...lines);
     console.info = console.log;
-    process.stdout.on('error', () => process.exit(0));
+    process.stdout.on('error', err => process.exit(err.code === 'EPIPE' ? 0 : 1));
     const raw = fs.readFileSync(0);
     const text = raw.toString('utf8');
     const isText = Buffer.from(text, 'utf8').equals(raw);
