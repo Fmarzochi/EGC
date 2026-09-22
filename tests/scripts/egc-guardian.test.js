@@ -778,6 +778,17 @@ async function runTests() {
   run('a secret file split by a continued line',           () => assertHardBlocking(`cat ${path.join(home, 'app', '.e')}\\\nnv`));
   run('a continued line inside double quotes',            () => assertHardBlocking(`cat "${path.join(home, 'app', '.e')}\\\nnv"`));
 
+  run('an ANSI-C escape past the Unicode range is judged, not thrown', () => {
+    const result = validateCommand(`cat $'\\U12345678'`);
+    assert.ok(typeof result.allowed === 'boolean', JSON.stringify(result));
+  });
+
+  run('find by name pattern is a search, not a path',       () => assertAllowed('find . -name "*.env"'));
+  run('find by name pattern with a type test',              () => assertAllowed('find src -name "*.pem" -type f'));
+  run('find with a quoted credential store as start',       () => assertHardBlocking(`find "${sshDir}" -name "*.pub"`));
+  run('find with an option before the credential store',    () => assertHardBlocking(`find -L "${sshDir}" -type f`));
+  run('find writing its list into a shell profile',         () => assertHardBlocking(`find . -fprint "${path.join(home, '.bashrc')}"`));
+
   run('a quoted operational file stays readable',       () => assertAllowed(`cat "${path.join(home, '.egc', 'bin', 'manifest.json')}"`));
   run('a quoted plain file stays allowed',              () => assertAllowed('cat "README.md"'));
 

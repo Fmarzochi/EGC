@@ -23,7 +23,7 @@ export const SHELL_META_REGEX = /[&|;<>$`\n\r]/;
 // find flags that perform an action (delete, run arbitrary commands) rather
 // than just filtering results. These bypass the DANGEROUS ['rm', 'mv'] check
 // entirely because the base command is 'find', which is SAFE_READONLY.
-export const FIND_ACTION_FLAGS = ['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprintf', '-fls'];
+export const FIND_ACTION_FLAGS = ['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprint', '-fprint0', '-fprintf', '-fls'];
 
 // Interpreters/shells whose inline-eval flags let an agent execute arbitrary
 // code that bypasses every path- and content-based check in this file (the
@@ -1636,6 +1636,22 @@ if (candidate !== null && isReadDeniedOperand(candidate, cwd)) {
   return { allowed: true, trust_level: 'SAFE_READONLY' };
 }
 
+// The starting points of a find come before its expression: every word up
+// to the first test, action or operator (`-name`, `(`, `!`), the leading
+// options (`-H`, `-L`, `-P`, `-D...`, `-O...`) skipped. A value inside the
+// expression (`-name "*.env"`) is a search pattern, not a path.
+const FIND_LEADING_OPTIONS = new Set(['-H', '-L', '-P']);
+
+function findStartingPoints(args: string[]): string[] {
+  const points: string[] = [];
+  for (const arg of args) {
+    if (FIND_LEADING_OPTIONS.has(arg) || arg.startsWith('-D') || arg.startsWith('-O')) continue;
+    if (arg.startsWith('-') || arg === '(' || arg === '!') break;
+    points.push(arg);
+  }
+  return points;
+}
+
 function validateFindArgs(args: string[], cwd?: string): ValidationResult {
   // -delete/-exec/etc. make find perform an action instead of just
   // filtering, which reproduces 'rm -rf' through a base command that
@@ -1649,12 +1665,7 @@ return {
 };
   }
 
-  // First non-flag arg is typically the search root; also surface paths
-  // handed over inside --flag=value forms.
-  const pathArgs = args
-    .map(a => (a.startsWith('-') ? embeddedPathCandidate(a) : a))
-    .filter((a): a is string => a !== null);
-  for (const p of pathArgs) {
+  for (const p of findStartingPoints(args)) {
 if (isProtectedOperand(p, cwd)) {
   return {
     allowed: false,
@@ -1913,7 +1924,7 @@ function unwrapFileUri(arg: string): string {
 // and every brace expansion of each. Every path check judges an argument
 // through these, so a quoted, escaped or expanded spelling of a protected
 // path meets the same denial as the plain one.
-function unquoteWord(token: string): string {
+function unquoteWord(token: string, keepBackslashes = false): string {
   let value = '';
   let i = 0;
   while (i < token.length) {
@@ -1926,9 +1937,9 @@ function unquoteWord(token: string): string {
       const quoted = readQuoted(token, i);
       value += quoted.value;
       i = quoted.end;
-    } else if (ch === '\\' && token[i + 1] === '\n') {
+    } else if (ch === '\\' && !keepBackslashes && token[i + 1] === '\n') {
       i += 2;
-    } else if (ch === '\\' && i + 1 < token.length) {
+    } else if (ch === '\\' && !keepBackslashes && i + 1 < token.length) {
       value += token[i + 1];
       i += 2;
     } else {
@@ -1957,7 +1968,11 @@ function ansiCEscape(text: string, at: number): { value: string; length: number 
   if (numeric === null) return { value: next, length: 1 };
   const digits = numeric[1] ?? numeric[2] ?? numeric[3] ?? numeric[4];
   const radix = numeric[4] === undefined ? 16 : 8;
-  return { value: String.fromCodePoint(parseInt(digits, radix)), length: numeric[0].length };
+  const codePoint = Number.parseInt(digits, radix);
+  // A number past the Unicode range names no character; bash prints the
+  // bytes as they are, and here the replacement character stands in.
+  const value = codePoint > 0x10ffff ? '\ufffd' : String.fromCodePoint(codePoint);
+  return { value, length: numeric[0].length };
 }
 
 // The `$'...'` span whose quote opens at `start`: its value with the escapes
@@ -1978,11 +1993,12 @@ function readAnsiC(token: string, start: number): { value: string; end: number }
   return { value, end: Math.min(i + 1, token.length) };
 }
 
-// The word the shell hands the command: quotes removed and, outside
-// Windows, backslash escapes resolved; on Windows a backslash separates
-// path components, so it stays.
+// The word the shell hands the command: quotes removed and ANSI-C quoting
+// decoded everywhere; outside Windows the backslash escapes are resolved
+// as well, while on Windows a backslash separates path components, so it
+// stays.
 function shellWord(token: string): string {
-  return process.platform === 'win32' ? token.replaceAll(/["']/g, '') : unquoteWord(token);
+  return unquoteWord(token, process.platform === 'win32');
 }
 
 // A brace expansion names every alternative at once (`~/.{ssh,aws}/x` opens
@@ -1991,23 +2007,30 @@ function shellWord(token: string): string {
 // pathological argument cannot grow without bound.
 const MAX_BRACE_EXPANSIONS = 64;
 
-function braceExpansions(word: string): string[] {
+// The first brace group of a word: the positions of its opening brace, of
+// the commas at its own depth and of its closing brace; null when the word
+// has no group with a comma.
+function findBraceGroup(word: string): { open: number; commas: number[]; close: number } | null {
   const open = word.indexOf('{');
-  if (open === -1) return [word];
+  if (open === -1) return null;
   const commas: number[] = [];
   let depth = 0;
-  let close = -1;
-  for (let i = open; i < word.length && close === -1; i++) {
+  for (let i = open; i < word.length; i++) {
     const ch = word[i];
     if (ch === '{') depth += 1;
-    else if (ch === '}') { depth -= 1; if (depth === 0) close = i; }
+    else if (ch === '}' && --depth === 0) return commas.length > 0 ? { open, commas, close: i } : null;
     else if (ch === ',' && depth === 1) commas.push(i);
   }
-  if (close === -1 || commas.length === 0) return [word];
-  const bounds = [open, ...commas, close];
+  return null;
+}
+
+function braceExpansions(word: string): string[] {
+  const group = findBraceGroup(word);
+  if (group === null) return [word];
+  const bounds = [group.open, ...group.commas, group.close];
   const out: string[] = [];
   for (let i = 0; i + 1 < bounds.length; i++) {
-    const rewritten = word.slice(0, open) + word.slice(bounds[i] + 1, bounds[i + 1]) + word.slice(close + 1);
+    const rewritten = word.slice(0, group.open) + word.slice(bounds[i] + 1, bounds[i + 1]) + word.slice(group.close + 1);
     for (const expansion of braceExpansions(rewritten)) {
       if (out.length >= MAX_BRACE_EXPANSIONS) return out;
       out.push(expansion);
@@ -2017,8 +2040,7 @@ function braceExpansions(word: string): string[] {
 }
 
 function pathSpellings(arg: string): string[] {
-  const resolved = unquoteWord(arg);
-  const words = process.platform === 'win32' && resolved !== arg ? [arg, resolved] : [arg];
+  const words = process.platform === 'win32' ? [arg, unquoteWord(arg)] : [arg];
   return words.flatMap(braceExpansions);
 }
 
