@@ -2034,9 +2034,9 @@ function readWord(command: string, start: number): ShellWord {
 }
 
 // Position of the next `<` or `>` at or after `start` that the shell reads
-// as an operator, outside quotes and not escaped; -1 when there is none
-// before the end of the line or before a comment (an unquoted `#` that
-// opens a word, after which the shell reads nothing).
+// as an operator, outside quotes and not escaped; -1 when there is none. A
+// comment (an unquoted `#` that opens a word) runs to the end of its line
+// and is skipped, since what follows the newline is read again.
 function nextOperator(command: string, start: number): number {
   let i = start;
   while (i < command.length) {
@@ -2046,7 +2046,12 @@ function nextOperator(command: string, start: number): number {
       continue;
     }
     const ch = command[i];
-    if (ch === '#' && (i === 0 || WORD_BREAKS.has(command[i - 1]))) return -1;
+    if (ch === '#' && (i === 0 || WORD_BREAKS.has(command[i - 1]))) {
+      const newline = command.indexOf('\n', i);
+      if (newline === -1) return -1;
+      i = newline;
+      continue;
+    }
     if (ch === '<' || ch === '>') return i;
     i += 1;
   }

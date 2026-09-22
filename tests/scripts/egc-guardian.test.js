@@ -724,6 +724,8 @@ async function runTests() {
   run('a command substitution inside double quotes is read',    () => assertRedirectDenied(`cat "$(cat <${secretFile})"`, 'input'));
   run('a backquoted command is read',                           () => assertRedirectDenied(`echo \`cat <${secretFile}\``, 'input'));
   run('a parameter expansion in braces is text',                () => assertNoRedirectDenial(`echo \${x:->${secretFile}}`));
+  run('a comment ends at its newline',                          () => assertRedirectDenied(`echo ok # note\necho evil >${secretFile}`, 'output'));
+  run('a comment inside a substitution ends at its newline',    () => assertRedirectDenied(`echo x $(echo y # note\ncat <${secretFile})`, 'input'));
   run('an operational file stays readable by redirection', () => assertNoRedirectDenial(`cat <${path.join(home, '.egc', 'bin', 'manifest.json')}`));
 
   // ── validate_command: the git force flag read per subcommand ─────────────
