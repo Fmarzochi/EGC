@@ -250,6 +250,40 @@ function runTests() {
     assert.ok(result.stderr.includes('incomplete list of verdicts'), result.stderr);
   })) passed++; else failed++;
 
+  if (test('blocks the command when a verdict entry carries no allowed flag', () => {
+    const result = runWithValidator("process.stdout.write(JSON.stringify([{}, null]));\n", 'git status && git log');
+    assert.strictEqual(result.code, 2, `Expected a block on an entry that is not a verdict, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('an entry that is not a verdict'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command and says the answer is not a list when the validator answers an object', () => {
+    const result = runWithValidator("process.stdout.write('{}');\n", 'git status');
+    assert.strictEqual(result.code, 2, `Expected a block on an answer that is not a list, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('not a list of verdicts'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command and says the answer was empty when the validator prints nothing', () => {
+    const result = runWithValidator('process.exit(0);\n', 'git status');
+    assert.strictEqual(result.code, 2, `Expected a block on an empty answer, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('an empty answer'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command within the budget even when the validator ignores the termination signal', () => {
+    const result = runWithValidator(
+      "process.on('SIGTERM', () => {});\nsetTimeout(() => {}, 30000);\n",
+      'git status',
+      { EGC_GUARDIAN_TIMEOUT_MS: '300' }
+    );
+    assert.strictEqual(result.code, 2, `Expected a block within the budget, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('did not answer within 0.3 seconds'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command and names the output limit when the validator answers past it', () => {
+    const result = runWithValidator("process.stdout.write('x'.repeat(2 * 1024 * 1024));\n", 'git status');
+    assert.strictEqual(result.code, 2, `Expected a block on an answer past the output limit, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('past the output limit'), result.stderr);
+  })) passed++; else failed++;
+
   if (test('blocks the command and says the answer was unreadable when the validator prints something that is not JSON', () => {
     const result = runWithValidator("process.stdout.write('not a verdict');\n", 'git status');
     assert.strictEqual(result.code, 2, `Expected a block without a verdict, got ${result.code}: ${result.stderr}`);

@@ -337,10 +337,24 @@ function callGuardianVerdict(cli, args, input, timeoutMs) {
     input: String(input ?? ''),
     encoding: 'utf8',
     timeout: timeoutMs,
+    // SIGKILL, so a validator that traps or ignores SIGTERM still ends when
+    // the budget does: the call is synchronous, and the budget is a promise.
+    killSignal: 'SIGKILL',
   });
-  if (result.error) {
-    const kind = result.error.code === 'ETIMEDOUT' ? 'timeout' : 'unstartable';
-    return { ok: false, kind, detail: String(result.error.message || result.error.code || result.error) };
+  return classifyGuardianResult(result);
+}
+
+// What the spawn result says, read in the order that tells the truth: the
+// budget first, then the output limit, then a process that never ran, then
+// one that ran and failed, then the answer itself. result.error alone does
+// not mean the process never started (EPIPE after the child closed stdin
+// comes with a status), so status and signal are read before the error.
+function classifyGuardianResult(result) {
+  const code = result.error?.code;
+  if (code === 'ETIMEDOUT') return { ok: false, kind: 'timeout', detail: 'no answer within the budget' };
+  if (code === 'ENOBUFS') return { ok: false, kind: 'unreadable', detail: 'an answer past the output limit' };
+  if (result.status === null && result.signal === null) {
+    return { ok: false, kind: 'unstartable', detail: String(result.error?.message ?? code ?? 'no process') };
   }
   if (result.status !== 0) {
     const detail = result.status === null ? `signal ${result.signal}` : `exit code ${result.status}`;
@@ -354,9 +368,9 @@ function callGuardianVerdict(cli, args, input, timeoutMs) {
   }
 }
 
-// The parsed JSON, or null on any failure, for the callers that fail open
-// (routing, mining, learning: a missing answer there costs a hint, not a
-// guard).
+// The parsed JSON, or null on any failure, for the callers that still fail
+// open: the prompt router and the intuition hook, the memory miner,
+// auto-learn and the write hook.
 function callGuardian(cli, args, input, timeoutMs) {
   const answer = callGuardianVerdict(cli, args, input, timeoutMs);
   return answer.ok ? answer.value : null;

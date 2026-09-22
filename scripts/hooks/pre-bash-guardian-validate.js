@@ -640,6 +640,12 @@ function firstHardBlock(verdicts, segments) {
 // ran, and what to do. A validator that is not installed at all is the
 // other case, handled in run(), so a machine without the build stays
 // usable.
+// A verdict says whether its segment is allowed; anything else in the list
+// is no answer for that segment.
+function isVerdict(entry) {
+  return entry !== null && typeof entry === 'object' && typeof entry.allowed === 'boolean';
+}
+
 function reasonWithoutVerdict(failure) {
   switch (failure.kind) {
     case 'timeout':
@@ -716,6 +722,9 @@ function run(inputOrRaw) {
   // command.
   if (verdicts.length !== segments.length) {
     return withoutVerdict({ kind: 'unreadable', detail: 'an incomplete list of verdicts' });
+  }
+  if (!verdicts.every(isVerdict)) {
+    return withoutVerdict({ kind: 'unreadable', detail: 'a list with an entry that is not a verdict' });
   }
   const hardBlock = firstHardBlock(verdicts, segments);
   if (hardBlock) return hardBlock;
