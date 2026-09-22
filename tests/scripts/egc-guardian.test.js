@@ -726,6 +726,18 @@ async function runTests() {
   run('a parameter expansion in braces is text',                () => assertNoRedirectDenial(`echo \${x:->${secretFile}}`));
   run('a comment ends at its newline',                          () => assertRedirectDenied(`echo ok # note\necho evil >${secretFile}`, 'output'));
   run('a comment inside a substitution ends at its newline',    () => assertRedirectDenied(`echo x $(echo y # note\ncat <${secretFile})`, 'input'));
+  // The body of a heredoc is data: the scan leaves it out, while the rest
+  // of the line that opens it and the lines after its terminator are read.
+  // A protected path inside the body still meets the per-command checks,
+  // which read the line word by word, so only the scan's own verdict is
+  // asserted there.
+  function assertNoRedirectVerdict(cmd) {
+    const result = validateCommand(cmd);
+    assert.ok(!String(result.reason ?? '').includes('redirecting'), `'${cmd}' was denied by the redirection scan: ${JSON.stringify(result)}`);
+  }
+  run('a heredoc body is data, the rest of its line is read',    () => assertRedirectDenied(`cat <<EOF >${secretFile}\nbody\nEOF`, 'output'));
+  run('a heredoc body is not read for operators',               () => assertNoRedirectVerdict(`cat <<EOF\n> ${secretFile}\nEOF`));
+  run('a command after the heredoc terminator is read',         () => assertRedirectDenied(`cat <<EOF\nbody\nEOF\necho evil >${secretFile}`, 'output'));
   run('an operational file stays readable by redirection', () => assertNoRedirectDenial(`cat <${path.join(home, '.egc', 'bin', 'manifest.json')}`));
 
   // ── validate_command: the git force flag read per subcommand ─────────────

@@ -1938,7 +1938,8 @@ function pathCandidatesOf(args: string[]): string[] {
 // `$(...)` or backquotes, inside double quotes too, is a command of its own
 // and its redirections are read on their own. A heredoc or a here-string
 // carries text, not a path; `<&` and a descriptor duplication (`2>&1`,
-// `>&-`) name no file; a process substitution (`<(cmd)`) reads as an empty
+// `>&-`) name no file; the body of a heredoc, up to its terminator line,
+// is data and is left out; a process substitution (`<(cmd)`) reads as an empty
 // target and the scan goes on inside the parentheses.
 const REDIRECTION_OPERATORS = ['<<<', '<<', '>>', '>|', '>&', '<>', '<&', '>', '<'];
 const WORD_BREAKS = new Set([' ', '\t', '\n', '\r', '|', '&', ';', '(', ')', '<', '>']);
@@ -2059,15 +2060,40 @@ function nextOperator(command: string, start: number): number {
 }
 
 // The redirection whose operator starts at `at`, null when it names no
-// file, and the index the scan resumes from.
-function redirectionAt(command: string, at: number): { redirection: Redirection | null; next: number } {
+// file; the delimiter of the heredoc it opens, if any; and the index the
+// scan resumes from.
+function redirectionAt(command: string, at: number): { redirection: Redirection | null; heredoc: string | null; next: number } {
   const operator = REDIRECTION_OPERATORS.find(op => command.startsWith(op, at)) ?? command[at];
   const target = readWord(command, at + operator.length);
-  const namesNoFile = operator === '<<<' || operator === '<<' || operator === '<&'
+  if (operator === '<<') return { redirection: null, heredoc: target.value.replace(/^-/, ''), next: target.end };
+  const namesNoFile = operator === '<<<' || operator === '<&'
     || (operator === '>&' && /^(?:\d+|-)$/.test(target.value))
     || target.value.length === 0;
-  if (namesNoFile) return { redirection: null, next: target.end };
-  return { redirection: { target, writes: operator !== '<' }, next: target.end };
+  if (namesNoFile) return { redirection: null, heredoc: null, next: target.end };
+  return { redirection: { target, writes: operator !== '<' }, heredoc: null, next: target.end };
+}
+
+// Index of the newline ending the line that carries `delimiter` alone
+// (leading tabs allowed, as `<<-` strips them), searched from `start`; the
+// end of the command when that line never comes.
+function terminatorLineEnd(command: string, start: number, delimiter: string): number {
+  let lineStart = start;
+  while (lineStart < command.length) {
+    const newline = command.indexOf('\n', lineStart);
+    const lineEnd = newline === -1 ? command.length : newline;
+    if (command.slice(lineStart, lineEnd).replace(/^\t+/, '') === delimiter) return lineEnd;
+    lineStart = lineEnd + 1;
+  }
+  return command.length;
+}
+
+// Index of the end of the last terminator line of the heredocs opened on
+// the line that ends at `newline`: their bodies follow that line in order,
+// carry data, and are left out of the scan.
+function heredocBodiesEnd(command: string, newline: number, delimiters: string[]): number {
+  let end = newline;
+  for (const delimiter of delimiters) end = terminatorLineEnd(command, end + 1, delimiter);
+  return end;
 }
 
 // Index of the parenthesis closing the substitution whose body starts at
@@ -2119,11 +2145,21 @@ function substitutionBodies(command: string): string[] {
 function redirectionsOf(line: string): Redirection[] {
   const command = joinContinuations(line);
   const found: Redirection[] = [];
-  let at = nextOperator(command, 0);
+  const heredocs: string[] = [];
+  let from = 0;
+  let at = nextOperator(command, from);
   while (at !== -1) {
-    const { redirection, next } = redirectionAt(command, at);
+    const newline = command.indexOf('\n', from);
+    if (heredocs.length > 0 && newline !== -1 && newline < at) {
+      from = heredocBodiesEnd(command, newline, heredocs.splice(0));
+      at = nextOperator(command, from);
+      continue;
+    }
+    const { redirection, heredoc, next } = redirectionAt(command, at);
+    if (heredoc !== null) heredocs.push(heredoc);
     if (redirection !== null) found.push(redirection);
-    at = nextOperator(command, next);
+    from = next;
+    at = nextOperator(command, from);
   }
   for (const body of substitutionBodies(command)) found.push(...redirectionsOf(body));
   return found;
