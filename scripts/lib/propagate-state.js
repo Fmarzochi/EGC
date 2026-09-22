@@ -69,7 +69,14 @@ function shSingleQuote(value) {
 // itself cannot answer, so a tree git cannot open (a worktree whose gitdir
 // moved, a checkout git refuses to read) is still known to be a repository.
 function isInsideGitWorkTree(projectPath) {
-  let dir = path.resolve(projectPath);
+  // The real path, so a symlinked project directory is walked where it
+  // actually lives; a path that does not exist keeps its resolved form.
+  let dir;
+  try {
+    dir = fs.realpathSync(projectPath);
+  } catch {
+    dir = path.resolve(projectPath);
+  }
   let parent = path.dirname(dir);
   while (parent !== dir) {
     if (fs.existsSync(path.join(dir, '.git'))) return true;

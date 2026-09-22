@@ -332,7 +332,7 @@ run('tells a repository git cannot open apart from a directory that is no reposi
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-brokengit-'));
   // A .git file whose gitdir does not exist: inside a repository as far as
   // anything that copies working trees can tell, but git cannot open it.
-  fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir')}\n`);
+  fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir').split(path.sep).join('/')}\n`);
   const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
   assert.strictEqual(plan.configured, false);
   assert.notStrictEqual(plan.reason, 'not a git repository', `the reason must not read as the silent case: ${plan.reason}`);

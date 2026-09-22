@@ -707,11 +707,16 @@ function runFreshnessGuardTests() {
       // A .git file whose gitdir does not exist: the directory sits inside a
       // repository as far as anything that copies working trees can tell,
       // but git cannot open it, so the clean filter cannot be armed there.
-      fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir')}\n`);
+      fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir').split(path.sep).join('/')}\n`);
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
       const lines = [];
       const originalWrite = process.stderr.write;
-      process.stderr.write = (chunk) => { lines.push(String(chunk)); return true; };
+      process.stderr.write = (chunk, encoding, callback) => {
+        lines.push(String(chunk));
+        const done = typeof encoding === 'function' ? encoding : callback;
+        if (typeof done === 'function') done();
+        return true;
+      };
       let result;
       try {
         result = propagateStateContent(dir, SAMPLE_STATE);
@@ -740,6 +745,34 @@ function runFreshnessGuardTests() {
       cleanup(dir);
     }
   })) passed++; else failed++;
+
+  // Symbolic links need a privilege Windows runners do not grant.
+  if (process.platform !== 'win32') {
+    if (test('keeps project memory out of the context files when the project path is a symlink into a checkout git cannot open', () => {
+      const dir = mktemp();
+      const linkParent = mktemp();
+      try {
+        fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir').split(path.sep).join('/')}\n`);
+        fs.mkdirSync(path.join(dir, 'packages', 'app'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'packages', 'app', 'AGENTS.md'), '# Agents\n');
+        const link = path.join(linkParent, 'app');
+        fs.symlinkSync(path.join(dir, 'packages', 'app'), link, 'dir');
+        const originalWrite = process.stderr.write;
+        process.stderr.write = () => true;
+        let result;
+        try {
+          result = propagateStateContent(link, SAMPLE_STATE);
+        } finally {
+          process.stderr.write = originalWrite;
+        }
+        assert.strictEqual(result.agents, null, 'the link is walked where it really lives');
+        assert.strictEqual(fs.readFileSync(path.join(link, 'AGENTS.md'), 'utf-8'), '# Agents\n', 'AGENTS.md is left as it was');
+      } finally {
+        cleanup(linkParent);
+        cleanup(dir);
+      }
+    })) passed++; else failed++;
+  }
 
   return { passed, failed };
 }

@@ -59,7 +59,14 @@ const PROPAGATION_FILES = [
 // moved, a checkout git refuses to read) is still known to be a repository
 // and reported apart from a directory that is no repository at all.
 function isInsideGitWorkTree(projectDir) {
-  let dir = path.resolve(projectDir);
+  // The real path, so a symlinked project directory is walked where it
+  // actually lives; a path that does not exist keeps its resolved form.
+  let dir;
+  try {
+    dir = fs.realpathSync(projectDir);
+  } catch {
+    dir = path.resolve(projectDir);
+  }
   let parent = path.dirname(dir);
   while (parent !== dir) {
     if (fs.existsSync(path.join(dir, '.git'))) return true;

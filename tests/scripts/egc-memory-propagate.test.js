@@ -427,12 +427,17 @@ async function runTests() {
       // A .git file whose gitdir does not exist: the directory sits inside a
       // repository as far as anything that copies working trees can tell,
       // but git cannot open it, so the clean filter cannot be armed there.
-      fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir')}\n`);
+      fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir').split(path.sep).join('/')}\n`);
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
       fs.writeFileSync(path.join(dir, 'CLAUDE.md'), '# Claude\n');
       const lines = [];
       const originalWrite = process.stderr.write;
-      process.stderr.write = (chunk) => { lines.push(String(chunk)); return true; };
+      process.stderr.write = (chunk, encoding, callback) => {
+        lines.push(String(chunk));
+        const done = typeof encoding === 'function' ? encoding : callback;
+        if (typeof done === 'function') done();
+        return true;
+      };
       let result;
       try {
         result = propagateStateToTools({ projectPath: dir, ...args });
