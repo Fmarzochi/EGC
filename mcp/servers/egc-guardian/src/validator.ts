@@ -1929,13 +1929,17 @@ function pathCandidatesOf(args: string[]): string[] {
 // argument the operator was glued to.
 //
 // The command line is read here the way the shell reads it, on its own and
-// not through tokenizeWords: single quotes take everything literally,
-// inside double quotes a backslash escapes only a quote, a backslash, a
-// dollar sign or a backquote, and outside quotes it escapes the next
-// character. A heredoc or a here-string carries text, not a path; `<&` and
-// a descriptor duplication (`2>&1`, `>&-`) name no file; a process
-// substitution (`<(cmd)`) reads as an empty target and the scan goes on
-// inside the parentheses, where the command's own redirections are read.
+// not through tokenizeWords: a backslash before a newline joins the two
+// lines; single quotes take everything literally; inside double quotes a
+// backslash escapes only a quote, a backslash, a dollar sign or a
+// backquote; outside quotes it escapes the next character; a parameter
+// expansion in braces (`${x:-y}`) is text up to its closing brace; an
+// unquoted `#` opening a word starts a comment. A command substitution,
+// `$(...)` or backquotes, inside double quotes too, is a command of its own
+// and its redirections are read on their own. A heredoc or a here-string
+// carries text, not a path; `<&` and a descriptor duplication (`2>&1`,
+// `>&-`) name no file; a process substitution (`<(cmd)`) reads as an empty
+// target and the scan goes on inside the parentheses.
 const REDIRECTION_OPERATORS = ['<<<', '<<', '>>', '>|', '>&', '<>', '<&', '>', '<'];
 const WORD_BREAKS = new Set([' ', '\t', '\n', '\r', '|', '&', ';', '(', ')', '<', '>']);
 const DOUBLE_QUOTE_ESCAPES = new Set(['"', '\\', '$', '`']);
@@ -1965,6 +1969,42 @@ function readQuoted(command: string, start: number): { value: string; end: numbe
   return { value, end: Math.min(i + 1, command.length) };
 }
 
+// The line with its backslash-newline continuations removed, everywhere
+// but inside single quotes, where the shell keeps them.
+function joinContinuations(command: string): string {
+  let joined = '';
+  let i = 0;
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === "'") {
+      const end = readQuoted(command, i).end;
+      joined += command.slice(i, end);
+      i = end;
+    } else if (ch === '\\') {
+      if (command[i + 1] !== '\n') joined += command.slice(i, i + 2);
+      i += 2;
+    } else {
+      joined += ch;
+      i += 1;
+    }
+  }
+  return joined;
+}
+
+// Index past the span at `i` the shell reads as text rather than as
+// operators (a quoted span, an escaped character, a parameter expansion in
+// braces); `i` itself when no such span starts there.
+function skipText(command: string, i: number): number {
+  const ch = command[i];
+  if (ch === '"' || ch === "'") return readQuoted(command, i).end;
+  if (ch === '\\') return Math.min(i + 2, command.length);
+  if (ch === '$' && command[i + 1] === '{') {
+    const close = command.indexOf('}', i + 2);
+    return close === -1 ? command.length : close + 1;
+  }
+  return i;
+}
+
 // The word at `start`, leading blanks skipped, up to the next unquoted blank
 // or shell metacharacter: as typed, and as the shell would hand it over.
 function readWord(command: string, start: number): ShellWord {
@@ -1978,9 +2018,13 @@ function readWord(command: string, start: number): ShellWord {
       const quoted = readQuoted(command, i);
       value += quoted.value;
       i = quoted.end;
-    } else if (ch === '\\' && i + 1 < command.length) {
-      value += command[i + 1];
+    } else if (ch === '\\') {
+      value += command.slice(i + 1, i + 2);
       i += 2;
+    } else if (ch === '$' && command[i + 1] === '{') {
+      const end = skipText(command, i);
+      value += command.slice(i, end);
+      i = end;
     } else {
       value += ch;
       i += 1;
@@ -1996,12 +2040,15 @@ function readWord(command: string, start: number): ShellWord {
 function nextOperator(command: string, start: number): number {
   let i = start;
   while (i < command.length) {
+    const skipped = skipText(command, i);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
     const ch = command[i];
-    if (ch === '"' || ch === "'") i = readQuoted(command, i).end;
-    else if (ch === '\\') i += 2;
-    else if (ch === '#' && (i === 0 || WORD_BREAKS.has(command[i - 1]))) return -1;
-    else if (ch === '<' || ch === '>') return i;
-    else i += 1;
+    if (ch === '#' && (i === 0 || WORD_BREAKS.has(command[i - 1]))) return -1;
+    if (ch === '<' || ch === '>') return i;
+    i += 1;
   }
   return -1;
 }
@@ -2018,7 +2065,54 @@ function redirectionAt(command: string, at: number): { redirection: Redirection 
   return { redirection: { target, writes: operator !== '<' }, next: target.end };
 }
 
-function redirectionsOf(command: string): Redirection[] {
+// Index of the parenthesis closing the substitution whose body starts at
+// `start`, quoted spans and escapes skipped; the end of the line when it
+// never closes.
+function closingParenthesis(command: string, start: number): number {
+  let depth = 1;
+  let i = start;
+  while (i < command.length) {
+    const skipped = skipText(command, i);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
+    if (command[i] === '(') depth += 1;
+    if (command[i] === ')') depth -= 1;
+    if (depth === 0) return i;
+    i += 1;
+  }
+  return command.length;
+}
+
+// The bodies of the command substitutions of the line, `$(...)` and
+// backquotes, inside double quotes too; a substitution nested in a body is
+// found when that body is read in turn.
+function substitutionBodies(command: string): string[] {
+  const bodies: string[] = [];
+  let i = 0;
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === "'" || ch === '\\') {
+      i = ch === "'" ? readQuoted(command, i).end : i + 2;
+    } else if (ch === '`') {
+      const close = command.indexOf('`', i + 1);
+      const end = close === -1 ? command.length : close;
+      bodies.push(command.slice(i + 1, end));
+      i = end + 1;
+    } else if (ch === '$' && command[i + 1] === '(') {
+      const end = closingParenthesis(command, i + 2);
+      bodies.push(command.slice(i + 2, end));
+      i = end + 1;
+    } else {
+      i += 1;
+    }
+  }
+  return bodies;
+}
+
+function redirectionsOf(line: string): Redirection[] {
+  const command = joinContinuations(line);
   const found: Redirection[] = [];
   let at = nextOperator(command, 0);
   while (at !== -1) {
@@ -2026,6 +2120,7 @@ function redirectionsOf(command: string): Redirection[] {
     if (redirection !== null) found.push(redirection);
     at = nextOperator(command, next);
   }
+  for (const body of substitutionBodies(command)) found.push(...redirectionsOf(body));
   return found;
 }
 
@@ -2036,13 +2131,10 @@ function targetSpellings(target: ShellWord): string[] {
   return process.platform === 'win32' ? [target.value, target.raw] : [target.value];
 }
 
-function isDeniedTarget(spelling: string, writes: boolean, cwd?: string): boolean {
-  return writes ? isProtectedPath(spelling, cwd) : isReadDeniedPath(spelling, cwd);
-}
-
 function redirectionVerdict(command: string, cwd?: string): ValidationResult | null {
   for (const { target, writes } of redirectionsOf(command)) {
-    const denied = targetSpellings(target).find(spelling => isDeniedTarget(spelling, writes, cwd));
+    const denies = writes ? isProtectedPath : isReadDeniedPath;
+    const denied = targetSpellings(target).find(spelling => denies(spelling, cwd));
     if (denied === undefined) continue;
     return {
       allowed: false,

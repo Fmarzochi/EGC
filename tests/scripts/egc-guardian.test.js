@@ -678,7 +678,7 @@ async function runTests() {
   }
   function assertNoRedirectDenial(cmd) {
     const result = validateCommand(cmd);
-    assert.ok(!String(result.reason ?? '').includes('redirecting'), `'${cmd}' was denied for its redirection: ${JSON.stringify(result)}`);
+    assert.ok(result.allowed === true || result.advisory === true, `'${cmd}' is hard-denied: ${JSON.stringify(result)}`);
   }
   run('output glued to a credential file',                 () => assertRedirectDenied(`echo evil >${secretFile}`, 'output'));
   run('output spaced from a credential file',              () => assertRedirectDenied(`echo evil > ${secretFile}`, 'output'));
@@ -706,12 +706,12 @@ async function runTests() {
   run('/dev/null stays outside the denial',                () => assertNoRedirectDenial('cat README.md 2>/dev/null'));
   run('a heredoc delimiter is not a path',                 () => assertNoRedirectDenial(`cat <<${secretFile}`));
   run('a here-string is text, not a path',                 () => assertNoRedirectDenial(`cat <<<${secretFile}`));
-  run('a quoted operator is literal text',                 () => assertNoRedirectDenial(`echo "a>${profileFile}"`));
-  run('an escaped operator is literal text',               () => assertNoRedirectDenial(`echo a\\>${profileFile}`));
+  run('a quoted operator is literal text',                 () => assertNoRedirectDenial(`echo "a>${secretFile}"`));
+  run('an escaped operator is literal text',               () => assertNoRedirectDenial(`echo a\\>${secretFile}`));
   run('an escaped quote inside double quotes does not hide the operator', () => assertRedirectDenied(`echo "\\""x>${secretFile}`, 'output'));
   run('a backslash escape inside the target is resolved',        () => assertRedirectDenied('echo evil >~/.ss\\h/id_rsa', 'output'));
   run('a redirection inside a process substitution is read',    () => assertRedirectDenied(`cat <(echo evil >${secretFile})`, 'output'));
-  run('an operator inside double quotes with an escaped quote is literal', () => assertNoRedirectDenial(`echo "\\"a>${profileFile}"`));
+  run('an operator inside double quotes with an escaped quote is literal', () => assertNoRedirectDenial(`echo "\\"a>${secretFile}"`));
   run('a process substitution is a command, not a file',         () => assertNoRedirectDenial('cat <(echo evil)'));
   run('two redirections glued in one word are both read',      () => assertRedirectDenied(`echo x >out.txt>${secretFile}`, 'output'));
   run('$HOME in a double-quoted target names the home directory', () => assertRedirectDenied('echo evil >"$HOME/.ssh/id_rsa"', 'output'));
@@ -719,6 +719,11 @@ async function runTests() {
   run('a comment is not read',                                  () => assertNoRedirectDenial(`echo ok # >${secretFile}`));
   run('a double-quoted target with a space',                    () => assertRedirectDenied(`echo evil >"${path.join(home, '.ssh', 'my key')}"`, 'output'));
   run('a single-quoted target',                                 () => assertRedirectDenied(`echo evil >'${secretFile}'`, 'output'));
+  run('a continued line does not start a comment',              () => assertRedirectDenied(`echo foo\\\n#text >${secretFile}`, 'output'));
+  run('a continuation inside the target is joined',             () => assertRedirectDenied(`echo evil >${path.join(home, 'config.p')}\\\nem`, 'output'));
+  run('a command substitution inside double quotes is read',    () => assertRedirectDenied(`cat "$(cat <${secretFile})"`, 'input'));
+  run('a backquoted command is read',                           () => assertRedirectDenied(`echo \`cat <${secretFile}\``, 'input'));
+  run('a parameter expansion in braces is text',                () => assertNoRedirectDenial(`echo \${x:->${secretFile}}`));
   run('an operational file stays readable by redirection', () => assertNoRedirectDenial(`cat <${path.join(home, '.egc', 'bin', 'manifest.json')}`));
 
   // ── validate_command: the git force flag read per subcommand ─────────────
