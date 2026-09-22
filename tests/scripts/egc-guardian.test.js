@@ -660,6 +660,56 @@ async function runTests() {
   });
 
 
+  // ── Redirection targets ───────────────────────────────────────────────────
+  // The shell opens a redirection target on the command's behalf: `> file`
+  // writes over it and `< file` reads it, whatever command stands in front,
+  // with the operator glued to the target (`>file`, `word>file`) just as
+  // with a space between them. Every form is judged against the same
+  // protected paths a plain operand is.
+  console.log('\n=== validate_command: redirection targets ===');
+  const secretFile = path.join(home, '.ssh', 'id_rsa');
+  const profileFile = path.join(home, '.bashrc');
+  function assertRedirectDenied(cmd, direction) {
+    const result = validateCommand(cmd);
+    assert.strictEqual(result.allowed, false, `Expected DENIED for: ${cmd}`);
+    assert.strictEqual(result.advisory, false, `Verdict for '${cmd}' is advisory: ${JSON.stringify(result)}`);
+    assert.strictEqual(result.trust_level, 'DANGEROUS', `Expected DANGEROUS for '${cmd}': ${JSON.stringify(result)}`);
+    assert.ok(String(result.reason).includes(`redirecting ${direction}`), `Reason for '${cmd}' does not name the redirection: ${JSON.stringify(result)}`);
+  }
+  function assertNoRedirectDenial(cmd) {
+    const result = validateCommand(cmd);
+    assert.ok(!String(result.reason ?? '').includes('redirecting'), `'${cmd}' was denied for its redirection: ${JSON.stringify(result)}`);
+  }
+  run('output glued to a credential file',                 () => assertRedirectDenied(`echo evil >${secretFile}`, 'output'));
+  run('output spaced from a credential file',              () => assertRedirectDenied(`echo evil > ${secretFile}`, 'output'));
+  run('output glued to a tilde path',                      () => assertRedirectDenied('echo evil >~/.ssh/id_rsa', 'output'));
+  run('output glued to the word before it',                () => assertRedirectDenied(`echo evil>${secretFile}`, 'output'));
+  run('output redirected before the command',              () => assertRedirectDenied(`>${secretFile} echo evil`, 'output'));
+  run('append glued to a shell profile',                   () => assertRedirectDenied(`echo evil >>${profileFile}`, 'output'));
+  run('stderr glued to a shell profile',                   () => assertRedirectDenied(`echo evil 2>${profileFile}`, 'output'));
+  run('both streams glued to a shell profile',             () => assertRedirectDenied(`echo evil &>${profileFile}`, 'output'));
+  run('clobber glued to a shell profile',                  () => assertRedirectDenied(`echo evil >|${profileFile}`, 'output'));
+  run('descriptor form >& onto a shell profile',           () => assertRedirectDenied(`echo evil >&${profileFile}`, 'output'));
+  run('quoted target glued to the operator',               () => assertRedirectDenied(`echo evil >"${profileFile}"`, 'output'));
+  run('read-only command writing a shell profile',         () => assertRedirectDenied(`ls >${profileFile}`, 'output'));
+  run('cat writing a shell profile',                       () => assertRedirectDenied(`cat README.md > ${profileFile}`, 'output'));
+  run('dev tool writing a shell profile',                  () => assertRedirectDenied(`node app.js >${profileFile}`, 'output'));
+  run('git writing a shell profile',                       () => assertRedirectDenied(`git log >${profileFile}`, 'output'));
+  run('wrapped command writing a shell profile',           () => assertRedirectDenied(`sudo echo evil >${profileFile}`, 'output'));
+  run('read-write open of a credential file',              () => assertRedirectDenied(`cat <>${secretFile}`, 'output'));
+  run('input glued from a credential file',                () => assertRedirectDenied(`cat <${secretFile}`, 'input'));
+  run('input spaced from a credential file',               () => assertRedirectDenied(`wc -l < ${secretFile}`, 'input'));
+  run('input from a tilde credential path',                () => assertRedirectDenied('head <~/.ssh/id_rsa', 'input'));
+  run('descriptor duplication names no file',              () => assertNoRedirectDenial('echo hi 2>&1'));
+  run('closing a descriptor names no file',                () => assertNoRedirectDenial('echo hi >&-'));
+  run('a plain output file stays outside the denial',      () => assertNoRedirectDenial('echo hi >out.txt'));
+  run('/dev/null stays outside the denial',                () => assertNoRedirectDenial('cat README.md 2>/dev/null'));
+  run('a heredoc delimiter is not a path',                 () => assertNoRedirectDenial(`cat <<${secretFile}`));
+  run('a here-string is text, not a path',                 () => assertNoRedirectDenial(`cat <<<${secretFile}`));
+  run('a quoted operator is literal text',                 () => assertNoRedirectDenial(`echo "a>${profileFile}"`));
+  run('an escaped operator is literal text',               () => assertNoRedirectDenial(`echo a\\>${profileFile}`));
+  run('an operational file stays readable by redirection', () => assertNoRedirectDenial(`cat <${path.join(home, '.egc', 'bin', 'manifest.json')}`));
+
   // ── validate_command: the git force flag read per subcommand ─────────────
   // A force flag means a different thing in every git subcommand: on push it
   // rewrites history other people already have, on worktree remove it drops a
