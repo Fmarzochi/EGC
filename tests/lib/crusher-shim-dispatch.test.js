@@ -8,6 +8,12 @@ const { spawnSync } = require('child_process');
 
 const { needsShellOnWindows } = require('../../scripts/lib/crusher/shim-dispatch');
 const { DISPATCH_SCRIPT, jsStringLiteral, writeShimLauncher } = require('./shim-fixtures');
+// The flag of `egc run --raw` reaches every child through the environment,
+// so a suite started from a shell that exported it would hand a passthrough
+// to the cases that expect compression; the children start from an
+// environment without it.
+const BASE_ENV = { ...process.env };
+delete BASE_ENV.EGC_CRUSHER_RAW;
 
 function withPlatform(value, fn) {
   const original = Object.getOwnPropertyDescriptor(process, 'platform');
@@ -77,7 +83,7 @@ function runShim(homeDir, name, args, options = {}) {
   // must be set or the real runner/user home leaks into the child process.
   return spawnSync(process.execPath, [DISPATCH_SCRIPT, name, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+    env: { ...BASE_ENV, HOME: homeDir, USERPROFILE: homeDir },
     ...options,
   });
 }
@@ -123,7 +129,7 @@ function runTests() {
       seedManifest(dir, { git: fakeGit });
 
       const result = runShim(dir, 'git', ['log', '--stat'], {
-        env: { ...process.env, HOME: dir, USERPROFILE: dir, EGC_CRUSHER_RAW: '1' },
+        env: { ...BASE_ENV, HOME: dir, USERPROFILE: dir, EGC_CRUSHER_RAW: '1' },
       });
       assert.strictEqual(result.status, 0);
       assert.strictEqual(result.stdout, bigBody, 'expected the exact raw output, not the compressed form');
@@ -251,7 +257,7 @@ function runTests() {
         encoding: 'utf8',
         timeout: 15000,
         env: {
-          ...process.env,
+          ...BASE_ENV,
           HOME: overrideHome,
           USERPROFILE: overrideHome,
           PATH: [installedShimDir, realBinDir, path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter),
@@ -281,7 +287,7 @@ function runTests() {
         encoding: 'utf8',
         timeout: 15000,
         env: {
-          ...process.env,
+          ...BASE_ENV,
           HOME: overrideHome,
           USERPROFILE: overrideHome,
           PATH: [installedShimDir, path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter),
@@ -303,7 +309,7 @@ function runTests() {
       // EGC_SHIM_PENDING naming it with its direct parent's pid, which is
       // the depth-1 signature of the shim having resolved to itself.
       const result = runShim(dir, 'npm', ['--version'], {
-        env: { ...process.env, HOME: dir, USERPROFILE: dir, EGC_SHIM_PENDING: `npm:${process.pid}` },
+        env: { ...BASE_ENV, HOME: dir, USERPROFILE: dir, EGC_SHIM_PENDING: `npm:${process.pid}` },
       });
       assert.strictEqual(result.status, 127);
       assert.ok(result.stderr.includes('refused to recurse'), `expected the circuit-breaker message, got: ${result.stderr}`);
@@ -333,7 +339,7 @@ function runTests() {
       // masked by an equivalent PATH fallback.
       const result = runShim(overrideHome, 'npm', ['--version'], {
         env: {
-          ...process.env,
+          ...BASE_ENV,
           HOME: overrideHome,
           USERPROFILE: overrideHome,
           EGC_SHIM_LAUNCHER_DIR: installedShimDir,
