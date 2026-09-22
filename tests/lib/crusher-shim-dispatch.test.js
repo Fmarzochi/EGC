@@ -13,10 +13,14 @@ const { DISPATCH_SCRIPT, jsStringLiteral, writeShimLauncher } = require('./shim-
 // to the cases that expect compression; the children start from an
 // environment without it, whatever the casing of the name (Windows reads
 // environment names without regard to case).
-const BASE_ENV = { ...process.env };
-for (const key of Object.keys(BASE_ENV)) {
-  if (key.toUpperCase() === 'EGC_CRUSHER_RAW') delete BASE_ENV[key];
+function withoutRawFlag(env) {
+  const copy = { ...env };
+  for (const key of Object.keys(copy)) {
+    if (key.toUpperCase() === 'EGC_CRUSHER_RAW') delete copy[key];
+  }
+  return copy;
 }
+const BASE_ENV = withoutRawFlag(process.env);
 
 function withPlatform(value, fn) {
   const original = Object.getOwnPropertyDescriptor(process, 'platform');
@@ -119,6 +123,22 @@ function runTests() {
       assert.strictEqual(result.status, 0);
       assert.ok(result.stdout.includes('[egc-crusher] saved'), 'expected the crusher marker in output');
       assert.ok(result.stdout.length < bigBody.length, 'expected compressed output to be smaller than the original');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('the raw flag exported under another casing by the suite does not reach the children', () => {
+    const scrubbed = withoutRawFlag({ egc_crusher_raw: '1', EGC_CRUSHER_RAW: '1', Egc_Crusher_Raw: '1', KEEP: 'x' });
+    assert.deepStrictEqual(Object.keys(scrubbed), ['KEEP']);
+    const dir = createTempDir('egc-shim-dispatch-');
+    try {
+      const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
+      const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
+      seedManifest(dir, { git: fakeGit });
+      const result = runShim(dir, 'git', ['log', '--stat'], { env: withoutRawFlag({ ...process.env, egc_crusher_raw: '1', HOME: dir, USERPROFILE: dir }) });
+      assert.strictEqual(result.status, 0);
+      assert.ok(result.stdout.includes('[egc-crusher] saved'), 'the lowercase flag of the suite must not reach the child');
     } finally {
       cleanup(dir);
     }
