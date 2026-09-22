@@ -11,9 +11,12 @@ const { DISPATCH_SCRIPT, jsStringLiteral, writeShimLauncher } = require('./shim-
 // The flag of `egc run --raw` reaches every child through the environment,
 // so a suite started from a shell that exported it would hand a passthrough
 // to the cases that expect compression; the children start from an
-// environment without it.
+// environment without it, whatever the casing of the name (Windows reads
+// environment names without regard to case).
 const BASE_ENV = { ...process.env };
-delete BASE_ENV.EGC_CRUSHER_RAW;
+for (const key of Object.keys(BASE_ENV)) {
+  if (key.toUpperCase() === 'EGC_CRUSHER_RAW') delete BASE_ENV[key];
+}
 
 function withPlatform(value, fn) {
   const original = Object.getOwnPropertyDescriptor(process, 'platform');
