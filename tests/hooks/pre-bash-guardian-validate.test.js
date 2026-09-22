@@ -214,16 +214,37 @@ function runTests() {
     assert.strictEqual(result.code, 2, 'Expected force-push to be blocked');
   })) passed++; else failed++;
 
-  if (test('fails open silently when the validator crashes', () => {
-    const brokenCli = path.join(os.tmpdir(), `egc-broken-cli-${Date.now()}.js`);
-    fs.writeFileSync(brokenCli, 'process.exit(1);\n');
+  // A stand-in validator written from the given source, so the hook can be
+  // exercised against one that crashes, stalls or answers nonsense.
+  function runWithValidator(source, command) {
+    const cli = path.join(os.tmpdir(), `egc-validator-${process.pid}-${Date.now()}.js`);
+    fs.writeFileSync(cli, source);
     try {
-      const result = runHook('rm -rf /', { EGC_GUARDIAN_CLI: brokenCli });
-      assert.strictEqual(result.code, 0, 'Expected fail-open on validator crash');
-      assert.strictEqual(result.stderr, '', `Expected silent fail-open, got: ${result.stderr}`);
+      return runHook(command, { EGC_GUARDIAN_CLI: cli });
     } finally {
-      try { fs.rmSync(brokenCli, { force: true }); } catch { /* best-effort cleanup */ }
+      try { fs.rmSync(cli, { force: true }); } catch { /* best-effort cleanup */ }
     }
+  }
+
+  if (test('blocks the command and says the validator stopped when it crashes', () => {
+    const result = runWithValidator('process.exit(1);\n', 'rm -rf /');
+    assert.strictEqual(result.code, 2, `Expected a block without a verdict, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('could not validate this command'), result.stderr);
+    assert.ok(result.stderr.includes('exit code 1'), result.stderr);
+    assert.ok(result.stderr.includes('egc doctor'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command and says the validator did not answer in time when it stalls', () => {
+    const result = runWithValidator('setTimeout(() => {}, 30000);\n', 'git status');
+    assert.strictEqual(result.code, 2, `Expected a block without a verdict, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('did not answer within 4 seconds'), result.stderr);
+    assert.ok(result.stderr.includes('Nothing was executed'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command and says the answer was unreadable when the validator prints something that is not JSON', () => {
+    const result = runWithValidator("process.stdout.write('not a verdict');\n", 'git status');
+    assert.strictEqual(result.code, 2, `Expected a block without a verdict, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('could not read'), result.stderr);
   })) passed++; else failed++;
 
   if (test('fails open (exercised, not just documented) when no Guardian CLI resolves at all', () => {
