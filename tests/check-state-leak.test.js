@@ -36,12 +36,24 @@ const POPULATED = [
   '',
 ].join('\n');
 
+// Every temporary directory of this file is removed when the process ends.
+const TEMP_DIRS = [];
+function tempDir(prefix) {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  TEMP_DIRS.push(dir);
+  return dir;
+}
+process.on('exit', () => {
+  for (const dir of TEMP_DIRS) fs.rmSync(dir, { recursive: true, force: true });
+});
+
 function makeRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-leak-test-'));
+  const dir = tempDir('egc-leak-test-');
   const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
   git('init', '-q');
   git('config', 'user.email', 'test@example.com');
   git('config', 'user.name', 'Test');
+  git('config', 'core.autocrlf', 'false');
   fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
   fs.copyFileSync(SCRIPT, path.join(dir, 'scripts', 'check-state-leak.js'));
   return { dir, git };
@@ -204,6 +216,7 @@ run('packaged-tree flags an untracked populated file inside the packaged set', (
 const { getStateDir, detectBranch, branchStateFile } = require('../scripts/lib/branch-state');
 const { configureMemoryFilters } = require('../scripts/lib/memory-filters');
 const { MAGIC } = require('../scripts/lib/state-crypto');
+const { propagateStateContent } = require('../scripts/lib/propagate-state');
 const crypto = require('node:crypto');
 
 const BARE_SKELETON = ['# Agents', '', '<!-- egc:start -->', '<!-- egc:end -->', ''].join('\n');
@@ -225,7 +238,7 @@ const STATE = [
 const UNREADABLE_STATE = Buffer.concat([Buffer.from(MAGIC), crypto.randomBytes(80)]);
 
 function makeHome() {
-  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-leak-home-')));
+  return tempDir('egc-leak-home-');
 }
 
 function withHome(home) {
@@ -250,12 +263,13 @@ function clean(dir, input) {
 // side leaves a populated block: exactly what a checkout hands the smudge.
 // The directory name is the caller's, so a path with spaces can be tried.
 function seedRepo(prefix = 'egc-leak-test-') {
-  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  const dir = tempDir(prefix);
   const home = makeHome();
   const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', env: withHome(home) });
   git('init', '-q');
   git('config', 'user.email', 'test@example.com');
   git('config', 'user.name', 'Test');
+  git('config', 'core.autocrlf', 'false');
   fs.writeFileSync(stateFileFor(home, dir), STATE);
   const skeleton = clean(dir, smudge(dir, home, 'AGENTS.md', BARE_SKELETON).stdout);
   fs.writeFileSync(path.join(dir, 'AGENTS.md'), skeleton);
@@ -366,6 +380,7 @@ run('a linked worktree gets the block of its own branch', () => {
   const { dir, home, git } = seedRepo();
   configureMemoryFilters({ projectDir: dir, scriptPath: SCRIPT, dryRun: false });
   const worktree = path.join(path.dirname(dir), `${path.basename(dir)}-wt`);
+  TEMP_DIRS.push(worktree);
   git('worktree', 'add', '-q', '-b', 'other', worktree);
   const gitWt = (...args) => execFileSync('git', args, { cwd: worktree, encoding: 'utf8', env: withHome(home) });
   assert.strictEqual(detectBranch(worktree), 'other');
@@ -377,23 +392,137 @@ run('a linked worktree gets the block of its own branch', () => {
   assert.strictEqual(gitWt('status', '--porcelain', '--', 'AGENTS.md'), '');
 });
 
-run('a branch switch that rewrites the file keeps the memory in it', () => {
+run('a branch switch keeps a block in the rewritten file, and the next propagation makes it the branch\'s own', () => {
   const { dir, home, skeleton, git } = seedRepo();
   configureMemoryFilters({ projectDir: dir, scriptPath: SCRIPT, dryRun: false });
   git('switch', '-q', '-c', 'other');
-  fs.writeFileSync(stateFileFor(home, dir), STATE);
+  fs.writeFileSync(stateFileFor(home, dir), STATE.replace('context kept in the local state', 'context of the other branch'));
   fs.writeFileSync(path.join(dir, 'AGENTS.md'), `${skeleton}\nA line the other branch adds.\n`);
   git('add', 'AGENTS.md');
   git('commit', '-q', '-m', 'other', '--no-verify');
   git('switch', '-q', '-');
   const back = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
   assert.ok(!back.includes('A line the other branch adds.'), back);
-  assert.ok(back.includes('**Context:** context kept in the local state'), back);
+  assert.ok(back.includes('**Context:** context'), 'a block is in the file after the switch');
+  assert.ok(!back.includes('egc:state-updated'), back);
   assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), '');
+  propagateStateContent(dir, STATE);
+  assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8').includes('**Context:** context kept in the local state'));
+  // A file rewritten with another size reads as modified to git until the
+  // index stat is refreshed, whatever the filter says; that is git's own
+  // heuristic and not this filter's doing.
+  git('update-index', '-q', '--refresh', '--', 'AGENTS.md');
   git('switch', '-q', 'other');
   const forth = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
   assert.ok(forth.includes('A line the other branch adds.'), forth);
-  assert.ok(forth.includes('**Context:** context kept in the local state'), forth);
+  assert.ok(forth.includes('**Context:** context'), forth);
+});
+
+const LLMS_POPULATED = [
+  '<!-- egc:start -->',
+  '<!-- egc:state-updated:2026-07-18T05:15:28.038Z -->',
+  '# EGC Project Memory',
+  '',
+  'secret local context that must never ship.',
+  '',
+  '## Next session',
+  '- private next step',
+  '',
+  '## EGC Natural Language Interface',
+  '<!-- egc:end -->',
+  '',
+].join('\n');
+
+run('llms.txt: the clean side zeroes the plain shape and keeps the heading and the triggers', () => {
+  const { dir, git } = makeRepo();
+  const file = path.join(dir, 'llms.txt');
+  fs.writeFileSync(file, LLMS_POPULATED);
+  const cleanRes = runScript(dir, '--clean', 'llms.txt');
+  assert.strictEqual(cleanRes.status, 0, cleanRes.stderr);
+  const cleaned = fs.readFileSync(file, 'utf8');
+  assert.ok(cleaned.includes('# EGC Project Memory'), cleaned);
+  assert.ok(cleaned.includes('## EGC Natural Language Interface'), cleaned);
+  assert.ok(!cleaned.includes('secret local context'), cleaned);
+  assert.ok(!cleaned.includes('private next step'), cleaned);
+  assert.ok(!cleaned.includes('## Next session'), cleaned);
+  assert.ok(!cleaned.includes('state-updated'), cleaned);
+  git('add', 'llms.txt');
+  assert.strictEqual(runScript(dir, '--staged').status, 0);
+});
+
+run('llms.txt: a staged populated file is blocked', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'llms.txt'), LLMS_POPULATED);
+  git('add', 'llms.txt');
+  const res = runScript(dir, '--staged');
+  assert.strictEqual(res.status, 1, res.stderr);
+  assert.ok(res.stderr.includes('llms.txt'), res.stderr);
+});
+
+run('the smudge leaves bytes that are not UTF-8 untouched', () => {
+  const { dir, home } = seedRepo();
+  const bytes = Buffer.from([0xff, 0xfe, 0x41, 0x0a]);
+  const res = spawnSync('node', [SCRIPT, '--filter-smudge', 'AGENTS.md'], { cwd: dir, input: bytes, env: withHome(home) });
+  assert.strictEqual(res.status, 0, String(res.stderr));
+  assert.ok(res.stdout.equals(bytes), 'bytes must go out as they came');
+});
+
+run('the smudge goes out without an update stamp, so the next propagation replaces the block', () => {
+  const { dir, home, skeleton } = seedRepo();
+  const smudged = smudge(dir, home, 'AGENTS.md', skeleton).stdout;
+  assert.ok(!smudged.includes('egc:state-updated'), smudged);
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), smudged);
+  propagateStateContent(dir, STATE.replace('context kept in the local state', 'context written by the next propagation'));
+  const after = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+  assert.ok(after.includes('**Context:** context written by the next propagation'), after);
+});
+
+run('a checkout goes on when the smudge script is gone', () => {
+  const { dir, skeleton, git } = seedRepo();
+  const scriptCopy = path.join(tempDir('egc-leak-script-'), 'check-state-leak.js');
+  fs.copyFileSync(SCRIPT, scriptCopy);
+  configureMemoryFilters({ projectDir: dir, scriptPath: scriptCopy, dryRun: false });
+  fs.rmSync(scriptCopy);
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+  assert.doesNotThrow(() => git('checkout', '--', 'AGENTS.md'), 'the checkout must not fail on a missing script');
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8'), skeleton);
+});
+
+if (process.platform !== 'win32') {
+  run('the smudge leaves the blob as it came when the state is a link', () => {
+    const { dir, home, skeleton } = seedRepo();
+    const stateFile = stateFileFor(home, dir);
+    const target = path.join(path.dirname(stateFile), 'elsewhere.md');
+    fs.renameSync(stateFile, target);
+    fs.symlinkSync(target, stateFile);
+    const res = smudge(dir, home, 'AGENTS.md', skeleton);
+    assert.strictEqual(res.status, 0, res.stderr);
+    assert.strictEqual(res.stdout, skeleton);
+  });
+}
+
+run('the clean side reads a file with CRLF line breaks and keeps them', () => {
+  const { dir } = makeRepo();
+  const crlf = POPULATED.replaceAll('\n', '\r\n');
+  const out = clean(dir, crlf);
+  assert.ok(!out.includes('state-updated'), out);
+  assert.ok(!out.includes('secret local context'), out);
+  assert.ok(!out.includes('private decision'), out);
+  assert.ok(out.includes('## EGC Project Memory\r\n'), 'the heading keeps its CRLF');
+  assert.ok(!/(^|[^\r])\n/.test(out), 'no bare LF is introduced');
+});
+
+run('a checkout under autocrlf brings the block back with the file\'s line breaks', () => {
+  const { dir, git } = seedRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: SCRIPT, dryRun: false });
+  git('config', 'core.autocrlf', 'true');
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+  git('checkout', '--', 'AGENTS.md');
+  const restored = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+  assert.ok(restored.includes('**Context:** context kept in the local state'), restored);
+  assert.ok(restored.includes('\r\n'), 'the checkout wrote CRLF');
+  assert.ok(!/(^|[^\r])\n/.test(restored), 'every line break of the file is CRLF, the block included');
+  assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), '');
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

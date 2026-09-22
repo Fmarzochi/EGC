@@ -285,7 +285,7 @@ run('configures filter.smudge so required=true does not break checkout (audit EG
   const { dir, git } = makeRepo();
   configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
   const smudge = git('config', `filter.${FILTER_NAME}.smudge`).trim();
-  assert.strictEqual(smudge, `node '${LEAK_SCRIPT}' --filter-smudge %f`);
+  assert.strictEqual(smudge, `node '${LEAK_SCRIPT}' --filter-smudge %f || cat`);
 
   // End-to-end: with required=true and clean configured but no smudge, git
   // treats the undefined smudge side as a failed filter and aborts checkout

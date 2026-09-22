@@ -212,7 +212,7 @@ function ensureCommitPrivacy(projectPath) {
       throw new Error(`the clean-filter script is not at ${scriptPath}`);
     }
     const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
-    const smudgeCommand = `node ${shSingleQuote(scriptPath)} --filter-smudge %f`;
+    const smudgeCommand = `node ${shSingleQuote(scriptPath)} --filter-smudge %f || cat`;
 
     writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`, cleanCommand);
     // The smudge side puts the memory back: git hands it the zeroed blob it
@@ -524,11 +524,15 @@ function writeLlmsTxt(projectPath, parsed) {
 // working tree at `projectPath`) and gets it back with the memory of the
 // local state put into its markers, the way propagation writes it, so a
 // pull, a branch switch or a stash pop never leaves the working tree
-// without the block. The state readers live next to this file in every
-// layout that carries it (see the library lists of the install targets); a
-// layout without them, a project without a state, a state that cannot be
-// read or a file without the markers all get the content back as it came:
-// a checkout must never fail on this filter's account.
+// without the block. The block goes out without the update stamp: git runs
+// the filter before the branch pointer moves on a switch, so the state it
+// reads is the one of the branch being left, and a block without a stamp
+// is one the next propagation replaces instead of keeping. The state
+// readers live next to this file in every layout that carries it (see the
+// library lists of the install targets); a layout without them, a project
+// without a state, a state that is a link or cannot be read, or a file
+// without the markers all get the content back as it came: a checkout must
+// never fail on this filter's account.
 function loadStateReaders() {
   try {
     return { branchState: require('./branch-state'), stateCrypto: require('./state-crypto') };
@@ -544,6 +548,7 @@ function readProjectState(projectPath) {
   const stateDir = branchState.getStateDir();
   const branch = branchState.detectBranch(projectPath);
   const { filePath } = branchState.resolveStateRead(stateDir, projectPath, branch);
+  if (fs.lstatSync(filePath).isSymbolicLink()) return null;
   return stateCrypto.readStateFileDecrypted(filePath, stateCrypto.defaultKeyPath());
 }
 
@@ -552,9 +557,13 @@ function smudgeContextContent(projectPath, relativePath, content) {
     if (!content.includes(EGC_START) || !content.includes(EGC_END)) return content;
     const stateContent = readProjectState(projectPath);
     if (stateContent === null) return content;
-    const parsed = parseStateContent(stateContent);
+    const parsed = { ...parseStateContent(stateContent), updated: '' };
     const block = path.basename(relativePath) === 'llms.txt' ? buildLlmsBlock(parsed) : buildSummaryBlock(parsed);
-    return upsertEgcSection(content, block);
+    // A file git checked out with CRLF line breaks keeps them on every line
+    // of the block; one that mixes both kinds gets the block with LF.
+    const crlfOnly = content.includes('\r\n') && !/(^|[^\r])\n/.test(content);
+    if (!crlfOnly) return upsertEgcSection(content, block);
+    return upsertEgcSection(content.replaceAll('\r\n', '\n'), block).replaceAll('\n', '\r\n');
   } catch {
     return content;
   }

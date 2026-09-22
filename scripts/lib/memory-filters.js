@@ -231,7 +231,7 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   }
 
   const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
-  const smudgeCommand = `node ${shSingleQuote(scriptPath)} --filter-smudge %f`;
+  const smudgeCommand = `node ${shSingleQuote(scriptPath)} --filter-smudge %f || cat`;
   const missingConfig = computeMissingConfig(projectDir, cleanCommand, smudgeCommand);
   const actions = missingConfig.map(entry => `git config ${entry.key} ${entry.shown} (local repo config)`);
 

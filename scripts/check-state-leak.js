@@ -15,7 +15,7 @@
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 
-const SECTION_HEADING = '## EGC Project Memory';
+
 const POPULATED_SIGNATURES = [
   /^<!-- egc:state-updated:\S+ -->$/m,
   /^\*\*Context:\*\*/m,
@@ -57,32 +57,55 @@ function isGuardedPath(p) {
   return NON_MARKDOWN_TARGETS.has(base);
 }
 
+const START_MARKER = '<!-- egc:start -->';
+const END_MARKER = '<!-- egc:end -->';
+const MEMORY_HEADING_RE = /^#{1,2} EGC Project Memory$/m;
+
 function findLeak(content) {
-  if (!content.includes(SECTION_HEADING)) return null;
+  if (!MEMORY_HEADING_RE.test(content)) return null;
   const matched = POPULATED_SIGNATURES.filter(re => re.test(content));
   return matched.length > 0 ? matched.map(re => re.source) : null;
 }
 
+// Zeroes the memory in a propagation file and keeps its structure. The
+// context files carry the block with bold labels (`**Context:**`, `**Active
+// decisions:**`, `**Next session:**`) followed by the items; llms.txt
+// carries it as plain text under `# EGC Project Memory`, a paragraph for the
+// context and a `## Next session` list, so those two shapes are zeroed too,
+// inside the markers only, since a heading of that name elsewhere in the
+// file belongs to whoever wrote it. A file with CRLF line breaks is read
+// the same way and keeps them.
 function cleanContent(content) {
   const lines = content.split('\n');
   const out = [];
   let dropping = false;
+  let inBlock = false;
+  let afterLlmsHeading = false;
   for (const line of lines) {
-    if (/^<!-- egc:state-updated:\S+ -->$/.test(line)) continue;
-    if (/^\*\*(Context|Active decisions|Next session):\*\*/.test(line)) {
+    const bare = line.endsWith('\r') ? line.slice(0, -1) : line;
+    if (bare === START_MARKER) inBlock = true;
+    if (bare === END_MARKER) inBlock = false;
+    if (/^<!-- egc:state-updated:\S+ -->$/.test(bare)) continue;
+    if (/^\*\*(Context|Active decisions|Next session):\*\*/.test(bare) || (inBlock && bare === '## Next session')) {
       dropping = true;
+      afterLlmsHeading = false;
       continue;
     }
     if (dropping) {
-      if (line.startsWith('- ') || line.trim() === '' ) {
-        if (line.trim() === '') dropping = false;
+      if (bare.startsWith('- ') || bare.trim() === '') {
+        if (bare.trim() === '') dropping = false;
         continue;
       }
       dropping = false;
     }
+    if (afterLlmsHeading && bare.trim() !== '') {
+      if (!bare.startsWith('#')) continue;
+      afterLlmsHeading = false;
+    }
+    if (inBlock && bare === '# EGC Project Memory') afterLlmsHeading = true;
     out.push(line);
   }
-  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+  return out.join('\n').replace(/(\r?\n){3,}/g, '$1$1');
 }
 
 function checkStaged() {
@@ -235,15 +258,18 @@ function main() {
   // in the way, the content goes out exactly as it came, because a checkout
   // must never fail on this filter's account. stdout carries the content
   // and nothing else: a line a library would print for a terminal goes to
-  // stderr, and a pipe git has already closed ends the run quietly. A blob
-  // that cannot be read from git is the one failure left loud, since
-  // writing nothing would truncate the file; git then holds the checkout.
+  // stderr, and a pipe git has already closed ends the run quietly. Bytes
+  // that are not UTF-8 go out untouched, since only text carries the block.
+  // A blob that cannot be read from git is the one failure left loud, since
+  // writing nothing would leave the file empty; git then holds the checkout.
   if (mode === '--filter-smudge') {
     console.log = (...lines) => console.error(...lines);
     console.info = console.log;
     process.stdout.on('error', () => process.exit(0));
-    const stdin = fs.readFileSync(0, 'utf8');
-    process.stdout.write(smudgeContent(args[1] ?? '', stdin));
+    const raw = fs.readFileSync(0);
+    const text = raw.toString('utf8');
+    const isText = Buffer.from(text, 'utf8').equals(raw);
+    process.stdout.write(isText ? Buffer.from(smudgeContent(args[1] ?? '', text), 'utf8') : raw);
     return;
   }
 
