@@ -326,25 +326,46 @@ function resolveGuardianCli() {
 // Invokes the guardian CLI with the payload on stdin, never in argv.
 // Untrusted content (prompts, commands, paths) must not travel as command
 // arguments where a leading dash could be parsed as a flag. argv carries
-// only the fixed mode and literal flags. Returns parsed JSON, or null on
-// any failure so callers fail open.
-function callGuardian(cli, args, input, timeoutMs) {
+// only the fixed mode and literal flags. Returns { ok: true, value } with
+// the parsed JSON, or { ok: false, kind, detail } saying what went wrong:
+// 'timeout' (no answer within timeoutMs), 'unstartable' (the process could
+// not be spawned), 'crash' (a non-zero exit or a signal) or 'unreadable'
+// (an empty answer, or one that is not JSON). A caller that must not run
+// without a verdict reads the kind; the others use callGuardian below.
+function callGuardianVerdict(cli, args, input, timeoutMs) {
   const result = spawnSync(process.execPath, [cli, ...args], {
     input: input == null ? '' : String(input),
     encoding: 'utf8',
     timeout: timeoutMs,
   });
-  if (result.error || result.status !== 0 || !result.stdout) return null;
-  try {
-    return JSON.parse(result.stdout);
-  } catch {
-    return null;
+  if (result.error) {
+    const kind = result.error.code === 'ETIMEDOUT' ? 'timeout' : 'unstartable';
+    return { ok: false, kind, detail: String(result.error.message || result.error.code || result.error) };
   }
+  if (result.status !== 0) {
+    const detail = result.status === null ? `signal ${result.signal}` : `exit code ${result.status}`;
+    return { ok: false, kind: 'crash', detail };
+  }
+  if (!result.stdout) return { ok: false, kind: 'unreadable', detail: 'an empty answer' };
+  try {
+    return { ok: true, value: JSON.parse(result.stdout) };
+  } catch {
+    return { ok: false, kind: 'unreadable', detail: 'something that is not JSON' };
+  }
+}
+
+// The parsed JSON, or null on any failure, for the callers that fail open
+// (routing, mining, learning: a missing answer there costs a hint, not a
+// guard).
+function callGuardian(cli, args, input, timeoutMs) {
+  const answer = callGuardianVerdict(cli, args, input, timeoutMs);
+  return answer.ok ? answer.value : null;
 }
 
 module.exports = {
   resolveGuardianCli,
   callGuardian,
+  callGuardianVerdict,
   fromEnv,
   fromPackageLayout,
   fromMcpConfigs,

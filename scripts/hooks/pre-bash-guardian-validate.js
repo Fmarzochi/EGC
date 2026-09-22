@@ -11,8 +11,10 @@
  * metacharacter denials are advisory and never block, otherwise any
  * command outside the guardian allowlist would break the session.
  *
- * Fails open: if the guardian CLI is missing or errors, the command is
- * allowed and a warning is emitted.
+ * Without a validator installed the command is allowed, so a machine
+ * without the build is never locked out. A validator that is installed but
+ * gives no verdict (it stalls, stops, or answers something unreadable)
+ * blocks the command, and the message says why and what to do.
  *
  * Exit codes:
  *   0 = allow
@@ -23,7 +25,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
 
 const MAX_STDIN = 1024 * 1024;
@@ -623,6 +625,28 @@ function firstHardBlock(verdicts, segments) {
   return null;
 }
 
+// The hook's answer when an installed validator gave no verdict: the
+// command does not run, and the one line says what happened, that nothing
+// ran, and what to do. A validator that is not installed at all is the
+// other case, handled in run(), so a machine without the build stays
+// usable.
+function withoutVerdict(failure) {
+  const why = {
+    timeout: `the validator did not answer within ${VALIDATE_TIMEOUT_MS / 1000} seconds`,
+    unstartable: `the validator could not be started (${failure.detail})`,
+    crash: `the validator stopped with ${failure.detail}`,
+    unreadable: `the validator answered ${failure.detail}, which this hook could not read`,
+  }[failure.kind] || 'the validator gave no verdict';
+  return {
+    exitCode: 2,
+    stderr:
+      `EGC Guardian could not validate this command, so it did not run: ${why}. ` +
+      'Nothing was executed. Run the command again; if this keeps happening, run ' +
+      "'egc doctor' to check the Guardian build, and set " +
+      'EGC_DISABLED_HOOKS=pre:bash:guardian-validate to lift this gate while you repair it.',
+  };
+}
+
 function run(inputOrRaw) {
   const input = parseInput(inputOrRaw);
   const command = input?.tool_input?.command;
@@ -661,13 +685,17 @@ function run(inputOrRaw) {
     };
   }
   segments.push(...scripts.segments);
-  const verdicts = callGuardian(
+  const answer = callGuardianVerdict(
     cli,
     ['command-batch'],
     JSON.stringify({ commands: segments, cwd }),
     VALIDATE_TIMEOUT_MS,
   );
-  if (!Array.isArray(verdicts)) return { exitCode: 0 };
+  if (!answer.ok) return withoutVerdict(answer);
+  const verdicts = answer.value;
+  if (!Array.isArray(verdicts)) {
+    return withoutVerdict({ kind: 'unreadable', detail: 'something that is not a list of verdicts' });
+  }
   const hardBlock = firstHardBlock(verdicts, segments);
   if (hardBlock) return hardBlock;
 
