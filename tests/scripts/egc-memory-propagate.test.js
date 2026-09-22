@@ -447,7 +447,10 @@ async function runTests() {
       assert.ok(Object.values(result).every(value => value === null), `no context file is reported as written: ${JSON.stringify(result)}`);
       assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8'), '# Agents\n', 'AGENTS.md is left as it was');
       assert.strictEqual(fs.readFileSync(path.join(dir, 'CLAUDE.md'), 'utf-8'), '# Claude\n', 'CLAUDE.md is left as it was');
-      assert.ok(lines.some(l => l.includes(dir)), 'one stderr line names the project that was not mirrored');
+      assert.strictEqual(lines.length, 1, `exactly one stderr line: ${JSON.stringify(lines)}`);
+      assert.ok(lines[0].includes(dir), 'the line names the project that was not mirrored');
+      assert.ok(lines[0].includes('commit-privacy filter'), 'the line says the filter is the reason');
+      assert.ok(lines[0].includes('egc doctor'), 'the line says what to run');
     } finally {
       cleanup(dir);
     }

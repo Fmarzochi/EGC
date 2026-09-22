@@ -52,6 +52,18 @@ const PROPAGATION_FILES = [
 // (.git/worktrees/<name>) when run inside a linked worktree. Building the
 // path by hand from --git-dir would silently write bindings to a file git
 // never consults there, leaving worktree-based projects unprotected.
+// A .git entry of any kind, a symlink included even when it dangles: git
+// accepts .git as a link, and one that points nowhere is a checkout git
+// cannot open, not a directory outside any repository.
+function hasGitEntry(dir) {
+  try {
+    fs.lstatSync(path.join(dir, '.git'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Whether projectDir sits inside a git working tree, judged from the
 // filesystem alone: a .git entry (a directory, or the file a linked worktree
 // and a submodule carry) in the directory or any parent. Consulted when git
@@ -69,11 +81,11 @@ function isInsideGitWorkTree(projectDir) {
   }
   let parent = path.dirname(dir);
   while (parent !== dir) {
-    if (fs.existsSync(path.join(dir, '.git'))) return true;
+    if (hasGitEntry(dir)) return true;
     dir = parent;
     parent = path.dirname(dir);
   }
-  return fs.existsSync(path.join(dir, '.git'));
+  return hasGitEntry(dir);
 }
 
 function resolveAttributesFile(projectDir) {

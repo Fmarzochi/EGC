@@ -47,7 +47,10 @@ function ensureCommitPrivacy(projectPath: string): boolean {
   try {
     const memoryFilters = tryRequireMemoryFilters();
     if (!memoryFilters) {
-      process.stderr.write(`[egc-memory] commit-privacy filter module unavailable for ${projectPath}\n`);
+      // Without the shared library the filter cannot be armed; outside a
+      // working tree there is still nothing a commit could carry.
+      if (!isInsideGitWorkTree(projectPath)) return true;
+      reportUnprotected(projectPath, 'the commit-privacy filter library is unavailable');
       return false;
     }
     const scriptPath = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'check-state-leak.js');
@@ -55,15 +58,51 @@ function ensureCommitPrivacy(projectPath: string): boolean {
     if (result.configured || result.reason === 'not a git repository') return true;
     // Any other configured:false reason (the fail-closed script-missing
     // check, a checkout git cannot open) means the filter is not in place.
-    process.stderr.write(`[egc-memory] commit-privacy filter not configured for ${projectPath}: ${result.reason}\n`);
+    reportUnprotected(projectPath, result.reason ?? 'the filter could not be configured');
     return false;
   } catch (err) {
     // A real git-config error (permission denied, git binary crashed) also
     // leaves the filter out of place; say so instead of failing silently.
-    const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${message}\n`);
+    reportUnprotected(projectPath, err instanceof Error ? err.message : String(err));
     return false;
   }
+}
+
+// The one line a user sees when the mirror is withheld: the reason, what it
+// means, where the memory still is, and what to run.
+function reportUnprotected(projectPath: string, reason: string): void {
+  process.stderr.write(`[egc-memory] project memory was not mirrored into the context files of ${projectPath}: ${reason}. The commit-privacy filter is not in place there, and a mirror git could stage would carry the memory; the memory itself is intact in ~/.egc/state. Run 'egc doctor' to see what is missing.\n`);
+}
+
+// A .git entry of any kind, a symlink included even when it dangles: git
+// accepts .git as a link, and one that points nowhere is a checkout git
+// cannot open, not a directory outside any repository.
+function hasGitEntry(dir: string): boolean {
+  try {
+    fs.lstatSync(path.join(dir, '.git'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Whether projectPath sits inside a git working tree, judged from the
+// filesystem alone, for the one branch above where the shared library (and
+// its own copy of this check) is not there to ask.
+function isInsideGitWorkTree(projectPath: string): boolean {
+  let dir: string;
+  try {
+    dir = fs.realpathSync(projectPath);
+  } catch {
+    dir = path.resolve(projectPath);
+  }
+  let parent = path.dirname(dir);
+  while (parent !== dir) {
+    if (hasGitEntry(dir)) return true;
+    dir = parent;
+    parent = path.dirname(dir);
+  }
+  return hasGitEntry(dir);
 }
 
 // The result of a propagation that wrote nothing: every mirror key present
@@ -368,10 +407,7 @@ function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
 }
 
 export function propagateStateToTools(args: PropagateArgs): PropagateResult {
-  if (!ensureCommitPrivacy(args.projectPath)) {
-    process.stderr.write(`[egc-memory] project memory was not mirrored into the context files of ${args.projectPath}: the commit-privacy filter is not in place there, and a mirror git could stage would carry the memory. The memory itself is intact in ~/.egc/state; run 'egc doctor' to see what is missing.\n`);
-    return noMirrorsWritten();
-  }
+  if (!ensureCommitPrivacy(args.projectPath)) return noMirrorsWritten();
   const block = buildSummaryBlock(args);
   return {
     cursor: writeCursorContext(args.projectPath, block),

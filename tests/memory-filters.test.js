@@ -339,5 +339,16 @@ run('tells a repository git cannot open apart from a directory that is no reposi
   assert.ok(plan.reason.includes('git could not open'), plan.reason);
 });
 
+// Symbolic links need a privilege Windows runners do not grant.
+if (process.platform !== 'win32') {
+  run('a .git symlink that points nowhere is a repository git cannot open, not a plain directory', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-danglinggit-'));
+    fs.symlinkSync(path.join(dir, 'missing-gitdir'), path.join(dir, '.git'), 'dir');
+    const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+    assert.strictEqual(plan.configured, false);
+    assert.ok(plan.reason.includes('git could not open'), plan.reason);
+  });
+}
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

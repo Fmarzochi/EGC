@@ -709,6 +709,7 @@ function runFreshnessGuardTests() {
       // but git cannot open it, so the clean filter cannot be armed there.
       fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir').split(path.sep).join('/')}\n`);
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      fs.writeFileSync(path.join(dir, 'GEMINI.md'), '# Gemini\n');
       const lines = [];
       const originalWrite = process.stderr.write;
       process.stderr.write = (chunk, encoding, callback) => {
@@ -723,9 +724,14 @@ function runFreshnessGuardTests() {
       } finally {
         process.stderr.write = originalWrite;
       }
-      assert.strictEqual(result.agents, null, 'no context file is reported as written');
+      assert.strictEqual(result.agents, null, 'AGENTS.md is not reported as written');
+      assert.strictEqual(result.gemini, null, 'GEMINI.md is not reported as written');
       assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8'), '# Agents\n', 'AGENTS.md is left as it was');
-      assert.ok(lines.some(l => l.includes(dir)), 'one stderr line names the project that was not mirrored');
+      assert.strictEqual(fs.readFileSync(path.join(dir, 'GEMINI.md'), 'utf-8'), '# Gemini\n', 'GEMINI.md is left as it was');
+      assert.strictEqual(lines.length, 1, `exactly one stderr line: ${JSON.stringify(lines)}`);
+      assert.ok(lines[0].includes(dir), 'the line names the project that was not mirrored');
+      assert.ok(lines[0].includes('commit-privacy filter'), 'the line says the filter is the reason');
+      assert.ok(lines[0].includes('egc doctor'), 'the line says what to run');
     } finally {
       cleanup(dir);
     }
@@ -739,8 +745,8 @@ function runFreshnessGuardTests() {
       const result = propagateStateContent(dir, SAMPLE_STATE);
       assert.ok(result.agents, 'AGENTS.md is reported as written');
       assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8').includes('EGC v1.1.1 stable'), 'the memory reaches the mirror');
-      const required = execFileSync('git', ['config', '--get', 'filter.egc-memory.required'], { cwd: dir, encoding: 'utf-8' }).trim();
-      assert.strictEqual(required, 'true', 'the filter is armed before the mirror is written');
+      const required = execFileSync('git', ['config', '--local', '--get', 'filter.egc-memory.required'], { cwd: dir, encoding: 'utf-8' }).trim();
+      assert.strictEqual(required, 'true', 'the filter is armed in this repository before the mirror is written');
     } finally {
       cleanup(dir);
     }
@@ -748,6 +754,28 @@ function runFreshnessGuardTests() {
 
   // Symbolic links need a privilege Windows runners do not grant.
   if (process.platform !== 'win32') {
+    if (test('keeps project memory out of the context files when .git is a symlink that points nowhere', () => {
+      const dir = mktemp();
+      try {
+        // git accepts .git as a symlink; one that dangles is a checkout git
+        // cannot open, not a directory outside any repository.
+        fs.symlinkSync(path.join(dir, 'missing-gitdir'), path.join(dir, '.git'), 'dir');
+        fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+        const originalWrite = process.stderr.write;
+        process.stderr.write = () => true;
+        let result;
+        try {
+          result = propagateStateContent(dir, SAMPLE_STATE);
+        } finally {
+          process.stderr.write = originalWrite;
+        }
+        assert.strictEqual(result.agents, null, 'a dangling .git link still marks a repository');
+        assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8'), '# Agents\n', 'AGENTS.md is left as it was');
+      } finally {
+        cleanup(dir);
+      }
+    })) passed++; else failed++;
+
     if (test('keeps project memory out of the context files when the project path is a symlink into a checkout git cannot open', () => {
       const dir = mktemp();
       const linkParent = mktemp();

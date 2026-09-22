@@ -63,6 +63,41 @@ function shSingleQuote(value) {
   return `'${escaped}'`;
 }
 
+// git config honours GIT_CONFIG as an alternate file for reads and writes;
+// the filter only protects this repository when it lives in .git/config, so
+// the variable is dropped and the local file is named on every call.
+function localGitConfigEnv() {
+  const env = { ...process.env };
+  delete env.GIT_CONFIG;
+  return env;
+}
+
+function writeLocalGitConfig(projectPath, key, value) {
+  execFileSync(GIT_BIN, ['config', '--local', key, value], {
+    cwd: projectPath,
+    encoding: 'utf8',
+    env: localGitConfigEnv(),
+  });
+}
+
+// The one line a user sees when the mirror is withheld: the reason, what it
+// means, where the memory still is, and what to run.
+function reportUnprotected(projectPath, reason) {
+  process.stderr.write(`[egc-memory] project memory was not mirrored into the context files of ${projectPath}: ${reason}. The commit-privacy filter is not in place there, and a mirror git could stage would carry the memory; the memory itself is intact in ~/.egc/state. Run 'egc doctor' to see what is missing.\n`);
+}
+
+// A .git entry of any kind, a symlink included even when it dangles: git
+// accepts .git as a link, and one that points nowhere is a checkout git
+// cannot open, not a directory outside any repository.
+function hasGitEntry(dir) {
+  try {
+    fs.lstatSync(path.join(dir, '.git'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Whether projectPath sits inside a git working tree, judged from the
 // filesystem alone: a .git entry (a directory, or the file a linked worktree
 // and a submodule carry) in the directory or any parent. Consulted when git
@@ -79,11 +114,11 @@ function isInsideGitWorkTree(projectPath) {
   }
   let parent = path.dirname(dir);
   while (parent !== dir) {
-    if (fs.existsSync(path.join(dir, '.git'))) return true;
+    if (hasGitEntry(dir)) return true;
     dir = parent;
     parent = path.dirname(dir);
   }
-  return fs.existsSync(path.join(dir, '.git'));
+  return hasGitEntry(dir);
 }
 
 function ensureCommitPrivacy(projectPath) {
@@ -107,7 +142,7 @@ function ensureCommitPrivacy(projectPath) {
       // Outside a working tree there is nothing a commit could carry.
       // Inside one, git could not open it, so the filter cannot be armed.
       if (!isInsideGitWorkTree(projectPath)) return true;
-      process.stderr.write(`[egc-memory] commit-privacy filter not configured for ${projectPath}: git could not open the repository\n`);
+      reportUnprotected(projectPath, 'git could not open the repository');
       return false;
     }
     // Installed layout flattens scripts/check-state-leak.js down into the
@@ -133,7 +168,12 @@ function ensureCommitPrivacy(projectPath) {
       // silently falling back to unfiltered content.
       let alreadyConfigured = true;
       try {
-        execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`], { cwd: projectPath, encoding: 'utf8' });
+        execFileSync(GIT_BIN, ['config', '--local', '--get', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`], {
+          cwd: projectPath,
+          encoding: 'utf8',
+          env: localGitConfigEnv(),
+          stdio: ['ignore', 'pipe', 'ignore'],
+        });
       } catch {
         alreadyConfigured = false;
       }
@@ -142,17 +182,14 @@ function ensureCommitPrivacy(projectPath) {
         // `clean` set. Hardening straight to required=true here without also
         // ensuring `smudge=cat` would turn every checkout/worktree/clone on
         // this repo into a hard "smudge filter egc-memory failed" failure.
-        execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat'], { cwd: projectPath, encoding: 'utf8' });
-        execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true'], { cwd: projectPath, encoding: 'utf8' });
+        writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat');
+        writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true');
       }
-      throw new Error(`commit-privacy clean-filter script not found at ${scriptPath}`);
+      throw new Error(`the clean-filter script is not at ${scriptPath}`);
     }
     const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
 
-    execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`, cleanCommand], {
-      cwd: projectPath,
-      encoding: 'utf8',
-    });
+    writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`, cleanCommand);
     // required=true (below) also turns an *unconfigured* smudge side into a
     // hard checkout failure instead of the passthru git defaults to when a
     // filter driver is missing entirely (gitattributes(5)): once clean is
@@ -160,19 +197,13 @@ function ensureCommitPrivacy(projectPath) {
     // filter egc-memory failed" without an explicit smudge command. cat is
     // configured as an identity smudge: the working tree keeps whatever
     // content is checked out, only the staged blob gets cleaned.
-    execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat'], {
-      cwd: projectPath,
-      encoding: 'utf8',
-    });
+    writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat');
     // required=true makes git refuse to stage a file through this filter if
     // the clean command itself fails or is missing, instead of the git
     // default of silently falling back to the original (unfiltered, still
     // populated) content -- fail-closed matches the README's unconditional
     // "never gets committed to git" promise.
-    execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true'], {
-      cwd: projectPath,
-      encoding: 'utf8',
-    });
+    writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true');
 
     let existing = '';
     try {
@@ -195,12 +226,10 @@ function ensureCommitPrivacy(projectPath) {
     }
     return true;
   } catch (err) {
-    // Best-effort: never let commit-privacy setup block the memory write the
-    // caller is waiting on. But silent failure here means a real git-config
-    // error (permission denied, git binary crashed) leaves the user with no
-    // signal that populated memory can still reach a commit -- a single
-    // stderr line costs nothing here either.
-    process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${err.message}\n`);
+    // A real git-config error (permission denied, git binary crashed) also
+    // leaves the filter out of place: the mirror is withheld and the one
+    // line says why.
+    reportUnprotected(projectPath, err.message);
     return false;
   }
 }
@@ -496,10 +525,7 @@ function noMirrorsWritten() {
 }
 
 function propagateStateContent(projectPath, stateContent) {
-  if (!ensureCommitPrivacy(projectPath)) {
-    process.stderr.write(`[egc-memory] project memory was not mirrored into the context files of ${projectPath}: the commit-privacy filter is not in place there, and a mirror git could stage would carry the memory. The memory itself is intact in ~/.egc/state; run 'egc doctor' to see what is missing.\n`);
-    return noMirrorsWritten();
-  }
+  if (!ensureCommitPrivacy(projectPath)) return noMirrorsWritten();
   const parsed = parseStateContent(stateContent);
   const block = buildSummaryBlock(parsed);
 
