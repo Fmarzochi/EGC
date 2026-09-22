@@ -1782,10 +1782,21 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // as a bare rm — without it, a quoted or escaped base command slips past
   // every check below and falls through to the advisory allowlist-miss path.
   const baseCommand = path.basename(bareToken(tokens[0]));
-  // The checks below read each argument as the word the shell hands the
-  // command, so a flag or a path written between quotes is the flag or the
-  // path it is; the redirection scan reads the raw line on its own.
-  const args = tokens.slice(1).map(shellWord);
+  // The checks below read each argument as the words the shell hands the
+  // command: a brace expansion becomes the arguments it names, then a flag
+  // or a path written between quotes is the flag or the path it is; the
+  // redirection scan reads the raw line on its own. A word with more
+  // expansions than this check reads is refused as a whole, since a path
+  // the shell would hand over must never go unjudged.
+  const expanded = expandArguments(tokens.slice(1));
+  if (expanded === null) {
+    return {
+      allowed: false,
+      reason: `an argument of '${baseCommand}' carries more brace expansions than this check reads (${MAX_BRACE_EXPANSIONS}), so the command is refused; spell the paths out`,
+      trust_level: 'DANGEROUS',
+    };
+  }
+  const args = expanded.map(shellWord);
 
   // 2. `eval` executes its entire argument list as shell code — the same
   // risk class as `bash -c`, but with no separate flag to opt into eval mode
@@ -1919,11 +1930,11 @@ function unwrapFileUri(arg: string): string {
 }
 
 // The spellings of an argument that may name a file: the word as the shell
-// hands it (see shellWord), on Windows the same word with its backslash
-// escapes resolved as well, since a shell there may read them either way,
-// and every brace expansion of each. Every path check judges an argument
-// through these, so a quoted, escaped or expanded spelling of a protected
-// path meets the same denial as the plain one.
+// hands it (see shellWord) and, on Windows, the same word with its
+// backslash escapes resolved as well, since a shell there may read them
+// either way. Every path check judges an argument through these, so a
+// quoted or escaped spelling of a protected path meets the same denial as
+// the plain one.
 function unquoteWord(token: string, keepBackslashes = false): string {
   let value = '';
   let i = 0;
@@ -2001,47 +2012,77 @@ function shellWord(token: string): string {
   return unquoteWord(token, process.platform === 'win32');
 }
 
-// A brace expansion names every alternative at once (`~/.{ssh,aws}/x` opens
-// two directories), so a word that carries one is judged as each of them;
-// braces without a comma are a literal name, and the list is capped so a
-// pathological argument cannot grow without bound.
+// Brace expansion runs where the shell runs it, before quote removal, and
+// turns one word into several (`~/.{ssh,aws}/x` is two arguments to the
+// command), only where the braces and the comma stand outside quotes and
+// unescaped; braces without a comma, and quoted or escaped ones, are
+// characters of the name. The alternatives are capped, and a word past the
+// cap refuses the whole command, since a path the shell would hand over
+// must never go unjudged.
 const MAX_BRACE_EXPANSIONS = 64;
 
-// The first brace group of a word: the positions of its opening brace, of
-// the commas at its own depth and of its closing brace; null when the word
-// has no group with a comma.
+// The first brace group of a word that the shell would expand: the
+// positions of its opening brace, of the commas at its own depth and of its
+// closing brace; a group without a comma is passed over and its inside read
+// again, and null means the word has no group to expand.
 function findBraceGroup(word: string): { open: number; commas: number[]; close: number } | null {
-  const open = word.indexOf('{');
-  if (open === -1) return null;
-  const commas: number[] = [];
+  let commas: number[] = [];
+  let open = -1;
   let depth = 0;
-  for (let i = open; i < word.length; i++) {
+  let i = 0;
+  while (i < word.length) {
+    const skipped = skipText(word, i);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
     const ch = word[i];
-    if (ch === '{') depth += 1;
-    else if (ch === '}' && --depth === 0) return commas.length > 0 ? { open, commas, close: i } : null;
-    else if (ch === ',' && depth === 1) commas.push(i);
+    if (ch === '{') {
+      if (depth === 0) open = i;
+      depth += 1;
+    } else if (ch === '}' && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && commas.length > 0) return { open, commas, close: i };
+      if (depth === 0) {
+        i = open + 1;
+        open = -1;
+        commas = [];
+        continue;
+      }
+    } else if (ch === ',' && depth === 1) {
+      commas.push(i);
+    }
+    i += 1;
   }
   return null;
 }
 
-function braceExpansions(word: string): string[] {
+function braceExpansions(word: string): string[] | null {
   const group = findBraceGroup(word);
   if (group === null) return [word];
   const bounds = [group.open, ...group.commas, group.close];
   const out: string[] = [];
   for (let i = 0; i + 1 < bounds.length; i++) {
     const rewritten = word.slice(0, group.open) + word.slice(bounds[i] + 1, bounds[i + 1]) + word.slice(group.close + 1);
-    for (const expansion of braceExpansions(rewritten)) {
-      if (out.length >= MAX_BRACE_EXPANSIONS) return out;
-      out.push(expansion);
-    }
+    const nested = braceExpansions(rewritten);
+    if (nested === null || out.length + nested.length > MAX_BRACE_EXPANSIONS) return null;
+    out.push(...nested);
+  }
+  return out;
+}
+
+function expandArguments(words: string[]): string[] | null {
+  const out: string[] = [];
+  for (const word of words) {
+    const expansions = braceExpansions(word);
+    if (expansions === null) return null;
+    out.push(...expansions);
   }
   return out;
 }
 
 function pathSpellings(arg: string): string[] {
-  const words = process.platform === 'win32' ? [arg, unquoteWord(arg)] : [arg];
-  return words.flatMap(braceExpansions);
+  return process.platform === 'win32' ? [arg, unquoteWord(arg)] : [arg];
 }
 
 function isProtectedOperand(arg: string, cwd?: string): boolean {

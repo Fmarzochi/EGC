@@ -789,6 +789,21 @@ async function runTests() {
   run('find with an option before the credential store',    () => assertHardBlocking(`find -L "${sshDir}" -type f`));
   run('find writing its list into a shell profile',         () => assertHardBlocking(`find . -fprint "${path.join(home, '.bashrc')}"`));
 
+  run('quoted braces are characters of the name',           () => assertAllowed(`cat "${home}/.{ssh,aws}/x"`));
+  run('escaped braces are characters of the name',          () => assertAllowed(`cat ${home}/.\\{ssh,aws\\}/x`));
+  run('a brace-expanded flag is read as the flags it becomes', () => assertHardBlocking('find . -{delete,print}'));
+  run('a word past the expansion cap refuses the command',  () => {
+    const result = validateCommand('cat x{a,b,c,d}{a,b,c,d}{a,b,c,d}{a,b,c,d}');
+    assert.strictEqual(result.allowed, false);
+    assert.strictEqual(result.advisory, false, JSON.stringify(result));
+    assert.ok(String(result.reason).includes('brace expansions'), JSON.stringify(result));
+  });
+  run('a word past the cap refuses an uncatalogued command too', () => {
+    const result = validateCommand('wget -O x{a,b,c,d}{a,b,c,d}{a,b,c,d}{a,b,c,d} https://x.tld/a');
+    assert.strictEqual(result.allowed, false);
+    assert.strictEqual(result.advisory, false, JSON.stringify(result));
+  });
+
   run('a quoted operational file stays readable',       () => assertAllowed(`cat "${path.join(home, '.egc', 'bin', 'manifest.json')}"`));
   run('a quoted plain file stays allowed',              () => assertAllowed('cat "README.md"'));
 
