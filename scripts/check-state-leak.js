@@ -175,6 +175,29 @@ function checkPackagedTree() {
   return scanDiskFiles(packagedFiles);
 }
 
+// The propagation library sits under lib/ next to this script in the
+// repository and beside it in the flattened install layouts.
+function loadPropagation() {
+  for (const candidate of ['./lib/propagate-state', './propagate-state']) {
+    try {
+      return require(candidate);
+    } catch {
+      // Not this layout; try the next one.
+    }
+  }
+  return null;
+}
+
+function smudgeContent(relativePath, content) {
+  try {
+    const propagation = loadPropagation();
+    if (propagation === null || typeof propagation.smudgeContextContent !== 'function') return content;
+    return propagation.smudgeContextContent(process.cwd(), relativePath, content);
+  } catch {
+    return content;
+  }
+}
+
 function main() {
   const args = process.argv.slice(2);
   const mode = args[0];
@@ -198,6 +221,19 @@ function main() {
   if (mode === '--filter-clean') {
     const stdin = fs.readFileSync(0, 'utf8');
     process.stdout.write(cleanContent(stdin));
+    return;
+  }
+
+  // Git smudge-filter mode: the zeroed blob git is checking out comes in on
+  // stdin and goes out with the memory of the local state put back into its
+  // markers, so a pull, a branch switch or a stash pop never leaves the
+  // working tree without the block. The propagation library renders it;
+  // when that library is not next to this script, or anything else stands
+  // in the way, the content goes out exactly as it came, because a checkout
+  // must never fail on this filter's account.
+  if (mode === '--filter-smudge') {
+    const stdin = fs.readFileSync(0, 'utf8');
+    process.stdout.write(smudgeContent(args[1] ?? '', stdin));
     return;
   }
 
