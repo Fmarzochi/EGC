@@ -95,6 +95,16 @@ function runShim(homeDir, name, args, options = {}) {
   });
 }
 
+// The shape the compression cases share: a fake git whose log is large and
+// the shim run for a non-generic command, the body handed back with the
+// result so each case asserts only what it is about.
+function runBigGitLog(dir, options = {}) {
+  const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
+  const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
+  seedManifest(dir, { git: fakeGit });
+  return { bigBody, result: runShim(dir, 'git', ['log', '--stat'], options) };
+}
+
 function test(name, fn) {
   try {
     fn();
@@ -115,11 +125,7 @@ function runTests() {
   if (test('a non-generic command with large output gets compressed with the crusher marker', () => {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
-      const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
-      const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
-      seedManifest(dir, { git: fakeGit });
-
-      const result = runShim(dir, 'git', ['log', '--stat']);
+      const { bigBody, result } = runBigGitLog(dir);
       assert.strictEqual(result.status, 0);
       assert.ok(result.stdout.includes('[egc-crusher] saved'), 'expected the crusher marker in output');
       assert.ok(result.stdout.length < bigBody.length, 'expected compressed output to be smaller than the original');
@@ -133,10 +139,7 @@ function runTests() {
     assert.deepStrictEqual(Object.keys(scrubbed), ['KEEP']);
     const dir = createTempDir('egc-shim-dispatch-');
     try {
-      const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
-      const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
-      seedManifest(dir, { git: fakeGit });
-      const result = runShim(dir, 'git', ['log', '--stat'], { env: withoutRawFlag({ ...process.env, egc_crusher_raw: '1', HOME: dir, USERPROFILE: dir }) });
+      const { result } = runBigGitLog(dir, { env: withoutRawFlag({ ...process.env, egc_crusher_raw: '1', HOME: dir, USERPROFILE: dir }) });
       assert.strictEqual(result.status, 0);
       assert.ok(result.stdout.includes('[egc-crusher] saved'), 'the lowercase flag of the suite must not reach the child');
     } finally {
@@ -147,13 +150,7 @@ function runTests() {
   if (test('EGC_CRUSHER_RAW=1 bypasses compression for a large non-generic command (egc run --raw escape hatch, audit EGC-521)', () => {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
-      const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
-      const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
-      seedManifest(dir, { git: fakeGit });
-
-      const result = runShim(dir, 'git', ['log', '--stat'], {
-        env: { ...BASE_ENV, HOME: dir, USERPROFILE: dir, EGC_CRUSHER_RAW: '1' },
-      });
+      const { bigBody, result } = runBigGitLog(dir, { env: { ...BASE_ENV, HOME: dir, USERPROFILE: dir, EGC_CRUSHER_RAW: '1' } });
       assert.strictEqual(result.status, 0);
       assert.strictEqual(result.stdout, bigBody, 'expected the exact raw output, not the compressed form');
       assert.ok(!result.stdout.includes('[egc-crusher]'));
