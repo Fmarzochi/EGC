@@ -121,6 +121,54 @@ function isInsideGitWorkTree(projectPath) {
   return hasGitEntry(dir);
 }
 
+// A repo whose filter was set up before required=true existed would
+// otherwise stay silently fail-open forever once the script goes missing,
+// with no path back to fail-closed. Harden an already-present driver in
+// place -- without touching its clean command or adding new bindings -- so
+// a broken script at least blocks staging instead of silently falling back
+// to unfiltered content. A driver that was never configured needs nothing.
+function hardenDriverWithoutScript(projectPath) {
+  let alreadyConfigured = true;
+  try {
+    execFileSync(GIT_BIN, ['config', '--local', '--get', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`], {
+      cwd: projectPath,
+      encoding: 'utf8',
+      env: localGitConfigEnv(),
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    alreadyConfigured = false;
+  }
+  if (!alreadyConfigured) return;
+  // A driver configured before the smudge fix existed may have only `clean`
+  // set. Hardening straight to required=true here without also ensuring
+  // `smudge=cat` would turn every checkout/worktree/clone on this repo into
+  // a hard "smudge filter egc-memory failed" failure.
+  writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat');
+  writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true');
+}
+
+// Appends the bindings that are not in the attributes file yet. Exact-line
+// matching (not a raw substring test): a commented-out entry ("# AGENTS.md
+// filter=egc-memory") or a line with extra trailing content would still
+// satisfy .includes(), silently skipping the real binding this project
+// needs.
+function bindPropagationFiles(attributesFile) {
+  let existing = '';
+  try {
+    existing = fs.readFileSync(attributesFile, 'utf8');
+  } catch { /* first configuration: attributes file does not exist yet */ }
+  const existingLines = new Set(existing.split('\n').map(l => l.trim()));
+  const missingBindings = COMMIT_PRIVACY_FILES.filter(
+    file => !existingLines.has(`${file} filter=${COMMIT_PRIVACY_FILTER_NAME}`)
+  );
+  if (missingBindings.length === 0) return;
+  fs.mkdirSync(path.dirname(attributesFile), { recursive: true });
+  const header = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+  const lines = missingBindings.map(f => `${f} filter=${COMMIT_PRIVACY_FILTER_NAME}\n`).join('');
+  fs.appendFileSync(attributesFile, header + lines);
+}
+
 function ensureCommitPrivacy(projectPath) {
   try {
     // --git-path (not --git-dir + a manual join) resolves correctly for
@@ -160,31 +208,7 @@ function ensureCommitPrivacy(projectPath) {
     // configuration entirely and leave the loud stderr diagnostic to explain
     // why.
     if (!fs.existsSync(scriptPath)) {
-      // A repo whose filter was set up before required=true existed would
-      // otherwise stay silently fail-open forever once the script goes
-      // missing, with no path back to fail-closed. Harden an already-present
-      // driver in place -- without touching its clean command or adding new
-      // bindings -- so a broken script at least blocks staging instead of
-      // silently falling back to unfiltered content.
-      let alreadyConfigured = true;
-      try {
-        execFileSync(GIT_BIN, ['config', '--local', '--get', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`], {
-          cwd: projectPath,
-          encoding: 'utf8',
-          env: localGitConfigEnv(),
-          stdio: ['ignore', 'pipe', 'ignore'],
-        });
-      } catch {
-        alreadyConfigured = false;
-      }
-      if (alreadyConfigured) {
-        // A driver configured before the smudge fix existed may have only
-        // `clean` set. Hardening straight to required=true here without also
-        // ensuring `smudge=cat` would turn every checkout/worktree/clone on
-        // this repo into a hard "smudge filter egc-memory failed" failure.
-        writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat');
-        writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true');
-      }
+      hardenDriverWithoutScript(projectPath);
       throw new Error(`the clean-filter script is not at ${scriptPath}`);
     }
     const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
@@ -205,25 +229,7 @@ function ensureCommitPrivacy(projectPath) {
     // "never gets committed to git" promise.
     writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true');
 
-    let existing = '';
-    try {
-      existing = fs.readFileSync(attributesFile, 'utf8');
-    } catch { /* first configuration: attributes file does not exist yet */ }
-
-    // Exact-line matching (not a raw substring test): a commented-out entry
-    // ("# AGENTS.md filter=egc-memory") or a line with extra trailing
-    // content would still satisfy .includes(), silently skipping the real
-    // binding this project needs.
-    const existingLines = new Set(existing.split('\n').map(l => l.trim()));
-    const missingBindings = COMMIT_PRIVACY_FILES.filter(
-      file => !existingLines.has(`${file} filter=${COMMIT_PRIVACY_FILTER_NAME}`)
-    );
-    if (missingBindings.length > 0) {
-      fs.mkdirSync(path.dirname(attributesFile), { recursive: true });
-      const header = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-      const lines = missingBindings.map(f => `${f} filter=${COMMIT_PRIVACY_FILTER_NAME}\n`).join('');
-      fs.appendFileSync(attributesFile, header + lines);
-    }
+    bindPropagationFiles(attributesFile);
     return true;
   } catch (err) {
     // A real git-config error (permission denied, git binary crashed) also
