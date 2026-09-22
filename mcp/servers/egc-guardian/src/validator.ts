@@ -1638,9 +1638,10 @@ if (candidate !== null && isReadDeniedOperand(candidate, cwd)) {
 
 // The starting points of a find come before its expression: every word up
 // to the first test, action or operator (`-name`, `(`, `!`), the leading
-// options (`-H`, `-L`, `-P`, `-D...`, `-O...`) skipped. A value inside the
-// expression (`-name "*.env"`) is a search pattern, not a path.
-const FIND_LEADING_OPTIONS = new Set(['-H', '-L', '-P']);
+// options (`-H`, `-L`, `-P`, `-D...`, `-O...`) and the `--` that ends them
+// skipped. A value inside the expression (`-name "*.env"`) is a search
+// pattern, not a path.
+const FIND_LEADING_OPTIONS = new Set(['-H', '-L', '-P', '--']);
 
 function findStartingPoints(args: string[]): string[] {
   const points: string[] = [];
@@ -1768,7 +1769,19 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   if (rawTokens.length === 0) {
     return { allowed: true, trust_level: 'SAFE_READONLY' };
   }
-  const unwrapped = unwrapLeadingConstructs(rawTokens);
+  // Brace expansion runs on every word of the line, the command word and
+  // the wrappers included, since `r{m,}` names `rm` to the shell; a word
+  // with more expansions than this check reads refuses the command as a
+  // whole, because a word the shell would hand over must never go unjudged.
+  const expandedTokens = expandArguments(rawTokens);
+  if (expandedTokens === null) {
+    return {
+      allowed: false,
+      reason: `a word of the command carries more brace expansions than this check reads (${MAX_BRACE_EXPANSIONS}), so the command is refused; spell the words out`,
+      trust_level: 'DANGEROUS',
+    };
+  }
+  const unwrapped = unwrapLeadingConstructs(expandedTokens);
   if (unwrapped.blocked) return unwrapped.blocked as ValidationResult;
   const tokens = unwrapped.tokens;
   if (tokens.length === 0) {
@@ -1782,21 +1795,11 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // as a bare rm — without it, a quoted or escaped base command slips past
   // every check below and falls through to the advisory allowlist-miss path.
   const baseCommand = path.basename(bareToken(tokens[0]));
-  // The checks below read each argument as the words the shell hands the
-  // command: a brace expansion becomes the arguments it names, then a flag
-  // or a path written between quotes is the flag or the path it is; the
-  // redirection scan reads the raw line on its own. A word with more
-  // expansions than this check reads is refused as a whole, since a path
-  // the shell would hand over must never go unjudged.
-  const expanded = expandArguments(tokens.slice(1));
-  if (expanded === null) {
-    return {
-      allowed: false,
-      reason: `an argument of '${baseCommand}' carries more brace expansions than this check reads (${MAX_BRACE_EXPANSIONS}), so the command is refused; spell the paths out`,
-      trust_level: 'DANGEROUS',
-    };
-  }
-  const args = expanded.map(shellWord);
+  // The checks below read each argument as the word the shell hands the
+  // command (the brace expansions already made above), so a flag or a path
+  // written between quotes is the flag or the path it is; the redirection
+  // scan reads the raw line on its own.
+  const args = tokens.slice(1).map(shellWord);
 
   // 2. `eval` executes its entire argument list as shell code — the same
   // risk class as `bash -c`, but with no separate flag to opt into eval mode
@@ -2021,15 +2024,28 @@ function shellWord(token: string): string {
 // must never go unjudged.
 const MAX_BRACE_EXPANSIONS = 64;
 
-// The first brace group of a word that the shell would expand: the
-// positions of its opening brace, of the commas at its own depth and of its
-// closing brace; a group without a comma is passed over and its inside read
-// again, and null means the word has no group to expand.
-function findBraceGroup(word: string): { open: number; commas: number[]; close: number } | null {
-  let commas: number[] = [];
-  let open = -1;
+// Position of the next `{` at or after `start` that the shell reads as one
+// (outside quotes and unescaped), or -1.
+function nextOpenBrace(word: string, start: number): number {
+  let i = start;
+  while (i < word.length) {
+    const skipped = skipText(word, i);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
+    if (word[i] === '{') return i;
+    i += 1;
+  }
+  return -1;
+}
+
+// The brace group that opens at `open`: the commas at its own depth and its
+// closing brace, or null when it never closes.
+function braceGroupAt(word: string, open: number): { commas: number[]; close: number } | null {
+  const commas: number[] = [];
   let depth = 0;
-  let i = 0;
+  let i = open;
   while (i < word.length) {
     const skipped = skipText(word, i);
     if (skipped !== i) {
@@ -2037,22 +2053,23 @@ function findBraceGroup(word: string): { open: number; commas: number[]; close: 
       continue;
     }
     const ch = word[i];
-    if (ch === '{') {
-      if (depth === 0) open = i;
-      depth += 1;
-    } else if (ch === '}' && depth > 0) {
-      depth -= 1;
-      if (depth === 0 && commas.length > 0) return { open, commas, close: i };
-      if (depth === 0) {
-        i = open + 1;
-        open = -1;
-        commas = [];
-        continue;
-      }
-    } else if (ch === ',' && depth === 1) {
-      commas.push(i);
-    }
+    if (ch === '{') depth += 1;
+    else if (ch === '}' && --depth === 0) return { commas, close: i };
+    else if (ch === ',' && depth === 1) commas.push(i);
     i += 1;
+  }
+  return null;
+}
+
+// The first brace group of a word that the shell would expand (one with a
+// comma at its own depth); a group without one is passed over and its
+// inside read, and null means the word has no group to expand.
+function findBraceGroup(word: string): { open: number; commas: number[]; close: number } | null {
+  let open = nextOpenBrace(word, 0);
+  while (open !== -1) {
+    const group = braceGroupAt(word, open);
+    if (group !== null && group.commas.length > 0) return { open, ...group };
+    open = nextOpenBrace(word, open + 1);
   }
   return null;
 }

@@ -804,6 +804,11 @@ async function runTests() {
     assert.strictEqual(result.advisory, false, JSON.stringify(result));
   });
 
+  run('find with the option terminator before the store',   () => assertHardBlocking(`find -- "${sshDir}" -type f`));
+  run('find with the option terminator and a plain start',  () => assertAllowed('find -- . -name "*.md"'));
+  run('a destructive command spelled with a brace expansion', () => assertHardBlocking('r{m,} -rf /'));
+  run('a destructive command behind a wrapper, spelled with braces', () => assertHardBlocking('sudo r{m,} -rf x'));
+
   run('a quoted operational file stays readable',       () => assertAllowed(`cat "${path.join(home, '.egc', 'bin', 'manifest.json')}"`));
   run('a quoted plain file stays allowed',              () => assertAllowed('cat "README.md"'));
 
