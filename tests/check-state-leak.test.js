@@ -225,7 +225,7 @@ const STATE = [
 const UNREADABLE_STATE = Buffer.concat([Buffer.from(MAGIC), crypto.randomBytes(80)]);
 
 function makeHome() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-leak-home-'));
+  return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-leak-home-')));
 }
 
 function withHome(home) {
@@ -248,16 +248,20 @@ function clean(dir, input) {
 
 // A repository with a state of its own and AGENTS.md committed as the clean
 // side leaves a populated block: exactly what a checkout hands the smudge.
-function seedRepo() {
-  const repo = makeRepo();
+// The directory name is the caller's, so a path with spaces can be tried.
+function seedRepo(prefix = 'egc-leak-test-') {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
   const home = makeHome();
-  fs.writeFileSync(stateFileFor(home, repo.dir), STATE);
-  const skeleton = clean(repo.dir, smudge(repo.dir, home, 'AGENTS.md', BARE_SKELETON).stdout);
-  fs.writeFileSync(path.join(repo.dir, 'AGENTS.md'), skeleton);
-  repo.git('add', 'AGENTS.md');
-  repo.git('commit', '-q', '-m', 'seed', '--no-verify');
-  const git = (...args) => execFileSync('git', args, { cwd: repo.dir, encoding: 'utf8', env: withHome(home) });
-  return { dir: repo.dir, home, skeleton, git };
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', env: withHome(home) });
+  git('init', '-q');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'Test');
+  fs.writeFileSync(stateFileFor(home, dir), STATE);
+  const skeleton = clean(dir, smudge(dir, home, 'AGENTS.md', BARE_SKELETON).stdout);
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), skeleton);
+  git('add', 'AGENTS.md');
+  git('commit', '-q', '-m', 'seed', '--no-verify');
+  return { dir, home, skeleton, git };
 }
 
 console.log('\n=== Testing check-state-leak: smudge ===\n');
@@ -336,6 +340,60 @@ run('a checkout goes on when the smudge cannot rebuild the block', () => {
   fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
   assert.doesNotThrow(() => git('checkout', '--', 'AGENTS.md'), 'the checkout must not fail on the filter');
   assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8'), skeleton);
+});
+
+run('the filter runs from a repository whose path carries spaces', () => {
+  const { dir, git } = seedRepo('egc leak test ');
+  assert.ok(dir.includes(' '), dir);
+  configureMemoryFilters({ projectDir: dir, scriptPath: SCRIPT, dryRun: false });
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+  git('checkout', '--', 'AGENTS.md');
+  const restored = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+  assert.ok(restored.includes('**Context:** context kept in the local state'), restored);
+  assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), '');
+});
+
+run('memory that carries the text of a marker still cleans back to the committed blob', () => {
+  const { dir, home, skeleton } = seedRepo();
+  fs.writeFileSync(stateFileFor(home, dir), STATE.replace('- decision kept in the local state', '- a decision that quotes <!-- egc:end --> in its text'));
+  const res = smudge(dir, home, 'AGENTS.md', skeleton);
+  assert.strictEqual(res.status, 0, res.stderr);
+  assert.ok(res.stdout.includes('a decision that quotes <!-- egc:end --> in its text'), res.stdout);
+  assert.strictEqual(clean(dir, res.stdout), skeleton, 'the clean side strips by section, whatever the text says');
+});
+
+run('a linked worktree gets the block of its own branch', () => {
+  const { dir, home, git } = seedRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: SCRIPT, dryRun: false });
+  const worktree = path.join(path.dirname(dir), `${path.basename(dir)}-wt`);
+  git('worktree', 'add', '-q', '-b', 'other', worktree);
+  const gitWt = (...args) => execFileSync('git', args, { cwd: worktree, encoding: 'utf8', env: withHome(home) });
+  assert.strictEqual(detectBranch(worktree), 'other');
+  fs.writeFileSync(stateFileFor(home, worktree), STATE.replace('context kept in the local state', 'context of the other branch'));
+  fs.writeFileSync(path.join(worktree, 'AGENTS.md'), '# Agents\n');
+  gitWt('checkout', '--', 'AGENTS.md');
+  const restored = fs.readFileSync(path.join(worktree, 'AGENTS.md'), 'utf8');
+  assert.ok(restored.includes('**Context:** context of the other branch'), restored);
+  assert.strictEqual(gitWt('status', '--porcelain', '--', 'AGENTS.md'), '');
+});
+
+run('a branch switch that rewrites the file keeps the memory in it', () => {
+  const { dir, home, skeleton, git } = seedRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: SCRIPT, dryRun: false });
+  git('switch', '-q', '-c', 'other');
+  fs.writeFileSync(stateFileFor(home, dir), STATE);
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), `${skeleton}\nA line the other branch adds.\n`);
+  git('add', 'AGENTS.md');
+  git('commit', '-q', '-m', 'other', '--no-verify');
+  git('switch', '-q', '-');
+  const back = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+  assert.ok(!back.includes('A line the other branch adds.'), back);
+  assert.ok(back.includes('**Context:** context kept in the local state'), back);
+  assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), '');
+  git('switch', '-q', 'other');
+  const forth = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+  assert.ok(forth.includes('A line the other branch adds.'), forth);
+  assert.ok(forth.includes('**Context:** context kept in the local state'), forth);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

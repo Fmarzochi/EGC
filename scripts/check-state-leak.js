@@ -176,16 +176,19 @@ function checkPackagedTree() {
 }
 
 // The propagation library sits under lib/ next to this script in the
-// repository and beside it in the flattened install layouts.
+// repository and beside it in the flattened install layouts; a layout
+// without it, or a library that cannot load, means no smudge, never a
+// failed checkout.
 function loadPropagation() {
-  for (const candidate of ['./lib/propagate-state', './propagate-state']) {
+  try {
+    return require('./lib/propagate-state');
+  } catch {
     try {
-      return require(candidate);
+      return require('./propagate-state');
     } catch {
-      // Not this layout; try the next one.
+      return null;
     }
   }
-  return null;
 }
 
 function smudgeContent(relativePath, content) {
@@ -230,8 +233,15 @@ function main() {
   // working tree without the block. The propagation library renders it;
   // when that library is not next to this script, or anything else stands
   // in the way, the content goes out exactly as it came, because a checkout
-  // must never fail on this filter's account.
+  // must never fail on this filter's account. stdout carries the content
+  // and nothing else: a line a library would print for a terminal goes to
+  // stderr, and a pipe git has already closed ends the run quietly. A blob
+  // that cannot be read from git is the one failure left loud, since
+  // writing nothing would truncate the file; git then holds the checkout.
   if (mode === '--filter-smudge') {
+    console.log = (...lines) => console.error(...lines);
+    console.info = console.log;
+    process.stdout.on('error', () => process.exit(0));
     const stdin = fs.readFileSync(0, 'utf8');
     process.stdout.write(smudgeContent(args[1] ?? '', stdin));
     return;
