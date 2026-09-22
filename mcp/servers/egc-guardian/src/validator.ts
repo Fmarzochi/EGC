@@ -1990,13 +1990,16 @@ function readWord(command: string, start: number): ShellWord {
 }
 
 // Position of the next `<` or `>` at or after `start` that the shell reads
-// as an operator, outside quotes and not escaped; -1 when there is none.
+// as an operator, outside quotes and not escaped; -1 when there is none
+// before the end of the line or before a comment (an unquoted `#` that
+// opens a word, after which the shell reads nothing).
 function nextOperator(command: string, start: number): number {
   let i = start;
   while (i < command.length) {
     const ch = command[i];
     if (ch === '"' || ch === "'") i = readQuoted(command, i).end;
     else if (ch === '\\') i += 2;
+    else if (ch === '#' && (i === 0 || WORD_BREAKS.has(command[i - 1]))) return -1;
     else if (ch === '<' || ch === '>') return i;
     else i += 1;
   }

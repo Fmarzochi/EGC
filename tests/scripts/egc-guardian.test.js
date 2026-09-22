@@ -716,6 +716,9 @@ async function runTests() {
   run('two redirections glued in one word are both read',      () => assertRedirectDenied(`echo x >out.txt>${secretFile}`, 'output'));
   run('$HOME in a double-quoted target names the home directory', () => assertRedirectDenied('echo evil >"$HOME/.ssh/id_rsa"', 'output'));
   run('${HOME} names the home directory in every path check',   () => assertHardBlocking('cat ${HOME}/.ssh/id_rsa'));
+  run('a comment is not read',                                  () => assertNoRedirectDenial(`echo ok # >${secretFile}`));
+  run('a double-quoted target with a space',                    () => assertRedirectDenied(`echo evil >"${path.join(home, '.ssh', 'my key')}"`, 'output'));
+  run('a single-quoted target',                                 () => assertRedirectDenied(`echo evil >'${secretFile}'`, 'output'));
   run('an operational file stays readable by redirection', () => assertNoRedirectDenial(`cat <${path.join(home, '.egc', 'bin', 'manifest.json')}`));
 
   // ── validate_command: the git force flag read per subcommand ─────────────
