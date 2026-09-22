@@ -96,11 +96,12 @@ function dropsListLine(bare, blank, state) {
 }
 
 // The llms.txt context sits under its heading as a paragraph up to the next
-// blank line; a heading in that place means there is no paragraph.
+// blank line or the next heading; a heading in that place means there is no
+// paragraph, and a heading right after it ends it and stays.
 function dropsParagraphLine(bare, blank, state) {
   if (state.paragraph === 'waiting' && !blank) state.paragraph = bare.startsWith('#') ? 'off' : 'dropping';
   if (state.paragraph !== 'dropping') return false;
-  if (blank) {
+  if (blank || bare.startsWith('#')) {
     state.paragraph = 'off';
     return false;
   }

@@ -535,5 +535,13 @@ run('llms.txt: a context paragraph that ends the block leaves both markers in pl
   assert.ok(out.includes('# EGC Project Memory'), out);
 });
 
+run('llms.txt: a heading right after the context paragraph stays', () => {
+  const { dir } = makeRepo();
+  const shape = ['<!-- egc:start -->', '# EGC Project Memory', '', 'secret local context that must never ship.', '## EGC Natural Language Interface', 'Detect user intent.', '<!-- egc:end -->', ''].join('\n');
+  const out = clean(dir, shape);
+  assert.ok(!out.includes('secret local context'), out);
+  assert.ok(out.includes('## EGC Natural Language Interface\nDetect user intent.'), 'the heading and what follows it stay');
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
