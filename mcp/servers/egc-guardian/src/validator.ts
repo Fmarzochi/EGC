@@ -1526,7 +1526,7 @@ function validateGitArgs(args: string[], cwd?: string): ValidationResult {
 
   if (subcommandIdx < 0) return { allowed: true, trust_level: 'SAFE_READONLY' };
   const subcommand = bareToken(args[subcommandIdx]);
-  const rest = args.slice(subcommandIdx + 1).map(stripQuotes);
+  const rest = args.slice(subcommandIdx + 1);
   const fileDenial = checkGitFileOperands(subcommand, rest, cwd);
   if (fileDenial) return fileDenial;
   if (subcommand === 'config') {
@@ -1771,7 +1771,10 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // as a bare rm — without it, a quoted or escaped base command slips past
   // every check below and falls through to the advisory allowlist-miss path.
   const baseCommand = path.basename(bareToken(tokens[0]));
-  const args = tokens.slice(1);
+  // The checks below read each argument as the word the shell hands the
+  // command, so a flag or a path written between quotes is the flag or the
+  // path it is; the redirection scan reads the raw line on its own.
+  const args = tokens.slice(1).map(shellWord);
 
   // 2. `eval` executes its entire argument list as shell code — the same
   // risk class as `bash -c`, but with no separate flag to opt into eval mode
@@ -1904,21 +1907,27 @@ function unwrapFileUri(arg: string): string {
   return /^\/[A-Za-z]:/.test(decoded) ? decoded.slice(1) : decoded;
 }
 
-// The spellings of an argument that may name a file: what the shell hands
-// the command (quotes removed, backslash escapes resolved) and, on Windows,
-// where a backslash separates path components rather than escaping the next
-// character, the argument with only its quotes removed. Every path check
-// judges an argument through these, so a quoted or escaped spelling of a
-// protected path meets the same denial as the plain one.
+// The spellings of an argument that may name a file: the word as the shell
+// hands it (see shellWord), on Windows the same word with its backslash
+// escapes resolved as well, since a shell there may read them either way,
+// and every brace expansion of each. Every path check judges an argument
+// through these, so a quoted, escaped or expanded spelling of a protected
+// path meets the same denial as the plain one.
 function unquoteWord(token: string): string {
   let value = '';
   let i = 0;
   while (i < token.length) {
     const ch = token[i];
-    if (ch === '"' || ch === "'") {
+    if (ch === '$' && token[i + 1] === "'") {
+      const ansi = readAnsiC(token, i + 1);
+      value += ansi.value;
+      i = ansi.end;
+    } else if (ch === '"' || ch === "'") {
       const quoted = readQuoted(token, i);
       value += quoted.value;
       i = quoted.end;
+    } else if (ch === '\\' && token[i + 1] === '\n') {
+      i += 2;
     } else if (ch === '\\' && i + 1 < token.length) {
       value += token[i + 1];
       i += 2;
@@ -1930,11 +1939,87 @@ function unquoteWord(token: string): string {
   return value;
 }
 
+// ANSI-C quoting: bash resolves the escapes of `$'...'` with the C table
+// (a simple escape, `\xHH`, `\NNN`, `\uHHHH`, `\UHHHHHHHH`) before it hands
+// the word over, so a path written that way names the same file.
+const ANSI_C_SIMPLE: Record<string, string> = {
+  n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', v: '\v',
+  '\\': '\\', "'": "'", '"': '"', '?': '?',
+};
+const ANSI_C_NUMERIC_RE = /^(?:x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3}))/;
+
+// The character an escape at `at` (the position after the backslash)
+// stands for, and how many characters it spans.
+function ansiCEscape(text: string, at: number): { value: string; length: number } {
+  const next = text[at] ?? '';
+  if (next in ANSI_C_SIMPLE) return { value: ANSI_C_SIMPLE[next], length: 1 };
+  const numeric = ANSI_C_NUMERIC_RE.exec(text.slice(at));
+  if (numeric === null) return { value: next, length: 1 };
+  const digits = numeric[1] ?? numeric[2] ?? numeric[3] ?? numeric[4];
+  const radix = numeric[4] === undefined ? 16 : 8;
+  return { value: String.fromCodePoint(parseInt(digits, radix)), length: numeric[0].length };
+}
+
+// The `$'...'` span whose quote opens at `start`: its value with the escapes
+// resolved, and the index past the closing quote.
+function readAnsiC(token: string, start: number): { value: string; end: number } {
+  let value = '';
+  let i = start + 1;
+  while (i < token.length && token[i] !== "'") {
+    if (token[i] !== '\\') {
+      value += token[i];
+      i += 1;
+      continue;
+    }
+    const escape = ansiCEscape(token, i + 1);
+    value += escape.value;
+    i += 1 + escape.length;
+  }
+  return { value, end: Math.min(i + 1, token.length) };
+}
+
+// The word the shell hands the command: quotes removed and, outside
+// Windows, backslash escapes resolved; on Windows a backslash separates
+// path components, so it stays.
+function shellWord(token: string): string {
+  return process.platform === 'win32' ? token.replaceAll(/["']/g, '') : unquoteWord(token);
+}
+
+// A brace expansion names every alternative at once (`~/.{ssh,aws}/x` opens
+// two directories), so a word that carries one is judged as each of them;
+// braces without a comma are a literal name, and the list is capped so a
+// pathological argument cannot grow without bound.
+const MAX_BRACE_EXPANSIONS = 64;
+
+function braceExpansions(word: string): string[] {
+  const open = word.indexOf('{');
+  if (open === -1) return [word];
+  const commas: number[] = [];
+  let depth = 0;
+  let close = -1;
+  for (let i = open; i < word.length && close === -1; i++) {
+    const ch = word[i];
+    if (ch === '{') depth += 1;
+    else if (ch === '}') { depth -= 1; if (depth === 0) close = i; }
+    else if (ch === ',' && depth === 1) commas.push(i);
+  }
+  if (close === -1 || commas.length === 0) return [word];
+  const bounds = [open, ...commas, close];
+  const out: string[] = [];
+  for (let i = 0; i + 1 < bounds.length; i++) {
+    const rewritten = word.slice(0, open) + word.slice(bounds[i] + 1, bounds[i + 1]) + word.slice(close + 1);
+    for (const expansion of braceExpansions(rewritten)) {
+      if (out.length >= MAX_BRACE_EXPANSIONS) return out;
+      out.push(expansion);
+    }
+  }
+  return out;
+}
+
 function pathSpellings(arg: string): string[] {
-  const value = unquoteWord(arg);
-  if (process.platform !== 'win32') return [value];
-  const typed = arg.replaceAll(/["']/g, '');
-  return typed === value ? [value] : [value, typed];
+  const resolved = unquoteWord(arg);
+  const words = process.platform === 'win32' && resolved !== arg ? [arg, resolved] : [arg];
+  return words.flatMap(braceExpansions);
 }
 
 function isProtectedOperand(arg: string, cwd?: string): boolean {
@@ -2009,6 +2094,10 @@ function readQuoted(command: string, start: number): { value: string; end: numbe
   let value = '';
   let i = start + 1;
   while (i < command.length && command[i] !== quote) {
+    if (quote === '"' && command[i] === '\\' && command[i + 1] === '\n') {
+      i += 2;
+      continue;
+    }
     if (quote === '"' && command[i] === '\\' && DOUBLE_QUOTE_ESCAPES.has(command[i + 1] ?? '')) i += 1;
     value += command[i];
     i += 1;

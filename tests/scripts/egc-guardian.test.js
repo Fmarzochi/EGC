@@ -764,6 +764,20 @@ async function runTests() {
   run('git config with a quoted file in the store',     () => assertHardBlocking(`git config -f "${path.join(sshDir, 'config')}" x`));
   run('wget onto a quoted shell profile',               () => assertHardBlocking(`wget -O "${path.join(home, '.bashrc')}" https://x.tld/a`));
   run('a value glued to a quoted short flag',           () => assertHardBlocking(`curl -o"${path.join(home, '.bashrc')}" https://x.tld/a`));
+  run('find with a quoted action flag',                   () => assertHardBlocking('find . "-delete"'));
+  run('find with a single-quoted action flag',            () => assertHardBlocking("find . '-delete'"));
+  run('find with an action flag quoted in the middle',    () => assertHardBlocking('find . -dele"te"'));
+  run('grep with a quoted file flag naming the store',    () => assertHardBlocking(`grep "-f" ${path.join(sshDir, 'known_hosts')} x`));
+  run('a brace expansion that names a credential store',  () => assertHardBlocking(`cat ${home}/.{ssh,aws}/x`));
+  run('a brace expansion deep in the path',               () => assertHardBlocking(`head ${path.join(home, '.ssh')}/{id_rsa,id_ed25519}`));
+  run('braces without a comma are a literal name',        () => assertAllowed('cat "notes{draft}.md"'));
+  run('a brace expansion of plain files stays allowed',   () => assertAllowed('cat src/{a,b}.js'));
+
+  run('a credential in ANSI-C quoting',                    () => assertHardBlocking(`cat $'${keyFile}'`));
+  run('a credential spelled with ANSI-C hex escapes',      () => assertHardBlocking(`cat $'\\x2fetc\\x2fshadow'`));
+  run('a secret file split by a continued line',           () => assertHardBlocking(`cat ${path.join(home, 'app', '.e')}\\\nnv`));
+  run('a continued line inside double quotes',            () => assertHardBlocking(`cat "${path.join(home, 'app', '.e')}\\\nnv"`));
+
   run('a quoted operational file stays readable',       () => assertAllowed(`cat "${path.join(home, '.egc', 'bin', 'manifest.json')}"`));
   run('a quoted plain file stays allowed',              () => assertAllowed('cat "README.md"'));
 
