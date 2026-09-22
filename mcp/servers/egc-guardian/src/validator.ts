@@ -1829,10 +1829,11 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // 5b. A redirection target is a file the shell opens for the command,
   // written (`>`, `>>`, `&>`) or read (`<`), and is judged against the
   // protected paths here, before the per-command checks, which only see
-  // the argument the operator was glued to. The raw tokens are scanned,
-  // since the shell accepts a redirection before the command and after a
-  // wrapper or an environment assignment.
-  const redirected = redirectionVerdict(rawTokens, cwd);
+  // the argument the operator was glued to. The command line is read
+  // whole, the way the shell reads it, since a redirection may stand
+  // before the command, behind a wrapper or an environment assignment,
+  // or inside a process substitution.
+  const redirected = redirectionVerdict(command, cwd);
   if (redirected) return redirected;
 
   // 6. Per-command checks (protected paths, destructive git/find forms,
@@ -1919,79 +1920,128 @@ function pathCandidatesOf(args: string[]): string[] {
 // `word>file`) exactly as it reads it spaced (`> file`). The target is
 // therefore a filesystem operand like any other and is judged against the
 // same protected paths, before the per-command checks, which only see the
-// argument the operator was glued to. A heredoc or a here-string carries
-// text, not a path, and a descriptor duplication (`2>&1`, `>&-`) names no
-// file, so those are left alone; a quoted or escaped operator is literal
-// text to the shell and is left alone too.
+// argument the operator was glued to.
+//
+// The command line is read here the way the shell reads it, on its own and
+// not through tokenizeWords: single quotes take everything literally,
+// inside double quotes a backslash escapes only a quote, a backslash, a
+// dollar sign or a backquote, and outside quotes it escapes the next
+// character. A heredoc or a here-string carries text, not a path; `<&` and
+// a descriptor duplication (`2>&1`, `>&-`) name no file; a process
+// substitution (`<(cmd)`) reads as an empty target and the scan goes on
+// inside the parentheses, where the command's own redirections are read.
 const REDIRECTION_OPERATORS = ['<<<', '<<', '>>', '>|', '>&', '<>', '<&', '>', '<'];
+const WORD_BREAKS = new Set([' ', '\t', '\n', '\r', '|', '&', ';', '(', ')', '<', '>']);
+const DOUBLE_QUOTE_ESCAPES = new Set(['"', '\\', '$', '`']);
+
+interface ShellWord {
+  raw: string;
+  value: string;
+  end: number;
+}
 
 interface Redirection {
-  target: string;
+  target: ShellWord;
   writes: boolean;
 }
 
-// Position of the first `<` or `>` the shell reads as an operator: outside
-// quotes and not escaped. The tokens keep their quote and backslash
-// characters (see tokenizeWords), which is what makes this decidable here.
-function firstOperatorIndex(token: string): number {
-  let quote: string | null = null;
-  for (let i = 0; i < token.length; i++) {
-    const ch = token[i];
-    if (quote !== null) {
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '\\') {
-      i += 1;
-      continue;
-    }
+// The quoted span opening at `start`: its value once the quotes are gone,
+// and the index past the closing quote (past the end when it never closes).
+function readQuoted(command: string, start: number): { value: string; end: number } {
+  const quote = command[start];
+  let value = '';
+  let i = start + 1;
+  while (i < command.length && command[i] !== quote) {
+    if (quote === '"' && command[i] === '\\' && DOUBLE_QUOTE_ESCAPES.has(command[i + 1] ?? '')) i += 1;
+    value += command[i];
+    i += 1;
+  }
+  return { value, end: Math.min(i + 1, command.length) };
+}
+
+// The word at `start`, leading blanks skipped, up to the next unquoted blank
+// or shell metacharacter: as typed, and as the shell would hand it over.
+function readWord(command: string, start: number): ShellWord {
+  let i = start;
+  while (i < command.length && (command[i] === ' ' || command[i] === '\t')) i += 1;
+  const from = i;
+  let value = '';
+  while (i < command.length && !WORD_BREAKS.has(command[i])) {
+    const ch = command[i];
     if (ch === '"' || ch === "'") {
-      quote = ch;
-      continue;
+      const quoted = readQuoted(command, i);
+      value += quoted.value;
+      i = quoted.end;
+    } else if (ch === '\\' && i + 1 < command.length) {
+      value += command[i + 1];
+      i += 2;
+    } else {
+      value += ch;
+      i += 1;
     }
-    if (ch === '<' || ch === '>') return i;
+  }
+  return { raw: command.slice(from, i), value, end: i };
+}
+
+// Position of the next `<` or `>` at or after `start` that the shell reads
+// as an operator, outside quotes and not escaped; -1 when there is none.
+function nextOperator(command: string, start: number): number {
+  let i = start;
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === '"' || ch === "'") i = readQuoted(command, i).end;
+    else if (ch === '\\') i += 2;
+    else if (ch === '<' || ch === '>') return i;
+    else i += 1;
   }
   return -1;
 }
 
-// The file a redirection word names once the shell is done with it: the
-// quotes come off, and so do the backslash escapes on POSIX, where the
-// shell removes them before opening the file; on Windows a backslash
-// separates path components and stays.
-function redirectionTarget(word: string): string {
-  const unquoted = word.replaceAll(/["']/g, '');
-  return process.platform === 'win32' ? unquoted : unquoted.replaceAll('\\', '');
+// The redirection whose operator starts at `at`, null when it names no
+// file, and the index the scan resumes from.
+function redirectionAt(command: string, at: number): { redirection: Redirection | null; next: number } {
+  const operator = REDIRECTION_OPERATORS.find(op => command.startsWith(op, at)) ?? command[at];
+  const target = readWord(command, at + operator.length);
+  const namesNoFile = operator === '<<<' || operator === '<<' || operator === '<&'
+    || (operator === '>&' && /^(?:\d+|-)$/.test(target.value))
+    || target.value.length === 0;
+  if (namesNoFile) return { redirection: null, next: target.end };
+  return { redirection: { target, writes: operator !== '<' }, next: target.end };
 }
 
-// The redirection a token starts or carries, with its target: the rest of
-// the token when the operator is glued to it, the next token otherwise.
-function redirectionAt(tokens: string[], index: number): Redirection | null {
-  const token = tokens[index];
-  const at = firstOperatorIndex(token);
-  if (at === -1) return null;
-  const operator = REDIRECTION_OPERATORS.find(op => token.startsWith(op, at));
-  if (operator === undefined || operator === '<<<' || operator === '<<' || operator === '<&') return null;
-  const glued = token.slice(at + operator.length);
-  const operand = redirectionTarget(glued.length > 0 ? glued : (tokens[index + 1] ?? ''));
-  if (operand.length === 0) return null;
-  if (operator === '>&' && /^(?:\d+|-)$/.test(operand)) return null;
-  return { target: operand, writes: operator !== '<' };
+function redirectionsOf(command: string): Redirection[] {
+  const found: Redirection[] = [];
+  let at = nextOperator(command, 0);
+  while (at !== -1) {
+    const { redirection, next } = redirectionAt(command, at);
+    if (redirection !== null) found.push(redirection);
+    at = nextOperator(command, next);
+  }
+  return found;
 }
 
-function redirectionVerdict(tokens: string[], cwd?: string): ValidationResult | null {
-  for (let i = 0; i < tokens.length; i++) {
-    const redirection = redirectionAt(tokens, i);
-    if (redirection === null) continue;
-    const { target, writes } = redirection;
-    if (writes ? isProtectedPath(target, cwd) : isReadDeniedPath(target, cwd)) {
-      return {
-        allowed: false,
-        reason: writes
-          ? `redirecting output onto protected file '${target}' is forbidden: the command would write over it, so send the output to another path`
-          : `redirecting input from protected file '${target}' is forbidden: it would hand the command a credential, so read another file`,
-        trust_level: 'DANGEROUS',
-      };
-    }
+// The spellings of a target that may name the file: what the shell hands
+// over and, on Windows, where a backslash separates path components rather
+// than escaping the next character, the word as typed.
+function targetSpellings(target: ShellWord): string[] {
+  return process.platform === 'win32' ? [target.value, target.raw] : [target.value];
+}
+
+function isDeniedTarget(spelling: string, writes: boolean, cwd?: string): boolean {
+  return writes ? isProtectedPath(spelling, cwd) : isReadDeniedPath(spelling, cwd);
+}
+
+function redirectionVerdict(command: string, cwd?: string): ValidationResult | null {
+  for (const { target, writes } of redirectionsOf(command)) {
+    const denied = targetSpellings(target).find(spelling => isDeniedTarget(spelling, writes, cwd));
+    if (denied === undefined) continue;
+    return {
+      allowed: false,
+      reason: writes
+        ? `redirecting output onto protected file '${denied}' is forbidden: the command would write over it, so send the output to another path`
+        : `redirecting input from protected file '${denied}' is forbidden: it would hand the command a credential, so read another file`,
+      trust_level: 'DANGEROUS',
+    };
   }
   return null;
 }

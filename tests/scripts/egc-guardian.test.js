@@ -708,6 +708,11 @@ async function runTests() {
   run('a here-string is text, not a path',                 () => assertNoRedirectDenial(`cat <<<${secretFile}`));
   run('a quoted operator is literal text',                 () => assertNoRedirectDenial(`echo "a>${profileFile}"`));
   run('an escaped operator is literal text',               () => assertNoRedirectDenial(`echo a\\>${profileFile}`));
+  run('an escaped quote inside double quotes does not hide the operator', () => assertRedirectDenied(`echo "\\""x>${secretFile}`, 'output'));
+  run('a backslash escape inside the target is resolved',        () => assertRedirectDenied('echo evil >~/.ss\\h/id_rsa', 'output'));
+  run('a redirection inside a process substitution is read',    () => assertRedirectDenied(`cat <(echo evil >${secretFile})`, 'output'));
+  run('an operator inside double quotes with an escaped quote is literal', () => assertNoRedirectDenial(`echo "\\"a>${profileFile}"`));
+  run('a process substitution is a command, not a file',         () => assertNoRedirectDenial('cat <(echo evil)'));
   run('an operational file stays readable by redirection', () => assertNoRedirectDenial(`cat <${path.join(home, '.egc', 'bin', 'manifest.json')}`));
 
   // ── validate_command: the git force flag read per subcommand ─────────────
