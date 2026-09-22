@@ -35,39 +35,54 @@ function tryRequireMemoryFilters(): MemoryFilters | null {
 // Previously this only happened via the separate, manual `egc init` command
 // (scripts/init.js) -- a project that only ever ran `egc install` (the exact
 // command the README documents) never got this protection unless the user
-// also ran `egc init` by hand. Best-effort and silent: this is a privacy
-// convenience, not a correctness gate, so any failure here (no git binary, a
-// read-only filesystem, projectPath not a repo) must never block the actual
-// memory write that the caller is waiting on.
-function ensureCommitPrivacy(projectPath: string): void {
+// also ran `egc init` by hand. Returns true when populated memory may be
+// written into the project: the filter is armed, or the path is outside any
+// git working tree (the normal case for most MCP calls). Returns false when
+// the project is a repository whose filter could not be armed; the caller
+// then leaves the context files as they are, because a mirror git could
+// stage is exactly what this guard exists to prevent. Never throws, and
+// reports every false verdict on stderr (MCP servers speak MCP over stdout,
+// stderr is free for diagnostics) since this is the one place that can know.
+function ensureCommitPrivacy(projectPath: string): boolean {
   try {
     const memoryFilters = tryRequireMemoryFilters();
     if (!memoryFilters) {
-      // Every other configured:false path below reports why via stderr;
-      // silently returning here would be the one way this function can
-      // leave memory unprotected with zero signal that anything went wrong.
       process.stderr.write(`[egc-memory] commit-privacy filter module unavailable for ${projectPath}\n`);
-      return;
+      return false;
     }
     const scriptPath = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'check-state-leak.js');
     const result = memoryFilters.configureMemoryFilters({ projectDir: projectPath, scriptPath, dryRun: false });
-    // "not a git repository" is the normal, silent case (most MCP calls
-    // aren't rooted in a repo at all); any other configured:false reason
-    // (e.g. the fail-closed script-missing check) means privacy protection
-    // did NOT get set up and the user should know.
-    if (!result.configured && result.reason !== 'not a git repository') {
-      process.stderr.write(`[egc-memory] commit-privacy filter not configured for ${projectPath}: ${result.reason}\n`);
-    }
+    if (result.configured || result.reason === 'not a git repository') return true;
+    // Any other configured:false reason (the fail-closed script-missing
+    // check, a checkout git cannot open) means the filter is not in place.
+    process.stderr.write(`[egc-memory] commit-privacy filter not configured for ${projectPath}: ${result.reason}\n`);
+    return false;
   } catch (err) {
-    // Best-effort: never let commit-privacy setup block the memory write the
-    // caller is waiting on. But silent failure here means a real git-config
-    // error (permission denied, git binary crashed) leaves the user with no
-    // signal that populated memory can still reach a commit -- a single
-    // stderr line costs nothing (MCP servers speak MCP over stdout, stderr
-    // is free for diagnostics) and this is the one place that can ever know.
+    // A real git-config error (permission denied, git binary crashed) also
+    // leaves the filter out of place; say so instead of failing silently.
     const message = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${message}\n`);
+    return false;
   }
+}
+
+// The result of a propagation that wrote nothing: every mirror key present
+// and null, the shape callers already handle for a file that is not there.
+function noMirrorsWritten(): PropagateResult {
+  return {
+    cursor: null,
+    copilot: null,
+    gemini: null,
+    windsurf: null,
+    trae: null,
+    zed: null,
+    cline: null,
+    aider: null,
+    cursorrules: null,
+    agents: null,
+    llms: null,
+    claude: null,
+  };
 }
 
 export interface PropagateArgs {
@@ -353,7 +368,10 @@ function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
 }
 
 export function propagateStateToTools(args: PropagateArgs): PropagateResult {
-  ensureCommitPrivacy(args.projectPath);
+  if (!ensureCommitPrivacy(args.projectPath)) {
+    process.stderr.write(`[egc-memory] project memory was not mirrored into the context files of ${args.projectPath}: the commit-privacy filter is not in place there, and a mirror git could stage would carry the memory. The memory itself is intact in ~/.egc/state; run 'egc doctor' to see what is missing.\n`);
+    return noMirrorsWritten();
+  }
   const block = buildSummaryBlock(args);
   return {
     cursor: writeCursorContext(args.projectPath, block),

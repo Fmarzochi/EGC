@@ -44,8 +44,12 @@ const COMMIT_PRIVACY_FILES = [
 // (not shared) with memory-filters.js/init.js on purpose so this function
 // has zero cross-file dependencies of its own.
 //
-// Best-effort and silent -- never blocks the actual memory write the caller
-// is waiting on.
+// Returns true when populated memory may be written into the project: the
+// filter is armed, or the path is outside any git working tree. Returns
+// false when the project is a repository whose filter could not be armed;
+// the caller then leaves the context files as they are, because a mirror
+// git could stage is exactly what this guard exists to prevent. Never
+// throws, and reports every false verdict on stderr.
 // POSIX single-quote escaping: git always resolves filter.<x>.clean through
 // its own bundled POSIX-like shell (sh on Linux/macOS, Git for Windows'
 // MSYS2 sh.exe on Windows -- never native cmd.exe), so single-quoting is
@@ -57,6 +61,22 @@ const COMMIT_PRIVACY_FILES = [
 function shSingleQuote(value) {
   const escaped = value.replaceAll("'", String.raw`'\''`);
   return `'${escaped}'`;
+}
+
+// Whether projectPath sits inside a git working tree, judged from the
+// filesystem alone: a .git entry (a directory, or the file a linked worktree
+// and a submodule carry) in the directory or any parent. Consulted when git
+// itself cannot answer, so a tree git cannot open (a worktree whose gitdir
+// moved, a checkout git refuses to read) is still known to be a repository.
+function isInsideGitWorkTree(projectPath) {
+  let dir = path.resolve(projectPath);
+  let parent = path.dirname(dir);
+  while (parent !== dir) {
+    if (fs.existsSync(path.join(dir, '.git'))) return true;
+    dir = parent;
+    parent = path.dirname(dir);
+  }
+  return fs.existsSync(path.join(dir, '.git'));
 }
 
 function ensureCommitPrivacy(projectPath) {
@@ -77,7 +97,11 @@ function ensureCommitPrivacy(projectPath) {
       }).trim();
       attributesFile = path.isAbsolute(raw) ? raw : path.join(projectPath, raw);
     } catch {
-      return; // not a git repository
+      // Outside a working tree there is nothing a commit could carry.
+      // Inside one, git could not open it, so the filter cannot be armed.
+      if (!isInsideGitWorkTree(projectPath)) return true;
+      process.stderr.write(`[egc-memory] commit-privacy filter not configured for ${projectPath}: git could not open the repository\n`);
+      return false;
     }
     // Installed layout flattens scripts/check-state-leak.js down into the
     // same directory as this file (see HOOK_LIB_SOURCES in
@@ -162,6 +186,7 @@ function ensureCommitPrivacy(projectPath) {
       const lines = missingBindings.map(f => `${f} filter=${COMMIT_PRIVACY_FILTER_NAME}\n`).join('');
       fs.appendFileSync(attributesFile, header + lines);
     }
+    return true;
   } catch (err) {
     // Best-effort: never let commit-privacy setup block the memory write the
     // caller is waiting on. But silent failure here means a real git-config
@@ -169,6 +194,7 @@ function ensureCommitPrivacy(projectPath) {
     // signal that populated memory can still reach a commit -- a single
     // stderr line costs nothing here either.
     process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${err.message}\n`);
+    return false;
   }
 }
 
@@ -444,8 +470,29 @@ function writeLlmsTxt(projectPath, parsed) {
   return filePath;
 }
 
+// The result of a propagation that wrote nothing: every mirror key present
+// and null, the shape callers already handle for a file that is not there.
+function noMirrorsWritten() {
+  return {
+    cursor: null,
+    copilot: null,
+    gemini: null,
+    windsurf: null,
+    trae: null,
+    zed: null,
+    cline: null,
+    aider: null,
+    cursorrules: null,
+    agents: null,
+    llms: null,
+  };
+}
+
 function propagateStateContent(projectPath, stateContent) {
-  ensureCommitPrivacy(projectPath);
+  if (!ensureCommitPrivacy(projectPath)) {
+    process.stderr.write(`[egc-memory] project memory was not mirrored into the context files of ${projectPath}: the commit-privacy filter is not in place there, and a mirror git could stage would carry the memory. The memory itself is intact in ~/.egc/state; run 'egc doctor' to see what is missing.\n`);
+    return noMirrorsWritten();
+  }
   const parsed = parseStateContent(stateContent);
   const block = buildSummaryBlock(parsed);
 
