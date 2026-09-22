@@ -526,5 +526,14 @@ run('a checkout under autocrlf brings the block back with the file\'s line break
   assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), '');
 });
 
+run('llms.txt: a context paragraph that ends the block leaves both markers in place', () => {
+  const { dir } = makeRepo();
+  const shape = ['<!-- egc:start -->', '# EGC Project Memory', '', 'secret local context that must never ship.', '<!-- egc:end -->', ''].join('\n');
+  const out = clean(dir, shape);
+  assert.ok(!out.includes('secret local context'), out);
+  assert.ok(out.includes('<!-- egc:start -->') && out.includes('<!-- egc:end -->'), 'both markers stay');
+  assert.ok(out.includes('# EGC Project Memory'), out);
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

@@ -74,37 +74,63 @@ function findLeak(content) {
 // context and a `## Next session` list, so those two shapes are zeroed too,
 // inside the markers only, since a heading of that name elsewhere in the
 // file belongs to whoever wrote it. A file with CRLF line breaks is read
-// the same way and keeps them.
-function cleanContent(content) {
-  const lines = content.split('\n');
-  const out = [];
-  let dropping = false;
-  let inBlock = false;
-  let afterLlmsHeading = false;
-  for (const line of lines) {
-    const bare = line.endsWith('\r') ? line.slice(0, -1) : line;
-    if (bare === START_MARKER) inBlock = true;
-    if (bare === END_MARKER) inBlock = false;
-    if (/^<!-- egc:state-updated:\S+ -->$/.test(bare)) continue;
-    if (/^\*\*(Context|Active decisions|Next session):\*\*/.test(bare) || (inBlock && bare === '## Next session')) {
-      dropping = true;
-      afterLlmsHeading = false;
-      continue;
-    }
-    if (dropping) {
-      if (bare.startsWith('- ') || bare.trim() === '') {
-        if (bare.trim() === '') dropping = false;
-        continue;
-      }
-      dropping = false;
-    }
-    if (afterLlmsHeading && bare.trim() !== '') {
-      if (!bare.startsWith('#')) continue;
-      afterLlmsHeading = false;
-    }
-    if (inBlock && bare === '# EGC Project Memory') afterLlmsHeading = true;
-    out.push(line);
+// the same way and keeps them. The markers themselves always stay.
+const STATE_STAMP_RE = /^<!-- egc:state-updated:\S+ -->$/;
+const LABEL_RE = /^\*\*(Context|Active decisions|Next session):\*\*/;
+
+function opensList(bare, state) {
+  return LABEL_RE.test(bare) || (state.inBlock && bare === '## Next session');
+}
+
+// A list opened by a label or by the llms.txt heading runs until a blank
+// line; the blank line closes it and goes with it.
+function dropsListLine(bare, blank, state) {
+  if (!state.inList) return false;
+  if (blank) {
+    state.inList = false;
+    return true;
   }
+  if (bare.startsWith('- ')) return true;
+  state.inList = false;
+  return false;
+}
+
+// The llms.txt context sits under its heading as a paragraph up to the next
+// blank line; a heading in that place means there is no paragraph.
+function dropsParagraphLine(bare, blank, state) {
+  if (state.paragraph === 'waiting' && !blank) state.paragraph = bare.startsWith('#') ? 'off' : 'dropping';
+  if (state.paragraph !== 'dropping') return false;
+  if (blank) {
+    state.paragraph = 'off';
+    return false;
+  }
+  return true;
+}
+
+function keepsLine(line, state) {
+  const bare = line.endsWith('\r') ? line.slice(0, -1) : line;
+  const blank = bare.trim() === '';
+  if (bare === START_MARKER) {
+    state.inBlock = true;
+    return true;
+  }
+  if (bare === END_MARKER) {
+    Object.assign(state, { inBlock: false, inList: false, paragraph: 'off' });
+    return true;
+  }
+  if (STATE_STAMP_RE.test(bare)) return false;
+  if (opensList(bare, state)) {
+    Object.assign(state, { inList: true, paragraph: 'off' });
+    return false;
+  }
+  if (dropsListLine(bare, blank, state) || dropsParagraphLine(bare, blank, state)) return false;
+  if (state.inBlock && bare === '# EGC Project Memory') state.paragraph = 'waiting';
+  return true;
+}
+
+function cleanContent(content) {
+  const state = { inList: false, inBlock: false, paragraph: 'off' };
+  const out = content.split('\n').filter(line => keepsLine(line, state));
   return out.join('\n').replace(/(\r?\n){3,}/g, '$1$1');
 }
 
