@@ -905,6 +905,17 @@ function foldCase(p: string): string {
   return CASE_INSENSITIVE_FS ? p.toLowerCase() : p;
 }
 
+// `~`, `$HOME` and `${HOME}` at the start of a path name the home directory
+// once the shell is done with them; every path check reads them the same
+// way, so a file is recognized under each spelling of its location.
+const HOME_PARAMETER_RE = /^\$(?:HOME|\{HOME\})(?=[\\/]|$)/;
+
+function expandHome(p: string): string {
+  if (p.startsWith('~')) return path.join(os.homedir(), p.slice(1));
+  const parameter = HOME_PARAMETER_RE.exec(p);
+  return parameter ? path.join(os.homedir(), p.slice(parameter[0].length)) : p;
+}
+
 export function isProtectedPath(p: string, baseDir: string = process.cwd()): boolean {
   // Trim first: a trailing newline (routine for anything piped through
   // `echo`) or stray whitespace survives path.resolve() into the final
@@ -913,10 +924,7 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
   // allowed through (audit EGC-533).
   p = p.trim();
 
-  // Expand ~ at the start
-  const expanded = p.startsWith('~')
-    ? path.join(os.homedir(), p.slice(1))
-    : p;
+  const expanded = expandHome(p);
 
   // Resolve symlinks so a link inside an allowed directory cannot point past
   // this check into a denied path. Fall back to the lexical path (then the
@@ -1013,9 +1021,7 @@ export function isReadDeniedPath(p: string, baseDir: string = process.cwd()): bo
   if (!isProtectedPath(p, baseDir)) return false;
 
   const trimmed = p.trim();
-  const expanded = trimmed.startsWith('~')
-    ? path.join(os.homedir(), trimmed.slice(1))
-    : trimmed;
+  const expanded = expandHome(trimmed);
   const normalizedP = resolveRealOrLexical(path.resolve(baseDir, expanded));
 
   // An explicitly operational location is readable.

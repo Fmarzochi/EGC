@@ -713,6 +713,9 @@ async function runTests() {
   run('a redirection inside a process substitution is read',    () => assertRedirectDenied(`cat <(echo evil >${secretFile})`, 'output'));
   run('an operator inside double quotes with an escaped quote is literal', () => assertNoRedirectDenial(`echo "\\"a>${profileFile}"`));
   run('a process substitution is a command, not a file',         () => assertNoRedirectDenial('cat <(echo evil)'));
+  run('two redirections glued in one word are both read',      () => assertRedirectDenied(`echo x >out.txt>${secretFile}`, 'output'));
+  run('$HOME in a double-quoted target names the home directory', () => assertRedirectDenied('echo evil >"$HOME/.ssh/id_rsa"', 'output'));
+  run('${HOME} names the home directory in every path check',   () => assertHardBlocking('cat ${HOME}/.ssh/id_rsa'));
   run('an operational file stays readable by redirection', () => assertNoRedirectDenial(`cat <${path.join(home, '.egc', 'bin', 'manifest.json')}`));
 
   // ── validate_command: the git force flag read per subcommand ─────────────
