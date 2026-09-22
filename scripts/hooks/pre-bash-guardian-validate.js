@@ -14,7 +14,9 @@
  * Without a validator installed the command is allowed, so a machine
  * without the build is never locked out. A validator that is installed but
  * gives no verdict (it stalls, stops, or answers something unreadable)
- * blocks the command, and the message says why and what to do.
+ * blocks the command, and the message says why and what to do. The
+ * validator gets four seconds, or EGC_GUARDIAN_TIMEOUT_MS milliseconds when
+ * that is set, so a slow machine raises the budget instead of the gate.
  *
  * Exit codes:
  *   0 = allow
@@ -29,7 +31,15 @@ const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin
 const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
 
 const MAX_STDIN = 1024 * 1024;
-const VALIDATE_TIMEOUT_MS = 4000;
+const DEFAULT_VALIDATE_TIMEOUT_MS = 4000;
+
+// The budget the validator gets, in milliseconds: EGC_GUARDIAN_TIMEOUT_MS
+// when it is a positive whole number, the default otherwise.
+function validateTimeoutMs() {
+  const budget = Number(process.env.EGC_GUARDIAN_TIMEOUT_MS);
+  return Number.isInteger(budget) && budget > 0 ? budget : DEFAULT_VALIDATE_TIMEOUT_MS;
+}
+const VALIDATE_TIMEOUT_MS = validateTimeoutMs();
 
 // Caps recursion into nested command/process substitutions
 // ($(echo $(echo $(...)))) — a real script has no reason to nest these more
@@ -630,20 +640,25 @@ function firstHardBlock(verdicts, segments) {
 // ran, and what to do. A validator that is not installed at all is the
 // other case, handled in run(), so a machine without the build stays
 // usable.
+function reasonWithoutVerdict(failure) {
+  switch (failure.kind) {
+    case 'timeout':
+      return `the validator did not answer within ${VALIDATE_TIMEOUT_MS / 1000} seconds`;
+    case 'unstartable':
+      return `the validator could not be started (${failure.detail})`;
+    case 'crash':
+      return `the validator stopped with ${failure.detail}`;
+    case 'unreadable':
+      return `the validator answered ${failure.detail}, which this hook could not read`;
+    default:
+      return 'the validator gave no verdict';
+  }
+}
+
 function withoutVerdict(failure) {
-  const why = {
-    timeout: `the validator did not answer within ${VALIDATE_TIMEOUT_MS / 1000} seconds`,
-    unstartable: `the validator could not be started (${failure.detail})`,
-    crash: `the validator stopped with ${failure.detail}`,
-    unreadable: `the validator answered ${failure.detail}, which this hook could not read`,
-  }[failure.kind] || 'the validator gave no verdict';
   return {
     exitCode: 2,
-    stderr:
-      `EGC Guardian could not validate this command, so it did not run: ${why}. ` +
-      'Nothing was executed. Run the command again; if this keeps happening, run ' +
-      "'egc doctor' to check the Guardian build, and set " +
-      'EGC_DISABLED_HOOKS=pre:bash:guardian-validate to lift this gate while you repair it.',
+    stderr: `EGC Guardian could not validate this command, so it did not run: ${reasonWithoutVerdict(failure)}. Nothing was executed. Run the command again; on a slow machine, set EGC_GUARDIAN_TIMEOUT_MS to a larger budget in milliseconds (${VALIDATE_TIMEOUT_MS} now). If this keeps happening, run 'egc doctor' to check the Guardian build, and set EGC_DISABLED_HOOKS=pre:bash:guardian-validate to lift this gate while you repair it.`,
   };
 }
 
@@ -695,6 +710,12 @@ function run(inputOrRaw) {
   const verdicts = answer.value;
   if (!Array.isArray(verdicts)) {
     return withoutVerdict({ kind: 'unreadable', detail: 'something that is not a list of verdicts' });
+  }
+  // One verdict per segment, in order: a shorter list would leave the
+  // segments past its end unjudged, and a longer one belongs to another
+  // command.
+  if (verdicts.length !== segments.length) {
+    return withoutVerdict({ kind: 'unreadable', detail: 'an incomplete list of verdicts' });
   }
   const hardBlock = firstHardBlock(verdicts, segments);
   if (hardBlock) return hardBlock;

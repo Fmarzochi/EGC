@@ -334,7 +334,7 @@ function resolveGuardianCli() {
 // without a verdict reads the kind; the others use callGuardian below.
 function callGuardianVerdict(cli, args, input, timeoutMs) {
   const result = spawnSync(process.execPath, [cli, ...args], {
-    input: input == null ? '' : String(input),
+    input: String(input ?? ''),
     encoding: 'utf8',
     timeout: timeoutMs,
   });

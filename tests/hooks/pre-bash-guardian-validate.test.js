@@ -216,11 +216,11 @@ function runTests() {
 
   // A stand-in validator written from the given source, so the hook can be
   // exercised against one that crashes, stalls or answers nonsense.
-  function runWithValidator(source, command) {
+  function runWithValidator(source, command, env = {}) {
     const cli = path.join(os.tmpdir(), `egc-validator-${process.pid}-${Date.now()}.js`);
     fs.writeFileSync(cli, source);
     try {
-      return runHook(command, { EGC_GUARDIAN_CLI: cli });
+      return runHook(command, { EGC_GUARDIAN_CLI: cli, ...env });
     } finally {
       try { fs.rmSync(cli, { force: true }); } catch { /* best-effort cleanup */ }
     }
@@ -235,10 +235,19 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('blocks the command and says the validator did not answer in time when it stalls', () => {
-    const result = runWithValidator('setTimeout(() => {}, 30000);\n', 'git status');
+    // The budget comes from the environment here so the case does not sit
+    // through the four seconds a user gets.
+    const result = runWithValidator('setTimeout(() => {}, 30000);\n', 'git status', { EGC_GUARDIAN_TIMEOUT_MS: '300' });
     assert.strictEqual(result.code, 2, `Expected a block without a verdict, got ${result.code}: ${result.stderr}`);
-    assert.ok(result.stderr.includes('did not answer within 4 seconds'), result.stderr);
+    assert.ok(result.stderr.includes('did not answer within 0.3 seconds'), result.stderr);
     assert.ok(result.stderr.includes('Nothing was executed'), result.stderr);
+    assert.ok(result.stderr.includes('EGC_GUARDIAN_TIMEOUT_MS'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command when the validator answers fewer verdicts than there are segments', () => {
+    const result = runWithValidator("process.stdout.write(JSON.stringify([{ allowed: true }]));\n", 'git status && git log');
+    assert.strictEqual(result.code, 2, `Expected a block without a verdict for every segment, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('incomplete list of verdicts'), result.stderr);
   })) passed++; else failed++;
 
   if (test('blocks the command and says the answer was unreadable when the validator prints something that is not JSON', () => {
