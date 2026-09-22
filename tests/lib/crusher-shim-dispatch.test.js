@@ -8,6 +8,19 @@ const { spawnSync } = require('child_process');
 
 const { needsShellOnWindows } = require('../../scripts/lib/crusher/shim-dispatch');
 const { DISPATCH_SCRIPT, jsStringLiteral, writeShimLauncher } = require('./shim-fixtures');
+// The flag of `egc run --raw` reaches every child through the environment,
+// so a suite started from a shell that exported it would hand a passthrough
+// to the cases that expect compression; the children start from an
+// environment without it, whatever the casing of the name (Windows reads
+// environment names without regard to case).
+function withoutRawFlag(env) {
+  const copy = { ...env };
+  for (const key of Object.keys(copy)) {
+    if (key.toUpperCase() === 'EGC_CRUSHER_RAW') delete copy[key];
+  }
+  return copy;
+}
+const BASE_ENV = withoutRawFlag(process.env);
 
 function withPlatform(value, fn) {
   const original = Object.getOwnPropertyDescriptor(process, 'platform');
@@ -77,9 +90,19 @@ function runShim(homeDir, name, args, options = {}) {
   // must be set or the real runner/user home leaks into the child process.
   return spawnSync(process.execPath, [DISPATCH_SCRIPT, name, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+    env: { ...BASE_ENV, HOME: homeDir, USERPROFILE: homeDir },
     ...options,
   });
+}
+
+// The shape the compression cases share: a fake git whose log is large and
+// the shim run for a non-generic command, the body handed back with the
+// result so each case asserts only what it is about.
+function runBigGitLog(dir, options = {}) {
+  const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
+  const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
+  seedManifest(dir, { git: fakeGit });
+  return { bigBody, result: runShim(dir, 'git', ['log', '--stat'], options) };
 }
 
 function test(name, fn) {
@@ -102,11 +125,7 @@ function runTests() {
   if (test('a non-generic command with large output gets compressed with the crusher marker', () => {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
-      const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
-      const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
-      seedManifest(dir, { git: fakeGit });
-
-      const result = runShim(dir, 'git', ['log', '--stat']);
+      const { bigBody, result } = runBigGitLog(dir);
       assert.strictEqual(result.status, 0);
       assert.ok(result.stdout.includes('[egc-crusher] saved'), 'expected the crusher marker in output');
       assert.ok(result.stdout.length < bigBody.length, 'expected compressed output to be smaller than the original');
@@ -115,16 +134,23 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('the raw flag exported under another casing by the suite does not reach the children', () => {
+    const scrubbed = withoutRawFlag({ egc_crusher_raw: '1', EGC_CRUSHER_RAW: '1', Egc_Crusher_Raw: '1', KEEP: 'x' });
+    assert.deepStrictEqual(Object.keys(scrubbed), ['KEEP']);
+    const dir = createTempDir('egc-shim-dispatch-');
+    try {
+      const { result } = runBigGitLog(dir, { env: withoutRawFlag({ ...process.env, egc_crusher_raw: '1', HOME: dir, USERPROFILE: dir }) });
+      assert.strictEqual(result.status, 0);
+      assert.ok(result.stdout.includes('[egc-crusher] saved'), 'the lowercase flag of the suite must not reach the child');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('EGC_CRUSHER_RAW=1 bypasses compression for a large non-generic command (egc run --raw escape hatch, audit EGC-521)', () => {
     const dir = createTempDir('egc-shim-dispatch-');
     try {
-      const bigBody = Array.from({ length: 100 }, (_, i) => `commit ${'a'.repeat(40)}\nAuthor: x\nDate: y\n\n    message ${i}\n`).join('\n');
-      const fakeGit = writeFakeBinary(dir, 'git', { stdout: bigBody });
-      seedManifest(dir, { git: fakeGit });
-
-      const result = runShim(dir, 'git', ['log', '--stat'], {
-        env: { ...process.env, HOME: dir, USERPROFILE: dir, EGC_CRUSHER_RAW: '1' },
-      });
+      const { bigBody, result } = runBigGitLog(dir, { env: { ...BASE_ENV, HOME: dir, USERPROFILE: dir, EGC_CRUSHER_RAW: '1' } });
       assert.strictEqual(result.status, 0);
       assert.strictEqual(result.stdout, bigBody, 'expected the exact raw output, not the compressed form');
       assert.ok(!result.stdout.includes('[egc-crusher]'));
@@ -251,7 +277,7 @@ function runTests() {
         encoding: 'utf8',
         timeout: 15000,
         env: {
-          ...process.env,
+          ...BASE_ENV,
           HOME: overrideHome,
           USERPROFILE: overrideHome,
           PATH: [installedShimDir, realBinDir, path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter),
@@ -281,7 +307,7 @@ function runTests() {
         encoding: 'utf8',
         timeout: 15000,
         env: {
-          ...process.env,
+          ...BASE_ENV,
           HOME: overrideHome,
           USERPROFILE: overrideHome,
           PATH: [installedShimDir, path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter),
@@ -303,7 +329,7 @@ function runTests() {
       // EGC_SHIM_PENDING naming it with its direct parent's pid, which is
       // the depth-1 signature of the shim having resolved to itself.
       const result = runShim(dir, 'npm', ['--version'], {
-        env: { ...process.env, HOME: dir, USERPROFILE: dir, EGC_SHIM_PENDING: `npm:${process.pid}` },
+        env: { ...BASE_ENV, HOME: dir, USERPROFILE: dir, EGC_SHIM_PENDING: `npm:${process.pid}` },
       });
       assert.strictEqual(result.status, 127);
       assert.ok(result.stderr.includes('refused to recurse'), `expected the circuit-breaker message, got: ${result.stderr}`);
@@ -333,7 +359,7 @@ function runTests() {
       // masked by an equivalent PATH fallback.
       const result = runShim(overrideHome, 'npm', ['--version'], {
         env: {
-          ...process.env,
+          ...BASE_ENV,
           HOME: overrideHome,
           USERPROFILE: overrideHome,
           EGC_SHIM_LAUNCHER_DIR: installedShimDir,
