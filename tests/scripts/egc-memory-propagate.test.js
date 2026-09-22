@@ -421,6 +421,33 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('keeps project memory out of the context files when git cannot open the repository', () => {
+    const dir = mktemp();
+    try {
+      // A .git file whose gitdir does not exist: the directory sits inside a
+      // repository as far as anything that copies working trees can tell,
+      // but git cannot open it, so the clean filter cannot be armed there.
+      fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir')}\n`);
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      fs.writeFileSync(path.join(dir, 'CLAUDE.md'), '# Claude\n');
+      const lines = [];
+      const originalWrite = process.stderr.write;
+      process.stderr.write = (chunk) => { lines.push(String(chunk)); return true; };
+      let result;
+      try {
+        result = propagateStateToTools({ projectPath: dir, ...args });
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+      assert.ok(Object.values(result).every(value => value === null), `no context file is reported as written: ${JSON.stringify(result)}`);
+      assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8'), '# Agents\n', 'AGENTS.md is left as it was');
+      assert.strictEqual(fs.readFileSync(path.join(dir, 'CLAUDE.md'), 'utf-8'), '# Claude\n', 'CLAUDE.md is left as it was');
+      assert.ok(lines.some(l => l.includes(dir)), 'one stderr line names the project that was not mirrored');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

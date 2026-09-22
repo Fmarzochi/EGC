@@ -701,6 +701,46 @@ function runFreshnessGuardTests() {
     }
   })) passed++; else failed++;
 
+  if (test('keeps project memory out of the context files when git cannot open the repository', () => {
+    const dir = mktemp();
+    try {
+      // A .git file whose gitdir does not exist: the directory sits inside a
+      // repository as far as anything that copies working trees can tell,
+      // but git cannot open it, so the clean filter cannot be armed there.
+      fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir')}\n`);
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      const lines = [];
+      const originalWrite = process.stderr.write;
+      process.stderr.write = (chunk) => { lines.push(String(chunk)); return true; };
+      let result;
+      try {
+        result = propagateStateContent(dir, SAMPLE_STATE);
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+      assert.strictEqual(result.agents, null, 'no context file is reported as written');
+      assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8'), '# Agents\n', 'AGENTS.md is left as it was');
+      assert.ok(lines.some(l => l.includes(dir)), 'one stderr line names the project that was not mirrored');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('mirrors project memory once the commit-privacy filter is in place in the repository', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.agents, 'AGENTS.md is reported as written');
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8').includes('EGC v1.1.1 stable'), 'the memory reaches the mirror');
+      const required = execFileSync('git', ['config', '--get', 'filter.egc-memory.required'], { cwd: dir, encoding: 'utf-8' }).trim();
+      assert.strictEqual(required, 'true', 'the filter is armed before the mirror is written');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   return { passed, failed };
 }
 
