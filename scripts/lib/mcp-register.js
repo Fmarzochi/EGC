@@ -46,6 +46,66 @@ function readFileIfExists(targetPath) {
   }
 }
 
+// TOML spells `mcp_servers` two ways that cannot be mixed: an array of
+// tables ([[mcp_servers]], what registerToml appends) and an inline array
+// (mcp_servers = [...]). Once the key exists as an inline array, appending
+// an [[mcp_servers]] table makes the whole document invalid — "Cannot mutate
+// immutable namespace" — and the tool refuses to start on its next launch.
+//
+// The distinction only survives in the raw text: @iarna/toml parses both
+// forms into a plain JS array, so tomlHasActiveServer cannot see it (and
+// @iarna/toml is a devDependency that never ships, so the parse path is not
+// available at install time anyway).
+//
+// Mistral Vibe reaches this state on its own: `vibe mcp remove <name>` on
+// the last server rewrites the file with `mcp_servers = []` left behind. A
+// hand-edited Codex config can reach it too, so the guard is shared.
+//
+// Returns null when the key is not an inline array — the normal case,
+// including [[mcp_servers]] tables and a file that has no mcp_servers at
+// all. Otherwise { start, end, isEmpty }, as inclusive line indices into the
+// split content. Anything that cannot be read with confidence is reported as
+// non-empty: refusing to touch a file is always safe, appending to one that
+// turns out to be occupied is not.
+function findInlineMcpServersArray(content) {
+  const lines = content.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith('#')) continue;
+    const opening = /^mcp_servers\s*=\s*\[/.exec(trimmed);
+    if (!opening) continue;
+
+    // Collect forward until the closing bracket: TOML allows the inline
+    // array to span lines. A nested `]` (an args array inside an inline
+    // table) closes early here, which only ever reports the array as
+    // occupied — the conservative answer, and the correct one, since a
+    // nested array means the outer one is not empty.
+    let body = trimmed.slice(opening[0].length);
+    let end = i;
+    let close = body.indexOf(']');
+    while (close === -1 && end + 1 < lines.length) {
+      end += 1;
+      body += '\n' + lines[end];
+      close = body.indexOf(']');
+    }
+    if (close === -1) {
+      // Unterminated: no way to tell what is in there.
+      return { start: i, end: lines.length - 1, isEmpty: false };
+    }
+
+    const inner = body
+      .slice(0, close)
+      .split('\n')
+      .map(part => part.trim())
+      .filter(part => part !== '' && !part.startsWith('#'))
+      .join('');
+    return { start: i, end, isEmpty: inner === '' };
+  }
+
+  return null;
+}
+
 // Whether an active (uncommented, correctly-tabled) mcp_servers entry with
 // the given name already exists. A plain string search matches commented-out
 // lines too (`# name = "egc-guardian"` still contains the substring), which
@@ -227,12 +287,35 @@ function tomlEscape(p) {
 }
 
 /**
- * Same idea as registerJson but for TOML configs (Codex CLI). Returns true
- * if the file was appended to, false if both entries were already present.
+ * Same idea as registerJson but for TOML configs (Codex CLI, Mistral Vibe).
+ * Returns true if the file was appended to, false if both entries were
+ * already present.
+ *
+ * An empty inline `mcp_servers = []` is dropped first: it carries no entries
+ * to preserve, and leaving it in place would make the appended
+ * [[mcp_servers]] tables invalid TOML. A non-empty one throws instead, the
+ * same "left untouched" contract registerJson uses for a file it cannot
+ * safely merge into - rewriting it would mean re-serializing entries the
+ * person wrote by hand, and appending to it would leave the tool unable to
+ * start at all.
  */
 function registerToml(targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
   let content = readFileIfExists(targetPath) ?? '';
+
+  const inlineArray = findInlineMcpServersArray(content);
+  if (inlineArray && !inlineArray.isEmpty) {
+    throw new TypeError(
+      `existing file at ${targetPath} declares mcp_servers as an inline array - left untouched: ` +
+      'rewrite it as [[mcp_servers]] tables, or add egc-guardian and egc-memory to it by hand, then re-run'
+    );
+  }
+  if (inlineArray) {
+    const lines = content.split('\n');
+    lines.splice(inlineArray.start, inlineArray.end - inlineArray.start + 1);
+    content = lines.join('\n');
+  }
+
   let appended = false;
   if (!tomlHasActiveServer(content, 'egc-guardian')) {
     content += `\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["${tomlEscape(guardianBin)}"]\n`;
@@ -488,6 +571,7 @@ function registerMcpServers(homeDir, bins, callbacks = {}) {
 
 module.exports = {
   buildMcpRegistrationTargets,
+  findInlineMcpServersArray,
   parseJsonObject,
   registerJson,
   registerToml,

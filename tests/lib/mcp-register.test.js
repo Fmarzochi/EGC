@@ -763,6 +763,75 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
 
+    (test('registerToml drops an empty inline mcp_servers array before appending (what `vibe mcp remove` leaves behind)', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.vibe', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // Byte-for-byte what Mistral Vibe writes after `vibe mcp add x` followed
+    // by `vibe mcp remove x`. Appending [[mcp_servers]] to this without
+    // dropping the inline array first makes the file invalid TOML, and Vibe
+    // then refuses to start at all.
+    fs.writeFileSync(target, 'theme = "auto"\nmcp_servers = []\n');
+
+    const changed = registerToml(target, bins);
+
+    assert.strictEqual(changed, true);
+    const content = fs.readFileSync(target, 'utf8');
+    assert.ok(!/^\s*mcp_servers\s*=\s*\[/m.test(content), 'the empty inline array must be gone');
+    assert.ok(content.includes('theme = "auto"'), 'unrelated keys must survive');
+    assert.ok(content.includes('name = "egc-guardian"'));
+    assert.ok(content.includes('name = "egc-memory"'));
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(content);
+    assert.strictEqual(parsed.mcp_servers.length, 2, 'the result must be valid TOML holding both servers');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml leaves a non-empty inline mcp_servers array untouched rather than corrupting it', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.vibe', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // Entries the person wrote by hand: appending would break the file, and
+    // rewriting the array would mean re-serializing their own configuration.
+    // Throwing keeps "could not write" distinguishable from "nothing to do",
+    // the same contract registerJson uses for a file it cannot merge into.
+    const original = 'theme = "auto"\nmcp_servers = [ { name = "mine", command = "node" } ]\n';
+    fs.writeFileSync(target, original);
+
+    assert.throws(() => registerToml(target, bins), /inline array - left untouched/);
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml still appends normally when mcp_servers is already an array of tables', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // The shape registerToml itself writes: [[mcp_servers]] tables append
+    // cleanly, so the new guard must not treat this as an inline array.
+    fs.writeFileSync(target, '[[mcp_servers]]\nname = "other"\ncommand = "node"\nargs = ["/x.js"]\n');
+
+    const changed = registerToml(target, bins);
+
+    assert.strictEqual(changed, true);
+    const content = fs.readFileSync(target, 'utf8');
+    assert.ok(content.includes('name = "other"'), 'the existing entry must survive');
+    assert.ok(content.includes('name = "egc-guardian"'));
+    assert.ok(content.includes('name = "egc-memory"'));
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
   // ── registerZedContextServers ───────────────────────────────────
 
   (test('registerZedContextServers keeps a Windows bin path valid JSON (backslash escape)', () => {
