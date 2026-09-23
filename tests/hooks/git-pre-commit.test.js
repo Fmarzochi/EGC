@@ -39,9 +39,18 @@ function cleanOf(text) {
   return execFileSync('node', [LEAK_SCRIPT, '--filter-clean'], { input: text, encoding: 'utf8' });
 }
 
+// The hook steps aside under its documented bypass variables, so they are
+// scrubbed from the environment the cases run in.
+function hookEnv(extra = {}) {
+  const env = { ...process.env, ...extra };
+  delete env.EGC_SKIP_GIT_HOOKS;
+  delete env.EGC_SKIP_PRECOMMIT;
+  return env;
+}
+
 function makeRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-precommit-'));
-  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', env: hookEnv(), timeout: 10000 });
   git('init', '-q');
   git('config', 'user.email', 'test@example.com');
   git('config', 'user.name', 'Test');
@@ -49,7 +58,7 @@ function makeRepo() {
 }
 
 function runHook(dir, env = {}) {
-  return spawnSync('bash', [HOOK], { cwd: dir, encoding: 'utf8', env: { ...process.env, ...env } });
+  return spawnSync('bash', [HOOK], { cwd: dir, encoding: 'utf8', env: hookEnv(env), timeout: 10000 });
 }
 
 let passed = 0;
@@ -88,7 +97,8 @@ if (process.platform === 'win32') {
     const { dir, git } = makeRepo();
     fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
     git('add', 'AGENTS.md');
-    runHook(dir);
+    const result = runHook(dir);
+    assert.strictEqual(result.status, 0, result.stderr);
     assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8'), POPULATED);
   });
 
@@ -121,6 +131,18 @@ if (process.platform === 'win32') {
     const result = runHook(dir);
     assert.strictEqual(result.status, 0, result.stderr);
     assert.strictEqual(git('show', `:${name}`), cleanOf(POPULATED));
+  });
+
+  run('the hook installed as a link into .git/hooks finds the clean side at the top level', () => {
+    const { dir, git } = makeRepo();
+    fs.mkdirSync(path.join(dir, 'scripts'));
+    fs.copyFileSync(LEAK_SCRIPT, path.join(dir, 'scripts', 'check-state-leak.js'));
+    fs.symlinkSync(HOOK, path.join(dir, '.git', 'hooks', 'pre-commit'));
+    fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
+    git('add', 'AGENTS.md', 'scripts/check-state-leak.js');
+    const result = spawnSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir, encoding: 'utf8', env: hookEnv(), timeout: 10000 });
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.strictEqual(git('show', 'HEAD:AGENTS.md'), cleanOf(POPULATED));
   });
 
   run('without node at hand the commit stops and says what is missing', () => {

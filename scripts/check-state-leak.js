@@ -108,6 +108,16 @@ function dropsParagraphLine(bare, blank, state) {
   return true;
 }
 
+// A context file carries the block under `## EGC Project Memory`, and the
+// propagation writes sections after the memory (the natural-language
+// triggers) that are as machine-made as the memory itself: from a heading
+// that is not the memory heading to the end marker, everything goes, so
+// the block cleans back to the markers, the heading and the notice whatever
+// the propagation put after them. llms.txt keeps its own shape.
+function opensTrailer(bare, state) {
+  return state.inBlock && state.contextShape && /^#{1,6} /.test(bare) && !MEMORY_HEADING_RE.test(bare);
+}
+
 function keepsLine(line, state) {
   const bare = line.endsWith('\r') ? line.slice(0, -1) : line;
   const blank = bare.trim() === '';
@@ -116,10 +126,16 @@ function keepsLine(line, state) {
     return true;
   }
   if (bare === END_MARKER) {
-    Object.assign(state, { inBlock: false, inList: false, paragraph: 'off' });
+    Object.assign(state, { inBlock: false, inList: false, paragraph: 'off', contextShape: false, trailer: false });
     return true;
   }
+  if (state.trailer) return false;
   if (STATE_STAMP_RE.test(bare)) return false;
+  if (state.inBlock && bare === '## EGC Project Memory') state.contextShape = true;
+  if (opensTrailer(bare, state)) {
+    state.trailer = true;
+    return false;
+  }
   if (opensList(bare, state)) {
     Object.assign(state, { inList: true, paragraph: 'off' });
     return false;
@@ -130,7 +146,7 @@ function keepsLine(line, state) {
 }
 
 function cleanContent(content) {
-  const state = { inList: false, inBlock: false, paragraph: 'off' };
+  const state = { inList: false, inBlock: false, paragraph: 'off', contextShape: false, trailer: false };
   const out = content.split('\n').filter(line => keepsLine(line, state));
   return out.join('\n').replace(/(\r?\n){3,}/g, '$1$1');
 }
@@ -271,9 +287,15 @@ function main() {
   // Git clean-filter mode: stdin in, zeroed content out. Wired by
   // memory-filters.js as filter.egc-memory.clean so populated memory is
   // stripped from the staged blob even when local hooks are bypassed.
+  // The bytes are decoded as UTF-8 only when they round-trip; otherwise
+  // they are read one per character and written back the same way, so
+  // every byte kept goes out as it came and the markers, ASCII, are still
+  // read.
   if (mode === '--filter-clean') {
-    const stdin = fs.readFileSync(0, 'utf8');
-    process.stdout.write(cleanContent(stdin));
+    const raw = fs.readFileSync(0);
+    const text = raw.toString('utf8');
+    const isText = Buffer.from(text, 'utf8').equals(raw);
+    process.stdout.write(isText ? cleanContent(text) : Buffer.from(cleanContent(raw.toString('latin1')), 'latin1'));
     return;
   }
 

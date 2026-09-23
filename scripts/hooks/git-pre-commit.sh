@@ -16,7 +16,14 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 EGC_START='<!-- egc:start -->'
+# The clean side lives next to this script (the wrapper scripts/install.sh
+# writes runs it from the repository, and so does the suite); when the hook
+# was installed as a link into .git/hooks, BASH_SOURCE names the link, so
+# the script is looked for at the top level of the repository instead.
 CLEAN_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/check-state-leak.js"
+if [[ ! -f "$CLEAN_SCRIPT" ]]; then
+  CLEAN_SCRIPT="$(git rev-parse --show-toplevel)/scripts/check-state-leak.js"
+fi
 
 # The paths come NUL-separated, so a name git would otherwise quote (a
 # space, a character outside ASCII) reaches the commands as it is; T is in
@@ -30,8 +37,12 @@ while IFS= read -r -d '' FILE; do
   # grep reads the whole blob: a grep -q that stops at the first match closes
   # the pipe under git show, and with pipefail the test would read as false.
   if git show ":$FILE" 2>/dev/null | grep -F "$EGC_START" >/dev/null; then
-    if ! command -v node >/dev/null 2>&1 || [[ ! -f "$CLEAN_SCRIPT" ]]; then
-      echo "[egc] $FILE is staged with a local state block, and the clean side of the commit-privacy filter (node and scripts/check-state-leak.js) is not at hand to take the memory out, so the commit stops here and the block never reaches history. Put node on the PATH and commit again." >&2
+    if ! command -v node >/dev/null 2>&1; then
+      echo "[egc] $FILE is staged with a local state block, and node is not on the PATH to run the clean side of the commit-privacy filter, so the commit stops here and the block never reaches history. Put node on the PATH and commit again." >&2
+      exit 1
+    fi
+    if [[ ! -f "$CLEAN_SCRIPT" ]]; then
+      echo "[egc] $FILE is staged with a local state block, and the clean side of the commit-privacy filter is not at $CLEAN_SCRIPT, so the commit stops here and the block never reaches history. This hook belongs to the EGC repository: run scripts/install.sh there to put it back in place, then commit again." >&2
       exit 1
     fi
     CLEAN_HASH=$(git show ":$FILE" | node "$CLEAN_SCRIPT" --filter-clean | git hash-object -w --stdin)

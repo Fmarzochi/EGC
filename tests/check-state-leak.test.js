@@ -456,6 +456,23 @@ run('llms.txt: a staged populated file is blocked', () => {
   assert.ok(res.stderr.includes('llms.txt'), res.stderr);
 });
 
+run('the clean of a smudged context file gives the committed skeleton back, triggers dropped', () => {
+  const { dir, home } = seedRepo('egc-leak-round-');
+  const smudged = smudge(dir, home, 'AGENTS.md', BARE_SKELETON).stdout;
+  assert.ok(smudged.includes('## EGC Natural Language Interface'), 'the smudge writes the triggers into the block');
+  const skeleton = clean(dir, smudged);
+  assert.ok(!skeleton.includes('Natural Language Interface'), skeleton);
+  assert.ok(skeleton.includes('## EGC Project Memory') && skeleton.includes('_Machine-generated'), skeleton);
+  assert.strictEqual(clean(dir, smudge(dir, home, 'AGENTS.md', skeleton).stdout), skeleton);
+});
+
+run('the clean side keeps bytes that are not UTF-8 as they came, outside the block', () => {
+  const input = Buffer.from('# A\n\xff\xfe tail\n<!-- egc:start -->\n## EGC Project Memory\n**Context:** secret\n<!-- egc:end -->\n', 'latin1');
+  const out = spawnSync('node', [SCRIPT, '--filter-clean'], { input }).stdout;
+  assert.ok(out.subarray(0, 12).equals(input.subarray(0, 12)), out.toString('latin1'));
+  assert.ok(!out.toString('latin1').includes('secret'), out.toString('latin1'));
+});
+
 run('the smudge leaves bytes that are not UTF-8 untouched', () => {
   const { dir, home } = seedRepo();
   const bytes = Buffer.from([0xff, 0xfe, 0x41, 0x0a]);
