@@ -410,21 +410,24 @@ function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
 export function propagateStateToTools(args: PropagateArgs): PropagateResult {
   if (!ensureCommitPrivacy(args.projectPath)) return noMirrorsWritten();
   const block = buildSummaryBlock(args);
-  const written: PropagateResult = {
-    cursor: writeCursorContext(args.projectPath, block),
-    copilot: writeCopilotContext(args.projectPath, block),
-    gemini: writeGeminiContext(args.projectPath, block),
-    windsurf: writeWindsurfContext(args.projectPath, block),
-    trae: writeTraeContext(args.projectPath, block),
-    zed: writeZedContext(args.projectPath, block),
-    cline: writeClineContext(args.projectPath, block),
-    aider: writeAiderContext(args.projectPath, block),
-    cursorrules: writeLegacyCursorRules(args.projectPath, block),
-    agents: writeAgentsContext(args.projectPath, block),
-    llms: writeLlmsTxt(args.projectPath, args),
-    claude: writeClaudeContext(args.projectPath, block),
-  };
-  forgetIndexStat(args.projectPath, written);
+  // The files written before a writer that throws are refreshed too.
+  const written = noMirrorsWritten();
+  try {
+    written.cursor = writeCursorContext(args.projectPath, block);
+    written.copilot = writeCopilotContext(args.projectPath, block);
+    written.gemini = writeGeminiContext(args.projectPath, block);
+    written.windsurf = writeWindsurfContext(args.projectPath, block);
+    written.trae = writeTraeContext(args.projectPath, block);
+    written.zed = writeZedContext(args.projectPath, block);
+    written.cline = writeClineContext(args.projectPath, block);
+    written.aider = writeAiderContext(args.projectPath, block);
+    written.cursorrules = writeLegacyCursorRules(args.projectPath, block);
+    written.agents = writeAgentsContext(args.projectPath, block);
+    written.llms = writeLlmsTxt(args.projectPath, args);
+    written.claude = writeClaudeContext(args.projectPath, block);
+  } finally {
+    forgetIndexStat(args.projectPath, written);
+  }
   return written;
 }
 

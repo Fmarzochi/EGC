@@ -423,6 +423,35 @@ run('forgetIndexStat: an index another git holds is said in one line and left al
   assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), ' M AGENTS.md\n');
 });
 
+run('forgetIndexStat: a mirror committed empty is a real change, refreshed or not', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '');
+  git('add', 'AGENTS.md');
+  git('commit', '-q', '-m', 'empty');
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
+  forgetIndexStat(dir, [path.join(dir, 'AGENTS.md')]);
+  // The clean side keeps the skeleton of the block, so the file differs
+  // from the empty blob for real; the entry is left alone and nothing staged.
+  assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), ' M AGENTS.md\n');
+  assert.strictEqual(git('diff', '--cached', '--name-only'), '');
+});
+
+run('forgetIndexStat: a project directory below the top level refreshes its own entry', () => {
+  const { dir, git } = makeRepo();
+  const project = path.join(dir, 'pkg');
+  fs.mkdirSync(project);
+  configureMemoryFilters({ projectDir: project, scriptPath: LEAK_SCRIPT, dryRun: false });
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# root\n');
+  fs.writeFileSync(path.join(project, 'AGENTS.md'), POPULATED);
+  git('add', 'AGENTS.md', 'pkg/AGENTS.md');
+  git('commit', '-q', '-m', 'seed');
+  fs.writeFileSync(path.join(project, 'AGENTS.md'), LONGER);
+  forgetIndexStat(project, [path.join(project, 'AGENTS.md')]);
+  assert.strictEqual(git('status', '--porcelain'), '');
+  assert.strictEqual(git('ls-files'), 'AGENTS.md\npkg/AGENTS.md\n', 'no entry appears that was not there');
+});
+
 run('forgetIndexStat: outside a repository nothing happens', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-norepo-'));
   fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);

@@ -435,7 +435,9 @@ async function runTests() {
       propagateStateToTools({ projectPath: dir, ...args });
       execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
       execFileSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir });
-      propagateStateToTools({ projectPath: dir, ...args, next: [...args.next, 'a longer next step recorded by a later session that changes the size of the mirror'] });
+      const second = propagateStateToTools({ projectPath: dir, ...args, next: [...args.next, 'a longer next step recorded by a later session that changes the size of the mirror'] });
+      assert.strictEqual(second.agents, path.join(dir, 'AGENTS.md'), 'the mirror is written again');
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8').includes('a longer next step recorded by a later session'), 'the mirror carries the longer block');
       const status = execFileSync('git', ['status', '--porcelain', '--', 'AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
       assert.strictEqual(status, '', `git must read the rewritten mirror as unmodified, got: ${JSON.stringify(status)}`);
     } finally {

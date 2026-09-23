@@ -609,9 +609,17 @@ function noMirrorsWritten() {
 // change, and nothing is ever staged (a path handed to update-index
 // directly would be re-added with its current content). Only a plain entry
 // takes the round trip: one marked skip-worktree or assume-unchanged, an
-// unmerged one, or an intent-to-add one (an empty blob in the index) is
-// left as it is, since the round trip would drop the mark. Without git or
-// a repository there is nothing recorded to refresh; a later step that
+// unmerged one, or an intent-to-add one is left as it is, since the round
+// trip would drop the mark. An intent-to-add entry is told by the empty
+// blob it carries, and leaving a file committed empty alone costs nothing:
+// the block written into it cleans to a skeleton, a real change either
+// way. The paths are read and given back relative to the top level, so a
+// project directory below it refreshes its own entries. The listing and
+// the write are two commands: a git that stages one of these files in the
+// instant between them has that entry read back as unstaged, with the file
+// intact; closing that instant would need the write to hold the index lock
+// while the listing runs, which a synchronous step cannot do. Without git
+// or a repository there is nothing recorded to refresh; a later step that
 // fails (an index another git holds) is said in one line, and git reads
 // the files again at the next session start or memory update.
 const EMPTY_BLOB_IDS = new Set([
@@ -619,15 +627,16 @@ const EMPTY_BLOB_IDS = new Set([
   '473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813',
 ]);
 
-// The entries of `git ls-files -z -s -t -v` that may take the round trip
-// ("H 100644 <oid> 0\t<path>": the tag, the entry as -s prints it, the
-// path), as the text --index-info reads and the paths to refresh.
+// The entries of `git ls-files -z -s -t -v --full-name` that may take the
+// round trip ("H 100644 <oid> 0\t<path>": the tag, the entry as -s prints
+// it, the path from the top level), as the text --index-info reads and the
+// paths to refresh.
 function plainIndexEntries(listing) {
   const info = [];
   const paths = [];
   for (const record of listing.split('\0')) {
     const match = /^([^ ]) (\d{6} ([0-9a-f]+) )(\d)\t(.+)$/s.exec(record);
-    if (!match || match[1] !== 'H' || match[4] !== '0' || EMPTY_BLOB_IDS.has(match[3])) continue;
+    if (match?.[1] !== 'H' || match[4] !== '0' || EMPTY_BLOB_IDS.has(match[3])) continue;
     info.push(`${match[2]}${match[4]}\t${match[5]}\0`);
     paths.push(match[5]);
   }
@@ -640,7 +649,7 @@ function forgetIndexStat(projectPath, files) {
   const gitOptions = { cwd: projectPath, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] };
   let listing;
   try {
-    listing = execFileSync(GIT_BIN, ['ls-files', '-z', '-s', '-t', '-v', '--', ...relative], gitOptions);
+    listing = execFileSync(GIT_BIN, ['ls-files', '-z', '-s', '-t', '-v', '--full-name', '--', ...relative], gitOptions);
   } catch {
     return;
   }
@@ -648,7 +657,7 @@ function forgetIndexStat(projectPath, files) {
   if (plain.paths.length === 0) return;
   try {
     execFileSync(GIT_BIN, ['update-index', '-z', '--index-info'], { ...gitOptions, input: plain.info });
-    execFileSync(GIT_BIN, ['add', '--refresh', '--', ...plain.paths], gitOptions);
+    execFileSync(GIT_BIN, ['add', '--refresh', '--', ...plain.paths.map(file => `:/${file}`)], gitOptions);
   } catch (err) {
     const detail = String(err.stderr || err.message).trim().split(/\r?\n/)[0] || 'git failed';
     process.stderr.write(`[egc-memory] the git index of ${projectPath} could not be refreshed after the context files were rewritten: ${detail}. git may read those files as modified until the next session start or memory update rewrites them.\n`);
@@ -662,20 +671,23 @@ function propagateStateContent(projectPath, stateContent) {
 
   const stateUpdated = parsed.updated;
 
-  const written = {
-    cursor: writeCursorContext(projectPath, block, stateUpdated),
-    copilot: writeCopilotContext(projectPath, block, stateUpdated),
-    gemini: writeGeminiContext(projectPath, block, stateUpdated),
-    windsurf: writeWindsurfContext(projectPath, block, stateUpdated),
-    trae: writeTraeContext(projectPath, block, stateUpdated),
-    zed: writeZedContext(projectPath, block, stateUpdated),
-    cline: writeClineContext(projectPath, block, stateUpdated),
-    aider: writeAiderContext(projectPath, block, stateUpdated),
-    cursorrules: writeLegacyCursorRules(projectPath, block, stateUpdated),
-    agents: writeAgentsContext(projectPath, block, stateUpdated),
-    llms: writeLlmsTxt(projectPath, parsed),
-  };
-  forgetIndexStat(projectPath, Object.values(written).filter(Boolean));
+  // The files written before a writer that throws are refreshed too.
+  const written = noMirrorsWritten();
+  try {
+    written.cursor = writeCursorContext(projectPath, block, stateUpdated);
+    written.copilot = writeCopilotContext(projectPath, block, stateUpdated);
+    written.gemini = writeGeminiContext(projectPath, block, stateUpdated);
+    written.windsurf = writeWindsurfContext(projectPath, block, stateUpdated);
+    written.trae = writeTraeContext(projectPath, block, stateUpdated);
+    written.zed = writeZedContext(projectPath, block, stateUpdated);
+    written.cline = writeClineContext(projectPath, block, stateUpdated);
+    written.aider = writeAiderContext(projectPath, block, stateUpdated);
+    written.cursorrules = writeLegacyCursorRules(projectPath, block, stateUpdated);
+    written.agents = writeAgentsContext(projectPath, block, stateUpdated);
+    written.llms = writeLlmsTxt(projectPath, parsed);
+  } finally {
+    forgetIndexStat(projectPath, Object.values(written).filter(Boolean));
+  }
   return written;
 }
 
