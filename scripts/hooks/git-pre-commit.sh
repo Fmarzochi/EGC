@@ -27,7 +27,9 @@ while IFS= read -r FILE; do
     *.md|*.mdx|*.mdc) ;;
     *) continue ;;
   esac
-  if git show ":$FILE" 2>/dev/null | grep -qF "$EGC_START"; then
+  # grep reads the whole blob: a grep -q that stops at the first match closes
+  # the pipe under git show, and with pipefail the test would read as false.
+  if git show ":$FILE" 2>/dev/null | grep -F "$EGC_START" >/dev/null; then
     if ! command -v node >/dev/null 2>&1 || [[ ! -f "$CLEAN_SCRIPT" ]]; then
       echo "[egc] $FILE is staged with a local state block, and the clean side of the commit-privacy filter (node and scripts/check-state-leak.js) is not at hand to take the memory out, so the commit stops here and the block never reaches history. Put node on the PATH and commit again." >&2
       exit 1
