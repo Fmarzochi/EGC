@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Strips egc:state blocks from staged markdown files before commit.
-# The working tree is left untouched — IDEs continue reading local project memory normally.
+# Cleans the egc:state block of a staged context file to the skeleton the
+# commit-privacy filter keeps (the markers, the heading and the notice stay,
+# the memory goes), through the same clean function the filter runs, so the
+# committed form is one. The working tree is left untouched: the tools keep
+# reading the local project memory from it.
 
 set -euo pipefail
 
@@ -16,7 +19,7 @@ STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null) || true
 [[ -z "$STAGED" ]] && exit 0
 
 EGC_START='<!-- egc:start -->'
-EGC_END='<!-- egc:end -->'
+CLEAN_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/check-state-leak.js"
 
 while IFS= read -r FILE; do
   [[ -z "$FILE" ]] && continue
@@ -25,10 +28,18 @@ while IFS= read -r FILE; do
     *) continue ;;
   esac
   if git show ":$FILE" 2>/dev/null | grep -qF "$EGC_START"; then
-    CLEAN_HASH=$(git show ":$FILE" | sed "/^${EGC_START}$/,/^${EGC_END}$/d" | git hash-object -w --stdin)
-    MODE=$(git ls-files --stage "$FILE" | awk '{print $1}')
-    git update-index --cacheinfo "${MODE},${CLEAN_HASH},${FILE}"
-    echo "[egc] stripped local state block from $FILE"
+    if ! command -v node >/dev/null 2>&1 || [[ ! -f "$CLEAN_SCRIPT" ]]; then
+      echo "[egc] $FILE is staged with a local state block, and the clean side of the commit-privacy filter (node and scripts/check-state-leak.js) is not at hand to take the memory out, so the commit stops here and the block never reaches history. Put node on the PATH and commit again." >&2
+      exit 1
+    fi
+    CLEAN_HASH=$(git show ":$FILE" | node "$CLEAN_SCRIPT" --filter-clean | git hash-object -w --stdin)
+    ENTRY=$(git ls-files --stage "$FILE")
+    MODE=$(echo "$ENTRY" | awk '{print $1}')
+    STAGED_HASH=$(echo "$ENTRY" | awk '{print $2}')
+    if [[ "$CLEAN_HASH" != "$STAGED_HASH" ]]; then
+      git update-index --cacheinfo "${MODE},${CLEAN_HASH},${FILE}"
+      echo "[egc] the local state block of $FILE was cleaned to its skeleton for the commit; the working tree keeps the memory"
+    fi
   fi
 done <<< "$STAGED"
 
