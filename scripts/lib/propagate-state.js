@@ -212,16 +212,20 @@ function ensureCommitPrivacy(projectPath) {
       throw new Error(`the clean-filter script is not at ${scriptPath}`);
     }
     const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
+    const smudgeCommand = `if command -v node >/dev/null 2>&1 && [ -f ${shSingleQuote(scriptPath)} ]; then node ${shSingleQuote(scriptPath)} --filter-smudge %f; else cat; fi`;
 
     writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`, cleanCommand);
-    // required=true (below) also turns an *unconfigured* smudge side into a
-    // hard checkout failure instead of the passthru git defaults to when a
-    // filter driver is missing entirely (gitattributes(5)): once clean is
-    // set, checkout/worktree/clone on this repo starts failing with "smudge
-    // filter egc-memory failed" without an explicit smudge command. cat is
-    // configured as an identity smudge: the working tree keeps whatever
-    // content is checked out, only the staged blob gets cleaned.
-    writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat');
+    // The smudge side puts the memory back: git hands it the zeroed blob it
+    // is checking out and gets the block of the local state in return, so a
+    // pull, a branch switch or a stash pop never leaves the working tree
+    // without the memory. Where node or the script is not there the blob
+    // goes through as committed, decided before anything reads stdin, and
+    // inside the script whatever stands in the way the content goes out as
+    // it came. Setting it explicitly also matters for required=true (below),
+    // which turns an *unconfigured* smudge side into a hard checkout failure
+    // instead of the passthru git defaults to when a filter driver is missing
+    // entirely (gitattributes(5)).
+    writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, smudgeCommand);
     // required=true makes git refuse to stage a file through this filter if
     // the clean command itself fails or is missing, instead of the git
     // default of silently falling back to the original (unfiltered, still
@@ -278,6 +282,14 @@ Detect user intent in any language and call the matching EGC tool — no keyword
 - User asks to organize a complex task → \`orchestrate_task\`
 - User asks AI to learn from session errors → \`auto_learn\``;
 
+// A marker inside a recorded line would end the block early for every
+// reader of the file, so the text of a marker never travels inside it.
+const MARKER_TEXT_RE = /<!--\s*egc:(start|end)\s*-->/gi;
+
+function withoutMarkers(text) {
+  return text.replace(MARKER_TEXT_RE, '');
+}
+
 function parseStateContent(content) {
   const result = { context: '', decisions: [], next: [], updated: '' };
   const updatedMatch = content.match(/^updated:\s*(\S+)\s*$/m);
@@ -288,7 +300,7 @@ function parseStateContent(content) {
     const h2 = line.match(/^## (.+)/);
     if (h2) { section = h2[1].trim(); continue; }
 
-    const item = line.replace(/^- /, '').trim();
+    const item = withoutMarkers(line.replace(/^- /, '')).trim();
     if (!item) continue;
 
     if (section === 'Context') result.context = item;
@@ -486,6 +498,22 @@ function writeAgentsContext(projectPath, block, stateUpdated) {
   return writeSimpleContext(projectPath, ['AGENTS.md'], block, stateUpdated);
 }
 
+// The llms.txt mirror carries the memory as plain headings, the shape a
+// reader of that file expects, instead of the bold labels of the other
+// context files.
+function buildLlmsBlock(parsed) {
+  const lines = [];
+  if (parsed.updated) lines.push(`<!-- egc:state-updated:${parsed.updated} -->`);
+  lines.push('# EGC Project Memory');
+  if (parsed.context) lines.push('', parsed.context);
+  if (parsed.next.length > 0) {
+    lines.push('', '## Next session');
+    for (const n of parsed.next.slice(0, MAX_ITEMS)) lines.push(`- ${n}`);
+  }
+  lines.push('', EGC_TRIGGERS);
+  return lines.join('\n');
+}
+
 function writeLlmsTxt(projectPath, parsed) {
   const filePath = path.join(projectPath, 'llms.txt');
   try {
@@ -495,21 +523,60 @@ function writeLlmsTxt(projectPath, parsed) {
   }
 
   const stateUpdated = parsed.updated;
-  const lines = [];
-  if (stateUpdated) lines.push(`<!-- egc:state-updated:${stateUpdated} -->`);
-  lines.push('# EGC Project Memory');
-  if (parsed.context) lines.push('', parsed.context);
-  if (parsed.next.length > 0) {
-    lines.push('', '## Next session');
-    for (const n of parsed.next.slice(0, MAX_ITEMS)) lines.push(`- ${n}`);
-  }
-  lines.push('', EGC_TRIGGERS);
-  const block = lines.join('\n');
-
   const existing = fs.readFileSync(filePath, 'utf-8');
   if (isStaleWrite(existing, stateUpdated)) return filePath;
-  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
+  fs.writeFileSync(filePath, upsertEgcSection(existing, buildLlmsBlock(parsed)), 'utf-8');
   return filePath;
+}
+
+// The smudge side of the commit-privacy filter. Git hands over the zeroed
+// blob it is checking out (`content`, the file at `relativePath` under the
+// working tree at `projectPath`) and gets it back with the memory of the
+// local state put into its markers, the way propagation writes it, so a
+// pull, a branch switch or a stash pop never leaves the working tree
+// without the block. The block goes out without the update stamp: git runs
+// the filter before the branch pointer moves on a switch, so the state it
+// reads is the one of the branch being left, and a block without a stamp
+// is one the next propagation replaces instead of keeping. The state
+// readers live next to this file in every layout that carries it (see the
+// library lists of the install targets); a layout without them, a project
+// without a state, a state that is a link or cannot be read, or a file
+// without the markers all get the content back as it came: a checkout must
+// never fail on this filter's account.
+function loadStateReaders() {
+  try {
+    return { branchState: require('./branch-state'), stateCrypto: require('./state-crypto') };
+  } catch {
+    return null;
+  }
+}
+
+function readProjectState(projectPath) {
+  const readers = loadStateReaders();
+  if (readers === null) return null;
+  const { branchState, stateCrypto } = readers;
+  const stateDir = branchState.getStateDir();
+  const branch = branchState.detectBranch(projectPath);
+  const { filePath } = branchState.resolveStateRead(stateDir, projectPath, branch);
+  if (fs.lstatSync(filePath).isSymbolicLink()) return null;
+  return stateCrypto.readStateFileDecrypted(filePath, stateCrypto.defaultKeyPath());
+}
+
+function smudgeContextContent(projectPath, relativePath, content) {
+  try {
+    if (!content.includes(EGC_START) || !content.includes(EGC_END)) return content;
+    const stateContent = readProjectState(projectPath);
+    if (stateContent === null) return content;
+    const parsed = { ...parseStateContent(stateContent), updated: '' };
+    const block = path.basename(relativePath) === 'llms.txt' ? buildLlmsBlock(parsed) : buildSummaryBlock(parsed);
+    // A file git checked out with CRLF line breaks keeps them on every line
+    // of the block; one that mixes both kinds gets the block with LF.
+    const crlfOnly = content.includes('\r\n') && !/(^|[^\r])\n/.test(content);
+    if (!crlfOnly) return upsertEgcSection(content, block);
+    return upsertEgcSection(content.replaceAll('\r\n', '\n'), block).replaceAll('\n', '\r\n');
+  } catch {
+    return content;
+  }
 }
 
 // The result of a propagation that wrote nothing: every mirror key present
@@ -552,4 +619,4 @@ function propagateStateContent(projectPath, stateContent) {
   };
 }
 
-module.exports = { propagateStateContent };
+module.exports = { propagateStateContent, smudgeContextContent };

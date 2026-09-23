@@ -167,18 +167,22 @@ function readLocalConfig(projectDir, key) {
 // makes git refuse to stage a file through this filter if the clean command
 // itself fails, instead of silently falling back to the original
 // (unfiltered, still populated) content: fail-closed matches the README's
-// unconditional "never gets committed to git" promise. But required=true
-// also turns an *unconfigured* smudge side into a hard failure instead of
-// the passthru git defaults to when a filter driver is missing entirely
+// unconditional "never gets committed to git" promise. The smudge side puts
+// the memory back: git hands it the zeroed blob it is checking out and gets
+// the block of the local state in return, so a pull, a branch switch or a
+// stash pop never leaves the working tree without the memory; where node or
+// the script is not there the blob goes through as committed, decided
+// before anything reads stdin, and inside the script whatever stands in the
+// way the content goes out as it came. Setting it explicitly also matters because required=true
+// turns an *unconfigured* smudge side into a hard failure instead of the
+// passthru git defaults to when a filter driver is missing entirely
 // (gitattributes(5)): once clean is set, checkout/worktree/clone on this
-// repo starts failing with "smudge filter egc-memory failed" without an
-// explicit smudge command. cat is configured as an identity smudge: the
-// working tree keeps whatever content is checked out, only the staged blob
-// gets cleaned.
-function desiredFilterConfig(cleanCommand) {
+// repo would fail with "smudge filter egc-memory failed" without an
+// explicit smudge command.
+function desiredFilterConfig(cleanCommand, smudgeCommand) {
   return [
     { key: `filter.${FILTER_NAME}.clean`, value: cleanCommand, shown: `"${cleanCommand}"` },
-    { key: `filter.${FILTER_NAME}.smudge`, value: 'cat', shown: 'cat' },
+    { key: `filter.${FILTER_NAME}.smudge`, value: smudgeCommand, shown: `"${smudgeCommand}"` },
     { key: `filter.${FILTER_NAME}.required`, value: 'true', shown: 'true' },
   ];
 }
@@ -186,8 +190,8 @@ function desiredFilterConfig(cleanCommand) {
 // Only the keys whose local value differs from the desired one are planned,
 // so a second run on a configured repo reports no change instead of the
 // same three writes every time.
-function computeMissingConfig(projectDir, cleanCommand) {
-  return desiredFilterConfig(cleanCommand).filter(entry => readLocalConfig(projectDir, entry.key) !== entry.value);
+function computeMissingConfig(projectDir, cleanCommand, smudgeCommand) {
+  return desiredFilterConfig(cleanCommand, smudgeCommand).filter(entry => readLocalConfig(projectDir, entry.key) !== entry.value);
 }
 
 function writeLocalConfig(projectDir, key, value) {
@@ -228,7 +232,8 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   }
 
   const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
-  const missingConfig = computeMissingConfig(projectDir, cleanCommand);
+  const smudgeCommand = `if command -v node >/dev/null 2>&1 && [ -f ${shSingleQuote(scriptPath)} ]; then node ${shSingleQuote(scriptPath)} --filter-smudge %f; else cat; fi`;
+  const missingConfig = computeMissingConfig(projectDir, cleanCommand, smudgeCommand);
   const actions = missingConfig.map(entry => `git config ${entry.key} ${entry.shown} (local repo config)`);
 
   const { existing, missing: missingBindings } = computeMissingBindings(attributesFile);

@@ -645,7 +645,8 @@ function runFreshnessGuardTests() {
         cwd: dir,
         encoding: 'utf-8',
       }).trim();
-      assert.strictEqual(smudge, 'cat');
+      const leakScript = path.join(__dirname, '..', '..', 'scripts', 'check-state-leak.js');
+      assert.strictEqual(smudge, `if command -v node >/dev/null 2>&1 && [ -f '${leakScript}' ]; then node '${leakScript}' --filter-smudge %f; else cat; fi`);
 
       // End-to-end: with required=true and clean configured but no smudge,
       // git treats the undefined smudge side as a failed filter and aborts
