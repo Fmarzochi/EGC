@@ -278,7 +278,8 @@ function skipWrapperOptions(words, start, wrapper, state) {
 // The index of the first word that is neither an environment assignment
 // nor a wrapper with its options; a chdir or chroot a wrapper carries is
 // noted on `state` for a caller that resolves operands against it.
-function skipEnvAndWrappers(words, state = { cwd: null, chroot: null, unsure: false }) {
+function skipEnvAndWrappers(words, state) {
+  const wrapperState = state ?? { cwd: null, chroot: null, unsure: false };
   let index = 0;
   while (index < words.length) {
     const word = words[index].value;
@@ -288,7 +289,7 @@ function skipEnvAndWrappers(words, state = { cwd: null, chroot: null, unsure: fa
     }
     const wrapper = WRAPPER_SPECS[word.split(/[\\/]/).pop()];
     if (!wrapper) break;
-    index = skipWrapperOptions(words, index + 1, wrapper, state);
+    index = skipWrapperOptions(words, index + 1, wrapper, wrapperState);
   }
   return index;
 }
@@ -562,6 +563,35 @@ function egcShellScriptOf(segment) {
   return segment.slice(words[index + 2].end).replace(/^\s+/, '');
 }
 
+// `own` followed by the segments of `script`, read one level deeper; null
+// when the depth cap is reached or the deeper analysis cannot continue.
+function withNested(own, script, depth) {
+  if (depth >= MAX_SUBSTITUTION_DEPTH) return null;
+  const inner = extractSegments(script, depth + 1);
+  if (inner === null) return null;
+  return [...own, ...inner];
+}
+
+// The segments one pipeline stage contributes: the stage itself and, when
+// it hands a script to a shell, the segments of that script.
+function segmentsOfStage(raw, depth) {
+  // A script handed to `egc run --shell` runs in a shell of its own, so
+  // it is read whole and its segments are judged like the body of a
+  // heredoc a shell reads.
+  const script = egcShellScriptOf(raw);
+  if (script !== null) {
+    const whole = raw.trim();
+    return withNested(whole ? [whole] : [], script, depth);
+  }
+  const { command: line, body } = splitHeredoc(raw);
+  const trimmed = line.trim();
+  const own = trimmed ? [trimmed] : [];
+  // The body is stdin data, except when a shell is the one reading it:
+  // there it is a script, and it is judged like any other script.
+  if (body === null || !readsItsInputAsCode(line)) return own;
+  return withNested(own, body, depth);
+}
+
 function extractSegments(rawCommand, depth = 0) {
 
   const command = joinContinuations(String(rawCommand));
@@ -573,42 +603,20 @@ function extractSegments(rawCommand, depth = 0) {
   // the caller blocks instead of silently accepting an unanalyzed command.
   if (bodies.length > 0 && depth >= MAX_SUBSTITUTION_DEPTH) return null;
 
-  const topLevel = [];
+  const segments = [];
   for (const raw of splitShellSegments(command, { splitOnPipe: true })) {
-    // A script handed to `egc run --shell` runs in a shell of its own, so
-    // it is read whole and its segments are judged like the body of a
-    // heredoc a shell reads.
-    const script = egcShellScriptOf(raw);
-    if (script !== null) {
-      const whole = raw.trim();
-      if (whole) topLevel.push(whole);
-      if (depth >= MAX_SUBSTITUTION_DEPTH) return null;
-      const inner = extractSegments(script, depth + 1);
-      if (inner === null) return null;
-      topLevel.push(...inner);
-      continue;
-    }
-    const { command: line, body } = splitHeredoc(raw);
-    const trimmed = line.trim();
-    if (trimmed) topLevel.push(trimmed);
-    if (body === null) continue;
-    // The body is stdin data, except when a shell is the one reading it:
-    // there it is a script, and it is judged like any other script.
-    if (!readsItsInputAsCode(line)) continue;
-    if (depth >= MAX_SUBSTITUTION_DEPTH) return null;
+    const stage = segmentsOfStage(raw, depth);
+    if (stage === null) return null;
+    segments.push(...stage);
+  }
+
+  for (const body of bodies) {
     const nested = extractSegments(body, depth + 1);
     if (nested === null) return null;
-    topLevel.push(...nested);
+    segments.push(...nested);
   }
 
-  const nested = [];
-  for (const body of bodies) {
-    const nestedSegments = extractSegments(body, depth + 1);
-    if (nestedSegments === null) return null;
-    nested.push(...nestedSegments);
-  }
-
-  return [...topLevel, ...nested];
+  return segments;
 }
 
 // A validator that knows the field says so itself; the marker scan only

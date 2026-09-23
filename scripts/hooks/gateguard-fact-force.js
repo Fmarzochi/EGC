@@ -323,7 +323,7 @@ const WRAPPER_VALUE_FLAGS = new Set([
   '-u', '--user', '-g', '--group', '-C', '--chdir', '-n', '--max-args', '-I', '-i', '-L', '-P', '--max-procs',
   '-d', '--delimiter', '-a', '--arg-file', '-E', '-s', '--signal', '-k', '--kill-after', '-o', '--output', '-f', '--format',
 ]);
-const ENV_ASSIGNMENT_RE = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const ENV_ASSIGNMENT_RE = /^[A-Za-z_]\w*=/;
 
 // The words of a line as the shell would see them: quotes group and then
 // disappear, a backslash escapes the next character.
@@ -332,24 +332,47 @@ function shellWordsOf(line) {
   let word = '';
   let quote = null;
   let open = false;
+  const flush = () => {
+    if (open || word) words.push(word);
+    word = '';
+    open = false;
+  };
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (quote) {
       if (ch === quote) quote = null;
       else word += ch;
-      continue;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      open = true;
+    } else if (ch === '\\' && i + 1 < line.length) {
+      word += line[i + 1];
+      i += 1;
+      open = true;
+    } else if (/\s/.test(ch)) {
+      flush();
+    } else {
+      word += ch;
+      open = true;
     }
-    if (ch === '"' || ch === "'") { quote = ch; open = true; continue; }
-    if (ch === '\\' && i + 1 < line.length) { word += line[i + 1]; i += 1; open = true; continue; }
-    if (/\s/.test(ch)) {
-      if (open || word) { words.push(word); word = ''; open = false; }
-      continue;
-    }
-    word += ch;
-    open = true;
   }
-  if (open || word) words.push(word);
+  flush();
   return words;
+}
+
+// The index of the first word after a wrapper's own options and its value;
+// -1 when an option ends the wrapper's work (`sudo -v`, `timeout --help`)
+// and no command follows.
+function skipWrapperOptions(words, start, name) {
+  let i = start;
+  while (i < words.length && words[i].startsWith('-')) {
+    const flag = words[i];
+    if (TERMINATING_WRAPPER_FLAGS.has(flag) || TERMINATING_BY_WRAPPER[name]?.has(flag)) return -1;
+    i += 1;
+    if (WRAPPER_VALUE_FLAGS.has(flag) && words[i] !== undefined && !words[i].startsWith('-')) i += 1;
+  }
+  if (WRAPPERS_TAKING_A_VALUE.has(name) && words[i] && !words[i].startsWith('-')) i += 1;
+  return i;
 }
 
 // What a segment actually runs: its command line (a backslash-newline is a
@@ -365,18 +388,12 @@ function commandLineOf(segment) {
     if (ENV_ASSIGNMENT_RE.test(word)) { i += 1; continue; }
     const name = path.basename(word);
     if (!COMMAND_WRAPPERS.has(name)) break;
-    i += 1;
     // A wrapper carries its own options (`sudo -u root`, `xargs -n1 -I{}`)
     // and sometimes a mandatory value (`timeout 30`): skipping only the word
     // itself left the wrapper's first option in command position and the real
     // command unread.
-    while (i < words.length && words[i].startsWith('-')) {
-      const flag = words[i];
-      if (TERMINATING_WRAPPER_FLAGS.has(flag) || TERMINATING_BY_WRAPPER[name]?.has(flag)) return '';
-      i += 1;
-      if (WRAPPER_VALUE_FLAGS.has(flag) && words[i] !== undefined && !words[i].startsWith('-')) i += 1;
-    }
-    if (WRAPPERS_TAKING_A_VALUE.has(name) && words[i] && !words[i].startsWith('-')) i += 1;
+    i = skipWrapperOptions(words, i + 1, name);
+    if (i < 0) return '';
   }
   return words.slice(i).join(' ');
 }

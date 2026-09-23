@@ -1390,29 +1390,27 @@ function hasShortForceCluster(token: string): boolean {
 // --no-dry-run cancels it, nothing after -- is an option, inside a cluster
 // the first e turns the rest of the cluster into the exclude pattern, and a
 // separate -e or --exclude (abbreviations included) consumes the next token.
+// What one token of `git clean` does to the dry-run reading: sets it, clears
+// it, or leaves it (null), and how many tokens after it are its value.
+function gitCleanTokenEffect(token: string): { dryRun: boolean | null; skip: number } {
+  if (abbreviates(token, '--dry-run')) return { dryRun: true, skip: 0 };
+  if (abbreviates(token, '--no-dry-run')) return { dryRun: false, skip: 0 };
+  if (token === '-e' || (abbreviates(token, '--exclude') && !token.includes('='))) return { dryRun: null, skip: 1 };
+  if (!/^-[a-zA-Z]+$/.test(token)) return { dryRun: null, skip: 0 };
+  const letters = token.slice(1);
+  const excludeAt = letters.indexOf('e');
+  const flags = excludeAt >= 0 ? letters.slice(0, excludeAt) : letters;
+  return { dryRun: flags.includes('n') ? true : null, skip: excludeAt === letters.length - 1 ? 1 : 0 };
+}
+
 function isGitCleanDryRun(rest: string[]): boolean {
   let dryRun = false;
   for (let i = 0; i < rest.length; i++) {
     const token = rest[i];
     if (token === '--') break;
-    if (abbreviates(token, '--dry-run')) {
-      dryRun = true;
-      continue;
-    }
-    if (abbreviates(token, '--no-dry-run')) {
-      dryRun = false;
-      continue;
-    }
-    if (token === '-e' || (abbreviates(token, '--exclude') && !token.includes('='))) {
-      i += 1;
-      continue;
-    }
-    if (!/^-[a-zA-Z]+$/.test(token)) continue;
-    const letters = token.slice(1);
-    const excludeAt = letters.indexOf('e');
-    const flags = excludeAt >= 0 ? letters.slice(0, excludeAt) : letters;
-    if (flags.includes('n')) dryRun = true;
-    if (excludeAt === letters.length - 1) i += 1;
+    const effect = gitCleanTokenEffect(token);
+    if (effect.dryRun !== null) dryRun = effect.dryRun;
+    i += effect.skip;
   }
   return dryRun;
 }
