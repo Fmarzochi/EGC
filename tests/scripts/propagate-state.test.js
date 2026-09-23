@@ -633,6 +633,29 @@ function runFreshnessGuardTests() {
     }
   })) passed++; else failed++;
 
+  // A mirror rewritten with another size reads as modified to git until the
+  // index stat is refreshed, even when the clean side of the filter takes it
+  // back to the committed blob; propagation refreshes the entries it wrote,
+  // so a branch switch after a session start is never refused for them.
+  if (test('a mirror rewritten by propagation reads as unmodified to git', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir });
+      const longer = SAMPLE_STATE.replace('updated: 2026-06-20T00:00:00.000Z', 'updated: 2026-07-01T00:00:00.000Z').replace('## Next Session', '## Next Session\n- a longer next step recorded by a later session that changes the size of the mirror');
+      propagateStateContent(dir, longer);
+      const status = execFileSync('git', ['status', '--porcelain', '--', 'AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(status, '', `git must read the rewritten mirror as unmodified, got: ${JSON.stringify(status)}`);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
     const dir = mktemp();
     try {
