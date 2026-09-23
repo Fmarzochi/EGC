@@ -267,6 +267,46 @@ function smudgeContent(relativePath, content) {
   }
 }
 
+// Stdin as git hands it to a filter: the bytes, and the text when they
+// round-trip through UTF-8.
+function readFilterInput() {
+  const raw = fs.readFileSync(0);
+  const text = raw.toString('utf8');
+  return { raw, text, isText: Buffer.from(text, 'utf8').equals(raw) };
+}
+
+// Git clean-filter mode: stdin in, zeroed content out. Wired by
+// memory-filters.js as filter.egc-memory.clean so populated memory is
+// stripped from the staged blob even when local hooks are bypassed. The
+// bytes are decoded as UTF-8 only when they round-trip; otherwise they are
+// read one per character and written back the same way, so every byte kept
+// goes out as it came and the markers, ASCII, are still read.
+function runFilterClean() {
+  const { raw, text, isText } = readFilterInput();
+  process.stdout.write(isText ? cleanContent(text) : Buffer.from(cleanContent(raw.toString('latin1')), 'latin1'));
+}
+
+// Git smudge-filter mode: the zeroed blob git is checking out comes in on
+// stdin and goes out with the memory of the local state put back into its
+// markers, so a pull, a branch switch or a stash pop never leaves the
+// working tree without the block. The propagation library renders it;
+// when that library is not next to this script, or anything else stands
+// in the way, the content goes out exactly as it came, because a checkout
+// must never fail on this filter's account. stdout carries the content
+// and nothing else: a line a library would print for a terminal goes to
+// stderr, and a pipe git has already closed ends the run quietly, while
+// any other failure to write is loud, so git holds the checkout instead
+// of keeping a truncated file. Bytes that are not UTF-8 go out untouched,
+// since only text carries the block. A blob that cannot be read from git
+// is loud for the same reason.
+function runFilterSmudge(relativePath) {
+  console.log = (...lines) => console.error(...lines);
+  console.info = console.log;
+  process.stdout.on('error', err => process.exit(err.code === 'EPIPE' ? 0 : 1));
+  const { raw, text, isText } = readFilterInput();
+  process.stdout.write(isText ? Buffer.from(smudgeContent(relativePath, text), 'utf8') : raw);
+}
+
 function main() {
   const args = process.argv.slice(2);
   const mode = args[0];
@@ -284,42 +324,12 @@ function main() {
     return;
   }
 
-  // Git clean-filter mode: stdin in, zeroed content out. Wired by
-  // memory-filters.js as filter.egc-memory.clean so populated memory is
-  // stripped from the staged blob even when local hooks are bypassed.
-  // The bytes are decoded as UTF-8 only when they round-trip; otherwise
-  // they are read one per character and written back the same way, so
-  // every byte kept goes out as it came and the markers, ASCII, are still
-  // read.
   if (mode === '--filter-clean') {
-    const raw = fs.readFileSync(0);
-    const text = raw.toString('utf8');
-    const isText = Buffer.from(text, 'utf8').equals(raw);
-    process.stdout.write(isText ? cleanContent(text) : Buffer.from(cleanContent(raw.toString('latin1')), 'latin1'));
+    runFilterClean();
     return;
   }
-
-  // Git smudge-filter mode: the zeroed blob git is checking out comes in on
-  // stdin and goes out with the memory of the local state put back into its
-  // markers, so a pull, a branch switch or a stash pop never leaves the
-  // working tree without the block. The propagation library renders it;
-  // when that library is not next to this script, or anything else stands
-  // in the way, the content goes out exactly as it came, because a checkout
-  // must never fail on this filter's account. stdout carries the content
-  // and nothing else: a line a library would print for a terminal goes to
-  // stderr, and a pipe git has already closed ends the run quietly, while
-  // any other failure to write is loud, so git holds the checkout instead
-  // of keeping a truncated file. Bytes that are not UTF-8 go out untouched,
-  // since only text carries the block. A blob that cannot be read from git
-  // is loud for the same reason.
   if (mode === '--filter-smudge') {
-    console.log = (...lines) => console.error(...lines);
-    console.info = console.log;
-    process.stdout.on('error', err => process.exit(err.code === 'EPIPE' ? 0 : 1));
-    const raw = fs.readFileSync(0);
-    const text = raw.toString('utf8');
-    const isText = Buffer.from(text, 'utf8').equals(raw);
-    process.stdout.write(isText ? Buffer.from(smudgeContent(args[1] ?? '', text), 'utf8') : raw);
+    runFilterSmudge(args[1] ?? '');
     return;
   }
 
