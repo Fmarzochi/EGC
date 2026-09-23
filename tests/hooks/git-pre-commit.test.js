@@ -113,6 +113,16 @@ if (process.platform === 'win32') {
     assert.strictEqual(git('ls-files', '--stage', 'README.md'), before);
   });
 
+  run('a file whose name git would quote (space and non-ASCII) is cleaned too', () => {
+    const { dir, git } = makeRepo();
+    const name = 'Notas ação.md';
+    fs.writeFileSync(path.join(dir, name), POPULATED);
+    git('add', '--', name);
+    const result = runHook(dir);
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.strictEqual(git('show', `:${name}`), cleanOf(POPULATED));
+  });
+
   run('without node at hand the commit stops and says what is missing', () => {
     const { dir, git } = makeRepo();
     fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);

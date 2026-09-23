@@ -15,13 +15,12 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 0
 fi
 
-STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null) || true
-[[ -z "$STAGED" ]] && exit 0
-
 EGC_START='<!-- egc:start -->'
 CLEAN_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/check-state-leak.js"
 
-while IFS= read -r FILE; do
+# The paths come NUL-separated, so a name git would otherwise quote (a
+# space, a character outside ASCII) reaches the commands as it is.
+while IFS= read -r -d '' FILE; do
   [[ -z "$FILE" ]] && continue
   case "$FILE" in
     *.md|*.mdx|*.mdc) ;;
@@ -43,6 +42,6 @@ while IFS= read -r FILE; do
       echo "[egc] the local state block of $FILE was cleaned to its skeleton for the commit; the working tree keeps the memory"
     fi
   fi
-done <<< "$STAGED"
+done < <(git diff --cached --name-only -z --diff-filter=ACMR 2>/dev/null)
 
 exit 0
