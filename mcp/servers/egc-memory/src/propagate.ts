@@ -19,6 +19,7 @@ interface MemoryFilters {
     scriptPath: string;
     dryRun: boolean;
   }): { configured: boolean; reason?: string; actions: string[] };
+  forgetIndexStat(projectDir: string, files: string[]): void;
 }
 
 function tryRequireMemoryFilters(): MemoryFilters | null {
@@ -409,7 +410,7 @@ function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
 export function propagateStateToTools(args: PropagateArgs): PropagateResult {
   if (!ensureCommitPrivacy(args.projectPath)) return noMirrorsWritten();
   const block = buildSummaryBlock(args);
-  return {
+  const written: PropagateResult = {
     cursor: writeCursorContext(args.projectPath, block),
     copilot: writeCopilotContext(args.projectPath, block),
     gemini: writeGeminiContext(args.projectPath, block),
@@ -423,4 +424,20 @@ export function propagateStateToTools(args: PropagateArgs): PropagateResult {
     llms: writeLlmsTxt(args.projectPath, args),
     claude: writeClaudeContext(args.projectPath, block),
   };
+  forgetIndexStat(args.projectPath, written);
+  return written;
+}
+
+// A mirror rewritten with another size reads as modified to git until its
+// index entry is looked at again (git trusts the size it recorded and does
+// not run the clean side of the filter), so a branch switch after a session
+// start was refused for a file that carried nothing new. The shared library
+// clears the recorded stat of the written files and refreshes them, so a
+// mirror that still cleans to the committed blob reads as unmodified and a
+// change of the user's own stays an unstaged change; without the library
+// there is no filter armed and nothing to refresh.
+function forgetIndexStat(projectPath: string, written: PropagateResult): void {
+  const files = Object.values(written).filter((file): file is string => typeof file === 'string');
+  if (files.length === 0) return;
+  tryRequireMemoryFilters()?.forgetIndexStat(projectPath, files);
 }

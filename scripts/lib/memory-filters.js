@@ -275,4 +275,42 @@ function applyCommitPrivacyFilterCli({ projectDir, scriptPath, log }) {
   return result;
 }
 
-module.exports = { FILTER_NAME, PROPAGATION_FILES, applyCommitPrivacyFilterCli, configureMemoryFilters };
+// The same step scripts/lib/propagate-state.js carries for the hooks (that
+// file is copied on its own, so it cannot share this one).
+// A mirror rewritten with another size reads as modified to git until its
+// index entry is looked at again: git trusts the size it recorded and does
+// not run the clean side of the filter, so a branch switch after a session
+// start was refused for a file that carried nothing new. Feeding the
+// entries of the written files back through update-index clears the
+// recorded stat, and the refresh that follows hashes them through the
+// filter and records what it finds: a mirror that still cleans to the
+// committed blob reads as unmodified, a change of the user's own stays an
+// unstaged change, and nothing is ever staged (a path handed to
+// update-index directly would be re-added with its current content). A
+// step that cannot run (no git, no repository, an index held by another
+// git) changes nothing: git recomputes the same information on its next
+// command.
+function forgetIndexStat(projectPath, files) {
+  if (files.length === 0) return;
+  const relative = files.map(file => path.relative(projectPath, file));
+  try {
+    const entries = execFileSync(GIT_BIN, ['ls-files', '-s', '-z', '--', ...relative], {
+      cwd: projectPath,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    if (entries.length === 0) return;
+    execFileSync(GIT_BIN, ['update-index', '-z', '--index-info'], {
+      cwd: projectPath,
+      input: entries,
+      stdio: ['pipe', 'ignore', 'ignore'],
+    });
+    execFileSync(GIT_BIN, ['update-index', '-q', '--unmerged', '--refresh'], {
+      cwd: projectPath,
+      stdio: 'ignore',
+    });
+  } catch {
+    // Nothing to undo: the entries are read again by the next git command.
+  }
+}
+
+module.exports = { FILTER_NAME, PROPAGATION_FILES, applyCommitPrivacyFilterCli, configureMemoryFilters, forgetIndexStat };

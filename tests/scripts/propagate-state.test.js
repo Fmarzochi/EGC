@@ -656,6 +656,30 @@ function runFreshnessGuardTests() {
     }
   })) passed++; else failed++;
 
+  // The refresh only re-reads the files: a change of the user's own in a
+  // mirror stays an unstaged change, and the index never takes content.
+  if (test('a change of the user\'s own in a mirror stays unstaged after propagation', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir });
+      fs.appendFileSync(path.join(dir, 'AGENTS.md'), '\nA line the user wrote.\n');
+      const longer = SAMPLE_STATE.replace('updated: 2026-06-20T00:00:00.000Z', 'updated: 2026-07-01T00:00:00.000Z').replace('## Next Session', '## Next Session\n- a longer next step recorded by a later session that changes the size of the mirror');
+      propagateStateContent(dir, longer);
+      const status = execFileSync('git', ['status', '--porcelain', '--', 'AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(status, ' M AGENTS.md\n', `the user's change must stay unstaged, got: ${JSON.stringify(status)}`);
+      const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(staged, '', `nothing may be staged, got: ${JSON.stringify(staged)}`);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
     const dir = mktemp();
     try {

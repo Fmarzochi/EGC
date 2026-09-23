@@ -409,10 +409,6 @@ run('a branch switch keeps a block in the rewritten file, and the next propagati
   assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), '');
   propagateStateContent(dir, STATE);
   assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8').includes('**Context:** context kept in the local state'));
-  // A file rewritten with another size reads as modified to git until the
-  // index stat is refreshed, whatever the filter says; that is git's own
-  // heuristic and not this filter's doing.
-  git('update-index', '-q', '--refresh', '--', 'AGENTS.md');
   git('switch', '-q', 'other');
   const forth = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
   assert.ok(forth.includes('A line the other branch adds.'), forth);
