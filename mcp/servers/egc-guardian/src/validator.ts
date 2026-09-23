@@ -23,7 +23,7 @@ export const SHELL_META_REGEX = /[&|;<>$`\n\r]/;
 // find flags that perform an action (delete, run arbitrary commands) rather
 // than just filtering results. These bypass the DANGEROUS ['rm', 'mv'] check
 // entirely because the base command is 'find', which is SAFE_READONLY.
-export const FIND_ACTION_FLAGS = ['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprintf', '-fls'];
+export const FIND_ACTION_FLAGS = ['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprint', '-fprint0', '-fprintf', '-fls'];
 
 // Interpreters/shells whose inline-eval flags let an agent execute arbitrary
 // code that bypasses every path- and content-based check in this file (the
@@ -1427,7 +1427,7 @@ function checkGitWorktreePaths(rest: string[], cwd?: string): ValidationResult |
   const operands = terminator >= 0
     ? [...rest.slice(0, terminator).filter(a => !a.startsWith('-')), ...rest.slice(terminator + 1)]
     : rest.filter(a => !a.startsWith('-'));
-  const target = operands.find(a => isProtectedPath(a, cwd));
+  const target = operands.find(a => isProtectedOperand(a, cwd));
   if (target === undefined) return null;
   return {
     allowed: false,
@@ -1507,7 +1507,7 @@ function fileOperandsOf(rest: string[], shortFlag: string, longFlags: string[]):
 function checkGitFileOperands(subcommand: string, rest: string[], cwd?: string): ValidationResult | null {
   const spelling = GIT_FILE_OPERAND_FLAGS.get(subcommand);
   if (spelling === undefined) return null;
-  const protectedFile = fileOperandsOf(rest, spelling.short, spelling.long).find(p => isReadDeniedPath(p, cwd));
+  const protectedFile = fileOperandsOf(rest, spelling.short, spelling.long).find(p => isReadDeniedOperand(p, cwd));
   if (protectedFile === undefined) return null;
   return {
     allowed: false,
@@ -1526,7 +1526,7 @@ function validateGitArgs(args: string[], cwd?: string): ValidationResult {
 
   if (subcommandIdx < 0) return { allowed: true, trust_level: 'SAFE_READONLY' };
   const subcommand = bareToken(args[subcommandIdx]);
-  const rest = args.slice(subcommandIdx + 1).map(stripQuotes);
+  const rest = args.slice(subcommandIdx + 1);
   const fileDenial = checkGitFileOperands(subcommand, rest, cwd);
   if (fileDenial) return fileDenial;
   if (subcommand === 'config') {
@@ -1581,13 +1581,13 @@ function denyGrepTarget(reason: string): ValidationResult {
 function checkRecursiveGrepPaths(pathArgs: string[], positionalArgs: string[], cwd?: string): ValidationResult | null {
   const home = os.homedir();
   for (const p of pathArgs) {
-    if (p === '/' || p === home || isProtectedPath(p, cwd)) {
+    if (pathSpellings(p).some(s => s === '/' || s === home) || isProtectedOperand(p, cwd)) {
       return denyGrepTarget(`grep recursive over protected path '${p}' is forbidden`);
     }
   }
   // If no explicit path args, grep defaults to '.', which is fine.
   // But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
-  if (positionalArgs.length === 1 && (positionalArgs[0] === '/' || isProtectedPath(positionalArgs[0], cwd))) {
+  if (positionalArgs.length === 1 && (pathSpellings(positionalArgs[0]).includes('/') || isProtectedOperand(positionalArgs[0], cwd))) {
     return denyGrepTarget(`grep over protected path '${positionalArgs[0]}' is forbidden`);
   }
   return null;
@@ -1596,7 +1596,7 @@ function checkRecursiveGrepPaths(pathArgs: string[], positionalArgs: string[], c
 function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
   const { fileFlagValues, patternViaFlag } = collectGrepPatternFlags(args);
   for (const p of fileFlagValues) {
-    if (isReadDeniedPath(p, cwd)) return denyGrepTarget(`grep pattern file '${p}' is a protected path`);
+    if (isReadDeniedOperand(p, cwd)) return denyGrepTarget(`grep pattern file '${p}' is a protected path`);
   }
 
   // Non-flag, non-empty args are candidates for pattern or path.
@@ -1616,7 +1616,7 @@ function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
 
   // Even without -r, block explicit protected paths
   for (const p of pathArgs) {
-    if (isReadDeniedPath(p, cwd)) return denyGrepTarget(`grep over protected path '${p}' is forbidden`);
+    if (isReadDeniedOperand(p, cwd)) return denyGrepTarget(`grep over protected path '${p}' is forbidden`);
   }
 
   return { allowed: true, trust_level: 'SAFE_READONLY' };
@@ -1625,7 +1625,7 @@ function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
 function validateCatArgs(args: string[], cwd?: string): ValidationResult {
   for (const arg of args) {
 const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isReadDeniedPath(candidate, cwd)) {
+if (candidate !== null && isReadDeniedOperand(candidate, cwd)) {
   return {
     allowed: false,
     reason: `cat of protected path '${arg}' is forbidden`,
@@ -1634,6 +1634,23 @@ if (candidate !== null && isReadDeniedPath(candidate, cwd)) {
 }
   }
   return { allowed: true, trust_level: 'SAFE_READONLY' };
+}
+
+// The starting points of a find come before its expression: every word up
+// to the first test, action or operator (`-name`, `(`, `!`), the leading
+// options (`-H`, `-L`, `-P`, `-D...`, `-O...`) and the `--` that ends them
+// skipped. A value inside the expression (`-name "*.env"`) is a search
+// pattern, not a path.
+const FIND_LEADING_OPTIONS = new Set(['-H', '-L', '-P', '--']);
+
+function findStartingPoints(args: string[]): string[] {
+  const points: string[] = [];
+  for (const arg of args) {
+    if (FIND_LEADING_OPTIONS.has(arg) || arg.startsWith('-D') || arg.startsWith('-O')) continue;
+    if (arg.startsWith('-') || arg === '(' || arg === '!') break;
+    points.push(arg);
+  }
+  return points;
 }
 
 function validateFindArgs(args: string[], cwd?: string): ValidationResult {
@@ -1649,13 +1666,8 @@ return {
 };
   }
 
-  // First non-flag arg is typically the search root; also surface paths
-  // handed over inside --flag=value forms.
-  const pathArgs = args
-    .map(a => (a.startsWith('-') ? embeddedPathCandidate(a) : a))
-    .filter((a): a is string => a !== null);
-  for (const p of pathArgs) {
-if (isProtectedPath(p, cwd)) {
+  for (const p of findStartingPoints(args)) {
+if (isProtectedOperand(p, cwd)) {
   return {
     allowed: false,
     reason: `find over protected path '${p}' is forbidden`,
@@ -1670,7 +1682,7 @@ function validateReadOnlyPathArgs(baseCommand: string, args: string[], cwd?: str
   // These are read-only but we still block protected paths
   for (const arg of args) {
 const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isReadDeniedPath(candidate, cwd)) {
+if (candidate !== null && isReadDeniedOperand(candidate, cwd)) {
   return {
     allowed: false,
     reason: `${baseCommand} on protected path '${arg}' is forbidden`,
@@ -1701,7 +1713,7 @@ return {
   // being in SAFE_DEV means "safe to run", not "exempt from path checks".
   for (const arg of args) {
 const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isProtectedPath(candidate, cwd)) {
+if (candidate !== null && isProtectedOperand(candidate, cwd)) {
   return {
     allowed: false,
     reason: `${baseCommand} on protected path '${arg}' is forbidden`,
@@ -1757,7 +1769,19 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   if (rawTokens.length === 0) {
     return { allowed: true, trust_level: 'SAFE_READONLY' };
   }
-  const unwrapped = unwrapLeadingConstructs(rawTokens);
+  // Brace expansion runs on every word of the line, the command word and
+  // the wrappers included, since `r{m,}` names `rm` to the shell; a word
+  // with more expansions than this check reads refuses the command as a
+  // whole, because a word the shell would hand over must never go unjudged.
+  const expandedTokens = expandArguments(rawTokens);
+  if (expandedTokens === null) {
+    return {
+      allowed: false,
+      reason: `a word of the command carries more brace expansions than this check reads (${MAX_BRACE_EXPANSIONS}), so the command is refused; spell the words out`,
+      trust_level: 'DANGEROUS',
+    };
+  }
+  const unwrapped = unwrapLeadingConstructs(expandedTokens);
   if (unwrapped.blocked) return unwrapped.blocked as ValidationResult;
   const tokens = unwrapped.tokens;
   if (tokens.length === 0) {
@@ -1771,7 +1795,11 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // as a bare rm — without it, a quoted or escaped base command slips past
   // every check below and falls through to the advisory allowlist-miss path.
   const baseCommand = path.basename(bareToken(tokens[0]));
-  const args = tokens.slice(1);
+  // The checks below read each argument as the word the shell hands the
+  // command (the brace expansions already made above), so a flag or a path
+  // written between quotes is the flag or the path it is; the redirection
+  // scan reads the raw line on its own.
+  const args = tokens.slice(1).map(shellWord);
 
   // 2. `eval` executes its entire argument list as shell code — the same
   // risk class as `bash -c`, but with no separate flag to opt into eval mode
@@ -1904,21 +1932,204 @@ function unwrapFileUri(arg: string): string {
   return /^\/[A-Za-z]:/.test(decoded) ? decoded.slice(1) : decoded;
 }
 
-function pathCandidatesOf(args: string[]): string[] {
-  return args.flatMap(rawArg => {
-    const arg = bareToken(rawArg);
-    const cased = stripQuotes(rawArg);
-    if (!arg.startsWith('-')) {
-      const unwrapped = unwrapFileUri(cased);
-      if (unwrapped !== cased) return [unwrapped];
-      return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [cased];
+// The spellings of an argument that may name a file: the word as the shell
+// hands it (see shellWord) and, on Windows, the same word with its
+// backslash escapes resolved as well, since a shell there may read them
+// either way. Every path check judges an argument through these, so a
+// quoted or escaped spelling of a protected path meets the same denial as
+// the plain one.
+function unquoteWord(token: string, keepBackslashes = false): string {
+  let value = '';
+  let i = 0;
+  while (i < token.length) {
+    const ch = token[i];
+    if (ch === '$' && token[i + 1] === "'") {
+      const ansi = readAnsiC(token, i + 1);
+      value += ansi.value;
+      i = ansi.end;
+    } else if (ch === '"' || ch === "'") {
+      const quoted = readQuoted(token, i);
+      value += quoted.value;
+      i = quoted.end;
+    } else if (ch === '\\' && !keepBackslashes && token[i + 1] === '\n') {
+      i += 2;
+    } else if (ch === '\\' && !keepBackslashes && i + 1 < token.length) {
+      value += token[i + 1];
+      i += 2;
+    } else {
+      value += ch;
+      i += 1;
     }
-    const eq = cased.indexOf('=');
-    if (eq > 0) return [unwrapFileUri(cased.slice(eq + 1))];
-    if (!arg.startsWith('--') && arg.length > 2) return [unwrapFileUri(cased.slice(2))];
-    return [];
-  });
+  }
+  return value;
 }
+
+// ANSI-C quoting: bash resolves the escapes of `$'...'` with the C table
+// (a simple escape, `\xHH`, `\NNN`, `\uHHHH`, `\UHHHHHHHH`) before it hands
+// the word over, so a path written that way names the same file.
+const ANSI_C_SIMPLE: Record<string, string> = {
+  n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', v: '\v',
+  '\\': '\\', "'": "'", '"': '"', '?': '?',
+};
+const ANSI_C_NUMERIC_RE = /^(?:x([0-9a-fA-F]{1,2})|u([0-9a-fA-F]{1,4})|U([0-9a-fA-F]{1,8})|([0-7]{1,3}))/;
+
+// The character an escape at `at` (the position after the backslash)
+// stands for, and how many characters it spans.
+function ansiCEscape(text: string, at: number): { value: string; length: number } {
+  const next = text[at] ?? '';
+  if (next in ANSI_C_SIMPLE) return { value: ANSI_C_SIMPLE[next], length: 1 };
+  const numeric = ANSI_C_NUMERIC_RE.exec(text.slice(at));
+  if (numeric === null) return { value: next, length: 1 };
+  const digits = numeric[1] ?? numeric[2] ?? numeric[3] ?? numeric[4];
+  const radix = numeric[4] === undefined ? 16 : 8;
+  const codePoint = Number.parseInt(digits, radix);
+  // A number past the Unicode range names no character; bash prints the
+  // bytes as they are, and here the replacement character stands in.
+  const value = codePoint > 0x10ffff ? '\ufffd' : String.fromCodePoint(codePoint);
+  return { value, length: numeric[0].length };
+}
+
+// The `$'...'` span whose quote opens at `start`: its value with the escapes
+// resolved, and the index past the closing quote.
+function readAnsiC(token: string, start: number): { value: string; end: number } {
+  let value = '';
+  let i = start + 1;
+  while (i < token.length && token[i] !== "'") {
+    if (token[i] !== '\\') {
+      value += token[i];
+      i += 1;
+      continue;
+    }
+    const escape = ansiCEscape(token, i + 1);
+    value += escape.value;
+    i += 1 + escape.length;
+  }
+  return { value, end: Math.min(i + 1, token.length) };
+}
+
+// The word the shell hands the command: quotes removed and ANSI-C quoting
+// decoded everywhere; outside Windows the backslash escapes are resolved
+// as well, while on Windows a backslash separates path components, so it
+// stays.
+function shellWord(token: string): string {
+  return unquoteWord(token, process.platform === 'win32');
+}
+
+// Brace expansion runs where the shell runs it, before quote removal, and
+// turns one word into several (`~/.{ssh,aws}/x` is two arguments to the
+// command), only where the braces and the comma stand outside quotes and
+// unescaped; braces without a comma, and quoted or escaped ones, are
+// characters of the name. The alternatives are capped, and a word past the
+// cap refuses the whole command, since a path the shell would hand over
+// must never go unjudged.
+const MAX_BRACE_EXPANSIONS = 64;
+
+// Position of the next `{` at or after `start` that the shell reads as one
+// (outside quotes and unescaped), or -1.
+function nextOpenBrace(word: string, start: number): number {
+  let i = start;
+  while (i < word.length) {
+    const skipped = skipText(word, i);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
+    if (word[i] === '{') return i;
+    i += 1;
+  }
+  return -1;
+}
+
+// The brace group that opens at `open`: the commas at its own depth and its
+// closing brace, or null when it never closes.
+function braceGroupAt(word: string, open: number): { commas: number[]; close: number } | null {
+  const commas: number[] = [];
+  let depth = 0;
+  let i = open;
+  while (i < word.length) {
+    const skipped = skipText(word, i);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
+    const ch = word[i];
+    if (ch === '{') depth += 1;
+    else if (ch === '}' && --depth === 0) return { commas, close: i };
+    else if (ch === ',' && depth === 1) commas.push(i);
+    i += 1;
+  }
+  return null;
+}
+
+// The first brace group of a word that the shell would expand (one with a
+// comma at its own depth); a group without one is passed over and its
+// inside read, and null means the word has no group to expand.
+function findBraceGroup(word: string): { open: number; commas: number[]; close: number } | null {
+  let open = nextOpenBrace(word, 0);
+  while (open !== -1) {
+    const group = braceGroupAt(word, open);
+    if (group !== null && group.commas.length > 0) return { open, ...group };
+    open = nextOpenBrace(word, open + 1);
+  }
+  return null;
+}
+
+function braceExpansions(word: string): string[] | null {
+  const group = findBraceGroup(word);
+  if (group === null) return [word];
+  const bounds = [group.open, ...group.commas, group.close];
+  const out: string[] = [];
+  for (let i = 0; i + 1 < bounds.length; i++) {
+    const rewritten = word.slice(0, group.open) + word.slice(bounds[i] + 1, bounds[i + 1]) + word.slice(group.close + 1);
+    const nested = braceExpansions(rewritten);
+    if (nested === null || out.length + nested.length > MAX_BRACE_EXPANSIONS) return null;
+    out.push(...nested);
+  }
+  return out;
+}
+
+function expandArguments(words: string[]): string[] | null {
+  const out: string[] = [];
+  for (const word of words) {
+    const expansions = braceExpansions(word);
+    if (expansions === null) return null;
+    out.push(...expansions);
+  }
+  return out;
+}
+
+function pathSpellings(arg: string): string[] {
+  return process.platform === 'win32' ? [arg, unquoteWord(arg)] : [arg];
+}
+
+function isProtectedOperand(arg: string, cwd?: string): boolean {
+  return pathSpellings(arg).some(spelling => isProtectedPath(spelling, cwd));
+}
+
+function isReadDeniedOperand(arg: string, cwd?: string): boolean {
+  return pathSpellings(arg).some(spelling => isReadDeniedPath(spelling, cwd));
+}
+
+// The filesystem targets one spelling of an argument can carry: a bare
+// operand (URIs excluded, they are download targets, not local paths), a
+// --flag=value value, or a value glued to a short flag (`-o~/.bashrc`).
+function candidatesOfSpelling(cased: string): string[] {
+  const arg = cased.toLowerCase();
+  if (!arg.startsWith('-')) {
+    const unwrapped = unwrapFileUri(cased);
+    if (unwrapped !== cased) return [unwrapped];
+    return /^[a-z][a-z\d+.-]*:\/\//i.test(arg) ? [] : [cased];
+  }
+  const eq = cased.indexOf('=');
+  if (eq > 0) return [unwrapFileUri(cased.slice(eq + 1))];
+  if (!arg.startsWith('--') && arg.length > 2) return [unwrapFileUri(cased.slice(2))];
+  return [];
+}
+
+function pathCandidatesOf(args: string[]): string[] {
+  return args.flatMap(rawArg => pathSpellings(rawArg).flatMap(candidatesOfSpelling));
+}
+
 
 // A redirection names a file the shell opens on the command's behalf:
 // `> file` writes over it and `< file` reads it, whatever command stands in
@@ -1963,6 +2174,10 @@ function readQuoted(command: string, start: number): { value: string; end: numbe
   let value = '';
   let i = start + 1;
   while (i < command.length && command[i] !== quote) {
+    if (quote === '"' && command[i] === '\\' && command[i + 1] === '\n') {
+      i += 2;
+      continue;
+    }
     if (quote === '"' && command[i] === '\\' && DOUBLE_QUOTE_ESCAPES.has(command[i + 1] ?? '')) i += 1;
     value += command[i];
     i += 1;

