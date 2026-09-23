@@ -279,7 +279,7 @@ function skipWrapperOptions(words, start, wrapper, state) {
 // nor a wrapper with its options; a chdir or chroot a wrapper carries is
 // noted on `state` for a caller that resolves operands against it.
 function skipEnvAndWrappers(words, state) {
-  const wrapperState = state ?? { cwd: null, chroot: null, unsure: false };
+  const wrapperState = state === undefined ? { cwd: null, chroot: null, unsure: false } : state;
   let index = 0;
   while (index < words.length) {
     const word = words[index].value;
