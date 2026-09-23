@@ -421,6 +421,53 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  // A mirror rewritten with another size reads as modified to git until the
+  // index entry is refreshed, even when the clean side of the filter takes it
+  // back to the committed blob; propagation refreshes the entries it wrote,
+  // so a branch switch after a session start is never refused for them.
+  if (await test('a mirror rewritten by propagation reads as unmodified to git', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateToTools({ projectPath: dir, ...args });
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir });
+      const second = propagateStateToTools({ projectPath: dir, ...args, next: [...args.next, 'a longer next step recorded by a later session that changes the size of the mirror'] });
+      assert.strictEqual(second.agents, path.join(dir, 'AGENTS.md'), 'the mirror is written again');
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8').includes('a longer next step recorded by a later session'), 'the mirror carries the longer block');
+      const status = execFileSync('git', ['status', '--porcelain', '--', 'AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(status, '', `git must read the rewritten mirror as unmodified, got: ${JSON.stringify(status)}`);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  // The refresh only re-reads the files: a change of the user's own in a
+  // mirror stays an unstaged change, and the index never takes content.
+  if (await test('a change of the user\'s own in a mirror stays unstaged after propagation', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateToTools({ projectPath: dir, ...args });
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir });
+      fs.appendFileSync(path.join(dir, 'AGENTS.md'), '\nA line the user wrote.\n');
+      propagateStateToTools({ projectPath: dir, ...args, next: [...args.next, 'a longer next step recorded by a later session that changes the size of the mirror'] });
+      const status = execFileSync('git', ['status', '--porcelain', '--', 'AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(status, ' M AGENTS.md\n', `the user's change must stay unstaged, got: ${JSON.stringify(status)}`);
+      const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(staged, '', `nothing may be staged, got: ${JSON.stringify(staged)}`);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (await test('keeps project memory out of the context files when git cannot open the repository', () => {
     const dir = mktemp();
     try {

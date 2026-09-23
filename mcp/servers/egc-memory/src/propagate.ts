@@ -19,6 +19,7 @@ interface MemoryFilters {
     scriptPath: string;
     dryRun: boolean;
   }): { configured: boolean; reason?: string; actions: string[] };
+  forgetIndexStat(projectDir: string, files: string[]): void;
 }
 
 function tryRequireMemoryFilters(): MemoryFilters | null {
@@ -409,18 +410,38 @@ function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
 export function propagateStateToTools(args: PropagateArgs): PropagateResult {
   if (!ensureCommitPrivacy(args.projectPath)) return noMirrorsWritten();
   const block = buildSummaryBlock(args);
-  return {
-    cursor: writeCursorContext(args.projectPath, block),
-    copilot: writeCopilotContext(args.projectPath, block),
-    gemini: writeGeminiContext(args.projectPath, block),
-    windsurf: writeWindsurfContext(args.projectPath, block),
-    trae: writeTraeContext(args.projectPath, block),
-    zed: writeZedContext(args.projectPath, block),
-    cline: writeClineContext(args.projectPath, block),
-    aider: writeAiderContext(args.projectPath, block),
-    cursorrules: writeLegacyCursorRules(args.projectPath, block),
-    agents: writeAgentsContext(args.projectPath, block),
-    llms: writeLlmsTxt(args.projectPath, args),
-    claude: writeClaudeContext(args.projectPath, block),
-  };
+  // The files written before a writer that throws are refreshed too.
+  const written = noMirrorsWritten();
+  try {
+    written.cursor = writeCursorContext(args.projectPath, block);
+    written.copilot = writeCopilotContext(args.projectPath, block);
+    written.gemini = writeGeminiContext(args.projectPath, block);
+    written.windsurf = writeWindsurfContext(args.projectPath, block);
+    written.trae = writeTraeContext(args.projectPath, block);
+    written.zed = writeZedContext(args.projectPath, block);
+    written.cline = writeClineContext(args.projectPath, block);
+    written.aider = writeAiderContext(args.projectPath, block);
+    written.cursorrules = writeLegacyCursorRules(args.projectPath, block);
+    written.agents = writeAgentsContext(args.projectPath, block);
+    written.llms = writeLlmsTxt(args.projectPath, args);
+    written.claude = writeClaudeContext(args.projectPath, block);
+  } finally {
+    forgetIndexStat(args.projectPath, written);
+  }
+  return written;
+}
+
+// A mirror rewritten with another size reads as modified to git until its
+// index entry is looked at again (git trusts the size it recorded and does
+// not run the clean side of the filter), so a branch switch after a session
+// start was refused for a file that carried nothing new. The shared library
+// clears the recorded stat of the written files and refreshes them, so a
+// mirror that still cleans to the committed blob reads as unmodified, a
+// change of the user's own stays an unstaged change, and an entry that
+// carries a mark (skip-worktree, assume-unchanged, intent-to-add) is left as
+// it is; without the library there is no filter armed and nothing to refresh.
+function forgetIndexStat(projectPath: string, written: PropagateResult): void {
+  const files = Object.values(written).filter((file): file is string => typeof file === 'string');
+  if (files.length === 0) return;
+  tryRequireMemoryFilters()?.forgetIndexStat(projectPath, files);
 }
