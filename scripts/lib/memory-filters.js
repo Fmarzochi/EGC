@@ -282,34 +282,56 @@ function applyCommitPrivacyFilterCli({ projectDir, scriptPath, log }) {
 // not run the clean side of the filter, so a branch switch after a session
 // start was refused for a file that carried nothing new. Feeding the
 // entries of the written files back through update-index clears the
-// recorded stat, and the refresh that follows hashes them through the
-// filter and records what it finds: a mirror that still cleans to the
-// committed blob reads as unmodified, a change of the user's own stays an
-// unstaged change, and nothing is ever staged (a path handed to
-// update-index directly would be re-added with its current content). A
-// step that cannot run (no git, no repository, an index held by another
-// git) changes nothing: git recomputes the same information on its next
-// command.
+// recorded stat, and the refresh that follows (git add --refresh, which
+// only re-reads the files it is given) hashes them through the filter and
+// records what it finds: a mirror that still cleans to the committed blob
+// reads as unmodified, a change of the user's own stays an unstaged
+// change, and nothing is ever staged (a path handed to update-index
+// directly would be re-added with its current content). Only a plain entry
+// takes the round trip: one marked skip-worktree or assume-unchanged, an
+// unmerged one, or an intent-to-add one (an empty blob in the index) is
+// left as it is, since the round trip would drop the mark. Without git or
+// a repository there is nothing recorded to refresh; a later step that
+// fails (an index another git holds) is said in one line, and git reads
+// the files again at the next session start or memory update.
+const EMPTY_BLOB_IDS = new Set([
+  'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391',
+  '473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813',
+]);
+
+// The entries of `git ls-files -z -s -t -v` that may take the round trip
+// ("H 100644 <oid> 0\t<path>": the tag, the entry as -s prints it, the
+// path), as the text --index-info reads and the paths to refresh.
+function plainIndexEntries(listing) {
+  const info = [];
+  const paths = [];
+  for (const record of listing.split('\0')) {
+    const match = /^([^ ]) (\d{6} ([0-9a-f]+) )(\d)\t(.+)$/s.exec(record);
+    if (!match || match[1] !== 'H' || match[4] !== '0' || EMPTY_BLOB_IDS.has(match[3])) continue;
+    info.push(`${match[2]}${match[4]}\t${match[5]}\0`);
+    paths.push(match[5]);
+  }
+  return { info: info.join(''), paths };
+}
+
 function forgetIndexStat(projectPath, files) {
   if (files.length === 0) return;
-  const relative = files.map(file => path.relative(projectPath, file));
+  const relative = files.map(file => path.relative(projectPath, file).split(path.sep).join('/'));
+  const gitOptions = { cwd: projectPath, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] };
+  let listing;
   try {
-    const entries = execFileSync(GIT_BIN, ['ls-files', '-s', '-z', '--', ...relative], {
-      cwd: projectPath,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    if (entries.length === 0) return;
-    execFileSync(GIT_BIN, ['update-index', '-z', '--index-info'], {
-      cwd: projectPath,
-      input: entries,
-      stdio: ['pipe', 'ignore', 'ignore'],
-    });
-    execFileSync(GIT_BIN, ['update-index', '-q', '--unmerged', '--refresh'], {
-      cwd: projectPath,
-      stdio: 'ignore',
-    });
+    listing = execFileSync(GIT_BIN, ['ls-files', '-z', '-s', '-t', '-v', '--', ...relative], gitOptions);
   } catch {
-    // Nothing to undo: the entries are read again by the next git command.
+    return;
+  }
+  const plain = plainIndexEntries(listing);
+  if (plain.paths.length === 0) return;
+  try {
+    execFileSync(GIT_BIN, ['update-index', '-z', '--index-info'], { ...gitOptions, input: plain.info });
+    execFileSync(GIT_BIN, ['add', '--refresh', '--', ...plain.paths], gitOptions);
+  } catch (err) {
+    const detail = String(err.stderr || err.message).trim().split(/\r?\n/)[0] || 'git failed';
+    process.stderr.write(`[egc-memory] the git index of ${projectPath} could not be refreshed after the context files were rewritten: ${detail}. git may read those files as modified until the next session start or memory update rewrites them.\n`);
   }
 }
 

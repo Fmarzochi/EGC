@@ -433,9 +433,10 @@ export function propagateStateToTools(args: PropagateArgs): PropagateResult {
 // not run the clean side of the filter), so a branch switch after a session
 // start was refused for a file that carried nothing new. The shared library
 // clears the recorded stat of the written files and refreshes them, so a
-// mirror that still cleans to the committed blob reads as unmodified and a
-// change of the user's own stays an unstaged change; without the library
-// there is no filter armed and nothing to refresh.
+// mirror that still cleans to the committed blob reads as unmodified, a
+// change of the user's own stays an unstaged change, and an entry that
+// carries a mark (skip-worktree, assume-unchanged, intent-to-add) is left as
+// it is; without the library there is no filter armed and nothing to refresh.
 function forgetIndexStat(projectPath: string, written: PropagateResult): void {
   const files = Object.values(written).filter((file): file is string => typeof file === 'string');
   if (files.length === 0) return;
