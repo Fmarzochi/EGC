@@ -19,7 +19,8 @@ EGC_START='<!-- egc:start -->'
 CLEAN_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/check-state-leak.js"
 
 # The paths come NUL-separated, so a name git would otherwise quote (a
-# space, a character outside ASCII) reaches the commands as it is.
+# space, a character outside ASCII) reaches the commands as it is; T is in
+# the filter so a file whose type changed is read too.
 while IFS= read -r -d '' FILE; do
   [[ -z "$FILE" ]] && continue
   case "$FILE" in
@@ -42,6 +43,6 @@ while IFS= read -r -d '' FILE; do
       echo "[egc] the local state block of $FILE was cleaned to its skeleton for the commit; the working tree keeps the memory"
     fi
   fi
-done < <(git diff --cached --name-only -z --diff-filter=ACMR 2>/dev/null)
+done < <(git diff --cached --name-only -z --diff-filter=ACMRT 2>/dev/null)
 
 exit 0
