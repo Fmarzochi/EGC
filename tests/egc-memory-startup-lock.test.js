@@ -40,6 +40,9 @@ const HAS_PROC_FDS = fs.existsSync('/proc/self/fd');
 const HOLD_AFTER_OPEN_MS = 2000;
 const FIXED_HOLD_MS = 3000;
 const POLL_MS = 50;
+// The probe gives up well before the answer budget, so the probe, the hold
+// and the answer never overlap: at worst 10 s of probing and a fixed hold.
+const PROBE_BUDGET_MS = 10000;
 
 function exec(db, sql) {
   return new Promise((resolve, reject) => db.exec(sql, err => (err ? reject(err) : resolve())));
@@ -103,17 +106,22 @@ function startServer(home) {
   return server;
 }
 
-// Resolves once the server is known to be at the store, or has finished.
+// Resolves once the lock has been held long enough, or the server has
+// finished. When the probe cannot see the store open in time, the fixed
+// hold takes over.
 async function waitUntilAtStore(server) {
-  if (!HAS_PROC_FDS) {
-    await sleep(FIXED_HOLD_MS);
-    return;
+  if (HAS_PROC_FDS) {
+    const deadline = Date.now() + PROBE_BUDGET_MS;
+    while (!server.settled && Date.now() < deadline) {
+      if (holdsStoreOpen(server.child.pid)) {
+        await sleep(HOLD_AFTER_OPEN_MS);
+        return;
+      }
+      await sleep(POLL_MS);
+    }
+    if (server.settled) return;
   }
-  const deadline = Date.now() + CLI_TIMEOUT_MS;
-  while (!server.settled && Date.now() < deadline && !holdsStoreOpen(server.child.pid)) {
-    await sleep(POLL_MS);
-  }
-  await sleep(HOLD_AFTER_OPEN_MS);
+  await sleep(FIXED_HOLD_MS);
 }
 
 async function main() {
