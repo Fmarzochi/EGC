@@ -30,7 +30,9 @@ try {
   process.exit(0);
 }
 
-const LOCK_HELD_MS = 1500;
+// Long enough for a slow runner to reach the store before the lock goes,
+// short enough to stay inside the server's 5000 ms busy timeout.
+const LOCK_HELD_MS = 3000;
 const ANSWER_BUDGET_MS = 20000;
 
 function exec(db, sql) {
@@ -53,12 +55,18 @@ function initialize(home) {
     let out = '';
     let err = '';
     let settled = false;
+    // Resolves only once the child is gone, so the cleanup that follows
+    // never races a process still holding the store open.
     const done = result => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (child.exitCode !== null || child.signalCode !== null) {
+        resolve(result);
+        return;
+      }
+      child.once('exit', () => resolve(result));
       child.kill();
-      resolve(result);
     };
     const timer = setTimeout(() => done({ ok: false, why: `no answer in ${ANSWER_BUDGET_MS}ms: ${err.slice(-200)}` }), ANSWER_BUDGET_MS);
     child.stdout.on('data', chunk => {
