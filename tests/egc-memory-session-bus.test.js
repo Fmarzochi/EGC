@@ -106,9 +106,15 @@ async function main() {
     const across = await bus.sendEvent(db, { fromSession: 'a', toSession: 'b', projectPath: '/p', kind: 'handoff', payload: 'x' });
     assert.strictEqual(across.ok, false);
     assert.match(across.reason, /not live in this project/);
+    const unscoped = await bus.sendEvent(db, { fromSession: 'a', toSession: 'c', kind: 'handoff', payload: 'x' });
+    assert.strictEqual(unscoped.ok, false, 'a sender without a project reaches no session of one');
     assert.strictEqual((await db.all('SELECT id FROM bus_events')).length, 0, 'nothing is queued for a session of another project');
-    const within = await bus.sendEvent(db, { fromSession: 'a', toSession: 'c', projectPath: '/p', kind: 'handoff', payload: 'x' });
+    const within = await bus.sendEvent(db, { fromSession: 'a', toSession: 'c', projectPath: '/p', kind: 'handoff', payload: 'kept' });
     assert.strictEqual(within.ok, true);
+    const queued = await db.all('SELECT from_session, to_session, project_path FROM bus_events');
+    assert.deepStrictEqual(queued.map(e => ({ ...e })), [{ from_session: 'a', to_session: 'c', project_path: '/p' }]);
+    const delivered = await bus.readEvents(db, { sessionId: 'c', projectPath: '/p' });
+    assert.deepStrictEqual(delivered.map(e => e.payload), ['kept']);
   });
 
   await run('a lock from a vanished session does not block a live claim', async () => {

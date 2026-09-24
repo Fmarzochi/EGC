@@ -204,8 +204,9 @@ export async function sendEvent(
     if (!target) {
       return { ok: false, reason: `session ${input.toSession} is not live on the bus` };
     }
-    // A direct event stays inside the sender's project, like a broadcast.
-    if (input.projectPath && target.project_path !== input.projectPath) {
+    // A direct event stays inside the sender's project, like a broadcast;
+    // a sender without a project only reaches a session without one.
+    if ((target.project_path ?? null) !== (input.projectPath ?? null)) {
       return { ok: false, reason: `session ${input.toSession} is not live in this project` };
     }
   }

@@ -967,7 +967,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {
             session_id: { type: "string", description: "Leave out: the bus always acts as this server's own session, and any other id is refused." },
-            project_path: { type: "string", description: "Absolute path to the project root. The first memory or bus call fixes this session's project (the working directory when omitted); a different project afterwards is refused." },
+            project_path: { type: "string", description: "Absolute path to the project root. The first memory call or project-scoped bus call fixes this session's project (the working directory when omitted); a different project afterwards is refused." },
             territory: { type: "string", description: "Folder or theme this session is claiming informally, e.g. 'scripts/lib' or 'docs sweep'." }
           }
         }
@@ -1504,7 +1504,9 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
 // The bus acts for this server process only. The session id is fixed per
 // process (never the shared current_session_id, which would break the
 // claim/release symmetry and let parallel sessions collide on one identity),
-// and the project is fixed by the first memory or bus call. A caller cannot
+// and the project is fixed by the first call that resolves one: a memory
+// call or any bus call but claim_path and release_path, which carry no
+// project (binding there would pin the process directory). A caller cannot
 // name another session or another project: every read, send, announce and
 // release happens as this session, inside the project it joined.
 const BUS_SESSION_ID = `bus-${process.pid}`;
