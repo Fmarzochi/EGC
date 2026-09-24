@@ -503,8 +503,84 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  const links = await runLinkTests(args);
+  passed += links.passed;
+  failed += links.failed;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
+}
+
+// The memory is written only into regular files inside the project: a
+// context file or a folder on its way that is a link is left alone, and so
+// is whatever the link points at.
+async function runLinkTests(args) {
+  let passed = 0;
+  let failed = 0;
+
+  // A link to a file needs a privilege Windows runners do not grant.
+  if (process.platform !== 'win32') {
+    if (await test('leaves a context file that is a link, and the file behind it, as they were', () => {
+      const dir = mktemp();
+      const outside = mktemp();
+      try {
+        const target = path.join(outside, 'profile');
+        fs.writeFileSync(target, 'export EDITOR=vi\n');
+        fs.symlinkSync(target, path.join(dir, 'CLAUDE.md'));
+        fs.symlinkSync(target, path.join(dir, 'llms.txt'));
+        fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+        const result = propagateStateToTools({ projectPath: dir, ...args });
+        assert.strictEqual(result.claude, null, 'CLAUDE.md is not reported as written');
+        assert.strictEqual(result.llms, null, 'llms.txt is not reported as written');
+        assert.strictEqual(fs.readFileSync(target, 'utf-8'), 'export EDITOR=vi\n', 'the file behind the links is left as it was');
+        assert.ok(fs.lstatSync(path.join(dir, 'CLAUDE.md')).isSymbolicLink(), 'the link stays a link');
+        assert.ok(result.agents, 'a regular context file beside them still receives the memory');
+      } finally {
+        cleanup(dir);
+        cleanup(outside);
+      }
+    })) passed++; else failed++;
+  }
+
+  // A junction needs no privilege on Windows and is an ordinary link
+  // elsewhere, so the folder cases run on every runner.
+  if (await test('writes nothing into a tool folder that is a link', () => {
+    const dir = mktemp();
+    const outside = mktemp();
+    try {
+      fs.symlinkSync(outside, path.join(dir, '.cursor'), 'junction');
+      fs.symlinkSync(outside, path.join(dir, '.windsurf'), 'junction');
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.strictEqual(result.cursor, null, '.cursor is not reported as written');
+      assert.strictEqual(result.windsurf, null, '.windsurf is not reported as written');
+      assert.deepStrictEqual(fs.readdirSync(outside), [], 'no folder or file is created behind the links');
+    } finally {
+      cleanup(dir);
+      cleanup(outside);
+    }
+  })) passed++; else failed++;
+
+  if (await test('leaves a context file alone when a folder on its way is a link', () => {
+    const dir = mktemp();
+    const outside = mktemp();
+    try {
+      fs.writeFileSync(path.join(outside, 'copilot-instructions.md'), '# Copilot\n');
+      fs.writeFileSync(path.join(outside, 'egc-context.md'), '# Trae\n');
+      fs.symlinkSync(outside, path.join(dir, '.github'), 'junction');
+      fs.mkdirSync(path.join(dir, '.trae'));
+      fs.symlinkSync(outside, path.join(dir, '.trae', 'rules'), 'junction');
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.strictEqual(result.copilot, null, 'the Copilot file is not reported as written');
+      assert.strictEqual(result.trae, null, 'the Trae file is not reported as written');
+      assert.strictEqual(fs.readFileSync(path.join(outside, 'copilot-instructions.md'), 'utf-8'), '# Copilot\n', 'the file reached through .github is left as it was');
+      assert.strictEqual(fs.readFileSync(path.join(outside, 'egc-context.md'), 'utf-8'), '# Trae\n', 'the file reached through .trae/rules is left as it was');
+    } finally {
+      cleanup(dir);
+      cleanup(outside);
+    }
+  })) passed++; else failed++;
+
+  return { passed, failed };
 }
 
 runTests();

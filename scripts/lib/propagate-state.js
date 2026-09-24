@@ -401,6 +401,27 @@ function stripLegacyCursorContent(existing) {
   return rest.trimStart().startsWith(LEGACY_BLOCK_HEADER) ? LEGACY_CURSOR_FRONTMATTER : existing;
 }
 
+// Whether the context file at filePath, below projectPath, may be written:
+// no entry between the project folder and the file is a link (a Windows
+// junction reads as one), so the write cannot land outside the project, and
+// the file, when it is already there, is a regular file. An entry that does
+// not exist yet is fine, since what the writer creates there is real.
+function isPlainPathBelow(projectPath, filePath) {
+  let current = projectPath;
+  for (const part of path.relative(projectPath, filePath).split(path.sep)) {
+    current = path.join(current, part);
+    let entry;
+    try {
+      entry = fs.lstatSync(current);
+    } catch (err) {
+      return err.code === 'ENOENT';
+    }
+    if (entry.isSymbolicLink()) return false;
+    if (current === filePath) return entry.isFile();
+  }
+  return false;
+}
+
 function writeCursorContext(projectPath, block, stateUpdated) {
   const cursorDir = path.join(projectPath, '.cursor');
   try {
@@ -410,9 +431,10 @@ function writeCursorContext(projectPath, block, stateUpdated) {
   }
 
   const rulesDir = path.join(cursorDir, 'rules');
+  const filePath = path.join(rulesDir, 'egc-context.mdc');
+  if (!isPlainPathBelow(projectPath, filePath)) return null;
   fs.mkdirSync(rulesDir, { recursive: true });
 
-  const filePath = path.join(rulesDir, 'egc-context.mdc');
   const existingRaw = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
   if (isStaleWrite(existingRaw, stateUpdated)) return filePath;
   const existing = existingRaw ? stripLegacyCursorContent(existingRaw) : LEGACY_CURSOR_FRONTMATTER;
@@ -429,7 +451,7 @@ function writeCursorContext(projectPath, block, stateUpdated) {
 function writeSimpleContext(projectPath, relativePathParts, block, stateUpdated) {
   const filePath = path.join(projectPath, ...relativePathParts);
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -461,9 +483,10 @@ function writeToolRulesContext(projectPath, toolDirName, block, stateUpdated) {
   }
 
   const rulesDir = path.join(toolDir, 'rules');
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  if (!isPlainPathBelow(projectPath, filePath)) return null;
   fs.mkdirSync(rulesDir, { recursive: true });
 
-  const filePath = path.join(rulesDir, 'egc-context.md');
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
   if (isStaleWrite(existing, stateUpdated)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
@@ -517,7 +540,7 @@ function buildLlmsBlock(parsed) {
 function writeLlmsTxt(projectPath, parsed) {
   const filePath = path.join(projectPath, 'llms.txt');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }

@@ -203,6 +203,27 @@ function upsertEgcSection(existing: string, block: string): string {
   return stripped ? `${stripped}\n\n${section}\n` : `${section}\n`;
 }
 
+// Whether the context file at filePath, below projectPath, may be written:
+// no entry between the project folder and the file is a link (a Windows
+// junction reads as one), so the write cannot land outside the project, and
+// the file, when it is already there, is a regular file. An entry that does
+// not exist yet is fine, since what the writer creates there is real.
+function isPlainPathBelow(projectPath: string, filePath: string): boolean {
+  let current = projectPath;
+  for (const part of path.relative(projectPath, filePath).split(path.sep)) {
+    current = path.join(current, part);
+    let entry: fs.Stats;
+    try {
+      entry = fs.lstatSync(current);
+    } catch (err) {
+      return (err as NodeJS.ErrnoException).code === 'ENOENT';
+    }
+    if (entry.isSymbolicLink()) return false;
+    if (current === filePath) return entry.isFile();
+  }
+  return false;
+}
+
 // Shared by the harness writers below: upsert the EGC block into filePath,
 // using defaultContent as the starting point when the file doesn't exist yet.
 function upsertFileSection(filePath: string, block: string, defaultContent = ''): string {
@@ -240,9 +261,10 @@ function writeCursorContext(projectPath: string, block: string): string | null {
   }
 
   const rulesDir = path.join(cursorDir, 'rules');
+  const filePath = path.join(rulesDir, 'egc-context.mdc');
+  if (!isPlainPathBelow(projectPath, filePath)) return null;
   fs.mkdirSync(rulesDir, { recursive: true });
 
-  const filePath = path.join(rulesDir, 'egc-context.mdc');
   const existing = fs.existsSync(filePath)
     ? stripLegacyCursorContent(fs.readFileSync(filePath, 'utf-8'))
     : LEGACY_CURSOR_FRONTMATTER;
@@ -253,7 +275,7 @@ function writeCursorContext(projectPath: string, block: string): string | null {
 function writeClaudeContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, 'CLAUDE.md');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -264,7 +286,7 @@ function writeClaudeContext(projectPath: string, block: string): string | null {
 function writeCopilotContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, '.github', 'copilot-instructions.md');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -277,7 +299,7 @@ function writeCopilotContext(projectPath: string, block: string): string | null 
 function writeGeminiContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, 'GEMINI.md');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -296,9 +318,10 @@ function writeWindsurfContext(projectPath: string, block: string): string | null
   }
 
   const rulesDir = path.join(windsurfDir, 'rules');
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  if (!isPlainPathBelow(projectPath, filePath)) return null;
   fs.mkdirSync(rulesDir, { recursive: true });
 
-  const filePath = path.join(rulesDir, 'egc-context.md');
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
@@ -313,9 +336,10 @@ function writeTraeContext(projectPath: string, block: string): string | null {
   }
 
   const rulesDir = path.join(traeDir, 'rules');
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  if (!isPlainPathBelow(projectPath, filePath)) return null;
   fs.mkdirSync(rulesDir, { recursive: true });
 
-  const filePath = path.join(rulesDir, 'egc-context.md');
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
@@ -324,7 +348,7 @@ function writeTraeContext(projectPath: string, block: string): string | null {
 function writeZedContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, '.rules');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -337,7 +361,7 @@ function writeZedContext(projectPath: string, block: string): string | null {
 function writeClineContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, '.clinerules');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -350,7 +374,7 @@ function writeClineContext(projectPath: string, block: string): string | null {
 function writeAiderContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, 'CONVENTIONS.md');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -363,7 +387,7 @@ function writeAiderContext(projectPath: string, block: string): string | null {
 function writeLegacyCursorRules(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, '.cursorrules');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -376,7 +400,7 @@ function writeLegacyCursorRules(projectPath: string, block: string): string | nu
 function writeAgentsContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, 'AGENTS.md');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -389,7 +413,7 @@ function writeAgentsContext(projectPath: string, block: string): string | null {
 function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
   const filePath = path.join(projectPath, 'llms.txt');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
