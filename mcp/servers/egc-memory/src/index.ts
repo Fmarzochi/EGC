@@ -999,11 +999,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "session_peers",
-        description: "List live sessions and active path locks on the session bus. Use before starting parallel work to see who is active and which territories are taken.",
+        description: "List the live sessions of this session's project and every active path lock on the session bus. Use before starting parallel work to see who is active and which territories are taken.",
         inputSchema: {
           type: "object",
           properties: {
-            project_path: { type: "string", description: "Filter sessions to one project. Omit for all projects." }
+            project_path: { type: "string", description: "Defaults to the project this session joined; a different project is refused. Locks are listed for every project, since a claim meets any live holder of the same path." }
           }
         }
       },
@@ -1284,15 +1284,16 @@ async function handleLessonReinforce(db: Database, args: unknown) {
 // Implicit bus presence: every session that touches memory becomes visible
 // to its peers without anyone having to call session_announce explicitly.
 // Implicit presence follows memory calls, but only in the project the
-// session joined: reading or saving another project's memory leaves this
-// session's place on the bus where it was.
+// session joined: reading or saving another project's memory still counts
+// as a heartbeat, refreshed where the session joined instead of moving it.
 async function announcePresenceBestEffort(db: Database, projPath: string): Promise<void> {
   try {
     const joined = joinBusProject(projPath);
-    if ('refusal' in joined) return;
+    const project = 'refusal' in joined ? busProject : joined.project;
+    if (project === null) return;
     await writeArbitrator.enqueue(async () => {
       await busSweepDead(db);
-      await busAnnounce(db, { sessionId: BUS_SESSION_ID, projectPath: joined.project });
+      await busAnnounce(db, { sessionId: BUS_SESSION_ID, projectPath: project });
     });
   } catch (_) { /* non-fatal: presence must never block memory calls */ } // NOSONAR
 }
@@ -1599,9 +1600,12 @@ async function handleReleasePath(db: Database, toolArgs: unknown) {
 
 async function handleSessionPeers(db: Database, toolArgs: unknown) {
   const args = SessionPeersSchema.parse(toolArgs || {});
+  const joined = joinBusProject(args.project_path);
+  if ('refusal' in joined) return refusedText(joined.refusal);
   await writeArbitrator.enqueue(async () => busSweepDead(db));
-  const projPath = args.project_path ? resolveProjectPath(args.project_path) : undefined;
-  const peers = await busListPeers(db, projPath);
+  const peers = await busListPeers(db, joined.project);
+  // Locks stay listed for every project: a claim is refused by any live
+  // holder of the same path, and this list is where a session sees who.
   const locks = await busListLocks(db);
   const peerLines = peers.map(describePeer);
   const lockLines = locks.map(l => `- ${rowText(l.path)} held by ${rowText(l.session_id)} (ttl ${rowText(l.ttl_seconds)}s)`);
