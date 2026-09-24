@@ -14,6 +14,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { CLI_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts');
 
 const serverDir = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory');
 const SERVER = path.join(serverDir, 'build', 'index.js');
@@ -30,10 +31,15 @@ try {
   process.exit(0);
 }
 
-// Long enough for a slow runner to reach the store before the lock goes,
-// short enough to stay inside the server's 5000 ms busy timeout.
-const LOCK_HELD_MS = 3000;
-const ANSWER_BUDGET_MS = 20000;
+// The native driver already waits 1000 ms for a lock on its own, so the
+// lock is held longer than that once the server is at the store, and well
+// inside the server's 5000 ms busy timeout. Where /proc exists the hold
+// starts when the server's process holds the store open; elsewhere a fixed
+// hold from spawn stands in for that proof.
+const HAS_PROC_FDS = fs.existsSync('/proc/self/fd');
+const HOLD_AFTER_OPEN_MS = 2000;
+const FIXED_HOLD_MS = 3000;
+const POLL_MS = 50;
 
 function exec(db, sql) {
   return new Promise((resolve, reject) => db.exec(sql, err => (err ? reject(err) : resolve())));
@@ -43,23 +49,37 @@ function close(db) {
   return new Promise(resolve => db.close(() => resolve()));
 }
 
-// Starts the server on the given home and resolves with whether it answered
-// the MCP initialize request.
-function initialize(home) {
-  return new Promise(resolve => {
-    const child = spawn(process.execPath, [SERVER], {
-      cwd: home,
-      env: { ...process.env, HOME: home, USERPROFILE: home, EGC_SQLITE_ENGINE: 'native' },
-      stdio: ['pipe', 'pipe', 'pipe'],
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function holdsStoreOpen(pid) {
+  const fdDir = `/proc/${pid}/fd`;
+  try {
+    return fs.readdirSync(fdDir).some(fd => {
+      try { return fs.readlinkSync(path.join(fdDir, fd)).endsWith(`${path.sep}state.db`); } catch { return false; }
     });
-    let out = '';
-    let err = '';
-    let settled = false;
-    // Resolves only once the child is gone, so the cleanup that follows
-    // never races a process still holding the store open.
+  } catch {
+    return false;
+  }
+}
+
+// Starts the server on the given home. `answered` resolves with whether it
+// answered the MCP initialize request, and only once the process is gone,
+// so the cleanup that follows never races a process holding the store.
+function startServer(home) {
+  const child = spawn(process.execPath, [SERVER], {
+    cwd: home,
+    env: { ...process.env, HOME: home, USERPROFILE: home, EGC_SQLITE_ENGINE: 'native' },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  const server = { child, settled: false };
+  let out = '';
+  let err = '';
+  server.answered = new Promise(resolve => {
     const done = result => {
-      if (settled) return;
-      settled = true;
+      if (server.settled) return;
+      server.settled = true;
       clearTimeout(timer);
       if (child.exitCode !== null || child.signalCode !== null) {
         resolve(result);
@@ -68,18 +88,32 @@ function initialize(home) {
       child.once('exit', () => resolve(result));
       child.kill();
     };
-    const timer = setTimeout(() => done({ ok: false, why: `no answer in ${ANSWER_BUDGET_MS}ms: ${err.slice(-200)}` }), ANSWER_BUDGET_MS);
+    const timer = setTimeout(() => done({ ok: false, why: `no answer in ${CLI_TIMEOUT_MS}ms: ${err.slice(-200)}` }), CLI_TIMEOUT_MS);
     child.stdout.on('data', chunk => {
       out += chunk;
       if (out.includes('"result"')) done({ ok: true });
     });
     child.stderr.on('data', chunk => { err += chunk; });
     child.on('exit', code => done({ ok: false, why: `exited with ${code}: ${(err.match(/SQLITE_\w+[^"\n]*/) || [err.slice(-200)])[0]}` }));
-    child.stdin.write(JSON.stringify({
-      jsonrpc: '2.0', id: 1, method: 'initialize',
-      params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'startup-lock-test', version: '0' } },
-    }) + '\n');
   });
+  child.stdin.write(JSON.stringify({
+    jsonrpc: '2.0', id: 1, method: 'initialize',
+    params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'startup-lock-test', version: '0' } },
+  }) + '\n');
+  return server;
+}
+
+// Resolves once the server is known to be at the store, or has finished.
+async function waitUntilAtStore(server) {
+  if (!HAS_PROC_FDS) {
+    await sleep(FIXED_HOLD_MS);
+    return;
+  }
+  const deadline = Date.now() + CLI_TIMEOUT_MS;
+  while (!server.settled && Date.now() < deadline && !holdsStoreOpen(server.child.pid)) {
+    await sleep(POLL_MS);
+  }
+  await sleep(HOLD_AFTER_OPEN_MS);
 }
 
 async function main() {
@@ -91,10 +125,13 @@ async function main() {
   let failed = 0;
   try {
     await exec(holder, 'CREATE TABLE IF NOT EXISTS held (x INTEGER); BEGIN EXCLUSIVE; INSERT INTO held VALUES (1);');
-    const started = initialize(home);
-    setTimeout(() => { exec(holder, 'COMMIT').catch(() => {}); }, LOCK_HELD_MS);
-    const result = await started;
+    const server = startServer(home);
+    await waitUntilAtStore(server);
+    const waitingAtRelease = !server.settled;
+    await exec(holder, 'COMMIT');
+    const result = await server.answered;
     try {
+      assert.ok(waitingAtRelease, `the server had already finished before the lock was released: ${result.why || 'answered'}`);
       assert.ok(result.ok, result.why);
       console.log('  PASS the server waits for a store lock held at startup and then answers');
     } catch (error) {
