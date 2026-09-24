@@ -3,7 +3,8 @@
 // instances sharing one isolated HOME, driving each over MCP stdio like a
 // real harness would. Proves: mutual visibility (session_peers), fail-fast
 // path locks with no steal under a concurrent claim (claim_path), stable
-// claim/release identity, and concurrent update_state without lost writes.
+// claim/release identity, concurrent update_state without lost writes, and
+// that each session acts only as itself, in the project it joined.
 //
 // Requires the built server; CI does not build the MCP servers, so the test
 // skips itself when the build output is absent. Run locally with:
@@ -26,14 +27,14 @@ const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mstest-proj-'));
 const N = Math.max(2, Number.parseInt(process.env.EGC_MSTEST_SESSIONS || '4', 10) || 4);
 
 class Session {
-  constructor(name) {
+  constructor(name, cwd = PROJECT) {
     this.name = name;
     this.nextId = 1;
     this.pending = new Map();
     this.buf = '';
     this.proc = spawn('node', [SERVER], {
       env: { ...process.env, HOME: FAKE_HOME },
-      cwd: PROJECT,
+      cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     this.proc.stdout.on('data', chunk => {
@@ -206,6 +207,52 @@ async function main() {
   check('presenca implicita: get_state registra a sessao no bus', ghostVisible, peersAfterGhost.split('\n')[0]);
   ghost.kill();
 
+  // 9. Every session acts only as itself, in the project it joined: the bus
+  // refuses another session's id and another project, and neither events nor
+  // presence cross from one project to the other.
+  const PROJECT_B = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mstest-projb-'));
+  const insider = sessions[0];
+  const insiderId = (announces[0].match(/Session (bus-\d+) announced/) || [])[1];
+  const outsider = new Session('outsider', PROJECT_B);
+  const courier = new Session('courier', PROJECT_B);
+  await outsider.init();
+  await courier.init();
+  const outsiderJoin = await outsider.tool('session_announce', { territory: 'other-project' });
+  await courier.tool('session_announce', {});
+  const outsiderId = (outsiderJoin.match(/Session (bus-\d+) announced/) || [])[1];
+  check('sessao de outro projeto entra no bus pela propria pasta', Boolean(insiderId && outsiderId), outsiderJoin.slice(0, 80));
+
+  const REFUSED = /^Refused: /;
+  await insider.tool('session_send', { kind: 'heads-up', payload: 'so para o projeto A' });
+  const outsiderRead = await outsider.tool('session_events', {});
+  check('broadcast de um projeto nao chega a sessao de outro', !/so para o projeto A/.test(outsiderRead), outsiderRead.slice(0, 80));
+
+  const acrossDirect = await insider.tool('session_send', { to_session: outsiderId, kind: 'handoff', payload: 'x' });
+  check('envio direto para sessao de outro projeto e recusado', /not live in this project/.test(acrossDirect), acrossDirect.slice(0, 80));
+
+  await courier.tool('session_send', { to_session: outsiderId, kind: 'handoff', payload: 'nota do courier' });
+  const hijackRead = await insider.tool('session_events', { session_id: outsiderId });
+  const outsiderInbox = await outsider.tool('session_events', {});
+  check('ler como outra sessao e recusado e o evento continua dela', REFUSED.test(hijackRead) && /nota do courier/.test(outsiderInbox), `${hijackRead.slice(0, 60)} | ${outsiderInbox.slice(0, 60)}`);
+
+  const forged = await insider.tool('session_send', { session_id: outsiderId, kind: 'handoff', payload: 'forjado' });
+  check('enviar em nome de outra sessao e recusado', REFUSED.test(forged), forged.slice(0, 80));
+
+  const otherProjectRead = await insider.tool('session_events', { project_path: PROJECT_B });
+  check('trocar de projeto no meio da sessao e recusado', REFUSED.test(otherProjectRead), otherProjectRead.slice(0, 80));
+
+  await outsider.tool('claim_path', { path: 'src/b-only.js' });
+  const foreignRelease = await insider.tool('release_path', { session_id: outsiderId, path: 'src/b-only.js' });
+  const locksAfter = await insider.tool('session_peers', {});
+  check('liberar lock em nome de outra sessao e recusado', REFUSED.test(foreignRelease) && locksAfter.includes(`src/b-only.js held by ${outsiderId}`), foreignRelease.slice(0, 80));
+
+  await insider.tool('get_state', { project_path: PROJECT_B });
+  // Locks are listed for every project, so only the sessions part counts here.
+  const sessionsOfB = (await outsider.tool('session_peers', { project_path: PROJECT_B })).split('Active locks')[0];
+  check('ler a memoria de outro projeto nao muda a presenca da sessao', /Live sessions: 2/.test(sessionsOfB) && !sessionsOfB.includes(insiderId), sessionsOfB.split('\n')[0]);
+
+  outsider.kill();
+  courier.kill();
   sessions.forEach(s => s.kill());
   const failed = results.filter(r => !r.ok).length;
   console.log(`\n${results.length - failed} passed, ${failed} failed`);

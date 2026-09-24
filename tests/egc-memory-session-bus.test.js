@@ -98,6 +98,19 @@ async function main() {
     assert.strictEqual(claim.ok, true, 'lock freed by sweep is claimable');
   });
 
+  await run('a direct event reaches only a live session of the same project', async () => {
+    const db = await freshDb();
+    await bus.announce(db, { sessionId: 'a', projectPath: '/p' });
+    await bus.announce(db, { sessionId: 'b', projectPath: '/other' });
+    await bus.announce(db, { sessionId: 'c', projectPath: '/p' });
+    const across = await bus.sendEvent(db, { fromSession: 'a', toSession: 'b', projectPath: '/p', kind: 'handoff', payload: 'x' });
+    assert.strictEqual(across.ok, false);
+    assert.match(across.reason, /not live in this project/);
+    assert.strictEqual((await db.all('SELECT id FROM bus_events')).length, 0, 'nothing is queued for a session of another project');
+    const within = await bus.sendEvent(db, { fromSession: 'a', toSession: 'c', projectPath: '/p', kind: 'handoff', payload: 'x' });
+    assert.strictEqual(within.ok, true);
+  });
+
   await run('a lock from a vanished session does not block a live claim', async () => {
     const db = await freshDb();
     await bus.announce(db, { sessionId: 'alive', projectPath: '/p' });
