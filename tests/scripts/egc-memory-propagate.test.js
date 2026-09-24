@@ -580,6 +580,25 @@ async function runLinkTests(args) {
     }
   })) passed++; else failed++;
 
+  if (await test('writes into a project opened through a link', () => {
+    const dir = mktemp();
+    const linkParent = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      fs.mkdirSync(path.join(dir, '.cursor'));
+      const link = path.join(linkParent, 'project');
+      fs.symlinkSync(dir, link, 'junction');
+      const result = propagateStateToTools({ projectPath: link, ...args });
+      assert.ok(result.agents, 'AGENTS.md is reported as written');
+      assert.ok(result.cursor, 'the Cursor rules file is reported as written');
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8').includes('Test project in alpha phase'), 'the memory reaches the file behind the project link');
+      assert.ok(fs.lstatSync(path.join(dir, '.cursor', 'rules')).isDirectory(), 'the rules folder is created as a real folder');
+    } finally {
+      cleanup(linkParent);
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   return { passed, failed };
 }
 
