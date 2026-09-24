@@ -480,11 +480,14 @@ async function getDb(): Promise<Database> {
       
       const dbPath = path.join(dbDir, 'state.db');
       dbInstance = await openCompatDatabase(dbPath, 'egc-memory');
-      
+
+      // The wait goes in before anything that takes the store's lock:
+      // switching to WAL does, and another process starting at the same
+      // moment may hold it, so the switch waits for it like every later query.
+      await dbInstance.exec('PRAGMA busy_timeout = 5000;');
       await dbInstance.exec('PRAGMA journal_mode = WAL;');
       await dbInstance.exec('PRAGMA synchronous = NORMAL;');
       await dbInstance.exec('PRAGMA foreign_keys = ON;');
-      await dbInstance.exec('PRAGMA busy_timeout = 5000;'); // Native fallback
       
       await runMigrations(dbInstance, dbDir);
       return dbInstance;
