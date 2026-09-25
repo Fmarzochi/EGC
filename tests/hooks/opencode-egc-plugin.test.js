@@ -288,6 +288,33 @@ async function runTests() {
       assert.strictEqual(crushable.args.command, 'egc run npm test');
       process.env.EGC_ASSUME_EGC_CLI = '0';
     })) passed++; else failed++;
+
+    if (await test('uses Node executable to restore session when process.execPath is a non-Node binary', async () => {
+      const stub = "#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({host:'opencode',context:'opencode-bun-fallback-marker'}));\n";
+      const restoreBridge = replaceTemporarily(bridgePath, stub);
+
+      const originalExecPath = process.execPath;
+      const fakeOpencodeBinary = process.platform === 'win32'
+        ? 'C:\\Users\\<windows-username>\\AppData\\Local\\opencode\\opencode.exe'
+        : '/usr/local/bin/opencode';
+
+      try {
+        process.execPath = fakeOpencodeBinary;
+
+        const project = path.join(tempDir, 'workspaces', 'non-node-runtime');
+        fs.mkdirSync(project, { recursive: true });
+
+        const calls = [];
+        const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: project });
+        await hooks.event({ event: sessionEvent('ses_non_node', project) });
+
+        assert.strictEqual(calls.length, 1);
+        assert.match(calls[0].body.parts[0].text, /opencode-bun-fallback-marker/);
+      } finally {
+        process.execPath = originalExecPath;
+        restoreBridge();
+      }
+    })) passed++; else failed++;
   } finally {
     for (const [key, value] of Object.entries(savedEnv)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
