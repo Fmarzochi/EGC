@@ -108,6 +108,18 @@ function seedLessons(dbPath, rows) {
   });
 }
 
+// A server stopped by a signal can leave its last writes in state.db-wal,
+// which the portable engine refuses to open; fold them into the database
+// first, the way a clean native shutdown would.
+function checkpoint(dbPath) {
+  return new Promise((resolve, reject) => {
+    const db = new sqlite3.Database(dbPath);
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)', error => {
+      db.close(closeError => (error || closeError ? reject(error || closeError) : resolve()));
+    });
+  });
+}
+
 async function test(name, fn) {
   try {
     await fn();
@@ -190,6 +202,7 @@ async function runTests() {
 
     if (await test('the substring recall of the portable engine hands back the same blocked marker', async () => {
       await server.stop();
+      await checkpoint(path.join(home, '.egc', 'memory', 'state.db'));
       server = startServer(home, projectDir, 'wasm');
       await initialize(server);
       const byId = Object.fromEntries((await recall(server, 'zebrastored')).map(lesson => [lesson.id, lesson]));
