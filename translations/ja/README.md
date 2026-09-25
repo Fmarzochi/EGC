@@ -1,5 +1,7 @@
 <!-- LANGUAGE-SELECTOR-START -->
+
 🌐 [English](../../README.md) · [العربية](../ar/README.md) · [Deutsch](../de/README.md) · [Español](../es/README.md) · [Français](../fr/README.md) · [हिन्दी](../hi/README.md) · [Italiano](../it/README.md) · **日本語** · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · [Türkçe](../tr/README.md) · [简体中文](../zh-CN/README.md)
+
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -10,15 +12,15 @@
 
 # EGC - すべてのAIエージェントに同じ脳を
 
-**すべてのAIエージェント、IDE、ターミナル、セッションが自動的に共有する永続メモリ。覚えるプロンプトなし。文脈の再構築なし。話すだけ。**
+**1つのローカルエンジンは、すべてのセッションにおいて、あなたのマシン上のすべてのAIコーディングツールに同じメモリ、同じガードレール、同じコンテキストを与えます。**
 
 </div>
 
 ---
 
-EGCは単なるメモリツールではありません。あらゆるAIが初日からプロジェクトにいたかのように働ける知能レイヤーです。Cursor、Copilot、Claude Code、Codex、Aider、そしてあらゆるターミナルエージェントで(合計23のAIコーディングツールに対応)。 Claude、GPT-4o、Gemini、DeepSeek、Mistral、Groq、Cohere、Vertex AIにネイティブ対応し、OpenRouter経由でQwen3やLlama 4などにも対応します。
+EGCは、AIコーディングツールのローカル初のランタイムです。一度インストールし、カーソル、クロードコード、コーデックス、コピロットをインストールします。 Aider および残りの 20 の AI コーディングツールは、プロジェクトの 1 つの暗号化されたメモリを共有します。 すべてのコマンドの前にある安全層モデルからノイズの出力を遠ざけるフィルターを ライブバスの1つでセッションが開かれています Claude、GPT-4o、Gemini、DeepSeek、Mistral、Groq、Coher、Vertex AI、加えてQwen3、Lama 4などのOpenRouterでネイティブに動作します。
 
-会話のたびにプロジェクトの集合知が育ちます。すべてのエージェントがそれを受け継ぎ、セッションごとに賢くなります。
+あなたの機械には何も残っていない。メモリは AES-256-GCM で暗号化された `~/.egc` に保存され、プロジェクトやブランチごとに保存され、gitにコミットすることはありません。
 
 ---
 
@@ -28,12 +30,10 @@ EGCは単なるメモリツールではありません。あらゆるAIが初日
 npm install -g @egchq/egc && egc install
 ```
 
-- **コンテキストの無駄を最大90%削減し、トークンコストを抑え、すべてのAIをセッション間で完全に同期させます。**
-- **Guardian: 実行前にすべてのコマンドを検証し、危険な書き込みをブロックし、プロンプトインジェクションを検出。共有される脳には安全レイヤーが標準搭載。**
-- **ワンコマンド、設定ゼロ: メモリはローカルに暗号化して保存され、gitにコミットされることはありません。**
+それがエンジン全体です。 `egc install` はツールを検出し、それぞれに2つのローカルMCPサーバーを登録します。 すべてのエージェントが読み取るメモリプロトコルを書き込み、トークンクラッシャーを設定します。オプションのプロンプトライブラリを使用するかどうかは、一つの質問をします。デフォルトは no です。
 
 <div align="center">
-  <img src="../../assets/gifs/install.gif" alt="EGC install" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
 </div>
 
 [インストールガイド全文](../../docs/installation.md)
@@ -42,41 +42,41 @@ npm install -g @egchq/egc && egc install
 
 ## 脳の中身: EGCの仕組み
 
-EGCはツールの一覧ではなく、複数の能力を持つひとつの脳です。覚え、理解し、守り、濾過し、調整します。あなたのマシン上のすべてのAIエージェントで。
+EGCは4つの学部を持つ1つの脳です。それぞれが最初のインストールから、サポートされているすべてのツールで、学習するコマンドがありません。
 
 <div align="center">
-  <img src="../../assets/gifs/sharedbrain.gif" alt="Cursor to Claude Code shared memory" width="900" />
+  <img src="../../assets/gifs/sharedbrain.gif" alt="A decision made in Cursor is already known in Claude Code" width="900" />
 </div>
 
-### コマンドを覚えない、自然に話すだけ
+### メモリ: エージェントが学ぶこと、すべてのエージェントが知っていること
 
-どの言語でも脳に話しかけてください。「このセッションを保存して」「認証について何を決めた?」「この決定を覚えて」。EGCは意図を理解し、文脈を保存し、マシン上の他のタブ・ターミナル・ツールで即座に呼び出します。ひとつの脳。すべてのエージェント。覚えるコマンドはゼロ。
+意思決定、セッションコンテキスト、作業メモリ、学習済みのレッスンは、作業中にキャプチャされ、他の端末、IDE、またはエージェントで使用できます。「このセッションを保存する」、「私たちは何を決めたのか?」、「この決定を覚えておく」、どの言語でも自然に話すことができます。 EGCは、意図を理解し、文脈を保存またはリコールします。暗記するコマンドはありません。
 
-### 永続するプロジェクトメモリ
+### セッションメッシュ:オープンセッションはお互いを見ることができます
 
-EGCはすべてのAIエージェントに永続的な共有脳を与えます。決定、セッションの文脈、ワーキングメモリ、学習したパターンを捉え、開いたどのターミナル・IDE・エージェントでも即座に利用可能にします。セッション状態、プロジェクト履歴、蓄積された教訓がタブ・ツール・チームメイトの間をシームレスに流れます。手動同期なし、文脈の喪失なし。メモリはすべてマシンの `~/.egc` にAES-256-GCMで暗号化され、ブランチごとに保存され、リポジトリにコミットされることはありません。
+2つのカーソルタブ、Claude Codeターミナル、抗重力セッションは1つのライブバスを共有しています。彼らは、彼らが作業しているものを発表し、彼らが編集したファイルを主張します。 お互いに手を取り合って着陸した瞬間の出来事を拾って 並行セッションは衝突する代わりに協力する
 
 ### Guardian: 組み込みの安全ガードレール
 
-脳のもう半分はバックグラウンドでガードレールを走らせます。コマンドを実行前に検証し、危険な書き込みを止め、溢れる前にコンテキストを圧縮し、エージェント間のマルチステップタスクを編成し、すべての修正から学びます。ツールをひとつも呼び出すことなく。コンテキストを軽く、行動を安全に、ワークフローを自律的に保つ見えないセーフティネットです。
+Guardianは、コマンドが実行される前にコマンドを検証し、ゲートが危険な書き込みを行い、バックグラウンドでコンテキストがオーバーフローしないようにします。カバー範囲は各ツールのフック対応に依存し、例外は[セキュリティ評価](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations)に記録されています。
 
-### Token Crusher: 脳は覚える前にノイズを濾過する
+### トークンクラッシャー: ノイズはモデルに到達しない
 
-脳は覚えるだけでなく、濾過します。シェル出力がモデルに届く前に、EGCのToken Crusherがgitログ、テストのノイズ、インストールのスパム、巨大なJSONを最大90%圧縮し、エラーと警告は必ず残します。「どれだけ節約できた?」とどの言語で聞いても、ローカルの記録からコストゼロで答えが返ってきます。セッションは安く、コンテキストは長持ち。
-
----
-
-## プロンプトライブラリ
-
-ボーナスとして、EGCは61のエージェント、230のスキル、77のコマンド、さらに109のルールへのアクセスを提供します。自らコードをレビューする専門家、あらゆる言語と状況のベストプラクティスガイド、一連のタスクをまとめて実行するショートカット、コードの一貫性を保つスタイルルール。すべて理論ではなく実際のエンジニアリングセッションから書かれています。使いたくない?問題ありません。EGCの永続メモリはまったく同じように機能します。
+シェル出力がモデルに到達する前に、Token Crusherはgit ログを圧縮し、テストスパムを実行します。 すべてのエラーと警告を維持しながら、最大90%のノイズと巨大なJSONをインストールします。任意の言語で「どのくらい保存しましたか?」と尋ねると、答えはあなたの地元の台帳からまっすぐに来ます。
 
 ---
 
 ## クイックスタート
 
-ステップ 2 はありません。お好きな AI ツールを開いて、ただ話しかけてください。「やあ」「続きをやろう」「この決定を覚えて」、どの言語でも構いません。セッションは自動でログインし、メモリは自動で読み込まれ、開いているすべてのタブが互いの動きをすでに知っています。Cursor のタブ 2 つ、Claude Code のターミナル、Antigravity のセッションが、同時に 1 つの生きたコンテキストを共有します。
+ステップ２がない。 AIツールのいずれかを開き、「こんにちは」、「続けましょう」、「この決定を覚えておきましょう」、「どんな言語でも。セッション接続、メモリロード、およびすべての開いているタブは、他のタブが何を行っているかすでに知っています。
 
-エージェントの活動・トークン・コストを映すライブパネルは、インストール直後に自動で立ち上がります。手動で操作したい場合は、すべてのコマンドが[インストールガイド](../../docs/installation.md)に記載されています。おそらく一度も入力する必要はないでしょう。
+エージェントの活動・トークン・コストを映すライブパネルは、インストール直後に自動で立ち上がります。手動で操作したい場合は、すべてのコマンドが[インストールガイド](../../docs/installation.md)に記載されています。おそらく一度も入力する必要はないでしょう。明示的なコントロールを好みますか？ [installation guide](../../docs/installation.md)には、すべてのコマンドが記載されています。
+
+---
+
+## プロンプトライブラリ
+
+エンジンとは別に、デフォルトではEGCは実際のエンジニアリングセッションから書かれたライブラリも出荷しています。61人のエージェントにアクセスできます。 232のスキルと77のコマンドに109のルールを加えましたあなたのコードを自分自身で確認するスペシャリスト、すべての言語と状況のためのベストプラクティスガイド 一連のタスクを実行するショートカットと、コードの一貫性を保つスタイルルールがあります。 `egc install --prompt-library` で検出されたすべてのツールに追加するか、 `egc install --target <tool> --profile full` で1つのツールに追加します。それをスキップすると、エンジンはまったく同じ動作します。
 
 ---
 
@@ -86,9 +86,10 @@ EGCはすべてのAIエージェントに永続的な共有脳を与えます。
 
 ## EGCを支援する
 
-EGCは1人の開発者によって作られ、オープンにメンテナンスされている無料のプロジェクトです。
+EGCは1人の開発者によって作られ、オープンにメンテナンスされている無料のプロジェクトです。エンジンは Apache-2 です。 EGCが有料のサービスを提供する場合は、無料のままにしてください。 マシンのメモリではなくチーム・レイヤーの上にあります
 
 - **[Website](https://fmarzochi.github.io/EGCSite)**: 完全なドキュメント、機能概要、ライブデモ
+- **[Vision](../../docs/VISION.md)**: EGCが行っている場所、そして無料のままにする
 - **[Join the Discord](https://discord.gg/TxppsGb52)**: 質問やフィードバックの共有
 - **[Sponsor on GitHub](https://github.com/sponsors/Fmarzochi)**: 金額はいくらでも
 - **[Donate via PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: GitHubアカウントなしでも可能
@@ -96,26 +97,25 @@ EGCは1人の開発者によって作られ、オープンにメンテナンス�
 - **[Contribute](../../.github/CONTRIBUTING.md)**: エージェント、スキル、コマンド、バグ修正、ドキュメント
 - **Share**: EGCによって働き方が変わったなら、誰かに伝えてください
 
-### Sponsors
+### スポンサー情報
 
 コミュニティからの支援が、このプロジェクトを生かし、独立した状態に保ちます。
 
-#### Tool Partners
+#### ツールパートナー
 
-EGCとネイティブに統合するAIコーディングツールです。パートナーはすべてのREADMEとEGCSiteにロゴを掲載できます。
+EGCとネイティブに統合されたAIコーディングツール。 EGCとネイティブに統合するAIコーディングツールです。パートナーはすべてのREADMEとEGCSiteにロゴを掲載できます。
 
 <a href="https://www.pincushion.io/"><img src="https://www.pincushion.io/logo-icon.png" width="52" height="52" alt="Pincushion" title="Pincushion" /></a>
 
-#### Annual Sponsors · _Be the first annual sponsor._
+#### 年次スポンサー・_最初の年次スポンサーになってください。_
 
 ---
 
-#### Backers
+#### バッター
 
-<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
-<a href="https://github.com/VIUK-XV"><img src="https://avatars.githubusercontent.com/u/216173586?v=4" width="52" height="52" alt="@VIUK-XV" title="@VIUK-XV, Japanese translation" /></a>
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a> <a href="https://github.com/VIUK-XV"><img src="https://avatars.githubusercontent.com/u/216173586?v=4" width="52" height="52" alt="@VIUK-XV" title="@VIUK-XV, Japanese translation" /></a>
 
-#### Monthly sponsors · _be the first_
+#### 毎月のスポンサー・_最初のスポンサーになる_
 
 ---
 
@@ -126,7 +126,6 @@ EGCとネイティブに統合するAIコーディングツールです。パー
 <br>
 
 <a href="https://bestpractices.dev/projects/13099"><img src="../../assets/images/openssf-best-practices-badge.svg" alt="OpenSSF Best Practices" width="110" /></a>
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
-<a href="https://www.linkedin.com/in/felipemarzochi"><img src="../../assets/images/egc-logo.png" alt="EGC" width="110" /></a>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; <a href="https://www.linkedin.com/in/felipemarzochi"><img src="../../assets/images/egc-logo.png" alt="EGC" width="110" /></a>
 
 </div>

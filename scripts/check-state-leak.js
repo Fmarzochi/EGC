@@ -15,7 +15,7 @@
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 
-const SECTION_HEADING = '## EGC Project Memory';
+
 const POPULATED_SIGNATURES = [
   /^<!-- egc:state-updated:\S+ -->$/m,
   /^\*\*Context:\*\*/m,
@@ -57,32 +57,98 @@ function isGuardedPath(p) {
   return NON_MARKDOWN_TARGETS.has(base);
 }
 
+const START_MARKER = '<!-- egc:start -->';
+const END_MARKER = '<!-- egc:end -->';
+const MEMORY_HEADING_RE = /^#{1,2} EGC Project Memory$/m;
+
 function findLeak(content) {
-  if (!content.includes(SECTION_HEADING)) return null;
+  if (!MEMORY_HEADING_RE.test(content)) return null;
   const matched = POPULATED_SIGNATURES.filter(re => re.test(content));
   return matched.length > 0 ? matched.map(re => re.source) : null;
 }
 
-function cleanContent(content) {
-  const lines = content.split('\n');
-  const out = [];
-  let dropping = false;
-  for (const line of lines) {
-    if (/^<!-- egc:state-updated:\S+ -->$/.test(line)) continue;
-    if (/^\*\*(Context|Active decisions|Next session):\*\*/.test(line)) {
-      dropping = true;
-      continue;
-    }
-    if (dropping) {
-      if (line.startsWith('- ') || line.trim() === '' ) {
-        if (line.trim() === '') dropping = false;
-        continue;
-      }
-      dropping = false;
-    }
-    out.push(line);
+// Zeroes the memory in a propagation file and keeps its structure. The
+// context files carry the block with bold labels (`**Context:**`, `**Active
+// decisions:**`, `**Next session:**`) followed by the items; llms.txt
+// carries it as plain text under `# EGC Project Memory`, a paragraph for the
+// context and a `## Next session` list, so those two shapes are zeroed too,
+// inside the markers only, since a heading of that name elsewhere in the
+// file belongs to whoever wrote it. A file with CRLF line breaks is read
+// the same way and keeps them. The markers themselves always stay.
+const STATE_STAMP_RE = /^<!-- egc:state-updated:\S+ -->$/;
+const LABEL_RE = /^\*\*(Context|Active decisions|Next session):\*\*/;
+
+function opensList(bare, state) {
+  return LABEL_RE.test(bare) || (state.inBlock && bare === '## Next session');
+}
+
+// A list opened by a label or by the llms.txt heading runs until a blank
+// line; the blank line closes it and goes with it.
+function dropsListLine(bare, blank, state) {
+  if (!state.inList) return false;
+  if (blank) {
+    state.inList = false;
+    return true;
   }
-  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+  if (bare.startsWith('- ')) return true;
+  state.inList = false;
+  return false;
+}
+
+// The llms.txt context sits under its heading as a paragraph up to the next
+// blank line or the next heading; a heading in that place means there is no
+// paragraph, and a heading right after it ends it and stays.
+function dropsParagraphLine(bare, blank, state) {
+  if (state.paragraph === 'waiting' && !blank) state.paragraph = bare.startsWith('#') ? 'off' : 'dropping';
+  if (state.paragraph !== 'dropping') return false;
+  if (blank || bare.startsWith('#')) {
+    state.paragraph = 'off';
+    return false;
+  }
+  return true;
+}
+
+// A context file carries the block under `## EGC Project Memory`, and the
+// propagation writes sections after the memory (the natural-language
+// triggers) that are as machine-made as the memory itself: from a heading
+// that is not the memory heading to the end marker, everything goes, so
+// the block cleans back to the markers, the heading and the notice whatever
+// the propagation put after them. llms.txt keeps its own shape.
+function opensTrailer(bare, state) {
+  return state.inBlock && state.contextShape && /^#{1,6} /.test(bare) && !MEMORY_HEADING_RE.test(bare);
+}
+
+function keepsLine(line, state) {
+  const bare = line.endsWith('\r') ? line.slice(0, -1) : line;
+  const blank = bare.trim() === '';
+  if (bare === START_MARKER) {
+    state.inBlock = true;
+    return true;
+  }
+  if (bare === END_MARKER) {
+    Object.assign(state, { inBlock: false, inList: false, paragraph: 'off', contextShape: false, trailer: false });
+    return true;
+  }
+  if (state.trailer) return false;
+  if (STATE_STAMP_RE.test(bare)) return false;
+  if (state.inBlock && bare === '## EGC Project Memory') state.contextShape = true;
+  if (opensTrailer(bare, state)) {
+    state.trailer = true;
+    return false;
+  }
+  if (opensList(bare, state)) {
+    Object.assign(state, { inList: true, paragraph: 'off' });
+    return false;
+  }
+  if (dropsListLine(bare, blank, state) || dropsParagraphLine(bare, blank, state)) return false;
+  if (state.inBlock && bare === '# EGC Project Memory') state.paragraph = 'waiting';
+  return true;
+}
+
+function cleanContent(content) {
+  const state = { inList: false, inBlock: false, paragraph: 'off', contextShape: false, trailer: false };
+  const out = content.split('\n').filter(line => keepsLine(line, state));
+  return out.join('\n').replace(/(\r?\n){3,}/g, '$1$1');
 }
 
 function checkStaged() {
@@ -175,6 +241,72 @@ function checkPackagedTree() {
   return scanDiskFiles(packagedFiles);
 }
 
+// The propagation library sits under lib/ next to this script in the
+// repository and beside it in the flattened install layouts; a layout
+// without it, or a library that cannot load, means no smudge, never a
+// failed checkout.
+function loadPropagation() {
+  try {
+    return require('./lib/propagate-state');
+  } catch {
+    try {
+      return require('./propagate-state');
+    } catch {
+      return null;
+    }
+  }
+}
+
+function smudgeContent(relativePath, content) {
+  try {
+    const propagation = loadPropagation();
+    if (propagation === null || typeof propagation.smudgeContextContent !== 'function') return content;
+    return propagation.smudgeContextContent(process.cwd(), relativePath, content);
+  } catch {
+    return content;
+  }
+}
+
+// Stdin as git hands it to a filter: the bytes, and the text when they
+// round-trip through UTF-8.
+function readFilterInput() {
+  const raw = fs.readFileSync(0);
+  const text = raw.toString('utf8');
+  return { raw, text, isText: Buffer.from(text, 'utf8').equals(raw) };
+}
+
+// Git clean-filter mode: stdin in, zeroed content out. Wired by
+// memory-filters.js as filter.egc-memory.clean so populated memory is
+// stripped from the staged blob even when local hooks are bypassed. The
+// bytes are decoded as UTF-8 only when they round-trip; otherwise they are
+// read one per character and written back the same way, so every byte kept
+// goes out as it came and the markers, ASCII, are still read.
+function runFilterClean() {
+  const { raw, text, isText } = readFilterInput();
+  process.stdout.write(isText ? cleanContent(text) : Buffer.from(cleanContent(raw.toString('latin1')), 'latin1'));
+}
+
+// Git smudge-filter mode: the zeroed blob git is checking out comes in on
+// stdin and goes out with the memory of the local state put back into its
+// markers, so a pull, a branch switch or a stash pop never leaves the
+// working tree without the block. The propagation library renders it;
+// when that library is not next to this script, or anything else stands
+// in the way, the content goes out exactly as it came, because a checkout
+// must never fail on this filter's account. stdout carries the content
+// and nothing else: a line a library would print for a terminal goes to
+// stderr, and a pipe git has already closed ends the run quietly, while
+// any other failure to write is loud, so git holds the checkout instead
+// of keeping a truncated file. Bytes that are not UTF-8 go out untouched,
+// since only text carries the block. A blob that cannot be read from git
+// is loud for the same reason.
+function runFilterSmudge(relativePath) {
+  console.log = (...lines) => console.error(...lines);
+  console.info = console.log;
+  process.stdout.on('error', err => process.exit(err.code === 'EPIPE' ? 0 : 1));
+  const { raw, text, isText } = readFilterInput();
+  process.stdout.write(isText ? Buffer.from(smudgeContent(relativePath, text), 'utf8') : raw);
+}
+
 function main() {
   const args = process.argv.slice(2);
   const mode = args[0];
@@ -192,12 +324,12 @@ function main() {
     return;
   }
 
-  // Git clean-filter mode: stdin in, zeroed content out. Wired by
-  // memory-filters.js as filter.egc-memory.clean so populated memory is
-  // stripped from the staged blob even when local hooks are bypassed.
   if (mode === '--filter-clean') {
-    const stdin = fs.readFileSync(0, 'utf8');
-    process.stdout.write(cleanContent(stdin));
+    runFilterClean();
+    return;
+  }
+  if (mode === '--filter-smudge') {
+    runFilterSmudge(args[1] ?? '');
     return;
   }
 

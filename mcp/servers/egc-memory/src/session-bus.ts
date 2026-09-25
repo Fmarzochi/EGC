@@ -200,9 +200,14 @@ export async function sendEvent(
     return { ok: false, reason: `sender has ${MAX_PENDING_EVENTS_PER_SENDER} unexpired events on the bus; wait for the sweep or slow down` };
   }
   if (input.toSession) {
-    const target = await db.get('SELECT id FROM bus_sessions WHERE id = ?', input.toSession);
+    const target = await db.get('SELECT id, project_path FROM bus_sessions WHERE id = ?', input.toSession);
     if (!target) {
       return { ok: false, reason: `session ${input.toSession} is not live on the bus` };
+    }
+    // A direct event stays inside the sender's project, like a broadcast;
+    // a sender without a project only reaches a session without one.
+    if ((target.project_path ?? null) !== (input.projectPath ?? null)) {
+      return { ok: false, reason: `session ${input.toSession} is not live in this project` };
     }
   }
   const result = await db.run(

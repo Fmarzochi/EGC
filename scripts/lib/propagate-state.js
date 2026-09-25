@@ -44,8 +44,12 @@ const COMMIT_PRIVACY_FILES = [
 // (not shared) with memory-filters.js/init.js on purpose so this function
 // has zero cross-file dependencies of its own.
 //
-// Best-effort and silent -- never blocks the actual memory write the caller
-// is waiting on.
+// Returns true when populated memory may be written into the project: the
+// filter is armed, or the path is outside any git working tree. Returns
+// false when the project is a repository whose filter could not be armed;
+// the caller then leaves the context files as they are, because a mirror
+// git could stage is exactly what this guard exists to prevent. Never
+// throws, and reports every false verdict on stderr.
 // POSIX single-quote escaping: git always resolves filter.<x>.clean through
 // its own bundled POSIX-like shell (sh on Linux/macOS, Git for Windows'
 // MSYS2 sh.exe on Windows -- never native cmd.exe), so single-quoting is
@@ -57,6 +61,112 @@ const COMMIT_PRIVACY_FILES = [
 function shSingleQuote(value) {
   const escaped = value.replaceAll("'", String.raw`'\''`);
   return `'${escaped}'`;
+}
+
+// git config honours GIT_CONFIG as an alternate file for reads and writes;
+// the filter only protects this repository when it lives in .git/config, so
+// the variable is dropped and the local file is named on every call.
+function localGitConfigEnv() {
+  const env = { ...process.env };
+  delete env.GIT_CONFIG;
+  return env;
+}
+
+function writeLocalGitConfig(projectPath, key, value) {
+  execFileSync(GIT_BIN, ['config', '--local', key, value], {
+    cwd: projectPath,
+    encoding: 'utf8',
+    env: localGitConfigEnv(),
+  });
+}
+
+// The one line a user sees when the mirror is withheld: the reason, what it
+// means, where the memory still is, and what to run.
+function reportUnprotected(projectPath, reason) {
+  process.stderr.write(`[egc-memory] project memory was not mirrored into the context files of ${projectPath}: ${reason}. The commit-privacy filter is not in place there, and a mirror git could stage would carry the memory; the memory itself is intact in ~/.egc/state. Run 'egc doctor' to see what is missing.\n`);
+}
+
+// A .git entry of any kind, a symlink included even when it dangles: git
+// accepts .git as a link, and one that points nowhere is a checkout git
+// cannot open, not a directory outside any repository.
+function hasGitEntry(dir) {
+  try {
+    fs.lstatSync(path.join(dir, '.git'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Whether projectPath sits inside a git working tree, judged from the
+// filesystem alone: a .git entry (a directory, or the file a linked worktree
+// and a submodule carry) in the directory or any parent. Consulted when git
+// itself cannot answer, so a tree git cannot open (a worktree whose gitdir
+// moved, a checkout git refuses to read) is still known to be a repository.
+function isInsideGitWorkTree(projectPath) {
+  // The real path, so a symlinked project directory is walked where it
+  // actually lives; a path that does not exist keeps its resolved form.
+  let dir;
+  try {
+    dir = fs.realpathSync(projectPath);
+  } catch {
+    dir = path.resolve(projectPath);
+  }
+  let parent = path.dirname(dir);
+  while (parent !== dir) {
+    if (hasGitEntry(dir)) return true;
+    dir = parent;
+    parent = path.dirname(dir);
+  }
+  return hasGitEntry(dir);
+}
+
+// A repo whose filter was set up before required=true existed would
+// otherwise stay silently fail-open forever once the script goes missing,
+// with no path back to fail-closed. Harden an already-present driver in
+// place -- without touching its clean command or adding new bindings -- so
+// a broken script at least blocks staging instead of silently falling back
+// to unfiltered content. A driver that was never configured needs nothing.
+function hardenDriverWithoutScript(projectPath) {
+  let alreadyConfigured = true;
+  try {
+    execFileSync(GIT_BIN, ['config', '--local', '--get', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`], {
+      cwd: projectPath,
+      encoding: 'utf8',
+      env: localGitConfigEnv(),
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    alreadyConfigured = false;
+  }
+  if (!alreadyConfigured) return;
+  // A driver configured before the smudge fix existed may have only `clean`
+  // set. Hardening straight to required=true here without also ensuring
+  // `smudge=cat` would turn every checkout/worktree/clone on this repo into
+  // a hard "smudge filter egc-memory failed" failure.
+  writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat');
+  writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true');
+}
+
+// Appends the bindings that are not in the attributes file yet. Exact-line
+// matching (not a raw substring test): a commented-out entry ("# AGENTS.md
+// filter=egc-memory") or a line with extra trailing content would still
+// satisfy .includes(), silently skipping the real binding this project
+// needs.
+function bindPropagationFiles(attributesFile) {
+  let existing = '';
+  try {
+    existing = fs.readFileSync(attributesFile, 'utf8');
+  } catch { /* first configuration: attributes file does not exist yet */ }
+  const existingLines = new Set(existing.split('\n').map(l => l.trim()));
+  const missingBindings = COMMIT_PRIVACY_FILES.filter(
+    file => !existingLines.has(`${file} filter=${COMMIT_PRIVACY_FILTER_NAME}`)
+  );
+  if (missingBindings.length === 0) return;
+  fs.mkdirSync(path.dirname(attributesFile), { recursive: true });
+  const header = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+  const lines = missingBindings.map(f => `${f} filter=${COMMIT_PRIVACY_FILTER_NAME}\n`).join('');
+  fs.appendFileSync(attributesFile, header + lines);
 }
 
 function ensureCommitPrivacy(projectPath) {
@@ -77,7 +187,11 @@ function ensureCommitPrivacy(projectPath) {
       }).trim();
       attributesFile = path.isAbsolute(raw) ? raw : path.join(projectPath, raw);
     } catch {
-      return; // not a git repository
+      // Outside a working tree there is nothing a commit could carry.
+      // Inside one, git could not open it, so the filter cannot be armed.
+      if (!isInsideGitWorkTree(projectPath)) return true;
+      reportUnprotected(projectPath, 'git could not open the repository');
+      return false;
     }
     // Installed layout flattens scripts/check-state-leak.js down into the
     // same directory as this file (see HOOK_LIB_SOURCES in
@@ -94,81 +208,39 @@ function ensureCommitPrivacy(projectPath) {
     // configuration entirely and leave the loud stderr diagnostic to explain
     // why.
     if (!fs.existsSync(scriptPath)) {
-      // A repo whose filter was set up before required=true existed would
-      // otherwise stay silently fail-open forever once the script goes
-      // missing, with no path back to fail-closed. Harden an already-present
-      // driver in place -- without touching its clean command or adding new
-      // bindings -- so a broken script at least blocks staging instead of
-      // silently falling back to unfiltered content.
-      let alreadyConfigured = true;
-      try {
-        execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`], { cwd: projectPath, encoding: 'utf8' });
-      } catch {
-        alreadyConfigured = false;
-      }
-      if (alreadyConfigured) {
-        // A driver configured before the smudge fix existed may have only
-        // `clean` set. Hardening straight to required=true here without also
-        // ensuring `smudge=cat` would turn every checkout/worktree/clone on
-        // this repo into a hard "smudge filter egc-memory failed" failure.
-        execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat'], { cwd: projectPath, encoding: 'utf8' });
-        execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true'], { cwd: projectPath, encoding: 'utf8' });
-      }
-      throw new Error(`commit-privacy clean-filter script not found at ${scriptPath}`);
+      hardenDriverWithoutScript(projectPath);
+      throw new Error(`the clean-filter script is not at ${scriptPath}`);
     }
     const cleanCommand = `node ${shSingleQuote(scriptPath)} --filter-clean`;
+    const smudgeCommand = `if command -v node >/dev/null 2>&1 && [ -f ${shSingleQuote(scriptPath)} ]; then node ${shSingleQuote(scriptPath)} --filter-smudge %f; else cat; fi`;
 
-    execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`, cleanCommand], {
-      cwd: projectPath,
-      encoding: 'utf8',
-    });
-    // required=true (below) also turns an *unconfigured* smudge side into a
-    // hard checkout failure instead of the passthru git defaults to when a
-    // filter driver is missing entirely (gitattributes(5)): once clean is
-    // set, checkout/worktree/clone on this repo starts failing with "smudge
-    // filter egc-memory failed" without an explicit smudge command. cat is
-    // configured as an identity smudge: the working tree keeps whatever
-    // content is checked out, only the staged blob gets cleaned.
-    execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, 'cat'], {
-      cwd: projectPath,
-      encoding: 'utf8',
-    });
+    writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.clean`, cleanCommand);
+    // The smudge side puts the memory back: git hands it the zeroed blob it
+    // is checking out and gets the block of the local state in return, so a
+    // pull, a branch switch or a stash pop never leaves the working tree
+    // without the memory. Where node or the script is not there the blob
+    // goes through as committed, decided before anything reads stdin, and
+    // inside the script whatever stands in the way the content goes out as
+    // it came. Setting it explicitly also matters for required=true (below),
+    // which turns an *unconfigured* smudge side into a hard checkout failure
+    // instead of the passthru git defaults to when a filter driver is missing
+    // entirely (gitattributes(5)).
+    writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.smudge`, smudgeCommand);
     // required=true makes git refuse to stage a file through this filter if
     // the clean command itself fails or is missing, instead of the git
     // default of silently falling back to the original (unfiltered, still
     // populated) content -- fail-closed matches the README's unconditional
     // "never gets committed to git" promise.
-    execFileSync(GIT_BIN, ['config', `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true'], {
-      cwd: projectPath,
-      encoding: 'utf8',
-    });
+    writeLocalGitConfig(projectPath, `filter.${COMMIT_PRIVACY_FILTER_NAME}.required`, 'true');
 
-    let existing = '';
-    try {
-      existing = fs.readFileSync(attributesFile, 'utf8');
-    } catch { /* first configuration: attributes file does not exist yet */ }
-
-    // Exact-line matching (not a raw substring test): a commented-out entry
-    // ("# AGENTS.md filter=egc-memory") or a line with extra trailing
-    // content would still satisfy .includes(), silently skipping the real
-    // binding this project needs.
-    const existingLines = new Set(existing.split('\n').map(l => l.trim()));
-    const missingBindings = COMMIT_PRIVACY_FILES.filter(
-      file => !existingLines.has(`${file} filter=${COMMIT_PRIVACY_FILTER_NAME}`)
-    );
-    if (missingBindings.length > 0) {
-      fs.mkdirSync(path.dirname(attributesFile), { recursive: true });
-      const header = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
-      const lines = missingBindings.map(f => `${f} filter=${COMMIT_PRIVACY_FILTER_NAME}\n`).join('');
-      fs.appendFileSync(attributesFile, header + lines);
-    }
+    bindPropagationFiles(attributesFile);
+    return true;
   } catch (err) {
-    // Best-effort: never let commit-privacy setup block the memory write the
-    // caller is waiting on. But silent failure here means a real git-config
-    // error (permission denied, git binary crashed) leaves the user with no
-    // signal that populated memory can still reach a commit -- a single
-    // stderr line costs nothing here either.
-    process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${err.message}\n`);
+    // A real git-config error (permission denied, git binary crashed) also
+    // leaves the filter out of place: the mirror is withheld and the one
+    // line says why.
+    reportUnprotected(projectPath, err.message);
+    return false;
   }
 }
 
@@ -190,13 +262,14 @@ Detect user intent in any language and call the matching EGC tool — no keyword
 - User asks what was learned in past sessions → \`lesson_recall\`
 
 **Memory — user forces a save**
-- User asks to record a decision → \`store_decision\`
+- User asks to record a decision → \`update_state\` (decisions field); \`store_decision\` only adds it to the searchable history
 - User asks AI not to repeat a mistake → \`lesson_save\`
 - User confirms a past lesson happened again → \`lesson_reinforce\`
 - User wants to store something temporarily → \`working_memory_set\`
 - User asks what is in temporary memory → \`working_memory_get\` / \`working_memory_list\`
 
 **Search — when AI forgot something**
+- User asks what was decided → the decisions in \`get_state\`
 - User asks about past decisions on a topic → \`search_history\`
 - User asks for recent decisions chronologically → \`query_history\`
 
@@ -210,6 +283,14 @@ Detect user intent in any language and call the matching EGC tool — no keyword
 - User asks to organize a complex task → \`orchestrate_task\`
 - User asks AI to learn from session errors → \`auto_learn\``;
 
+// A marker inside a recorded line would end the block early for every
+// reader of the file, so the text of a marker never travels inside it.
+const MARKER_TEXT_RE = /<!--\s*egc:(start|end)\s*-->/gi;
+
+function withoutMarkers(text) {
+  return text.replace(MARKER_TEXT_RE, '');
+}
+
 function parseStateContent(content) {
   const result = { context: '', decisions: [], next: [], updated: '' };
   const updatedMatch = content.match(/^updated:\s*(\S+)\s*$/m);
@@ -220,7 +301,7 @@ function parseStateContent(content) {
     const h2 = line.match(/^## (.+)/);
     if (h2) { section = h2[1].trim(); continue; }
 
-    const item = line.replace(/^- /, '').trim();
+    const item = withoutMarkers(line.replace(/^- /, '')).trim();
     if (!item) continue;
 
     if (section === 'Context') result.context = item;
@@ -290,17 +371,20 @@ function extractStateUpdated(content) {
   return match ? match[1] : '';
 }
 
-// A mirror stamped by an equally new or newer state must not be overwritten:
-// stale sources (older update stamp, or no stamp at all) would silently roll
-// project memory back, as a leftover flat state file once did to AGENTS.md.
-function isStaleWrite(existingContent, stateUpdated) {
+// A mirror stamped by a newer state must not be overwritten: stale sources
+// (older update stamp, or no stamp at all) would silently roll project memory
+// back, as a leftover flat state file once did to AGENTS.md. At an equal stamp
+// the state is the same, so the mirror is rewritten only when its generated
+// block changed, which is how a new template reaches mirrors already in place.
+function isStaleWrite(existingContent, stateUpdated, block) {
   const existingUpdated = extractStateUpdated(existingContent || '');
   if (!existingUpdated) return false;
   if (!stateUpdated) return true;
   const existingMs = Date.parse(existingUpdated);
   const stateMs = Date.parse(stateUpdated);
   if (Number.isNaN(existingMs) || Number.isNaN(stateMs)) return false;
-  return stateMs <= existingMs;
+  if (stateMs !== existingMs) return stateMs < existingMs;
+  return existingContent.replaceAll('\r\n', '\n').includes(block);
 }
 
 const LEGACY_CURSOR_FRONTMATTER = `---\ndescription: EGC project memory (auto-updated)\nalwaysApply: true\n---\n\n`;
@@ -321,6 +405,27 @@ function stripLegacyCursorContent(existing) {
   return rest.trimStart().startsWith(LEGACY_BLOCK_HEADER) ? LEGACY_CURSOR_FRONTMATTER : existing;
 }
 
+// Whether the context file at filePath, below projectPath, may be written:
+// no entry between the project folder and the file is a link (a Windows
+// junction reads as one), so the write cannot land outside the project, and
+// the file, when it is already there, is a regular file. An entry that does
+// not exist yet is fine, since what the writer creates there is real.
+function isPlainPathBelow(projectPath, filePath) {
+  let current = projectPath;
+  for (const part of path.relative(projectPath, filePath).split(path.sep)) {
+    current = path.join(current, part);
+    let entry;
+    try {
+      entry = fs.lstatSync(current);
+    } catch (err) {
+      return err.code === 'ENOENT';
+    }
+    if (entry.isSymbolicLink()) return false;
+    if (current === filePath) return entry.isFile();
+  }
+  return false;
+}
+
 function writeCursorContext(projectPath, block, stateUpdated) {
   const cursorDir = path.join(projectPath, '.cursor');
   try {
@@ -330,11 +435,12 @@ function writeCursorContext(projectPath, block, stateUpdated) {
   }
 
   const rulesDir = path.join(cursorDir, 'rules');
+  const filePath = path.join(rulesDir, 'egc-context.mdc');
+  if (!isPlainPathBelow(projectPath, filePath)) return null;
   fs.mkdirSync(rulesDir, { recursive: true });
 
-  const filePath = path.join(rulesDir, 'egc-context.mdc');
   const existingRaw = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
-  if (isStaleWrite(existingRaw, stateUpdated)) return filePath;
+  if (isStaleWrite(existingRaw, stateUpdated, block)) return filePath;
   const existing = existingRaw ? stripLegacyCursorContent(existingRaw) : LEGACY_CURSOR_FRONTMATTER;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
@@ -349,13 +455,13 @@ function writeCursorContext(projectPath, block, stateUpdated) {
 function writeSimpleContext(projectPath, relativePathParts, block, stateUpdated) {
   const filePath = path.join(projectPath, ...relativePathParts);
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
 
   const existing = fs.readFileSync(filePath, 'utf-8');
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
+  if (isStaleWrite(existing, stateUpdated, block)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
@@ -381,11 +487,12 @@ function writeToolRulesContext(projectPath, toolDirName, block, stateUpdated) {
   }
 
   const rulesDir = path.join(toolDir, 'rules');
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  if (!isPlainPathBelow(projectPath, filePath)) return null;
   fs.mkdirSync(rulesDir, { recursive: true });
 
-  const filePath = path.join(rulesDir, 'egc-context.md');
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
+  if (isStaleWrite(existing, stateUpdated, block)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
@@ -418,17 +525,12 @@ function writeAgentsContext(projectPath, block, stateUpdated) {
   return writeSimpleContext(projectPath, ['AGENTS.md'], block, stateUpdated);
 }
 
-function writeLlmsTxt(projectPath, parsed) {
-  const filePath = path.join(projectPath, 'llms.txt');
-  try {
-    if (!fs.existsSync(filePath)) return null;
-  } catch {
-    return null;
-  }
-
-  const stateUpdated = parsed.updated;
+// The llms.txt mirror carries the memory as plain headings, the shape a
+// reader of that file expects, instead of the bold labels of the other
+// context files.
+function buildLlmsBlock(parsed) {
   const lines = [];
-  if (stateUpdated) lines.push(`<!-- egc:state-updated:${stateUpdated} -->`);
+  if (parsed.updated) lines.push(`<!-- egc:state-updated:${parsed.updated} -->`);
   lines.push('# EGC Project Memory');
   if (parsed.context) lines.push('', parsed.context);
   if (parsed.next.length > 0) {
@@ -436,34 +538,185 @@ function writeLlmsTxt(projectPath, parsed) {
     for (const n of parsed.next.slice(0, MAX_ITEMS)) lines.push(`- ${n}`);
   }
   lines.push('', EGC_TRIGGERS);
-  const block = lines.join('\n');
+  return lines.join('\n');
+}
 
+function writeLlmsTxt(projectPath, parsed) {
+  const filePath = path.join(projectPath, 'llms.txt');
+  try {
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
+  } catch {
+    return null;
+  }
+
+  const stateUpdated = parsed.updated;
   const existing = fs.readFileSync(filePath, 'utf-8');
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
+  const block = buildLlmsBlock(parsed);
+  if (isStaleWrite(existing, stateUpdated, block)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
+// The smudge side of the commit-privacy filter. Git hands over the zeroed
+// blob it is checking out (`content`, the file at `relativePath` under the
+// working tree at `projectPath`) and gets it back with the memory of the
+// local state put into its markers, the way propagation writes it, so a
+// pull, a branch switch or a stash pop never leaves the working tree
+// without the block. The block goes out without the update stamp: git runs
+// the filter before the branch pointer moves on a switch, so the state it
+// reads is the one of the branch being left, and a block without a stamp
+// is one the next propagation replaces instead of keeping. The state
+// readers live next to this file in every layout that carries it (see the
+// library lists of the install targets); a layout without them, a project
+// without a state, a state that is a link or cannot be read, or a file
+// without the markers all get the content back as it came: a checkout must
+// never fail on this filter's account.
+function loadStateReaders() {
+  try {
+    return { branchState: require('./branch-state'), stateCrypto: require('./state-crypto') };
+  } catch {
+    return null;
+  }
+}
+
+function readProjectState(projectPath) {
+  const readers = loadStateReaders();
+  if (readers === null) return null;
+  const { branchState, stateCrypto } = readers;
+  const stateDir = branchState.getStateDir();
+  const branch = branchState.detectBranch(projectPath);
+  const { filePath } = branchState.resolveStateRead(stateDir, projectPath, branch);
+  if (fs.lstatSync(filePath).isSymbolicLink()) return null;
+  return stateCrypto.readStateFileDecrypted(filePath, stateCrypto.defaultKeyPath());
+}
+
+function smudgeContextContent(projectPath, relativePath, content) {
+  try {
+    if (!content.includes(EGC_START) || !content.includes(EGC_END)) return content;
+    const stateContent = readProjectState(projectPath);
+    if (stateContent === null) return content;
+    const parsed = { ...parseStateContent(stateContent), updated: '' };
+    const block = path.basename(relativePath) === 'llms.txt' ? buildLlmsBlock(parsed) : buildSummaryBlock(parsed);
+    // A file git checked out with CRLF line breaks keeps them on every line
+    // of the block; one that mixes both kinds gets the block with LF.
+    const crlfOnly = content.includes('\r\n') && !/(^|[^\r])\n/.test(content);
+    if (!crlfOnly) return upsertEgcSection(content, block);
+    return upsertEgcSection(content.replaceAll('\r\n', '\n'), block).replaceAll('\n', '\r\n');
+  } catch {
+    return content;
+  }
+}
+
+// The result of a propagation that wrote nothing: every mirror key present
+// and null, the shape callers already handle for a file that is not there.
+function noMirrorsWritten() {
+  return {
+    cursor: null,
+    copilot: null,
+    gemini: null,
+    windsurf: null,
+    trae: null,
+    zed: null,
+    cline: null,
+    aider: null,
+    cursorrules: null,
+    agents: null,
+    llms: null,
+  };
+}
+
+// A mirror rewritten with another size reads as modified to git until its
+// index entry is looked at again: git trusts the size it recorded and does
+// not run the clean side of the filter, so a branch switch after a session
+// start was refused for a file that carried nothing new. Feeding the
+// entries of the written files back through update-index clears the
+// recorded stat, and the refresh that follows (git add --refresh, which
+// only re-reads the files it is given) hashes them through the filter and
+// records what it finds: a mirror that still cleans to the committed blob
+// reads as unmodified, a change of the user's own stays an unstaged
+// change, and nothing is ever staged (a path handed to update-index
+// directly would be re-added with its current content). Only a plain entry
+// takes the round trip: one marked skip-worktree or assume-unchanged, an
+// unmerged one, or an intent-to-add one is left as it is, since the round
+// trip would drop the mark. An intent-to-add entry is told by the empty
+// blob it carries, and leaving a file committed empty alone costs nothing:
+// the block written into it cleans to a skeleton, a real change either
+// way. The paths are read and given back relative to the top level, so a
+// project directory below it refreshes its own entries. The listing and
+// the write are two commands: a git that stages one of these files in the
+// instant between them has that entry read back as unstaged, with the file
+// intact; closing that instant would need the write to hold the index lock
+// while the listing runs, which a synchronous step cannot do. Without git
+// or a repository there is nothing recorded to refresh; a later step that
+// fails (an index another git holds) is said in one line, and git reads
+// the files again at the next session start or memory update.
+const EMPTY_BLOB_IDS = new Set([
+  'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391',
+  '473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813',
+]);
+
+// The entries of `git ls-files -z -s -t -v --full-name` that may take the
+// round trip ("H 100644 <oid> 0\t<path>": the tag, the entry as -s prints
+// it, the path from the top level), as the text --index-info reads and the
+// paths to refresh.
+function plainIndexEntries(listing) {
+  const info = [];
+  const paths = [];
+  for (const record of listing.split('\0')) {
+    const match = /^([^ ]) (\d{6} ([0-9a-f]+) )(\d)\t(.+)$/s.exec(record);
+    if (match?.[1] !== 'H' || match[4] !== '0' || EMPTY_BLOB_IDS.has(match[3])) continue;
+    info.push(`${match[2]}${match[4]}\t${match[5]}\0`);
+    paths.push(match[5]);
+  }
+  return { info: info.join(''), paths };
+}
+
+function forgetIndexStat(projectPath, files) {
+  if (files.length === 0) return;
+  const relative = files.map(file => path.relative(projectPath, file).split(path.sep).join('/'));
+  const gitOptions = { cwd: projectPath, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] };
+  let listing;
+  try {
+    listing = execFileSync(GIT_BIN, ['ls-files', '-z', '-s', '-t', '-v', '--full-name', '--', ...relative], gitOptions);
+  } catch {
+    return;
+  }
+  const plain = plainIndexEntries(listing);
+  if (plain.paths.length === 0) return;
+  try {
+    execFileSync(GIT_BIN, ['update-index', '-z', '--index-info'], { ...gitOptions, input: plain.info });
+    execFileSync(GIT_BIN, ['add', '--refresh', '--', ...plain.paths.map(file => `:/${file}`)], gitOptions);
+  } catch (err) {
+    const detail = String(err.stderr || err.message).trim().split(/\r?\n/)[0] || 'git failed';
+    process.stderr.write(`[egc-memory] the git index of ${projectPath} could not be refreshed after the context files were rewritten: ${detail}. git may read those files as modified until the next session start or memory update rewrites them.\n`);
+  }
+}
+
 function propagateStateContent(projectPath, stateContent) {
-  ensureCommitPrivacy(projectPath);
+  if (!ensureCommitPrivacy(projectPath)) return noMirrorsWritten();
   const parsed = parseStateContent(stateContent);
   const block = buildSummaryBlock(parsed);
 
   const stateUpdated = parsed.updated;
 
-  return {
-    cursor: writeCursorContext(projectPath, block, stateUpdated),
-    copilot: writeCopilotContext(projectPath, block, stateUpdated),
-    gemini: writeGeminiContext(projectPath, block, stateUpdated),
-    windsurf: writeWindsurfContext(projectPath, block, stateUpdated),
-    trae: writeTraeContext(projectPath, block, stateUpdated),
-    zed: writeZedContext(projectPath, block, stateUpdated),
-    cline: writeClineContext(projectPath, block, stateUpdated),
-    aider: writeAiderContext(projectPath, block, stateUpdated),
-    cursorrules: writeLegacyCursorRules(projectPath, block, stateUpdated),
-    agents: writeAgentsContext(projectPath, block, stateUpdated),
-    llms: writeLlmsTxt(projectPath, parsed),
-  };
+  // The files written before a writer that throws are refreshed too.
+  const written = noMirrorsWritten();
+  try {
+    written.cursor = writeCursorContext(projectPath, block, stateUpdated);
+    written.copilot = writeCopilotContext(projectPath, block, stateUpdated);
+    written.gemini = writeGeminiContext(projectPath, block, stateUpdated);
+    written.windsurf = writeWindsurfContext(projectPath, block, stateUpdated);
+    written.trae = writeTraeContext(projectPath, block, stateUpdated);
+    written.zed = writeZedContext(projectPath, block, stateUpdated);
+    written.cline = writeClineContext(projectPath, block, stateUpdated);
+    written.aider = writeAiderContext(projectPath, block, stateUpdated);
+    written.cursorrules = writeLegacyCursorRules(projectPath, block, stateUpdated);
+    written.agents = writeAgentsContext(projectPath, block, stateUpdated);
+    written.llms = writeLlmsTxt(projectPath, parsed);
+  } finally {
+    forgetIndexStat(projectPath, Object.values(written).filter(Boolean));
+  }
+  return written;
 }
 
-module.exports = { propagateStateContent };
+module.exports = { propagateStateContent, smudgeContextContent };

@@ -11,8 +11,12 @@
  * metacharacter denials are advisory and never block, otherwise any
  * command outside the guardian allowlist would break the session.
  *
- * Fails open: if the guardian CLI is missing or errors, the command is
- * allowed and a warning is emitted.
+ * Without a validator installed the command is allowed, so a machine
+ * without the build is never locked out. A validator that is installed but
+ * gives no verdict (it stalls, stops, or answers something unreadable)
+ * blocks the command, and the message says why and what to do. The
+ * validator gets four seconds, or EGC_GUARDIAN_TIMEOUT_MS milliseconds when
+ * that is set, so a slow machine raises the budget instead of the gate.
  *
  * Exit codes:
  *   0 = allow
@@ -23,11 +27,19 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
 
 const MAX_STDIN = 1024 * 1024;
-const VALIDATE_TIMEOUT_MS = 4000;
+const DEFAULT_VALIDATE_TIMEOUT_MS = 4000;
+
+// The budget the validator gets, in milliseconds: EGC_GUARDIAN_TIMEOUT_MS
+// when it is a positive whole number, the default otherwise.
+function validateTimeoutMs() {
+  const budget = Number(process.env.EGC_GUARDIAN_TIMEOUT_MS);
+  return Number.isInteger(budget) && budget > 0 ? budget : DEFAULT_VALIDATE_TIMEOUT_MS;
+}
+const VALIDATE_TIMEOUT_MS = validateTimeoutMs();
 
 // Caps recursion into nested command/process substitutions
 // ($(echo $(echo $(...)))) — a real script has no reason to nest these more
@@ -266,7 +278,8 @@ function skipWrapperOptions(words, start, wrapper, state) {
 // The index of the first word that is neither an environment assignment
 // nor a wrapper with its options; a chdir or chroot a wrapper carries is
 // noted on `state` for a caller that resolves operands against it.
-function skipEnvAndWrappers(words, state = { cwd: null, chroot: null, unsure: false }) {
+function skipEnvAndWrappers(words, state) {
+  const wrapperState = state === undefined ? { cwd: null, chroot: null, unsure: false } : state;
   let index = 0;
   while (index < words.length) {
     const word = words[index].value;
@@ -276,7 +289,7 @@ function skipEnvAndWrappers(words, state = { cwd: null, chroot: null, unsure: fa
     }
     const wrapper = WRAPPER_SPECS[word.split(/[\\/]/).pop()];
     if (!wrapper) break;
-    index = skipWrapperOptions(words, index + 1, wrapper, state);
+    index = skipWrapperOptions(words, index + 1, wrapper, wrapperState);
   }
   return index;
 }
@@ -550,6 +563,35 @@ function egcShellScriptOf(segment) {
   return segment.slice(words[index + 2].end).replace(/^\s+/, '');
 }
 
+// `own` followed by the segments of `script`, read one level deeper; null
+// when the depth cap is reached or the deeper analysis cannot continue.
+function withNested(own, script, depth) {
+  if (depth >= MAX_SUBSTITUTION_DEPTH) return null;
+  const inner = extractSegments(script, depth + 1);
+  if (inner === null) return null;
+  return [...own, ...inner];
+}
+
+// The segments one pipeline stage contributes: the stage itself and, when
+// it hands a script to a shell, the segments of that script.
+function segmentsOfStage(raw, depth) {
+  // A script handed to `egc run --shell` runs in a shell of its own, so
+  // it is read whole and its segments are judged like the body of a
+  // heredoc a shell reads.
+  const script = egcShellScriptOf(raw);
+  if (script !== null) {
+    const whole = raw.trim();
+    return withNested(whole ? [whole] : [], script, depth);
+  }
+  const { command: line, body } = splitHeredoc(raw);
+  const trimmed = line.trim();
+  const own = trimmed ? [trimmed] : [];
+  // The body is stdin data, except when a shell is the one reading it:
+  // there it is a script, and it is judged like any other script.
+  if (body === null || !readsItsInputAsCode(line)) return own;
+  return withNested(own, body, depth);
+}
+
 function extractSegments(rawCommand, depth = 0) {
 
   const command = joinContinuations(String(rawCommand));
@@ -561,42 +603,20 @@ function extractSegments(rawCommand, depth = 0) {
   // the caller blocks instead of silently accepting an unanalyzed command.
   if (bodies.length > 0 && depth >= MAX_SUBSTITUTION_DEPTH) return null;
 
-  const topLevel = [];
+  const segments = [];
   for (const raw of splitShellSegments(command, { splitOnPipe: true })) {
-    // A script handed to `egc run --shell` runs in a shell of its own, so
-    // it is read whole and its segments are judged like the body of a
-    // heredoc a shell reads.
-    const script = egcShellScriptOf(raw);
-    if (script !== null) {
-      const whole = raw.trim();
-      if (whole) topLevel.push(whole);
-      if (depth >= MAX_SUBSTITUTION_DEPTH) return null;
-      const inner = extractSegments(script, depth + 1);
-      if (inner === null) return null;
-      topLevel.push(...inner);
-      continue;
-    }
-    const { command: line, body } = splitHeredoc(raw);
-    const trimmed = line.trim();
-    if (trimmed) topLevel.push(trimmed);
-    if (body === null) continue;
-    // The body is stdin data, except when a shell is the one reading it:
-    // there it is a script, and it is judged like any other script.
-    if (!readsItsInputAsCode(line)) continue;
-    if (depth >= MAX_SUBSTITUTION_DEPTH) return null;
+    const stage = segmentsOfStage(raw, depth);
+    if (stage === null) return null;
+    segments.push(...stage);
+  }
+
+  for (const body of bodies) {
     const nested = extractSegments(body, depth + 1);
     if (nested === null) return null;
-    topLevel.push(...nested);
+    segments.push(...nested);
   }
 
-  const nested = [];
-  for (const body of bodies) {
-    const nestedSegments = extractSegments(body, depth + 1);
-    if (nestedSegments === null) return null;
-    nested.push(...nestedSegments);
-  }
-
-  return [...topLevel, ...nested];
+  return segments;
 }
 
 // A validator that knows the field says so itself; the marker scan only
@@ -621,6 +641,39 @@ function firstHardBlock(verdicts, segments) {
     }
   }
   return null;
+}
+
+// The hook's answer when an installed validator gave no verdict: the
+// command does not run, and the one line says what happened, that nothing
+// ran, and what to do. A validator that is not installed at all is the
+// other case, handled in run(), so a machine without the build stays
+// usable.
+// A verdict says whether its segment is allowed; anything else in the list
+// is no answer for that segment.
+function isVerdict(entry) {
+  return entry !== null && typeof entry === 'object' && typeof entry.allowed === 'boolean';
+}
+
+function reasonWithoutVerdict(failure) {
+  switch (failure.kind) {
+    case 'timeout':
+      return `the validator did not answer within ${VALIDATE_TIMEOUT_MS / 1000} seconds`;
+    case 'unstartable':
+      return `the validator could not be started (${failure.detail})`;
+    case 'crash':
+      return `the validator stopped with ${failure.detail}`;
+    case 'unreadable':
+      return `the validator answered ${failure.detail}, which this hook could not read`;
+    default:
+      return 'the validator gave no verdict';
+  }
+}
+
+function withoutVerdict(failure) {
+  return {
+    exitCode: 2,
+    stderr: `EGC Guardian could not validate this command, so it did not run: ${reasonWithoutVerdict(failure)}. Nothing was executed. Run the command again; on a slow machine, set EGC_GUARDIAN_TIMEOUT_MS to a larger budget in milliseconds (${VALIDATE_TIMEOUT_MS} now). If this keeps happening, run 'egc doctor' to check the Guardian build, and set EGC_DISABLED_HOOKS=pre:bash:guardian-validate to lift this gate while you repair it.`,
+  };
 }
 
 function run(inputOrRaw) {
@@ -661,13 +714,26 @@ function run(inputOrRaw) {
     };
   }
   segments.push(...scripts.segments);
-  const verdicts = callGuardian(
+  const answer = callGuardianVerdict(
     cli,
     ['command-batch'],
     JSON.stringify({ commands: segments, cwd }),
     VALIDATE_TIMEOUT_MS,
   );
-  if (!Array.isArray(verdicts)) return { exitCode: 0 };
+  if (!answer.ok) return withoutVerdict(answer);
+  const verdicts = answer.value;
+  if (!Array.isArray(verdicts)) {
+    return withoutVerdict({ kind: 'unreadable', detail: 'something that is not a list of verdicts' });
+  }
+  // One verdict per segment, in order: a shorter list would leave the
+  // segments past its end unjudged, and a longer one belongs to another
+  // command.
+  if (verdicts.length !== segments.length) {
+    return withoutVerdict({ kind: 'unreadable', detail: 'an incomplete list of verdicts' });
+  }
+  if (!verdicts.every(isVerdict)) {
+    return withoutVerdict({ kind: 'unreadable', detail: 'a list with an entry that is not a verdict' });
+  }
   const hardBlock = firstHardBlock(verdicts, segments);
   if (hardBlock) return hardBlock;
 

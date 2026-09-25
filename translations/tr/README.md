@@ -1,5 +1,7 @@
 <!-- LANGUAGE-SELECTOR-START -->
+
 🌐 [English](../../README.md) · [العربية](../ar/README.md) · [Deutsch](../de/README.md) · [Español](../es/README.md) · [Français](../fr/README.md) · [हिन्दी](../hi/README.md) · [Italiano](../it/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · **Türkçe** · [简体中文](../zh-CN/README.md)
+
 <!-- LANGUAGE-SELECTOR-END -->
 
 <div align="center">
@@ -10,15 +12,15 @@
 
 # EGC - Her AI Agent'a Aynı Beyni Verin
 
-**Her AI agent'ın, IDE'nin, terminalin ve oturumun otomatik olarak paylaştığı kalıcı bellek. Ezberlenecek prompt yok. Yeniden kurulacak context yok. Sadece konuşun.**
+**Makinenizdeki her AI kodlama aracına, her oturumda aynı belleği, aynı güvenlik önlemlerini ve aynı context'i veren tek bir yerel motor.**
 
 </div>
 
 ---
 
-EGC sıradan bir bellek aracı değildir. Cursor, Copilot, Claude Code, Codex, Aider ve herhangi bir terminal agent'ı dahil olmak üzere toplam 23 AI kodlama aracında, her AI'ın projenizde ilk günden beri çalışıyormuş gibi hareket etmesini sağlayan zeka katmanıdır. Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere ve Vertex AI ile doğrudan çalışır; ayrıca Qwen3, Llama 4 ve daha fazlası için OpenRouter'ı destekler.
+EGC, AI kodlama araçları için yerel öncelikli bir çalışma zamanıdır. Bir kez kurun; Cursor, Claude Code, Codex, Copilot, Aider ve desteklediği 20 AI kodlama aracının geri kalanı, projelerinizin tek bir şifreli belleğini, her komutun önünde duran tek bir güvenlik katmanını, gürültülü çıktıyı modelden uzak tutan tek bir filtreyi ve açık oturumlarınızın birbirini görmesini sağlayan tek bir canlı veri yolunu paylaşır. Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere ve Vertex AI ile doğrudan çalışır; ayrıca Qwen3, Llama 4 ve daha fazlası için OpenRouter'ı destekler.
 
-Her konuşma projenizin kolektif zekasını geliştirir. Her agent bunu devralır. Her oturum daha akıllı hale gelir.
+Hiçbir şey makinenizden dışarı çıkmaz. Bellek `~/.egc` içinde yaşar, AES-256-GCM ile şifrelenir, proje ve branch bazında tutulur ve git'e asla commit edilmez.
 
 ---
 
@@ -28,66 +30,66 @@ Her konuşma projenizin kolektif zekasını geliştirir. Her agent bunu devralı
 npm install -g @egchq/egc && egc install
 ```
 
-- **Context israfını %90'a kadar azaltın, token maliyetlerini düşürün ve her AI'ın oturumlar arasında tam uyumlu kalmasını sağlayın.**
-- **Guardian: Her komutu çalıştırmadan önce doğrulayın, tehlikeli yazma işlemlerini engelleyin ve prompt injection girişimlerini tespit edin. Her paylaşılan beyin yerleşik bir güvenlik katmanıyla gelir.**
-- **Tek komut, sıfır yapılandırma: bellek makinenizde yerel ve şifreli kalır, git'e asla commit edilmez.**
+Motorun tamamı bu kadar. `egc install` sahip olduğunuz araçları tespit eder, her birine iki yerel MCP sunucusunu kaydeder, her agent'ın okuduğu bellek protokolünü yazar ve Token Crusher'ı kurar. Tek bir soru sorar: isteğe bağlı prompt kütüphanesini de ister misiniz, ve varsayılan yanıt hayırdır.
 
 <div align="center">
-  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 23 AI coding tools" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
 </div>
 
 [Tam kurulum rehberi](../../docs/installation.md)
 
 ---
 
-## Beynin İçinde: EGC Nasıl Çalışır
+## Motor: EGC Nasıl Çalışır
 
-EGC bir araç listesi değildir; farklı yeteneklere sahip tek bir beyindir. Makinenizdeki tüm AI agent'lar arasında hatırlar, anlar, korur, filtreler ve koordinasyon sağlar.
+EGC, dört yeteneği olan tek bir beyindir. Her biri ilk kurulumdan itibaren, desteklenen her araçta, öğrenilecek tek bir komut olmadan açıktır.
 
 <div align="center">
   <img src="../../assets/gifs/sharedbrain.gif" alt="A decision made in Cursor is already known in Claude Code" width="900" />
 </div>
 
-### Komut Ezberlemezsiniz, Doğal Konuşursunuz
+### Bellek: Bir Agent'ın Öğrendiğini Her Agent Bilir
 
-Beyinle herhangi bir dilde konuşun: "bu oturumu kaydet", "auth hakkında neye karar vermiştik?", "bu kararı hatırla". EGC niyeti anlar, context'i saklar ve makinenizdeki başka bir sekmede, terminalde veya araçta anında geri çağırır. Tek beyin. Her agent. Ezberlenecek sıfır komut.
+Kararlar, oturum context'i, çalışma belleği ve öğrenilen dersler siz çalışırken yakalanır ve açtığınız başka herhangi bir terminalde, IDE'de veya agent'ta kullanılabilir olur. Herhangi bir dilde doğal konuşursunuz: "bu oturumu kaydet", "auth hakkında neye karar vermiştik?", "bu kararı hatırla". EGC niyeti anlar ve context'i saklar ya da geri çağırır. Ezberlenecek komut yoktur.
 
-### Kalıcı Proje Belleği
+### Oturum Ağı: Açık Oturumlarınız Birbirini Görür
 
-EGC her AI agent'a kalıcı ve paylaşılan bir beyin verir. Kararları, oturum context'ini, çalışma belleğini ve öğrenilmiş kalıpları yakalar; ardından bunları açtığınız herhangi bir terminalde, IDE'de veya agent'ta anında kullanılabilir hale getirir. Oturum durumu, proje geçmişi ve biriken dersler sekmeler, araçlar ve ekip arkadaşları arasında kesintisiz akar: manuel senkronizasyon yok, context kaybı yok. Tüm bellek makinenizde `~/.egc` içinde yaşar, AES-256-GCM ile şifrelenir, proje branch'i bazında tutulur ve repository'nize asla commit edilmez.
+İki Cursor sekmesi, bir Claude Code terminali ve bir Antigravity oturumu tek bir canlı veri yolunu paylaşır. Ne üzerinde çalıştıklarını duyurur, düzenledikleri dosyaları üstlenir, işi birbirlerine devreder ve olayları geldiği anda yakalar; böylece paralel oturumlar çarpışmak yerine iş birliği yapar.
 
-### Guardian: Yerleşik Güvenlik Önlemleri
+### Guardian: Her Komutun Önünde Bir Güvenlik Katmanı
 
-Beynin diğer yarısı arka planda koruma mekanizmalarını çalıştırır. Tek bir aracı bile elle çağırmanıza gerek kalmadan komutları çalışmadan önce doğrular, riskli yazma işlemleri için güvenlik kapısı uygular, context taşmadan önce sıkıştırır, çok adımlı görevleri agent'lar arasında orkestre eder ve her düzeltmeden öğrenir. Context'i hafif, eylemleri güvenli ve workflow'ları otonom tutan görünmez bir güvenlik ağıdır.
+Guardian komutları çalışmadan önce doğrular, riskli yazma işlemlerini kapıda tutar ve context'in taşmasını önler; arka planda, siz hiçbir şey çağırmadan. Kapsam her aracın kendi hook desteğine bağlıdır; istisna [Güvenlik Değerlendirmesi](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) içinde belgelenmiştir.
 
-### Token Crusher: Beyin Hatırlamadan Önce Gürültüyü Filtreler
+### Token Crusher: Gürültü Modele Asla Ulaşmaz
 
-Beyin yalnızca hatırlamaz; aynı zamanda filtreler. Herhangi bir shell çıktısı modele ulaşmadan önce EGC'nin Token Crusher'ı git log'larını, test kalabalığını, kurulum gürültüsünü ve dev JSON'ları %90'a kadar sıkıştırır; tüm hata ve uyarıları korur. Herhangi bir dilde sadece "ne kadar tasarruf ettim?" diye sorun; yanıt sıfır maliyetle doğrudan yerel kayıt defterinizden gelir: daha ucuz oturumlar, daha uzun ömürlü context.
-
----
-
-## Prompt Kütüphanesi
-
-Bonus olarak EGC size 61 agent, 230 skill, 77 command ve ayrıca 109 rule'a erişim sağlar: Kodunuzu kendi başına inceleyen uzmanlar, her dil ve durum için best-practice rehberleri, sizin için tüm bir görev dizisini çalıştıran kısayollar ve kodunuzu tutarlı tutan stil kuralları. Hepsi teoriden değil, gerçek mühendislik oturumlarından yazıldı. Hiçbirini kullanmak istemiyor musunuz? Sorun değil: EGC'nin kalıcı belleği tamamen aynı şekilde çalışır.
+Shell çıktısı modele ulaşmadan önce Token Crusher git log'larını, test kalabalığını, kurulum gürültüsünü ve dev JSON'ları yüzde 90'a kadar sıkıştırır; her hatayı ve uyarıyı korur. Herhangi bir dilde "ne kadar tasarruf ettim?" diye sorun, yanıt doğrudan yerel kayıt defterinizden gelir.
 
 ---
 
 ## Hızlı Başlangıç
 
-İkinci adım yok. AI araçlarınızdan herhangi birini açın ve herhangi bir dilde konuşmaya başlayın: "merhaba", "devam edelim", "bu kararı hatırla". Oturumlar anında bağlanır, bellek otomatik yüklenir ve açık olan her sekme diğerlerinin ne yaptığını zaten bilir: iki Cursor sekmesi, bir Claude Code terminali ve bir Antigravity oturumu aynı canlı context'i eşzamanlı olarak paylaşır.
+İkinci adım yok. AI araçlarınızdan herhangi birini açın ve sadece konuşun: "merhaba", "devam edelim", "bu kararı hatırla", herhangi bir dilde. Oturumlar bağlanır, bellek yüklenir ve açık olan her sekme diğerlerinin ne yaptığını zaten bilir.
 
-Agent etkinliğini, token'ları ve maliyetleri gösteren canlı bir dashboard kurulumdan hemen sonra otomatik olarak başlar. Manuel kontrol mü tercih ediyorsunuz? Her komut [kurulum rehberinde](../../docs/installation.md) belgelenmiştir; büyük olasılıkla hiçbirini yazmanız gerekmeyecek.
+Agent etkinliğini, token'ları ve maliyetleri gösteren canlı bir dashboard kurulumdan hemen sonra başlar. Açık kontrol mü tercih ediyorsunuz? Her komut [kurulum rehberinde](../../docs/installation.md) belgelenmiştir: büyük olasılıkla hiçbirini yazmanız gerekmeyecek.
 
 ---
+
+## Prompt Kütüphanesi (İsteğe Bağlı)
+
+Motordan ayrı ve varsayılan olarak kapalı olan EGC, gerçek mühendislik oturumlarından yazılmış bir kütüphane de sunar: 61 agent, 232 skill ve 77 command'a, ayrıca 109 rule'a erişirsiniz. Kodunuzu kendi başına inceleyen uzmanlar, her dil ve durum için best-practice rehberleri, tüm bir görev dizisini çalıştıran kısayollar ve kodunuzu tutarlı tutan stil kuralları. Tespit edilen her araca `egc install --prompt-library` ile, tek bir araca `egc install --target <tool> --profile full` ile ekleyin. Atlarsanız motor tamamen aynı şekilde çalışır.
+
+---
+
 🌐 [English](../../README.md) · [العربية](../ar/README.md) · [Deutsch](../de/README.md) · [Español](../es/README.md) · [Français](../fr/README.md) · [हिन्दी](../hi/README.md) · [Italiano](../it/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Português (Brasil)](../pt/README.md) · [Русский](../ru/README.md) · **Türkçe** · [简体中文](../zh-CN/README.md)
 
 ---
 
 ## EGC'yi Destekleyin
 
-EGC tek bir geliştirici tarafından geliştiriliyor, açık şekilde sürdürülüyor ve ücretsiz.
+EGC tek bir geliştirici tarafından geliştiriliyor, açık şekilde sürdürülüyor ve ücretsiz. Motor Apache-2.0 lisanslıdır ve ücretsiz kalır: EGC bir gün ücretli bir şey sunarsa bu, motorun üzerine eklenen bir ekip katmanı olur, makinenizdeki bellek asla.
 
 - **[Web sitesi](https://fmarzochi.github.io/EGCSite)**: tam dokümantasyon, özellik özeti ve canlı demo
+- **[Vizyon](../../docs/VISION.md)**: EGC nereye gidiyor ve ne ücretsiz kalıyor
 - **[Discord'a katılın](https://discord.gg/TxppsGb52)**: soru sorun, geri bildirim paylaşın
 - **[GitHub'da sponsor olun](https://github.com/sponsors/Fmarzochi)**: dilediğiniz tutarda
 - **[PayPal ile bağış yapın](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: GitHub hesabı gerekmez
@@ -111,7 +113,7 @@ EGC ile doğrudan entegre olan AI kodlama araçları. Partnerlerin logoları tü
 
 #### Destekçiler
 
-<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a> <a href="https://github.com/Iahmacun"><img src="https://avatars.githubusercontent.com/u/57403555?v=4" width="48" height="48" alt="@Iahmacun" title="@Iahmacun, Turkish translation" /></a>
+<a href="https://github.com/chizormaangel-commits"><img src="https://avatars.githubusercontent.com/u/291871326?v=4" width="52" height="52" alt="@chizormaangel-commits" title="@chizormaangel-commits" /></a>
 
 #### Aylık sponsorlar · _ilk siz olun_
 
@@ -124,7 +126,6 @@ EGC ile doğrudan entegre olan AI kodlama araçları. Partnerlerin logoları tü
 <br>
 
 <a href="https://bestpractices.dev/projects/13099"><img src="../../assets/images/openssf-best-practices-badge.svg" alt="OpenSSF Best Practices" width="110" /></a>
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
-<a href="https://www.linkedin.com/in/felipemarzochi"><img src="../../assets/images/egc-logo.png" alt="EGC" width="110" /></a>
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; <a href="https://www.linkedin.com/in/felipemarzochi"><img src="../../assets/images/egc-logo.png" alt="EGC" width="110" /></a>
 
 </div>

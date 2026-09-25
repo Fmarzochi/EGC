@@ -260,6 +260,27 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('the generated and shipped mirrors route a decision to update_state and recall it from get_state first (#1524)', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor'));
+      fs.mkdirSync(path.join(dir, '.windsurf'));
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      const mirrors = [
+        ['cursor mirror', fs.readFileSync(result.cursor, 'utf-8')],
+        ['windsurf mirror', fs.readFileSync(result.windsurf, 'utf-8')],
+        ['shipped cursor mirror', fs.readFileSync(path.join(__dirname, '..', '..', '.cursor', 'rules', 'egc-context.mdc'), 'utf-8')],
+      ];
+      for (const [label, content] of mirrors) {
+        assert.ok(content.includes('- User asks to record a decision → `update_state` (decisions field); `store_decision` only adds it to the searchable history'), `${label} must route a decision to update_state`);
+        assert.ok(content.includes('- User asks what was decided → the decisions in `get_state`'), `${label} must recall decisions from get_state first`);
+        assert.ok(!content.includes('record a decision → `store_decision`'), `${label} must drop the old route`);
+      }
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('propagates to .trae/rules/egc-context.md when .trae/ dir exists (Trae)', () => {
     const dir = mktemp();
     try {
@@ -466,6 +487,10 @@ function runTests() {
   passed += freshness.passed;
   failed += freshness.failed;
 
+  const links = runLinkTests();
+  passed += links.passed;
+  failed += links.failed;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
@@ -545,6 +570,29 @@ function runFreshnessGuardTests() {
         content.includes('<!-- egc:state-updated:2026-07-01T00:00:00.000Z -->'),
         'stamp advanced to the newer timestamp'
       );
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('an equally stamped mirror is rewritten when its generated block changed, and left alone when it did not', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor'));
+      const { cursor } = propagateStateContent(dir, SAMPLE_STATE);
+      const routeLine = '- User asks to record a decision → `update_state` (decisions field); `store_decision` only adds it to the searchable history';
+      const current = fs.readFileSync(cursor, 'utf-8');
+      assert.ok(current.includes(routeLine), 'the current template is written');
+      fs.writeFileSync(cursor, current.replace(routeLine, '- User asks to record a decision → `store_decision`'), 'utf-8');
+
+      propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(fs.readFileSync(cursor, 'utf-8').includes(routeLine), 'a block from an older template must be replaced at the same stamp');
+
+      const past = new Date('2026-01-01T00:00:00Z');
+      fs.utimesSync(cursor, past, past);
+      const untouched = fs.statSync(cursor).mtimeMs;
+      propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(fs.statSync(cursor).mtimeMs, untouched, 'an identical block at the same stamp must not be rewritten');
     } finally {
       cleanup(dir);
     }
@@ -633,6 +681,78 @@ function runFreshnessGuardTests() {
     }
   })) passed++; else failed++;
 
+  // A mirror rewritten with another size reads as modified to git until the
+  // index stat is refreshed, even when the clean side of the filter takes it
+  // back to the committed blob; propagation refreshes the entries it wrote,
+  // so a branch switch after a session start is never refused for them.
+  if (test('a mirror rewritten by propagation reads as unmodified to git', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir });
+      const longer = SAMPLE_STATE.replace('updated: 2026-06-20T00:00:00.000Z', 'updated: 2026-07-01T00:00:00.000Z').replace('## Next Session', '## Next Session\n- a longer next step recorded by a later session that changes the size of the mirror');
+      propagateStateContent(dir, longer);
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8').includes('a longer next step recorded by a later session'), 'the mirror carries the longer block');
+      const status = execFileSync('git', ['status', '--porcelain', '--', 'AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(status, '', `git must read the rewritten mirror as unmodified, got: ${JSON.stringify(status)}`);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  // The refresh only re-reads the files: a change of the user's own in a
+  // mirror stays an unstaged change, and the index never takes content.
+  if (test('a change of the user\'s own in a mirror stays unstaged after propagation', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir });
+      fs.appendFileSync(path.join(dir, 'AGENTS.md'), '\nA line the user wrote.\n');
+      const longer = SAMPLE_STATE.replace('updated: 2026-06-20T00:00:00.000Z', 'updated: 2026-07-01T00:00:00.000Z').replace('## Next Session', '## Next Session\n- a longer next step recorded by a later session that changes the size of the mirror');
+      propagateStateContent(dir, longer);
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8').includes('a longer next step recorded by a later session'), 'the mirror carries the longer block');
+      const status = execFileSync('git', ['status', '--porcelain', '--', 'AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(status, ' M AGENTS.md\n', `the user's change must stay unstaged, got: ${JSON.stringify(status)}`);
+      const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(staged, '', `nothing may be staged, got: ${JSON.stringify(staged)}`);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  // An entry that carries a mark is left as it is: the round trip that
+  // clears the stat would drop the mark.
+  if (test('a mirror marked skip-worktree keeps the mark after propagation', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateContent(dir, SAMPLE_STATE);
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir });
+      execFileSync('git', ['update-index', '--skip-worktree', 'AGENTS.md'], { cwd: dir });
+      const longer = SAMPLE_STATE.replace('updated: 2026-06-20T00:00:00.000Z', 'updated: 2026-07-01T00:00:00.000Z').replace('## Next Session', '## Next Session\n- a longer next step recorded by a later session that changes the size of the mirror');
+      propagateStateContent(dir, longer);
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8').includes('a longer next step recorded by a later session'), 'the mirror carries the longer block');
+      const tags = execFileSync('git', ['ls-files', '-t', '-v', '--', 'AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(tags, 'S AGENTS.md\n', `the mark must survive, got: ${JSON.stringify(tags)}`);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
     const dir = mktemp();
     try {
@@ -645,7 +765,8 @@ function runFreshnessGuardTests() {
         cwd: dir,
         encoding: 'utf-8',
       }).trim();
-      assert.strictEqual(smudge, 'cat');
+      const leakScript = path.join(__dirname, '..', '..', 'scripts', 'check-state-leak.js');
+      assert.strictEqual(smudge, `if command -v node >/dev/null 2>&1 && [ -f '${leakScript}' ]; then node '${leakScript}' --filter-smudge %f; else cat; fi`);
 
       // End-to-end: with required=true and clean configured but no smudge,
       // git treats the undefined smudge side as a failed filter and aborts
@@ -697,6 +818,198 @@ function runFreshnessGuardTests() {
       const staged = execFileSync('git', ['show', ':0:AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
       assert.ok(!staged.includes('EGC v1.1.1 stable'), 'clean filter must have run and stripped the populated memory before staging');
     } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('keeps project memory out of the context files when git cannot open the repository', () => {
+    const dir = mktemp();
+    try {
+      // A .git file whose gitdir does not exist: the directory sits inside a
+      // repository as far as anything that copies working trees can tell,
+      // but git cannot open it, so the clean filter cannot be armed there.
+      fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir').split(path.sep).join('/')}\n`);
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      fs.writeFileSync(path.join(dir, 'GEMINI.md'), '# Gemini\n');
+      const lines = [];
+      const originalWrite = process.stderr.write;
+      process.stderr.write = (chunk, encoding, callback) => {
+        lines.push(String(chunk));
+        const done = typeof encoding === 'function' ? encoding : callback;
+        if (typeof done === 'function') done();
+        return true;
+      };
+      let result;
+      try {
+        result = propagateStateContent(dir, SAMPLE_STATE);
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+      assert.strictEqual(result.agents, null, 'AGENTS.md is not reported as written');
+      assert.strictEqual(result.gemini, null, 'GEMINI.md is not reported as written');
+      assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8'), '# Agents\n', 'AGENTS.md is left as it was');
+      assert.strictEqual(fs.readFileSync(path.join(dir, 'GEMINI.md'), 'utf-8'), '# Gemini\n', 'GEMINI.md is left as it was');
+      assert.strictEqual(lines.length, 1, `exactly one stderr line: ${JSON.stringify(lines)}`);
+      assert.ok(lines[0].includes(dir), 'the line names the project that was not mirrored');
+      assert.ok(lines[0].includes('commit-privacy filter'), 'the line says the filter is the reason');
+      assert.ok(lines[0].includes('egc doctor'), 'the line says what to run');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('mirrors project memory once the commit-privacy filter is in place in the repository', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(result.agents, 'AGENTS.md is reported as written');
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8').includes('EGC v1.1.1 stable'), 'the memory reaches the mirror');
+      const required = execFileSync('git', ['config', '--local', '--get', 'filter.egc-memory.required'], { cwd: dir, encoding: 'utf-8' }).trim();
+      assert.strictEqual(required, 'true', 'the filter is armed in this repository before the mirror is written');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  // Symbolic links need a privilege Windows runners do not grant.
+  if (process.platform !== 'win32') {
+    if (test('keeps project memory out of the context files when .git is a symlink that points nowhere', () => {
+      const dir = mktemp();
+      try {
+        // git accepts .git as a symlink; one that dangles is a checkout git
+        // cannot open, not a directory outside any repository.
+        fs.symlinkSync(path.join(dir, 'missing-gitdir'), path.join(dir, '.git'), 'dir');
+        fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+        const originalWrite = process.stderr.write;
+        process.stderr.write = () => true;
+        let result;
+        try {
+          result = propagateStateContent(dir, SAMPLE_STATE);
+        } finally {
+          process.stderr.write = originalWrite;
+        }
+        assert.strictEqual(result.agents, null, 'a dangling .git link still marks a repository');
+        assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8'), '# Agents\n', 'AGENTS.md is left as it was');
+      } finally {
+        cleanup(dir);
+      }
+    })) passed++; else failed++;
+
+    if (test('keeps project memory out of the context files when the project path is a symlink into a checkout git cannot open', () => {
+      const dir = mktemp();
+      const linkParent = mktemp();
+      try {
+        fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir').split(path.sep).join('/')}\n`);
+        fs.mkdirSync(path.join(dir, 'packages', 'app'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'packages', 'app', 'AGENTS.md'), '# Agents\n');
+        const link = path.join(linkParent, 'app');
+        fs.symlinkSync(path.join(dir, 'packages', 'app'), link, 'dir');
+        const originalWrite = process.stderr.write;
+        process.stderr.write = () => true;
+        let result;
+        try {
+          result = propagateStateContent(link, SAMPLE_STATE);
+        } finally {
+          process.stderr.write = originalWrite;
+        }
+        assert.strictEqual(result.agents, null, 'the link is walked where it really lives');
+        assert.strictEqual(fs.readFileSync(path.join(link, 'AGENTS.md'), 'utf-8'), '# Agents\n', 'AGENTS.md is left as it was');
+      } finally {
+        cleanup(linkParent);
+        cleanup(dir);
+      }
+    })) passed++; else failed++;
+  }
+
+  return { passed, failed };
+}
+
+// The memory is written only into regular files inside the project: a
+// context file or a folder on its way that is a link is left alone, and so
+// is whatever the link points at.
+function runLinkTests() {
+  let passed = 0;
+  let failed = 0;
+
+  // A link to a file needs a privilege Windows runners do not grant.
+  if (process.platform !== 'win32') {
+    if (test('leaves a context file that is a link, and the file behind it, as they were', () => {
+      const dir = mktemp();
+      const outside = mktemp();
+      try {
+        const target = path.join(outside, 'profile');
+        fs.writeFileSync(target, 'export EDITOR=vi\n');
+        fs.symlinkSync(target, path.join(dir, 'GEMINI.md'));
+        fs.symlinkSync(target, path.join(dir, 'llms.txt'));
+        fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+        const result = propagateStateContent(dir, SAMPLE_STATE);
+        assert.strictEqual(result.gemini, null, 'GEMINI.md is not reported as written');
+        assert.strictEqual(result.llms, null, 'llms.txt is not reported as written');
+        assert.strictEqual(fs.readFileSync(target, 'utf-8'), 'export EDITOR=vi\n', 'the file behind the links is left as it was');
+        assert.ok(fs.lstatSync(path.join(dir, 'GEMINI.md')).isSymbolicLink(), 'the link stays a link');
+        assert.ok(result.agents, 'a regular context file beside them still receives the memory');
+      } finally {
+        cleanup(dir);
+        cleanup(outside);
+      }
+    })) passed++; else failed++;
+  }
+
+  // A junction needs no privilege on Windows and is an ordinary link
+  // elsewhere, so the folder cases run on every runner.
+  if (test('writes nothing into a tool folder that is a link', () => {
+    const dir = mktemp();
+    const outside = mktemp();
+    try {
+      fs.symlinkSync(outside, path.join(dir, '.cursor'), 'junction');
+      fs.symlinkSync(outside, path.join(dir, '.windsurf'), 'junction');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.cursor, null, '.cursor is not reported as written');
+      assert.strictEqual(result.windsurf, null, '.windsurf is not reported as written');
+      assert.deepStrictEqual(fs.readdirSync(outside), [], 'no folder or file is created behind the links');
+    } finally {
+      cleanup(dir);
+      cleanup(outside);
+    }
+  })) passed++; else failed++;
+
+  if (test('leaves a context file alone when a folder on its way is a link', () => {
+    const dir = mktemp();
+    const outside = mktemp();
+    try {
+      fs.writeFileSync(path.join(outside, 'copilot-instructions.md'), '# Copilot\n');
+      fs.writeFileSync(path.join(outside, 'egc-context.md'), '# Trae\n');
+      fs.symlinkSync(outside, path.join(dir, '.github'), 'junction');
+      fs.mkdirSync(path.join(dir, '.trae'));
+      fs.symlinkSync(outside, path.join(dir, '.trae', 'rules'), 'junction');
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(result.copilot, null, 'the Copilot file is not reported as written');
+      assert.strictEqual(result.trae, null, 'the Trae file is not reported as written');
+      assert.strictEqual(fs.readFileSync(path.join(outside, 'copilot-instructions.md'), 'utf-8'), '# Copilot\n', 'the file reached through .github is left as it was');
+      assert.strictEqual(fs.readFileSync(path.join(outside, 'egc-context.md'), 'utf-8'), '# Trae\n', 'the file reached through .trae/rules is left as it was');
+    } finally {
+      cleanup(dir);
+      cleanup(outside);
+    }
+  })) passed++; else failed++;
+
+  if (test('writes into a project opened through a link', () => {
+    const dir = mktemp();
+    const linkParent = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      fs.mkdirSync(path.join(dir, '.cursor'));
+      const link = path.join(linkParent, 'project');
+      fs.symlinkSync(dir, link, 'junction');
+      const result = propagateStateContent(link, SAMPLE_STATE);
+      assert.ok(result.agents, 'AGENTS.md is reported as written');
+      assert.ok(result.cursor, 'the Cursor rules file is reported as written');
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8').includes('EGC v1.1.1 stable'), 'the memory reaches the file behind the project link');
+      assert.ok(fs.lstatSync(path.join(dir, '.cursor', 'rules')).isDirectory(), 'the rules folder is created as a real folder');
+    } finally {
+      cleanup(linkParent);
       cleanup(dir);
     }
   })) passed++; else failed++;

@@ -214,16 +214,80 @@ function runTests() {
     assert.strictEqual(result.code, 2, 'Expected force-push to be blocked');
   })) passed++; else failed++;
 
-  if (test('fails open silently when the validator crashes', () => {
-    const brokenCli = path.join(os.tmpdir(), `egc-broken-cli-${Date.now()}.js`);
-    fs.writeFileSync(brokenCli, 'process.exit(1);\n');
+  // A stand-in validator written from the given source, so the hook can be
+  // exercised against one that crashes, stalls or answers nonsense.
+  function runWithValidator(source, command, env = {}) {
+    const cli = path.join(os.tmpdir(), `egc-validator-${process.pid}-${Date.now()}.js`);
+    fs.writeFileSync(cli, source);
     try {
-      const result = runHook('rm -rf /', { EGC_GUARDIAN_CLI: brokenCli });
-      assert.strictEqual(result.code, 0, 'Expected fail-open on validator crash');
-      assert.strictEqual(result.stderr, '', `Expected silent fail-open, got: ${result.stderr}`);
+      return runHook(command, { EGC_GUARDIAN_CLI: cli, ...env });
     } finally {
-      try { fs.rmSync(brokenCli, { force: true }); } catch { /* best-effort cleanup */ }
+      try { fs.rmSync(cli, { force: true }); } catch { /* best-effort cleanup */ }
     }
+  }
+
+  if (test('blocks the command and says the validator stopped when it crashes', () => {
+    const result = runWithValidator('process.exit(1);\n', 'rm -rf /');
+    assert.strictEqual(result.code, 2, `Expected a block without a verdict, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('could not validate this command'), result.stderr);
+    assert.ok(result.stderr.includes('exit code 1'), result.stderr);
+    assert.ok(result.stderr.includes('egc doctor'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command and says the validator did not answer in time when it stalls', () => {
+    // The budget comes from the environment here so the case does not sit
+    // through the four seconds a user gets.
+    const result = runWithValidator('setTimeout(() => {}, 30000);\n', 'git status', { EGC_GUARDIAN_TIMEOUT_MS: '300' });
+    assert.strictEqual(result.code, 2, `Expected a block without a verdict, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('did not answer within 0.3 seconds'), result.stderr);
+    assert.ok(result.stderr.includes('Nothing was executed'), result.stderr);
+    assert.ok(result.stderr.includes('EGC_GUARDIAN_TIMEOUT_MS'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command when the validator answers fewer verdicts than there are segments', () => {
+    const result = runWithValidator("process.stdout.write(JSON.stringify([{ allowed: true }]));\n", 'git status && git log');
+    assert.strictEqual(result.code, 2, `Expected a block without a verdict for every segment, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('incomplete list of verdicts'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command when a verdict entry carries no allowed flag', () => {
+    const result = runWithValidator("process.stdout.write(JSON.stringify([{}, null]));\n", 'git status && git log');
+    assert.strictEqual(result.code, 2, `Expected a block on an entry that is not a verdict, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('an entry that is not a verdict'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command and says the answer is not a list when the validator answers an object', () => {
+    const result = runWithValidator("process.stdout.write('{}');\n", 'git status');
+    assert.strictEqual(result.code, 2, `Expected a block on an answer that is not a list, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('not a list of verdicts'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command and says the answer was empty when the validator prints nothing', () => {
+    const result = runWithValidator('process.exit(0);\n', 'git status');
+    assert.strictEqual(result.code, 2, `Expected a block on an empty answer, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('an empty answer'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command within the budget even when the validator ignores the termination signal', () => {
+    const result = runWithValidator(
+      "process.on('SIGTERM', () => {});\nsetTimeout(() => {}, 30000);\n",
+      'git status',
+      { EGC_GUARDIAN_TIMEOUT_MS: '300' }
+    );
+    assert.strictEqual(result.code, 2, `Expected a block within the budget, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('did not answer within 0.3 seconds'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command and names the output limit when the validator answers past it', () => {
+    const result = runWithValidator("process.stdout.write('x'.repeat(2 * 1024 * 1024));\n", 'git status');
+    assert.strictEqual(result.code, 2, `Expected a block on an answer past the output limit, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('past the output limit'), result.stderr);
+  })) passed++; else failed++;
+
+  if (test('blocks the command and says the answer was unreadable when the validator prints something that is not JSON', () => {
+    const result = runWithValidator("process.stdout.write('not a verdict');\n", 'git status');
+    assert.strictEqual(result.code, 2, `Expected a block without a verdict, got ${result.code}: ${result.stderr}`);
+    assert.ok(result.stderr.includes('could not read'), result.stderr);
   })) passed++; else failed++;
 
   if (test('fails open (exercised, not just documented) when no Guardian CLI resolves at all', () => {

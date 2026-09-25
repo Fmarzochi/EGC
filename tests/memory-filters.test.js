@@ -18,7 +18,7 @@ const path = require('node:path');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const LEAK_SCRIPT = path.join(REPO_ROOT, 'scripts', 'check-state-leak.js');
-const { configureMemoryFilters, FILTER_NAME, PROPAGATION_FILES } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'memory-filters.js'));
+const { configureMemoryFilters, FILTER_NAME, PROPAGATION_FILES, forgetIndexStat } = require(path.join(REPO_ROOT, 'scripts', 'lib', 'memory-filters.js'));
 
 const POPULATED = [
   '# EGC: Agent Catalog',
@@ -285,7 +285,7 @@ run('configures filter.smudge so required=true does not break checkout (audit EG
   const { dir, git } = makeRepo();
   configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
   const smudge = git('config', `filter.${FILTER_NAME}.smudge`).trim();
-  assert.strictEqual(smudge, 'cat');
+  assert.strictEqual(smudge, `if command -v node >/dev/null 2>&1 && [ -f '${LEAK_SCRIPT}' ]; then node '${LEAK_SCRIPT}' --filter-smudge %f; else cat; fi`);
 
   // End-to-end: with required=true and clean configured but no smudge, git
   // treats the undefined smudge side as a failed filter and aborts checkout
@@ -326,6 +326,136 @@ run('configures and cleans correctly when the script path itself contains a spac
   git('add', 'AGENTS.md');
   const staged = git('show', ':0:AGENTS.md');
   assert.ok(!staged.includes('secret local context'), 'filter actually ran despite the odd path and stripped the content');
+});
+
+run('tells a repository git cannot open apart from a directory that is no repository', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-brokengit-'));
+  // A .git file whose gitdir does not exist: inside a repository as far as
+  // anything that copies working trees can tell, but git cannot open it.
+  fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir').split(path.sep).join('/')}\n`);
+  const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+  assert.strictEqual(plan.configured, false);
+  assert.notStrictEqual(plan.reason, 'not a git repository', `the reason must not read as the silent case: ${plan.reason}`);
+  assert.ok(plan.reason.includes('git could not open'), plan.reason);
+});
+
+// Symbolic links need a privilege Windows runners do not grant.
+if (process.platform !== 'win32') {
+  run('a .git symlink that points nowhere is a repository git cannot open, not a plain directory', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-danglinggit-'));
+    fs.symlinkSync(path.join(dir, 'missing-gitdir'), path.join(dir, '.git'), 'dir');
+    const plan = configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: true });
+    assert.strictEqual(plan.configured, false);
+    assert.ok(plan.reason.includes('git could not open'), plan.reason);
+  });
+}
+
+
+// A mirror rewritten with another size reads as modified to git until its
+// entry is looked at again; forgetIndexStat makes git look, and only look.
+function seedMirrorRepo() {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
+  git('add', 'AGENTS.md');
+  git('commit', '-q', '-m', 'seed');
+  return { dir, git, mirror: path.join(dir, 'AGENTS.md') };
+}
+const LONGER = POPULATED.replace('- private decision one', '- private decision one\n- private decision two, recorded by a later session, that changes the size of the file');
+
+run('forgetIndexStat: a mirror rewritten with another size reads as unmodified again', () => {
+  const { dir, git, mirror } = seedMirrorRepo();
+  fs.writeFileSync(mirror, LONGER);
+  assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), ' M AGENTS.md\n', 'git reads the rewritten mirror as modified before the refresh');
+  forgetIndexStat(dir, [mirror]);
+  assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), '');
+});
+
+run('forgetIndexStat: a change of the user\'s own stays unstaged', () => {
+  const { dir, git, mirror } = seedMirrorRepo();
+  fs.writeFileSync(mirror, `${LONGER}\nA line the user wrote.\n`);
+  forgetIndexStat(dir, [mirror]);
+  assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), ' M AGENTS.md\n');
+  assert.strictEqual(git('diff', '--cached', '--name-only'), '');
+});
+
+run('forgetIndexStat: the skip-worktree and assume-unchanged marks survive', () => {
+  const { dir, git, mirror } = seedMirrorRepo();
+  const second = path.join(dir, 'CLAUDE.md');
+  fs.writeFileSync(second, POPULATED);
+  git('add', 'CLAUDE.md');
+  git('commit', '-q', '-m', 'second');
+  git('update-index', '--skip-worktree', 'AGENTS.md');
+  git('update-index', '--assume-unchanged', 'CLAUDE.md');
+  fs.writeFileSync(mirror, LONGER);
+  fs.writeFileSync(second, LONGER);
+  forgetIndexStat(dir, [mirror, second]);
+  assert.strictEqual(git('ls-files', '-t', '-v', '--', 'AGENTS.md', 'CLAUDE.md'), 'S AGENTS.md\nh CLAUDE.md\n');
+});
+
+run('forgetIndexStat: an intent-to-add mirror stays intent-to-add', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  fs.writeFileSync(path.join(dir, 'README.md'), '# seed\n');
+  git('add', 'README.md');
+  git('commit', '-q', '-m', 'seed');
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
+  git('add', '-N', 'AGENTS.md');
+  forgetIndexStat(dir, [path.join(dir, 'AGENTS.md')]);
+  assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), ' A AGENTS.md\n');
+});
+
+run('forgetIndexStat: an index another git holds is said in one line and left alone', () => {
+  const { dir, git, mirror } = seedMirrorRepo();
+  fs.writeFileSync(mirror, LONGER);
+  fs.writeFileSync(path.join(dir, '.git', 'index.lock'), '');
+  const lines = [];
+  const write = process.stderr.write;
+  process.stderr.write = (chunk) => { lines.push(String(chunk)); return true; };
+  try {
+    forgetIndexStat(dir, [mirror]);
+  } finally {
+    process.stderr.write = write;
+    fs.unlinkSync(path.join(dir, '.git', 'index.lock'));
+  }
+  assert.strictEqual(lines.length, 1, JSON.stringify(lines));
+  assert.ok(lines[0].includes('could not be refreshed'), lines[0]);
+  assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), ' M AGENTS.md\n');
+});
+
+run('forgetIndexStat: a mirror committed empty is a real change, refreshed or not', () => {
+  const { dir, git } = makeRepo();
+  configureMemoryFilters({ projectDir: dir, scriptPath: LEAK_SCRIPT, dryRun: false });
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '');
+  git('add', 'AGENTS.md');
+  git('commit', '-q', '-m', 'empty');
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
+  forgetIndexStat(dir, [path.join(dir, 'AGENTS.md')]);
+  // The clean side keeps the skeleton of the block, so the file differs
+  // from the empty blob for real; the entry is left alone and nothing staged.
+  assert.strictEqual(git('status', '--porcelain', '--', 'AGENTS.md'), ' M AGENTS.md\n');
+  assert.strictEqual(git('diff', '--cached', '--name-only'), '');
+});
+
+run('forgetIndexStat: a project directory below the top level refreshes its own entry', () => {
+  const { dir, git } = makeRepo();
+  const project = path.join(dir, 'pkg');
+  fs.mkdirSync(project);
+  configureMemoryFilters({ projectDir: project, scriptPath: LEAK_SCRIPT, dryRun: false });
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# root\n');
+  fs.writeFileSync(path.join(project, 'AGENTS.md'), POPULATED);
+  git('add', 'AGENTS.md', 'pkg/AGENTS.md');
+  git('commit', '-q', '-m', 'seed');
+  fs.writeFileSync(path.join(project, 'AGENTS.md'), LONGER);
+  forgetIndexStat(project, [path.join(project, 'AGENTS.md')]);
+  assert.strictEqual(git('status', '--porcelain'), '');
+  assert.strictEqual(git('ls-files'), 'AGENTS.md\npkg/AGENTS.md\n', 'no entry appears that was not there');
+});
+
+run('forgetIndexStat: outside a repository nothing happens', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-norepo-'));
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), POPULATED);
+  forgetIndexStat(dir, [path.join(dir, 'AGENTS.md')]);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

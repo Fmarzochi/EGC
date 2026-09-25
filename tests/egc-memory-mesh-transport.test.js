@@ -292,7 +292,7 @@ async function main() {
 
           for (let i = 1; i <= TOTAL; i++) {
             const sent = await bus.sendEvent(writerDb, {
-              fromSession: 'mesh-a', toSession: 'mesh-b', kind: 'seq', payload: String(i)
+              fromSession: 'mesh-a', toSession: 'mesh-b', projectPath: '/p', kind: 'seq', payload: String(i)
             });
             assert.strictEqual(sent.ok, true, `send ${i} accepted`);
           }
@@ -329,7 +329,7 @@ async function main() {
           await bus.announce(db, { sessionId: 'mesh-b', projectPath: '/p' });
 
           const wake = transport.waitForChange(8000);
-          await bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', kind: 'ping' });
+          await bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', projectPath: '/p', kind: 'ping' });
           // A single write can land inside FSEvents' stream warm-up window on
           // a fresh watcher and get dropped (the exact macOS-runner race the
           // #1277 deadline fix and the fresh-watcher append fix documented),
@@ -371,7 +371,7 @@ async function main() {
           await bus.announce(db, { sessionId: 'mesh-b', projectPath: '/p' });
           const wake = transport.waitForChange(8000);
           const started = Date.now();
-          await bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', kind: 'ping' });
+          await bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', projectPath: '/p', kind: 'ping' });
           assert.strictEqual(await wake, 'change', 'the poll woke the parked waiter');
           assert.ok(Date.now() - started < 3000, 'within a few poll intervals, not the deadline');
           const events = await bus.readEvents(db, { sessionId: 'mesh-b' });
@@ -427,7 +427,7 @@ async function main() {
           await bus.announce(db, { sessionId: 'mesh-a', projectPath: '/p' });
           await bus.announce(db, { sessionId: 'mesh-b', projectPath: '/p' });
           const sendLater = new Promise((resolve, reject) => setTimeout(() => {
-            bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', kind: 'late', payload: 'x' })
+            bus.sendEvent(db, { fromSession: 'mesh-a', toSession: 'mesh-b', projectPath: '/p', kind: 'late', payload: 'x' })
               .then(sent => {
                 assert.strictEqual(sent.ok, true, 'mid-wait send accepted');
                 resolve();

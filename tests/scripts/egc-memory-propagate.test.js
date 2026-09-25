@@ -421,8 +421,185 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  // A mirror rewritten with another size reads as modified to git until the
+  // index entry is refreshed, even when the clean side of the filter takes it
+  // back to the committed blob; propagation refreshes the entries it wrote,
+  // so a branch switch after a session start is never refused for them.
+  if (await test('a mirror rewritten by propagation reads as unmodified to git', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateToTools({ projectPath: dir, ...args });
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir });
+      const second = propagateStateToTools({ projectPath: dir, ...args, next: [...args.next, 'a longer next step recorded by a later session that changes the size of the mirror'] });
+      assert.strictEqual(second.agents, path.join(dir, 'AGENTS.md'), 'the mirror is written again');
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8').includes('a longer next step recorded by a later session'), 'the mirror carries the longer block');
+      const status = execFileSync('git', ['status', '--porcelain', '--', 'AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(status, '', `git must read the rewritten mirror as unmodified, got: ${JSON.stringify(status)}`);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  // The refresh only re-reads the files: a change of the user's own in a
+  // mirror stays an unstaged change, and the index never takes content.
+  if (await test('a change of the user\'s own in a mirror stays unstaged after propagation', () => {
+    const dir = mktemp();
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: dir });
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      propagateStateToTools({ projectPath: dir, ...args });
+      execFileSync('git', ['add', 'AGENTS.md'], { cwd: dir });
+      execFileSync('git', ['commit', '-q', '-m', 'seed'], { cwd: dir });
+      fs.appendFileSync(path.join(dir, 'AGENTS.md'), '\nA line the user wrote.\n');
+      propagateStateToTools({ projectPath: dir, ...args, next: [...args.next, 'a longer next step recorded by a later session that changes the size of the mirror'] });
+      const status = execFileSync('git', ['status', '--porcelain', '--', 'AGENTS.md'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(status, ' M AGENTS.md\n', `the user's change must stay unstaged, got: ${JSON.stringify(status)}`);
+      const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: dir, encoding: 'utf-8' });
+      assert.strictEqual(staged, '', `nothing may be staged, got: ${JSON.stringify(staged)}`);
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('keeps project memory out of the context files when git cannot open the repository', () => {
+    const dir = mktemp();
+    try {
+      // A .git file whose gitdir does not exist: the directory sits inside a
+      // repository as far as anything that copies working trees can tell,
+      // but git cannot open it, so the clean filter cannot be armed there.
+      fs.writeFileSync(path.join(dir, '.git'), `gitdir: ${path.join(dir, 'missing-gitdir').split(path.sep).join('/')}\n`);
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      fs.writeFileSync(path.join(dir, 'CLAUDE.md'), '# Claude\n');
+      const lines = [];
+      const originalWrite = process.stderr.write;
+      process.stderr.write = (chunk, encoding, callback) => {
+        lines.push(String(chunk));
+        const done = typeof encoding === 'function' ? encoding : callback;
+        if (typeof done === 'function') done();
+        return true;
+      };
+      let result;
+      try {
+        result = propagateStateToTools({ projectPath: dir, ...args });
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+      assert.ok(Object.values(result).every(value => value === null), `no context file is reported as written: ${JSON.stringify(result)}`);
+      assert.strictEqual(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8'), '# Agents\n', 'AGENTS.md is left as it was');
+      assert.strictEqual(fs.readFileSync(path.join(dir, 'CLAUDE.md'), 'utf-8'), '# Claude\n', 'CLAUDE.md is left as it was');
+      assert.strictEqual(lines.length, 1, `exactly one stderr line: ${JSON.stringify(lines)}`);
+      assert.ok(lines[0].includes(dir), 'the line names the project that was not mirrored');
+      assert.ok(lines[0].includes('commit-privacy filter'), 'the line says the filter is the reason');
+      assert.ok(lines[0].includes('egc doctor'), 'the line says what to run');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  const links = await runLinkTests(args);
+  passed += links.passed;
+  failed += links.failed;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
+}
+
+// The memory is written only into regular files inside the project: a
+// context file or a folder on its way that is a link is left alone, and so
+// is whatever the link points at.
+async function runLinkTests(args) {
+  let passed = 0;
+  let failed = 0;
+
+  // A link to a file needs a privilege Windows runners do not grant.
+  if (process.platform !== 'win32') {
+    if (await test('leaves a context file that is a link, and the file behind it, as they were', () => {
+      const dir = mktemp();
+      const outside = mktemp();
+      try {
+        const target = path.join(outside, 'profile');
+        fs.writeFileSync(target, 'export EDITOR=vi\n');
+        fs.symlinkSync(target, path.join(dir, 'CLAUDE.md'));
+        fs.symlinkSync(target, path.join(dir, 'llms.txt'));
+        fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+        const result = propagateStateToTools({ projectPath: dir, ...args });
+        assert.strictEqual(result.claude, null, 'CLAUDE.md is not reported as written');
+        assert.strictEqual(result.llms, null, 'llms.txt is not reported as written');
+        assert.strictEqual(fs.readFileSync(target, 'utf-8'), 'export EDITOR=vi\n', 'the file behind the links is left as it was');
+        assert.ok(fs.lstatSync(path.join(dir, 'CLAUDE.md')).isSymbolicLink(), 'the link stays a link');
+        assert.ok(result.agents, 'a regular context file beside them still receives the memory');
+      } finally {
+        cleanup(dir);
+        cleanup(outside);
+      }
+    })) passed++; else failed++;
+  }
+
+  // A junction needs no privilege on Windows and is an ordinary link
+  // elsewhere, so the folder cases run on every runner.
+  if (await test('writes nothing into a tool folder that is a link', () => {
+    const dir = mktemp();
+    const outside = mktemp();
+    try {
+      fs.symlinkSync(outside, path.join(dir, '.cursor'), 'junction');
+      fs.symlinkSync(outside, path.join(dir, '.windsurf'), 'junction');
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.strictEqual(result.cursor, null, '.cursor is not reported as written');
+      assert.strictEqual(result.windsurf, null, '.windsurf is not reported as written');
+      assert.deepStrictEqual(fs.readdirSync(outside), [], 'no folder or file is created behind the links');
+    } finally {
+      cleanup(dir);
+      cleanup(outside);
+    }
+  })) passed++; else failed++;
+
+  if (await test('leaves a context file alone when a folder on its way is a link', () => {
+    const dir = mktemp();
+    const outside = mktemp();
+    try {
+      fs.writeFileSync(path.join(outside, 'copilot-instructions.md'), '# Copilot\n');
+      fs.writeFileSync(path.join(outside, 'egc-context.md'), '# Trae\n');
+      fs.symlinkSync(outside, path.join(dir, '.github'), 'junction');
+      fs.mkdirSync(path.join(dir, '.trae'));
+      fs.symlinkSync(outside, path.join(dir, '.trae', 'rules'), 'junction');
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.strictEqual(result.copilot, null, 'the Copilot file is not reported as written');
+      assert.strictEqual(result.trae, null, 'the Trae file is not reported as written');
+      assert.strictEqual(fs.readFileSync(path.join(outside, 'copilot-instructions.md'), 'utf-8'), '# Copilot\n', 'the file reached through .github is left as it was');
+      assert.strictEqual(fs.readFileSync(path.join(outside, 'egc-context.md'), 'utf-8'), '# Trae\n', 'the file reached through .trae/rules is left as it was');
+    } finally {
+      cleanup(dir);
+      cleanup(outside);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes into a project opened through a link', () => {
+    const dir = mktemp();
+    const linkParent = mktemp();
+    try {
+      fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
+      fs.mkdirSync(path.join(dir, '.cursor'));
+      const link = path.join(linkParent, 'project');
+      fs.symlinkSync(dir, link, 'junction');
+      const result = propagateStateToTools({ projectPath: link, ...args });
+      assert.ok(result.agents, 'AGENTS.md is reported as written');
+      assert.ok(result.cursor, 'the Cursor rules file is reported as written');
+      assert.ok(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf-8').includes('Test project in alpha phase'), 'the memory reaches the file behind the project link');
+      assert.ok(fs.lstatSync(path.join(dir, '.cursor', 'rules')).isDirectory(), 'the rules folder is created as a real folder');
+    } finally {
+      cleanup(linkParent);
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  return { passed, failed };
 }
 
 runTests();

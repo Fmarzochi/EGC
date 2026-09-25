@@ -19,6 +19,7 @@ interface MemoryFilters {
     scriptPath: string;
     dryRun: boolean;
   }): { configured: boolean; reason?: string; actions: string[] };
+  forgetIndexStat(projectDir: string, files: string[]): void;
 }
 
 function tryRequireMemoryFilters(): MemoryFilters | null {
@@ -35,39 +36,93 @@ function tryRequireMemoryFilters(): MemoryFilters | null {
 // Previously this only happened via the separate, manual `egc init` command
 // (scripts/init.js) -- a project that only ever ran `egc install` (the exact
 // command the README documents) never got this protection unless the user
-// also ran `egc init` by hand. Best-effort and silent: this is a privacy
-// convenience, not a correctness gate, so any failure here (no git binary, a
-// read-only filesystem, projectPath not a repo) must never block the actual
-// memory write that the caller is waiting on.
-function ensureCommitPrivacy(projectPath: string): void {
+// also ran `egc init` by hand. Returns true when populated memory may be
+// written into the project: the filter is armed, or the path is outside any
+// git working tree (the normal case for most MCP calls). Returns false when
+// the project is a repository whose filter could not be armed; the caller
+// then leaves the context files as they are, because a mirror git could
+// stage is exactly what this guard exists to prevent. Never throws, and
+// reports every false verdict on stderr (MCP servers speak MCP over stdout,
+// stderr is free for diagnostics) since this is the one place that can know.
+function ensureCommitPrivacy(projectPath: string): boolean {
   try {
     const memoryFilters = tryRequireMemoryFilters();
     if (!memoryFilters) {
-      // Every other configured:false path below reports why via stderr;
-      // silently returning here would be the one way this function can
-      // leave memory unprotected with zero signal that anything went wrong.
-      process.stderr.write(`[egc-memory] commit-privacy filter module unavailable for ${projectPath}\n`);
-      return;
+      // Without the shared library the filter cannot be armed; outside a
+      // working tree there is still nothing a commit could carry.
+      if (!isInsideGitWorkTree(projectPath)) return true;
+      reportUnprotected(projectPath, 'the commit-privacy filter library is unavailable');
+      return false;
     }
     const scriptPath = path.join(__dirname, '..', '..', '..', '..', 'scripts', 'check-state-leak.js');
     const result = memoryFilters.configureMemoryFilters({ projectDir: projectPath, scriptPath, dryRun: false });
-    // "not a git repository" is the normal, silent case (most MCP calls
-    // aren't rooted in a repo at all); any other configured:false reason
-    // (e.g. the fail-closed script-missing check) means privacy protection
-    // did NOT get set up and the user should know.
-    if (!result.configured && result.reason !== 'not a git repository') {
-      process.stderr.write(`[egc-memory] commit-privacy filter not configured for ${projectPath}: ${result.reason}\n`);
-    }
+    if (result.configured || result.reason === 'not a git repository') return true;
+    // Any other configured:false reason (the fail-closed script-missing
+    // check, a checkout git cannot open) means the filter is not in place.
+    reportUnprotected(projectPath, result.reason ?? 'the filter could not be configured');
+    return false;
   } catch (err) {
-    // Best-effort: never let commit-privacy setup block the memory write the
-    // caller is waiting on. But silent failure here means a real git-config
-    // error (permission denied, git binary crashed) leaves the user with no
-    // signal that populated memory can still reach a commit -- a single
-    // stderr line costs nothing (MCP servers speak MCP over stdout, stderr
-    // is free for diagnostics) and this is the one place that can ever know.
-    const message = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[egc-memory] commit-privacy filter setup failed for ${projectPath}: ${message}\n`);
+    // A real git-config error (permission denied, git binary crashed) also
+    // leaves the filter out of place; say so instead of failing silently.
+    reportUnprotected(projectPath, err instanceof Error ? err.message : String(err));
+    return false;
   }
+}
+
+// The one line a user sees when the mirror is withheld: the reason, what it
+// means, where the memory still is, and what to run.
+function reportUnprotected(projectPath: string, reason: string): void {
+  process.stderr.write(`[egc-memory] project memory was not mirrored into the context files of ${projectPath}: ${reason}. The commit-privacy filter is not in place there, and a mirror git could stage would carry the memory; the memory itself is intact in ~/.egc/state. Run 'egc doctor' to see what is missing.\n`);
+}
+
+// A .git entry of any kind, a symlink included even when it dangles: git
+// accepts .git as a link, and one that points nowhere is a checkout git
+// cannot open, not a directory outside any repository.
+function hasGitEntry(dir: string): boolean {
+  try {
+    fs.lstatSync(path.join(dir, '.git'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Whether projectPath sits inside a git working tree, judged from the
+// filesystem alone, for the one branch above where the shared library (and
+// its own copy of this check) is not there to ask.
+function isInsideGitWorkTree(projectPath: string): boolean {
+  let dir: string;
+  try {
+    dir = fs.realpathSync(projectPath);
+  } catch {
+    dir = path.resolve(projectPath);
+  }
+  let parent = path.dirname(dir);
+  while (parent !== dir) {
+    if (hasGitEntry(dir)) return true;
+    dir = parent;
+    parent = path.dirname(dir);
+  }
+  return hasGitEntry(dir);
+}
+
+// The result of a propagation that wrote nothing: every mirror key present
+// and null, the shape callers already handle for a file that is not there.
+function noMirrorsWritten(): PropagateResult {
+  return {
+    cursor: null,
+    copilot: null,
+    gemini: null,
+    windsurf: null,
+    trae: null,
+    zed: null,
+    cline: null,
+    aider: null,
+    cursorrules: null,
+    agents: null,
+    llms: null,
+    claude: null,
+  };
 }
 
 export interface PropagateArgs {
@@ -148,6 +203,27 @@ function upsertEgcSection(existing: string, block: string): string {
   return stripped ? `${stripped}\n\n${section}\n` : `${section}\n`;
 }
 
+// Whether the context file at filePath, below projectPath, may be written:
+// no entry between the project folder and the file is a link (a Windows
+// junction reads as one), so the write cannot land outside the project, and
+// the file, when it is already there, is a regular file. An entry that does
+// not exist yet is fine, since what the writer creates there is real.
+function isPlainPathBelow(projectPath: string, filePath: string): boolean {
+  let current = projectPath;
+  for (const part of path.relative(projectPath, filePath).split(path.sep)) {
+    current = path.join(current, part);
+    let entry: fs.Stats;
+    try {
+      entry = fs.lstatSync(current);
+    } catch (err) {
+      return (err as NodeJS.ErrnoException).code === 'ENOENT';
+    }
+    if (entry.isSymbolicLink()) return false;
+    if (current === filePath) return entry.isFile();
+  }
+  return false;
+}
+
 // Shared by the harness writers below: upsert the EGC block into filePath,
 // using defaultContent as the starting point when the file doesn't exist yet.
 function upsertFileSection(filePath: string, block: string, defaultContent = ''): string {
@@ -185,9 +261,10 @@ function writeCursorContext(projectPath: string, block: string): string | null {
   }
 
   const rulesDir = path.join(cursorDir, 'rules');
+  const filePath = path.join(rulesDir, 'egc-context.mdc');
+  if (!isPlainPathBelow(projectPath, filePath)) return null;
   fs.mkdirSync(rulesDir, { recursive: true });
 
-  const filePath = path.join(rulesDir, 'egc-context.mdc');
   const existing = fs.existsSync(filePath)
     ? stripLegacyCursorContent(fs.readFileSync(filePath, 'utf-8'))
     : LEGACY_CURSOR_FRONTMATTER;
@@ -198,7 +275,7 @@ function writeCursorContext(projectPath: string, block: string): string | null {
 function writeClaudeContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, 'CLAUDE.md');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -209,7 +286,7 @@ function writeClaudeContext(projectPath: string, block: string): string | null {
 function writeCopilotContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, '.github', 'copilot-instructions.md');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -222,7 +299,7 @@ function writeCopilotContext(projectPath: string, block: string): string | null 
 function writeGeminiContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, 'GEMINI.md');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -241,9 +318,10 @@ function writeWindsurfContext(projectPath: string, block: string): string | null
   }
 
   const rulesDir = path.join(windsurfDir, 'rules');
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  if (!isPlainPathBelow(projectPath, filePath)) return null;
   fs.mkdirSync(rulesDir, { recursive: true });
 
-  const filePath = path.join(rulesDir, 'egc-context.md');
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
@@ -258,9 +336,10 @@ function writeTraeContext(projectPath: string, block: string): string | null {
   }
 
   const rulesDir = path.join(traeDir, 'rules');
+  const filePath = path.join(rulesDir, 'egc-context.md');
+  if (!isPlainPathBelow(projectPath, filePath)) return null;
   fs.mkdirSync(rulesDir, { recursive: true });
 
-  const filePath = path.join(rulesDir, 'egc-context.md');
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
@@ -269,7 +348,7 @@ function writeTraeContext(projectPath: string, block: string): string | null {
 function writeZedContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, '.rules');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -282,7 +361,7 @@ function writeZedContext(projectPath: string, block: string): string | null {
 function writeClineContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, '.clinerules');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -295,7 +374,7 @@ function writeClineContext(projectPath: string, block: string): string | null {
 function writeAiderContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, 'CONVENTIONS.md');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -308,7 +387,7 @@ function writeAiderContext(projectPath: string, block: string): string | null {
 function writeLegacyCursorRules(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, '.cursorrules');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -321,7 +400,7 @@ function writeLegacyCursorRules(projectPath: string, block: string): string | nu
 function writeAgentsContext(projectPath: string, block: string): string | null {
   const filePath = path.join(projectPath, 'AGENTS.md');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -334,7 +413,7 @@ function writeAgentsContext(projectPath: string, block: string): string | null {
 function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
   const filePath = path.join(projectPath, 'llms.txt');
   try {
-    if (!fs.existsSync(filePath)) return null;
+    if (!fs.existsSync(filePath) || !isPlainPathBelow(projectPath, filePath)) return null;
   } catch {
     return null;
   }
@@ -353,20 +432,40 @@ function writeLlmsTxt(projectPath: string, args: PropagateArgs): string | null {
 }
 
 export function propagateStateToTools(args: PropagateArgs): PropagateResult {
-  ensureCommitPrivacy(args.projectPath);
+  if (!ensureCommitPrivacy(args.projectPath)) return noMirrorsWritten();
   const block = buildSummaryBlock(args);
-  return {
-    cursor: writeCursorContext(args.projectPath, block),
-    copilot: writeCopilotContext(args.projectPath, block),
-    gemini: writeGeminiContext(args.projectPath, block),
-    windsurf: writeWindsurfContext(args.projectPath, block),
-    trae: writeTraeContext(args.projectPath, block),
-    zed: writeZedContext(args.projectPath, block),
-    cline: writeClineContext(args.projectPath, block),
-    aider: writeAiderContext(args.projectPath, block),
-    cursorrules: writeLegacyCursorRules(args.projectPath, block),
-    agents: writeAgentsContext(args.projectPath, block),
-    llms: writeLlmsTxt(args.projectPath, args),
-    claude: writeClaudeContext(args.projectPath, block),
-  };
+  // The files written before a writer that throws are refreshed too.
+  const written = noMirrorsWritten();
+  try {
+    written.cursor = writeCursorContext(args.projectPath, block);
+    written.copilot = writeCopilotContext(args.projectPath, block);
+    written.gemini = writeGeminiContext(args.projectPath, block);
+    written.windsurf = writeWindsurfContext(args.projectPath, block);
+    written.trae = writeTraeContext(args.projectPath, block);
+    written.zed = writeZedContext(args.projectPath, block);
+    written.cline = writeClineContext(args.projectPath, block);
+    written.aider = writeAiderContext(args.projectPath, block);
+    written.cursorrules = writeLegacyCursorRules(args.projectPath, block);
+    written.agents = writeAgentsContext(args.projectPath, block);
+    written.llms = writeLlmsTxt(args.projectPath, args);
+    written.claude = writeClaudeContext(args.projectPath, block);
+  } finally {
+    forgetIndexStat(args.projectPath, written);
+  }
+  return written;
+}
+
+// A mirror rewritten with another size reads as modified to git until its
+// index entry is looked at again (git trusts the size it recorded and does
+// not run the clean side of the filter), so a branch switch after a session
+// start was refused for a file that carried nothing new. The shared library
+// clears the recorded stat of the written files and refreshes them, so a
+// mirror that still cleans to the committed blob reads as unmodified, a
+// change of the user's own stays an unstaged change, and an entry that
+// carries a mark (skip-worktree, assume-unchanged, intent-to-add) is left as
+// it is; without the library there is no filter armed and nothing to refresh.
+function forgetIndexStat(projectPath: string, written: PropagateResult): void {
+  const files = Object.values(written).filter((file): file is string => typeof file === 'string');
+  if (files.length === 0) return;
+  tryRequireMemoryFilters()?.forgetIndexStat(projectPath, files);
 }

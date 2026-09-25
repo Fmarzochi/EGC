@@ -326,25 +326,60 @@ function resolveGuardianCli() {
 // Invokes the guardian CLI with the payload on stdin, never in argv.
 // Untrusted content (prompts, commands, paths) must not travel as command
 // arguments where a leading dash could be parsed as a flag. argv carries
-// only the fixed mode and literal flags. Returns parsed JSON, or null on
-// any failure so callers fail open.
-function callGuardian(cli, args, input, timeoutMs) {
+// only the fixed mode and literal flags. Returns { ok: true, value } with
+// the parsed JSON, or { ok: false, kind, detail } saying what went wrong:
+// 'timeout' (no answer within timeoutMs), 'unstartable' (the process could
+// not be spawned), 'crash' (a non-zero exit or a signal) or 'unreadable'
+// (an empty answer, or one that is not JSON). A caller that must not run
+// without a verdict reads the kind; the others use callGuardian below.
+function callGuardianVerdict(cli, args, input, timeoutMs) {
   const result = spawnSync(process.execPath, [cli, ...args], {
-    input: input == null ? '' : String(input),
+    input: String(input ?? ''),
     encoding: 'utf8',
     timeout: timeoutMs,
+    // SIGKILL, so a validator that traps or ignores SIGTERM still ends when
+    // the budget does: the call is synchronous, and the budget is a promise.
+    killSignal: 'SIGKILL',
   });
-  if (result.error || result.status !== 0 || !result.stdout) return null;
-  try {
-    return JSON.parse(result.stdout);
-  } catch {
-    return null;
+  return classifyGuardianResult(result);
+}
+
+// What the spawn result says, read in the order that tells the truth: the
+// budget first, then the output limit, then a process that never ran, then
+// one that ran and failed, then the answer itself. result.error alone does
+// not mean the process never started (EPIPE after the child closed stdin
+// comes with a status), so status and signal are read before the error.
+function classifyGuardianResult(result) {
+  const code = result.error?.code;
+  if (code === 'ETIMEDOUT') return { ok: false, kind: 'timeout', detail: 'no answer within the budget' };
+  if (code === 'ENOBUFS') return { ok: false, kind: 'unreadable', detail: 'an answer past the output limit' };
+  if (result.status === null && result.signal === null) {
+    return { ok: false, kind: 'unstartable', detail: String(result.error?.message ?? code ?? 'no process') };
   }
+  if (result.status !== 0) {
+    const detail = result.status === null ? `signal ${result.signal}` : `exit code ${result.status}`;
+    return { ok: false, kind: 'crash', detail };
+  }
+  if (!result.stdout) return { ok: false, kind: 'unreadable', detail: 'an empty answer' };
+  try {
+    return { ok: true, value: JSON.parse(result.stdout) };
+  } catch {
+    return { ok: false, kind: 'unreadable', detail: 'something that is not JSON' };
+  }
+}
+
+// The parsed JSON, or null on any failure, for the callers that still fail
+// open: the prompt router and the intuition hook, the memory miner,
+// auto-learn and the write hook.
+function callGuardian(cli, args, input, timeoutMs) {
+  const answer = callGuardianVerdict(cli, args, input, timeoutMs);
+  return answer.ok ? answer.value : null;
 }
 
 module.exports = {
   resolveGuardianCli,
   callGuardian,
+  callGuardianVerdict,
   fromEnv,
   fromPackageLayout,
   fromMcpConfigs,

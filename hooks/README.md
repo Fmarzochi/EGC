@@ -36,7 +36,7 @@ That installs resolved hooks to `~/.gemini/hooks/hooks.json`. On Windows, the Ge
 
 | Hook | Matcher | Behavior | Exit Code |
 |------|---------|----------|-----------|
-| **Guardian command enforcement** | `Bash` | Validates every command with the egc-guardian validator before it runs; splits compound commands into segments so destructive commands cannot hide behind chaining or sudo. Blocks destructive commands, protected paths, and forbidden git flags; allowlist misses are advisory. Fails open silently if the validator is unavailable | 2 (blocks) |
+| **Guardian command enforcement** | `Bash` | Validates every command with the egc-guardian validator before it runs; splits compound commands into segments so destructive commands cannot hide behind chaining or sudo. Blocks destructive commands, protected paths (in every spelling the shell accepts, the target of a redirection included), and forbidden git flags; allowlist misses are advisory. Without a validator installed the command runs; an installed validator that gives no verdict (it stalls, stops, or answers something unreadable) blocks the command with a message that says why and what to do; the validator gets four seconds, or `EGC_GUARDIAN_TIMEOUT_MS` milliseconds when set | 2 (blocks) |
 | **Guardian write enforcement** | `Write\|Edit\|MultiEdit` | Validates the target path with the egc-guardian validator; blocks writes to protected paths (credential stores, key files). Fails open silently if the validator is unavailable | 2 (blocks) |
 | **Dev server blocker** | `Bash` | Blocks `npm run dev` etc. outside tmux: ensures log access | 2 (blocks) |
 | **Tmux reminder** | `Bash` | Suggests tmux for long-running commands (npm test, cargo build, docker) | 0 (warns) |
