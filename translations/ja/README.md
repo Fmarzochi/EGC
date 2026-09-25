@@ -90,7 +90,7 @@ EGCは1人の開発者によって作られ、オープンにメンテナンス�
 
 - **[Website](https://fmarzochi.github.io/EGCSite)**: 完全なドキュメント、機能概要、ライブデモ
 - **[Vision](../../docs/VISION.md)**: EGCが行っている場所、そして無料のままにする
-- **[Join the Discord](https://discord.gg/TxppsGb52)**: 質問やフィードバックの共有
+- **[Join the Discord](https://discord.gg/FmXbgUmdmM)**: 質問やフィードバックの共有
 - **[Sponsor on GitHub](https://github.com/sponsors/Fmarzochi)**: 金額はいくらでも
 - **[Donate via PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: GitHubアカウントなしでも可能
 - **Star the repository**: 他の開発者が見つけやすくなります

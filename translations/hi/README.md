@@ -90,7 +90,7 @@ EGC एक डेवलपर द्वारा बनाया गया ह�
 
 - **[वेबसाइट](https://fmarzochi.github.io/EGCSite)**: पूरा दस्तावेज़, फ़ीचर अवलोकन और लाइव डेमो
 - **[विज़न](../../docs/VISION.md)**: EGC कहाँ जा रहा है, और क्या मुफ़्त रहेगा
-- **[Discord में शामिल हों](https://discord.gg/TxppsGb52)**: प्रश्न पूछें, फीडबैक साझा करें
+- **[Discord में शामिल हों](https://discord.gg/FmXbgUmdmM)**: प्रश्न पूछें, फीडबैक साझा करें
 - **[GitHub पर प्रायोजित करें](https://github.com/sponsors/Fmarzochi)**: कोई भी राशि
 - **[PayPal के माध्यम से दान करें](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: किसी GitHub खाते की आवश्यकता नहीं है
 - **रिपॉजिटरी को स्टार दें**: अन्य डेवलपर्स को इसे खोजने में मदद मिलती है
