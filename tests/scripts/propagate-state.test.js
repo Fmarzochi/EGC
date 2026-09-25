@@ -260,6 +260,27 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('the generated and shipped mirrors route a decision to update_state and recall it from get_state first (#1524)', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor'));
+      fs.mkdirSync(path.join(dir, '.windsurf'));
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      const mirrors = [
+        ['cursor mirror', fs.readFileSync(result.cursor, 'utf-8')],
+        ['windsurf mirror', fs.readFileSync(result.windsurf, 'utf-8')],
+        ['shipped cursor mirror', fs.readFileSync(path.join(__dirname, '..', '..', '.cursor', 'rules', 'egc-context.mdc'), 'utf-8')],
+      ];
+      for (const [label, content] of mirrors) {
+        assert.ok(content.includes('- User asks to record a decision → `update_state` (decisions field); `store_decision` only adds it to the searchable history'), `${label} must route a decision to update_state`);
+        assert.ok(content.includes('- User asks what was decided → the decisions in `get_state`'), `${label} must recall decisions from get_state first`);
+        assert.ok(!content.includes('record a decision → `store_decision`'), `${label} must drop the old route`);
+      }
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('propagates to .trae/rules/egc-context.md when .trae/ dir exists (Trae)', () => {
     const dir = mktemp();
     try {
@@ -549,6 +570,29 @@ function runFreshnessGuardTests() {
         content.includes('<!-- egc:state-updated:2026-07-01T00:00:00.000Z -->'),
         'stamp advanced to the newer timestamp'
       );
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('an equally stamped mirror is rewritten when its generated block changed, and left alone when it did not', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor'));
+      const { cursor } = propagateStateContent(dir, SAMPLE_STATE);
+      const routeLine = '- User asks to record a decision → `update_state` (decisions field); `store_decision` only adds it to the searchable history';
+      const current = fs.readFileSync(cursor, 'utf-8');
+      assert.ok(current.includes(routeLine), 'the current template is written');
+      fs.writeFileSync(cursor, current.replace(routeLine, '- User asks to record a decision → `store_decision`'), 'utf-8');
+
+      propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(fs.readFileSync(cursor, 'utf-8').includes(routeLine), 'a block from an older template must be replaced at the same stamp');
+
+      const past = new Date('2026-01-01T00:00:00Z');
+      fs.utimesSync(cursor, past, past);
+      const untouched = fs.statSync(cursor).mtimeMs;
+      propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(fs.statSync(cursor).mtimeMs, untouched, 'an identical block at the same stamp must not be rewritten');
     } finally {
       cleanup(dir);
     }
