@@ -1200,10 +1200,10 @@ async function handleLessonSave(db: Database, args: unknown) {
   const { content, context, tags, initial_confidence, author } = LessonSaveSchema.parse(args);
   const authorName = author || process.env.USER || process.env.USERNAME || 'unknown';
   const normalizedTags = normalizeTags(tags);
-  const cleaned = sanitizeStrings({ content, context, tags: normalizedTags ?? undefined, author: authorName });
-  if (cleaned.flagged) {
-    log('WARN', 'lesson_save: suspicious content blocked', { reasons: cleaned.reasons });
-    return { content: [{ type: "text", text: `Blocked: ${cleaned.reasons.join('; ')}` }] };
+  const checked = checkLessonText({ content, context, tags: normalizedTags ?? undefined, author: authorName });
+  if (checked.reasons.length > 0) {
+    log('WARN', 'lesson_save: suspicious content blocked', { reasons: checked.reasons });
+    return { content: [{ type: "text", text: `Blocked: ${checked.reasons.join('; ')}` }] };
   }
 
   // Exact-match deduplication: reinforce an identical lesson instead of duplicating.
@@ -1230,12 +1230,29 @@ async function handleLessonSave(db: Database, args: unknown) {
   return { content: [{ type: "text", text: JSON.stringify({ id, content, context, confidence: initial_confidence, tags: normalizedTags, createdAt: now, author: authorName }, null, 2) }] };
 }
 
+type LessonText = { content: string; context: string; tags?: string; author?: string };
+
+// Each field is checked on its own and then read together, in the order a
+// recalled lesson presents them, so a directive split across fields is
+// caught as a whole and every field then comes back as the blocked marker.
+function checkLessonText(fields: LessonText): { sanitized: Record<string, string>; reasons: string[] } {
+  const cleaned = sanitizeStrings(fields);
+  if (cleaned.flagged) return { sanitized: cleaned.sanitized, reasons: cleaned.reasons };
+  const present = Object.entries(fields).filter((entry): entry is [string, string] => entry[1] !== undefined);
+  const together = sanitize(present.map(([, value]) => value).join('\n'));
+  if (!together.flagged) return { sanitized: cleaned.sanitized, reasons: [] };
+  return {
+    sanitized: Object.fromEntries(present.map(([key]) => [key, together.value])),
+    reasons: [`fields read together: ${together.reason}`],
+  };
+}
+
 // A stored field that reads as an instruction is handed back as the blocked
 // marker, never as its text: rows written before lesson_save checked its
 // input, or put in the store by anything else, are read the way new ones are
 // checked, and the row itself stays visible so it can be found and fixed.
 function presentLesson(lesson: ReturnType<typeof mapLessonRow>): ReturnType<typeof mapLessonRow> {
-  const { sanitized } = sanitizeStrings({
+  const { sanitized } = checkLessonText({
     content: lesson.content,
     context: lesson.context,
     tags: lesson.tags ?? undefined,
