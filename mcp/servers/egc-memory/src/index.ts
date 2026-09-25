@@ -1199,6 +1199,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 async function handleLessonSave(db: Database, args: unknown) {
   const { content, context, tags, initial_confidence, author } = LessonSaveSchema.parse(args);
   const authorName = author || process.env.USER || process.env.USERNAME || 'unknown';
+  const normalizedTags = normalizeTags(tags);
+  const cleaned = sanitizeStrings({ content, context, tags: normalizedTags ?? undefined, author: authorName });
+  if (cleaned.flagged) {
+    log('WARN', 'lesson_save: suspicious content blocked', { reasons: cleaned.reasons });
+    return { content: [{ type: "text", text: `Blocked: ${cleaned.reasons.join('; ')}` }] };
+  }
 
   // Exact-match deduplication: reinforce an identical lesson instead of duplicating.
   const duplicate = await db.get<{id: string}>(
@@ -1213,7 +1219,6 @@ async function handleLessonSave(db: Database, args: unknown) {
   const id = generateLessonId();
   const now = new Date().toISOString();
   const projPath = resolveProjectPath();
-  const normalizedTags = normalizeTags(tags);
   await writeArbitrator.enqueue(async () => {
     await db.run(
       `INSERT INTO lessons (id, content, context, confidence, last_reinforced, last_recalled, created_at, tags, archived, project_path, author)
@@ -1225,6 +1230,20 @@ async function handleLessonSave(db: Database, args: unknown) {
   return { content: [{ type: "text", text: JSON.stringify({ id, content, context, confidence: initial_confidence, tags: normalizedTags, createdAt: now, author: authorName }, null, 2) }] };
 }
 
+// A stored field that reads as an instruction is handed back as the blocked
+// marker, never as its text: rows written before lesson_save checked its
+// input, or put in the store by anything else, are read the way new ones are
+// checked, and the row itself stays visible so it can be found and fixed.
+function presentLesson(lesson: ReturnType<typeof mapLessonRow>): ReturnType<typeof mapLessonRow> {
+  const { sanitized } = sanitizeStrings({
+    content: lesson.content,
+    context: lesson.context,
+    tags: lesson.tags ?? undefined,
+    author: lesson.author ?? undefined,
+  });
+  return { ...lesson, ...sanitized };
+}
+
 async function handleLessonRecall(db: Database, args: unknown) {
   const { query, min_confidence, limit } = LessonRecallSchema.parse(args);
 
@@ -1234,9 +1253,9 @@ async function handleLessonRecall(db: Database, args: unknown) {
     const results = await searchLessons(db, query, min_confidence, limit);
     matched = results.map(r => mapLessonRow({
       id: r.id, content: r.content, context: r.context, confidence: r.confidence,
-      tags: r.tags ?? null, archived: 0, created_at: r.created_at,
+      tags: r.tags ?? null, author: r.author ?? null, archived: 0, created_at: r.created_at,
       last_reinforced: r.last_reinforced ?? null, last_recalled: r.last_recalled ?? null
-    } as LessonRow));
+    } as LessonRow)).map(presentLesson);
   } else {
     const lowerQuery = query.toLowerCase();
     const rows = await db.all<LessonRow[]>(
@@ -1249,7 +1268,8 @@ async function handleLessonRecall(db: Database, args: unknown) {
     matched = rows
       .filter(r => r.content.toLowerCase().includes(lowerQuery) || r.context.toLowerCase().includes(lowerQuery) || (r.tags?.toLowerCase().includes(lowerQuery) ?? false))
       .slice(0, limit)
-      .map(mapLessonRow);
+      .map(mapLessonRow)
+      .map(presentLesson);
   }
 
   const now = new Date().toISOString();
@@ -1281,7 +1301,7 @@ async function handleLessonReinforce(db: Database, args: unknown) {
   });
   const updated = await db.get<LessonRow>('SELECT * FROM lessons WHERE id = ?', [id]);
   log('INFO', 'Lesson reinforced', { id, confidence: newConfidence });
-  return { content: [{ type: "text", text: JSON.stringify(updated ? mapLessonRow(updated) : { id, confidence: newConfidence }, null, 2) }] };
+  return { content: [{ type: "text", text: JSON.stringify(updated ? presentLesson(mapLessonRow(updated)) : { id, confidence: newConfidence }, null, 2) }] };
 }
 
 // Implicit bus presence: every session that touches memory becomes visible

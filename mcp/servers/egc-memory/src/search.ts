@@ -77,6 +77,7 @@ export interface RankedLesson {
   context: string;
   confidence: number;
   tags: string | null;
+  author: string | null;
   created_at: string;
   last_reinforced: string | null;
   last_recalled: string | null;
@@ -89,6 +90,7 @@ interface RawLessonRow {
   context: string;
   confidence: number;
   tags: string | null;
+  author: string | null;
   created_at: string;
   last_reinforced: string | null;
   last_recalled: string | null;
@@ -135,7 +137,7 @@ export async function searchLessons(
   if (!match) return [];
 
   const rows: RawLessonRow[] = await db.all(
-    `SELECT l.id, l.content, l.context, l.confidence, l.tags,
+    `SELECT l.id, l.content, l.context, l.confidence, l.tags, l.author,
             l.created_at, l.last_reinforced, l.last_recalled,
             bm25(lessons_fts) AS rawScore
      FROM lessons_fts
@@ -156,6 +158,7 @@ export async function searchLessons(
     context: r.context,
     confidence: r.confidence,
     tags: r.tags ?? null,
+    author: r.author ?? null,
     created_at: r.created_at,
     last_reinforced: r.last_reinforced ?? null,
     last_recalled: r.last_recalled ?? null,
