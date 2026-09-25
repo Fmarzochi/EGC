@@ -60,6 +60,34 @@ function registerIsolated(homeDir, options) {
   }
 }
 
+// Runs fn against an mcp-register loaded the way it is on a user's machine,
+// where @iarna/toml is a devDependency that was never installed: every parse
+// path is unavailable and the scan alone has to be right.
+function withoutTomlParser(fn) {
+  const Module = require('node:module');
+  const registerPath = require.resolve('../../scripts/lib/mcp-register');
+  const cachedRegister = require.cache[registerPath];
+  const originalLoad = Module._load;
+  Module._load = function (request) {
+    if (request === '@iarna/toml') {
+      const err = new Error("Cannot find module '@iarna/toml'");
+      err.code = 'MODULE_NOT_FOUND';
+      throw err;
+    }
+    return originalLoad.apply(this, arguments);
+  };
+  delete require.cache[registerPath];
+  let parserless;
+  try {
+    parserless = require('../../scripts/lib/mcp-register');
+  } finally {
+    Module._load = originalLoad;
+    delete require.cache[registerPath];
+    if (cachedRegister) require.cache[registerPath] = cachedRegister;
+  }
+  fn(parserless.registerToml);
+}
+
 function runTests() {
   console.log('\n=== Testing scripts/lib/mcp-register.js ===\n');
 
@@ -759,6 +787,382 @@ function runTests() {
 
     assert.strictEqual(changed, false, 'should be a no-op the second time');
     assert.strictEqual(fs.readFileSync(target, 'utf8'), firstWrite, 'should not duplicate the entries');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml drops an empty inline mcp_servers array before appending (what `vibe mcp remove` leaves behind)', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.vibe', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // Byte-for-byte what Mistral Vibe writes after `vibe mcp add x` followed
+    // by `vibe mcp remove x`. Appending [[mcp_servers]] to this without
+    // dropping the inline array first makes the file invalid TOML, and Vibe
+    // then refuses to start at all.
+    fs.writeFileSync(target, 'theme = "auto"\nmcp_servers = []\n');
+
+    const changed = registerToml(target, bins);
+
+    assert.strictEqual(changed, true);
+    const content = fs.readFileSync(target, 'utf8');
+    assert.ok(!/^\s*mcp_servers\s*=\s*\[/m.test(content), 'the empty inline array must be gone');
+    assert.ok(content.includes('theme = "auto"'), 'unrelated keys must survive');
+    assert.ok(content.includes('name = "egc-guardian"'));
+    assert.ok(content.includes('name = "egc-memory"'));
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(content);
+    assert.strictEqual(parsed.mcp_servers.length, 2, 'the result must be valid TOML holding both servers');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml leaves a non-empty inline mcp_servers array untouched rather than corrupting it', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.vibe', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // Entries the person wrote by hand: appending would break the file, and
+    // rewriting the array would mean re-serializing their own configuration.
+    // Throwing keeps "could not write" distinguishable from "nothing to do",
+    // the same contract registerJson uses for a file it cannot merge into.
+    const original = 'theme = "auto"\nmcp_servers = [ { name = "mine", command = "node" } ]\n';
+    fs.writeFileSync(target, original);
+
+    assert.throws(() => registerToml(target, bins), /inline array - left untouched/);
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml still appends normally when mcp_servers is already an array of tables', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // The shape registerToml itself writes: [[mcp_servers]] tables append
+    // cleanly, so the new guard must not treat this as an inline array.
+    fs.writeFileSync(target, '[[mcp_servers]]\nname = "other"\ncommand = "node"\nargs = ["/x.js"]\n');
+
+    const changed = registerToml(target, bins);
+
+    assert.strictEqual(changed, true);
+    const content = fs.readFileSync(target, 'utf8');
+    assert.ok(content.includes('name = "other"'), 'the existing entry must survive');
+    assert.ok(content.includes('name = "egc-guardian"'));
+    assert.ok(content.includes('name = "egc-memory"'));
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml only reads the root table, so an mcp_servers under a [table] header is left alone', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // TOML offers no way back to the root table: this key belongs to
+    // [profile], and deleting the line would silently drop
+    // profile.mcp_servers along with it.
+    fs.writeFileSync(target, 'theme = "auto"\n\n[profile]\nmcp_servers = []\n');
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    assert.deepStrictEqual(parsed.profile.mcp_servers, [], 'the table key must survive untouched');
+    assert.strictEqual(parsed.mcp_servers.length, 2, 'our two tables are appended at the root');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml ignores a closing bracket that sits inside a comment', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // Valid TOML for an empty array. Taking the `]` in the comment as the
+    // end would remove only the first line and leave an orphan `]` behind,
+    // which is not valid TOML either.
+    fs.writeFileSync(target, 'mcp_servers = [ # ]\n]\n');
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    assert.strictEqual(parsed.mcp_servers.length, 2, 'both lines of the empty array are gone and the file parses');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml recognises the quoted spellings of the mcp_servers key', () => {
+    const tmpHome = makeTempDir();
+    // "mcp_servers" and 'mcp_servers' name the same root key as the bare
+    // spelling; missing either leaves the file invalid after the append.
+    const spellings = [['basic', '"mcp_servers"'], ['literal', "'mcp_servers'"]];
+    for (const [label, spelling] of spellings) {
+      const target = path.join(tmpHome, label, 'config.toml');
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, `${spelling} = []\n`);
+
+      assert.strictEqual(registerToml(target, bins), true, `${spelling} should be handled`);
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(!content.includes(`${spelling} = []`), `${spelling} should be dropped like the bare key`);
+      assert.ok(content.includes('name = "egc-guardian"'));
+      assert.ok(content.includes('name = "egc-memory"'));
+    }
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml does not cut a line out of a multi-line string', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // Inside """ this line is text, not a key: removing it would corrupt
+    // the person's own note.
+    fs.writeFileSync(target, 'note = """\nmcp_servers = []\n"""\n');
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    assert.ok(parsed.note.includes('mcp_servers = []'), 'the string content must be untouched');
+    assert.strictEqual(parsed.mcp_servers.length, 2);
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml is a silent no-op when an inline array already holds both servers', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.vibe', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // The shape someone actually writes after following the error message:
+    // each entry carries args, and that inner `]` ends a line-based scan
+    // early, hiding every entry after it. The check has to come from a real
+    // parse, which is what tomlHasActiveServer does.
+    const original = 'mcp_servers = [ { name = "egc-guardian", command = "node", args = ["/a/index.js"] }, '
+      + '{ name = "egc-memory", command = "node", args = ["/b/index.js"] } ]\n';
+    fs.writeFileSync(target, original);
+
+    assert.strictEqual(registerToml(target, bins), false, 'nothing left to do');
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml does not mistake a delimiter inside a comment for a multi-line string', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // A comment may mention the multi-line delimiter without opening a
+    // string. Counting it would put the scan inside a string it never
+    // entered, so the empty array below would be missed and the append
+    // would break the file.
+    fs.writeFileSync(target, '# notes use """ for long text\nmcp_servers = []\n');
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+    const content = fs.readFileSync(target, 'utf8');
+    assert.ok(content.includes('# notes use'), 'the comment must survive');
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    assert.strictEqual(TOML.parse(content).mcp_servers.length, 2, 'the result must be valid TOML');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml refuses to write a file the scan would have broken', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // `[3]` on its own line looks like a table header, so the scan stops
+    // before the empty array and the append would produce invalid TOML. A
+    // line-based scan will always have a corner like this one, so what
+    // actually protects the file is parsing the result before writing it.
+    const original = 'matrix = [\n  [1, 2],\n  [3]\n]\nmcp_servers = []\n';
+    fs.writeFileSync(target, original);
+
+    try {
+      require('@iarna/toml');
+    } catch (_) {
+      console.log('    (skipped: @iarna/toml not installed, nothing to parse with)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+
+    assert.throws(() => registerToml(target, bins), /could not be updated without breaking it/);
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml refuses rather than act on a delimiter it read inside a single-line string', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // The `'''` here is content of a basic string and opens nothing, but the
+    // scan reads it as opening a multi-line string and skips the rest of the
+    // file, so the empty array below is never dropped. Refusing is the right
+    // outcome: the install does less, and the config still starts the tool.
+    const original = 'note = "Here is \'\'\'"\nmcp_servers = []\n';
+    fs.writeFileSync(target, original);
+
+    try {
+      require('@iarna/toml');
+    } catch (_) {
+      console.log('    (skipped: @iarna/toml not installed, nothing to compare with)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+
+    assert.throws(() => registerToml(target, bins), /could not be updated without breaking it/);
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml keeps a `"""` inside a `\'\'\'` string as content, not as a delimiter', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // Only the delimiter that opened a string closes it. Counting both kinds
+    // would end this string at the inner `"""`, putting the scan back outside
+    // and letting it cut the next line out of the person's own note - and the
+    // result would still parse, so parsing alone would not catch it.
+    fs.writeFileSync(target, "note = '''\nHere is a \"\"\" inside\nmcp_servers = []\n'''\n");
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    assert.ok(parsed.note.includes('mcp_servers = []'), 'the string content must be untouched');
+    assert.strictEqual(parsed.mcp_servers.length, 2);
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml recognises a table header whose key is quoted and holds any character', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // A table may be named after anything once the key is quoted. Missing
+    // this as a header lets the scan walk into the table and remove a key
+    // that is not the root one - and the result still parses.
+    fs.writeFileSync(target, '["github.com/x"]\nmcp_servers = []\n');
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    assert.deepStrictEqual(parsed['github.com/x'].mcp_servers, [], 'the table key must survive untouched');
+    assert.strictEqual(parsed.mcp_servers.length, 2, 'our two tables are appended at the root');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('the scan alone gets the string and the quoted table right, with no parser to fall back on', () => {
+    // @iarna/toml is a devDependency that never ships, so on a user's machine
+    // the parse comparison cannot run and the scan is the only thing standing
+    // between an install and a damaged config. Both cases above are checked
+    // again with the parser taken away from the module under test.
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (skipped: @iarna/toml not installed, nothing to verify with)');
+      return;
+    }
+
+    withoutTomlParser((parserlessRegisterToml) => {
+      const tmpHome = makeTempDir();
+
+      const stringTarget = path.join(tmpHome, 'string', 'config.toml');
+      fs.mkdirSync(path.dirname(stringTarget), { recursive: true });
+      fs.writeFileSync(stringTarget, "note = '''\nHere is a \"\"\" inside\nmcp_servers = []\n'''\n");
+      assert.strictEqual(parserlessRegisterToml(stringTarget, bins), true);
+      const stringParsed = TOML.parse(fs.readFileSync(stringTarget, 'utf8'));
+      assert.ok(stringParsed.note.includes('mcp_servers = []'), 'the string content must survive without a parser');
+      assert.strictEqual(stringParsed.mcp_servers.length, 2);
+
+      const tableTarget = path.join(tmpHome, 'table', 'config.toml');
+      fs.mkdirSync(path.dirname(tableTarget), { recursive: true });
+      fs.writeFileSync(tableTarget, '["github.com/x"]\nmcp_servers = []\n');
+      assert.strictEqual(parserlessRegisterToml(tableTarget, bins), true);
+      const tableParsed = TOML.parse(fs.readFileSync(tableTarget, 'utf8'));
+      assert.deepStrictEqual(tableParsed['github.com/x'].mcp_servers, [], 'the table key must survive without a parser');
+      assert.strictEqual(tableParsed.mcp_servers.length, 2);
+
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    });
+  }) ? passed++ : failed++);
+
+  (test('registerToml does not take a comment naming both servers as proof they are registered', () => {
+    const tmpHome = makeTempDir();
+    // Only a parse can confirm an entry. Without one tomlHasActiveServer
+    // falls back to a substring search over the whole file, and a comment
+    // is not an array entry: taking it as one would have the install report
+    // nothing to do while neither server is actually registered.
+    const original = 'mcp_servers = [{ name = "other" }] # "egc-guardian" "egc-memory"\n';
+
+    const refuses = (label, register) => {
+      const target = path.join(tmpHome, label, 'config.toml');
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, original);
+      assert.throws(() => register(target, bins), /inline array - left untouched/, label);
+      assert.strictEqual(fs.readFileSync(target, 'utf8'), original, `${label}: the file must be byte-identical`);
+    };
+
+    refuses('with-parser', registerToml);
+    withoutTomlParser((parserlessRegisterToml) => refuses('no-parser', parserlessRegisterToml));
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
