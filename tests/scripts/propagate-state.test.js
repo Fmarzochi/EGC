@@ -590,8 +590,9 @@ function runFreshnessGuardTests() {
 
       const past = new Date('2026-01-01T00:00:00Z');
       fs.utimesSync(cursor, past, past);
+      const untouched = fs.statSync(cursor).mtimeMs;
       propagateStateContent(dir, SAMPLE_STATE);
-      assert.strictEqual(fs.statSync(cursor).mtimeMs, past.getTime(), 'an identical block at the same stamp must not be rewritten');
+      assert.strictEqual(fs.statSync(cursor).mtimeMs, untouched, 'an identical block at the same stamp must not be rewritten');
     } finally {
       cleanup(dir);
     }
