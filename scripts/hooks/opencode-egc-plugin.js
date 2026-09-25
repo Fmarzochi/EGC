@@ -100,6 +100,14 @@ function withTimeout(operation, timeoutMs) {
   });
 }
 
+function resolveNodeExecutable() {
+  const binaryName = path.basename(process.execPath).toLowerCase();
+  
+  const isNode = binaryName === 'node' || binaryName === 'node.exe';
+  
+  return isNode ? process.execPath : 'node';
+}
+
 function loadSessionContext(projectDirectory, sessionId) {
   return new Promise(resolve => {
     const timeoutMs = positiveIntegerEnv(
@@ -124,7 +132,8 @@ function loadSessionContext(projectDirectory, sessionId) {
 
     let child;
     try {
-      child = spawn(process.execPath, [SESSION_CONTEXT_SCRIPT], {
+      const nodeExecutable = resolveNodeExecutable() 
+      child = spawn(nodeExecutable, [SESSION_CONTEXT_SCRIPT], {
         cwd: projectDirectory,
         env: { ...process.env, OPENCODE_PROJECT_DIR: projectDirectory },
         stdio: ['pipe', 'pipe', 'ignore'],
