@@ -39,7 +39,7 @@ Act on user intent, not keywords. When what the user says implies an EGC action,
 - Session starting or resuming → call `get_state`
 - Context was just compacted/summarized (short recap, missing earlier detail, references to work you don't remember doing) → call `get_state` again immediately, do not wait to be asked
 - Save/remember this decision → call `update_state` (decisions field); use `store_decision` only for history logging or `lesson_save` for lessons
-- What failed? What did we decide? → call `search_history` or `query_history`
+- What failed? What did we decide? → check `get_state` first (what `update_state` saved), then `search_history` or `query_history` for the `store_decision` history
 - Review code or a PR → spawn `/review-pr` agents
 - Context is heavy or slow → call `reduce_context`
 - How much did I save? How many tokens did this session save or cost? → run `egc gain` (short form: `egc saved`)

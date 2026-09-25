@@ -113,6 +113,24 @@ async function runTests() {
       }
     })) passed++; else failed++;
 
+    if (await test('store_decision says its decisions come back through the history tools, not get_state, in the server and in glama.json (#1524)', async () => {
+      const server = startServer(home, projectDir, 'wasm');
+      try {
+        await initialize(server);
+        const tools = await server.request('tools/list', {});
+        const served = tools.result.tools.find(t => t.name === 'store_decision').description;
+        const listed = JSON.parse(fs.readFileSync(path.join(__dirname, '../../glama.json'), 'utf8'))
+          .tools.find(t => t.name === 'store_decision').description;
+        for (const [label, description] of [['server', served], ['glama.json', listed]]) {
+          assert.ok(description.includes('queryable via query_history and search_history'), `${label}: ${description}`);
+          assert.ok(description.includes('not part of get_state'), `${label}: ${description}`);
+          assert.ok(!description.includes('surfaced in get_state'), `${label}: ${description}`);
+        }
+      } finally {
+        await server.stop();
+      }
+    })) passed++; else failed++;
+
     if (await test('state written on the portable engine survives a restart', async () => {
       const first = startServer(home, projectDir, 'wasm');
       try {

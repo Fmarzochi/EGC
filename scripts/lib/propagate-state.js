@@ -262,13 +262,14 @@ Detect user intent in any language and call the matching EGC tool — no keyword
 - User asks what was learned in past sessions → \`lesson_recall\`
 
 **Memory — user forces a save**
-- User asks to record a decision → \`store_decision\`
+- User asks to record a decision → \`update_state\` (decisions field); \`store_decision\` only adds it to the searchable history
 - User asks AI not to repeat a mistake → \`lesson_save\`
 - User confirms a past lesson happened again → \`lesson_reinforce\`
 - User wants to store something temporarily → \`working_memory_set\`
 - User asks what is in temporary memory → \`working_memory_get\` / \`working_memory_list\`
 
 **Search — when AI forgot something**
+- User asks what was decided → the decisions in \`get_state\`
 - User asks about past decisions on a topic → \`search_history\`
 - User asks for recent decisions chronologically → \`query_history\`
 

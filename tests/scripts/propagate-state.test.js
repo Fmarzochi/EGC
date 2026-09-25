@@ -260,6 +260,27 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('the generated and shipped mirrors route a decision to update_state and recall it from get_state first (#1524)', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor'));
+      fs.mkdirSync(path.join(dir, '.windsurf'));
+      const result = propagateStateContent(dir, SAMPLE_STATE);
+      const mirrors = [
+        ['cursor mirror', fs.readFileSync(result.cursor, 'utf-8')],
+        ['windsurf mirror', fs.readFileSync(result.windsurf, 'utf-8')],
+        ['shipped cursor mirror', fs.readFileSync(path.join(__dirname, '..', '..', '.cursor', 'rules', 'egc-context.mdc'), 'utf-8')],
+      ];
+      for (const [label, content] of mirrors) {
+        assert.ok(content.includes('- User asks to record a decision → `update_state` (decisions field); `store_decision` only adds it to the searchable history'), `${label} must route a decision to update_state`);
+        assert.ok(content.includes('- User asks what was decided → the decisions in `get_state`'), `${label} must recall decisions from get_state first`);
+        assert.ok(!content.includes('record a decision → `store_decision`'), `${label} must drop the old route`);
+      }
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('propagates to .trae/rules/egc-context.md when .trae/ dir exists (Trae)', () => {
     const dir = mktemp();
     try {
