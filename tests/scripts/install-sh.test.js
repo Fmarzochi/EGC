@@ -326,6 +326,40 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('skips npm link for an npm install under a non-default prefix (#1464)', () => {
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+
+    // `npm install -g --prefix <other> @egchq/egc` lands the tree under
+    // <other>/lib/node_modules/@egchq/egc, which is not the default global
+    // npm install (#1218 guard passes it), but is also not a checkout. It
+    // must be detected as an npm install and never linked into a global
+    // prefix it does not belong to.
+    assert.ok(
+      /is_checkout\(\)/.test(script),
+      'install.sh must define a checkout test'
+    );
+    assert.ok(
+      /\$\{?ROOT_DIR\/\.git/.test(script),
+      'a checkout must be detected by a .git directory (or worktree file) at the tree root'
+    );
+    assert.ok(
+      /\*\/node_modules(\/\*)?\)/.test(script),
+      'an npm install must be detected by a node_modules directory in the path'
+    );
+    assert.ok(
+      script.includes('skipping npm link: this tree is an npm install, not a git checkout'),
+      'the npm-install skip must be announced, not silent'
+    );
+    assert.ok(
+      script.indexOf('is_checkout') < script.indexOf('npm link --silent'),
+      'the checkout test must run before npm link'
+    );
+    assert.ok(
+      /linked: egc ->/.test(script),
+      'a successful link must print a linked line naming the command and its target'
+    );
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
