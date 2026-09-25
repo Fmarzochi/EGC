@@ -46,6 +46,43 @@ function readFileIfExists(targetPath) {
   }
 }
 
+// A line that opens a table. Every key after it belongs to that table, and
+// TOML offers no way back to the root, so the root-table scan below stops
+// here. A line like `[1, 2],` inside a multi-line array is not a header,
+// which the comma-free character class keeps out.
+const TOML_TABLE_HEADER = /^\[\[?\s*[A-Za-z0-9_\-."' ]+\s*\]\]?\s*(#.*)?$/;
+
+// The same root key in its three legal spellings: bare, basic-quoted and
+// literal-quoted all name `mcp_servers`.
+const INLINE_MCP_SERVERS_KEY = /^(?:mcp_servers|"mcp_servers"|'mcp_servers')\s*=\s*\[/;
+
+// The names our two entries carry inside an inline table.
+const INLINE_GUARDIAN_ENTRY = /name\s*=\s*["']egc-guardian["']/;
+const INLINE_MEMORY_ENTRY = /name\s*=\s*["']egc-memory["']/;
+
+// Everything from the first `#` onwards is a comment. Cutting there before
+// looking for the closing `]` keeps a bracket inside a comment from ending
+// the array early: `mcp_servers = [ # ]` with the real bracket on the next
+// line is a valid empty array, and stopping at the commented one would
+// remove only half of it and leave an orphan `]` behind. A `#` inside a
+// quoted string can only occur in an array that has content, and a
+// non-empty array never reaches the deletion path, so this can never turn a
+// populated array into an apparently empty one.
+function stripTomlComment(line) {
+  const hash = line.indexOf('#');
+  return hash === -1 ? line : line.slice(0, hash);
+}
+
+function countOccurrences(text, needle) {
+  let count = 0;
+  let index = text.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = text.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
 // TOML spells `mcp_servers` two ways that cannot be mixed: an array of
 // tables ([[mcp_servers]], what registerToml appends) and an inline array
 // (mcp_servers = [...]). Once the key exists as an inline array, appending
@@ -61,19 +98,36 @@ function readFileIfExists(targetPath) {
 // the last server rewrites the file with `mcp_servers = []` left behind. A
 // hand-edited Codex config can reach it too, so the guard is shared.
 //
-// Returns null when the key is not an inline array — the normal case,
+// The scan reads the root table only, skips lines inside a multi-line
+// string, accepts the quoted spellings of the key and cuts comments before
+// seeking the closing bracket, so what it finds is the real root key and
+// nothing that merely looks like one.
+//
+// Returns null when the root key is not an inline array — the normal case,
 // including [[mcp_servers]] tables and a file that has no mcp_servers at
-// all. Otherwise { start, end, isEmpty }, as inclusive line indices into the
-// split content. Anything that cannot be read with confidence is reported as
-// non-empty: refusing to touch a file is always safe, appending to one that
-// turns out to be occupied is not.
+// all. Otherwise { start, end, isEmpty, hasBothServers }, as inclusive line
+// indices into the split content. Anything that cannot be read with
+// confidence is reported as non-empty: refusing to touch a file is always
+// safe, appending to one that turns out to be occupied is not.
 function findInlineMcpServersArray(content) {
   const lines = content.split('\n');
+  let inMultilineString = false;
 
   for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
+    const raw = lines[i];
+    // A line that opens or closes a multi-line string is itself part of that
+    // value, so the flag is read as it stood before this line was counted.
+    const wasInsideString = inMultilineString;
+    if ((countOccurrences(raw, '"""') + countOccurrences(raw, "'''")) % 2 === 1) {
+      inMultilineString = !inMultilineString;
+    }
+    if (wasInsideString) continue;
+
+    const trimmed = raw.trim();
     if (trimmed.startsWith('#')) continue;
-    const opening = /^mcp_servers\s*=\s*\[/.exec(trimmed);
+    // Past the first table header nothing belongs to the root table any more.
+    if (TOML_TABLE_HEADER.test(trimmed)) break;
+    const opening = INLINE_MCP_SERVERS_KEY.exec(trimmed);
     if (!opening) continue;
 
     // Collect forward until the closing bracket: TOML allows the inline
@@ -81,26 +135,27 @@ function findInlineMcpServersArray(content) {
     // table) closes early here, which only ever reports the array as
     // occupied — the conservative answer, and the correct one, since a
     // nested array means the outer one is not empty.
-    let body = trimmed.slice(opening[0].length);
+    let body = stripTomlComment(trimmed.slice(opening[0].length));
     let end = i;
     let close = body.indexOf(']');
     while (close === -1 && end + 1 < lines.length) {
       end += 1;
-      body += '\n' + lines[end];
+      body += '\n' + stripTomlComment(lines[end]);
       close = body.indexOf(']');
     }
     if (close === -1) {
       // Unterminated: no way to tell what is in there.
-      return { start: i, end: lines.length - 1, isEmpty: false };
+      return { start: i, end: lines.length - 1, isEmpty: false, hasBothServers: false };
     }
 
-    const inner = body
-      .slice(0, close)
-      .split('\n')
-      .map(part => part.trim())
-      .filter(part => part !== '' && !part.startsWith('#'))
-      .join('');
-    return { start: i, end, isEmpty: inner === '' };
+    const inner = body.slice(0, close);
+    const compact = inner.split('\n').map(part => part.trim()).filter(Boolean).join('');
+    return {
+      start: i,
+      end,
+      isEmpty: compact === '',
+      hasBothServers: INLINE_GUARDIAN_ENTRY.test(inner) && INLINE_MEMORY_ENTRY.test(inner),
+    };
   }
 
   return null;
@@ -293,9 +348,12 @@ function tomlEscape(p) {
  *
  * An empty inline `mcp_servers = []` is dropped first: it carries no entries
  * to preserve, and leaving it in place would make the appended
- * [[mcp_servers]] tables invalid TOML. A non-empty one throws instead, the
+ * [[mcp_servers]] tables invalid TOML. A non-empty one that already names
+ * both servers is a silent no-op - the person followed the error below and
+ * added them by hand, and warning again on every run would punish them for
+ * doing exactly what they were told. Any other non-empty one throws, the
  * same "left untouched" contract registerJson uses for a file it cannot
- * safely merge into - rewriting it would mean re-serializing entries the
+ * safely merge into: rewriting it would mean re-serializing entries the
  * person wrote by hand, and appending to it would leave the tool unable to
  * start at all.
  */
@@ -305,6 +363,7 @@ function registerToml(targetPath, bins) {
 
   const inlineArray = findInlineMcpServersArray(content);
   if (inlineArray && !inlineArray.isEmpty) {
+    if (inlineArray.hasBothServers) return false;
     throw new TypeError(
       `existing file at ${targetPath} declares mcp_servers as an inline array - left untouched: ` +
       'rewrite it as [[mcp_servers]] tables, or add egc-guardian and egc-memory to it by hand, then re-run'

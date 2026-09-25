@@ -763,7 +763,7 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
 
-    (test('registerToml drops an empty inline mcp_servers array before appending (what `vibe mcp remove` leaves behind)', () => {
+  (test('registerToml drops an empty inline mcp_servers array before appending (what `vibe mcp remove` leaves behind)', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.vibe', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -831,6 +831,123 @@ function runTests() {
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
+
+    (test('registerToml only reads the root table, so an mcp_servers under a [table] header is left alone', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // TOML offers no way back to the root table: this key belongs to
+    // [profile], and deleting the line would silently drop
+    // profile.mcp_servers along with it.
+    fs.writeFileSync(target, 'theme = "auto"\n\n[profile]\nmcp_servers = []\n');
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    assert.deepStrictEqual(parsed.profile.mcp_servers, [], 'the table key must survive untouched');
+    assert.strictEqual(parsed.mcp_servers.length, 2, 'our two tables are appended at the root');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml ignores a closing bracket that sits inside a comment', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // Valid TOML for an empty array. Taking the `]` in the comment as the
+    // end would remove only the first line and leave an orphan `]` behind,
+    // which is not valid TOML either.
+    fs.writeFileSync(target, 'mcp_servers = [ # ]\n]\n');
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    assert.strictEqual(parsed.mcp_servers.length, 2, 'both lines of the empty array are gone and the file parses');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml recognises the quoted spellings of the mcp_servers key', () => {
+    const tmpHome = makeTempDir();
+    // "mcp_servers" and 'mcp_servers' name the same root key as the bare
+    // spelling; missing either leaves the file invalid after the append.
+    const spellings = [['basic', '"mcp_servers"'], ['literal', "'mcp_servers'"]];
+    for (const [label, spelling] of spellings) {
+      const target = path.join(tmpHome, label, 'config.toml');
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, `${spelling} = []\n`);
+
+      assert.strictEqual(registerToml(target, bins), true, `${spelling} should be handled`);
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(!content.includes(`${spelling} = []`), `${spelling} should be dropped like the bare key`);
+      assert.ok(content.includes('name = "egc-guardian"'));
+      assert.ok(content.includes('name = "egc-memory"'));
+    }
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml does not cut a line out of a multi-line string', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // Inside """ this line is text, not a key: removing it would corrupt
+    // the person's own note.
+    fs.writeFileSync(target, 'note = """\nmcp_servers = []\n"""\n');
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    assert.ok(parsed.note.includes('mcp_servers = []'), 'the string content must be untouched');
+    assert.strictEqual(parsed.mcp_servers.length, 2);
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml is a silent no-op when an inline array already names both servers', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.vibe', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // What the file looks like after someone followed the error message and
+    // added the two entries by hand: warning again on every run would
+    // punish them for doing exactly what they were told.
+    const original = 'mcp_servers = [ { name = "egc-guardian", command = "node" }, '
+      + '{ name = "egc-memory", command = "node" } ]\n';
+    fs.writeFileSync(target, original);
+
+    assert.strictEqual(registerToml(target, bins), false, 'nothing left to do');
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+
 
   // ── registerZedContextServers ───────────────────────────────────
 
