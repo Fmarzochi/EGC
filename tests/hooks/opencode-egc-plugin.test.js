@@ -300,6 +300,7 @@ async function runTests() {
 
       try {
         process.execPath = fakeOpencodeBinary;
+        assert.strictEqual(process.execPath, fakeOpencodeBinary, 'execPath override must take effect');
 
         const project = path.join(tempDir, 'workspaces', 'non-node-runtime');
         fs.mkdirSync(project, { recursive: true });

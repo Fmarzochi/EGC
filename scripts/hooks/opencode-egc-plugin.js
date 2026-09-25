@@ -102,8 +102,7 @@ function withTimeout(operation, timeoutMs) {
 
 function resolveNodeExecutable() {
   const binaryName = path.basename(process.execPath).toLowerCase();
-  
-  const isNode = binaryName === 'node' || binaryName === 'node.exe';
+  const isNode = ['node', 'node.exe', 'nodejs', 'nodejs.exe'].includes(binaryName);
   
   return isNode ? process.execPath : 'node';
 }
