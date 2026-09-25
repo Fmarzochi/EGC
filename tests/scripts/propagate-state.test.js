@@ -575,6 +575,28 @@ function runFreshnessGuardTests() {
     }
   })) passed++; else failed++;
 
+  if (test('an equally stamped mirror is rewritten when its generated block changed, and left alone when it did not', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.cursor'));
+      const { cursor } = propagateStateContent(dir, SAMPLE_STATE);
+      const routeLine = '- User asks to record a decision → `update_state` (decisions field); `store_decision` only adds it to the searchable history';
+      const current = fs.readFileSync(cursor, 'utf-8');
+      assert.ok(current.includes(routeLine), 'the current template is written');
+      fs.writeFileSync(cursor, current.replace(routeLine, '- User asks to record a decision → `store_decision`'), 'utf-8');
+
+      propagateStateContent(dir, SAMPLE_STATE);
+      assert.ok(fs.readFileSync(cursor, 'utf-8').includes(routeLine), 'a block from an older template must be replaced at the same stamp');
+
+      const past = new Date('2026-01-01T00:00:00Z');
+      fs.utimesSync(cursor, past, past);
+      propagateStateContent(dir, SAMPLE_STATE);
+      assert.strictEqual(fs.statSync(cursor).mtimeMs, past.getTime(), 'an identical block at the same stamp must not be rewritten');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (test('configures the commit-privacy git filter automatically, without a separate egc init step (audit EGC-547)', () => {
     const dir = mktemp();
     try {

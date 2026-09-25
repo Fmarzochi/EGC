@@ -371,17 +371,20 @@ function extractStateUpdated(content) {
   return match ? match[1] : '';
 }
 
-// A mirror stamped by an equally new or newer state must not be overwritten:
-// stale sources (older update stamp, or no stamp at all) would silently roll
-// project memory back, as a leftover flat state file once did to AGENTS.md.
-function isStaleWrite(existingContent, stateUpdated) {
+// A mirror stamped by a newer state must not be overwritten: stale sources
+// (older update stamp, or no stamp at all) would silently roll project memory
+// back, as a leftover flat state file once did to AGENTS.md. At an equal stamp
+// the state is the same, so the mirror is rewritten only when its generated
+// block changed, which is how a new template reaches mirrors already in place.
+function isStaleWrite(existingContent, stateUpdated, block) {
   const existingUpdated = extractStateUpdated(existingContent || '');
   if (!existingUpdated) return false;
   if (!stateUpdated) return true;
   const existingMs = Date.parse(existingUpdated);
   const stateMs = Date.parse(stateUpdated);
   if (Number.isNaN(existingMs) || Number.isNaN(stateMs)) return false;
-  return stateMs <= existingMs;
+  if (stateMs !== existingMs) return stateMs < existingMs;
+  return existingContent.replaceAll('\r\n', '\n').includes(block);
 }
 
 const LEGACY_CURSOR_FRONTMATTER = `---\ndescription: EGC project memory (auto-updated)\nalwaysApply: true\n---\n\n`;
@@ -437,7 +440,7 @@ function writeCursorContext(projectPath, block, stateUpdated) {
   fs.mkdirSync(rulesDir, { recursive: true });
 
   const existingRaw = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
-  if (isStaleWrite(existingRaw, stateUpdated)) return filePath;
+  if (isStaleWrite(existingRaw, stateUpdated, block)) return filePath;
   const existing = existingRaw ? stripLegacyCursorContent(existingRaw) : LEGACY_CURSOR_FRONTMATTER;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
@@ -458,7 +461,7 @@ function writeSimpleContext(projectPath, relativePathParts, block, stateUpdated)
   }
 
   const existing = fs.readFileSync(filePath, 'utf-8');
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
+  if (isStaleWrite(existing, stateUpdated, block)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
@@ -489,7 +492,7 @@ function writeToolRulesContext(projectPath, toolDirName, block, stateUpdated) {
   fs.mkdirSync(rulesDir, { recursive: true });
 
   const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
+  if (isStaleWrite(existing, stateUpdated, block)) return filePath;
   fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
@@ -548,8 +551,9 @@ function writeLlmsTxt(projectPath, parsed) {
 
   const stateUpdated = parsed.updated;
   const existing = fs.readFileSync(filePath, 'utf-8');
-  if (isStaleWrite(existing, stateUpdated)) return filePath;
-  fs.writeFileSync(filePath, upsertEgcSection(existing, buildLlmsBlock(parsed)), 'utf-8');
+  const block = buildLlmsBlock(parsed);
+  if (isStaleWrite(existing, stateUpdated, block)) return filePath;
+  fs.writeFileSync(filePath, upsertEgcSection(existing, block), 'utf-8');
   return filePath;
 }
 
