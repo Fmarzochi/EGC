@@ -399,10 +399,12 @@ function keepsEverythingElse(original, updated) {
  *
  * An empty inline `mcp_servers = []` is dropped first: it carries no entries
  * to preserve, and leaving it in place would make the appended
- * [[mcp_servers]] tables invalid TOML. A non-empty one that already holds
- * both servers is a silent no-op - the person followed the error below and
- * added them by hand, and warning again on every run would punish them for
- * doing exactly what they were told. Any other non-empty one throws, the
+ * [[mcp_servers]] tables invalid TOML. A non-empty one that a parser
+ * confirms already holds both servers is a silent no-op - the person
+ * followed the error below and added them by hand, and warning again on
+ * every run would punish them for doing exactly what they were told; with
+ * no parser to confirm it, that case throws like any other. Any other
+ * non-empty one throws, the
  * same "left untouched" contract registerJson uses for a file it cannot
  * safely merge into: rewriting it would mean re-serializing entries the
  * person wrote by hand, and appending to it would leave the tool unable to
@@ -420,11 +422,17 @@ function registerToml(targetPath, bins) {
 
   const inlineArray = findInlineMcpServersArray(content);
   if (inlineArray && !inlineArray.isEmpty) {
-    // A real parse rather than a scan of the raw text: an entry added by
-    // hand as the error below asks carries args = ["/path/index.js"], and
-    // that inner bracket ends a line-based scan early, hiding every entry
-    // after it.
-    if (tomlHasActiveServer(content, 'egc-guardian') && tomlHasActiveServer(content, 'egc-memory')) {
+    // Only a real parse can confirm the entries are there, and only a parse
+    // is asked for: an entry added by hand as the error below asks carries
+    // args = ["/path/index.js"], whose inner bracket ends a line-based scan
+    // early and hides every entry after it. Without a parser
+    // tomlHasActiveServer falls back to a substring search over the whole
+    // file, where a comment naming both servers would pass as proof of a
+    // registration that does not exist and the install would report nothing
+    // to do, so there the honest answer is to refuse instead.
+    if (TOML
+      && tomlHasActiveServer(content, 'egc-guardian')
+      && tomlHasActiveServer(content, 'egc-memory')) {
       return false;
     }
     throw new TypeError(

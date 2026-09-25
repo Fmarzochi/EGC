@@ -1145,6 +1145,28 @@ function runTests() {
     });
   }) ? passed++ : failed++);
 
+  (test('registerToml does not take a comment naming both servers as proof they are registered', () => {
+    const tmpHome = makeTempDir();
+    // Only a parse can confirm an entry. Without one tomlHasActiveServer
+    // falls back to a substring search over the whole file, and a comment
+    // is not an array entry: taking it as one would have the install report
+    // nothing to do while neither server is actually registered.
+    const original = 'mcp_servers = [{ name = "other" }] # "egc-guardian" "egc-memory"\n';
+
+    const refuses = (label, register) => {
+      const target = path.join(tmpHome, label, 'config.toml');
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, original);
+      assert.throws(() => register(target, bins), /inline array - left untouched/, label);
+      assert.strictEqual(fs.readFileSync(target, 'utf8'), original, `${label}: the file must be byte-identical`);
+    };
+
+    refuses('with-parser', registerToml);
+    withoutTomlParser((parserlessRegisterToml) => refuses('no-parser', parserlessRegisterToml));
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
   // ── registerZedContextServers ───────────────────────────────────
 
   (test('registerZedContextServers keeps a Windows bin path valid JSON (backslash escape)', () => {
