@@ -39,7 +39,7 @@
     },
     {
       "name": "store_decision",
-      "description": "Persist a single decision to SQLite with write-lock arbitration to prevent concurrent conflicts. Decisions are queryable via query_history and surfaced in get_state."
+      "description": "Persist a single decision to the SQLite store with write-lock arbitration to prevent concurrent conflicts. Provide a short context label and the decision text. Decisions stored here are queryable via query_history and search_history, and are not part of get_state."
     },
     {
       "name": "query_history",
