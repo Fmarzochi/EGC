@@ -288,6 +288,115 @@ async function runTests() {
       assert.strictEqual(crushable.args.command, 'egc run npm test');
       process.env.EGC_ASSUME_EGC_CLI = '0';
     })) passed++; else failed++;
+
+    if (await test('ignores relative PATH entries and planted node binary in project root', async () => {
+      const originalExecPath = process.execPath;
+      const originalPath = process.env.PATH;
+      
+      const isWin = process.platform === 'win32';
+      const fakeBinaryName = isWin ? 'node.exe' : 'node';
+      const realNodeDir = path.dirname(process.execPath);
+
+      const project = path.join(tempDir, 'workspaces', 'safe-path');
+      fs.mkdirSync(project, { recursive: true });
+      writeState(tempDir, project, 'safe-path-marker');
+
+      const fakeBinaryPath = path.join(project, fakeBinaryName);
+
+      try {
+        if (isWin) {
+          fs.writeFileSync(fakeBinaryPath, 'fake node binary', { mode: 0o755 });
+        } else {
+          fs.writeFileSync(fakeBinaryPath, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+        }
+
+        // Simulate host app running under Bun or non-Node runtime
+        process.execPath = isWin ? 'C:\\bun.exe' : '/usr/local/bin/bun';
+        // Set PATH with relative entries first, followed by real Node directory
+        process.env.PATH = `.${path.delimiter}${path.delimiter}${realNodeDir}`;
+
+        const calls = [];
+        const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: project });
+        await hooks.event({ event: sessionEvent('ses_safe_path', project) });
+
+        // Must ignore planted node in project cwd and resolve via system Node
+        assert.strictEqual(calls.length, 1);
+        assert.match(calls[0].body.parts[0].text, /safe-path-marker/);
+      } finally {
+        if (fs.existsSync(fakeBinaryPath)) {
+          fs.unlinkSync(fakeBinaryPath);
+        }
+        process.execPath = originalExecPath;
+        process.env.PATH = originalPath;
+      }
+    })) passed++; else failed++;
+
+    if (await test('fails open cleanly without executing anything when PATH contains only relative entries', async () => {
+      const originalExecPath = process.execPath;
+      const originalPath = process.env.PATH;
+
+      const isWin = process.platform === 'win32';
+      const fakeBinaryName = isWin ? 'node.exe' : 'node';
+
+      const project = path.join(tempDir, 'workspaces', 'relative-only-path');
+      fs.mkdirSync(project, { recursive: true });
+      writeState(tempDir, project, 'should-not-run-marker');
+
+      const fakeBinaryPath = path.join(project, fakeBinaryName);
+
+      try {
+        if (isWin) {
+          fs.writeFileSync(fakeBinaryPath, 'fake node binary', { mode: 0o755 });
+        } else {
+          fs.writeFileSync(fakeBinaryPath, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+        }
+
+        process.execPath = isWin ? 'C:\\bun.exe' : '/usr/local/bin/bun';
+        // PATH contains ONLY relative entries
+        process.env.PATH = `.${path.delimiter}`;
+
+        const calls = [];
+        const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: project });
+        await hooks.event({ event: sessionEvent('ses_relative_path', project) });
+
+        // Fail-open: Must not execute planted binary and must return no prompt calls
+        assert.strictEqual(calls.length, 0);
+      } finally {
+        if (fs.existsSync(fakeBinaryPath)) {
+          fs.unlinkSync(fakeBinaryPath);
+        }
+        process.execPath = originalExecPath;
+        process.env.PATH = originalPath;
+      }
+    })) passed++; else failed++;
+
+    if (await test('uses Node executable to restore session when process.execPath is a non-Node binary', async () => {
+      const stub = "#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({host:'opencode',context:'opencode-bun-fallback-marker'}));\n";
+      const restoreBridge = replaceTemporarily(bridgePath, stub);
+
+      const originalExecPath = process.execPath;
+      const fakeOpencodeBinary = process.platform === 'win32'
+        ? 'C:\\Users\\<windows-username>\\AppData\\Local\\opencode\\opencode.exe'
+        : '/usr/local/bin/opencode';
+
+      try {
+        process.execPath = fakeOpencodeBinary;
+        assert.strictEqual(process.execPath, fakeOpencodeBinary, 'execPath override must take effect');
+
+        const project = path.join(tempDir, 'workspaces', 'non-node-runtime');
+        fs.mkdirSync(project, { recursive: true });
+
+        const calls = [];
+        const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: project });
+        await hooks.event({ event: sessionEvent('ses_non_node', project) });
+
+        assert.strictEqual(calls.length, 1);
+        assert.match(calls[0].body.parts[0].text, /opencode-bun-fallback-marker/);
+      } finally {
+        process.execPath = originalExecPath;
+        restoreBridge();
+      }
+    })) passed++; else failed++;
   } finally {
     for (const [key, value] of Object.entries(savedEnv)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
