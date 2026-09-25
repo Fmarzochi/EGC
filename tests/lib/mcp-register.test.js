@@ -60,6 +60,34 @@ function registerIsolated(homeDir, options) {
   }
 }
 
+// Runs fn against an mcp-register loaded the way it is on a user's machine,
+// where @iarna/toml is a devDependency that was never installed: every parse
+// path is unavailable and the scan alone has to be right.
+function withoutTomlParser(fn) {
+  const Module = require('node:module');
+  const registerPath = require.resolve('../../scripts/lib/mcp-register');
+  const cachedRegister = require.cache[registerPath];
+  const originalLoad = Module._load;
+  Module._load = function (request) {
+    if (request === '@iarna/toml') {
+      const err = new Error("Cannot find module '@iarna/toml'");
+      err.code = 'MODULE_NOT_FOUND';
+      throw err;
+    }
+    return originalLoad.apply(this, arguments);
+  };
+  delete require.cache[registerPath];
+  let parserless;
+  try {
+    parserless = require('../../scripts/lib/mcp-register');
+  } finally {
+    Module._load = originalLoad;
+    delete require.cache[registerPath];
+    if (cachedRegister) require.cache[registerPath] = cachedRegister;
+  }
+  fn(parserless.registerToml);
+}
+
 function runTests() {
   console.log('\n=== Testing scripts/lib/mcp-register.js ===\n');
 
@@ -999,6 +1027,122 @@ function runTests() {
     assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml refuses rather than act on a delimiter it read inside a single-line string', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // The `'''` here is content of a basic string and opens nothing, but the
+    // scan reads it as opening a multi-line string and skips the rest of the
+    // file, so the empty array below is never dropped. Refusing is the right
+    // outcome: the install does less, and the config still starts the tool.
+    const original = 'note = "Here is \'\'\'"\nmcp_servers = []\n';
+    fs.writeFileSync(target, original);
+
+    try {
+      require('@iarna/toml');
+    } catch (_) {
+      console.log('    (skipped: @iarna/toml not installed, nothing to compare with)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+
+    assert.throws(() => registerToml(target, bins), /could not be updated without breaking it/);
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml keeps a `"""` inside a `\'\'\'` string as content, not as a delimiter', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // Only the delimiter that opened a string closes it. Counting both kinds
+    // would end this string at the inner `"""`, putting the scan back outside
+    // and letting it cut the next line out of the person's own note - and the
+    // result would still parse, so parsing alone would not catch it.
+    fs.writeFileSync(target, "note = '''\nHere is a \"\"\" inside\nmcp_servers = []\n'''\n");
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    assert.ok(parsed.note.includes('mcp_servers = []'), 'the string content must be untouched');
+    assert.strictEqual(parsed.mcp_servers.length, 2);
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('registerToml recognises a table header whose key is quoted and holds any character', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.codex', 'config.toml');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // A table may be named after anything once the key is quoted. Missing
+    // this as a header lets the scan walk into the table and remove a key
+    // that is not the root one - and the result still parses.
+    fs.writeFileSync(target, '["github.com/x"]\nmcp_servers = []\n');
+
+    const changed = registerToml(target, bins);
+    assert.strictEqual(changed, true);
+
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (parse check skipped: @iarna/toml not installed)');
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+      return;
+    }
+    const parsed = TOML.parse(fs.readFileSync(target, 'utf8'));
+    assert.deepStrictEqual(parsed['github.com/x'].mcp_servers, [], 'the table key must survive untouched');
+    assert.strictEqual(parsed.mcp_servers.length, 2, 'our two tables are appended at the root');
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
+  (test('the scan alone gets the string and the quoted table right, with no parser to fall back on', () => {
+    // @iarna/toml is a devDependency that never ships, so on a user's machine
+    // the parse comparison cannot run and the scan is the only thing standing
+    // between an install and a damaged config. Both cases above are checked
+    // again with the parser taken away from the module under test.
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (skipped: @iarna/toml not installed, nothing to verify with)');
+      return;
+    }
+
+    withoutTomlParser((parserlessRegisterToml) => {
+      const tmpHome = makeTempDir();
+
+      const stringTarget = path.join(tmpHome, 'string', 'config.toml');
+      fs.mkdirSync(path.dirname(stringTarget), { recursive: true });
+      fs.writeFileSync(stringTarget, "note = '''\nHere is a \"\"\" inside\nmcp_servers = []\n'''\n");
+      assert.strictEqual(parserlessRegisterToml(stringTarget, bins), true);
+      const stringParsed = TOML.parse(fs.readFileSync(stringTarget, 'utf8'));
+      assert.ok(stringParsed.note.includes('mcp_servers = []'), 'the string content must survive without a parser');
+      assert.strictEqual(stringParsed.mcp_servers.length, 2);
+
+      const tableTarget = path.join(tmpHome, 'table', 'config.toml');
+      fs.mkdirSync(path.dirname(tableTarget), { recursive: true });
+      fs.writeFileSync(tableTarget, '["github.com/x"]\nmcp_servers = []\n');
+      assert.strictEqual(parserlessRegisterToml(tableTarget, bins), true);
+      const tableParsed = TOML.parse(fs.readFileSync(tableTarget, 'utf8'));
+      assert.deepStrictEqual(tableParsed['github.com/x'].mcp_servers, [], 'the table key must survive without a parser');
+      assert.strictEqual(tableParsed.mcp_servers.length, 2);
+
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    });
   }) ? passed++ : failed++);
 
   // ── registerZedContextServers ───────────────────────────────────

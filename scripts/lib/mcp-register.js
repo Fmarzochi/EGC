@@ -17,6 +17,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { isDeepStrictEqual } = require('node:util');
 // A tool the person installed but never launched owns no config directory,
 // so an existence check alone would skip it. The shell installers used to
 // cover that with `command -v`; sharing the repo's own probe keeps the two
@@ -48,9 +49,11 @@ function readFileIfExists(targetPath) {
 
 // A line that opens a table. Every key after it belongs to that table, and
 // TOML offers no way back to the root, so the root-table scan below stops
-// here. A line like `[1, 2],` inside a multi-line array is not a header,
-// which the comma-free character class keeps out.
-const TOML_TABLE_HEADER = /^\[\[?\s*[A-Za-z0-9_\-."' ]+\s*\]\]?\s*(#.*)?$/;
+// here. The key follows TOML's own grammar: dotted parts, each either bare
+// or quoted, and a quoted part may hold any character at all (a table named
+// after a URL, say). A line like `[1, 2],` inside a multi-line array is not
+// a header, because of the comma between its elements.
+const TOML_TABLE_HEADER = /^\[\[?\s*(?:"(?:[^"\\]|\\.)*"|'[^']*'|[\w-]+)(?:\s*\.\s*(?:"(?:[^"\\]|\\.)*"|'[^']*'|[\w-]+))*\s*\]\]?\s*(?:#.*)?$/;
 
 // The same root key in its three legal spellings: bare, basic-quoted and
 // literal-quoted all name `mcp_servers`.
@@ -69,14 +72,36 @@ function stripTomlComment(line) {
   return hash === -1 ? line : line.slice(0, hash);
 }
 
-function countOccurrences(text, needle) {
-  let count = 0;
-  let index = text.indexOf(needle);
-  while (index !== -1) {
-    count += 1;
-    index = text.indexOf(needle, index + needle.length);
+const MULTILINE_DELIMITERS = ['"""', "'''"];
+
+// The delimiter still holding a multi-line string open at the end of this
+// line, or null when the line ends outside one. Counting delimiters cannot
+// do this: only the delimiter that opened a string closes it, so a `"""`
+// inside a `'''` string is content, and a lone `'''` inside a single-line
+// basic string opens nothing. Outside a string a `#` starts a comment,
+// which is free to mention a delimiter; inside one the same characters are
+// content, so the text is only cut where a comment can actually begin.
+function multilineDelimiterAfter(line, openDelimiter) {
+  let open = openDelimiter;
+  let text = open ? line : stripTomlComment(line);
+  let from = 0;
+  for (;;) {
+    if (open) {
+      const close = text.indexOf(open, from);
+      if (close === -1) return open;
+      from = close + open.length;
+      open = null;
+      text = text.slice(0, from) + stripTomlComment(text.slice(from));
+      continue;
+    }
+    const next = MULTILINE_DELIMITERS
+      .map(delimiter => ({ delimiter, at: text.indexOf(delimiter, from) }))
+      .filter(candidate => candidate.at !== -1)
+      .sort((a, b) => a.at - b.at)[0];
+    if (!next) return null;
+    open = next.delimiter;
+    from = next.at + open.length;
   }
-  return count;
 }
 
 // TOML spells `mcp_servers` two ways that cannot be mixed: an array of
@@ -111,20 +136,14 @@ function countOccurrences(text, needle) {
 // to one that turns out to be occupied is not.
 function findInlineMcpServersArray(content) {
   const lines = content.split('\n');
-  let inMultilineString = false;
+  let openDelimiter = null;
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
     // A line that opens or closes a multi-line string is itself part of that
-    // value, so the flag is read as it stood before this line was counted.
-    const wasInsideString = inMultilineString;
-    // Outside a string a `#` starts a comment, and a comment is free to
-    // mention a `"""` without opening one; inside a string those same
-    // characters are content, so there the line is counted whole.
-    const scanned = wasInsideString ? raw : stripTomlComment(raw);
-    if ((countOccurrences(scanned, '"""') + countOccurrences(scanned, "'''")) % 2 === 1) {
-      inMultilineString = !inMultilineString;
-    }
+    // value, so the state is read as it stood before this line was walked.
+    const wasInsideString = openDelimiter !== null;
+    openDelimiter = multilineDelimiterAfter(raw, openDelimiter);
     if (wasInsideString) continue;
 
     const trimmed = raw.trim();
@@ -354,6 +373,25 @@ function parsesAsToml(text) {
   }
 }
 
+// Whether the update touched nothing but mcp_servers. Parsing alone is too
+// weak a test: a line cut out of a multi-line string, or a key removed from
+// under a table header the scan did not recognise, leaves a document that
+// still parses and has quietly lost content. Comparing both sides with
+// mcp_servers set aside catches exactly that. Without a parser nothing can
+// be compared, so the answer is true and the scan stands on its own.
+function keepsEverythingElse(original, updated) {
+  if (!TOML) return true;
+  try {
+    const before = TOML.parse(original);
+    const after = TOML.parse(updated);
+    delete before.mcp_servers;
+    delete after.mcp_servers;
+    return isDeepStrictEqual(before, after);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Same idea as registerJson but for TOML configs (Codex CLI, Mistral Vibe).
  * Returns true if the file was appended to, false if both entries were
@@ -370,10 +408,10 @@ function parsesAsToml(text) {
  * person wrote by hand, and appending to it would leave the tool unable to
  * start at all.
  *
- * Whatever the scan concluded, the result is parsed before it is written: a
- * file that parsed going in and does not coming out is never saved. An
- * install may leave a tool unregistered, but it must never leave one unable
- * to start.
+ * Whatever the scan concluded, both sides are parsed before anything is
+ * written and compared with mcp_servers set aside: an update that would
+ * lose any other content is refused and the file is left as it was. An
+ * install may leave a tool unregistered, but it must never damage a config.
  */
 function registerToml(targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
@@ -410,7 +448,7 @@ function registerToml(targetPath, bins) {
     appended = true;
   }
   if (!appended) return false;
-  if (parsesAsToml(original) && !parsesAsToml(content)) {
+  if (parsesAsToml(original) && !keepsEverythingElse(original, content)) {
     throw new TypeError(
       `existing file at ${targetPath} could not be updated without breaking it - left untouched: ` +
       'add egc-guardian and egc-memory as [[mcp_servers]] tables by hand, then re-run'
