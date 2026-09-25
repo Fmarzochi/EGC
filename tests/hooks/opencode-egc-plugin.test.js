@@ -289,6 +289,85 @@ async function runTests() {
       process.env.EGC_ASSUME_EGC_CLI = '0';
     })) passed++; else failed++;
 
+    if (await test('ignores relative PATH entries and planted node binary in project root', async () => {
+          const originalExecPath = process.execPath;
+          const originalPath = process.env.PATH;
+          
+          const isWin = process.platform === 'win32';
+          const fakeBinaryName = isWin ? 'node.exe' : 'node';
+          const fakeBinaryPath = path.join(tempDir, fakeBinaryName);
+          const realNodeDir = path.dirname(process.execPath);
+    
+          try {
+            if (isWin) {
+              fs.writeFileSync(fakeBinaryPath, 'fake node binary', { mode: 0o755 });
+            } else {
+              fs.writeFileSync(fakeBinaryPath, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+            }
+          
+            // Simula que la app host corre bajo Bun/un runtime no-Node
+            process.execPath = isWin ? 'C:\\bun.exe' : '/usr/local/bin/bun';
+            // PATH con entradas relativas primero, y el directorio de Node real al final
+            process.env.PATH = `.${path.delimiter}${path.delimiter}${realNodeDir}`;
+          
+            const project = path.join(tempDir, 'workspaces', 'safe-path');
+            fs.mkdirSync(project, { recursive: true });
+            writeState(tempDir, project, 'safe-path-marker');
+          
+            const calls = [];
+            const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: project });
+            await hooks.event({ event: sessionEvent('ses_safe_path', project) });
+          
+            // Debe ignorar el 'node' falso del directorio actual y usar el Node real
+            assert.strictEqual(calls.length, 1);
+            assert.match(calls[0].body.parts[0].text, /safe-path-marker/);
+          } finally {
+            if (fs.existsSync(fakeBinaryPath)) {
+              fs.unlinkSync(fakeBinaryPath);
+            }
+            process.execPath = originalExecPath;
+            process.env.PATH = originalPath;
+          }
+        })) passed++; else failed++;
+      
+        if (await test('fails open cleanly without executing anything when PATH contains only relative entries', async () => {
+          const originalExecPath = process.execPath;
+          const originalPath = process.env.PATH;
+        
+          const isWin = process.platform === 'win32';
+          const fakeBinaryName = isWin ? 'node.exe' : 'node';
+          const fakeBinaryPath = path.join(tempDir, fakeBinaryName);
+        
+          try {
+            if (isWin) {
+              fs.writeFileSync(fakeBinaryPath, 'fake node binary', { mode: 0o755 });
+            } else {
+              fs.writeFileSync(fakeBinaryPath, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+            }
+          
+            process.execPath = isWin ? 'C:\\bun.exe' : '/usr/local/bin/bun';
+            // PATH contiene ÚNICAMENTE rutas relativas
+            process.env.PATH = `.${path.delimiter}`;
+          
+            const project = path.join(tempDir, 'workspaces', 'relative-only-path');
+            fs.mkdirSync(project, { recursive: true });
+            writeState(tempDir, project, 'should-not-run-marker');
+          
+            const calls = [];
+            const hooks = await EgcGuardianCrusher({ client: clientWith(calls), directory: project });
+            await hooks.event({ event: sessionEvent('ses_relative_path', project) });
+          
+            // Fail-open: No debe ejecutar el binario falso ni hacer llamadas al prompt
+            assert.strictEqual(calls.length, 0);
+          } finally {
+            if (fs.existsSync(fakeBinaryPath)) {
+              fs.unlinkSync(fakeBinaryPath);
+            }
+            process.execPath = originalExecPath;
+            process.env.PATH = originalPath;
+          }
+        })) passed++; else failed++;
+
     if (await test('uses Node executable to restore session when process.execPath is a non-Node binary', async () => {
       const stub = "#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify({host:'opencode',context:'opencode-bun-fallback-marker'}));\n";
       const restoreBridge = replaceTemporarily(bridgePath, stub);

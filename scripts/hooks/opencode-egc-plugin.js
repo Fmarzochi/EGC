@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 
 // The hook scripts installed next to this plugin are CommonJS modules.
 const require = createRequire(import.meta.url);
@@ -100,11 +101,28 @@ function withTimeout(operation, timeoutMs) {
   });
 }
 
+function findNodeOnPath() {
+  const binaryName = process.platform === 'win32' ? 'node.exe' : 'node';
+  const entries = (process.env.PATH ?? process.env.Path ?? '').split(path.delimiter);
+  for (const entry of entries) {
+    const dir = entry.replace(/^"(.*)"$/, '$1');
+    if (!path.isAbsolute(dir)) continue;
+    const candidate = path.join(dir, binaryName);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      if (fs.statSync(candidate).isFile()) return candidate;
+    } catch {
+      // Not in this entry; keep looking.
+    }
+  }
+  return null;
+}
+
 function resolveNodeExecutable() {
   const binaryName = path.basename(process.execPath).toLowerCase();
   const isNode = ['node', 'node.exe', 'nodejs', 'nodejs.exe'].includes(binaryName);
   
-  return isNode ? process.execPath : 'node';
+  return isNode ? process.execPath : findNodeOnPath();
 }
 
 function loadSessionContext(projectDirectory, sessionId) {
@@ -131,7 +149,11 @@ function loadSessionContext(projectDirectory, sessionId) {
 
     let child;
     try {
-      const nodeExecutable = resolveNodeExecutable() 
+      const nodeExecutable = resolveNodeExecutable();
+      if (!nodeExecutable) {
+        finish('');
+        return;
+      }
       child = spawn(nodeExecutable, [SESSION_CONTEXT_SCRIPT], {
         cwd: projectDirectory,
         env: { ...process.env, OPENCODE_PROJECT_DIR: projectDirectory },
