@@ -53,7 +53,38 @@ function readFileIfExists(targetPath) {
 // or quoted, and a quoted part may hold any character at all (a table named
 // after a URL, say). A line like `[1, 2],` inside a multi-line array is not
 // a header, because of the comma between its elements.
-const TOML_TABLE_HEADER = /^\[\[?\s*(?:"(?:[^"\\]|\\.)*"|'[^']*'|[\w-]+)(?:\s*\.\s*(?:"(?:[^"\\]|\\.)*"|'[^']*'|[\w-]+))*\s*\]\]?\s*(?:#.*)?$/;
+const TOML_TABLE_HEADER_SHAPE = /^\[\[?(.+?)\]\]?\s*(?:#.*)?$/;
+const TOML_KEY_PART = /^(?:"(?:[^"\\]|\\.)*"|'[^']*'|[\w-]+)$/;
+
+// Splits a dotted key on the dots that sit outside quotes, so a quoted part
+// keeps its own dots (a table named after a URL, say).
+function splitDottedKey(key) {
+  const parts = [''];
+  let quote = null;
+  let escaped = false;
+  for (const char of key) {
+    if (!quote && char === '.') {
+      parts.push('');
+      continue;
+    }
+    parts[parts.length - 1] += char;
+    if (escaped) {
+      escaped = false;
+    } else if (quote === '"' && char === '\\') {
+      escaped = true;
+    } else if (quote && char === quote) {
+      quote = null;
+    } else if (!quote && (char === '"' || char === "'")) {
+      quote = char;
+    }
+  }
+  return parts;
+}
+
+function isTomlTableHeader(line) {
+  const shape = TOML_TABLE_HEADER_SHAPE.exec(line);
+  return shape !== null && splitDottedKey(shape[1]).every(part => TOML_KEY_PART.test(part.trim()));
+}
 
 // The same root key in its three legal spellings: bare, basic-quoted and
 // literal-quoted all name `mcp_servers`.
@@ -149,7 +180,7 @@ function findInlineMcpServersArray(content) {
     const trimmed = raw.trim();
     if (trimmed.startsWith('#')) continue;
     // Past the first table header nothing belongs to the root table any more.
-    if (TOML_TABLE_HEADER.test(trimmed)) break;
+    if (isTomlTableHeader(trimmed)) break;
     const opening = INLINE_MCP_SERVERS_KEY.exec(trimmed);
     if (!opening) continue;
 
