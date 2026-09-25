@@ -56,10 +56,6 @@ const TOML_TABLE_HEADER = /^\[\[?\s*[A-Za-z0-9_\-."' ]+\s*\]\]?\s*(#.*)?$/;
 // literal-quoted all name `mcp_servers`.
 const INLINE_MCP_SERVERS_KEY = /^(?:mcp_servers|"mcp_servers"|'mcp_servers')\s*=\s*\[/;
 
-// The names our two entries carry inside an inline table.
-const INLINE_GUARDIAN_ENTRY = /name\s*=\s*["']egc-guardian["']/;
-const INLINE_MEMORY_ENTRY = /name\s*=\s*["']egc-memory["']/;
-
 // Everything from the first `#` onwards is a comment. Cutting there before
 // looking for the closing `]` keeps a bracket inside a comment from ending
 // the array early: `mcp_servers = [ # ]` with the real bracket on the next
@@ -103,12 +99,16 @@ function countOccurrences(text, needle) {
 // seeking the closing bracket, so what it finds is the real root key and
 // nothing that merely looks like one.
 //
+// A line-based scan has corners whatever it covers, so it is not the last
+// word: registerToml re-parses before writing and refuses to turn a file
+// that parsed into one that does not.
+//
 // Returns null when the root key is not an inline array — the normal case,
 // including [[mcp_servers]] tables and a file that has no mcp_servers at
-// all. Otherwise { start, end, isEmpty, hasBothServers }, as inclusive line
-// indices into the split content. Anything that cannot be read with
-// confidence is reported as non-empty: refusing to touch a file is always
-// safe, appending to one that turns out to be occupied is not.
+// all. Otherwise { start, end, isEmpty }, as inclusive line indices into
+// the split content. Anything that cannot be read with confidence is
+// reported as non-empty: refusing to touch a file is always safe, appending
+// to one that turns out to be occupied is not.
 function findInlineMcpServersArray(content) {
   const lines = content.split('\n');
   let inMultilineString = false;
@@ -118,7 +118,11 @@ function findInlineMcpServersArray(content) {
     // A line that opens or closes a multi-line string is itself part of that
     // value, so the flag is read as it stood before this line was counted.
     const wasInsideString = inMultilineString;
-    if ((countOccurrences(raw, '"""') + countOccurrences(raw, "'''")) % 2 === 1) {
+    // Outside a string a `#` starts a comment, and a comment is free to
+    // mention a `"""` without opening one; inside a string those same
+    // characters are content, so there the line is counted whole.
+    const scanned = wasInsideString ? raw : stripTomlComment(raw);
+    if ((countOccurrences(scanned, '"""') + countOccurrences(scanned, "'''")) % 2 === 1) {
       inMultilineString = !inMultilineString;
     }
     if (wasInsideString) continue;
@@ -145,17 +149,12 @@ function findInlineMcpServersArray(content) {
     }
     if (close === -1) {
       // Unterminated: no way to tell what is in there.
-      return { start: i, end: lines.length - 1, isEmpty: false, hasBothServers: false };
+      return { start: i, end: lines.length - 1, isEmpty: false };
     }
 
     const inner = body.slice(0, close);
     const compact = inner.split('\n').map(part => part.trim()).filter(Boolean).join('');
-    return {
-      start: i,
-      end,
-      isEmpty: compact === '',
-      hasBothServers: INLINE_GUARDIAN_ENTRY.test(inner) && INLINE_MEMORY_ENTRY.test(inner),
-    };
+    return { start: i, end, isEmpty: compact === '' };
   }
 
   return null;
@@ -341,6 +340,20 @@ function tomlEscape(p) {
   return p.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`);
 }
 
+// Whether the text is a TOML document a parser accepts. Without @iarna/toml
+// (a devDependency that never ships) there is nothing to check with, so the
+// answer is true and the guard below behaves exactly as the code did before
+// it existed, rather than refusing every write it cannot verify.
+function parsesAsToml(text) {
+  if (!TOML) return true;
+  try {
+    TOML.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Same idea as registerJson but for TOML configs (Codex CLI, Mistral Vibe).
  * Returns true if the file was appended to, false if both entries were
@@ -348,7 +361,7 @@ function tomlEscape(p) {
  *
  * An empty inline `mcp_servers = []` is dropped first: it carries no entries
  * to preserve, and leaving it in place would make the appended
- * [[mcp_servers]] tables invalid TOML. A non-empty one that already names
+ * [[mcp_servers]] tables invalid TOML. A non-empty one that already holds
  * both servers is a silent no-op - the person followed the error below and
  * added them by hand, and warning again on every run would punish them for
  * doing exactly what they were told. Any other non-empty one throws, the
@@ -356,14 +369,26 @@ function tomlEscape(p) {
  * safely merge into: rewriting it would mean re-serializing entries the
  * person wrote by hand, and appending to it would leave the tool unable to
  * start at all.
+ *
+ * Whatever the scan concluded, the result is parsed before it is written: a
+ * file that parsed going in and does not coming out is never saved. An
+ * install may leave a tool unregistered, but it must never leave one unable
+ * to start.
  */
 function registerToml(targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
-  let content = readFileIfExists(targetPath) ?? '';
+  const original = readFileIfExists(targetPath) ?? '';
+  let content = original;
 
   const inlineArray = findInlineMcpServersArray(content);
   if (inlineArray && !inlineArray.isEmpty) {
-    if (inlineArray.hasBothServers) return false;
+    // A real parse rather than a scan of the raw text: an entry added by
+    // hand as the error below asks carries args = ["/path/index.js"], and
+    // that inner bracket ends a line-based scan early, hiding every entry
+    // after it.
+    if (tomlHasActiveServer(content, 'egc-guardian') && tomlHasActiveServer(content, 'egc-memory')) {
+      return false;
+    }
     throw new TypeError(
       `existing file at ${targetPath} declares mcp_servers as an inline array - left untouched: ` +
       'rewrite it as [[mcp_servers]] tables, or add egc-guardian and egc-memory to it by hand, then re-run'
@@ -385,6 +410,12 @@ function registerToml(targetPath, bins) {
     appended = true;
   }
   if (!appended) return false;
+  if (parsesAsToml(original) && !parsesAsToml(content)) {
+    throw new TypeError(
+      `existing file at ${targetPath} could not be updated without breaking it - left untouched: ` +
+      'add egc-guardian and egc-memory as [[mcp_servers]] tables by hand, then re-run'
+    );
+  }
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.writeFileSync(targetPath, content);
   return true;
