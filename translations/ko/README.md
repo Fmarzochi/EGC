@@ -90,7 +90,7 @@ EGC는 한 명의 개발자가 만들고, 공개적으로 유지·관리되며, 
 
 - **[웹사이트](https://fmarzochi.github.io/EGCSite)**: 전체 문서, 기능 소개 및 라이브 데모
 - **[비전](../../docs/VISION.md)**: EGC가 나아가는 방향과 계속 무료로 남는 것
-- **[Discord 참여하기](https://discord.gg/TxppsGb52)**: 질문하고, 피드백을 공유하세요.
+- **[Discord 참여하기](https://discord.gg/FmXbgUmdmM)**: 질문하고, 피드백을 공유하세요.
 - **[GitHub에서 후원하기](https://github.com/sponsors/Fmarzochi)**: 금액에 상관없이 후원할 수 있습니다.
 - **[PayPal로 후원하기](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: GitHub 계정이 없어도 후원할 수 있습니다.
 - **저장소에 Star 남기기**: 다른 개발자들이 이 프로젝트를 더 쉽게 찾을 수 있도록 도와줍니다.

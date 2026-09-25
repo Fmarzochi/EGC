@@ -90,7 +90,7 @@ EGC es construido por un desarrollador, mantenido en abierto, y libre. El motor 
 
 - **[Website](https://fmarzochi.github.io/EGCSite)**: documentos completos, resumen de características y demo en vivo
 - **[Vision](../../docs/VISION.md)**: adónde va EGC y qué permanece libre
-- **[Únete al Discord](https://discord.gg/TxppsGb52)**: haz preguntas, comparte comentarios
+- **[Únete al Discord](https://discord.gg/FmXbgUmdmM)**: haz preguntas, comparte comentarios
 - **[Patrocinador en GitHub](https://github.com/sponsors/Fmarzochi)**: cualquier cantidad
 - **[Donar a través de PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: no se necesita una cuenta de GitHub
 - **Destaca el repositorio**: ayuda a otros desarrolladores a encontrarlo

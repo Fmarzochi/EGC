@@ -90,7 +90,7 @@ EGC создан одним разработчиком, поддерживает
 
 - **[Сайт](https://fmarzochi.github.io/EGCSite)**: полная документация, обзор функций и демонстрация в реальном времени
 - **[Vision](../../docs/VISION.md)**: где идет EGC, и что остается бесплатным
-- **[Присоединяйтесь к Discord](https://discord.gg/TxppsGb52)**: задавайте вопросы, делитесь обратной связью
+- **[Присоединяйтесь к Discord](https://discord.gg/FmXbgUmdmM)**: задавайте вопросы, делитесь обратной связью
 - **[Спонсор на GitHub](https://github.com/sponsors/Fmarzochi)**: любая сумма
 - **[Пожертвовать через PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: аккаунт GitHub не требуется
 - **Поставьте звездочку репозиторию**: помогает другим разработчикам найти его

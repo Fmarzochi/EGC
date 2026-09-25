@@ -90,7 +90,7 @@ EGC tek bir geliştirici tarafından geliştiriliyor, açık şekilde sürdürü
 
 - **[Web sitesi](https://fmarzochi.github.io/EGCSite)**: tam dokümantasyon, özellik özeti ve canlı demo
 - **[Vizyon](../../docs/VISION.md)**: EGC nereye gidiyor ve ne ücretsiz kalıyor
-- **[Discord'a katılın](https://discord.gg/TxppsGb52)**: soru sorun, geri bildirim paylaşın
+- **[Discord'a katılın](https://discord.gg/FmXbgUmdmM)**: soru sorun, geri bildirim paylaşın
 - **[GitHub'da sponsor olun](https://github.com/sponsors/Fmarzochi)**: dilediğiniz tutarda
 - **[PayPal ile bağış yapın](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: GitHub hesabı gerekmez
 - **Repository'ye star verin**: diğer geliştiricilerin bulmasına yardımcı olur

@@ -90,7 +90,7 @@ npm install -g @egchq/egc && egc install
 
 - **[Website](https://fmarzochi.github.io/EGCSite)**: المستندات الكاملة، استعراض الميزات، العرض التجريبي الحي
 - **[Vision](../../docs/VISION.md)**: إلى أين تذهب EGC وما تبقى مجانا
-- **[انضم إلى ديسكورد](https://discord.gg/TxppsGb52)**: طرح أسئلة، شارك الملاحظات
+- **[انضم إلى ديسكورد](https://discord.gg/FmXbgUmdmM)**: طرح أسئلة، شارك الملاحظات
 - **[راعي على GitHub](https://github.com/sponsors/Fmarzochi)**: أي مبلغ
 - **[تبرع عبر PayPal](https://www.paypal.com/donate/?business=fmarzochi%40gmail.com&currency_code=USD)**: لا حاجة إلى حساب GitHub
 - **نجم المستودع**: يساعد المطورين الآخرين على العثور عليه
