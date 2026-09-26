@@ -72,21 +72,19 @@ PARALLEL_SPECS.forEach((spec, id) => {
 // Getopt::Long's PAT_FLOAT: `.5`, `5.`, `1e3` and a sign are all numbers.
 const NUMBER_RE = /^[-+]?(?=\.?\d)[\d_]*(?:\.[\d_]*)?(?:[eE][-+]?[\d_]+)?$/;
 
-// An exact name wins; otherwise a long name is matched without regard to
-// case, first whole and then as a prefix, and counts only when every match
-// is the same option. Anything else is an error parallel stops on.
+// A name written after `--` is lowered first and then matched as it is
+// stored: whole, or as a prefix that every match shares with one option.
+// Single letters keep their case in the table, so `--U` is the flag `u` and
+// `--B`, having no `b`, is only a prefix, and an ambiguous one. Anything
+// that is not one option is an error parallel stops on.
 function longOption(name: string): ParallelOption | null {
-  const exact = OPTIONS.get(name);
-  if (exact) return exact;
   const lower = name.toLowerCase();
-  const whole = new Map<number, ParallelOption>();
-  const prefixed = new Map<number, ParallelOption>();
+  const exact = OPTIONS.get(lower);
+  if (exact) return exact;
+  const matches = new Map<number, ParallelOption>();
   for (const [key, option] of OPTIONS) {
-    const lowerKey = key.toLowerCase();
-    if (lowerKey === lower) whole.set(option.id, option);
-    else if (lowerKey.startsWith(lower)) prefixed.set(option.id, option);
+    if (key.startsWith(lower)) matches.set(option.id, option);
   }
-  const matches = whole.size > 0 ? whole : prefixed;
   return matches.size === 1 ? [...matches.values()][0] : null;
 }
 
@@ -101,7 +99,8 @@ function takesNextWord(kind: OptionKind, next: string | undefined): boolean {
 // How many words one of parallel's option words spans, `word` and `next`
 // already stripped of quotes. A bundle of single letters (`-kj4`) is read up
 // to the first letter that takes a value, which is the rest of the word or,
-// when nothing is left, the next word when it could be that value.
+// when nothing is left, the next word when it could be that value; an
+// unknown letter ends the bundle, as it ends parallel.
 export function readParallelOption(word: string, next: string | undefined): { names: string[]; width: number } {
   if (word.startsWith('--')) {
     const eq = word.indexOf('=');
@@ -112,7 +111,8 @@ export function readParallelOption(word: string, next: string | undefined): { na
   }
   for (let k = 1; k < word.length; k++) {
     const option = OPTIONS.get(word[k]);
-    if (!option || option.kind === 'flag') continue;
+    if (!option) break;
+    if (option.kind === 'flag') continue;
     const attached = k < word.length - 1;
     return { names: [], width: !attached && takesNextWord(option.kind, next) ? 2 : 1 };
   }

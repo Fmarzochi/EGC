@@ -313,11 +313,17 @@ run('GNU parallel options: each option word spans the words its Getopt::Long tak
   }
   assert.strictEqual(width('--max-lines', '.'), 1, 'a lone point is not a number');
   assert.strictEqual(width('--jobs', undefined), 1, 'nothing left means nothing taken');
+  assert.strictEqual(width('--U', 'rm'), 1, '--U is lowered to the flag u, not the value option U');
+  assert.strictEqual(width('--J', '4'), 2, '--J is lowered to the value option j');
+  assert.strictEqual(width('--B', 'x'), 1, '--B has no b and is an ambiguous prefix');
+  assert.strictEqual(width('-wd', 'x'), 1, 'an unknown letter ends the bundle');
 });
 for (const command of [
   'parallel -kj4 rm ::: /',
   'parallel --max-lines rm ::: /',
   'parallel --dry-run rm ::: /',
+  'parallel --U rm ::: /',
+  'parallel -wd rm ::: /',
 ]) {
   run(`GNU parallel options: ${command} is hard-blocked (a flag or a non-numeric word is not taken as a value)`, () => assertHardBlocked(command));
 }
