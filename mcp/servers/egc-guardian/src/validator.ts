@@ -198,7 +198,7 @@ function tokenizeWords(command: string): string[] {
 // that does (sudo --login and --login-class): they count when a prefix is
 // matched, so neither the exact name nor a prefix it shares is stretched
 // into the value option.
-interface WrapperSpec {
+export interface WrapperSpec {
   valueFlags: Set<string>;
   optionalValueFlags?: Set<string>;
   exactLongFlags?: Set<string>;
@@ -208,7 +208,7 @@ interface WrapperSpec {
   readOption?: (word: string, next: string | undefined) => { names: string[]; width: number };
 }
 
-const WRAPPER_SPECS: Record<string, WrapperSpec> = {
+export const WRAPPER_SPECS: Record<string, WrapperSpec> = {
   sudo: {
     valueFlags: new Set(['-a', '--auth-type', '-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-c', '--login-class', '-r', '--role', '-t', '--type', '-T', '--command-timeout', '-R', '--chroot', '-D', '--chdir']),
     exactLongFlags: new Set(['--login']),
@@ -274,7 +274,7 @@ function resolveLongOption(name: string, spec: WrapperSpec): string {
 // when it is a value flag written without `=value`. A short cluster (`-Hu`)
 // is read letter by letter up to the first letter that takes a value: that
 // value is the rest of the word or, when nothing is left, the next word.
-function readWrapperOption(flag: string, spec: WrapperSpec): { names: string[]; width: number } {
+export function readWrapperOption(flag: string, spec: WrapperSpec): { names: string[]; width: number } {
   if (flag.startsWith('--')) {
     const eq = flag.indexOf('=');
     const name = resolveLongOption(eq > 0 ? flag.slice(0, eq) : flag, spec);

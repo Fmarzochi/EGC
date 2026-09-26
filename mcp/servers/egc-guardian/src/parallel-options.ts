@@ -6,7 +6,7 @@
 // ":f" and ":i" when it is a number). The table is parallel's own
 // options_completion_hash (src/parallel 20260922), spec strings as written
 // there, so it can be compared line by line.
-const PARALLEL_SPECS = [
+export const PARALLEL_SPECS = [
   'debug|D=s', 'xargs', 'm', 'X', 'v', 'sql=s', 'sql-master|sqlmaster=s', 'sql-worker|sqlworker=s',
   'sql-and-worker|sqlandworker=s', 'joblog|jl=s', 'results|result|res=s', 'resume', 'resume-failed|resumefailed',
   'retry-failed|retryfailed', 'silent', 'keep-order|keeporder|k', 'no-keep-order|nokeeporder|nok|no-k', 'group', 'g',

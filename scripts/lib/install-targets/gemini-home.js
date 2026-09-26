@@ -64,7 +64,7 @@ function createAntigravityGlobalCrusherOperations(targetRoot, homeDir, createRem
 }
 
 // EGC Guardian: same reasoning as GateGuard above -- copy
-// pre-bash-guardian-validate.js (and its guardian-bin.js/shell-split.js
+// pre-bash-guardian-validate.js (and its guardian-bin.js/shell-split.js/wrapper-options.js
 // deps) explicitly rather than relying on hooks-runtime having scaffolded
 // them, then register it on Bash only (the Guardian validates shell
 // commands, not file writes). cubic-dev-ai review (PR #1052, 2026-07-27)
