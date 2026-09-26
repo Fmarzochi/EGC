@@ -25,6 +25,7 @@ const { isDeepStrictEqual } = require('node:util');
 // itself is missing.
 const { commandExists } = require('./utils');
 const { isInsideReal, realizePath } = require('./path-safety');
+const { replaceFileWith } = require('./install/preserving-write');
 
 let TOML = null;
 try {
@@ -68,6 +69,37 @@ function isSymbolicLink(filePath) {
   } catch {
     return false;
   }
+}
+
+// A config may carry credentials; one created here is readable by its owner
+// only. An existing one keeps the mode its owner chose.
+const NEW_CONFIG_MODE = 0o600;
+
+// Run as root over another person's home, the replacement keeps the owner
+// the file had, as a write in place did.
+function ownerToKeep(filePath) {
+  if (process.getuid?.() !== 0) return null;
+  try {
+    const { uid, gid } = fs.statSync(filePath);
+    return { uid, gid };
+  } catch {
+    return null;
+  }
+}
+
+// Every config lands in one replacement where its path really leads, so a
+// dotfiles link keeps pointing at the updated file: the text goes to a
+// private temporary file beside it, reaches the disk, and is renamed over
+// the previous file, so a write cut short leaves that file whole.
+function writeConfig(targetPath, text) {
+  const landing = realizePath(targetPath);
+  const owner = ownerToKeep(landing);
+  fs.mkdirSync(path.dirname(landing), { recursive: true });
+  replaceFileWith(landing, (descriptor) => {
+    fs.writeFileSync(descriptor, text);
+    if (owner) fs.fchownSync(descriptor, owner.uid, owner.gid);
+    fs.fsyncSync(descriptor);
+  }, NEW_CONFIG_MODE);
 }
 
 // A line that opens a table. Every key after it belongs to that table, and
@@ -395,8 +427,7 @@ function registerJson(targetPath, bins) {
     changed = true;
   }
   if (!changed) return false;
-  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.writeFileSync(targetPath, JSON.stringify(obj, null, 2) + '\n');
+  writeConfig(targetPath, JSON.stringify(obj, null, 2) + '\n');
   return true;
 }
 
@@ -516,8 +547,7 @@ function registerToml(targetPath, bins) {
       'add egc-guardian and egc-memory as [[mcp_servers]] tables by hand, then re-run'
     );
   }
-  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.writeFileSync(targetPath, content);
+  writeConfig(targetPath, content);
   return true;
 }
 
@@ -556,8 +586,7 @@ function registerZedContextServers(targetPath, bins) {
     }
   }
   if (!changed) return false;
-  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.writeFileSync(targetPath, JSON.stringify(settings, null, 2) + '\n');
+  writeConfig(targetPath, JSON.stringify(settings, null, 2) + '\n');
   return true;
 }
 
@@ -683,8 +712,7 @@ function registerOpenCodeMcp(targetPath, bins) {
   }
   if (dropStaleEgcServers(obj)) changed = true;
   if (changed) {
-    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-    fs.writeFileSync(targetPath, JSON.stringify(obj, null, 2) + '\n');
+    writeConfig(targetPath, JSON.stringify(obj, null, 2) + '\n');
   }
   const siblingChanged = retireStaleLegacySibling(targetPath);
   return changed || siblingChanged;
@@ -709,7 +737,7 @@ function retireStaleLegacySibling(targetPath) {
     return false;
   }
   if (!dropStaleEgcServers(legacy)) return false;
-  fs.writeFileSync(legacyPath, JSON.stringify(legacy, null, 2) + '\n');
+  writeConfig(legacyPath, JSON.stringify(legacy, null, 2) + '\n');
   return true;
 }
 

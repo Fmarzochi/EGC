@@ -1636,6 +1636,187 @@ function runTests() {
     }) ? passed++ : failed++);
   }
 
+  // ── configs are replaced in one step ───────────────────────────────
+  // A config is written to a temporary file beside it and renamed over it,
+  // so a write cut short leaves the previous file whole.
+
+  const interruptWrites = (fn) => {
+    const realWriteFileSync = fs.writeFileSync;
+    fs.writeFileSync = (target, data, ...rest) => {
+      realWriteFileSync(target, String(data).slice(0, 5), ...rest);
+      throw new Error('simulated interruption');
+    };
+    try {
+      return fn();
+    } finally {
+      fs.writeFileSync = realWriteFileSync;
+    }
+  };
+
+  (test('a JSON write cut short leaves the previous config whole and nothing beside it', () => {
+    const tmp = makeTempDir();
+    try {
+      const configPath = path.join(tmp, 'mcp.json');
+      const previous = JSON.stringify({ mcpServers: { mine: { command: 'node', args: ['mine.js'] } } }, null, 2) + '\n';
+      fs.writeFileSync(configPath, previous);
+
+      assert.throws(() => interruptWrites(() => registerJson(configPath, bins)), /simulated interruption/);
+
+      assert.strictEqual(fs.readFileSync(configPath, 'utf8'), previous);
+      assert.deepStrictEqual(fs.readdirSync(tmp), ['mcp.json']);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
+  (test('a TOML write cut short leaves the previous config whole and nothing beside it', () => {
+    const tmp = makeTempDir();
+    try {
+      const configPath = path.join(tmp, 'config.toml');
+      const previous = 'model = "gpt-5"\n';
+      fs.writeFileSync(configPath, previous);
+
+      assert.throws(() => interruptWrites(() => registerToml(configPath, bins)), /simulated interruption/);
+
+      assert.strictEqual(fs.readFileSync(configPath, 'utf8'), previous);
+      assert.deepStrictEqual(fs.readdirSync(tmp), ['config.toml']);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
+  if (process.platform !== 'win32') {
+    (test('a config is replaced, so a hard link to it elsewhere keeps the previous content', () => {
+      const tmp = makeTempDir();
+      try {
+        const configPath = path.join(tmp, 'mcp.json');
+        fs.writeFileSync(configPath, '{}\n');
+        fs.mkdirSync(path.join(tmp, 'elsewhere'));
+        const other = path.join(tmp, 'elsewhere', 'kept.json');
+        fs.linkSync(configPath, other);
+
+        assert.strictEqual(registerJson(configPath, bins), true);
+
+        assert.strictEqual(fs.readFileSync(other, 'utf8'), '{}\n');
+        assert.ok(JSON.parse(fs.readFileSync(configPath, 'utf8')).mcpServers['egc-guardian']);
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('an existing config keeps its permission bits', () => {
+      const tmp = makeTempDir();
+      try {
+        const configPath = path.join(tmp, 'mcp.json');
+        fs.writeFileSync(configPath, '{}\n');
+        fs.chmodSync(configPath, 0o640);
+
+        registerJson(configPath, bins);
+
+        assert.strictEqual(fs.statSync(configPath).mode & 0o777, 0o640);
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a new config is readable by its owner only', () => {
+      const tmp = makeTempDir();
+      try {
+        const configPath = path.join(tmp, 'settings', 'mcp.json');
+
+        registerJson(configPath, bins);
+
+        assert.strictEqual(fs.statSync(configPath).mode & 0o777, 0o600);
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a config linked from a dotfiles folder is replaced where the link leads, the link kept', () => {
+      const tmp = makeTempDir();
+      try {
+        const dotfiles = path.join(tmp, 'dotfiles');
+        fs.mkdirSync(dotfiles);
+        const dotfile = path.join(dotfiles, 'mcp.json');
+        fs.writeFileSync(dotfile, '{}\n');
+        const link = path.join(tmp, 'mcp.json');
+        fs.symlinkSync(path.join('dotfiles', 'mcp.json'), link);
+
+        registerJson(link, bins);
+
+        assert.ok(fs.lstatSync(link).isSymbolicLink(), 'the link itself stays in place');
+        assert.ok(JSON.parse(fs.readFileSync(dotfile, 'utf8')).mcpServers['egc-guardian']);
+        assert.deepStrictEqual(fs.readdirSync(dotfiles), ['mcp.json']);
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('the new content reaches the disk before it replaces the config', () => {
+      const tmp = makeTempDir();
+      const realFsyncSync = fs.fsyncSync;
+      const realRenameSync = fs.renameSync;
+      const steps = [];
+      try {
+        const configPath = path.join(tmp, 'mcp.json');
+        fs.writeFileSync(configPath, '{}\n');
+        fs.fsyncSync = (fd) => { steps.push('fsync'); return realFsyncSync(fd); };
+        fs.renameSync = (from, to) => { steps.push('rename'); return realRenameSync(from, to); };
+
+        registerJson(configPath, bins);
+
+        assert.deepStrictEqual(steps, ['fsync', 'rename']);
+      } finally {
+        fs.fsyncSync = realFsyncSync;
+        fs.renameSync = realRenameSync;
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('run as a regular user, the owner of a config is left alone', () => {
+      const tmp = makeTempDir();
+      const realGetuid = process.getuid;
+      const realFchownSync = fs.fchownSync;
+      const owners = [];
+      try {
+        const configPath = path.join(tmp, 'mcp.json');
+        fs.writeFileSync(configPath, '{}\n');
+        process.getuid = () => 1000;
+        fs.fchownSync = (fd, uid, gid) => { owners.push([uid, gid]); };
+
+        registerJson(configPath, bins);
+
+        assert.deepStrictEqual(owners, []);
+      } finally {
+        process.getuid = realGetuid;
+        fs.fchownSync = realFchownSync;
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('run as root, a config keeps the owner it had', () => {
+      const tmp = makeTempDir();
+      const realGetuid = process.getuid;
+      const realFchownSync = fs.fchownSync;
+      const owners = [];
+      try {
+        const configPath = path.join(tmp, 'mcp.json');
+        fs.writeFileSync(configPath, '{}\n');
+        const before = fs.statSync(configPath);
+        process.getuid = () => 0;
+        fs.fchownSync = (fd, uid, gid) => { owners.push([uid, gid]); };
+
+        registerJson(configPath, bins);
+
+        assert.deepStrictEqual(owners, [[before.uid, before.gid]]);
+      } finally {
+        process.getuid = realGetuid;
+        fs.fchownSync = realFchownSync;
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+  }
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
