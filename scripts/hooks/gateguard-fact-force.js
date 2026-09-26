@@ -310,19 +310,20 @@ const DESTRUCTIVE_CONTENT_PATTERNS = [
   /\btruncate\b/i,
 ];
 
-// Words that stand in front of the command they run.
-const COMMAND_WRAPPERS = new Set(['sudo', 'doas', 'command', 'nice', 'ionice', 'nohup', 'setsid', 'timeout', 'env', 'xargs', 'time', 'stdbuf']);
-const WRAPPERS_TAKING_A_VALUE = new Set(['timeout', 'nice', 'ionice']);
+// Words that stand in front of the command they run, read by the Guardian
+// validator's own wrapper tables (scripts/lib/wrapper-options.js).
 // Wrapper options that make the wrapper answer for itself and exit, so the
 // words after them are never executed and classify nothing.
 const TERMINATING_WRAPPER_FLAGS = new Set(['-V', '--version', '--help']);
-const TERMINATING_BY_WRAPPER = { sudo: new Set(['-v', '--validate', '-l', '--list']), command: new Set(['-v', '-V']), doas: new Set(['-L']) };
-
-// Wrapper options that consume the word after them.
-const WRAPPER_VALUE_FLAGS = new Set([
-  '-u', '--user', '-g', '--group', '-C', '--chdir', '-n', '--max-args', '-I', '-i', '-L', '-P', '--max-procs',
-  '-d', '--delimiter', '-a', '--arg-file', '-E', '-s', '--signal', '-k', '--kill-after', '-o', '--output', '-f', '--format',
-]);
+const HELP_H = new Set(['-h']);
+const TERMINATING_BY_WRAPPER = {
+  sudo: new Set(['-v', '--validate', '-l', '--list']),
+  command: new Set(['-v', '-V']),
+  doas: new Set(['-L']),
+  parallel: HELP_H, setsid: HELP_H, taskset: HELP_H, chrt: HELP_H, unshare: HELP_H, nsenter: HELP_H, prlimit: HELP_H, runuser: HELP_H,
+};
+// numactl's -V is --verify, which runs the command.
+const RUNNING_BY_WRAPPER = { numactl: new Set(['-V']) };
 const ENV_ASSIGNMENT_RE = /^[A-Za-z_]\w*=/;
 
 // The words of a line as the shell would see them: quotes group and then
@@ -360,18 +361,32 @@ function shellWordsOf(line) {
   return words;
 }
 
-// The index of the first word after a wrapper's own options and its value;
-// -1 when an option ends the wrapper's work (`sudo -v`, `timeout --help`)
-// and no command follows.
+function isTerminating(name, word, names) {
+  return [word, ...names].some((flag) => !RUNNING_BY_WRAPPER[name]?.has(flag)
+    && (TERMINATING_WRAPPER_FLAGS.has(flag) || TERMINATING_BY_WRAPPER[name]?.has(flag)));
+}
+
+// The index of the first word after a wrapper's own options and the
+// positionals it takes (timeout's duration, flock's lock file, chrt's
+// priority when it is a number); -1 when an option ends the wrapper's work
+// (`sudo -v`, `timeout --help`) and no command follows.
 function skipWrapperOptions(words, start, name) {
   let i = start;
   while (i < words.length && words[i].startsWith('-')) {
-    const flag = words[i];
-    if (TERMINATING_WRAPPER_FLAGS.has(flag) || TERMINATING_BY_WRAPPER[name]?.has(flag)) return -1;
-    i += 1;
-    if (WRAPPER_VALUE_FLAGS.has(flag) && words[i] !== undefined && !words[i].startsWith('-')) i += 1;
+    if (words[i] === '-') {
+      if (WRAPPER_SPECS[name].loneDashIsOption) i += 1;
+      break;
+    }
+    const option = readWrapperOption(name, words[i], words[i + 1]);
+    if (isTerminating(name, words[i], option.names)) return -1;
+    i += option.width;
   }
-  if (WRAPPERS_TAKING_A_VALUE.has(name) && words[i] && !words[i].startsWith('-')) i += 1;
+  const spec = WRAPPER_SPECS[name];
+  let skip = spec.leadingPositionals ?? 0;
+  while (skip > 0 && i < words.length && (!spec.positionalWhen || spec.positionalWhen.test(words[i]))) {
+    i += 1;
+    skip -= 1;
+  }
   return i;
 }
 
@@ -387,7 +402,7 @@ function commandLineOf(segment) {
     const word = words[i];
     if (ENV_ASSIGNMENT_RE.test(word)) { i += 1; continue; }
     const name = path.basename(word);
-    if (!COMMAND_WRAPPERS.has(name)) break;
+    if (!Object.hasOwn(WRAPPER_SPECS, name)) break;
     // A wrapper carries its own options (`sudo -u root`, `xargs -n1 -I{}`)
     // and sometimes a mandatory value (`timeout 30`): skipping only the word
     // itself left the wrapper's first option in command position and the real
@@ -796,6 +811,7 @@ function allowWithStateWarning() {
 
 const { trace } = require('../lib/utils');
 const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
+const { WRAPPER_SPECS, readWrapperOption } = require('../lib/wrapper-options');
 
 // --- Per-tool gate handlers ---
 

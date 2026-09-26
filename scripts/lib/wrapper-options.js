@@ -14,14 +14,15 @@ const set = values => new Set(values);
 // Options that take a value, short and long; optional values attached only;
 // exact no-value long names that are a prefix of a value option; leading
 // positional operands before the wrapped command, and the pattern a leading
-// positional the wrapper may leave out must match to be read as one.
+// positional the wrapper may leave out must match to be read as one; a lone
+// `-` ends the options except for env, which reads it as -i.
 const WRAPPER_SPECS = {
   sudo: {
     valueFlags: set(['-a', '--auth-type', '-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-c', '--login-class', '-r', '--role', '-t', '--type', '-T', '--command-timeout', '-R', '--chroot', '-D', '--chdir']),
     exactLongFlags: set(['--login']),
   },
   doas: { valueFlags: set(['-a', '-u', '-C']) },
-  env: { valueFlags: set(['-a', '--argv0', '-u', '--unset', '-C', '--chdir', '-f', '--file', '-S', '--split-string']) },
+  env: { valueFlags: set(['-a', '--argv0', '-u', '--unset', '-C', '--chdir', '-f', '--file', '-S', '--split-string']), loneDashIsOption: true },
   nohup: { valueFlags: set([]) },
   time: { valueFlags: set(['-o', '--output', '-f', '--format']) },
   command: { valueFlags: set([]) },

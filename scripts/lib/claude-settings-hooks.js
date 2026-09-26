@@ -682,9 +682,11 @@ function createPreToolUseGateGuardHookMergeOperation(targetRoot, matcher) {
   );
 }
 
-// gateguard-fact-force.js's only internal dependency (require('../lib/utils')
-// resolved relative to itself), so any target that wires the gate outside the
-// generic module-scaffold path needs both files copied together.
+// gateguard-fact-force.js requires '../lib/utils' resolved relative to itself,
+// so any target that wires the gate outside the generic module-scaffold path
+// copies both files together; its other helpers (shell-split.js and
+// wrapper-options.js) are the Bash guardian's, which every such target also
+// copies (BASH_GUARDIAN_HOOK_LIB_SOURCES).
 const GATEGUARD_LIB_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
 
 /**

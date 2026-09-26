@@ -53,6 +53,7 @@ run('every wrapper has the same option tables', () => {
     assert.strictEqual(mirror.leadingPositionals ?? 0, spec.leadingPositionals ?? 0, `${name} positionals`);
     assert.strictEqual(String(mirror.positionalWhen ?? ''), String(spec.positionalWhen ?? ''), `${name} optional positional`);
     assert.strictEqual(Boolean(mirror.reader), Boolean(spec.readOption), `${name} reader`);
+    assert.strictEqual(Boolean(mirror.loneDashIsOption), Boolean(spec.loneDashIsOption), `${name} lone dash`);
   }
 });
 
