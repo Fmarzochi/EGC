@@ -574,6 +574,8 @@ for (const command of [
   'bwrap --setenv A B rm -rf /',
   'bwrap --unshare-all -- rm -rf /',
   'bwrap --ro-bind / / --chdir / rm -rf /',
+  'bwrap --argv0 x rm -rf /',
+  'bwrap --userns2 3 rm -rf /',
   'sudo setsid taskset 0x1 rm -rf /',
 ]) {
   run(`local wrappers: ${command} is hard-blocked (the wrapped command is judged)`, () => assertHardBlocked(command));
@@ -585,6 +587,8 @@ for (const command of [
   'runuser -c "rm -rf /" root',
   'runuser --comm "rm -rf /" root',
   'runuser --session-command "rm -rf /" root',
+  'runuser -u root -c "rm -rf /"',
+  'runuser -u root --comm "rm -rf /"',
   'su --comm "rm -rf /"',
   'su --session-command "rm -rf /"',
   'su root notes.sh',

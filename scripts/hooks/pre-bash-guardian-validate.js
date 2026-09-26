@@ -213,7 +213,6 @@ const CHDIR_FLAGS = {
   'systemd-run': new Set(['--working-directory']),
   unshare: new Set(['-w', '--wd']),
   nsenter: new Set(['-w', '--wd']),
-  bwrap: new Set(['--chdir']),
 };
 const CHROOT_FLAGS = { sudo: new Set(['-R', '--chroot']), unshare: new Set(['-R', '--root']), nsenter: new Set(['-r', '--root']) };
 // chroot, unshare -R and nsenter -r start the command at the new root's `/`
@@ -241,35 +240,60 @@ function optionMove(option, word) {
 // A chdir or chroot option moves where the operands are resolved; a
 // directory spelled with byte escapes cannot be resolved faithfully, and
 // neither can the target's own view that nsenter enters.
-function noteWrapperMove(name, move, valueWord, state) {
+function noteWrapperMove(name, move, valueWord, moves, state) {
   if (move.flag === undefined) return;
   if (name === 'nsenter' && (NSENTER_TARGET_VIEW.has(move.flag) || (NSENTER_OPTIONAL_MOVES.has(move.flag) && move.value === undefined))) {
     state.unresolved = NSENTER_VIEW;
     return;
   }
   if (move.value === undefined) return;
-  if (CHDIR_FLAGS[name]?.has(move.flag)) state.cwd = move.value;
-  else if (CHROOT_FLAGS[name]?.has(move.flag)) state.chroot = move.value;
+  if (CHDIR_FLAGS[name]?.has(move.flag)) moves.dir = move.value;
+  else if (CHROOT_FLAGS[name]?.has(move.flag)) moves.root = move.value;
   else return;
-  state.unsure = state.unsure || Boolean(valueWord?.unsure);
+  moves.unsure = moves.unsure || Boolean(valueWord?.unsure);
 }
 
-// A new root starts the command at its top unless this wrapper also set the
-// directory; chroot's own new root is its first operand, and chroot takes
-// --skip-chdir only when that root is the current `/`, which moves nothing.
-function noteNewRoot(name, rootWord, before, state) {
-  if (before.skipChdir) return;
-  if (rootWord !== undefined) {
-    state.chroot = rootWord.value;
-    state.unsure = state.unsure || Boolean(rootWord.unsure);
+// A path the wrapper was given, read from the view it runs in: relative to
+// the directory an outer wrapper moved to, or to the top of its root.
+function within(value, state) {
+  return path.isAbsolute(value) ? value : path.join(state.cwd ?? (state.chroot ? '/' : ''), value);
+}
+
+// A wrapper's new root is read from the view before it; chroot, unshare -R
+// and nsenter -r start at the new root's top, and a directory given with it
+// is inside it.
+function applyMoves(name, moves, state) {
+  if (moves.root !== undefined) {
+    const inside = within(moves.root, state);
+    state.chroot = state.chroot ? path.join(state.chroot, inside) : inside;
+    if (ROOT_STARTS_AT_TOP.has(name)) state.cwd = null;
   }
-  if (state.chroot !== before.chroot && state.cwd === before.cwd) state.cwd = null;
+  if (moves.dir !== undefined) state.cwd = within(moves.dir, state);
+  state.unsure = state.unsure || moves.unsure;
 }
 
-// Skips a wrapper's options and leading positionals; a chdir option's value
-// becomes the directory later operands are resolved against.
+// The leading positionals a wrapper takes before its command; chroot's is
+// its new root, and chroot takes --skip-chdir only when that root is the
+// current `/`, which moves nothing.
+function skipLeadingPositionals(words, index, name, moves) {
+  const spec = WRAPPER_SPECS[name];
+  let skip = spec?.leadingPositionals ?? 0;
+  let at = index;
+  while (skip > 0 && at < words.length && (!spec.positionalWhen || spec.positionalWhen.test(words[at].value))) {
+    if (name === 'chroot' && !moves.skipChdir) {
+      moves.root = words[at].value;
+      moves.unsure = moves.unsure || Boolean(words[at].unsure);
+    }
+    at += 1;
+    skip -= 1;
+  }
+  return at;
+}
+
+// Skips a wrapper's options and leading positionals; the directory and root
+// they move to become where later operands are resolved.
 function skipWrapperOptions(words, start, name, state) {
-  const before = { cwd: state.cwd, chroot: state.chroot, skipChdir: false };
+  const moves = { root: undefined, dir: undefined, unsure: false, skipChdir: false };
   if (name === 'bwrap') state.unresolved = BWRAP_VIEW;
   let index = start;
   while (index < words.length) {
@@ -280,18 +304,12 @@ function skipWrapperOptions(words, start, name, state) {
     }
     if (!word.startsWith('-') || word === '-') break;
     const option = readWrapperOption(name, word, words[index + 1]?.value) ?? NO_OPTION;
-    before.skipChdir = before.skipChdir || Boolean(option.names?.includes('--skip-chdir'));
-    noteWrapperMove(name, optionMove(option, word), option.width === 2 ? words[index + 1] : words[index], state);
+    moves.skipChdir = moves.skipChdir || Boolean(option.names?.includes('--skip-chdir'));
+    noteWrapperMove(name, optionMove(option, word), option.width === 2 ? words[index + 1] : words[index], moves, state);
     index += option.width;
   }
-  const spec = WRAPPER_SPECS[name];
-  let skip = spec?.leadingPositionals ?? 0;
-  while (skip > 0 && index < words.length && (!spec.positionalWhen || spec.positionalWhen.test(words[index].value))) {
-    if (name === 'chroot') noteNewRoot(name, words[index], before, state);
-    index += 1;
-    skip -= 1;
-  }
-  if (ROOT_STARTS_AT_TOP.has(name) && name !== 'chroot') noteNewRoot(name, undefined, before, state);
+  index = skipLeadingPositionals(words, index, name, moves);
+  applyMoves(name, moves, state);
   return index;
 }
 
@@ -366,6 +384,26 @@ function operandPath(name, root, base) {
 // Existing files among the operands, resolved against the cwd; a file that
 // exists but cannot be read within the budget is reported so the caller
 // fails closed instead of skipping it.
+// The script file one operand names, the reason it cannot be inspected, or
+// null when it names no file.
+function inspectOperand(operand, root, base) {
+  // The shell expands an unquoted wildcard to whatever matches at run time;
+  // the literal name is not the file that runs.
+  if (operand.globbed) return { blocked: `wildcard operand ${operand.value} cannot be inspected before the shell expands it` };
+  if (operand.unsure) return { blocked: `operand ${operand.value} uses byte escapes that cannot be resolved faithfully` };
+  const candidate = operandPath(operand.value, root, base);
+  if (candidate === null) return { blocked: `operand ${operand.value} leaves the chroot` };
+  let stat;
+  try {
+    stat = fs.statSync(candidate);
+  } catch {
+    return null;
+  }
+  if (!stat.isFile()) return null;
+  if (stat.size > MAX_SCRIPT_BYTES) return { blocked: `script ${operand.value} is too large to analyze` };
+  return { file: candidate };
+}
+
 function scriptOperandsOf(segment, cwd) {
   const files = [];
   const found = interpreterOperands(shellWords(segment));
@@ -374,21 +412,9 @@ function scriptOperandsOf(segment, cwd) {
   if (found.unsure) return outcome('a wrapper path uses byte escapes that cannot be resolved faithfully');
   if (found.unresolved && found.operands.length > 0) return outcome(found.unresolved);
   for (const operand of found.operands) {
-    // The shell expands an unquoted wildcard to whatever matches at run time;
-    // the literal name is not the file that runs.
-    if (operand.globbed) return outcome(`wildcard operand ${operand.value} cannot be inspected before the shell expands it`);
-    if (operand.unsure) return outcome(`operand ${operand.value} uses byte escapes that cannot be resolved faithfully`);
-    const candidate = operandPath(operand.value, root, base);
-    if (candidate === null) return outcome(`operand ${operand.value} leaves the chroot`);
-    let stat;
-    try {
-      stat = fs.statSync(candidate);
-    } catch {
-      continue;
-    }
-    if (!stat.isFile()) continue;
-    if (stat.size > MAX_SCRIPT_BYTES) return outcome(`script ${operand.value} is too large to analyze`);
-    files.push(candidate);
+    const inspected = inspectOperand(operand, root, base);
+    if (inspected?.blocked) return outcome(inspected.blocked);
+    if (inspected) files.push(inspected.file);
   }
   return outcome(null);
 }

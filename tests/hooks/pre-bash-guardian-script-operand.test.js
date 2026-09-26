@@ -119,7 +119,13 @@ function runTests() {
           const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: elsewhere });
           assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
         }
-        for (const command of [`nsenter --wd=${quoted} bash build.sh`, `nsenter -w${quoted} bash build.sh`]) {
+        const parent = JSON.stringify(path.dirname(dir));
+        const leaf = JSON.stringify(path.basename(dir));
+        for (const command of [`chroot ${quoted} chroot / bash notes.txt`, `env -C ${parent} chroot ${leaf} bash notes.txt`, `env -C ${parent} env -C ${leaf} bash notes.txt`, `env -C ${parent} unshare -w ${leaf} bash notes.txt`, `env -C ${parent} unshare -R ${leaf} bash /notes.txt`]) {
+          const nested = run({ tool_name: 'Bash', tool_input: { command }, cwd: elsewhere });
+          assert.strictEqual(nested.exitCode, 2, `a relative root or directory is read from where the outer wrapper moved: ${command}: ${JSON.stringify(nested)}`);
+        }
+        for (const command of [`nsenter --wd=${quoted} bash build.sh`, `nsenter -w${quoted} bash build.sh`, `nsenter --ro=${quoted} bash /build.sh`]) {
           const benignThere = run({ tool_name: 'Bash', tool_input: { command }, cwd: elsewhere });
           assert.strictEqual(benignThere.exitCode, 0, `nsenter with a directory moves to it, where the script is benign: ${command}: ${JSON.stringify(benignThere)}`);
         }
@@ -140,6 +146,9 @@ function runTests() {
         'nsenter -a -t 1 bash build.sh',
         'nsenter -t 1 -w bash build.sh',
         'nsenter -t 1 --root bash build.sh',
+        'nsenter --al -t 1 bash build.sh',
+        'nsenter -t 1 --mo bash build.sh',
+        'nsenter -t 1 --ro bash build.sh',
       ];
       for (const command of commands) {
         const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });

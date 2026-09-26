@@ -127,7 +127,7 @@ run('the hook copy names the option and the value it takes, for the chdir and ch
 });
 
 run('every bwrap option word spans the same words', () => {
-  const words = ['--', '-', '--bind', '--ro-bind', '--overlay', '--setenv', '--chdir', '--unshare-all', '--new-session', '--unknown', '--bin', '--debug-opt=x'];
+  const words = ['--', '-', '--bind', '--ro-bind', '--overlay', '--setenv', '--chdir', '--argv0', '--userns2', '--as-pid-1', '--unshare-all', '--new-session', '--unknown', '--bin', '--debug-opt=x'];
   for (const word of words) {
     const expected = localWrappers.readBwrapOption(word).width;
     assert.strictEqual(lib.readWrapperOption('bwrap', word, 'next').width, expected, `bwrap ${word}`);

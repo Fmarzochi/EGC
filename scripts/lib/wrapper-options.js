@@ -74,7 +74,11 @@ const WRAPPER_SPECS = {
   nsenter: {
     valueFlags: set(['-t', '-N', '-S', '-G', '--target', '--net-socket', '--setuid', '--setgid']),
     optionalValueFlags: set(['-m', '-u', '-i', '-n', '-p', '-C', '-U', '-T', '-r', '-w', '-W']),
-    exactLongFlags: set(['--net']),
+    exactLongFlags: set([
+      '--all', '--help', '--version', '--mount', '--uts', '--ipc', '--net', '--pid', '--user', '--cgroup', '--time',
+      '--root', '--wd', '--wdns', '--env', '--no-fork', '--join-cgroup', '--preserve-credentials', '--keep-caps',
+      '--user-parent', '--follow-context',
+    ]),
   },
   runuser: {
     valueFlags: set([
@@ -102,7 +106,7 @@ const WRAPPER_SPECS = {
 // bwrap reads exact option names, each followed by a fixed number of
 // values, up to the first word that is not an option or a `--`.
 const BWRAP_ARITY = {
-  '--args': 1, '--userns': 1, '--userns-block-fd': 1, '--pidns': 1, '--uid': 1, '--gid': 1,
+  '--args': 1, '--argv0': 1, '--userns': 1, '--userns2': 1, '--userns-block-fd': 1, '--pidns': 1, '--uid': 1, '--gid': 1,
   '--hostname': 1, '--chdir': 1, '--unsetenv': 1, '--lock-file': 1, '--sync-fd': 1, '--block-fd': 1,
   '--info-fd': 1, '--json-status-fd': 1, '--seccomp': 1, '--add-seccomp-fd': 1, '--exec-label': 1,
   '--file-label': 1, '--proc': 1, '--dev': 1, '--tmpfs': 1, '--mqueue': 1, '--dir': 1,

@@ -60,6 +60,23 @@ function matchesEvalFlag(arg: string, flags: string[], casedArg: string | null):
   return false;
 }
 
+function inlineEvalVerdict(baseCommand: string, args: string[]): ValidationResult | null {
+  const evalName = INLINE_EVAL_COMMANDS[baseCommand] ? baseCommand : bareInterpreterName(baseCommand);
+  const evalFlags = INLINE_EVAL_COMMANDS[evalName];
+  const clusters = !NO_SHORT_FLAG_CLUSTERS.has(evalName);
+  const abbreviates = ABBREVIATING_EVAL_COMMANDS.has(evalName);
+  const isEvalFlag = (a: string, flags: string[]): boolean =>
+    matchesEvalFlag(bareToken(a), flags, clusters ? stripQuotes(a) : null) || (abbreviates && abbreviatesEvalFlag(bareToken(a), flags));
+  if (evalFlags && args.some(a => isEvalFlag(a, evalFlags))) {
+    return {
+      allowed: false,
+      reason: `inline code execution via '${baseCommand}' eval flag is forbidden — write the code to a file and run it instead`,
+      trust_level: 'DANGEROUS',
+    };
+  }
+  return suShellOperandsVerdict(evalName, args);
+}
+
 // su, runuser and script read long options with getopt_long, which takes any
 // prefix of `--command` (`--comm`) as the option itself.
 const ABBREVIATING_EVAL_COMMANDS = new Set(['su', 'runuser', 'script']);
@@ -219,10 +236,11 @@ function tokenizeWords(command: string): string[] {
 // next word as the host when -h stands alone, so it is read as a value flag;
 // where that differs from sudo, sudo refuses to run. sudo -U only works
 // together with -l, which lists instead of running, so it stays out.
-// exactLongFlags are long flags that take no value but are a prefix of one
-// that does (sudo --login and --login-class): they count when a prefix is
-// matched, so neither the exact name nor a prefix it shares is stretched
-// into the value option.
+// exactLongFlags are long flags that take no value (or only one attached with
+// `=`), listed where one is a prefix of a value option (sudo --login and
+// --login-class) or where the name itself matters (nsenter's): they count
+// when a prefix is matched, so an abbreviation resolves among them the way
+// getopt_long resolves it and is never stretched into the value option.
 export interface WrapperSpec {
   valueFlags: Set<string>;
   optionalValueFlags?: Set<string>;
@@ -468,6 +486,15 @@ export function permutedOptions(words: string[], spec: WrapperSpec): { names: st
 }
 
 const RUNUSER_USER_FLAGS = new Set(['-u', '--user']);
+const RUNUSER_SHELL_FLAGS = new Set(['-c', '--command', '--session-command']);
+
+// runuser runs the words after its options only with -u/--user and without
+// a command for the shell (which it refuses alongside -u); otherwise it
+// behaves like su and is judged as su is.
+function runuserRunsWords(current: string[], spec: WrapperSpec): boolean {
+  const names = permutedOptions(current.slice(1), spec).names;
+  return names.some(name => RUNUSER_USER_FLAGS.has(name)) && !names.some(name => RUNUSER_SHELL_FLAGS.has(name));
+}
 
 // `sg [-] GROUP [-c] COMMAND` hands COMMAND to `sh -c`.
 function sgRunsCommand(current: string[]): boolean {
@@ -487,11 +514,7 @@ function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
   }
   const spec = WRAPPER_SPECS[head];
   if (!spec) return null;
-  // Without -u/--user, runuser behaves like su: the words after the user go
-  // to that user's shell, and it is judged as su is.
-  if (head === 'runuser' && !permutedOptions(current.slice(1), spec).names.some(name => RUNUSER_USER_FLAGS.has(name))) {
-    return null;
-  }
+  if (head === 'runuser' && !runuserRunsWords(current, spec)) return null;
 
   // env -S/--split-string re-splits its value into a new argv and execs the
   // first word of that split, the same "string becomes code" shape as
@@ -2007,21 +2030,8 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // The name the eval table answers to (bare, or version-stripped) is also
   // the name the cluster exclusion is keyed on, so `pwsh7 -NonInteractive`
   // is judged as PowerShell just like `pwsh`.
-  const evalName = INLINE_EVAL_COMMANDS[baseCommand] ? baseCommand : bareInterpreterName(baseCommand);
-  const evalFlagsForBase = INLINE_EVAL_COMMANDS[evalName];
-  const clusters = !NO_SHORT_FLAG_CLUSTERS.has(evalName);
-  const abbreviates = ABBREVIATING_EVAL_COMMANDS.has(evalName);
-  const isEvalFlag = (a: string, flags: string[]): boolean =>
-    matchesEvalFlag(bareToken(a), flags, clusters ? stripQuotes(a) : null) || (abbreviates && abbreviatesEvalFlag(bareToken(a), flags));
-  if (evalFlagsForBase && args.some(a => isEvalFlag(a, evalFlagsForBase))) {
-    return {
-      allowed: false,
-      reason: `inline code execution via '${baseCommand}' eval flag is forbidden — write the code to a file and run it instead`,
-      trust_level: 'DANGEROUS',
-    };
-  }
-  const suShell = suShellOperandsVerdict(evalName, args);
-  if (suShell) return suShell;
+  const inlineEval = inlineEvalVerdict(baseCommand, args);
+  if (inlineEval) return inlineEval;
 
   // 5. Destructive variants of common CLIs (docker prune/rm, gh delete,
   // prisma reset...) hard-block for the same reason inline eval does: the
