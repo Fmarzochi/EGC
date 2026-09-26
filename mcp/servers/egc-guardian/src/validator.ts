@@ -2492,8 +2492,20 @@ function validateAgainstAllowlist(baseCommand: string, args: string[], cwd?: str
   };
 }
 
-export function validateWrite(filepath: string): ValidationResult {
-  if (isProtectedPath(filepath)) {
+// A relative write target names a file under the directory the agent works
+// in, which the caller passes as cwd; without it, this process's own
+// working directory is the only one known.
+function writeBaseDir(cwd?: string | null): string {
+  const trimmed = cwd?.trim();
+  return trimmed ? path.resolve(expandHome(trimmed)) : process.cwd();
+}
+
+export function resolveWriteTarget(filepath: string, cwd?: string | null): string {
+  return path.resolve(writeBaseDir(cwd), expandHome(filepath.trim()));
+}
+
+export function validateWrite(filepath: string, cwd?: string | null): ValidationResult {
+  if (isProtectedPath(filepath, writeBaseDir(cwd))) {
     return {
       allowed: false,
       reason: `Path '${filepath}' is protected`,

@@ -255,6 +255,42 @@ async function runTests() {
   run(`write ~/.config/zed/settings.json`,       () => assertWriteAllowed(`${home}/.config/zed/settings.json`));
   run(`write ~/.continue/config.yaml`,           () => assertWriteAllowed(`${home}/.continue/config.yaml`));
 
+  // ── validate_write: a relative path is judged where the agent works ───────
+
+  console.log('\n=== validate_write: relative paths resolve against the agent cwd ===');
+
+  const project = path.join(home, 'project');
+  run('../.ssh/authorized_keys from a project in the home is denied', () => {
+    assert.strictEqual(validateWrite('../.ssh/authorized_keys', project).allowed, false);
+  });
+  run('id_rsa from ~/.ssh is denied', () => {
+    assert.strictEqual(validateWrite('id_rsa', path.join(home, '.ssh')).allowed, false);
+  });
+  run('a cwd with a trailing line break is read without it', () => {
+    assert.strictEqual(validateWrite('id_rsa', `${path.join(home, '.ssh')}\n`).allowed, false);
+  });
+  run('a cwd written with ~ is expanded to the home', () => {
+    assert.strictEqual(validateWrite(path.join('..', '.ssh', 'id_rsa'), path.join('~', 'project')).allowed, false);
+  });
+  run('a protected path written with ~ or padded with spaces is denied from any cwd', () => {
+    assert.strictEqual(validateWrite('~/.ssh/id_rsa', os.tmpdir()).allowed, false);
+    assert.strictEqual(validateWrite('  ~/.ssh/id_rsa\n', os.tmpdir()).allowed, false);
+    assert.strictEqual(validateWrite(` ${home}/.ssh/id_rsa`, project).allowed, false);
+  });
+  run('notes.md from a project in the home stays allowed', () => {
+    assert.strictEqual(validateWrite('notes.md', project).allowed, true);
+  });
+  run('an absolute path ignores the cwd', () => {
+    assert.strictEqual(validateWrite(`${home}/.ssh/id_rsa`, os.tmpdir()).allowed, false);
+    assert.strictEqual(validateWrite(path.join(os.tmpdir(), 'output.txt'), path.join(home, '.ssh')).allowed, true);
+  });
+  run('without a cwd, or with a blank one, the server directory is the base', () => {
+    const expected = !isProtectedPath('../.ssh/authorized_keys', process.cwd());
+    assert.strictEqual(validateWrite('../.ssh/authorized_keys').allowed, expected);
+    assert.strictEqual(validateWrite('../.ssh/authorized_keys', '  ').allowed, expected);
+    assert.strictEqual(validateWrite('../.ssh/authorized_keys', null).allowed, expected);
+  });
+
   // ── isProtectedPath: spot checks ──────────────────────────────────────────
 
   console.log('\n=== isProtectedPath: spot checks ===');
