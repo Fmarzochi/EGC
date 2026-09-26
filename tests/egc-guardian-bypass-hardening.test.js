@@ -526,5 +526,106 @@ run('write protection is untouched by the read split', () => {
   }
 });
 
+// Local wrappers from util-linux, coreutils, polkit, busybox and bubblewrap
+// run the command that follows their own options, read the way each reads
+// them (tables taken from their sources: util-linux 2.41 and master).
+for (const command of [
+  'setsid rm -rf /',
+  'setsid -fw rm -rf /',
+  'setsid --fork rm -rf /',
+  'taskset 0x1 rm -rf /',
+  'taskset -c 0 rm -rf /',
+  'chrt -f 1 rm -rf /',
+  'chrt 1 rm -rf /',
+  'chrt -o rm -rf /',
+  'chrt -d -T 5 -P 10 0 rm -rf /',
+  'chrt --sched-runtime 5 --deadline 0 rm -rf /',
+  'unshare -r rm -rf /',
+  'unshare -R /x rm -rf /',
+  'unshare --wd /x rm -rf /',
+  'unshare --mount=/x rm -rf /',
+  'unshare --load-interp x rm -rf /',
+  'unshare -rmR/x rm -rf /',
+  'nsenter -t 1 -m rm -rf /',
+  'nsenter --net rm -rf /',
+  'nsenter -n rm -rf /',
+  'nsenter --target 1 --mount rm -rf /',
+  'nsenter -t1 -S 0 rm -rf /',
+  'runuser -u root rm -rf /',
+  'runuser -u root -- rm -rf /',
+  'runuser --user root -- rm -rf /',
+  'runuser --us root -- rm -rf /',
+  'prlimit --nofile=1 rm -rf /',
+  'prlimit -n rm -rf /',
+  'prlimit -o x rm -rf /',
+  'chroot / rm -rf /',
+  'chroot --userspec 0:0 / rm -rf /',
+  'numactl -C 0 rm -rf /',
+  'numactl --physcpubind=0 rm -rf /',
+  'numactl --interleave all rm -rf /',
+  'numactl -aC 0 rm -rf /',
+  'pkexec rm -rf /',
+  'pkexec --user root rm -rf /',
+  'pkexec -u root rm -rf /',
+  'busybox rm -rf /',
+  'busybox sh -c "rm -rf /"',
+  'bwrap --bind / / rm -rf /',
+  'bwrap --overlay a b c rm -rf /',
+  'bwrap --setenv A B rm -rf /',
+  'bwrap --unshare-all -- rm -rf /',
+  'bwrap --ro-bind / / --chdir / rm -rf /',
+  'sudo setsid taskset 0x1 rm -rf /',
+]) {
+  run(`local wrappers: ${command} is hard-blocked (the wrapped command is judged)`, () => assertHardBlocked(command));
+}
+
+// Wrappers that hand a string, or the words after a user, to a shell.
+for (const command of [
+  'runuser root -c "rm -rf /"',
+  'runuser -c "rm -rf /" root',
+  'runuser --comm "rm -rf /" root',
+  'runuser --session-command "rm -rf /" root',
+  'su --comm "rm -rf /"',
+  'su --session-command "rm -rf /"',
+  'su root notes.sh',
+  'su - root notes.sh',
+  'runuser root notes.sh',
+  'script -c "rm -rf /"',
+  'script -qc "rm -rf /" /dev/null',
+  'script --command "rm -rf /"',
+  'script --comm "rm -rf /"',
+  'script --command="rm -rf /"',
+  'sg wheel "rm -rf /"',
+  'sg wheel -c "rm -rf /"',
+  'sg - wheel "rm -rf /"',
+]) {
+  run(`local wrappers: ${command} is hard-blocked (a string or the words after a user reach a shell)`, () => assertHardBlocked(command));
+}
+
+for (const command of [
+  'setsid ls',
+  'taskset -c 0 ls',
+  'chrt -o 0 ls',
+  'chrt -o ls',
+  'unshare -r ls',
+  'nsenter -t 1 -n ls',
+  'prlimit --nofile=1024 ls',
+  'numactl -C 0 ls',
+  'chroot / ls',
+  'pkexec ls',
+  'busybox ls',
+  'bwrap --ro-bind / / ls',
+  'runuser -u nobody -- ls',
+]) {
+  run(`local wrappers: ${command} stays allowed (a benign command behind the wrapper)`, () => assertAllowed(command));
+}
+
+run('local wrappers: su and runuser with only a user are not hard-blocked', () => {
+  for (const command of ['su - root', 'su root', 'runuser root', 'su -l postgres', 'sg wheel', 'su root -s /bin/bash', 'runuser postgres -l', 'su - root --shell=/bin/zsh']) {
+    const v = validateCommand(command);
+    assert.notStrictEqual(v.trust_level, 'DANGEROUS', `${command}: ${v.reason}`);
+  }
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

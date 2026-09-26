@@ -3,8 +3,9 @@
 /**
  * How a wrapper (sudo, env, timeout, xargs, parallel, ...) reads its own
  * options, for the hooks that must find the command behind it: the same
- * tables and rules as the egc-guardian validator (validator.ts and
- * parallel-options.ts), which cannot be required from here.
+ * tables and rules as the egc-guardian validator (validator.ts,
+ * local-wrappers.ts and parallel-options.ts), which cannot be required from
+ * here.
  * tests/lib/wrapper-options.test.js keeps the two in step.
  */
 
@@ -12,7 +13,8 @@ const set = values => new Set(values);
 
 // Options that take a value, short and long; optional values attached only;
 // exact no-value long names that are a prefix of a value option; leading
-// positional operands before the wrapped command.
+// positional operands before the wrapped command, and the pattern a leading
+// positional the wrapper may leave out must match to be read as one.
 const WRAPPER_SPECS = {
   sudo: {
     valueFlags: set(['-a', '--auth-type', '-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-c', '--login-class', '-r', '--role', '-t', '--type', '-T', '--command-timeout', '-R', '--chroot', '-D', '--chdir']),
@@ -54,8 +56,70 @@ const WRAPPER_SPECS = {
       '--json',
     ]),
   },
-  parallel: { valueFlags: set([]), getoptLong: true },
+  parallel: { valueFlags: set([]), reader: 'parallel' },
+  setsid: { valueFlags: set([]) },
+  taskset: { valueFlags: set([]), leadingPositionals: 1 },
+  chrt: {
+    valueFlags: set(['-D', '-P', '-T', '-U', '-X', '--sched-runtime', '--sched-period', '--sched-deadline', '--clamp-min', '--clamp-max']),
+    leadingPositionals: 1,
+    positionalWhen: /^\d+$/,
+  },
+  unshare: {
+    valueFlags: set([
+      '-R', '-w', '-S', '-G', '-l', '--root', '--wd', '--setuid', '--setgid', '--load-interp',
+      '--map-user', '--map-users', '--map-group', '--map-groups', '--propagation', '--setgroups',
+      '--monotonic', '--boottime', '--owner', '--whitelist-env',
+    ]),
+  },
+  nsenter: {
+    valueFlags: set(['-t', '-N', '-S', '-G', '--target', '--net-socket', '--setuid', '--setgid']),
+    optionalValueFlags: set(['-m', '-u', '-i', '-n', '-p', '-C', '-U', '-T', '-r', '-w', '-W']),
+    exactLongFlags: set(['--net']),
+  },
+  runuser: {
+    valueFlags: set([
+      '-c', '-g', '-G', '-s', '-u', '-w', '--command', '--session-command', '--group', '--supp-group',
+      '--shell', '--user', '--whitelist-environment',
+    ]),
+  },
+  prlimit: {
+    valueFlags: set(['-p', '-o', '--pid', '--output']),
+    optionalValueFlags: set(['-c', '-d', '-e', '-f', '-i', '-l', '-m', '-n', '-q', '-r', '-s', '-t', '-u', '-v', '-x', '-y']),
+  },
+  chroot: { valueFlags: set(['--groups', '--userspec']), exactLongFlags: set(['--skip-chdir']), leadingPositionals: 1 },
+  numactl: {
+    valueFlags: set([
+      '-i', '-w', '-p', '-P', '-c', '-N', '-C', '-m', '-S', '-f', '-o', '-L', '-M', '-I',
+      '--interleave', '--weighted-interleave', '--preferred', '--preferred-many', '--cpubind', '--cpunodebind',
+      '--physcpubind', '--membind', '--shm', '--file', '--offset', '--length', '--shmmode', '--shmid',
+    ]),
+  },
+  pkexec: { valueFlags: set(['-u', '--user']) },
+  busybox: { valueFlags: set([]) },
+  bwrap: { valueFlags: set([]), reader: 'bwrap' },
 };
+
+// bwrap reads exact option names, each followed by a fixed number of
+// values, up to the first word that is not an option or a `--`.
+const BWRAP_ARITY = {
+  '--args': 1, '--userns': 1, '--userns-block-fd': 1, '--pidns': 1, '--uid': 1, '--gid': 1,
+  '--hostname': 1, '--chdir': 1, '--unsetenv': 1, '--lock-file': 1, '--sync-fd': 1, '--block-fd': 1,
+  '--info-fd': 1, '--json-status-fd': 1, '--seccomp': 1, '--add-seccomp-fd': 1, '--exec-label': 1,
+  '--file-label': 1, '--proc': 1, '--dev': 1, '--tmpfs': 1, '--mqueue': 1, '--dir': 1,
+  '--remount-ro': 1, '--overlay-src': 1, '--tmp-overlay': 1, '--ro-overlay': 1, '--cap-add': 1,
+  '--cap-drop': 1, '--perms': 1, '--size': 1,
+  '--bind': 2, '--bind-try': 2, '--ro-bind': 2, '--ro-bind-try': 2, '--dev-bind': 2,
+  '--dev-bind-try': 2, '--bind-fd': 2, '--ro-bind-fd': 2, '--bind-data': 2, '--ro-bind-data': 2,
+  '--file': 2, '--symlink': 2, '--chmod': 2, '--setenv': 2,
+  '--overlay': 3,
+};
+
+// The first value of a bwrap option is the one the hook moves by (--chdir).
+function readBwrapOption(word, next) {
+  const arity = Object.hasOwn(BWRAP_ARITY, word) ? BWRAP_ARITY[word] : 0;
+  if (arity === 0) return noValue([word], 1);
+  return { names: [word], width: 1 + arity, valueName: word, value: next };
+}
 
 // getopt_long takes an exact long name as itself and a prefix that names a
 // single option as that option; a prefix that fits several is an error that
@@ -201,7 +265,9 @@ function readParallelOption(word, next) {
 function readWrapperOption(name, word, next) {
   const spec = WRAPPER_SPECS[name];
   if (!spec) return null;
-  return spec.getoptLong ? readParallelOption(word, next) : readGetoptOption(word, spec, next);
+  if (spec.reader === 'parallel') return readParallelOption(word, next);
+  if (spec.reader === 'bwrap') return readBwrapOption(word, next);
+  return readGetoptOption(word, spec, next);
 }
 
-module.exports = { WRAPPER_SPECS, PARALLEL_SPECS, readWrapperOption, readParallelOption };
+module.exports = { WRAPPER_SPECS, PARALLEL_SPECS, readWrapperOption, readParallelOption, readBwrapOption };

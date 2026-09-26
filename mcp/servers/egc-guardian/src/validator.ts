@@ -2,6 +2,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { readParallelOption } from './parallel-options.js';
+import { LOCAL_WRAPPER_SPECS } from './local-wrappers.js';
 
 // Trust level tiers
 export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git'];
@@ -57,6 +58,30 @@ function matchesEvalFlag(arg: string, flags: string[], casedArg: string | null):
     if (casedArg !== null && SHORT_FLAG_CLUSTER.test(casedArg) && casedArg.includes(flag[1])) return true;
   }
   return false;
+}
+
+// su, runuser and script read long options with getopt_long, which takes any
+// prefix of `--command` (`--comm`) as the option itself.
+const ABBREVIATING_EVAL_COMMANDS = new Set(['su', 'runuser', 'script']);
+
+function abbreviatesEvalFlag(arg: string, flags: string[]): boolean {
+  if (!arg.startsWith('--')) return false;
+  const name = arg.split('=')[0];
+  return name.length > 2 && flags.some(flag => flag.startsWith('--') && flag.startsWith(name));
+}
+
+// su, and runuser without -u, hand every word after the user to that user's
+// shell as its arguments: a script to run, or `-c` and a command.
+function suShellOperandsVerdict(baseCommand: string, args: string[]): ValidationResult | null {
+  if (baseCommand !== 'su' && baseCommand !== 'runuser') return null;
+  const operands = permutedOptions(args, WRAPPER_SPECS.runuser).operands;
+  const afterLogin = operands[0] === '-' ? operands.slice(1) : operands;
+  if (afterLogin.length < 2) return null;
+  return {
+    allowed: false,
+    reason: `'${baseCommand}' hands the words after the user to that user's shell, which runs them; run the command directly instead`,
+    trust_level: 'DANGEROUS',
+  };
 }
 
 // Strip a trailing version suffix (python3.11 -> python) so a versioned
@@ -203,6 +228,9 @@ export interface WrapperSpec {
   optionalValueFlags?: Set<string>;
   exactLongFlags?: Set<string>;
   leadingPositionals?: number;
+  // A leading positional the wrapper may leave out, read as one only when
+  // the word matches (chrt's priority, all digits).
+  positionalWhen?: RegExp;
   // A wrapper whose options follow other rules than getopt reads each option
   // word itself, given the word and the next one, quotes already stripped.
   readOption?: (word: string, next: string | undefined) => { names: string[]; width: number };
@@ -250,6 +278,7 @@ export const WRAPPER_SPECS: Record<string, WrapperSpec> = {
     ]),
   },
   parallel: { valueFlags: new Set(), readOption: readParallelOption },
+  ...LOCAL_WRAPPER_SPECS,
 };
 
 interface WrapperOptions {
@@ -414,12 +443,55 @@ function forbiddenCommandString(reason: string): UnwrapStep {
   return { blocked: { allowed: false, reason, trust_level: 'DANGEROUS' } };
 }
 
+// Every word of a command whose options getopt permutes (su, runuser):
+// the option names set anywhere before `--`, and the other words in order.
+export function permutedOptions(words: string[], spec: WrapperSpec): { names: string[]; operands: string[] } {
+  const names: string[] = [];
+  const operands: string[] = [];
+  let i = 0;
+  while (i < words.length) {
+    const word = stripQuotes(words[i]);
+    if (word === '--') {
+      operands.push(...words.slice(i + 1).map(stripQuotes));
+      break;
+    }
+    if (!word.startsWith('-') || word === '-') {
+      operands.push(word);
+      i += 1;
+      continue;
+    }
+    const option = readWrapperOption(word, spec);
+    names.push(...option.names);
+    i += option.width;
+  }
+  return { names, operands };
+}
+
+const RUNUSER_USER_FLAGS = new Set(['-u', '--user']);
+
+// `sg [-] GROUP [-c] COMMAND` hands COMMAND to `sh -c`.
+function sgRunsCommand(current: string[]): boolean {
+  const words = current.slice(1).map(stripQuotes);
+  let k = words[0] === '-' || words[0] === '-l' ? 1 : 0;
+  if (k >= words.length || words[k].startsWith('-')) return false;
+  k += 1;
+  return k < words.length;
+}
+
 // Unwraps a known wrapper command (sudo, timeout, xargs, ...), skipping its
 // flags and any mandatory leading positionals to reach the wrapped command.
 function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
   const head = bareToken(current[0]);
+  if (head === 'sg' && sgRunsCommand(current)) {
+    return forbiddenCommandString(`'sg' runs its command through a shell and is forbidden`);
+  }
   const spec = WRAPPER_SPECS[head];
   if (!spec) return null;
+  // Without -u/--user, runuser behaves like su: the words after the user go
+  // to that user's shell, and it is judged as su is.
+  if (head === 'runuser' && !permutedOptions(current.slice(1), spec).names.some(name => RUNUSER_USER_FLAGS.has(name))) {
+    return null;
+  }
 
   // env -S/--split-string re-splits its value into a new argv and execs the
   // first word of that split, the same "string becomes code" shape as
@@ -433,7 +505,10 @@ function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
 
   let i = options.end;
   let skip = spec.leadingPositionals ?? 0;
-  while (skip > 0 && i < current.length) { i += 1; skip -= 1; }
+  while (skip > 0 && i < current.length && (!spec.positionalWhen || spec.positionalWhen.test(stripQuotes(current[i])))) {
+    i += 1;
+    skip -= 1;
+  }
 
   // `flock FILE -c STRING` (or --command) hands STRING to a shell, the same
   // shape as env -S, so it is denied the same way.
@@ -801,7 +876,9 @@ const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
   // same risk class as `bash -c` — unlike sudo/doas, su has no separate
   // "unwrap the next token as the real command" shape (the command is one
   // string argument to -c), so it is handled here instead of WRAPPER_SPECS.
-  su: ['-c', '--command'],
+  su: ['-c', '--command', '--session-command'],
+  runuser: ['-c', '--command', '--session-command'],
+  script: ['-c', '--command'],
   pwsh: ['-c', '-command', '-Command'],
   powershell: ['-c', '-command', '-Command'],
   'powershell.exe': ['-c', '-command', '-Command'],
@@ -1933,13 +2010,18 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   const evalName = INLINE_EVAL_COMMANDS[baseCommand] ? baseCommand : bareInterpreterName(baseCommand);
   const evalFlagsForBase = INLINE_EVAL_COMMANDS[evalName];
   const clusters = !NO_SHORT_FLAG_CLUSTERS.has(evalName);
-  if (evalFlagsForBase && args.some(a => matchesEvalFlag(bareToken(a), evalFlagsForBase, clusters ? stripQuotes(a) : null))) {
+  const abbreviates = ABBREVIATING_EVAL_COMMANDS.has(evalName);
+  const isEvalFlag = (a: string, flags: string[]): boolean =>
+    matchesEvalFlag(bareToken(a), flags, clusters ? stripQuotes(a) : null) || (abbreviates && abbreviatesEvalFlag(bareToken(a), flags));
+  if (evalFlagsForBase && args.some(a => isEvalFlag(a, evalFlagsForBase))) {
     return {
       allowed: false,
       reason: `inline code execution via '${baseCommand}' eval flag is forbidden — write the code to a file and run it instead`,
       trust_level: 'DANGEROUS',
     };
   }
+  const suShell = suShellOperandsVerdict(evalName, args);
+  if (suShell) return suShell;
 
   // 5. Destructive variants of common CLIs (docker prune/rm, gh delete,
   // prisma reset...) hard-block for the same reason inline eval does: the
