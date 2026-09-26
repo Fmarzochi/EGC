@@ -17,6 +17,7 @@ const { spawnSync } = require('node:child_process');
 
 const { listInstallTargetAdapters, planInstallTargetScaffold } = require('../../scripts/lib/install-targets/registry');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { resolveInstallPlan } = require('../../scripts/lib/install-manifests');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const HOOKS = new Set([
@@ -27,15 +28,14 @@ const HOOKS = new Set([
 // Scripts that only run from the package itself (egc auto-update runs the
 // package's own copy), so a target never receives one.
 const PACKAGE_ONLY_SCRIPTS = new Set(['scripts/auto-update.js']);
-const MANIFEST = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'manifests', 'install-modules.json'), 'utf8'));
-const PROFILES = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'manifests', 'install-profiles.json'), 'utf8'));
 
-// The minimal profile's modules that apply to a target, as the installer
-// resolves them.
-function minimalModulesFor(target) {
-  const ids = new Set(PROFILES.profiles.minimal.modules);
-  return MANIFEST.modules.filter(module => ids.has(module.id) && (module.targets || []).includes(target));
-}
+// The two plans each target is checked with: the copies it makes by itself,
+// and the minimal profile as the installer resolves it for that target
+// (its dependency expansion and target filtering included).
+const PLANS = {
+  'its own copies': (target, planningInput) => planInstallTargetScaffold({ target, ...planningInput, modules: [] }),
+  'the minimal profile': (target, planningInput) => resolveInstallPlan({ ...planningInput, profileId: 'minimal', target }),
+};
 
 let passed = 0;
 let failed = 0;
@@ -78,11 +78,11 @@ const targets = [...new Set(listInstallTargetAdapters().map(adapter => adapter.t
 let loaded = 0;
 run('the targets are listed', () => assert.ok(targets.length > 10, targets.join(' ')));
 for (const target of targets) {
-  for (const [label, modules] of [['its own copies', []], ['the minimal profile', minimalModulesFor(target)]]) {
+  for (const [label, planFor] of Object.entries(PLANS)) {
     run(`${target}, ${label}: each hook it copies loads with the helpers copied next to it`, () => {
       const home = fs.mkdtempSync(path.join(os.tmpdir(), `egc-hook-helpers-${target}-`));
       try {
-        const plan = planInstallTargetScaffold({ target, repoRoot: REPO_ROOT, projectRoot: home, homeDir: home, modules });
+        const plan = planFor(target, { repoRoot: REPO_ROOT, projectRoot: home, homeDir: home });
         layOut(plan);
         const copies = plan.operations.filter(op => op.kind === 'copy-path');
         const hooks = copies.filter(op => HOOKS.has(op.sourceRelativePath));
