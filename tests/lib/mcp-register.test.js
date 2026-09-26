@@ -84,11 +84,11 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
 
-  (test('the registration list is the seven tools the documentation names, in order', () => {
+  (test('the registration list is the eight tools the documentation names, in order', () => {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity CLI', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Kimi Code CLI',
     ]);
   }) ? passed++ : failed++);
 

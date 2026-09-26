@@ -4312,6 +4312,48 @@ function runTests() {
     assert.deepStrictEqual(foreign, [], 'files other targets keep on their roots stay out of Kiro');
   })) passed++; else failed++;
 
+  if (test('kimi adapter is registered and resolves ~/.kimi-code as its root', () => {
+    const homeDir = '/Users/example';
+    const adapter = getInstallTargetAdapter('kimi');
+    assert.ok(adapter, 'kimi adapter must be registered');
+    assert.strictEqual(adapter.id, 'kimi-home');
+    assert.strictEqual(adapter.target, 'kimi');
+    assert.strictEqual(adapter.kind, 'home');
+    const root = adapter.resolveRoot({ homeDir });
+    assert.strictEqual(root, path.join(homeDir, '.kimi-code'), 'root must be ~/.kimi-code');
+    const statePath = adapter.getInstallStatePath({ homeDir });
+    assert.strictEqual(statePath, path.join(homeDir, '.kimi-code', 'egc', 'install-state.json'));
+  })) passed++; else failed++;
+
+  if (test('kimi adapter respects KIMI_CODE_HOME when resolving the data root', () => {
+    const previous = process.env.KIMI_CODE_HOME;
+    const customHome = '/custom/kimi-home';
+    try {
+      process.env.KIMI_CODE_HOME = customHome;
+      const adapter = getInstallTargetAdapter('kimi');
+      const root = adapter.resolveRoot({ homeDir: '/Users/example' });
+      assert.strictEqual(root, customHome, 'KIMI_CODE_HOME must take precedence over ~/.kimi-code');
+    } finally {
+      if (previous === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = previous;
+    }
+  })) passed++; else failed++;
+
+  if (test('kimi adapter plans skills into ~/.kimi-code/skills when a skills module is selected', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const plan = planInstallTargetScaffold({
+      target: 'kimi',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+    const rulesOperation = plan.operations.find(op =>
+      op.destinationPath === path.join(homeDir, '.kimi-code', 'rules')
+    );
+    assert.ok(rulesOperation, 'should plan rules into ~/.kimi-code/rules');
+  })) passed++; else failed++;
+
   if (test('the Trae adapter resolves .trae-cn when TRAE_ENV=cn at resolution time, as the retired .trae/install.sh allowed', () => {
     const trae = require('../../scripts/lib/install-targets/trae-project');
     const previous = process.env.TRAE_ENV;
