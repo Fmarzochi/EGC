@@ -23,7 +23,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
-const { registerMcpServers, registerJson } = require('./mcp-register');
+const { registerMcpServers, registerJson, assertLandsInside } = require('./mcp-register');
 
 const [, , guardianBin, memoryBin] = process.argv;
 
@@ -48,8 +48,9 @@ registerMcpServers(homeDir, bins, {
 
 // The filename is fixed here rather than accepted from the caller, and the
 // directory is the process's own working directory, so no argument can turn
-// this into a writer of arbitrary files. The package's own bundled config
-// is excluded: it is nobody's project.
+// this into a writer of arbitrary files; a link there is followed only while
+// it stays inside that directory. The package's own bundled config is
+// excluded: it is nobody's project.
 // Compared physically and, on Windows, case-insensitively: reaching the
 // package root through a junction or a differently-cased path would
 // otherwise read as somebody's project and rewrite the bundled config.
@@ -68,6 +69,7 @@ const projectMcp = path.join(process.cwd(), '.mcp.json');
 
 if (canonical(path.dirname(projectMcp)) !== canonical(packageRoot) && fs.existsSync(projectMcp)) {
   try {
+    assertLandsInside(projectMcp, [path.dirname(projectMcp)]);
     if (registerJson(projectMcp, bins)) {
       console.log(`  ✓ registered in Claude Code (project .mcp.json) (${projectMcp})`);
     }
