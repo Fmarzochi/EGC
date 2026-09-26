@@ -53,6 +53,31 @@ function runTests() {
       }
     })) passed++; else failed++;
 
+    if (test('wrapper options are read the way the wrapper reads them before the interpreter is found', () => {
+      const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-script-operand-elsewhere-'));
+      const commands = [
+        'sudo -Hu root bash notes.txt',
+        'sudo -nHu root bash notes.txt',
+        'sudo --us root bash notes.txt',
+        'sudo -T 10 bash notes.txt',
+        'env -iu HOME bash notes.txt',
+        'timeout -vk 9 5 bash notes.txt',
+        'parallel --tmpdir /x bash notes.txt ::: a',
+        `sudo -Hu root bash <<EOF\n${wipe} /tmp/egc-victim\nEOF`,
+        `timeout -vk 9 5 sh <<EOF\n${wipe} /tmp/egc-victim\nEOF`,
+      ];
+      try {
+        for (const command of commands) {
+          const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+          assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+        }
+        const moved = run({ tool_name: 'Bash', tool_input: { command: `sudo -nD ${JSON.stringify(dir)} bash notes.txt` }, cwd: elsewhere });
+        assert.strictEqual(moved.exitCode, 2, `a directory given in a bundle of flags moves the script: ${JSON.stringify(moved)}`);
+      } finally {
+        fs.rmSync(elsewhere, { recursive: true, force: true });
+      }
+    })) passed++; else failed++;
+
     if (test('quoted paths, path-qualified and wrapped interpreters, and variable interpreters reach the file', () => {
       const spaced = path.join(dir, 'my dir');
       fs.mkdirSync(spaced, { recursive: true });

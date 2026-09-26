@@ -888,6 +888,7 @@ function createKiroMeshHookFileOperation(targetRoot, hookScriptPath) {
 const BASH_GUARDIAN_HOOK_LIB_SOURCES = [
   'scripts/lib/guardian-bin.js',
   'scripts/lib/shell-split.js',
+  'scripts/lib/wrapper-options.js',
 ];
 
 function resolveBashGuardianHookScriptDestination(targetRoot) {

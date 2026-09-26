@@ -29,6 +29,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
+const { WRAPPER_SPECS, readWrapperOption } = require('../lib/wrapper-options');
 
 const MAX_STDIN = 1024 * 1024;
 const DEFAULT_VALIDATE_TIMEOUT_MS = 4000;
@@ -200,64 +201,33 @@ function shellWords(segment) {
   return words;
 }
 
-// Wrappers that end up running the interpreter, mirrored from the
-// validator's wrapper table: the options of each that take a value, the
-// leading positional operands some take (timeout's duration, flock's file),
-// and the options that change the working directory the script is resolved
-// against.
-function spec(valueFlags, extra = {}) {
-  return { valueFlags: new Set(valueFlags), positionals: 0, chdirFlags: new Set(), chrootFlags: new Set(), ...extra };
+// Wrappers that end up running the interpreter read their options through
+// the same tables and rules as the validator (scripts/lib/wrapper-options.js).
+// What only this hook needs is here: the options that move the directory a
+// wrapped script is resolved against, and `builtin`, which the validator
+// does not unwrap.
+const CHDIR_FLAGS = { sudo: new Set(['-D', '--chdir']), env: new Set(['-C', '--chdir']), 'systemd-run': new Set(['--working-directory']) };
+const CHROOT_FLAGS = { sudo: new Set(['-R', '--chroot']) };
+const HOOK_ONLY_WRAPPERS = new Set(['builtin']);
+const NO_OPTION = { width: 1, valueName: null, value: undefined };
 
-}
-
-const WRAPPER_SPECS = {
-  sudo: spec(['-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-r', '--role', '-t', '--type', '-D', '--chdir', '-R', '--chroot', '-U', '-T'], { chdirFlags: new Set(['-D', '--chdir']), chrootFlags: new Set(['-R', '--chroot']) }),
-
-
-  doas: spec(['-u', '-C']),
-  env: spec(['-u', '--unset', '-C', '--chdir', '-S', '--split-string'], { chdirFlags: new Set(['-C', '--chdir']) }),
-  nohup: spec([]),
-  time: spec(['-o', '--output', '-f', '--format']),
-  command: spec([]),
-  exec: spec(['-a']),
-  builtin: spec([]),
-  nice: spec(['-n', '--adjustment']),
-  ionice: spec(['-c', '--class', '-n', '--classdata', '-p', '--pid', '-P', '--pgid']),
-  timeout: spec(['-s', '--signal', '-k', '--kill-after'], { positionals: 1 }),
-  stdbuf: spec(['-i', '--input', '-o', '--output', '-e', '--error']),
-  xargs: spec(['-a', '--arg-file', '-d', '--delimiter', '-E', '--eof', '-I', '-i', '--replace', '-L', '-l', '--max-lines', '-n', '--max-args', '-P', '--max-procs', '-s', '--max-chars']),
-  flock: spec(['-w', '--timeout', '-E', '--conflict-exit-code'], { positionals: 1 }),
-  watch: spec(['-n', '--interval']),
-  strace: spec(['-e', '-o', '--output', '-s', '-p', '-P', '-b', '-U']),
-  parallel: spec(['-j', '--jobs', '-N', '--delay', '--retries', '--timeout', '--joblog', '--results', '-S', '--sshlogin']),
-  'systemd-run': spec(['-p', '--property', '-u', '--unit', '-E', '--setenv', '-d', '--description', '--on-active', '--on-boot', '--on-startup', '--on-unit-active', '--on-unit-inactive', '--on-calendar', '--timer-property', '--working-directory', '--uid', '--gid', '--nice', '-M', '--machine', '-H', '--host', '--slice', '--service-type'], { chdirFlags: new Set(['--working-directory']) }),
-};
-
-// Skips a wrapper's options and leading positionals; a chdir option's value
-// becomes the directory later operands are resolved against.
-// One wrapper option as typed: --name=value, -Xvalue (the short option with
-// its value attached) or the value in the next word.
-function wrapperOption(word, wrapper, nextWord) {
-  const attached = !word.startsWith('--') && word.length > 2 && wrapper.valueFlags.has(word.slice(0, 2));
-  if (attached) return { name: word.slice(0, 2), value: word.slice(2), takesNext: false };
-  const equal = word.indexOf('=');
-  if (equal !== -1) return { name: word.slice(0, equal), value: word.slice(equal + 1), takesNext: false };
-
-  const takesNext = wrapper.valueFlags.has(word);
-  return { name: word, value: takesNext ? nextWord : undefined, takesNext };
+function isWrapper(name) {
+  return Object.prototype.hasOwnProperty.call(WRAPPER_SPECS, name) || HOOK_ONLY_WRAPPERS.has(name);
 }
 
 // A chdir or chroot option moves where the operands are resolved; a
 // directory spelled with byte escapes cannot be resolved faithfully.
-function noteWrapperMove(option, wrapper, valueWord, state) {
-  if (option.value === undefined) return;
-  if (wrapper.chdirFlags.has(option.name)) state.cwd = option.value;
-  else if (wrapper.chrootFlags.has(option.name)) state.chroot = option.value;
+function noteWrapperMove(name, option, valueWord, state) {
+  if (option.value === undefined || option.valueName === null) return;
+  if (CHDIR_FLAGS[name]?.has(option.valueName)) state.cwd = option.value;
+  else if (CHROOT_FLAGS[name]?.has(option.valueName)) state.chroot = option.value;
   else return;
   state.unsure = state.unsure || Boolean(valueWord?.unsure);
 }
 
-function skipWrapperOptions(words, start, wrapper, state) {
+// Skips a wrapper's options and leading positionals; a chdir option's value
+// becomes the directory later operands are resolved against.
+function skipWrapperOptions(words, start, name, state) {
   let index = start;
   while (index < words.length) {
     const word = words[index].value;
@@ -266,13 +236,11 @@ function skipWrapperOptions(words, start, wrapper, state) {
       break;
     }
     if (!word.startsWith('-') || word === '-') break;
-    const option = wrapperOption(word, wrapper, words[index + 1]?.value);
-    noteWrapperMove(option, wrapper, option.takesNext ? words[index + 1] : words[index], state);
-    index += option.takesNext ? 2 : 1;
-
-
+    const option = readWrapperOption(name, word, words[index + 1]?.value) ?? NO_OPTION;
+    noteWrapperMove(name, option, option.width === 2 ? words[index + 1] : words[index], state);
+    index += option.width;
   }
-  return index + wrapper.positionals;
+  return index + (WRAPPER_SPECS[name]?.leadingPositionals ?? 0);
 }
 
 // The index of the first word that is neither an environment assignment
@@ -287,9 +255,9 @@ function skipEnvAndWrappers(words, state) {
       index += 1;
       continue;
     }
-    const wrapper = WRAPPER_SPECS[word.split(/[\\/]/).pop()];
-    if (!wrapper) break;
-    index = skipWrapperOptions(words, index + 1, wrapper, wrapperState);
+    const name = word.split(/[\\/]/).pop();
+    if (!isWrapper(name)) break;
+    index = skipWrapperOptions(words, index + 1, name, wrapperState);
   }
   return index;
 }
