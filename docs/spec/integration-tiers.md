@@ -2,7 +2,7 @@
 
 > The honest map of how each supported AI coding tool integrates with EGC.
 
-EGC supports 20 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
+EGC supports 22 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
 
 What the maintainers guarantee per tool is a separate axis: see [support levels](../governance/support-levels.md).
 
@@ -14,7 +14,7 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 | **2** | Custom-script (retired) | Formerly tool-specific assets via a dedicated shell script | none: Kiro, Trae and CodeBuddy assets ship through their Tier 1 adapters |
 | **3** | Protocol-only | MCP server registration + memory protocol injection | `scripts/bootstrap-cognitive.js` + `install.sh` MCP registration |
 
-## The 20 harnesses
+## The 21 harnesses
 
 > Retired on 2026-08-16, after each vendor's own lifecycle decision: Gemini CLI (standalone product stopped serving 2026-06-18; Antigravity succeeded it on the same home directory), Continue.dev (shut down after the Cursor acqui-hire, repository read-only), and Roo Code (archived upstream since 2026-05-15). Their adapter files remain in the tree, unregistered, for history and trivial rollback.
 
@@ -40,17 +40,18 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 | 18 | **Cline** | 1 | `cline` | `.clinerules/` (project only, no home target) | Rules are flattened into Cline's project-level rules directory using collision-safe namespaced filenames; agents and commands as library folders under `.clinerules/` |
 | 19 | **Warp** | 1 | `warp` | `.warp/skills/<name>.md` + index in project root `AGENTS.md` (project only, no home target) | Warp only discovers a single root `AGENTS.md`/`WARP.md` file as project rules, not a directory of skill files -- confirmed a plain `AGENTS.md` is sufficient (Warp's own docs call it the default project rules file; `WARP.md` is legacy and only takes priority if both exist). Full skill content is copied flat to `.warp/skills/<name>.md` (read on demand); a short index (name + one-line description + path) is merged into a marked block inside `AGENTS.md` via a new `merge-markdown-skill-index` operation kind, since concatenating all 230+ skills (~2MB) into the always-loaded rules file would blow the context budget. Install/repair/uninstall all wired; uninstall never deletes `AGENTS.md` itself, only the EGC block |
 | 20 | **Qwen Code** | 1 | `qwen` | `.qwen/skills/<name>/SKILL.md` (project only, no home target) | Skills installed flat with the source category stripped; Qwen Code discovers project skills natively from `.qwen/skills/`; agents, commands and rules as library folders under `.qwen/`; no hook wiring |
+| 21 | **Kimi Code CLI** | 1 | `kimi` | `~/.kimi-code/skills/<name>/SKILL.md` (home only; `KIMI_CODE_HOME` moves the data root) | Skills installed flat; agents, commands and rules as library folders under `~/.kimi-code/`; hook surface exists (`[[hooks]]` array in `config.toml`, `event = "PreToolUse"`, `matcher = "Bash"`) but the TOML merge and exact matcher string for the Guardian and Token Crusher are deferred pending machine-side verification (see issue #1492); MCP servers registered in `~/.kimi-code/mcp.json` (or `$KIMI_CODE_HOME/mcp.json`) using the standard `{mcpServers: {}}` JSON shape |
 
 ## Prompt library per target
 
-With `--profile full` every target receives the whole prompt library the README counts (agents, skills, commands, rules), and `egc install --prompt-library` applies that profile to every home target detected on the machine (config directory or command on PATH) and to Trae and CodeBuddy under the home directory through their project adapters. A tool without native discovery for a family still receives the files under its root as a library folder, so the agent can be pointed at them. The documented exceptions: Claude Code leaves the Chinese mirror of the common rules out (they would load into every session), and Aider and Warp receive the memory rule only. The contract test in `tests/lib/install-library-contract.test.js` resolves the full profile on all 21 targets and counts what lands. Codex, Goose and OpenHands share the `~/.agents` root, so the same test resolves the three plans together and fails when any destination has two sources; at a destination the catalog also delivers, the catalog copy wins over the repository's `.agents/skills` mirror, and only what the mirror alone carries (the Codex `openai.yaml` metadata) ships from it.
+With `--profile full` every target receives the whole prompt library the README counts (agents, skills, commands, rules), and `egc install --prompt-library` applies that profile to every home target detected on the machine (config directory or command on PATH) and to Trae and CodeBuddy under the home directory through their project adapters. A tool without native discovery for a family still receives the files under its root as a library folder, so the agent can be pointed at them. The documented exceptions: Claude Code leaves the Chinese mirror of the common rules out (they would load into every session), and Aider and Warp receive the memory rule only. The contract test in `tests/lib/install-library-contract.test.js` resolves the full profile on all 22 targets and counts what lands. Codex, Goose and OpenHands share the `~/.agents` root, so the same test resolves the three plans together and fails when any destination has two sources; at a destination the catalog also delivers, the catalog copy wins over the repository's `.agents/skills` mirror, and only what the mirror alone carries (the Codex `openai.yaml` metadata) ships from it.
 
 ## Session-mesh delivery per harness
 
 Every harness participates in the real-time session mesh through two always-on layers, plus a native turn signal where the host's own extension surface supports context injection (each claim below was verified against the vendor's current official documentation, or its source code, on 2026-08-16):
 
-1. **MCP bus (all 20):** `session_announce`, `session_events`, `session_send`, `claim_path`, `working_memory_*`, and the long-poll `session_wait` (wake-on-write, ON by default, with a slow stat poll of the store while a waiter is parked as the safety net for a silent watcher; `EGC_MESH_PUSH=0` opts a server out).
-2. **Cognitive protocol v7 (all 20):** every install's context file teaches the agent to announce presence after restoring state, drain events when an `[egc-mesh]` notice appears, drain `session_events` at the start of every turn while busy (autonomous-loop ticks and scheduled wakeups included) before deciding to stay silent, claim paths before shared edits, and park with `session_wait` when idle. Since v6 the same block states that the state store belongs to `egc-memory` (encrypted at rest, one file per project and branch), that the agent must never read or write those files directly, and that an agent without `get_state` among its tools should say the server is not registered and point at `egc init` instead of improvising memory on the filesystem. Since v7 the review line sends the agent to the `/review-pr` agents only when the prompt library is installed for the tool, and `orchestrate_task` lists what is not installed.
+1. **MCP bus (all 21):** `session_announce`, `session_events`, `session_send`, `claim_path`, `working_memory_*`, and the long-poll `session_wait` (wake-on-write, ON by default, with a slow stat poll of the store while a waiter is parked as the safety net for a silent watcher; `EGC_MESH_PUSH=0` opts a server out).
+2. **Cognitive protocol v7 (all 21):** every install's context file teaches the agent to announce presence after restoring state, drain events when an `[egc-mesh]` notice appears, drain `session_events` at the start of every turn while busy (autonomous-loop ticks and scheduled wakeups included) before deciding to stay silent, claim paths before shared edits, and park with `session_wait` when idle. Since v6 the same block states that the state store belongs to `egc-memory` (encrypted at rest, one file per project and branch), that the agent must never read or write those files directly, and that an agent without `get_state` among its tools should say the server is not registered and point at `egc init` instead of improvising memory on the filesystem. Since v7 the review line sends the agent to the `/review-pr` agents only when the prompt library is installed for the tool, and `orchestrate_task` lists what is not installed.
 3. **Native turn signal (hosts with injection-capable surfaces):** the standalone `mesh-events-inject.js` stats the bus store on every user prompt and injects a one-line drain notice.
    - **Claude Code**: `UserPromptSubmit` hook (settings.json).
    - **Antigravity**: same hook at `.agents/hooks.json` (project) and `~/.gemini/antigravity-cli/hooks.json` (global).
@@ -58,7 +59,7 @@ Every harness participates in the real-time session mesh through two always-on l
    - **Trae**: same hook at `.trae/hooks.json` (hook stdout becomes model context).
    - **Amp**: `agent.start` plugin at `.amp/plugins/` and `~/.config/amp/plugins/` returning a hidden context message.
    - **Kiro**: dedicated hook document at `.kiro/hooks/egc-mesh-notice.json` (project and home), `UserPromptSubmit` command action whose stdout becomes agent context (`--format=text`).
-   - **Not wired, by the host's own limitation** (documented upstream, revisited when vendors ship injection): Cursor (`beforeSubmitPrompt` observes/blocks but does not inject), OpenCode (no per-turn context event), Goose (turn-boundary hook stdout is discarded upstream), and the remaining harnesses whose surfaces expose no per-turn hook (Qwen, Windsurf, VS Code Copilot, Zed, Junie, Amazon Q, OpenHands, Aider, Cline, Warp, CodeBuddy). All of these still get layers 1 and 2.
+   - **Not wired, by the host's own limitation** (documented upstream, revisited when vendors ship injection): Cursor (`beforeSubmitPrompt` observes/blocks but does not inject), OpenCode (no per-turn context event), Goose (turn-boundary hook stdout is discarded upstream), and the remaining harnesses whose surfaces expose no per-turn hook (Qwen, Kimi Code CLI, Windsurf, VS Code Copilot, Zed, Junie, Amazon Q, OpenHands, Aider, Cline, Warp, CodeBuddy). All of these still get layers 1 and 2.
 
 ## Why three tiers (history, not aspiration)
 
@@ -70,7 +71,7 @@ Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude
 
 ## What "supported" guarantees
 
-For all 20 harnesses, EGC guarantees:
+For all 22 harnesses, EGC guarantees:
 
 - The install path is documented above
 - MCP server registration (if the tool supports MCP)

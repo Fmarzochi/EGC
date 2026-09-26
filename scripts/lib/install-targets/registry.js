@@ -27,6 +27,7 @@ const traeProject = require('./trae-project');
 const junieHome = require('./junie-home');
 const junieProject = require('./junie-project');
 const warpProject = require('./warp-project');
+const kimiHome = require('./kimi-home');
 
 // Retired adapters (files kept for history and trivial rollback, never
 // registered): gemini-project (standalone Gemini CLI stopped serving
@@ -62,6 +63,7 @@ const ADAPTERS = Object.freeze([
   junieHome,
   junieProject,
   warpProject,
+  kimiHome,
 ]);
 
 function listInstallTargetAdapters() {

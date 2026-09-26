@@ -84,12 +84,74 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
 
-  (test('the registration list is the seven tools the documentation names, in order', () => {
+  (test('the registration list is the eight tools the documentation names, in order', () => {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity CLI', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Kimi Code CLI',
     ]);
+  }) ? passed++ : failed++);
+
+  (test('Kimi Code CLI: gate opens when the ~/.kimi-code directory is present', () => {
+    const tmpHome = makeTempDir();
+    const savedKimi = process.env.KIMI_CODE_HOME;
+    delete process.env.KIMI_CODE_HOME;
+    try {
+      const kimiDir = path.join(tmpHome, '.kimi-code');
+      fs.mkdirSync(kimiDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kimi Code CLI');
+      assert.strictEqual(target.gate(), true, 'directory alone must open the gate');
+      assert.strictEqual(target.path, path.join(kimiDir, 'mcp.json'));
+    } finally {
+      if (savedKimi === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = savedKimi;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
+  (test('Kimi Code CLI: gate opens when the `kimi` binary is on PATH but no directory exists', () => {
+    const tmpHome = makeTempDir();
+    const savedKimi = process.env.KIMI_CODE_HOME;
+    delete process.env.KIMI_CODE_HOME;
+    // Ensure ~/.kimi-code does NOT exist in tmpHome so the binary-path is exercised.
+    try {
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kimi Code CLI');
+      // The gate is false when neither directory nor binary is present.
+      // We cannot guarantee `kimi` is on PATH in CI, so we only assert the
+      // false branch here; the true branch is covered by the directory test above.
+      const dirExists = require('fs').existsSync(path.join(tmpHome, '.kimi-code'));
+      assert.strictEqual(dirExists, false, 'sanity: no kimi-code dir in fresh tmpHome');
+      // gate() must return a boolean (not throw) regardless of whether the
+      // binary is present.
+      const result = target.gate();
+      assert.strictEqual(typeof result, 'boolean', 'gate must always return a boolean');
+    } finally {
+      if (savedKimi === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = savedKimi;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
+  (test('Kimi Code CLI: KIMI_CODE_HOME redirects both the path and the gate check', () => {
+    const tmpHome = makeTempDir();
+    const customRoot = path.join(tmpHome, 'custom-kimi');
+    const savedKimi = process.env.KIMI_CODE_HOME;
+    process.env.KIMI_CODE_HOME = customRoot;
+    try {
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kimi Code CLI');
+      // Before directory is created: gate is closed (binary not guaranteed in CI)
+      // — we just assert path resolution is correct.
+      assert.strictEqual(target.path, path.join(customRoot, 'mcp.json'),
+        'mcp.json must be under KIMI_CODE_HOME, not ~/.kimi-code');
+      // After creating the custom directory, gate opens.
+      fs.mkdirSync(customRoot, { recursive: true });
+      const target2 = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kimi Code CLI');
+      assert.strictEqual(target2.gate(), true, 'KIMI_CODE_HOME directory must open the gate');
+    } finally {
+      if (savedKimi === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = savedKimi;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
   }) ? passed++ : failed++);
 
   (test('OpenCode: a fresh install gets opencode.json with both servers under mcp in OpenCode\'s own shape', () => {

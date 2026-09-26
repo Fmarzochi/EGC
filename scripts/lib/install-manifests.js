@@ -8,7 +8,7 @@ const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
 // Gemini CLI stopped serving (Antigravity succeeded it on the same ~/.gemini
 // home that the egc target owns), Continue.dev shut down after the Cursor
 // acqui-hire, and Roo Code has been archived upstream since 2026-05-15.
-const SUPPORTED_INSTALL_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'kiro', 'trae', 'junie', 'goose', 'amazonq', 'openhands', 'aider', 'cline', 'warp'];
+const SUPPORTED_INSTALL_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'kiro', 'trae', 'junie', 'goose', 'amazonq', 'openhands', 'aider', 'cline', 'warp', 'kimi'];
 const COMPONENT_FAMILY_PREFIXES = {
   baseline: 'baseline:',
   language: 'lang:',

@@ -152,6 +152,35 @@ function buildMcpRegistrationTargets(homeDir) {
       gate: () => fs.existsSync(path.join(homeDir, '.config', 'zed')),
       format: 'zed-context-servers',
     },
+    {
+      // Kimi Code CLI (MoonshotAI/kimi-code) reads MCP servers from
+      // ~/.kimi-code/mcp.json (or $KIMI_CODE_HOME/mcp.json) in the
+      // standard {mcpServers: {name: {command, args}}} JSON shape.
+      // The gate checks either the config directory (created on first launch)
+      // or the `kimi` binary on PATH, so machines that installed the CLI but
+      // have not launched it yet are still covered.
+      // A leading ~ in KIMI_CODE_HOME is expanded to the real home directory.
+      name: 'Kimi Code CLI',
+      path: (() => {
+        const raw = process.env.KIMI_CODE_HOME;
+        const kimiRoot = raw
+          ? ((raw.startsWith('~/') || raw === '~')
+              ? path.join(homeDir, raw.slice(1))
+              : path.resolve(raw))
+          : path.join(homeDir, '.kimi-code');
+        return path.join(kimiRoot, 'mcp.json');
+      })(),
+      gate: () => {
+        const raw = process.env.KIMI_CODE_HOME;
+        const kimiRoot = raw
+          ? ((raw.startsWith('~/') || raw === '~')
+              ? path.join(homeDir, raw.slice(1))
+              : path.resolve(raw))
+          : path.join(homeDir, '.kimi-code');
+        return fs.existsSync(kimiRoot) || commandExists('kimi');
+      },
+      format: 'json',
+    },
   ];
 }
 
