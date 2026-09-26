@@ -1653,7 +1653,7 @@ function runTests() {
     }
   };
 
-  (test('a JSON write cut short leaves the previous config whole and nothing beside it', () => {
+  (test('a JSON write that fails part way leaves the previous config whole and nothing beside it', () => {
     const tmp = makeTempDir();
     try {
       const configPath = path.join(tmp, 'mcp.json');
@@ -1669,7 +1669,7 @@ function runTests() {
     }
   }) ? passed++ : failed++);
 
-  (test('a TOML write cut short leaves the previous config whole and nothing beside it', () => {
+  (test('a TOML write that fails part way leaves the previous config whole and nothing beside it', () => {
     const tmp = makeTempDir();
     try {
       const configPath = path.join(tmp, 'config.toml');
@@ -1681,6 +1681,27 @@ function runTests() {
       assert.strictEqual(fs.readFileSync(configPath, 'utf8'), previous);
       assert.deepStrictEqual(fs.readdirSync(tmp), ['config.toml']);
     } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }) ? passed++ : failed++);
+
+  (test('a config that cannot be renamed over, like one mounted on its own, is written in place', () => {
+    const tmp = makeTempDir();
+    const realRenameSync = fs.renameSync;
+    try {
+      const configPath = path.join(tmp, 'mcp.json');
+      fs.writeFileSync(configPath, '{}\n');
+      fs.renameSync = () => {
+        throw Object.assign(new Error('EBUSY: resource busy or locked, rename'), { code: 'EBUSY' });
+      };
+
+      assert.strictEqual(registerJson(configPath, bins), true);
+
+      fs.renameSync = realRenameSync;
+      assert.ok(JSON.parse(fs.readFileSync(configPath, 'utf8')).mcpServers['egc-guardian']);
+      assert.deepStrictEqual(fs.readdirSync(tmp), ['mcp.json']);
+    } finally {
+      fs.renameSync = realRenameSync;
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }) ? passed++ : failed++);
@@ -1700,6 +1721,25 @@ function runTests() {
         assert.strictEqual(fs.readFileSync(other, 'utf8'), '{}\n');
         assert.ok(JSON.parse(fs.readFileSync(configPath, 'utf8')).mcpServers['egc-guardian']);
       } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a config in a folder that refuses new files is updated in place', () => {
+      const tmp = makeTempDir();
+      const folder = path.join(tmp, 'locked');
+      try {
+        fs.mkdirSync(folder);
+        const configPath = path.join(folder, 'mcp.json');
+        fs.writeFileSync(configPath, '{}\n');
+        fs.chmodSync(folder, 0o555);
+
+        assert.strictEqual(registerJson(configPath, bins), true);
+
+        assert.ok(JSON.parse(fs.readFileSync(configPath, 'utf8')).mcpServers['egc-guardian']);
+        assert.deepStrictEqual(fs.readdirSync(folder), ['mcp.json']);
+      } finally {
+        fs.chmodSync(folder, 0o755);
         fs.rmSync(tmp, { recursive: true, force: true });
       }
     }) ? passed++ : failed++);

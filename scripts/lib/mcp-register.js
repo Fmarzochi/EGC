@@ -87,6 +87,11 @@ function ownerToKeep(filePath) {
   }
 }
 
+// Where the folder or a mount refuses the replacement (a read-only folder
+// holding a writable config, a config mounted on its own, a file another
+// program holds on Windows), the config is written in place, as before.
+const IN_PLACE_FALLBACK_CODES = new Set(['EACCES', 'EPERM', 'EBUSY']);
+
 // Every config lands in one replacement where its path really leads, so a
 // dotfiles link keeps pointing at the updated file: the text goes to a
 // private temporary file beside it, reaches the disk, and is renamed over
@@ -95,11 +100,16 @@ function writeConfig(targetPath, text) {
   const landing = realizePath(targetPath);
   const owner = ownerToKeep(landing);
   fs.mkdirSync(path.dirname(landing), { recursive: true });
-  replaceFileWith(landing, (descriptor) => {
-    fs.writeFileSync(descriptor, text);
-    if (owner) fs.fchownSync(descriptor, owner.uid, owner.gid);
-    fs.fsyncSync(descriptor);
-  }, NEW_CONFIG_MODE);
+  try {
+    replaceFileWith(landing, (descriptor) => {
+      fs.writeFileSync(descriptor, text);
+      if (owner) fs.fchownSync(descriptor, owner.uid, owner.gid);
+      fs.fsyncSync(descriptor);
+    }, NEW_CONFIG_MODE);
+  } catch (err) {
+    if (!IN_PLACE_FALLBACK_CODES.has(err?.code)) throw err;
+    fs.writeFileSync(landing, text);
+  }
 }
 
 // A line that opens a table. Every key after it belongs to that table, and
