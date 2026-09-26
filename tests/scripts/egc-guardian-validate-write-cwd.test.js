@@ -79,6 +79,16 @@ function verdictOf(response) {
   return response.result.content[0].text;
 }
 
+// The log line and the tool response travel on different pipes, so the line
+// may reach this process a little after the response it belongs to.
+async function waitForStderr(server, text) {
+  const deadline = Date.now() + 2000;
+  while (!server.stderr().includes(text) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  return server.stderr().includes(text);
+}
+
 // Paths land in the log as JSON strings, where a Windows backslash is doubled.
 function asLogged(p) {
   return JSON.stringify(p).slice(1, -1);
@@ -125,13 +135,13 @@ async function runTests() {
     if (await test('an allowed write is logged with the path resolved against the cwd', async () => {
       const text = verdictOf(await validateWrite({ filepath: 'notes.md', cwd: project }));
       assert.strictEqual(text, '[ALLOWED]');
-      assert.ok(server.stderr().includes(asLogged(path.join(project, 'notes.md'))), server.stderr().slice(-600));
+      assert.ok(await waitForStderr(server, asLogged(path.join(project, 'notes.md'))), server.stderr().slice(-600));
     })) passed++; else failed++;
 
     if (await test('a filepath written with ~ is logged under the home', async () => {
       const text = verdictOf(await validateWrite({ filepath: '~/project/todo.md', cwd: serverDir }));
       assert.strictEqual(text, '[ALLOWED]');
-      assert.ok(server.stderr().includes(asLogged(path.join(project, 'todo.md'))), server.stderr().slice(-600));
+      assert.ok(await waitForStderr(server, asLogged(path.join(project, 'todo.md'))), server.stderr().slice(-600));
     })) passed++; else failed++;
 
     if (await test('a denied write is audited with the path resolved against the cwd', async () => {

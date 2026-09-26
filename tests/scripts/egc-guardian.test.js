@@ -277,6 +277,11 @@ async function runTests() {
     assert.strictEqual(validateWrite('  ~/.ssh/id_rsa\n', os.tmpdir()).allowed, false);
     assert.strictEqual(validateWrite(` ${home}/.ssh/id_rsa`, project).allowed, false);
   });
+  run('a relative cwd is refused instead of read against the server directory', () => {
+    const verdict = validateWrite('notes.md', 'project');
+    assert.strictEqual(verdict.allowed, false);
+    assert.match(verdict.reason, /not an absolute path/);
+  });
   run('notes.md from a project in the home stays allowed', () => {
     assert.strictEqual(validateWrite('notes.md', project).allowed, true);
   });

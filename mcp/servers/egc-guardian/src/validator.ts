@@ -2504,8 +2504,23 @@ export function resolveWriteTarget(filepath: string, cwd?: string | null): strin
   return path.resolve(writeBaseDir(cwd), expandHome(filepath.trim()));
 }
 
+// A cwd that is still relative once ~ is expanded would be read against this
+// process's directory, not the agent's, so it is refused rather than guessed.
+function relativeCwdOf(cwd?: string | null): string | null {
+  const trimmed = cwd?.trim();
+  return trimmed && !path.isAbsolute(expandHome(trimmed)) ? trimmed : null;
+}
+
 export function validateWrite(filepath: string, cwd?: string | null): ValidationResult {
-  if (isProtectedPath(filepath, writeBaseDir(cwd))) {
+  const relativeCwd = relativeCwdOf(cwd);
+  if (relativeCwd !== null) {
+    return {
+      allowed: false,
+      reason: `cwd '${relativeCwd}' is not an absolute path; pass the absolute directory the agent works in`,
+      trust_level: 'BLOCKED',
+    };
+  }
+  if (isProtectedPath(resolveWriteTarget(filepath, cwd))) {
     return {
       allowed: false,
       reason: `Path '${filepath}' is protected`,
