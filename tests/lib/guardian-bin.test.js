@@ -474,6 +474,68 @@ function main() {
     }
   });
 
+  run('reads back a control character tomlEscape() wrote into the install path', () => {
+    // A Windows file name cannot hold a C0 control character but can hold
+    // DEL and the C1 ones, so there the folder name carries those two alone.
+    const controlName = process.platform === 'win32'
+      ? 'del\u007fnel\u0085'
+      : 'line\nbreak\r\ttab\b\f\u0001\u007f\u0085';
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const { registerToml } = require('../../scripts/lib/mcp-register');
+      const installDir = path.join(fakeHome, controlName, 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      registerToml(path.join(fakeHome, '.codex', 'config.toml'), {
+        guardianBin: path.join(installDir, 'index.js'),
+        memoryBin: path.join(installDir, '..', 'egc-memory', 'index.js'),
+      });
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromCodexToml } = freshGuardianBin();
+        assert.strictEqual(fromCodexToml(), path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
+  run('reads \\u and \\U escapes in a hand-edited config.toml and keeps one naming no scalar value as written', () => {
+    // On POSIX 'kept\\uD800' is one folder whose name holds a backslash; on
+    // Windows it is the folder 'uD800' inside 'kept'. Either way the path is
+    // the text \uD800 left as written: decoded, it would be a lone surrogate
+    // that names no folder.
+    const fakeHome = createTempDir('egc-guardian-bin-home-');
+    try {
+      const installDir = path.join(fakeHome, 'somewhere', 'kept\\uD800', 'egc-guardian', 'build');
+      fs.mkdirSync(installDir, { recursive: true });
+      fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
+      const escapedIndex = path.join(installDir, 'index.js')
+        .replaceAll('\\', '\\\\')
+        .replace(String.raw`kept\\uD800`, String.raw`kept\uD800`)
+        .replace('somewhere', String.raw`\u0073ome\U00000077here`);
+      const configPath = path.join(fakeHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(
+        configPath,
+        [
+          '[[mcp_servers]]',
+          'name = "egc-guardian"',
+          'command = "node"',
+          String.raw`args = ["\UFFFFFFFF", "${escapedIndex}"]`,
+          '',
+        ].join('\n'),
+      );
+
+      withEnv({ HOME: fakeHome, USERPROFILE: fakeHome }, () => {
+        const { fromCodexToml } = freshGuardianBin();
+        assert.strictEqual(fromCodexToml(), path.join(installDir, 'guardian-cli.js'));
+      });
+    } finally {
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  });
+
   run('handles a multi-line args array', () => {
     const fakeHome = createTempDir('egc-guardian-bin-home-');
     try {

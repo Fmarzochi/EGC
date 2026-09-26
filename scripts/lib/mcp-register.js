@@ -478,17 +478,32 @@ function registerJson(targetPath, bins) {
   return true;
 }
 
+// The escapes TOML spells with a single letter. Any other control character
+// is written as \uXXXX, and guardian-bin.js reads both forms back.
+const TOML_SHORT_ESCAPES = {
+  '\\': String.raw`\\`,
+  '"': String.raw`\"`,
+  '\b': String.raw`\b`,
+  '\t': String.raw`\t`,
+  '\n': String.raw`\n`,
+  '\f': String.raw`\f`,
+  '\r': String.raw`\r`,
+};
+
 /**
  * Escapes a path for use inside a TOML basic (double-quoted) string.
- * Two characters can occur in a real filesystem path and break the string: a
- * backslash (TOML reserves "\U" for an 8-hex-digit Unicode escape, so a raw
- * Windows path like C:\Users\... silently corrupts the file the moment a
- * backslash precedes a hex-ish character) and a double quote (legal in a POSIX
- * directory name, and it would terminate the string early). Escape the
- * backslash first so the one added for the quote is not doubled again.
+ * Three kinds of character can occur in a real filesystem path and break the
+ * string: a backslash (TOML reserves "\U" for an 8-hex-digit Unicode escape,
+ * so a raw Windows path like C:\Users\... silently corrupts the file the
+ * moment a backslash precedes a hex-ish character), a double quote (legal in
+ * a POSIX directory name, and it would terminate the string early) and a
+ * control character such as a line break (just as legal there, and a basic
+ * string cannot hold one raw). All of them are replaced in one pass, so the
+ * backslash an escape adds is never escaped again.
  */
 function tomlEscape(p) {
-  return p.replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`);
+  return p.replaceAll(/["\\\p{Cc}]/gu, (ch) => TOML_SHORT_ESCAPES[ch]
+    ?? String.raw`\u${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`);
 }
 
 // Whether the text is a TOML document a parser accepts. Without @iarna/toml

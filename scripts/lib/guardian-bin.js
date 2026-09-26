@@ -122,28 +122,30 @@ function fromMcpConfigs() {
 // config file with other tables/features registerToml() doesn't touch still
 // resolves fine.
 
-// Reverses tomlEscape() in scripts/lib/mcp-register.js: backslash-escaped
-// backslash and double-quote are the only two escapes that function ever
-// produces, but \n and \t are handled too since they're valid in a TOML
-// basic string and a hand-edited file could contain them. A lookup table
-// (rather than a chain of if/else on each recognized escape) keeps this
-// under SonarCloud's cognitive-complexity ceiling.
-const TOML_ESCAPES = { '\\': '\\', '"': '"', n: '\n', t: '\t' };
+// Reverses tomlEscape() in scripts/lib/mcp-register.js: the single-letter
+// escapes and \uXXXX, the two forms that function writes. \UXXXXXXXX is read
+// too, since it is just as valid in a basic string and a hand-edited file
+// could contain it. An unrecognized escape, or one that names no Unicode
+// scalar value (a surrogate, or a code point past the last one), is kept
+// verbatim: TOML allows scalar values only, String.fromCodePoint would throw
+// past the last one, and parseCodexMcpServers() never throws.
+const TOML_ESCAPES = { '\\': '\\', '"': '"', b: '\b', t: '\t', n: '\n', f: '\f', r: '\r' };
+const TOML_ESCAPE_PATTERN = /\\(?:u([\dA-Fa-f]{4})|U([\dA-Fa-f]{8})|(.))/g;
+const MAX_CODE_POINT = 0x10FFFF;
+const FIRST_SURROGATE = 0xD800;
+const LAST_SURROGATE = 0xDFFF;
+
+function isScalarValue(codePoint) {
+  return codePoint <= MAX_CODE_POINT && (codePoint < FIRST_SURROGATE || codePoint > LAST_SURROGATE);
+}
 
 function tomlUnescapeBasicString(raw) {
-  let out = '';
-  for (let i = 0; i < raw.length; i++) {
-    const ch = raw[i];
-    const next = ch === '\\' ? raw[i + 1] : undefined;
-    const mapped = next !== undefined ? TOML_ESCAPES[next] : undefined;
-    if (mapped !== undefined) {
-      out += mapped;
-      i++; // consumed the escape char too
-    } else {
-      out += ch; // not an escape, or an unrecognized one: keep verbatim
-    }
-  }
-  return out;
+  return raw.replaceAll(TOML_ESCAPE_PATTERN, (escape, hex4, hex8, letter) => {
+    const hex = hex4 ?? hex8;
+    if (hex === undefined) return TOML_ESCAPES[letter] ?? escape;
+    const codePoint = Number.parseInt(hex, 16);
+    return isScalarValue(codePoint) ? String.fromCodePoint(codePoint) : escape;
+  });
 }
 
 // Extracts the value of a TOML basic (double-quoted) string, or null if the

@@ -752,6 +752,47 @@ function runTests() {
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
 
+  (test('registerToml keeps a path with a line break or another control character one valid string', () => {
+    let TOML;
+    try {
+      TOML = require('@iarna/toml');
+    } catch (_) {
+      console.log('    (skipped: @iarna/toml not installed, nothing to verify with)');
+      return;
+    }
+
+    // A line break is as legal in a POSIX directory name as a double quote,
+    // and a basic string cannot hold one raw. The written file is checked
+    // with the module holding the parser and without it, as on a user's
+    // machine where only the escaping stands between the path and the file.
+    const controlPath = '/home/person/line\nbreak\r\ttab\b\f\u0001\u001f\u007f\u0085/egc-guardian/index.js';
+    const tmpHome = makeTempDir();
+
+    const roundTrips = (label, register) => {
+      const target = path.join(tmpHome, label, 'config.toml');
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, 'model = "o3"\n');
+
+      assert.strictEqual(register(target, { guardianBin: controlPath, memoryBin: bins.memoryBin }), true, label);
+
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(
+        content.includes(String.raw`args = ["/home/person/line\nbreak\r\ttab\b\f\u0001\u001F\u007F\u0085/egc-guardian/index.js"]`),
+        `${label}: every control character must be written as its escape, on the line of the entry`
+      );
+      const parsed = TOML.parse(content);
+      assert.deepStrictEqual(Object.keys(parsed).sort(), ['mcp_servers', 'model'], `${label}: only the two tables may be added`);
+      assert.strictEqual(parsed.mcp_servers.length, 2, label);
+      const guardianEntry = parsed.mcp_servers.find(s => s.name === 'egc-guardian');
+      assert.strictEqual(guardianEntry.args[0], controlPath, `${label}: the path must round-trip exactly`);
+    };
+
+    roundTrips('with-parser', registerToml);
+    withoutTomlParser((parserlessRegisterToml) => roundTrips('no-parser', parserlessRegisterToml));
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  }) ? passed++ : failed++);
+
   (test('registerToml restores a commented-out entry instead of treating it as already registered (audit EGC-128)', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
