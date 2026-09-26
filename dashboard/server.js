@@ -7,7 +7,7 @@ const fs      = require('fs');
 const os      = require('os');
 const { execSync, execFileSync } = require('child_process');
 const { KNOWN_IDES, createAccumulator } = require('./accumulator');
-const { TOKEN_HEADER, createOpsHandler, isPanelOrigin, loadOrCreateOpsToken, tokensMatch } = require('./ops');
+const { TOKEN_HEADER, createOpsHandler, isLoopbackHost, isPanelOrigin, loadOrCreateOpsToken, tokensMatch } = require('./ops');
 const { SUPPORTED_INSTALL_TARGETS } = require('../scripts/lib/install-manifests');
 const { PORT } = require('./port');
 const PUBLIC = path.join(__dirname, 'public');
@@ -189,6 +189,12 @@ const clients = new Set();
 
 // ── HTTP server ─────────────────────────────────────────────
 const server = http.createServer((req, res) => {
+  // Checked before every route, the token-carrying page and /ops included.
+  if (!isLoopbackHost(req.headers.host)) {
+    sendJson(res, 403, { error: 'Host not allowed' });
+    return;
+  }
+
   // ── POST /ops/<operation> ───────────────────────────────
   // Answered first so it sets its own token-aware CORS headers instead of the
   // permissive any-loopback-port ones the telemetry routes below carry.
@@ -521,7 +527,7 @@ try {
   // Only the panel this server serves may join the live broadcast: the
   // upgrade must carry the panel's own origin, so a page elsewhere in the
   // same browser cannot read commands, paths and URLs off the stream.
-  const wss = new WebSocketServer({ server, verifyClient: info => isPanelOrigin(info.origin, PORT) });
+  const wss = new WebSocketServer({ server, verifyClient: info => isLoopbackHost(info.req.headers.host) && isPanelOrigin(info.origin, PORT) });
   wss.on('connection', ws => {
     clients.add(ws);
     ws.on('close', () => clients.delete(ws));

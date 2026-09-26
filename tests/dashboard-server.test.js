@@ -602,6 +602,96 @@ test('WebSocket upgrade is refused without the panel origin and accepted with it
   assert.equal(panel.opened, true, 'the panel itself must connect');
 }));
 
+// ---------------------------------------------------------------------------
+// Host header: only the loopback names this server answers to are served
+// ---------------------------------------------------------------------------
+
+function requestWithHost(port, { method = 'GET', path: reqPath, host, body = '' }) {
+  return new Promise((resolve, reject) => {
+    const headers = { 'Content-Length': Buffer.byteLength(body) };
+    if (host !== undefined) headers.Host = host;
+    const req = http.request({ hostname: '127.0.0.1', port, path: reqPath, method, headers, setHost: false }, res => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+function hostRoutes() {
+  const { listOpsOperations } = require('../dashboard/ops');
+  // [method, path, status a loopback Host gets without a token or a session]
+  return [
+    ['GET', '/', 200], ['GET', '/index.html', 200], ['GET', '/ping', 200], ['GET', '/capabilities', 200],
+    ['GET', '/telemetry', 200], ['GET', '/replay/sessions', 200], ['GET', '/replay/events?session=x', 400],
+    ['GET', '/session-history', 200], ['GET', '/prices', 200], ['GET', '/cost-summary', 200], ['GET', '/stats', 200],
+    ['GET', '/egc-logo.png', 200], ['GET', '/config.json', 200], ['OPTIONS', '/ping', 204],
+    ['POST', '/event', 401], ['POST', `/ops/${listOpsOperations()[0]}`, 401],
+  ];
+}
+
+test('isLoopbackHost accepts the loopback names with any port and nothing else', () => {
+  const { isLoopbackHost } = require('../dashboard/ops');
+  for (const host of ['localhost', 'localhost:7890', 'LOCALHOST:7890', '127.0.0.1', '127.0.0.1:9000', '[::1]', '[::1]:7890', 'localhost:65535']) {
+    assert.equal(isLoopbackHost(host), true, `${host} is a loopback name`);
+  }
+  for (const host of [undefined, '', 'attacker.example', 'attacker.example:7890', 'localhost.attacker.example:7890',
+    '127.0.0.1.nip.io:7890', 'evil.localhost:7890', 'localhost:7890:1', 'localhost:abc', '[::2]:7890', '0.0.0.0:7890',
+    'localhost:65536', 'localhost:0', '127.0.0.1:99999']) {
+    assert.equal(isLoopbackHost(host), false, `${host} is not a loopback name`);
+  }
+});
+
+test('every route refuses a request whose Host is not a loopback name', () => withDashboardServer(async port => {
+  for (const [method, reqPath] of hostRoutes()) {
+    const res = await requestWithHost(port, { method, path: reqPath, host: `attacker.example:${PANEL_PORT}` });
+    assert.equal(res.status, 403, `${method} ${reqPath} must refuse a foreign Host`);
+    assert.match(res.body, /Host not allowed/, `${method} ${reqPath} must say why`);
+    assert.ok(!res.body.includes(dashboardToken()), `${method} ${reqPath} must not carry the dashboard token`);
+  }
+}));
+
+function rawRequest(port, text) {
+  return new Promise((resolve, reject) => {
+    const net = require('net');
+    const socket = net.connect(port, '127.0.0.1', () => socket.end(text));
+    let data = '';
+    socket.setEncoding('utf8');
+    socket.on('data', chunk => { data += chunk; });
+    socket.on('end', () => resolve(data));
+    socket.on('error', reject);
+  });
+}
+
+test('a request without a Host header is refused', () => withDashboardServer(async port => {
+  const http10 = await rawRequest(port, 'GET /ping HTTP/1.0\r\n\r\n');
+  assert.match(http10, /^HTTP\/1\.[01] 403 /, 'an HTTP/1.0 request, which may omit Host, is refused by the server');
+  const http11 = await requestWithHost(port, { path: '/ping', host: undefined });
+  assert.ok(http11.status >= 400, 'an HTTP/1.1 request without Host is refused as well');
+}));
+
+test('every route keeps answering the loopback names', () => withDashboardServer(async port => {
+  for (const host of [`localhost:${PANEL_PORT}`, `127.0.0.1:${port}`, `[::1]:${PANEL_PORT}`]) {
+    for (const [method, reqPath, status] of hostRoutes()) {
+      const res = await requestWithHost(port, { method, path: reqPath, host });
+      assert.equal(res.status, status, `${method} ${reqPath} must answer Host ${host} as it always has`);
+    }
+  }
+}));
+
+test('the WebSocket upgrade is refused for a foreign Host even with the panel origin', () => withDashboardServer(async port => {
+  const result = await new Promise(resolve => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { origin: `http://localhost:${PANEL_PORT}`, headers: { Host: `attacker.example:${PANEL_PORT}` } });
+    ws.on('open', () => { ws.close(); resolve({ opened: true }); });
+    ws.on('unexpected-response', (req, res) => { req.destroy(); resolve({ opened: false, status: res.statusCode }); });
+    ws.on('error', error => resolve({ opened: false, error: error.message }));
+  });
+  assert.equal(result.opened, false, 'a rebound page must not join the broadcast');
+}));
+
 test('postEvent reports completion once even when a timeout also raises an error', () => new Promise((resolve, reject) => {
   const { postEvent } = require('../dashboard/telemetry-client');
   const net = require('net');
