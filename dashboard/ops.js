@@ -219,6 +219,19 @@ function isPanelOrigin(origin, port) {
   return panelOrigins(port).includes(origin);
 }
 
+// A page that points its own domain at 127.0.0.1 still sends that domain as
+// Host, so only the loopback names this server answers to are served. Any
+// port is accepted: a forwarded or mapped port still reaches this server
+// under a loopback name.
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const HOST_RE = /^(\[[^\]]*\]|[^:]*)(?::\d{1,5})?$/;
+
+function isLoopbackHost(host) {
+  if (typeof host !== 'string') return false;
+  const match = HOST_RE.exec(host.toLowerCase());
+  return match !== null && LOOPBACK_HOSTS.has(match[1]);
+}
+
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(payload));
@@ -604,6 +617,7 @@ module.exports = {
   TOKEN_FILE_NAME,
   TOKEN_HEADER,
   createOpsHandler,
+  isLoopbackHost,
   isPanelOrigin,
   listOpsOperations,
   loadOrCreateOpsToken,
