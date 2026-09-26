@@ -260,8 +260,31 @@ for (const command of [
   run(`command strings: ${command} is hard-blocked (the wrapper hands its value to a shell)`, () => assertHardBlocked(command));
 }
 for (const command of [
+  'sudo --us root rm -rf /',
+  'sudo --login-c default rm -rf /',
+  'timeout --kill 5 10 rm -rf /',
+  'strace --stack-trace-frame-limit 5 rm -rf /',
+  'strace --stack-trace-f 5 rm -rf /',
+  'systemd-run --json short rm -rf /',
+]) {
+  run(`long option abbreviations: ${command} is hard-blocked (a unique prefix is read as the option it names)`, () => assertHardBlocked(command));
+}
+for (const command of [
+  'sudo --login rm -rf /',
+  'strace --stack-trace rm -rf /',
+  'strace --summary rm -rf /',
+  'sudo --log rm -rf /',
+  'strace --stack rm -rf /',
+  'nice -- rm -rf /',
+  'xargs --max-l rm -rf /',
+]) {
+  run(`long option abbreviations: ${command} is hard-blocked (an exact or ambiguous name is not stretched into a value option)`, () => assertHardBlocked(command));
+}
+run('long option abbreviations: env --split "rm -rf /" is hard-blocked (an abbreviated --split-string still splits)', () => assertHardBlocked('env --split "rm -rf /"'));
+for (const command of [
   'sudo -Hu root npm install',
   'sudo -uroot npm install',
+  'sudo --us root npm install',
   'timeout -k 5 10 npm test',
   'xargs -I{} ls {}',
   'xargs -I {} ls {}',
