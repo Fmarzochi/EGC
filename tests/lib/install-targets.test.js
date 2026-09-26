@@ -1506,10 +1506,13 @@ function runTests() {
         resolution: { selectedModules: [], skippedModules: [] },
         operations: [
           { kind: 'copy-file', moduleId: 'platform-configs', sourceRelativePath: 'scripts/auto-update.js', destinationPath: destination, strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          // The person's global config now: the package rule keeps it, and
+          // the general rule must not offer it either.
+          { kind: 'copy-file', moduleId: 'platform-configs', sourceRelativePath: '.opencode/opencode.json', destinationPath: path.join(targetRoot, 'opencode.json'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
         ],
         source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
       }));
-      const modules = [{ id: 'platform-configs', paths: ['mcp-configs', 'scripts/setup-package-manager.js'] }];
+      const modules = [{ id: 'platform-configs', paths: ['.opencode', 'mcp-configs', 'scripts/setup-package-manager.js'] }];
       const plan = planInstallTargetScaffold({ ...planningInput, modules });
       assert.deepStrictEqual(plan.retirements.map(entry => entry.destinationPath), [destination]);
     } finally {
@@ -3866,6 +3869,9 @@ function runTests() {
     try {
       fs.mkdirSync(path.join(repoRoot, 'bundle', 'nested'), { recursive: true });
       fs.writeFileSync(path.join(repoRoot, 'bundle', 'a.md'), 'a');
+      // A tooling file the installer never copies today, recorded by an
+      // older install that did.
+      fs.writeFileSync(path.join(repoRoot, 'bundle', '.gitignore'), 'x');
       fs.mkdirSync(path.join(repoRoot, 'rootcopy'), { recursive: true });
       fs.writeFileSync(path.join(repoRoot, 'rootcopy', 'kept.md'), 'kept');
       fs.mkdirSync(path.join(repoRoot, 'scripts'), { recursive: true });
@@ -3903,6 +3909,7 @@ function runTests() {
         operations: [
           copy('x', 'bundle/a.md', path.join(targetRoot, 'bundle', 'a.md')),
           copy('x', 'bundle/nested/b.md', path.join(targetRoot, 'bundle', 'nested', 'b.md')),
+          copy('x', 'bundle/.gitignore', path.join(targetRoot, 'bundle', '.gitignore')),
           copy('y', 'rootcopy/kept.md', path.join(targetRoot, 'kept.md')),
           copy('z', 'scripts/dropped.js', path.join(targetRoot, 'scripts', 'dropped.js')),
         ],
@@ -3911,8 +3918,8 @@ function runTests() {
 
       assert.deepStrictEqual(
         adapter.planRetirements(planningInput).map(entry => path.relative(targetRoot, entry.destinationPath)).sort(),
-        [path.join('bundle', 'nested', 'b.md'), path.join('scripts', 'dropped.js')].sort(),
-        'b.md left the planned directory and dropped.js left its module; a.md and kept.md are still written'
+        [path.join('bundle', '.gitignore'), path.join('bundle', 'nested', 'b.md'), path.join('scripts', 'dropped.js')].sort(),
+        'b.md left the planned directory, .gitignore is no longer copied and dropped.js left its module; a.md and kept.md are still written'
       );
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
