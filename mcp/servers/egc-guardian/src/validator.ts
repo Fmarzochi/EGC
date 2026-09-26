@@ -194,8 +194,9 @@ function tokenizeWords(command: string): string[] {
 // where that differs from sudo, sudo refuses to run. sudo -U only works
 // together with -l, which lists instead of running, so it stays out.
 // exactLongFlags are long flags that take no value but are a prefix of one
-// that does (sudo --login and --login-class): getopt_long takes an exact
-// name as itself, so they are never read as an abbreviation.
+// that does (sudo --login and --login-class): they count when a prefix is
+// matched, so neither the exact name nor a prefix it shares is stretched
+// into the value option.
 interface WrapperSpec {
   valueFlags: Set<string>;
   optionalValueFlags?: Set<string>;
@@ -253,11 +254,14 @@ interface WrapperOptions {
 }
 
 // getopt_long takes an exact long name as itself and a prefix that names a
-// single option as that option; a prefix that fits several is an error that
-// stops the wrapper before it runs anything, so it is left as written.
+// single option as that option; a prefix that fits several (sudo --log fits
+// --login and --login-class) is an error that stops the wrapper before it
+// runs anything, so it is left as written. An exact name that is also a
+// prefix of a longer one is ambiguous here too and so stays itself.
 function resolveLongOption(name: string, spec: WrapperSpec): string {
-  if (name.length <= 2 || spec.valueFlags.has(name) || spec.exactLongFlags?.has(name)) return name;
-  const matches = [...spec.valueFlags].filter(flag => flag.startsWith(name));
+  if (name.length <= 2) return name;
+  const known = [...spec.valueFlags, ...(spec.exactLongFlags ?? [])];
+  const matches = known.filter(flag => flag.startsWith(name));
   return matches.length === 1 ? matches[0] : name;
 }
 

@@ -273,6 +273,8 @@ for (const command of [
   'sudo --login rm -rf /',
   'strace --stack-trace rm -rf /',
   'strace --summary rm -rf /',
+  'sudo --log rm -rf /',
+  'strace --stack rm -rf /',
   'nice -- rm -rf /',
   'xargs --max-l rm -rf /',
 ]) {
