@@ -1563,6 +1563,27 @@ function runTests() {
       }
     }) ? passed++ : failed++);
 
+    (test('OpenCode: a lone legacy config.json linked from under the home is registered through the link', () => {
+      const { base, home } = makeLayout();
+      try {
+        const dotfile = path.join(home, 'dotfiles', 'opencode-config.json');
+        fs.mkdirSync(path.dirname(dotfile));
+        fs.writeFileSync(dotfile, '{}\n');
+        const dir = path.join(home, '.config', 'opencode');
+        fs.mkdirSync(dir, { recursive: true });
+        const link = path.join(dir, 'config.json');
+        fs.symlinkSync(path.join('..', '..', 'dotfiles', 'opencode-config.json'), link);
+
+        const outcome = registerWithoutXdg(home);
+
+        assert.ok(outcome.registered.includes('OpenCode'), `registered through the link: ${outcome.warned.join(' | ')}`);
+        assert.ok(JSON.parse(fs.readFileSync(dotfile, 'utf8')).mcp['egc-guardian'], 'the dotfile holds the servers');
+        assert.ok(fs.lstatSync(link).isSymbolicLink(), 'the link itself stays in place');
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
     const runRegisterCli = (projectDir, homeDir) => {
       const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, PATH: homeDir };
       delete env.XDG_CONFIG_HOME;

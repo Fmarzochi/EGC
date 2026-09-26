@@ -88,7 +88,7 @@ function assertLandsInside(targetPath, roots) {
   if (roots.some(root => isInsideReal(landing, root))) return;
   throw new Error(
     `${targetPath} leads through a link to ${landing}, outside ${roots.join(' and ')} - left untouched: ` +
-    'add egc-guardian and egc-memory to that file by hand, then re-run'
+    `keep the file under ${roots.join(' or ')} (move it or relink it), or add egc-guardian and egc-memory to it by hand`
   );
 }
 
