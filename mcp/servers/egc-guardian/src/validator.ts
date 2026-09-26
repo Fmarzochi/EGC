@@ -193,14 +193,21 @@ function tokenizeWords(command: string): string[] {
 // next word as the host when -h stands alone, so it is read as a value flag;
 // where that differs from sudo, sudo refuses to run. sudo -U only works
 // together with -l, which lists instead of running, so it stays out.
+// exactLongFlags are long flags that take no value but are a prefix of one
+// that does (sudo --login and --login-class): getopt_long takes an exact
+// name as itself, so they are never read as an abbreviation.
 interface WrapperSpec {
   valueFlags: Set<string>;
   optionalValueFlags?: Set<string>;
+  exactLongFlags?: Set<string>;
   leadingPositionals?: number;
 }
 
 const WRAPPER_SPECS: Record<string, WrapperSpec> = {
-  sudo: { valueFlags: new Set(['-a', '--auth-type', '-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-c', '--login-class', '-r', '--role', '-t', '--type', '-T', '--command-timeout', '-R', '--chroot', '-D', '--chdir']) },
+  sudo: {
+    valueFlags: new Set(['-a', '--auth-type', '-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-c', '--login-class', '-r', '--role', '-t', '--type', '-T', '--command-timeout', '-R', '--chroot', '-D', '--chdir']),
+    exactLongFlags: new Set(['--login']),
+  },
   doas: { valueFlags: new Set(['-a', '-u', '-C']) },
   env: { valueFlags: new Set(['-a', '--argv0', '-u', '--unset', '-C', '--chdir', '-f', '--file', '-S', '--split-string']) },
   nohup: { valueFlags: new Set() },
@@ -224,7 +231,9 @@ const WRAPPER_SPECS: Record<string, WrapperSpec> = {
       '--env', '--fault', '--inject', '--interruptible', '--kvm', '--output', '--raw', '--read', '--signal',
       '--status', '--string-limit', '--summary-columns', '--summary-sort-by', '--summary-syscall-overhead',
       '--syscall-limit', '--trace', '--trace-fds', '--trace-path', '--user', '--verbose', '--write',
+      '--stack-trace-frame-limit',
     ]),
+    exactLongFlags: new Set(['--stack-trace']),
   },
   'systemd-run': {
     valueFlags: new Set([
@@ -232,6 +241,7 @@ const WRAPPER_SPECS: Record<string, WrapperSpec> = {
       '--working-directory', '-M', '--machine', '-H', '--host', '--description', '--background',
       '--expand-environment', '--on-active', '--on-boot', '--on-calendar', '--on-startup', '--on-unit-active',
       '--on-unit-inactive', '--path-property', '--service-type', '--socket-property', '--timer-property',
+      '--json',
     ]),
   },
   parallel: { valueFlags: new Set(['-j', '--jobs', '-N', '--delay', '--retries', '--timeout', '--joblog', '--results', '-S', '--sshlogin']) },
@@ -242,6 +252,15 @@ interface WrapperOptions {
   end: number;
 }
 
+// getopt_long takes an exact long name as itself and a prefix that names a
+// single option as that option; a prefix that fits several is an error that
+// stops the wrapper before it runs anything, so it is left as written.
+function resolveLongOption(name: string, spec: WrapperSpec): string {
+  if (name.length <= 2 || spec.valueFlags.has(name) || spec.exactLongFlags?.has(name)) return name;
+  const matches = [...spec.valueFlags].filter(flag => flag.startsWith(name));
+  return matches.length === 1 ? matches[0] : name;
+}
+
 // Reads one option word the way getopt does and returns the option names it
 // sets plus how many words it spans. A long flag takes the next word only
 // when it is a value flag written without `=value`. A short cluster (`-Hu`)
@@ -250,7 +269,7 @@ interface WrapperOptions {
 function readWrapperOption(flag: string, spec: WrapperSpec): { names: string[]; width: number } {
   if (flag.startsWith('--')) {
     const eq = flag.indexOf('=');
-    const name = eq > 0 ? flag.slice(0, eq) : flag;
+    const name = resolveLongOption(eq > 0 ? flag.slice(0, eq) : flag, spec);
     return { names: [name], width: eq < 0 && spec.valueFlags.has(name) ? 2 : 1 };
   }
   const names: string[] = [];
