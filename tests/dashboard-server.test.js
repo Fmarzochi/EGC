@@ -623,21 +623,24 @@ function requestWithHost(port, { method = 'GET', path: reqPath, host, body = '' 
 
 function hostRoutes() {
   const { listOpsOperations } = require('../dashboard/ops');
+  // [method, path, status a loopback Host gets without a token or a session]
   return [
-    ['GET', '/'], ['GET', '/index.html'], ['GET', '/ping'], ['GET', '/capabilities'], ['GET', '/telemetry'],
-    ['GET', '/replay/sessions'], ['GET', '/replay/events?session=x'], ['GET', '/session-history'], ['GET', '/prices'],
-    ['GET', '/cost-summary'], ['GET', '/stats'], ['GET', '/egc-logo.png'], ['GET', '/config.json'],
-    ['OPTIONS', '/ping'], ['POST', '/event'], ['POST', `/ops/${listOpsOperations()[0]}`],
+    ['GET', '/', 200], ['GET', '/index.html', 200], ['GET', '/ping', 200], ['GET', '/capabilities', 200],
+    ['GET', '/telemetry', 200], ['GET', '/replay/sessions', 200], ['GET', '/replay/events?session=x', 400],
+    ['GET', '/session-history', 200], ['GET', '/prices', 200], ['GET', '/cost-summary', 200], ['GET', '/stats', 200],
+    ['GET', '/egc-logo.png', 200], ['GET', '/config.json', 200], ['OPTIONS', '/ping', 204],
+    ['POST', '/event', 401], ['POST', `/ops/${listOpsOperations()[0]}`, 401],
   ];
 }
 
 test('isLoopbackHost accepts the loopback names with any port and nothing else', () => {
   const { isLoopbackHost } = require('../dashboard/ops');
-  for (const host of ['localhost', 'localhost:7890', 'LOCALHOST:7890', '127.0.0.1', '127.0.0.1:9000', '[::1]', '[::1]:7890']) {
+  for (const host of ['localhost', 'localhost:7890', 'LOCALHOST:7890', '127.0.0.1', '127.0.0.1:9000', '[::1]', '[::1]:7890', 'localhost:65535']) {
     assert.equal(isLoopbackHost(host), true, `${host} is a loopback name`);
   }
   for (const host of [undefined, '', 'attacker.example', 'attacker.example:7890', 'localhost.attacker.example:7890',
-    '127.0.0.1.nip.io:7890', 'evil.localhost:7890', 'localhost:7890:1', 'localhost:abc', '[::2]:7890', '0.0.0.0:7890']) {
+    '127.0.0.1.nip.io:7890', 'evil.localhost:7890', 'localhost:7890:1', 'localhost:abc', '[::2]:7890', '0.0.0.0:7890',
+    'localhost:65536', 'localhost:0', '127.0.0.1:99999']) {
     assert.equal(isLoopbackHost(host), false, `${host} is not a loopback name`);
   }
 });
@@ -672,13 +675,11 @@ test('a request without a Host header is refused', () => withDashboardServer(asy
 
 test('every route keeps answering the loopback names', () => withDashboardServer(async port => {
   for (const host of [`localhost:${PANEL_PORT}`, `127.0.0.1:${port}`, `[::1]:${PANEL_PORT}`]) {
-    for (const [method, reqPath] of hostRoutes()) {
+    for (const [method, reqPath, status] of hostRoutes()) {
       const res = await requestWithHost(port, { method, path: reqPath, host });
-      assert.ok(!/Host not allowed/.test(res.body), `${method} ${reqPath} must answer Host ${host}`);
+      assert.equal(res.status, status, `${method} ${reqPath} must answer Host ${host} as it always has`);
     }
   }
-  const page = await requestWithHost(port, { path: '/', host: `localhost:${PANEL_PORT}` });
-  assert.equal(page.status, 200);
 }));
 
 test('the WebSocket upgrade is refused for a foreign Host even with the panel origin', () => withDashboardServer(async port => {

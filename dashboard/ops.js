@@ -224,12 +224,15 @@ function isPanelOrigin(origin, port) {
 // port is accepted: a forwarded or mapped port still reaches this server
 // under a loopback name.
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
-const HOST_RE = /^(\[[^\]]*\]|[^:]*)(?::\d{1,5})?$/;
+const HOST_RE = /^(\[[^\]]*\]|[^:]*)(?::(\d{1,5}))?$/;
+const MAX_PORT = 65535;
 
 function isLoopbackHost(host) {
   if (typeof host !== 'string') return false;
   const match = HOST_RE.exec(host.toLowerCase());
-  return match !== null && LOOPBACK_HOSTS.has(match[1]);
+  if (match === null || !LOOPBACK_HOSTS.has(match[1])) return false;
+  const port = match[2] === undefined ? null : Number(match[2]);
+  return port === null || (port >= 1 && port <= MAX_PORT);
 }
 
 function sendJson(res, statusCode, payload) {
