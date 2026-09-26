@@ -78,6 +78,88 @@ function runTests() {
       }
     })) passed++; else failed++;
 
+    if (test('a script behind a local wrapper (setsid, taskset, chrt, nsenter, numactl, pkexec, busybox, prlimit, runuser -u) is judged', () => {
+      const commands = [
+        'setsid bash notes.txt',
+        'setsid -f bash notes.txt',
+        'taskset -c 0 bash notes.txt',
+        'chrt -o bash notes.txt',
+        'chrt 0 bash notes.txt',
+        'nsenter -t 1 -n bash notes.txt',
+        'numactl -C 0 bash notes.txt',
+        'pkexec bash notes.txt',
+        'busybox sh notes.txt',
+        'prlimit -n bash notes.txt',
+        'runuser -u nobody -- bash notes.txt',
+      ];
+      for (const command of commands) {
+        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+        assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+      }
+      const benignRun = run({ tool_name: 'Bash', tool_input: { command: 'setsid bash build.sh' }, cwd: dir });
+      assert.strictEqual(benignRun.exitCode, 0, `a benign script behind setsid passes: ${JSON.stringify(benignRun)}`);
+    })) passed++; else failed++;
+
+    if (test('a local wrapper that moves the root or the directory moves where the script is found', () => {
+      const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-script-operand-moved-'));
+      const quoted = JSON.stringify(dir);
+      const commands = [
+        `unshare -w ${quoted} bash notes.txt`,
+        `unshare --wd=${quoted} bash notes.txt`,
+        `unshare -R ${quoted} bash /notes.txt`,
+        `unshare -R ${quoted} bash notes.txt`,
+        `chroot ${quoted} bash notes.txt`,
+        `chroot ${quoted} bash /notes.txt`,
+        `env -C /tmp chroot ${quoted} bash notes.txt`,
+        `nsenter -w${quoted} bash notes.txt`,
+        `nsenter --wd=${quoted} bash notes.txt`,
+      ];
+      try {
+        for (const command of commands) {
+          const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: elsewhere });
+          assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+        }
+        const parent = JSON.stringify(path.dirname(dir));
+        const leaf = JSON.stringify(path.basename(dir));
+        for (const command of [`chroot ${quoted} chroot / bash notes.txt`, `env -C ${parent} chroot ${leaf} bash notes.txt`, `env -C ${parent} env -C ${leaf} bash notes.txt`, `env -C ${parent} unshare -w ${leaf} bash notes.txt`, `env -C ${parent} unshare -R ${leaf} bash /notes.txt`]) {
+          const nested = run({ tool_name: 'Bash', tool_input: { command }, cwd: elsewhere });
+          assert.strictEqual(nested.exitCode, 2, `a relative root or directory is read from where the outer wrapper moved: ${command}: ${JSON.stringify(nested)}`);
+        }
+        for (const command of [`nsenter --wd=${quoted} bash build.sh`, `nsenter -w${quoted} bash build.sh`, `nsenter --ro=${quoted} bash /build.sh`]) {
+          const benignThere = run({ tool_name: 'Bash', tool_input: { command }, cwd: elsewhere });
+          assert.strictEqual(benignThere.exitCode, 0, `nsenter with a directory moves to it, where the script is benign: ${command}: ${JSON.stringify(benignThere)}`);
+        }
+        for (const command of ['chroot --skip-chdir / bash notes.txt', 'chroot --skip / bash notes.txt']) {
+          const kept = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+          assert.strictEqual(kept.exitCode, 2, `--skip-chdir keeps the directory: ${command}: ${JSON.stringify(kept)}`);
+        }
+      } finally {
+        fs.rmSync(elsewhere, { recursive: true, force: true });
+      }
+    })) passed++; else failed++;
+
+    if (test('a script run in a filesystem view the hook cannot follow fails closed (bwrap, nsenter into a mount namespace or the target root)', () => {
+      const commands = [
+        'bwrap --ro-bind / / bash build.sh',
+        'bwrap --dev-bind / / --chdir / bash build.sh',
+        'nsenter -t 1 -m bash build.sh',
+        'nsenter -a -t 1 bash build.sh',
+        'nsenter -t 1 -w bash build.sh',
+        'nsenter -t 1 --root bash build.sh',
+        'nsenter --al -t 1 bash build.sh',
+        'nsenter -t 1 --mo bash build.sh',
+        'nsenter -t 1 --ro bash build.sh',
+      ];
+      for (const command of commands) {
+        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+        assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+      }
+      for (const command of ['bwrap --ro-bind / / ls', 'nsenter -t 1 -m ls', 'bwrap --ro-bind / / bash']) {
+        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+        assert.strictEqual(result.exitCode, 0, `no script to follow: ${command}: ${JSON.stringify(result)}`);
+      }
+    })) passed++; else failed++;
+
     if (test('quoted paths, path-qualified and wrapped interpreters, and variable interpreters reach the file', () => {
       const spaced = path.join(dir, 'my dir');
       fs.mkdirSync(spaced, { recursive: true });

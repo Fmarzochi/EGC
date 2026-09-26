@@ -19,6 +19,7 @@ if (!fs.existsSync(path.join(buildDir, 'validator.js'))) {
 
 const validator = require(path.join(buildDir, 'validator.js'));
 const parallelOptions = require(path.join(buildDir, 'parallel-options.js'));
+const localWrappers = require(path.join(buildDir, 'local-wrappers.js'));
 const lib = require('../../scripts/lib/wrapper-options');
 
 let passed = 0;
@@ -50,7 +51,8 @@ run('every wrapper has the same option tables', () => {
     assert.deepStrictEqual(sorted(mirror.optionalValueFlags), sorted(spec.optionalValueFlags), `${name} optional values`);
     assert.deepStrictEqual(sorted(mirror.exactLongFlags), sorted(spec.exactLongFlags), `${name} exact names`);
     assert.strictEqual(mirror.leadingPositionals ?? 0, spec.leadingPositionals ?? 0, `${name} positionals`);
-    assert.strictEqual(Boolean(mirror.getoptLong), Boolean(spec.readOption), `${name} reader`);
+    assert.strictEqual(String(mirror.positionalWhen ?? ''), String(spec.positionalWhen ?? ''), `${name} optional positional`);
+    assert.strictEqual(Boolean(mirror.reader), Boolean(spec.readOption), `${name} reader`);
   }
 });
 
@@ -122,6 +124,15 @@ run('the hook copy names the option and the value it takes, for the chdir and ch
   assert.deepStrictEqual(read('sudo', '-n', 'rm'), [null, undefined, 1]);
   assert.deepStrictEqual(read('xargs', '-i{}', 'rm'), ['-i', '{}', 1]);
   assert.strictEqual(lib.readWrapperOption('not-a-wrapper', '-x', 'rm'), null);
+});
+
+run('every bwrap option word spans the same words', () => {
+  const words = ['--', '-', '--bind', '--ro-bind', '--overlay', '--setenv', '--chdir', '--argv0', '--userns2', '--as-pid-1', '--unshare-all', '--new-session', '--unknown', '--bin', '--debug-opt=x'];
+  for (const word of words) {
+    const expected = localWrappers.readBwrapOption(word).width;
+    assert.strictEqual(lib.readWrapperOption('bwrap', word, 'next').width, expected, `bwrap ${word}`);
+  }
+  assert.deepStrictEqual([lib.readWrapperOption('bwrap', '--chdir', '/x').valueName, lib.readWrapperOption('bwrap', '--chdir', '/x').value], ['--chdir', '/x']);
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
