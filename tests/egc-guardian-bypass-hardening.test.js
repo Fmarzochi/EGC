@@ -200,6 +200,77 @@ run('git config diff.evil.command /tmp/evil is hard-blocked', () => assertHardBl
 
 run('sudo -U rm -rf / is not silently misparsed by case-insensitive flag lookup (unknown flag stays boolean, rm is still reached)', () => assertHardBlocked('sudo -U rm -rf /'));
 
+console.log('\nWrapper options are read the way the wrapper reads them:');
+for (const command of [
+  'sudo -Hu root rm -rf /',
+  'sudo -nHu root rm -rf /',
+  'sudo -Huroot rm -rf /',
+  'doas -nu root rm -rf /',
+  'env -iu HOME rm -rf /',
+  'timeout -vk 9 5 rm -rf /',
+  'xargs -0n 1 rm -rf /',
+  'ionice -tc 3 rm -rf /',
+  'flock -nw 5 /tmp/l rm -rf /',
+  'watch -tn 1 rm -rf /',
+  'time -po out rm -rf /',
+]) {
+  run(`grouped short flags: ${command} is hard-blocked (the value letter takes the next word)`, () => assertHardBlocked(command));
+}
+for (const command of [
+  'sudo -T 10 rm -rf /',
+  'sudo --command-timeout 10 rm -rf /',
+  'sudo --user=root rm -rf /',
+  'sudo -h host rm -rf /',
+  'timeout --kill-after=5 10 rm -rf /',
+  'sudo -a pam rm -rf /',
+  'sudo -c default rm -rf /',
+  'doas -a style rm -rf /',
+  'env -a name rm -rf /',
+  'env -f vars.env rm -rf /',
+  'exec -a name rm -rf /',
+  'ionice -u 0 rm -rf /',
+  'strace -u root rm -rf /',
+  'strace --user root rm -rf /',
+  'strace -fX raw rm -rf /',
+  'watch -q 3 rm -rf /',
+  'watch --equexit 3 rm -rf /',
+  'strace --verbose all rm -rf /',
+  'strace --decode-pids comm rm -rf /',
+  'systemd-run --on-active 5 rm -rf /',
+  'systemd-run --background red rm -rf /',
+  'xargs --process-slot-var SLOT rm -rf /',
+]) {
+  run(`value flags: ${command} is hard-blocked (the flag value is not taken for the command)`, () => assertHardBlocked(command));
+}
+for (const command of [
+  'xargs -i rm -rf /',
+  'xargs -l rm -rf /',
+  'xargs -in rm -rf /',
+  'watch -d rm -rf /',
+]) {
+  run(`optional values: ${command} is hard-blocked (an optional value is only ever attached)`, () => assertHardBlocked(command));
+}
+for (const command of [
+  'env -iS "rm -rf /"',
+  'env -vS "rm -rf /"',
+  'env -S"rm -rf /"',
+  'flock /tmp/l -c "rm -rf /"',
+  'flock -n /tmp/l --command "rm -rf /"',
+]) {
+  run(`command strings: ${command} is hard-blocked (the wrapper hands its value to a shell)`, () => assertHardBlocked(command));
+}
+for (const command of [
+  'sudo -Hu root npm install',
+  'sudo -uroot npm install',
+  'timeout -k 5 10 npm test',
+  'xargs -I{} ls {}',
+  'xargs -I {} ls {}',
+  'flock /tmp/l npm test',
+  'env ls -lS',
+]) {
+  run(`${command} stays allowed`, () => assertAllowed(command));
+}
+
 console.log('\nGemini CLI cross-CLI fail-open fix (2026-07-27 audit):');
 run('.gemini/config/mcp_config.json write is blocked (guardian-bin.js now trusts this file to resolve the CLI)', () => {
   const v = validateWrite('.gemini/config/mcp_config.json');

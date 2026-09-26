@@ -184,34 +184,95 @@ function tokenizeWords(command: string): string[] {
 // the lockfile/fd). This replaces a fixed 5-name strip list with a table
 // that both grows easily and — via the while loop in
 // unwrapLeadingConstructs — unwraps stacked wrappers (`sudo timeout 5 xargs
-// -I{} rm -rf {}`) instead of stopping after a single layer. Bundled short
-// flags (-Hu instead of -H -u) are not decomposed, same simplification the
-// docker checks above already accept — not exhaustive, covers the common
-// spelled-out forms.
+// -I{} rm -rf {}`) instead of stopping after a single layer. Options are
+// read the way getopt reads them (readWrapperOption), so the tables list
+// every option that takes a value, checked against each tool's own parser.
+// optionalValueFlags are short flags whose value, when present, is attached
+// (`xargs -i{}`, `watch -dpermanent`) and never taken from the next word.
+// sudo -h is optional in sudo's getopt string, but sudo itself takes the
+// next word as the host when -h stands alone, so it is read as a value flag;
+// where that differs from sudo, sudo refuses to run. sudo -U only works
+// together with -l, which lists instead of running, so it stays out.
 interface WrapperSpec {
   valueFlags: Set<string>;
+  optionalValueFlags?: Set<string>;
   leadingPositionals?: number;
 }
 
 const WRAPPER_SPECS: Record<string, WrapperSpec> = {
-  sudo: { valueFlags: new Set(['-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-r', '--role', '-t', '--type', '-R', '--chroot', '-D', '--chdir']) },
-  doas: { valueFlags: new Set(['-u', '-C']) },
-  env: { valueFlags: new Set(['-u', '--unset', '-C', '--chdir', '-S', '--split-string']) },
+  sudo: { valueFlags: new Set(['-a', '--auth-type', '-u', '--user', '-g', '--group', '-p', '--prompt', '-h', '--host', '-C', '--close-from', '-c', '--login-class', '-r', '--role', '-t', '--type', '-T', '--command-timeout', '-R', '--chroot', '-D', '--chdir']) },
+  doas: { valueFlags: new Set(['-a', '-u', '-C']) },
+  env: { valueFlags: new Set(['-a', '--argv0', '-u', '--unset', '-C', '--chdir', '-f', '--file', '-S', '--split-string']) },
   nohup: { valueFlags: new Set() },
   time: { valueFlags: new Set(['-o', '--output', '-f', '--format']) },
   command: { valueFlags: new Set() },
-  exec: { valueFlags: new Set() },
+  exec: { valueFlags: new Set(['-a']) },
   nice: { valueFlags: new Set(['-n', '--adjustment']) },
-  ionice: { valueFlags: new Set(['-c', '--class', '-n', '--classdata', '-p', '--pid', '-P', '--pgid']) },
+  ionice: { valueFlags: new Set(['-c', '--class', '-n', '--classdata', '-p', '--pid', '-P', '--pgid', '-u', '--uid']) },
   timeout: { valueFlags: new Set(['-s', '--signal', '-k', '--kill-after']), leadingPositionals: 1 },
   stdbuf: { valueFlags: new Set(['-i', '--input', '-o', '--output', '-e', '--error']) },
-  xargs: { valueFlags: new Set(['-a', '--arg-file', '-d', '--delimiter', '-E', '-I', '-i', '-L', '-l', '-n', '--max-args', '-P', '--max-procs', '-s', '--max-chars']) },
-  flock: { valueFlags: new Set(['-w', '--timeout', '-E', '--conflict-exit-code']), leadingPositionals: 1 },
-  watch: { valueFlags: new Set(['-n', '--interval']) },
-  strace: { valueFlags: new Set(['-e', '-o', '--output', '-s', '-p', '-P', '-b', '-U']) },
-  'systemd-run': { valueFlags: new Set(['-p', '--property', '-u', '--unit', '--slice', '--uid', '--gid', '--nice', '-E', '--setenv', '--working-directory', '-M', '--machine', '-H', '--host', '--description']) },
+  xargs: {
+    valueFlags: new Set(['-a', '--arg-file', '-d', '--delimiter', '-E', '-I', '-L', '-n', '--max-args', '-P', '--max-procs', '-s', '--max-chars', '--process-slot-var']),
+    optionalValueFlags: new Set(['-e', '-i', '-l']),
+  },
+  flock: { valueFlags: new Set(['-w', '--timeout', '--wait', '-E', '--conflict-exit-code']), leadingPositionals: 1 },
+  watch: { valueFlags: new Set(['-n', '--interval', '-q', '--equexit']), optionalValueFlags: new Set(['-d']) },
+  strace: {
+    valueFlags: new Set([
+      '-a', '-b', '-e', '-E', '-I', '-o', '-O', '-p', '-P', '-s', '-S', '-u', '-U', '-X',
+      '--abbrev', '--argv0', '--attach', '--columns', '--const-print-style', '--decode-pids', '--detach-on',
+      '--env', '--fault', '--inject', '--interruptible', '--kvm', '--output', '--raw', '--read', '--signal',
+      '--status', '--string-limit', '--summary-columns', '--summary-sort-by', '--summary-syscall-overhead',
+      '--syscall-limit', '--trace', '--trace-fds', '--trace-path', '--user', '--verbose', '--write',
+    ]),
+  },
+  'systemd-run': {
+    valueFlags: new Set([
+      '-p', '--property', '-u', '--unit', '--slice', '--uid', '--gid', '--nice', '-E', '--setenv',
+      '--working-directory', '-M', '--machine', '-H', '--host', '--description', '--background',
+      '--expand-environment', '--on-active', '--on-boot', '--on-calendar', '--on-startup', '--on-unit-active',
+      '--on-unit-inactive', '--path-property', '--service-type', '--socket-property', '--timer-property',
+    ]),
+  },
   parallel: { valueFlags: new Set(['-j', '--jobs', '-N', '--delay', '--retries', '--timeout', '--joblog', '--results', '-S', '--sshlogin']) },
 };
+
+interface WrapperOptions {
+  names: string[];
+  end: number;
+}
+
+// Reads one option word the way getopt does and returns the option names it
+// sets plus how many words it spans. A long flag takes the next word only
+// when it is a value flag written without `=value`. A short cluster (`-Hu`)
+// is read letter by letter up to the first letter that takes a value: that
+// value is the rest of the word or, when nothing is left, the next word.
+function readWrapperOption(flag: string, spec: WrapperSpec): { names: string[]; width: number } {
+  if (flag.startsWith('--')) {
+    const eq = flag.indexOf('=');
+    const name = eq > 0 ? flag.slice(0, eq) : flag;
+    return { names: [name], width: eq < 0 && spec.valueFlags.has(name) ? 2 : 1 };
+  }
+  const names: string[] = [];
+  for (let k = 1; k < flag.length; k++) {
+    const name = `-${flag[k]}`;
+    names.push(name);
+    if (spec.optionalValueFlags?.has(name)) break;
+    if (spec.valueFlags.has(name)) return { names, width: k === flag.length - 1 ? 2 : 1 };
+  }
+  return { names, width: 1 };
+}
+
+function readWrapperOptions(current: string[], spec: WrapperSpec): WrapperOptions {
+  const names: string[] = [];
+  let i = 1;
+  while (i < current.length && stripQuotes(current[i]).startsWith('-')) {
+    const option = readWrapperOption(stripQuotes(current[i]), spec);
+    names.push(...option.names);
+    i += option.width;
+  }
+  return { names, end: i };
+}
 
 const ENV_ASSIGNMENT_RE = /^([A-Za-z_]\w*)=/;
 
@@ -310,6 +371,20 @@ function tryUnwrapExport(current: string[]): UnwrapStep | null {
   return { remaining: current.slice(idx + 1) };
 }
 
+const FLOCK_COMMAND_FLAGS = new Set(['-c', '--command']);
+
+function isSplitStringFlag(flag: string): boolean {
+  return flag === '-S' || flag === '--split-string' || flag.startsWith('--split-string=');
+}
+
+function envSplitsString(current: string[], optionNames: string[]): boolean {
+  return optionNames.some(isSplitStringFlag) || current.slice(1).some(t => isSplitStringFlag(stripQuotes(t)));
+}
+
+function forbiddenCommandString(reason: string): UnwrapStep {
+  return { blocked: { allowed: false, reason, trust_level: 'DANGEROUS' } };
+}
+
 // Unwraps a known wrapper command (sudo, timeout, xargs, ...), skipping its
 // flags and any mandatory leading positionals to reach the wrapped command.
 function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
@@ -318,36 +393,24 @@ function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
   if (!spec) return null;
 
   // env -S/--split-string re-splits its value into a new argv and execs the
-  // first word of that split — the same "string becomes code" shape as
+  // first word of that split, the same "string becomes code" shape as
   // eval, just via env(1) instead of a shell builtin. The value isn't a
   // simple opaque flag argument to skip past; it can itself be a full
   // destructive command, so this is a hard deny rather than an unwrap.
-  if (head === 'env') {
-    const hasSplitString = current.slice(1).some(t => {
-      const bare = stripQuotes(t);
-      return bare === '-S' || bare === '--split-string' || bare.startsWith('--split-string=');
-    });
-    if (hasSplitString) {
-      return {
-        blocked: {
-          allowed: false,
-          reason: `'env -S/--split-string' re-splits and executes its value and is forbidden`,
-          trust_level: 'DANGEROUS',
-        },
-      };
-    }
+  const options = readWrapperOptions(current, spec);
+  if (head === 'env' && envSplitsString(current, options.names)) {
+    return forbiddenCommandString(`'env -S/--split-string' re-splits and executes its value and is forbidden`);
   }
 
-  let i = 1;
-  while (i < current.length && stripQuotes(current[i]).startsWith('-')) {
-    const flag = stripQuotes(current[i]);
-    const eq = flag.indexOf('=');
-    const flagName = eq > 0 ? flag.slice(0, eq) : flag;
-    if (eq < 0 && spec.valueFlags.has(flagName)) i += 2;
-    else i += 1;
-  }
+  let i = options.end;
   let skip = spec.leadingPositionals ?? 0;
   while (skip > 0 && i < current.length) { i += 1; skip -= 1; }
+
+  // `flock FILE -c STRING` (or --command) hands STRING to a shell, the same
+  // shape as env -S, so it is denied the same way.
+  if (head === 'flock' && i < current.length && FLOCK_COMMAND_FLAGS.has(stripQuotes(current[i]))) {
+    return forbiddenCommandString(`'flock -c/--command' runs its value through a shell and is forbidden`);
+  }
   return { remaining: current.slice(i) };
 }
 
