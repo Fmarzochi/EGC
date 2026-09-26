@@ -16,10 +16,10 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { listInstallTargetAdapters, planInstallTargetScaffold } = require('../../scripts/lib/install-targets/registry');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const HOOKS = new Set(['scripts/hooks/pre-bash-guardian-validate.js', 'scripts/hooks/gateguard-fact-force.js']);
-const LOAD_TIMEOUT_MS = process.platform === 'win32' ? 30000 : 15000;
 
 let passed = 0;
 let failed = 0;
@@ -49,7 +49,7 @@ function loadFailure(hookPath, home) {
   const result = spawnSync(process.execPath, ['-e', `require(${JSON.stringify(hookPath)})`], {
     cwd: home,
     encoding: 'utf8',
-    timeout: LOAD_TIMEOUT_MS,
+    timeout: CLI_TIMEOUT_MS,
     env: { ...process.env, HOME: home, USERPROFILE: home },
   });
   if (result.status === 0) return null;

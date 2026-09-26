@@ -293,6 +293,8 @@ function runTests() {
     ['command -v rm', 'a wrapper asked where a command lives'],
     ['sudo -nv rm -rf /tmp/x', 'a wrapper asked to validate inside a group of flags'],
     ['timeout --help rm -rf /tmp/x', 'a wrapper asked for its help'],
+    ['parallel -h rm -rf /tmp/x', 'parallel asked for its help'],
+    ['setsid -h rm -rf /tmp/x', 'setsid asked for its help'],
   ];
   for (const [command, what] of NOT_A_COMMAND) {
     if (test(`the destructive gate ignores ${what}`, () => {
@@ -324,6 +326,8 @@ function runTests() {
     ['parallel --tmpdir /x rm -rf ::: /tmp/x', 'parallel with its options'],
     ['sudo -u root -- rm -rf /tmp/x', 'a wrapper ending its options with --'],
     ['env - rm -rf /tmp/x', 'env with a lone dash that clears the environment'],
+    ['flock - rm -rf /tmp/x', 'flock locking a file named -'],
+    ['numactl -V rm -rf /tmp/x', 'numactl -V, which verifies and runs the command'],
     ['env FOO=bar rm -rf /tmp/x', 'an environment assignment in front'],
     ['git status && rm -rf /tmp/x', 'a second segment'],
     ['echo x | rm -rf /tmp/x', 'a later pipeline stage'],

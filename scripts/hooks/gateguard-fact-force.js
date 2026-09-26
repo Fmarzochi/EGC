@@ -315,7 +315,15 @@ const DESTRUCTIVE_CONTENT_PATTERNS = [
 // Wrapper options that make the wrapper answer for itself and exit, so the
 // words after them are never executed and classify nothing.
 const TERMINATING_WRAPPER_FLAGS = new Set(['-V', '--version', '--help']);
-const TERMINATING_BY_WRAPPER = { sudo: new Set(['-v', '--validate', '-l', '--list']), command: new Set(['-v', '-V']), doas: new Set(['-L']) };
+const HELP_H = new Set(['-h']);
+const TERMINATING_BY_WRAPPER = {
+  sudo: new Set(['-v', '--validate', '-l', '--list']),
+  command: new Set(['-v', '-V']),
+  doas: new Set(['-L']),
+  parallel: HELP_H, setsid: HELP_H, taskset: HELP_H, chrt: HELP_H, unshare: HELP_H, nsenter: HELP_H, prlimit: HELP_H, runuser: HELP_H,
+};
+// numactl's -V is --verify, which runs the command.
+const RUNNING_BY_WRAPPER = { numactl: new Set(['-V']) };
 const ENV_ASSIGNMENT_RE = /^[A-Za-z_]\w*=/;
 
 // The words of a line as the shell would see them: quotes group and then
@@ -354,7 +362,8 @@ function shellWordsOf(line) {
 }
 
 function isTerminating(name, word, names) {
-  return [word, ...names].some((flag) => TERMINATING_WRAPPER_FLAGS.has(flag) || TERMINATING_BY_WRAPPER[name]?.has(flag));
+  return [word, ...names].some((flag) => !RUNNING_BY_WRAPPER[name]?.has(flag)
+    && (TERMINATING_WRAPPER_FLAGS.has(flag) || TERMINATING_BY_WRAPPER[name]?.has(flag)));
 }
 
 // The index of the first word after a wrapper's own options and the
@@ -364,6 +373,10 @@ function isTerminating(name, word, names) {
 function skipWrapperOptions(words, start, name) {
   let i = start;
   while (i < words.length && words[i].startsWith('-')) {
+    if (words[i] === '-') {
+      if (WRAPPER_SPECS[name].loneDashIsOption) i += 1;
+      break;
+    }
     const option = readWrapperOption(name, words[i], words[i + 1]);
     if (isTerminating(name, words[i], option.names)) return -1;
     i += option.width;

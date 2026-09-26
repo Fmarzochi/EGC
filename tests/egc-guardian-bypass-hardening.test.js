@@ -577,6 +577,10 @@ for (const command of [
   'bwrap --argv0 x rm -rf /',
   'bwrap --userns2 3 rm -rf /',
   'sudo setsid taskset 0x1 rm -rf /',
+  'flock - rm -rf /',
+  'chroot - rm -rf /',
+  'env - rm -rf /',
+  'env -i - rm -rf /',
 ]) {
   run(`local wrappers: ${command} is hard-blocked (the wrapped command is judged)`, () => assertHardBlocked(command));
 }

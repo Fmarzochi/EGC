@@ -82,6 +82,7 @@ function runTests() {
       const commands = [
         'setsid bash notes.txt',
         'env - bash notes.txt',
+        'flock - bash notes.txt',
         'setsid -f bash notes.txt',
         'taskset -c 0 bash notes.txt',
         'chrt -o bash notes.txt',

@@ -249,6 +249,9 @@ export interface WrapperSpec {
   // A leading positional the wrapper may leave out, read as one only when
   // the word matches (chrt's priority, all digits).
   positionalWhen?: RegExp;
+  // getopt reads a lone `-` as an operand, which ends the options; env reads
+  // it right after its options as -i, and the command follows it.
+  loneDashIsOption?: boolean;
   // A wrapper whose options follow other rules than getopt reads each option
   // word itself, given the word and the next one, quotes already stripped.
   readOption?: (word: string, next: string | undefined) => { names: string[]; width: number };
@@ -260,7 +263,7 @@ export const WRAPPER_SPECS: Record<string, WrapperSpec> = {
     exactLongFlags: new Set(['--login']),
   },
   doas: { valueFlags: new Set(['-a', '-u', '-C']) },
-  env: { valueFlags: new Set(['-a', '--argv0', '-u', '--unset', '-C', '--chdir', '-f', '--file', '-S', '--split-string']) },
+  env: { valueFlags: new Set(['-a', '--argv0', '-u', '--unset', '-C', '--chdir', '-f', '--file', '-S', '--split-string']), loneDashIsOption: true },
   nohup: { valueFlags: new Set() },
   time: { valueFlags: new Set(['-o', '--output', '-f', '--format']) },
   command: { valueFlags: new Set() },
@@ -342,6 +345,10 @@ function readWrapperOptions(current: string[], spec: WrapperSpec): WrapperOption
   let i = 1;
   while (i < current.length && stripQuotes(current[i]).startsWith('-')) {
     const word = stripQuotes(current[i]);
+    if (word === '-') {
+      if (spec.loneDashIsOption) i += 1;
+      break;
+    }
     const next = i + 1 < current.length ? stripQuotes(current[i + 1]) : undefined;
     const option = spec.readOption ? spec.readOption(word, next) : readWrapperOption(word, spec);
     names.push(...option.names);
