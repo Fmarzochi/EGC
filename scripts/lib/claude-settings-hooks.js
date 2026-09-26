@@ -1029,10 +1029,14 @@ function createRoocodeDenylistMergeOperation(settingsPath) {
 // PreCompact hook contributes to the surviving post-compaction context
 // (confirmed empirically: PreCompact hook stdout is not swept away by
 // summarization the way regular turn history is). Its dependency chain is
-// egc-memory-save.js -> lib/state-snapshot.js -> lib/branch-state.js.
+// egc-memory-save.js -> lib/state-snapshot.js -> lib/branch-state.js,
+// lib/state-crypto.js and lib/state-integrity.js (which also needs
+// state-crypto.js); every one is required when the hook loads.
 const EGC_MEMORY_SAVE_HOOK_LIB_SOURCES = [
   'scripts/lib/state-snapshot.js',
   'scripts/lib/branch-state.js',
+  'scripts/lib/state-crypto.js',
+  'scripts/lib/state-integrity.js',
 ];
 
 function resolveEgcMemorySaveHookScriptDestination(targetRoot) {
