@@ -46,6 +46,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The dashboard answers only to its loopback names: a request or WebSocket upgrade whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` is refused before any route (#1545).
 - The Economy tab shows a provider name as text: a provider the panel does not know is labeled with its escaped id (#1546).
 - A wrapper's long options are read in any abbreviation the wrapper accepts: a unique prefix counts as the option it names, an exact name keeps its own meaning, and `env --split` is refused like `--split-string` (#1548).
+- GNU parallel's options are read the way parallel reads them: its own Getopt::Long table, letter case, abbreviations and optional values included (#1549).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
 - Routing on this machine, without an API key: the catalog index records the source of every component, the prompt router and `orchestrate_task` read the install state of the active tool and never offer what it has not installed (a named `Not installed for this tool` line and `not_installed` carry the command that adds them), the local scorers weigh tokens by rarity, name and activation text, stem plurals and ignore Portuguese and Spanish function words, and the decision stays with the tool's model, by intent (#1453).

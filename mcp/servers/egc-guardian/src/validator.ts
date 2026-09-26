@@ -1,6 +1,7 @@
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
+import { readParallelOption } from './parallel-options.js';
 
 // Trust level tiers
 export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git'];
@@ -202,6 +203,9 @@ interface WrapperSpec {
   optionalValueFlags?: Set<string>;
   exactLongFlags?: Set<string>;
   leadingPositionals?: number;
+  // A wrapper whose options follow other rules than getopt reads each option
+  // word itself, given the word and the next one, quotes already stripped.
+  readOption?: (word: string, next: string | undefined) => { names: string[]; width: number };
 }
 
 const WRAPPER_SPECS: Record<string, WrapperSpec> = {
@@ -245,7 +249,7 @@ const WRAPPER_SPECS: Record<string, WrapperSpec> = {
       '--json',
     ]),
   },
-  parallel: { valueFlags: new Set(['-j', '--jobs', '-N', '--delay', '--retries', '--timeout', '--joblog', '--results', '-S', '--sshlogin']) },
+  parallel: { valueFlags: new Set(), readOption: readParallelOption },
 };
 
 interface WrapperOptions {
@@ -290,7 +294,9 @@ function readWrapperOptions(current: string[], spec: WrapperSpec): WrapperOption
   const names: string[] = [];
   let i = 1;
   while (i < current.length && stripQuotes(current[i]).startsWith('-')) {
-    const option = readWrapperOption(stripQuotes(current[i]), spec);
+    const word = stripQuotes(current[i]);
+    const next = i + 1 < current.length ? stripQuotes(current[i + 1]) : undefined;
+    const option = spec.readOption ? spec.readOption(word, next) : readWrapperOption(word, spec);
     names.push(...option.names);
     i += option.width;
   }

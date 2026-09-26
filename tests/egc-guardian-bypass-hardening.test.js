@@ -282,9 +282,51 @@ for (const command of [
 }
 run('long option abbreviations: env --split "rm -rf /" is hard-blocked (an abbreviated --split-string still splits)', () => assertHardBlocked('env --split "rm -rf /"'));
 for (const command of [
+  'parallel --tmpdir /x rm ::: /',
+  'parallel --TMPDIR /x rm ::: /',
+  'parallel --tmpd /x rm ::: /',
+  'parallel --workdir /w rm ::: /',
+  'parallel -a args.txt rm',
+  'parallel --replace {} rm ::: /',
+  'parallel -i {} rm ::: /',
+  'parallel --max-lines 2 rm ::: /',
+  'parallel --max-lines .5 rm ::: /',
+  'parallel --n 1 rm ::: /',
+]) {
+  run(`GNU parallel options: ${command} is hard-blocked (read the way its Getopt::Long reads them)`, () => assertHardBlocked(command));
+}
+run('GNU parallel options: each option word spans the words its Getopt::Long takes', () => {
+  const { readParallelOption } = require(path.join(path.dirname(buildPath), 'parallel-options.js'));
+  const width = (word, next) => readParallelOption(word, next).width;
+  assert.strictEqual(width('--jo', '4'), 1, 'an ambiguous prefix (joblog, jobs) is an error, not a value option');
+  assert.strictEqual(width('--', 'rm'), 1, 'a bare -- takes no value');
+  assert.strictEqual(width('--tmpdir=/x', 'rm'), 1, 'a value written with = stays in its word');
+  assert.strictEqual(width('--n', '1'), 2, 'a single letter written after -- is that option');
+  assert.strictEqual(width('-kj4', 'rm'), 1, 'a value attached in a bundle stays in its word');
+  assert.strictEqual(width('-kj', '4'), 2, 'a bundle ending in a value letter takes the next word');
+  assert.strictEqual(width('-i', '{}'), 2, 'an optional string takes a next word that is not an option');
+  assert.strictEqual(width('-i', '-k'), 1, 'an optional string does not take an option');
+  assert.strictEqual(width('--max-lines', 'x'), 1, 'an optional number takes only a number');
+  assert.strictEqual(width('--max-lines', '-2'), 2, 'a negative number is a number');
+  for (const number of ['.5', '5.', '1e3', '+2']) {
+    assert.strictEqual(width('--max-lines', number), 2, `${number} is a number to Getopt::Long`);
+  }
+  assert.strictEqual(width('--max-lines', '.'), 1, 'a lone point is not a number');
+  assert.strictEqual(width('--jobs', undefined), 1, 'nothing left means nothing taken');
+});
+for (const command of [
+  'parallel -kj4 rm ::: /',
+  'parallel --max-lines rm ::: /',
+  'parallel --dry-run rm ::: /',
+]) {
+  run(`GNU parallel options: ${command} is hard-blocked (a flag or a non-numeric word is not taken as a value)`, () => assertHardBlocked(command));
+}
+for (const command of [
   'sudo -Hu root npm install',
   'sudo -uroot npm install',
   'sudo --us root npm install',
+  'parallel -j4 ls ::: a',
+  'parallel --replace {} ls {} ::: a',
   'timeout -k 5 10 npm test',
   'xargs -I{} ls {}',
   'xargs -I {} ls {}',
