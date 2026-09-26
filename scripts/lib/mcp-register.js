@@ -24,6 +24,7 @@ const { isDeepStrictEqual } = require('node:util');
 // detections from drifting, and it falls back to a PATH scan where `which`
 // itself is missing.
 const { commandExists } = require('./utils');
+const { isInsideReal } = require('./path-safety');
 
 let TOML = null;
 try {
@@ -44,6 +45,58 @@ function readFileIfExists(targetPath) {
   } catch (err) {
     if (err.code === 'ENOENT') return null;
     throw err;
+  }
+}
+
+// Linux gives up on a path after this many links (ELOOP); a longer chain of
+// links to missing files is refused the same way.
+const MAX_LINK_HOPS = 40;
+
+// Where a write to targetPath lands: every link on the way is followed the
+// way the filesystem follows it on open, a link to a file that is not there
+// yet included, since the write would create that file.
+function landingPath(targetPath, hops = 0) {
+  try {
+    return fs.realpathSync(targetPath);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  const parent = path.dirname(targetPath);
+  if (parent === targetPath) return targetPath;
+  const realParent = landingPath(parent, hops);
+  const entry = path.join(realParent, path.basename(targetPath));
+  let stat = null;
+  try {
+    stat = fs.lstatSync(entry);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+  if (!stat?.isSymbolicLink()) return entry;
+  if (hops >= MAX_LINK_HOPS) {
+    throw Object.assign(new Error(`${targetPath}: too many levels of symbolic links`), { code: 'ELOOP' });
+  }
+  return landingPath(path.resolve(realParent, fs.readlinkSync(entry)), hops + 1);
+}
+
+// A config reached through a link is written where the link leads, which is
+// how a dotfiles folder linked into place works, as long as that stays under
+// one of roots (the home folder, the XDG config folder, a project's own
+// folder). A link that leads anywhere else is left untouched, and nothing
+// behind it is read either.
+function assertLandsInside(targetPath, roots) {
+  const landing = landingPath(targetPath);
+  if (roots.some(root => isInsideReal(landing, root))) return;
+  throw new Error(
+    `${targetPath} leads through a link to ${landing}, outside ${roots.join(' and ')} - left untouched: ` +
+    `keep the file under ${roots.join(' or ')} (move it or relink it), or add egc-guardian and egc-memory to it by hand`
+  );
+}
+
+function isSymbolicLink(filePath) {
+  try {
+    return fs.lstatSync(filePath).isSymbolicLink();
+  } catch {
+    return false;
   }
 }
 
@@ -671,11 +724,12 @@ function registerOpenCodeMcp(targetPath, bins) {
 // to it, the mcpServers block an older EGC may have left in that legacy file
 // is retired too (our entries only; the rest of the file is left as it is).
 // OpenCode merges both files, so the entries written above reach it either
-// way. A legacy file that cannot be parsed is left alone: it is not the file
-// being registered into.
+// way. A legacy file that is a link, or that cannot be parsed, is left
+// alone: it is not the file being registered into.
 function retireStaleLegacySibling(targetPath) {
   if (path.basename(targetPath) !== 'opencode.json') return false;
   const legacyPath = path.join(path.dirname(targetPath), 'config.json');
+  if (isSymbolicLink(legacyPath)) return false;
   const content = readFileIfExists(legacyPath);
   if (content === null || content === undefined) return false;
   let legacy;
@@ -697,10 +751,12 @@ const FORMAT_HANDLERS = {
   'claude-cli': registerClaudeCli,
 };
 
-function registerTarget(target, bins, onRegister, onWarn, onUnchanged) {
+function registerTarget(target, bins, roots, onRegister, onWarn, onUnchanged) {
   const handler = FORMAT_HANDLERS[target.format];
   if (!handler) return;
   try {
+    // The Claude Code CLI writes its own file; every other handler writes here.
+    if (target.format !== 'claude-cli') assertLandsInside(target.path, roots);
     const registered = handler(target.path, bins);
     if (registered) {
       if (onRegister) onRegister(target);
@@ -723,6 +779,7 @@ function registerTarget(target, bins, onRegister, onWarn, onUnchanged) {
 function registerMcpServers(homeDir, bins, callbacks = {}) {
   const { dryRun = false, onSkip, onRegister, onWarn, onUnchanged } = callbacks;
   const targets = buildMcpRegistrationTargets(homeDir);
+  const roots = [homeDir, process.env.XDG_CONFIG_HOME].filter(Boolean);
 
   for (const target of targets) {
     if (!target.gate()) continue;
@@ -730,13 +787,14 @@ function registerMcpServers(homeDir, bins, callbacks = {}) {
       if (onSkip) onSkip(target);
       continue;
     }
-    registerTarget(target, bins, onRegister, onWarn, onUnchanged);
+    registerTarget(target, bins, roots, onRegister, onWarn, onUnchanged);
   }
 
   return targets;
 }
 
 module.exports = {
+  assertLandsInside,
   buildMcpRegistrationTargets,
   findInlineMcpServersArray,
   parseJsonObject,

@@ -10,9 +10,11 @@
  */
 
 const assert = require('assert');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const {
   buildMcpRegistrationTargets,
@@ -1356,6 +1358,283 @@ function runTests() {
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   }) ? passed++ : failed++);
+
+  // ── configs reached through links ──────────────────────────────────
+  // A config kept in a dotfiles folder and linked into place is written
+  // where the link leads, as long as that stays under the home folder (or
+  // the XDG config folder); anywhere else the config is left untouched.
+
+  if (process.platform !== 'win32') {
+    const registerWithoutXdg = (homeDir) => {
+      const outcome = { registered: [], warned: [] };
+      const savedXdg = process.env.XDG_CONFIG_HOME;
+      delete process.env.XDG_CONFIG_HOME;
+      try {
+        registerIsolated(homeDir, {
+          onRegister: (target) => outcome.registered.push(target.name),
+          onWarn: (target, err) => outcome.warned.push(`${target.name}: ${err.message}`),
+        });
+      } finally {
+        if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
+      }
+      return outcome;
+    };
+    const warnedFor = (outcome, name) => outcome.warned.some(line => line.startsWith(`${name}:`) && line.includes('left untouched'));
+    const makeLayout = () => {
+      const base = makeTempDir();
+      const home = path.join(base, 'home');
+      const outside = path.join(base, 'outside');
+      fs.mkdirSync(home);
+      fs.mkdirSync(outside);
+      return { base, home, outside };
+    };
+
+    (test('a config whose link leads outside the home is left untouched, destination included', () => {
+      const { base, home, outside } = makeLayout();
+      try {
+        fs.mkdirSync(path.join(home, '.cursor'));
+        const destination = path.join(outside, 'mcp.json');
+        fs.writeFileSync(destination, '{"keep":true}\n');
+        const link = path.join(home, '.cursor', 'mcp.json');
+        fs.symlinkSync(destination, link);
+
+        const outcome = registerWithoutXdg(home);
+
+        assert.ok(!outcome.registered.includes('Cursor'), 'nothing is registered through the link');
+        assert.ok(warnedFor(outcome, 'Cursor'), `the skip is reported: ${outcome.warned.join(' | ')}`);
+        assert.strictEqual(fs.readFileSync(destination, 'utf8'), '{"keep":true}\n');
+        assert.ok(fs.lstatSync(link).isSymbolicLink(), 'the link itself stays in place');
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a config folder whose link leads outside the home gets nothing created behind it', () => {
+      const { base, home, outside } = makeLayout();
+      try {
+        fs.symlinkSync(outside, path.join(home, '.kiro'), 'dir');
+
+        const outcome = registerWithoutXdg(home);
+
+        assert.ok(!outcome.registered.includes('Kiro'), 'nothing is registered through the linked folder');
+        assert.ok(warnedFor(outcome, 'Kiro'), `the skip is reported: ${outcome.warned.join(' | ')}`);
+        assert.deepStrictEqual(fs.readdirSync(outside), [], 'the folder behind the link stays empty');
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a config link to a missing file outside the home does not create that file', () => {
+      const { base, home, outside } = makeLayout();
+      try {
+        fs.mkdirSync(path.join(home, '.cursor'));
+        const destination = path.join(outside, 'missing.json');
+        fs.symlinkSync(destination, path.join(home, '.cursor', 'mcp.json'));
+
+        const outcome = registerWithoutXdg(home);
+
+        assert.ok(warnedFor(outcome, 'Cursor'), `the skip is reported: ${outcome.warned.join(' | ')}`);
+        assert.ok(!fs.existsSync(destination), 'the missing file is not created');
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a relative config link is followed from the folder it really sits in', () => {
+      const { base, home, outside } = makeLayout();
+      try {
+        fs.symlinkSync(outside, path.join(home, '.cursor'), 'dir');
+        fs.symlinkSync(path.join('..', 'escaped.json'), path.join(outside, 'mcp.json'));
+
+        const outcome = registerWithoutXdg(home);
+
+        assert.ok(warnedFor(outcome, 'Cursor'), `the skip is reported: ${outcome.warned.join(' | ')}`);
+        assert.ok(!fs.existsSync(path.join(base, 'escaped.json')), 'nothing is created where the link really leads');
+        assert.ok(!fs.existsSync(path.join(home, 'escaped.json')));
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a config linked from a dotfiles folder under the home is registered through the link', () => {
+      const { base, home } = makeLayout();
+      try {
+        const dotfile = path.join(home, 'dotfiles', 'cursor', 'mcp.json');
+        fs.mkdirSync(path.dirname(dotfile), { recursive: true });
+        fs.writeFileSync(dotfile, '{}\n');
+        fs.mkdirSync(path.join(home, '.cursor'));
+        const link = path.join(home, '.cursor', 'mcp.json');
+        fs.symlinkSync(path.join('..', 'dotfiles', 'cursor', 'mcp.json'), link);
+
+        const outcome = registerWithoutXdg(home);
+
+        assert.ok(outcome.registered.includes('Cursor'), `registered through the link: ${outcome.warned.join(' | ')}`);
+        assert.ok(JSON.parse(fs.readFileSync(dotfile, 'utf8')).mcpServers['egc-guardian'], 'the dotfile holds the servers');
+        assert.ok(fs.lstatSync(link).isSymbolicLink(), 'the link itself stays in place');
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a config folder linked from a dotfiles folder under the home is registered through the link', () => {
+      const { base, home } = makeLayout();
+      try {
+        fs.mkdirSync(path.join(home, 'dotfiles', 'zed'), { recursive: true });
+        fs.mkdirSync(path.join(home, '.config'));
+        fs.symlinkSync(path.join('..', 'dotfiles', 'zed'), path.join(home, '.config', 'zed'), 'dir');
+
+        const outcome = registerWithoutXdg(home);
+
+        assert.ok(outcome.registered.includes('Zed'), `registered through the linked folder: ${outcome.warned.join(' | ')}`);
+        const settings = JSON.parse(fs.readFileSync(path.join(home, 'dotfiles', 'zed', 'settings.json'), 'utf8'));
+        assert.ok(settings.context_servers['egc-guardian'], 'the dotfiles folder holds the servers');
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a config link to a missing file under the home creates that file', () => {
+      const { base, home } = makeLayout();
+      try {
+        fs.mkdirSync(path.join(home, 'dotfiles'));
+        fs.mkdirSync(path.join(home, '.cursor'));
+        fs.symlinkSync(path.join('..', 'dotfiles', 'cursor-mcp.json'), path.join(home, '.cursor', 'mcp.json'));
+
+        const outcome = registerWithoutXdg(home);
+
+        assert.ok(outcome.registered.includes('Cursor'), `registered through the link: ${outcome.warned.join(' | ')}`);
+        const created = JSON.parse(fs.readFileSync(path.join(home, 'dotfiles', 'cursor-mcp.json'), 'utf8'));
+        assert.ok(created.mcpServers['egc-memory'], 'the file the link names holds the servers');
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a home folder reached through a link still registers', () => {
+      const { base, outside } = makeLayout();
+      try {
+        fs.mkdirSync(path.join(outside, '.cursor'));
+        const linkedHome = path.join(base, 'linked-home');
+        fs.symlinkSync(outside, linkedHome, 'dir');
+
+        const outcome = registerWithoutXdg(linkedHome);
+
+        assert.ok(outcome.registered.includes('Cursor'), `registered under the linked home: ${outcome.warned.join(' | ')}`);
+        assert.ok(fs.existsSync(path.join(outside, '.cursor', 'mcp.json')));
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('OpenCode: an XDG config folder outside the home still registers', () => {
+      const { base, home, outside } = makeLayout();
+      const savedXdg = process.env.XDG_CONFIG_HOME;
+      try {
+        fs.mkdirSync(path.join(outside, 'opencode'));
+        process.env.XDG_CONFIG_HOME = outside;
+        const registered = [];
+        registerIsolated(home, { onRegister: (target) => registered.push(target.name) });
+
+        assert.ok(registered.includes('OpenCode'));
+        const config = JSON.parse(fs.readFileSync(path.join(outside, 'opencode', 'opencode.json'), 'utf8'));
+        assert.ok(config.mcp['egc-guardian']);
+      } finally {
+        if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('OpenCode: a legacy config.json that is a link is left alone', () => {
+      const { base, home, outside } = makeLayout();
+      try {
+        const dir = path.join(home, '.config', 'opencode');
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, 'opencode.json'), '{}\n');
+        const legacy = path.join(outside, 'legacy.json');
+        const legacyContent = JSON.stringify({ mcpServers: { 'egc-guardian': { command: 'node' } } }) + '\n';
+        fs.writeFileSync(legacy, legacyContent);
+        fs.symlinkSync(legacy, path.join(dir, 'config.json'));
+
+        registerOpenCodeMcp(path.join(dir, 'opencode.json'), bins);
+
+        assert.strictEqual(fs.readFileSync(legacy, 'utf8'), legacyContent);
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('OpenCode: a lone legacy config.json linked from under the home is registered through the link', () => {
+      const { base, home } = makeLayout();
+      try {
+        const dotfile = path.join(home, 'dotfiles', 'opencode-config.json');
+        fs.mkdirSync(path.dirname(dotfile));
+        fs.writeFileSync(dotfile, '{}\n');
+        const dir = path.join(home, '.config', 'opencode');
+        fs.mkdirSync(dir, { recursive: true });
+        const link = path.join(dir, 'config.json');
+        fs.symlinkSync(path.join('..', '..', 'dotfiles', 'opencode-config.json'), link);
+
+        const outcome = registerWithoutXdg(home);
+
+        assert.ok(outcome.registered.includes('OpenCode'), `registered through the link: ${outcome.warned.join(' | ')}`);
+        assert.ok(JSON.parse(fs.readFileSync(dotfile, 'utf8')).mcp['egc-guardian'], 'the dotfile holds the servers');
+        assert.ok(fs.lstatSync(link).isSymbolicLink(), 'the link itself stays in place');
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    const runRegisterCli = (projectDir, homeDir) => {
+      const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, PATH: homeDir };
+      delete env.XDG_CONFIG_HOME;
+      return spawnSync(process.execPath, [path.join(__dirname, '..', '..', 'scripts', 'lib', 'mcp-register-cli.js'), bins.guardianBin, bins.memoryBin], {
+        cwd: projectDir,
+        env,
+        encoding: 'utf8',
+        timeout: CLI_TIMEOUT_MS,
+      });
+    };
+
+    (test('installer CLI: a project .mcp.json whose link leads outside the project is left untouched', () => {
+      const { base, home, outside } = makeLayout();
+      try {
+        const project = path.join(base, 'project');
+        fs.mkdirSync(project);
+        const destination = path.join(outside, 'other.json');
+        fs.writeFileSync(destination, '{"keep":true}\n');
+        fs.symlinkSync(destination, path.join(project, '.mcp.json'));
+
+        const result = runRegisterCli(project, home);
+
+        assert.ifError(result.error);
+        assert.strictEqual(result.status, 0, result.stderr);
+        assert.strictEqual(fs.readFileSync(destination, 'utf8'), '{"keep":true}\n');
+        assert.ok(result.stdout.includes('skipped project .mcp.json'), result.stdout);
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('installer CLI: a project .mcp.json linked inside the project is registered', () => {
+      const { base, home } = makeLayout();
+      try {
+        const project = path.join(base, 'project');
+        const inner = path.join(project, 'config', 'mcp.json');
+        fs.mkdirSync(path.dirname(inner), { recursive: true });
+        fs.writeFileSync(inner, '{}\n');
+        fs.symlinkSync(path.join('config', 'mcp.json'), path.join(project, '.mcp.json'));
+
+        const result = runRegisterCli(project, home);
+
+        assert.ifError(result.error);
+        assert.strictEqual(result.status, 0, result.stderr);
+        assert.ok(result.stdout.includes('registered in Claude Code (project .mcp.json)'), result.stdout);
+        assert.ok(JSON.parse(fs.readFileSync(inner, 'utf8')).mcpServers['egc-guardian']);
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+  }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
