@@ -503,7 +503,7 @@ const TOML_SHORT_ESCAPES = {
  */
 function tomlEscape(p) {
   return p.replaceAll(/["\\\p{Cc}]/gu, (ch) => TOML_SHORT_ESCAPES[ch]
-    ?? `\\u${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`);
+    ?? String.raw`\u${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`);
 }
 
 // Whether the text is a TOML document a parser accepts. Without @iarna/toml

@@ -502,15 +502,20 @@ function main() {
     }
   });
 
-  run('reads \\u and \\U escapes in a hand-edited config.toml and keeps an out-of-range one as written', () => {
+  run('reads \\u and \\U escapes in a hand-edited config.toml and keeps one naming no scalar value as written', () => {
+    // On POSIX 'kept\\uD800' is one folder whose name holds a backslash; on
+    // Windows it is the folder 'uD800' inside 'kept'. Either way the path is
+    // the text \uD800 left as written: decoded, it would be a lone surrogate
+    // that names no folder.
     const fakeHome = createTempDir('egc-guardian-bin-home-');
     try {
-      const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
+      const installDir = path.join(fakeHome, 'somewhere', 'kept\\uD800', 'egc-guardian', 'build');
       fs.mkdirSync(installDir, { recursive: true });
       fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
       const escapedIndex = path.join(installDir, 'index.js')
         .replaceAll('\\', '\\\\')
-        .replace('somewhere', String.raw`some\U00000077here`);
+        .replace(String.raw`kept\\uD800`, String.raw`kept\uD800`)
+        .replace('somewhere', String.raw`\u0073ome\U00000077here`);
       const configPath = path.join(fakeHome, '.codex', 'config.toml');
       fs.mkdirSync(path.dirname(configPath), { recursive: true });
       fs.writeFileSync(
