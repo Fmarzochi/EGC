@@ -24,7 +24,7 @@ const { isDeepStrictEqual } = require('node:util');
 // detections from drifting, and it falls back to a PATH scan where `which`
 // itself is missing.
 const { commandExists } = require('./utils');
-const { isInsideReal } = require('./path-safety');
+const { isInsideReal, realizePath } = require('./path-safety');
 
 let TOML = null;
 try {
@@ -48,43 +48,13 @@ function readFileIfExists(targetPath) {
   }
 }
 
-// Linux gives up on a path after this many links (ELOOP); a longer chain of
-// links to missing files is refused the same way.
-const MAX_LINK_HOPS = 40;
-
-// Where a write to targetPath lands: every link on the way is followed the
-// way the filesystem follows it on open, a link to a file that is not there
-// yet included, since the write would create that file.
-function landingPath(targetPath, hops = 0) {
-  try {
-    return fs.realpathSync(targetPath);
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
-  }
-  const parent = path.dirname(targetPath);
-  if (parent === targetPath) return targetPath;
-  const realParent = landingPath(parent, hops);
-  const entry = path.join(realParent, path.basename(targetPath));
-  let stat = null;
-  try {
-    stat = fs.lstatSync(entry);
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err;
-  }
-  if (!stat?.isSymbolicLink()) return entry;
-  if (hops >= MAX_LINK_HOPS) {
-    throw Object.assign(new Error(`${targetPath}: too many levels of symbolic links`), { code: 'ELOOP' });
-  }
-  return landingPath(path.resolve(realParent, fs.readlinkSync(entry)), hops + 1);
-}
-
 // A config reached through a link is written where the link leads, which is
 // how a dotfiles folder linked into place works, as long as that stays under
 // one of roots (the home folder, the XDG config folder, a project's own
 // folder). A link that leads anywhere else is left untouched, and nothing
 // behind it is read either.
 function assertLandsInside(targetPath, roots) {
-  const landing = landingPath(targetPath);
+  const landing = realizePath(targetPath);
   if (roots.some(root => isInsideReal(landing, root))) return;
   throw new Error(
     `${targetPath} leads through a link to ${landing}, outside ${roots.join(' and ')} - left untouched: ` +

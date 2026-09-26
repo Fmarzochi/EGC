@@ -2524,6 +2524,38 @@ function runTests() {
   {
     const homeDir = createTempDir('lifecycle-home-');
     const projectRoot = createTempDir('lifecycle-project-');
+    const outside = createTempDir('lifecycle-outside-');
+    const destination = path.join(projectRoot, '.cursor', 'rules', 'linked.md');
+    let linked = false;
+    try {
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.symlinkSync(path.join(outside, 'created.md'), destination);
+      linked = true;
+    } catch (error) {
+      console.log(`  - skipped (link to a missing file): cannot create symlinks here (${error.code})`);
+    }
+    if (linked) {
+      if (test('repair refuses a destination that is a link to a missing file outside the root', () => {
+        writeCursorState(projectRoot, {
+          operations: [
+            { kind: 'copy-file', moduleId: 'rules-core', sourceRelativePath: 'rules/common/agents.md', destinationPath: destination, strategy: 'overwrite', ownership: 'managed', scaffoldOnly: false },
+          ],
+        });
+        const result = repairInstalledStates({ homeDir, projectRoot, targets: ['cursor'] });
+        const outcome = result.results[0];
+        assert.strictEqual(outcome.status, 'error', JSON.stringify(outcome));
+        assert.ok(String(outcome.error).includes('escapes the managed roots'), String(outcome.error));
+        assert.ok(!fs.existsSync(path.join(outside, 'created.md')), 'nothing is created behind the link');
+      })) passed++; else failed++;
+    }
+    cleanup(homeDir);
+    cleanup(projectRoot);
+    cleanup(outside);
+  }
+
+  {
+    const homeDir = createTempDir('lifecycle-home-');
+    const projectRoot = createTempDir('lifecycle-project-');
     const repoRoot = createTempDir('lifecycle-repo-');
     const outside = createTempDir('lifecycle-outside-');
     let linked = false;
