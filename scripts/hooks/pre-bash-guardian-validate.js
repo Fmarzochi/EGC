@@ -256,7 +256,9 @@ function noteWrapperMove(name, move, valueWord, moves, state) {
 // A path the wrapper was given, read from the view it runs in: relative to
 // the directory an outer wrapper moved to, or to the top of its root.
 function within(value, state) {
-  return path.isAbsolute(value) ? value : path.join(state.cwd ?? (state.chroot ? '/' : ''), value);
+  if (path.isAbsolute(value)) return value;
+  const top = state.chroot ? '/' : '';
+  return path.join(state.cwd ?? top, value);
 }
 
 // A wrapper's new root is read from the view before it; chroot, unshare -R
