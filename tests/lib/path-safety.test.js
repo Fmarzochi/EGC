@@ -89,6 +89,19 @@ function runTests() {
       });
     })) passed++; else failed++;
 
+    if (test('a chain of 40 links, the most a write follows, is followed to its end', () => {
+      withLayout(({ root, outside }) => {
+        let next = path.join(outside, 'end.json');
+        for (let i = 39; i >= 0; i--) {
+          const link = path.join(root, `link${i}.json`);
+          fs.symlinkSync(next, link);
+          next = link;
+        }
+        assert.strictEqual(realizePath(path.join(root, 'link0.json')), path.join(outside, 'end.json'));
+        assert.strictEqual(isInsideReal(path.join(root, 'link0.json'), root), false);
+      });
+    })) passed++; else failed++;
+
     if (test('a link to a missing file below a missing folder keeps the tail under the link target', () => {
       withLayout(({ root, outside }) => {
         fs.symlinkSync(path.join(outside, 'gone'), path.join(root, 'dir'), 'dir');
