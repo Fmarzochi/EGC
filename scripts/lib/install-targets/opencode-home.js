@@ -7,6 +7,7 @@ const {
   isForeignPlatformPath,
   normalizeRelativePath,
   planFlatAgentOperations,
+  planGenericRetirements,
   resolveModulesPlan,
 } = require('./helpers');
 const { OPENCODE_AGENT_FRONTMATTER_TRANSFORM } = require('../install/copy-transforms');
@@ -264,8 +265,16 @@ module.exports = createInstallTargetAdapter({
       ...createOpenCodePluginOperations(adapter, targetRoot),
     ];
   },
+  // The package files follow their own rule above (opencode.json stays, it
+  // is the person's config now); every other file an earlier install wrote
+  // and today's plan no longer does is retired as on any other target.
   planRetirements(input, adapter) {
     const { planningInput } = resolveModulesPlan(input, adapter);
-    return planOpenCodePackageRetirements(adapter, planningInput);
+    const own = planOpenCodePackageRetirements(adapter, planningInput);
+    const offered = new Set(own.map(entry => entry.destinationPath));
+    const generic = planGenericRetirements(input, adapter).filter(entry => (
+      !offered.has(entry.destinationPath) && !isOpenCodePackagePath(normalizeRelativePath(entry.sourceRelativePath))
+    ));
+    return [...own, ...generic];
   },
 });

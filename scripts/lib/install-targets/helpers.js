@@ -407,15 +407,32 @@ function createDefaultScaffoldOperations(input, adapter) {
   });
 }
 
+// The files a directory scaffold copy writes, relative to it, listed the
+// way materializeScaffoldOperation (install-executor.js) lists them for the
+// copy-file entries the state records: regular files, the same ignored
+// names left out, names unchanged.
+function listScaffoldDirectoryFiles(dirPath) {
+  const files = [];
+  for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (isIgnoredSourceDirectory(entry.name)) continue;
+      for (const child of listScaffoldDirectoryFiles(path.join(dirPath, entry.name))) {
+        files.push(path.join(entry.name, child));
+      }
+    } else if (entry.isFile() && !isIgnoredSourceFile(entry.name)) {
+      files.push(entry.name);
+    }
+  }
+  return files;
+}
+
 // What today's scaffold operations would actually write, at the
-// granularity the install-state records: single files in `files`,
-// whole source directories (still copied recursively, one child file
-// at a time) in `dirs`. Mirrors the file/directory split
-// materializeScaffoldOperation (install-executor.js) applies when it
-// turns these same scaffold operations into the copy-file entries
-// the state records, so a directory scaffold entry here shields every
-// file under it even though no single copy-file operation names the
-// directory itself.
+// granularity the install-state records: one destination per file. A
+// directory scaffold copy covers the files it copies today, not every path
+// under its destination, so a file that left the directory, or another
+// module's file under a directory copied onto the target root itself
+// (codex's `.agents`, egc's `.gemini-plugin`), is no longer shielded. A
+// directory that cannot be listed keeps shielding its whole subtree.
 function collectCurrentlyCoveredDestinations(operations, repoRoot) {
   const files = new Set();
   const dirs = new Set();
@@ -440,7 +457,18 @@ function collectCurrentlyCoveredDestinations(operations, repoRoot) {
       files.add(resolvedDestination);
       continue;
     }
-    (stat.isDirectory() ? dirs : files).add(resolvedDestination);
+    if (!stat.isDirectory()) {
+      files.add(resolvedDestination);
+      continue;
+    }
+    try {
+      const sourceDir = path.join(repoRoot, ...normalizeRelativePath(source).split('/'));
+      for (const relativeFile of listScaffoldDirectoryFiles(sourceDir)) {
+        files.add(path.join(resolvedDestination, relativeFile));
+      }
+    } catch {
+      dirs.add(resolvedDestination);
+    }
   }
   return { files, dirs };
 }

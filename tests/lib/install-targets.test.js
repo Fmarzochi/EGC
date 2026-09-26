@@ -1487,6 +1487,36 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('opencode adapter also retires a module file that left the plan, beside the package files it retires on its own', () => {
+    const fs = require('fs');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-opencode-retire-module-'));
+    try {
+      const planningInput = { target: 'opencode', repoRoot, homeDir, modules: [] };
+      const adapter = getInstallTargetAdapter('opencode');
+      const targetRoot = adapter.resolveRoot({ repoRoot, homeDir });
+      const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
+      const destination = path.join(targetRoot, 'scripts', 'auto-update.js');
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      writeInstallState(installStatePath, createInstallState({
+        adapter: { id: adapter.id },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'minimal', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          { kind: 'copy-file', moduleId: 'platform-configs', sourceRelativePath: 'scripts/auto-update.js', destinationPath: destination, strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+      const modules = [{ id: 'platform-configs', paths: ['mcp-configs', 'scripts/setup-package-manager.js'] }];
+      const plan = planInstallTargetScaffold({ ...planningInput, modules });
+      assert.deepStrictEqual(plan.retirements.map(entry => entry.destinationPath), [destination]);
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (test('opencode adapter retires the package files an earlier install wrote, keeps the shipped folders and opencode.json, and plans nothing without a previous state (#1396)', () => {
     const fs = require('fs');
     const repoRoot = path.join(__dirname, '..', '..');
@@ -3822,6 +3852,67 @@ function runTests() {
         adapter.planRetirements(planningInput),
         [],
         'both files still live inside the planned directory, so neither is offered up'
+      );
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('generic planRetirements retires a file recorded under a planned directory once it leaves that directory, and a root-wide directory copy no longer shields another module file that left the plan', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-left-repo-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-left-home-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'bundle', 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'bundle', 'a.md'), 'a');
+      fs.mkdirSync(path.join(repoRoot, 'rootcopy'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'rootcopy', 'kept.md'), 'kept');
+      fs.mkdirSync(path.join(repoRoot, 'scripts'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'scripts', 'dropped.js'), 'dropped');
+
+      const adapter = createInstallTargetAdapter({
+        id: 'egc-generic-retire-left-target',
+        target: 'egc-generic-retire-left-target',
+        kind: 'home',
+        rootSegments: ['egc-generic-retire-left-target'],
+        installStatePathSegments: ['egc', 'install-state.json'],
+        // Like codex's '.agents -> .agents': one module copies a whole
+        // directory onto the target root itself.
+        planOperations(input, self) {
+          const root = self.resolveRoot(input);
+          return [
+            { kind: 'copy-path', moduleId: 'x', sourceRelativePath: 'bundle', destinationPath: path.join(root, 'bundle'), strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+            { kind: 'copy-path', moduleId: 'y', sourceRelativePath: 'rootcopy', destinationPath: root, strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false },
+          ];
+        },
+      });
+
+      const targetRoot = adapter.resolveRoot({ repoRoot, homeDir });
+      const installStatePath = adapter.getInstallStatePath({ repoRoot, homeDir });
+      const planningInput = { repoRoot, homeDir, modules: [{ id: 'x', paths: ['bundle'] }, { id: 'y', paths: ['rootcopy'] }, { id: 'z', paths: [] }] };
+      const copy = (moduleId, sourceRelativePath, destination) => ({ kind: 'copy-file', moduleId, sourceRelativePath, destinationPath: destination, strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false });
+
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      writeInstallState(installStatePath, createInstallState({
+        adapter: { id: adapter.id },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'full', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          copy('x', 'bundle/a.md', path.join(targetRoot, 'bundle', 'a.md')),
+          copy('x', 'bundle/nested/b.md', path.join(targetRoot, 'bundle', 'nested', 'b.md')),
+          copy('y', 'rootcopy/kept.md', path.join(targetRoot, 'kept.md')),
+          copy('z', 'scripts/dropped.js', path.join(targetRoot, 'scripts', 'dropped.js')),
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+
+      assert.deepStrictEqual(
+        adapter.planRetirements(planningInput).map(entry => path.relative(targetRoot, entry.destinationPath)).sort(),
+        [path.join('bundle', 'nested', 'b.md'), path.join('scripts', 'dropped.js')].sort(),
+        'b.md left the planned directory and dropped.js left its module; a.md and kept.md are still written'
       );
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
