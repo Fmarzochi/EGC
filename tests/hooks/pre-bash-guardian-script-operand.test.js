@@ -81,6 +81,7 @@ function runTests() {
     if (test('a script behind a local wrapper (setsid, taskset, chrt, nsenter, numactl, pkexec, busybox, prlimit, runuser -u) is judged', () => {
       const commands = [
         'setsid bash notes.txt',
+        'env - bash notes.txt',
         'setsid -f bash notes.txt',
         'taskset -c 0 bash notes.txt',
         'chrt -o bash notes.txt',

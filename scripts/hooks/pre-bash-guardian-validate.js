@@ -304,7 +304,9 @@ function skipWrapperOptions(words, start, name, state) {
       index += 1;
       break;
     }
-    if (!word.startsWith('-') || word === '-') break;
+    // A lone `-` is read as an option word, as the validator reads it (env's
+    // `-` clears the environment and the command follows it).
+    if (!word.startsWith('-')) break;
     const option = readWrapperOption(name, word, words[index + 1]?.value) ?? NO_OPTION;
     moves.skipChdir = moves.skipChdir || Boolean(option.names?.includes('--skip-chdir'));
     noteWrapperMove(name, optionMove(option, word), option.width === 2 ? words[index + 1] : words[index], moves, state);
