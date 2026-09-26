@@ -1725,21 +1725,85 @@ function runTests() {
       }
     }) ? passed++ : failed++);
 
-    (test('a config in a folder that refuses new files is updated in place', () => {
+    // Folder and file permissions do not bind root, so these two only mean
+    // something for a regular user.
+    if (process.getuid?.() !== 0) {
+      (test('a config in a folder that refuses new files is updated in place', () => {
+        const tmp = makeTempDir();
+        const folder = path.join(tmp, 'locked');
+        try {
+          fs.mkdirSync(folder);
+          const configPath = path.join(folder, 'mcp.json');
+          fs.writeFileSync(configPath, '{}\n');
+          fs.chmodSync(folder, 0o555);
+
+          assert.strictEqual(registerJson(configPath, bins), true);
+
+          assert.ok(JSON.parse(fs.readFileSync(configPath, 'utf8')).mcpServers['egc-guardian']);
+          assert.deepStrictEqual(fs.readdirSync(folder), ['mcp.json']);
+        } finally {
+          fs.chmodSync(folder, 0o755);
+          fs.rmSync(tmp, { recursive: true, force: true });
+        }
+      }) ? passed++ : failed++);
+
+      (test('a config its owner made read-only is left as it is', () => {
+        const tmp = makeTempDir();
+        const configPath = path.join(tmp, 'mcp.json');
+        try {
+          fs.writeFileSync(configPath, '{}\n');
+          fs.chmodSync(configPath, 0o444);
+
+          assert.throws(() => registerJson(configPath, bins), /EACCES/);
+
+          assert.strictEqual(fs.readFileSync(configPath, 'utf8'), '{}\n');
+          assert.deepStrictEqual(fs.readdirSync(tmp), ['mcp.json']);
+        } finally {
+          fs.chmodSync(configPath, 0o644);
+          fs.rmSync(tmp, { recursive: true, force: true });
+        }
+      }) ? passed++ : failed++);
+    }
+
+    const refuseRenames = () => {
+      throw Object.assign(new Error('EBUSY: resource busy or locked, rename'), { code: 'EBUSY' });
+    };
+
+    (test('a new config written in place is readable by its owner only', () => {
       const tmp = makeTempDir();
-      const folder = path.join(tmp, 'locked');
+      const realRenameSync = fs.renameSync;
       try {
-        fs.mkdirSync(folder);
-        const configPath = path.join(folder, 'mcp.json');
-        fs.writeFileSync(configPath, '{}\n');
-        fs.chmodSync(folder, 0o555);
+        const configPath = path.join(tmp, 'mcp.json');
+        fs.renameSync = refuseRenames;
 
-        assert.strictEqual(registerJson(configPath, bins), true);
+        registerJson(configPath, bins);
 
-        assert.ok(JSON.parse(fs.readFileSync(configPath, 'utf8')).mcpServers['egc-guardian']);
-        assert.deepStrictEqual(fs.readdirSync(folder), ['mcp.json']);
+        fs.renameSync = realRenameSync;
+        assert.strictEqual(fs.statSync(configPath).mode & 0o777, 0o600);
       } finally {
-        fs.chmodSync(folder, 0o755);
+        fs.renameSync = realRenameSync;
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
+    (test('a config written in place reaches the disk too', () => {
+      const tmp = makeTempDir();
+      const realRenameSync = fs.renameSync;
+      const realFsyncSync = fs.fsyncSync;
+      const synced = [];
+      try {
+        const configPath = path.join(tmp, 'mcp.json');
+        fs.writeFileSync(configPath, '{}\n');
+        const inode = fs.statSync(configPath).ino;
+        fs.renameSync = refuseRenames;
+        fs.fsyncSync = (fd) => { synced.push(fs.fstatSync(fd).ino); return realFsyncSync(fd); };
+
+        registerJson(configPath, bins);
+
+        assert.ok(synced.includes(inode), 'the config itself was synced after the write in place');
+      } finally {
+        fs.renameSync = realRenameSync;
+        fs.fsyncSync = realFsyncSync;
         fs.rmSync(tmp, { recursive: true, force: true });
       }
     }) ? passed++ : failed++);
@@ -1792,7 +1856,7 @@ function runTests() {
       }
     }) ? passed++ : failed++);
 
-    (test('the new content reaches the disk before it replaces the config', () => {
+    (test('the new content reaches the disk before it replaces the config, and the folder after', () => {
       const tmp = makeTempDir();
       const realFsyncSync = fs.fsyncSync;
       const realRenameSync = fs.renameSync;
@@ -1800,12 +1864,15 @@ function runTests() {
       try {
         const configPath = path.join(tmp, 'mcp.json');
         fs.writeFileSync(configPath, '{}\n');
-        fs.fsyncSync = (fd) => { steps.push('fsync'); return realFsyncSync(fd); };
+        fs.fsyncSync = (fd) => {
+          steps.push(fs.fstatSync(fd).isDirectory() ? 'fsync folder' : 'fsync file');
+          return realFsyncSync(fd);
+        };
         fs.renameSync = (from, to) => { steps.push('rename'); return realRenameSync(from, to); };
 
         registerJson(configPath, bins);
 
-        assert.deepStrictEqual(steps, ['fsync', 'rename']);
+        assert.deepStrictEqual(steps, ['fsync file', 'rename', 'fsync folder']);
       } finally {
         fs.fsyncSync = realFsyncSync;
         fs.renameSync = realRenameSync;

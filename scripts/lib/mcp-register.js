@@ -92,12 +92,47 @@ function ownerToKeep(filePath) {
 // program holds on Windows), the config is written in place, as before.
 const IN_PLACE_FALLBACK_CODES = new Set(['EACCES', 'EPERM', 'EBUSY']);
 
+// A config its owner made read-only stays as it is, as the write in place
+// left it; renaming over it would go around the file's own mode.
+function assertWritableIfPresent(filePath) {
+  try {
+    fs.accessSync(filePath, fs.constants.W_OK);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+}
+
+function writeInPlace(filePath, text) {
+  const descriptor = fs.openSync(filePath, 'w', NEW_CONFIG_MODE);
+  try {
+    fs.writeFileSync(descriptor, text);
+    fs.fsyncSync(descriptor);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+// The rename is recorded in the folder, so the folder is synced too.
+function syncFolder(folder) {
+  let descriptor;
+  try {
+    descriptor = fs.openSync(folder, 'r');
+    fs.fsyncSync(descriptor);
+  } catch {
+    // Windows cannot open a folder and some filesystems refuse to sync one;
+    // the replacement has landed either way.
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+
 // Every config lands in one replacement where its path really leads, so a
 // dotfiles link keeps pointing at the updated file: the text goes to a
 // private temporary file beside it, reaches the disk, and is renamed over
 // the previous file, so a write cut short leaves that file whole.
 function writeConfig(targetPath, text) {
   const landing = realizePath(targetPath);
+  assertWritableIfPresent(landing);
   const owner = ownerToKeep(landing);
   fs.mkdirSync(path.dirname(landing), { recursive: true });
   try {
@@ -108,8 +143,10 @@ function writeConfig(targetPath, text) {
     }, NEW_CONFIG_MODE);
   } catch (err) {
     if (!IN_PLACE_FALLBACK_CODES.has(err?.code)) throw err;
-    fs.writeFileSync(landing, text);
+    writeInPlace(landing, text);
+    return;
   }
+  syncFolder(path.dirname(landing));
 }
 
 // A line that opens a table. Every key after it belongs to that table, and
