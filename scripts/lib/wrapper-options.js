@@ -71,27 +71,32 @@ const noValue = (names, width) => ({ names, width, valueName: null, value: undef
 
 // One option word read the way getopt reads it: how many words it spans and,
 // for an option that takes a value, which option and what value.
-function readGetoptOption(word, spec, next) {
-  if (word.startsWith('--')) {
-    const eq = word.indexOf('=');
-    const name = resolveLongOption(eq > 0 ? word.slice(0, eq) : word, spec);
-    if (!spec.valueFlags.has(name)) return noValue([name], 1);
-    if (eq > 0) return { names: [name], width: 1, valueName: name, value: word.slice(eq + 1) };
-    return { names: [name], width: 2, valueName: name, value: next };
-  }
+function readLongGetoptOption(word, spec, next) {
+  const eq = word.indexOf('=');
+  const name = resolveLongOption(eq > 0 ? word.slice(0, eq) : word, spec);
+  if (!spec.valueFlags.has(name)) return noValue([name], 1);
+  if (eq > 0) return { names: [name], width: 1, valueName: name, value: word.slice(eq + 1) };
+  return { names: [name], width: 2, valueName: name, value: next };
+}
+
+// A bundle of short options ends at the first one that takes a value: an
+// optional value only attached, a required one attached or in the next word.
+function readShortGetoptBundle(word, spec, next) {
   const names = [];
   for (let k = 1; k < word.length; k++) {
     const name = `-${word[k]}`;
     names.push(name);
     const rest = word.slice(k + 1);
-    if (spec.optionalValueFlags && spec.optionalValueFlags.has(name)) {
-      return { names, width: 1, valueName: name, value: rest || undefined };
-    }
-    if (spec.valueFlags.has(name)) {
-      return rest ? { names, width: 1, valueName: name, value: rest } : { names, width: 2, valueName: name, value: next };
-    }
+    if (spec.optionalValueFlags?.has(name)) return { names, width: 1, valueName: name, value: rest || undefined };
+    if (!spec.valueFlags.has(name)) continue;
+    if (rest) return { names, width: 1, valueName: name, value: rest };
+    return { names, width: 2, valueName: name, value: next };
   }
   return noValue(names, 1);
+}
+
+function readGetoptOption(word, spec, next) {
+  return word.startsWith('--') ? readLongGetoptOption(word, spec, next) : readShortGetoptBundle(word, spec, next);
 }
 
 // GNU parallel's own options_completion_hash (src/parallel 20260922), read

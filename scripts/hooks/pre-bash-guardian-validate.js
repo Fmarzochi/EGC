@@ -212,7 +212,7 @@ const HOOK_ONLY_WRAPPERS = new Set(['builtin']);
 const NO_OPTION = { width: 1, valueName: null, value: undefined };
 
 function isWrapper(name) {
-  return Object.prototype.hasOwnProperty.call(WRAPPER_SPECS, name) || HOOK_ONLY_WRAPPERS.has(name);
+  return Object.hasOwn(WRAPPER_SPECS, name) || HOOK_ONLY_WRAPPERS.has(name);
 }
 
 // A chdir or chroot option moves where the operands are resolved; a
