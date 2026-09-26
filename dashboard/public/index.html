@@ -1497,7 +1497,7 @@ function renderEconomy(telemetry){
       </div>`;
     }
     return`<div class="eco-provider">
-      <div class="eco-provider-head" style="color:${ic.c}">${ic.label}</div>
+      <div class="eco-provider-head" style="color:${ic.c}">${esc(ic.label)}</div>
       ${tokHtml}
       <div class="eco-row"><span class="eco-lbl">Tool Calls</span><span class="eco-val">${p.toolCalls}</span></div>
       <div class="eco-row"><span class="eco-lbl">Sessions</span><span class="eco-val">${p.sessions}</span></div>
