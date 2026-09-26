@@ -122,28 +122,23 @@ function fromMcpConfigs() {
 // config file with other tables/features registerToml() doesn't touch still
 // resolves fine.
 
-// Reverses tomlEscape() in scripts/lib/mcp-register.js: backslash-escaped
-// backslash and double-quote are the only two escapes that function ever
-// produces, but \n and \t are handled too since they're valid in a TOML
-// basic string and a hand-edited file could contain them. A lookup table
-// (rather than a chain of if/else on each recognized escape) keeps this
-// under SonarCloud's cognitive-complexity ceiling.
-const TOML_ESCAPES = { '\\': '\\', '"': '"', n: '\n', t: '\t' };
+// Reverses tomlEscape() in scripts/lib/mcp-register.js: the single-letter
+// escapes and \uXXXX, the two forms that function writes. \UXXXXXXXX is read
+// too, since it is just as valid in a basic string and a hand-edited file
+// could contain it. An unrecognized escape, or a code point past the last
+// one Unicode defines, is kept verbatim: String.fromCodePoint would throw on
+// it, and parseCodexMcpServers() never throws.
+const TOML_ESCAPES = { '\\': '\\', '"': '"', b: '\b', t: '\t', n: '\n', f: '\f', r: '\r' };
+const TOML_ESCAPE_PATTERN = /\\(?:u([\dA-Fa-f]{4})|U([\dA-Fa-f]{8})|(.))/g;
+const MAX_CODE_POINT = 0x10FFFF;
 
 function tomlUnescapeBasicString(raw) {
-  let out = '';
-  for (let i = 0; i < raw.length; i++) {
-    const ch = raw[i];
-    const next = ch === '\\' ? raw[i + 1] : undefined;
-    const mapped = next !== undefined ? TOML_ESCAPES[next] : undefined;
-    if (mapped !== undefined) {
-      out += mapped;
-      i++; // consumed the escape char too
-    } else {
-      out += ch; // not an escape, or an unrecognized one: keep verbatim
-    }
-  }
-  return out;
+  return raw.replaceAll(TOML_ESCAPE_PATTERN, (escape, hex4, hex8, letter) => {
+    const hex = hex4 ?? hex8;
+    if (hex === undefined) return TOML_ESCAPES[letter] ?? escape;
+    const codePoint = Number.parseInt(hex, 16);
+    return codePoint <= MAX_CODE_POINT ? String.fromCodePoint(codePoint) : escape;
+  });
 }
 
 // Extracts the value of a TOML basic (double-quoted) string, or null if the
