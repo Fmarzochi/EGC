@@ -475,17 +475,15 @@ function main() {
   });
 
   run('reads back a control character tomlEscape() wrote into the install path', () => {
-    // A Windows file name cannot hold a control character, so there is no
-    // such install path to round-trip there; the next test reads the
-    // unicode escapes on every platform.
-    if (process.platform === 'win32') {
-      console.log('    (skipped: control characters are not allowed in Windows file names)');
-      return;
-    }
+    // A Windows file name cannot hold a C0 control character but can hold
+    // DEL and the C1 ones, so there the folder name carries those two alone.
+    const controlName = process.platform === 'win32'
+      ? 'del\u007fnel\u0085'
+      : 'line\nbreak\r\ttab\b\f\u0001\u007f\u0085';
     const fakeHome = createTempDir('egc-guardian-bin-home-');
     try {
       const { registerToml } = require('../../scripts/lib/mcp-register');
-      const installDir = path.join(fakeHome, 'line\nbreak\r\ttab\b\f\u0001\u007f\u0085', 'egc-guardian', 'build');
+      const installDir = path.join(fakeHome, controlName, 'egc-guardian', 'build');
       fs.mkdirSync(installDir, { recursive: true });
       fs.writeFileSync(path.join(installDir, 'guardian-cli.js'), '// real cli\n');
       registerToml(path.join(fakeHome, '.codex', 'config.toml'), {
