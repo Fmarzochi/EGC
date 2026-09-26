@@ -1440,6 +1440,22 @@ function runTests() {
       }
     }) ? passed++ : failed++);
 
+    (test('a relative config link is followed from the folder it really sits in', () => {
+      const { base, home, outside } = makeLayout();
+      try {
+        fs.symlinkSync(outside, path.join(home, '.cursor'), 'dir');
+        fs.symlinkSync(path.join('..', 'escaped.json'), path.join(outside, 'mcp.json'));
+
+        const outcome = registerWithoutXdg(home);
+
+        assert.ok(warnedFor(outcome, 'Cursor'), `the skip is reported: ${outcome.warned.join(' | ')}`);
+        assert.ok(!fs.existsSync(path.join(base, 'escaped.json')), 'nothing is created where the link really leads');
+        assert.ok(!fs.existsSync(path.join(home, 'escaped.json')));
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }) ? passed++ : failed++);
+
     (test('a config linked from a dotfiles folder under the home is registered through the link', () => {
       const { base, home } = makeLayout();
       try {
