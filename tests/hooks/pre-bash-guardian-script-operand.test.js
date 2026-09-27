@@ -522,6 +522,9 @@ function runTests() {
         'for t in build.sh good.sh; do bash "$t"; done',
         'S=good.sh; bash "$S"',
         'export T=good.sh; bash "$T"',
+        // A loop header fixes the variable for the body over any environment
+        // value, whatever its name, so it leads to the script it names.
+        'for PATH in good.sh; do bash "$PATH"; done',
       ];
       for (const command of passing) {
         const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
@@ -531,8 +534,6 @@ function runTests() {
         'for t in build.sh evil.sh; do bash "$t"; done',
         'S=evil.sh; bash "$S"',
         'for f in *.sh; do bash "$f"; done',
-        // The environment can set PATH, so the loop header cannot fix it.
-        'for PATH in good.sh; do bash "$PATH"; done',
         'read t; bash "$t"',
         'T=$(cat name.txt); bash "$T"',
         'bash opaque.sh',
