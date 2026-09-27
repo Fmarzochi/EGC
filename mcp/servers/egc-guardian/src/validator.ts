@@ -392,7 +392,7 @@ const ENV_ASSIGNMENT_RE = /^([A-Za-z_]\w*)=/;
 
 // Environment variables that let a command persist or override git's hook
 // and execution config the same way `-c core.hooksPath=`/`git config` does
-// (see DANGEROUS_GIT_CONFIG_KEYS below), but via `VAR=value git ...` on the
+// (see DANGEROUS_GIT_CONFIG_RULES below), but via `VAR=value git ...` on the
 // command line instead — a form the old strip-and-ignore VAR= handling let
 // through untouched. GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n are numbered
 // (GIT_CONFIG_COUNT-driven), hence the pattern rather than a fixed name.
@@ -1282,37 +1282,63 @@ export interface ValidationResult {
  * Validate arguments for a specific allowed command.
  * Returns { allowed: false, reason } if the args are unsafe.
  */
-// Config keys that persist a hook-bypass or arbitrary-execution mechanism:
-// once set, they take effect on every future git invocation in this repo/
-// environment, not just the one that set them (unlike the inline `-c
-// core.hooksPath=` form, already blocked separately in
-// scripts/hooks/block-no-verify.js). core.hooksPath repoints where git looks
-// for hooks (including the DCO/commit hooks this project relies on);
-// core.pager/core.editor/diff.external run an arbitrary command on ordinary
-// read operations; credential.helper receives every credential request;
-// include.path loads another config file wholesale.
-const DANGEROUS_GIT_CONFIG_KEYS = new Set([
-  'core.hookspath',
-  'core.pager',
-  'core.editor',
-  'core.sshcommand',
-  'core.fsmonitor',
-  'credential.helper',
-  'diff.external',
-  'include.path',
-]);
-// A merge driver runs an arbitrary command on every merge that touches a
-// matching path, by design of the merge.<name>.driver mechanism itself —
-// any write to one is dangerous regardless of the command it names. filter
-// clean/smudge/process drivers and a named diff driver's own command run the
-// same way, on every checkout/diff of a matching path.
-const GIT_CONFIG_MERGE_DRIVER_KEY_RE = /^merge\..+\.driver$/;
-const GIT_CONFIG_FILTER_KEY_RE = /^filter\..+\.(clean|smudge|process)$/;
-const GIT_CONFIG_DIFF_COMMAND_KEY_RE = /^diff\..+\.command$/;
-// includeIf.<condition>.path loads another config file wholesale, exactly
-// like include.path above -- git's conditional-include syntax, not covered
-// by the exact-match DANGEROUS_GIT_CONFIG_KEYS set (audit EGC-533).
-const GIT_CONFIG_INCLUDEIF_KEY_RE = /^includeif\..+\.path$/i;
+// Config keys whose value git runs as a command or program, or that make it
+// run one (hooks, templates, included files, transport helpers), enumerated
+// from the git-config manual of git 2.51. Set with git config they take
+// effect on every later git invocation, not just the one that set them; set
+// inline with -c they run in that very call. core.hooksPath repoints where
+// git looks for hooks (including the DCO/commit hooks this project relies
+// on); a pager, editor, textconv or driver runs on ordinary reads, checkouts,
+// diffs and merges; a credential helper receives every credential request;
+// include.path and includeIf load another config file wholesale;
+// init.templateDir seeds the hooks of every repository git creates. A key
+// set from the environment (--config-env) is judged without its value, which
+// the command line does not show.
+interface GitConfigKeyRule {
+  // The section, which a rename would carry keys into.
+  section: string;
+  key: RegExp;
+  // When given, only a value it accepts runs something.
+  runs?: (value: string, cwd?: string) => boolean;
+}
+
+// git reads a pager.<cmd> value that parses as a boolean as on or off, and
+// anything else as the pager command.
+const GIT_BOOLEAN_VALUE = /^(?:true|false|yes|no|on|off|\d+)?$/i;
+
+const DANGEROUS_GIT_CONFIG_RULES: GitConfigKeyRule[] = [
+  { section: 'core', key: /^core\.(?:hookspath|pager|editor|sshcommand|fsmonitor|gitproxy|askpass|alternaterefscommand)$/ },
+  { section: 'credential', key: /^credential\.(?:.+\.)?helper$/ },
+  { section: 'diff', key: /^diff\.(?:external|.+\.(?:command|textconv))$/ },
+  { section: 'include', key: /^include\.path$/ },
+  { section: 'includeif', key: /^includeif\..+\.path$/ },
+  { section: 'merge', key: /^merge\..+\.driver$/ },
+  { section: 'filter', key: /^filter\..+\.(?:clean|smudge|process)$/ },
+  { section: 'difftool', key: /^difftool\..+\.(?:cmd|path)$/ },
+  { section: 'mergetool', key: /^mergetool\..+\.(?:cmd|path)$/ },
+  { section: 'man', key: /^man\..+\.(?:cmd|path)$/ },
+  { section: 'browser', key: /^browser\..+\.(?:cmd|path)$/ },
+  { section: 'guitool', key: /^guitool\..+\.cmd$/ },
+  { section: 'gpg', key: /^gpg\.(?:program|.+\.program|ssh\.defaultkeycommand)$/ },
+  { section: 'remote', key: /^remote\..+\.(?:uploadpack|receivepack|vcs)$/ },
+  { section: 'tar', key: /^tar\..+\.command$/ },
+  { section: 'trailer', key: /^trailer\..+\.(?:command|cmd)$/ },
+  { section: 'sendemail', key: /^sendemail\.(?:.+\.)?(?:tocmd|cccmd|headercmd|sendmailcmd)$/ },
+  // A full path is a sendmail-like program; a host name is just a server.
+  { section: 'sendemail', key: /^sendemail\.(?:.+\.)?smtpserver$/, runs: value => /[\\/]/.test(value) },
+  { section: 'sequence', key: /^sequence\.editor$/ },
+  { section: 'gc', key: /^gc\.recentobjectshook$/ },
+  { section: 'imap', key: /^imap\.tunnel$/ },
+  { section: 'instaweb', key: /^instaweb\.httpd$/ },
+  { section: 'interactive', key: /^interactive\.difffilter$/ },
+  { section: 'uploadpack', key: /^uploadpack\.packobjectshook$/ },
+  { section: 'init', key: /^init\.templatedir$/ },
+  { section: 'pager', key: /^pager\..+$/, runs: value => !GIT_BOOLEAN_VALUE.test(stripQuotes(value).trim()) },
+  { section: 'submodule', key: /^submodule\..+\.update$/, runs: value => stripQuotes(value).trim().startsWith('!') },
+  // The ext:: transport runs the command its URL names once it is allowed.
+  { section: 'protocol', key: /^protocol\.(?:ext\.)?allow$/, runs: value => /^(?:always|user)$/i.test(stripQuotes(value).trim()) },
+  { section: 'alias', key: /^alias\..+$/, runs: (value, cwd) => isDangerousAliasValue(value, cwd) },
+];
 // An alias is a shell-escape risk when its value starts with '!' (git's
 // own syntax for "run this as a shell command" instead of a git subcommand),
 // or when its value's first token is -c, --config-env, or 'config' (which allows proxying
@@ -1323,8 +1349,6 @@ const GIT_CONFIG_INCLUDEIF_KEY_RE = /^includeif\..+\.path$/i;
 // shifts the subcommand out of args[0] and the dangerous-key check below is
 // never reached at all.
 const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir', '--namespace', '--super-prefix', '--config-env']);
-
-const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
 
 function isDangerousAliasValue(value: string, cwd?: string): boolean {
   const trimmed = stripEnclosingQuotes(value);
@@ -1470,24 +1494,18 @@ function parseGitConfigCall(rest: string[]): GitConfigCall {
   return call;
 }
 
-function isDangerousGitConfigWrite(key: string, value: string, cwd?: string): boolean {
+// `value` is undefined when the command line does not show it.
+function isDangerousGitConfigWrite(key: string, value: string | undefined, cwd?: string): boolean {
   const lowerKey = key.toLowerCase();
-  return DANGEROUS_GIT_CONFIG_KEYS.has(lowerKey)
-    || GIT_CONFIG_MERGE_DRIVER_KEY_RE.test(lowerKey)
-    || GIT_CONFIG_FILTER_KEY_RE.test(lowerKey)
-    || GIT_CONFIG_DIFF_COMMAND_KEY_RE.test(lowerKey)
-    || GIT_CONFIG_INCLUDEIF_KEY_RE.test(lowerKey)
-    || (GIT_CONFIG_ALIAS_KEY_RE.test(lowerKey) && isDangerousAliasValue(value, cwd));
+  return DANGEROUS_GIT_CONFIG_RULES.some(rule => rule.key.test(lowerKey)
+    && (rule.runs === undefined || value === undefined || rule.runs(value, cwd)));
 }
 
-// The last names of the dangerous keys above: a section renamed to one that
-// can hold them turns the keys it carries into those keys.
-const GIT_CONFIG_DANGEROUS_NAMES = [...new Set([...DANGEROUS_GIT_CONFIG_KEYS]
-  .map(key => key.slice(key.lastIndexOf('.') + 1))
-  .concat(['driver', 'clean', 'smudge', 'process', 'command']))];
-
-function isDangerousGitConfigSection(section: string, cwd?: string): boolean {
-  return GIT_CONFIG_DANGEROUS_NAMES.some(name => isDangerousGitConfigWrite(`${section}.${name}`, '!', cwd));
+// A section renamed into one that holds the keys above turns the keys it
+// carries into those keys.
+function isDangerousGitConfigSection(section: string): boolean {
+  const name = section.toLowerCase().split('.')[0];
+  return DANGEROUS_GIT_CONFIG_RULES.some(rule => rule.section === name);
 }
 
 const GIT_CONFIG_EDIT_DENIAL: ValidationResult = {
@@ -1518,7 +1536,7 @@ function checkGitConfigWrite(args: string[], cwd?: string): ValidationResult | n
     };
   }
   const section = call.actions.includes('rename')
-    ? operands.slice(1).map(stripQuotes).find(name => isDangerousGitConfigSection(name, cwd))
+    ? operands.slice(1).map(stripQuotes).find(name => isDangerousGitConfigSection(name))
     : undefined;
   if (section === undefined) return null;
   return {
@@ -1545,7 +1563,9 @@ function findGitSubcommandIndex(args: string[]): number {
   return -1;
 }
 
-function parseInlineConfigToken(token: string, nextToken: string | undefined): { key: string; value: string; consumedNext: boolean } | null {
+// The key and value an inline override sets. --config-env names the
+// environment variable that holds the value, so the value is unknown.
+function parseInlineConfigToken(token: string, nextToken: string | undefined): { key: string; value: string | undefined; consumedNext: boolean } | null {
   const stripped = stripQuotes(token);
   const bare = bareToken(token);
   let rawPair: string | null = null;
@@ -1568,6 +1588,7 @@ function parseInlineConfigToken(token: string, nextToken: string | undefined): {
 
   const eq = rawPair.indexOf('=');
   const key = (eq > 0 ? rawPair.slice(0, eq) : rawPair).toLowerCase();
+  if (bare.startsWith('--config-env')) return { key, value: undefined, consumedNext };
   const value = eq > 0 ? rawPair.slice(eq + 1) : '';
   return { key, value, consumedNext };
 }

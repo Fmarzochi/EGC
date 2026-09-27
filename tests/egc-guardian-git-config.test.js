@@ -54,10 +54,10 @@ const READ = /would read the protected file/;
 console.log('\n=== git config and git grep, read as git reads them ===\n');
 
 console.log('the set, edit and rename-section subcommands:');
-denied('git config set core.hooksPath /tmp/evil', KEY);
+denied('git config set core.hooksPath /opt/evil', KEY);
 denied("git config set --global alias.x '!rm -rf ~'", KEY);
-denied('git config set --comment note core.hooksPath /tmp/evil', KEY);
-denied('git config set --comment --get core.hooksPath /tmp/evil', KEY);
+denied('git config set --comment note core.hooksPath /opt/evil', KEY);
+denied('git config set --comment --get core.hooksPath /opt/evil', KEY);
 denied('git config edit', /editable session/);
 denied('git config rename-section x core', /rename/);
 denied("git config rename-section x 'filter.lfs'", /rename/);
@@ -71,15 +71,15 @@ allowed('git config rename-section old new');
 allowed('git config --rename-section old new');
 
 console.log('\nan option value is not an action, and options end at the first operand:');
-denied('git config --comment --get core.hooksPath /tmp/evil', KEY);
-denied('git config --comm --get core.hooksPath /tmp/evil', KEY);
-denied('git config --comment X core.hooksPath /tmp/evil', KEY);
-denied('git config --default --list core.hooksPath /tmp/evil', KEY);
-denied('git config core.hooksPath /tmp/evil --get', KEY);
-denied('git config core.hooksPath /tmp/evil --unset', KEY);
-denied('git config --no-such-option --get core.hooksPath /tmp/evil', KEY);
-denied('git config --no-such-option X core.hooksPath /tmp/evil', KEY);
-denied('git config -Q --get core.hooksPath /tmp/evil', KEY);
+denied('git config --comment --get core.hooksPath /opt/evil', KEY);
+denied('git config --comm --get core.hooksPath /opt/evil', KEY);
+denied('git config --comment X core.hooksPath /opt/evil', KEY);
+denied('git config --default --list core.hooksPath /opt/evil', KEY);
+denied('git config core.hooksPath /opt/evil --get', KEY);
+denied('git config core.hooksPath /opt/evil --unset', KEY);
+denied('git config --no-such-option --get core.hooksPath /opt/evil', KEY);
+denied('git config --no-such-option X core.hooksPath /opt/evil', KEY);
+denied('git config -Q --get core.hooksPath /opt/evil', KEY);
 allowed('git config --get core.hooksPath');
 allowed('git config --get-all alias.co');
 allowed('git config --no-show-origin --get core.hooksPath');
@@ -97,7 +97,7 @@ denied('git config --file ~/.bashrc --unset a.b', WRITE);
 denied('git config --file ~/.bashrc a.b --get', WRITE);
 denied('git config set --file ~/.bashrc a.b c', WRITE);
 denied('git config --file .git/config user.name x', WRITE);
-denied('git config -zf .git/config core.hooksPath /tmp/evil');
+denied('git config -zf .git/config core.hooksPath /opt/evil');
 allowed('git config --file ~/.bashrc --get a.b');
 allowed('git config --file ~/.gitconfig --get user.name');
 allowed('git config get --file ~/.gitconfig user.name');
@@ -111,6 +111,46 @@ allowed('git config get --file ~/.gitconfig --value x user.name');
 allowed('git config get --file ~/.gitconfig --url https://example.com http.proxy');
 allowed('git config --file ./local.cfg a.b c');
 allowed('git config -f .gitmodules submodule.x.url https://example.com/x.git');
+
+console.log('\nevery key whose value git runs, set with git config or inline:');
+for (const [key, value] of [
+  ['core.gitProxy', '/opt/evil'], ['core.askPass', '/opt/evil'], ['core.alternateRefsCommand', "'rm -rf ~'"],
+  ['credential.https://example.com.helper', "'!rm -rf ~'"], ['diff.foo.textconv', "'rm -rf ~'"],
+  ['difftool.x.cmd', "'rm -rf ~'"], ['difftool.x.path', '/opt/evil'], ['mergetool.x.cmd', "'rm -rf ~'"],
+  ['mergetool.x.path', '/opt/evil'], ['man.x.cmd', "'rm -rf ~'"], ['man.x.path', '/opt/evil'],
+  ['browser.x.cmd', "'rm -rf ~'"], ['browser.x.path', '/opt/evil'], ['guitool.x.cmd', "'rm -rf ~'"],
+  ['gpg.program', '/opt/evil'], ['gpg.ssh.program', '/opt/evil'], ['gpg.ssh.defaultKeyCommand', "'rm -rf ~'"],
+  ['remote.origin.uploadpack', "'rm -rf ~'"], ['remote.origin.receivepack', "'rm -rf ~'"], ['remote.origin.vcs', 'evil'],
+  ['tar.tgz.command', "'rm -rf ~'"], ['trailer.x.command', "'rm -rf ~'"], ['trailer.x.cmd', "'rm -rf ~'"],
+  ['sendemail.toCmd', "'rm -rf ~'"], ['sendemail.work.ccCmd', "'rm -rf ~'"], ['sendemail.headerCmd', "'rm -rf ~'"],
+  ['sendemail.sendmailCmd', "'rm -rf ~'"], ['sendemail.smtpServer', '/opt/evil'], ['sequence.editor', "'rm -rf ~'"],
+  ['gc.recentObjectsHook', "'rm -rf ~'"], ['imap.tunnel', "'rm -rf ~'"], ['instaweb.httpd', "'rm -rf ~'"],
+  ['interactive.diffFilter', "'rm -rf ~'"], ['uploadpack.packObjectsHook', "'rm -rf ~'"], ['init.templateDir', '/opt/evil'],
+  ['pager.log', "'rm -rf ~'"], ['submodule.x.update', "'!rm -rf ~'"], ['protocol.ext.allow', 'always'],
+  ['protocol.allow', 'user'], ['include.path', '/opt/evil.cfg'], ['includeIf.gitdir:/x/.path', '/opt/evil.cfg'],
+]) {
+  denied(`git config ${key} ${value}`, KEY);
+}
+denied("git -c pager.log='rm -rf ~' log", /inline config override/);
+denied('git -c protocol.ext.allow=always fetch', /inline config override/);
+denied('git --config-env alias.x=EVIL x', /inline config override/);
+denied('git --config-env=pager.log=PAGER log', /inline config override/);
+denied('git --config-env submodule.x.update=CMD submodule update', /inline config override/);
+denied('git config --rename-section x pager', /rename/);
+denied('git config rename-section x remote.origin', /rename/);
+allowed('git config pager.branch false');
+allowed('git config pager.log 0');
+allowed('git config pager.log False');
+allowed('git config submodule.x.update rebase');
+allowed('git config sendemail.smtpServer smtp.example.com');
+allowed('git config protocol.ext.allow never');
+allowed('git config protocol.file.allow always');
+allowed('git config remote.origin.url https://example.com/x.git');
+allowed('git config gpg.format ssh');
+allowed('git config core.autocrlf input');
+allowed('git -c pager.log=false log');
+allowed('git -c pager.log log');
+allowed('git config --rename-section branch.old branch.new');
 
 console.log('\na short-option cluster is read letter by letter:');
 denied('git config -zf ~/.ssh/config --list', READ);
