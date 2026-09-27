@@ -635,20 +635,32 @@ function fixedValues(words) {
   });
 }
 
+// Whether the environment already carries a variable of this name, which can
+// then set it and the script cannot be trusted to fix it. Windows environment
+// names are case-insensitive (PATH is the same as Path), so match them so.
+function environmentDefines(name) {
+  if (Object.hasOwn(process.env, name)) return true;
+  if (process.platform !== 'win32') return false;
+  const lower = name.toLowerCase();
+  return Object.keys(process.env).some(key => key.toLowerCase() === lower);
+}
+
 // Variables the command itself fixes to literal filenames, and so can be
 // followed to the scripts they name. A variable with any run-time source
 // (a glob, a substitution, `read`, or one the environment can set) is left
 // out, so `bash "$VAR"` for it still fails closed.
 function resolvableScriptVars(segments) {
   const values = new Map();
-  const unsafe = new Set(Object.keys(process.env));
+  const unsafe = new Set();
   for (const segment of segments) {
     for (const [name, word] of fixedValues(shellWords(segment))) {
       if (!isPlainValue(word)) unsafe.add(name);
       else values.set(name, [...(values.get(name) ?? []), word.value]);
     }
   }
-  for (const name of unsafe) values.delete(name);
+  for (const name of [...values.keys()]) {
+    if (unsafe.has(name) || environmentDefines(name)) values.delete(name);
+  }
   return values;
 }
 
@@ -974,7 +986,7 @@ function boundAssignments(segments, callerSet) {
   for (const segment of segments) {
     for (const word of shellWords(segment)) {
       const assignment = /^([A-Za-z_]\w*)=(.*)$/s.exec(word.value);
-      if (!assignment || callerSet.has(assignment[1])) continue;
+      if (!assignment || callerSet.has(assignment[1]) || environmentDefines(assignment[1])) continue;
       values[assignment[1]] = [...(values[assignment[1]] ?? []), assignment[2]];
     }
   }
