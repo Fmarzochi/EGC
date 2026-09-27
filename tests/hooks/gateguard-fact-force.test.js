@@ -304,6 +304,10 @@ function runTests() {
     ['chrt -p 1234 git reset --hard', 'chrt reading a running process'],
     ['chrt -f -p 5 git reset --hard', 'chrt setting a running process'],
     ['chrt --pid 1234 git reset --hard', 'chrt with the long pid option'],
+    ['taskset --pid=1234 git reset --hard', 'taskset with the long pid option and an attached value'],
+    ['chrt --pid=5 1234 git reset --hard', 'chrt with the long pid option and an attached value'],
+    ['taskset --p 1234 git reset --hard', 'taskset with the shortest abbreviation of the pid option'],
+    ['chrt --p 1234 git reset --hard', 'chrt with the shortest abbreviation of the pid option'],
   ];
   for (const [command, what] of NOT_A_COMMAND) {
     if (test(`the destructive gate ignores ${what}`, () => {
