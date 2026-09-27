@@ -326,7 +326,11 @@ function doubleQuoteEnd(command, start) {
   while (j < command.length) {
     const ch = command[j];
     if (ch === '"') return j;
-    const end = ch === '\\' ? j + 1 : constructEnd(command, j);
+    // Inside double quotes `<(` and `>(` are plain text, not a process
+    // substitution.
+    let end = null;
+    if (ch === '\\') end = j + 1;
+    else if (ch !== '<' && ch !== '>') end = constructEnd(command, j);
     if (end === -1) return -1;
     j = (end ?? j) + 1;
   }

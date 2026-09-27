@@ -1320,7 +1320,7 @@ function findExecCommandsOf(line) {
     if (current === null) {
       if (FIND_EXEC_FLAGS.has(word.value)) current = [];
     } else if (FIND_EXEC_ENDS.has(word.value)) {
-      commands.push(current.map(singleQuoted).join(' '));
+      commands.push(current.map(word => singleQuoted(word)).join(' '));
       current = null;
     } else {
       current.push(word.value);

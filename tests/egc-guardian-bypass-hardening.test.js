@@ -693,14 +693,14 @@ run('a protected path after an escaped quote is still read', () => {
   }
   for (const command of ["cat $'a\\'b' # see ~/.ssh/id_rsa", 'cat "a\\"b" # see ~/.ssh/id_rsa', 'cat "${x:-"a # b"}" # see ~/.ssh/id_rsa']) {
     const v = validateCommand(command);
-    assert.ok(!/protected path/.test(v.reason ?? ''), `${command}: the path only sits in a comment, got: ${v.reason}`);
+    assert.ok(v.allowed || v.advisory === true, `${command}: the path only sits in a comment, got: ${v.reason}`);
   }
 });
 
 run('a # glued mid-word inside a command body is text, so a comment after the expansion stays inert', () => {
   for (const command of ['ls ${x:-$(echo a#)} # see ~/.ssh/id_rsa', 'ls $(echo a#) # see ~/.ssh/id_rsa']) {
     const v = validateCommand(command);
-    assert.ok(!/protected path/.test(v.reason ?? ''), `${command}: the path only sits in a comment, got: ${v.reason}`);
+    assert.ok(v.allowed || v.advisory === true, `${command}: the path only sits in a comment, got: ${v.reason}`);
   }
 });
 

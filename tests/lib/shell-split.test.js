@@ -79,6 +79,10 @@ test('a backslash inside single quotes escapes nothing, so the quote closes afte
 test("$'...' reads its backslash escapes, an escaped quote included", () => {
   assert.deepStrictEqual(splitShellSegments("echo $'a\\'b' && echo bye"), ["echo $'a\\'b'", 'echo bye']);
 });
+test('inside double quotes <( and >( are plain text, so a separator after the string still splits', () => {
+  assert.deepStrictEqual(splitShellSegments('echo "<(foo"; rm -rf /'), ['echo "<(foo"', 'rm -rf /']);
+  assert.deepStrictEqual(splitShellSegments('echo ">(x"; rm -rf /'), ['echo ">(x"', 'rm -rf /']);
+});
 test('a double-quoted string holds a ${...} with quotes of its own whole', () => {
   assert.deepStrictEqual(
     splitShellSegments('echo "${x:-"a # b"}"; rm -rf /', { splitOnPipe: true, stripComments: true }),
