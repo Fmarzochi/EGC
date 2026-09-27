@@ -67,6 +67,7 @@ function buildInstalledLayout() {
     'scripts/lib/guardian-bin.js',
     'scripts/lib/shell-split.js',
     'scripts/lib/wrapper-options.js',
+    'scripts/lib/shell-bindings.js',
     'scripts/hooks/pre-bash-crusher-rewrite.js',
     'scripts/lib/crusher/engine.js',
   ]) {
