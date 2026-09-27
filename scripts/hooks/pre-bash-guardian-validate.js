@@ -33,6 +33,7 @@ const path = require('node:path');
 const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
 const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption } = require('../lib/wrapper-options');
+const { collectBindings, mergeBindings, valuesOf, commandWordChoices, quoteField, singleQuoted } = require('../lib/shell-bindings');
 
 const MAX_STDIN = 1024 * 1024;
 const DEFAULT_VALIDATE_TIMEOUT_MS = 4000;
@@ -613,90 +614,73 @@ function scriptDirVariables(segments) {
   return names;
 }
 
-// A word that stands for one plain value the shell will not expand further.
-function isPlainValue(word) {
-  return word !== undefined && !word.expands && !word.globbed && !word.tilde && !/[$`]/.test(word.value);
+// The variables these segments fix (scripts/lib/shell-bindings.js).
+function bindingsOfSegments(segments) {
+  return collectBindings(segments.map(segment => {
+    const words = shellWords(segment);
+    return { segment, words, commandIndex: skipEnvAndWrappers(words) };
+  }));
 }
 
-const ASSIGNMENT_RE = /^([A-Za-z_]\w*)=(.*)$/s;
-const ASSIGNMENT_KEYWORDS = new Set(['export', 'declare', 'typeset', 'local', 'readonly']);
-
-// The name and value words a segment fixes: the loop variable and items of a
-// `for VAR in a.sh b.sh` header, or each assignment of a segment that is only
-// assignments (VAR=value, or export VAR=value). Anything else fixes nothing.
-function fixedValues(words) {
-  if (words[0]?.value === 'for' && /^[A-Za-z_]\w*$/.test(words[1]?.value ?? '') && words[2]?.value === 'in') {
-    return words.slice(3).map(item => [words[1].value, item]);
-  }
-  if (words.length === 0 || !words.every(word => ASSIGNMENT_RE.test(word.value) || ASSIGNMENT_KEYWORDS.has(word.value))) return [];
-  return words.flatMap(word => {
-    const assignment = ASSIGNMENT_RE.exec(word.value);
-    if (!assignment) return [];
-    const value = assignment[2];
-    return [[assignment[1], { value, expands: /[$`]/.test(value), globbed: /[*?[]/.test(value), tilde: value.startsWith('~') }]];
-  });
-}
-
-// Variables the command itself fixes to literal filenames, and so can be
-// followed to the scripts they name. A `for VAR in ...` header and a
-// `VAR=path` assignment both fix the variable for the code that uses it next,
-// over any environment value, so only a run-time source (a glob, a
-// substitution, `read`) leaves a variable out, and `bash "$VAR"` for it still
+// Variables the command fixes to literal filenames, and so can be followed to
+// the scripts they name, with the value the environment holds, which the
+// shell may still use where the line does not fix the variable first (a
+// file it names that is not there only fails to run); a variable fixed from
+// a source this hook cannot read is left out, so `bash "$VAR"` for it still
 // fails closed.
-function resolvableScriptVars(segments) {
+function scriptVarsOf(bindings) {
   const values = new Map();
-  const unsafe = new Set();
-  for (const segment of segments) {
-    for (const [name, word] of fixedValues(shellWords(segment))) {
-      if (!isPlainValue(word)) unsafe.add(name);
-      else values.set(name, [...(values.get(name) ?? []), word.value]);
-    }
+  for (const [name, entry] of bindings.names) {
+    if (entry.opaque || entry.values.size === 0) continue;
+    const fixed = [...entry.values].filter(value => value !== '').map(value => ({ value, optional: false }));
+    const env = process.env[name];
+    const fromEnv = typeof env === 'string' && env !== '' && !entry.values.has(env) ? [{ value: env, optional: true }] : [];
+    values.set(name, [...fixed, ...fromEnv]);
   }
-  for (const name of unsafe) values.delete(name);
   return values;
 }
 
-// Names the command itself fixes from a source this hook cannot read: a
-// `read`/`mapfile` target, or an assignment to something not literal
-// (`X=$(cmd)`, `X=$Y`). A `$VAR` command word for one of these fails closed,
-// since the command chooses what runs and the hook cannot see it. A variable
-// that is only the environment's is not here, so `$EDITOR file` stays advisory.
-const READ_BUILTINS = new Set(['read', 'mapfile', 'readarray']);
-function opaqueCommandVars(segments, fixed) {
-  const opaque = new Set();
-  for (const segment of segments) {
-    const words = shellWords(segment);
-    const name = words[skipEnvAndWrappers(words)]?.value.split(/[\\/]/).pop();
-    if (!READ_BUILTINS.has(name)) continue;
-    for (const word of words.slice(1)) {
-      if (/^[A-Za-z_]\w*$/.test(word.value)) opaque.add(word.value);
-    }
-  }
-  for (const name of assignedNames(segments)) {
-    if (!fixed.has(name)) opaque.add(name);
-  }
-  return opaque;
-}
+// Each segment whose command word expands is judged as written and once per
+// value the word can take (X=rm; $X -rf / is also judged as rm -rf /, and an
+// empty $X hands the command to the next word). A word whose value this hook
+// cannot read fails closed when `unknownFails`, and is left as it is
+// otherwise (a committed script, held only to the grave denials).
+const MAX_WORD_ROUNDS = 4;
 
-// A segment whose command word is exactly $VAR: rewritten to the literal the
-// command fixes VAR to (so `X=rm; $X -rf /` is judged as `rm -rf /`), refused
-// when the command fixes VAR from a source this hook cannot read, or left as
-// is when VAR is only the environment's (a legitimate `$EDITOR file`).
-function resolveCommandName(segment, fixed, opaque) {
+function commandWordVariants(segment, context, round) {
   const words = shellWords(segment);
   const cmd = words[skipEnvAndWrappers(words)];
-  if (!cmd || !cmd.expands) return { segment };
-  const reference = /^\$\{?([A-Za-z_]\w*)\}?$/.exec(cmd.value);
-  if (!reference) return { segment };
-  const name = reference[1];
-  const values = fixed.get(name);
-  if (values && values.length === 1 && !/[$`*?[\s]/.test(values[0])) {
-    return { segment: segment.slice(0, cmd.start) + values[0] + segment.slice(cmd.end) };
+  if (!cmd?.expands || cmd.start === undefined) return { segments: [segment] };
+  const raw = segment.slice(cmd.start, cmd.end);
+  const outcome = commandWordChoices(raw, context.lookup, context.ifsBound);
+  if (outcome.keep) return { segments: [segment] };
+  if (outcome.unknown) {
+    return { blocked: `the command name comes from ${raw}, which the command sets from a source this hook cannot read or which only the shell knows when it runs (${outcome.unknown}); run it by its real name, or quote the expansion when only a literal file name follows it` };
   }
-  if (opaque.has(name)) {
-    return { blocked: `the command name comes from ${cmd.value}, which the command sets from a source this hook cannot read; run it by its real name` };
+  if (round >= MAX_WORD_ROUNDS) return { blocked: `the command name comes from ${raw}, which expands into further expansions than this hook follows; run it by its real name` };
+  const variants = [];
+  for (const fields of outcome.choices) {
+    const variant = (segment.slice(0, cmd.start) + fields.map(quoteField).join(' ') + segment.slice(cmd.end)).trim();
+    if (variant === '') continue;
+    const next = commandWordVariants(variant, context, round + 1);
+    if (next.blocked) return next;
+    variants.push(...next.segments);
   }
-  return { segment };
+  return { segments: [...new Set(variants)] };
+}
+
+function resolveCommandWords(segments, bindings, unknownFails) {
+  const context = {
+    lookup: name => valuesOf(bindings, name, process.env),
+    ifsBound: bindings.ifs,
+  };
+  const resolved = [];
+  for (const segment of segments) {
+    const outcome = commandWordVariants(segment, context, 0);
+    if (outcome.blocked && unknownFails) return { blocked: outcome.blocked };
+    resolved.push(...new Set([segment, ...(outcome.segments ?? [])]));
+  }
+  return { segments: resolved };
 }
 
 // A script operand that is exactly one resolvable variable, spread to the
@@ -705,7 +689,7 @@ function expandScriptVar(word, context) {
   const reference = word.script && word.expands && /^\$\{?([A-Za-z_]\w*)\}?$/.exec(word.value);
   const found = reference && context.scriptVars?.get(reference[1]);
   if (!found) return [word];
-  return found.map(value => ({ ...word, value, expands: false, globbed: /[*?[]/.test(value), tilde: value.startsWith('~') }));
+  return found.map(({ value, optional }) => ({ ...word, value, optional, expands: false, globbed: /[*?[]/.test(value), tilde: value.startsWith('~') }));
 }
 
 // The file an operand names when it starts with the script's own
@@ -834,7 +818,7 @@ function readOperand(word, context, root, base) {
   // not could be written by this very command before it runs. A cd in an
   // earlier segment moves the directory the hook cannot follow, so the file
   // may well be there under the real one; then this cannot be claimed.
-  if (context.own && context.cwdKnown && candidate !== null && !fs.existsSync(candidate)) {
+  if (context.own && context.cwdKnown && !word.optional && candidate !== null && !fs.existsSync(candidate)) {
     return { blocked: `script ${word.value} is not there when the command is checked, so it cannot be inspected; write it first, then run it in a command of its own` };
   }
   return null;
@@ -923,7 +907,7 @@ function isCommittedUnchanged(file) {
 // What the command line itself leaves the scripts it runs to know: the
 // variables it or the environment sets (a committed script cannot count
 // those as its own), and no script directory.
-function commandContext(segments, cwd) {
+function commandContext(segments, cwd, bindings) {
   return {
     own: true,
     cwdUnknown: null,
@@ -931,7 +915,8 @@ function commandContext(segments, cwd) {
     homeKnown: true,
     scriptDir: null,
     dirVars: new Set(),
-    scriptVars: resolvableScriptVars(segments),
+    bindings,
+    scriptVars: scriptVarsOf(bindings),
     callerSet: new Set([...Object.keys(process.env), ...assignedNames(segments)]),
     written: writesOf(segments, cwd || process.cwd(), true),
   };
@@ -978,23 +963,33 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
   const nested = nestedSegmentsOf(file, depth, seen);
   if (nested.blocked) return { segments: [], committed: [], blocked: nested.blocked };
   if (nested.segments === null) return { segments: [], committed: [], blocked: null };
-  const mark = isCommittedUnchanged(file) ? { bound: boundAssignments(nested.segments, context.callerSet) } : false;
+  const committedFile = isCommittedUnchanged(file);
+  // A script's command words are judged by every value they can take, from
+  // what the script and its caller fix; one the hook cannot read fails closed
+  // unless the script is committed, where only the grave denials apply.
+  const ownBindings = bindingsOfSegments(nested.segments);
+  const bindings = mergeBindings(context.bindings, ownBindings);
+  const words = resolveCommandWords(nested.segments, bindings, !committedFile);
+  if (words.blocked) return { segments: [], committed: [], blocked: `script ${file}: ${words.blocked}` };
+  const own = words.segments;
+  const mark = committedFile ? { bound: boundAssignments(nested.segments, context.callerSet) } : false;
   // A script the wrapper moved into a directory runs its own children there.
-  const ownWrites = writesOf(nested.segments, operands.base, false);
-  const inner = scriptSegmentsOf(nested.segments, operands.base, depth + 1, seen, {
+  const ownWrites = writesOf(own, operands.base, false);
+  const inner = scriptSegmentsOf(own, operands.base, depth + 1, seen, {
     own: false,
     cwdUnknown: operands.cwdUnknown,
     cwdKnown: true,
     homeKnown: context.homeKnown,
     scriptDir: path.dirname(file),
     dirVars: scriptDirVariables(nested.segments),
-    scriptVars: resolvableScriptVars(nested.segments),
+    bindings,
+    scriptVars: scriptVarsOf(ownBindings),
     callerSet: new Set([...context.callerSet, ...assignedNames(nested.segments)]),
     written: { paths: new Set([...context.written.paths, ...ownWrites.paths]), bulk: context.written.bulk },
   });
   return {
-    segments: [...nested.segments, ...inner.segments],
-    committed: [...nested.segments.map(() => mark), ...inner.committed],
+    segments: [...own, ...inner.segments],
+    committed: [...own.map(() => mark), ...inner.committed],
     blocked: inner.blocked,
   };
 }
@@ -1231,13 +1226,7 @@ function withPositionals(code, given) {
 
 // find's actions that run a command, which ends at a `;` or `+`.
 const FIND_EXEC_FLAGS = new Set(['-exec', '-execdir', '-ok', '-okdir']);
-const FIND_EXEC_ENDS = new Set([';', '\\;', '+']);
-
-// A word as the shell would read it back: single-quoted, so the command a
-// find action runs keeps each of its words whole when it is read again.
-function quotedWord(value) {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
+const FIND_EXEC_ENDS = new Set([';', String.raw`\;`, '+']);
 
 // The commands a find in this stage runs through -exec and its kin, each
 // read as its own command line, so what they run (a shell's -c included)
@@ -1252,7 +1241,7 @@ function findExecCommandsOf(line) {
     if (current === null) {
       if (FIND_EXEC_FLAGS.has(word.value)) current = [];
     } else if (FIND_EXEC_ENDS.has(word.value)) {
-      commands.push(current.map(quotedWord).join(' '));
+      commands.push(current.map(singleQuoted).join(' '));
       current = null;
     } else {
       current.push(word.value);
@@ -1376,8 +1365,8 @@ function run(inputOrRaw) {
   const command = input?.tool_input?.command;
   if (!command || typeof command !== 'string') return { exitCode: 0 };
 
-  const segments = extractSegments(command);
-  if (segments === null) {
+  const extracted = extractSegments(command);
+  if (extracted === null) {
     return {
       exitCode: 2,
       stderr:
@@ -1386,19 +1375,15 @@ function run(inputOrRaw) {
         'command so every substitution can be validated.',
     };
   }
-  if (segments.length === 0) return { exitCode: 0 };
+  if (extracted.length === 0) return { exitCode: 0 };
 
-  // A command whose name comes from a variable the command itself fixes is
-  // judged by the name it resolves to (X=rm; $X -rf / -> rm -rf /), or fails
-  // closed when that source cannot be read; a variable only from the
-  // environment ($EDITOR) is left for the validator to weigh as before.
-  const fixedVars = resolvableScriptVars(segments);
-  const opaqueVars = opaqueCommandVars(segments, fixedVars);
-  for (let i = 0; i < segments.length; i += 1) {
-    const resolved = resolveCommandName(segments[i], fixedVars, opaqueVars);
-    if (resolved.blocked) return { exitCode: 2, stderr: `EGC Guardian BLOCKED this command: ${resolved.blocked}.` };
-    segments[i] = resolved.segment;
-  }
+  // A command word that comes from an expansion is judged by every value it
+  // can take (X=rm; $X -rf / -> rm -rf /; an empty $X hands the command to
+  // the next word), and fails closed when that value cannot be read.
+  const bindings = bindingsOfSegments(extracted);
+  const words = resolveCommandWords(extracted, bindings, true);
+  if (words.blocked) return { exitCode: 2, stderr: `EGC Guardian BLOCKED this command: ${words.blocked}.` };
+  const segments = words.segments;
 
   const cli = resolveGuardianCli();
   // resolveGuardianCli() only returns falsy when all 3 of its resolution
@@ -1413,7 +1398,7 @@ function run(inputOrRaw) {
   }
 
   const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
-  const scripts = scriptSegmentsOf(segments, cwd, 0, new Set(), commandContext(segments, cwd));
+  const scripts = scriptSegmentsOf(segments, cwd, 0, new Set(), commandContext(segments, cwd, bindings));
   if (scripts.blocked) {
     return {
       exitCode: 2,
