@@ -4,13 +4,6 @@ function pushSegment(current, segments) {
   if (current.trim()) segments.push(current.trim());
 }
 
-function handleInsideQuotes(ch, i, command, quote) {
-  if (ch === '\\' && i + 1 < command.length) {
-    return { chars: ch + command[i + 1], advance: 1, closeQuote: false };
-  }
-  return { chars: ch, advance: 0, closeQuote: ch === quote };
-}
-
 function handleEscape(ch, i, command) {
   if (ch === '\\' && i + 1 < command.length) {
     // A backslash before '\r\n' escapes only the '\r' (bash has no special
@@ -349,15 +342,27 @@ function ansiQuoteEnd(command, start) {
   return -1;
 }
 
+// Where the quoted string opening at `i` closes, read as bash reads it: a
+// single-quoted one at the next quote, with no escape at all; `$'...'` past
+// its backslash escapes; a double-quoted one past its escapes and the
+// constructs inside it (see doubleQuoteEnd). null when no quote opens at
+// `i`, -1 when it never closes.
+function quotedEnd(command, i) {
+  const ch = command[i];
+  if (ch === "'") return command.indexOf("'", i + 1);
+  if (ch === '$' && command[i + 1] === "'") return ansiQuoteEnd(command, i + 2);
+  if (ch === '"') return doubleQuoteEnd(command, i + 1);
+  return null;
+}
+
 // The end of a span read whole at `j`: an escape, a quoted string, a
 // comment in a command body, or a nested construct. null when none starts
 // there, -1 when it never closes.
 function spanEnd(command, j, inCommand) {
   const ch = command[j];
   if (ch === '\\') return j + 1;
-  if (ch === "'") return command.indexOf("'", j + 1);
-  if (ch === '$' && command[j + 1] === "'") return ansiQuoteEnd(command, j + 2);
-  if (ch === '"') return doubleQuoteEnd(command, j + 1);
+  const quoted = quotedEnd(command, j);
+  if (quoted !== null) return quoted;
   if (inCommand && ch === '#' && isCommentStart(command, j, null, null)) {
     const newline = command.indexOf('\n', j);
     return newline === -1 ? -1 : newline - 1;
@@ -424,7 +429,6 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
   const stripComments = Boolean(options.stripComments);
   const segments = [];
   let current = '';
-  let quote = null;
   // Heredoc state machine: null (no heredoc pending) -> 'awaiting-body' (the
   // <<DELIM operator was just parsed; the body starts at the NEXT newline,
   // not immediately) -> 'in-body' (scanning body lines for the terminator)
@@ -474,14 +478,6 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
       continue;
     }
 
-    if (quote) {
-      const r = handleInsideQuotes(ch, i, command, quote);
-      current += r.chars;
-      i += r.advance;
-      if (r.closeQuote) quote = null;
-      continue;
-    }
-
     const esc = handleEscape(ch, i, command);
     if (esc.handled) {
       current += esc.chars;
@@ -489,9 +485,13 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
       continue;
     }
 
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
+    // A quoted string is text whole, read as bash reads it (quotedEnd): no
+    // operator, comment or line break inside it splits the segment.
+    const quoted = quotedEnd(command, i);
+    if (quoted !== null) {
+      const text = command.slice(i, quoted === -1 ? command.length : quoted + 1);
+      current += text;
+      i += text.length - 1;
       continue;
     }
 
@@ -518,7 +518,7 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
       continue;
     }
 
-    if (isCommentStart(command, i, quote, hd.state, paramDepth)) {
+    if (isCommentStart(command, i, null, hd.state, paramDepth)) {
       inComment = true;
       if (!stripComments) current += ch;
       continue;
@@ -717,6 +717,13 @@ function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state ma
 
     if (hd.state !== 'in-body' && !quote && ch === '\\' && i + 1 < command.length) {
       i += 1;
+      continue;
+    }
+
+    // `$'...'` holds no substitution, and an escaped quote does not close it.
+    if (hd.state !== 'in-body' && !quote && ch === '$' && command[i + 1] === "'") {
+      const end = ansiQuoteEnd(command, i + 2);
+      i += (end === -1 ? command.length : end) - i;
       continue;
     }
 

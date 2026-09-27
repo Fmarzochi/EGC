@@ -69,9 +69,21 @@ test('escaped double quote inside double quotes', () => {
   const segs = splitShellSegments('echo "hello \\"world\\"" && echo bye');
   assert.strictEqual(segs.length, 2);
 });
-test('escaped single quote inside single quotes', () => {
-  const segs = splitShellSegments("echo 'hello \\'world\\'' && echo bye");
-  assert.strictEqual(segs.length, 2);
+// A backslash is literal inside single quotes: `'a\'` closes at the quote
+// after it, so the `&&` after it is live (checked against bash; the old
+// form `'hello \'world\''` leaves a quote open, and bash refuses it).
+test('a backslash inside single quotes escapes nothing, so the quote closes after it', () => {
+  assert.deepStrictEqual(splitShellSegments("echo 'a\\' && echo bye"), ["echo 'a\\'", 'echo bye']);
+  assert.deepStrictEqual(splitShellSegments("echo 'hello \\'world\\'' && echo bye"), ["echo 'hello \\'world\\'' && echo bye"]);
+});
+test("$'...' reads its backslash escapes, an escaped quote included", () => {
+  assert.deepStrictEqual(splitShellSegments("echo $'a\\'b' && echo bye"), ["echo $'a\\'b'", 'echo bye']);
+});
+test('a double-quoted string holds a ${...} with quotes of its own whole', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo "${x:-"a # b"}"; rm -rf /', { splitOnPipe: true, stripComments: true }),
+    ['echo "${x:-"a # b"}"', 'rm -rf /'],
+  );
 });
 
 // Escaped operators outside quotes

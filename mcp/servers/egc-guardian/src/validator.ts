@@ -210,17 +210,21 @@ interface TokenizerState {
 function consumeTokenChar(command: string, i: number, state: TokenizerState): number {
   const ch = command[i];
 
-  if (state.quote) {
-    state.current += ch;
-    state.hasToken = true;
-    if (ch === state.quote) state.quote = null;
-    return i + 1;
-  }
+  if (state.quote) return consumeQuotedChar(command, i, state);
 
   if (ch === '\\' && i + 1 < command.length) {
     state.current += ch + command[i + 1];
     state.hasToken = true;
     return i + 2;
+  }
+
+  // `$'...'` is read whole, its backslash escapes (an escaped quote too)
+  // included.
+  if (ch === '$' && command[i + 1] === "'") {
+    const end = readAnsiC(command, i + 1).end;
+    state.current += command.slice(i, end);
+    state.hasToken = true;
+    return end;
   }
 
   if (ch === '"' || ch === "'") {
@@ -238,6 +242,36 @@ function consumeTokenChar(command: string, i: number, state: TokenizerState): nu
   state.current += ch;
   state.hasToken = true;
   return i + 1;
+}
+
+// One character inside a quoted span. In double quotes a backslash escapes
+// the next character and a `${...}`, `$(...)` or backquoted command is read
+// whole, so a quote of theirs does not close the string; in single quotes
+// every character is literal up to the closing quote.
+function consumeQuotedChar(command: string, i: number, state: TokenizerState): number {
+  const ch = command[i];
+  state.hasToken = true;
+  if (state.quote === '"') {
+    const end = doubleQuotedSpanEnd(command, i);
+    if (end !== i) {
+      state.current += command.slice(i, end);
+      return end;
+    }
+  }
+  state.current += ch;
+  if (ch === state.quote) state.quote = null;
+  return i + 1;
+}
+
+// Index past an escaped character, a parameter expansion, a command
+// substitution or a backquoted command opening at `i` inside double quotes;
+// `i` itself when none opens there.
+function doubleQuotedSpanEnd(command: string, i: number): number {
+  const ch = command[i];
+  if (ch === '\\' && i + 1 < command.length) return i + 2;
+  if (ch === '$' && command[i + 1] === '{') return parameterExpansionEnd(command, i + 2);
+  if (ch === '`' || (ch === '$' && command[i + 1] === '(')) return skipSubstitution(command, i);
+  return i;
 }
 
 function tokenizeWords(command: string): string[] {
@@ -2547,6 +2581,14 @@ function readQuoted(command: string, start: number): { value: string; end: numbe
       i += 2;
       continue;
     }
+    // A `${...}`, `$(...)` or backquoted command inside double quotes is read
+    // whole: a quote inside it opens a string of its own.
+    const nested = quote === '"' && command[i] !== '\\' ? doubleQuotedSpanEnd(command, i) : i;
+    if (nested !== i) {
+      value += command.slice(i, nested);
+      i = nested;
+      continue;
+    }
     if (quote === '"' && command[i] === '\\' && DOUBLE_QUOTE_ESCAPES.has(command[i + 1] ?? '')) i += 1;
     value += command[i];
     i += 1;
@@ -2581,6 +2623,7 @@ function joinContinuations(command: string): string {
 // braces); `i` itself when no such span starts there.
 function skipText(command: string, i: number): number {
   const ch = command[i];
+  if (ch === '$' && command[i + 1] === "'") return readAnsiC(command, i + 1).end;
   if (ch === '"' || ch === "'") return readQuoted(command, i).end;
   if (ch === '\\') return Math.min(i + 2, command.length);
   if (ch === '$' && command[i + 1] === '{') return parameterExpansionEnd(command, i + 2);
