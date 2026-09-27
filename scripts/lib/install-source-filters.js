@@ -21,10 +21,12 @@ const IGNORED_FILE_NAMES = new Set([
 const IGNORED_FILE_SUFFIXES = ['.pyc', '.pyo'];
 
 // Install-state files a local install may have left inside a source tree:
-// runtime output, never copied as a source.
-const EXCLUDED_GENERATED_SOURCE_SUFFIXES = [
-  '/egc-install-state.json',
-  '/egc/install-state.json',
+// runtime output, never copied as a source. Every adapter's state name fits
+// one of these (egc-install-state.json, egc/install-state.json and the
+// per-adapter egc/<name>-install-state.json of codex, goose and openhands).
+const GENERATED_SOURCE_PATTERNS = [
+  /(^|\/)egc-install-state\.json$/,
+  /(^|\/)egc\/[\w-]*install-state\.json$/,
 ];
 
 function isIgnoredSourceDirectory(directoryName) {
@@ -40,7 +42,7 @@ function isIgnoredSourceFile(fileName) {
 
 function isGeneratedRuntimeSourcePath(sourceRelativePath) {
   const normalizedPath = String(sourceRelativePath || '').replaceAll('\\', '/');
-  return EXCLUDED_GENERATED_SOURCE_SUFFIXES.some(suffix => normalizedPath.endsWith(suffix));
+  return GENERATED_SOURCE_PATTERNS.some(pattern => pattern.test(normalizedPath));
 }
 
 module.exports = {
