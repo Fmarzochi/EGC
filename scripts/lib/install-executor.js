@@ -12,7 +12,7 @@ const {
   resolveInstallPlan,
 } = require('./install-manifests');
 const { getInstallTargetAdapter } = require('./install-targets/registry');
-const { isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-source-filters');
+const { isGeneratedRuntimeSourcePath, isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-source-filters');
 const { HOOK_OPERATION_KIND } = require('./claude-settings-hooks');
 const { MERGE_YAML_READ_LIST_KIND } = require('./aider-config-merge');
 const { MERGE_MARKDOWN_INDEX_KIND } = require('./warp-agents-merge');
@@ -20,10 +20,6 @@ const { assertSafeMcpConfig, isMcpConfigPath } = require('./mcp-config');
 
 const LANGUAGE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const GEMINI_EGC_NAMESPACE = 'egc';
-const EXCLUDED_GENERATED_SOURCE_SUFFIXES = [
-  '/egc-install-state.json',
-  '/egc/install-state.json',
-];
 
 function getSourceRoot() {
   return path.join(__dirname, '../..');
@@ -117,10 +113,6 @@ function listFilesRecursive(dirPath) {
   return files.sort((a, b) => a.localeCompare(b));
 }
 
-function isGeneratedRuntimeSourcePath(sourceRelativePath) {
-  const normalizedPath = String(sourceRelativePath || '').replaceAll('\\', '/');
-  return EXCLUDED_GENERATED_SOURCE_SUFFIXES.some(suffix => normalizedPath.endsWith(suffix));
-}
 
 // The repository's .agents/skills directory is the Codex-facing copy of the
 // catalog: a SKILL.md per skill in the shape Codex accepts, plus files the

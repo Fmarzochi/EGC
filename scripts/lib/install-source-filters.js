@@ -20,6 +20,13 @@ const IGNORED_FILE_NAMES = new Set([
 
 const IGNORED_FILE_SUFFIXES = ['.pyc', '.pyo'];
 
+// Install-state files a local install may have left inside a source tree:
+// runtime output, never copied as a source.
+const EXCLUDED_GENERATED_SOURCE_SUFFIXES = [
+  '/egc-install-state.json',
+  '/egc/install-state.json',
+];
+
 function isIgnoredSourceDirectory(directoryName) {
   return IGNORED_DIRECTORY_NAMES.has(directoryName);
 }
@@ -31,7 +38,13 @@ function isIgnoredSourceFile(fileName) {
   return IGNORED_FILE_SUFFIXES.some(suffix => fileName.endsWith(suffix));
 }
 
+function isGeneratedRuntimeSourcePath(sourceRelativePath) {
+  const normalizedPath = String(sourceRelativePath || '').replaceAll('\\', '/');
+  return EXCLUDED_GENERATED_SOURCE_SUFFIXES.some(suffix => normalizedPath.endsWith(suffix));
+}
+
 module.exports = {
+  isGeneratedRuntimeSourcePath,
   isIgnoredSourceDirectory,
   isIgnoredSourceFile,
 };

@@ -3872,6 +3872,10 @@ function runTests() {
       // A tooling file the installer never copies today, recorded by an
       // older install that did.
       fs.writeFileSync(path.join(repoRoot, 'bundle', '.gitignore'), 'x');
+      // A generated install-state left in the source tree: the executor
+      // never copies it, so it covers nothing.
+      fs.mkdirSync(path.join(repoRoot, 'bundle', 'egc'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'bundle', 'egc', 'install-state.json'), '{}');
       fs.mkdirSync(path.join(repoRoot, 'rootcopy'), { recursive: true });
       fs.writeFileSync(path.join(repoRoot, 'rootcopy', 'kept.md'), 'kept');
       fs.mkdirSync(path.join(repoRoot, 'scripts'), { recursive: true });
@@ -3910,6 +3914,7 @@ function runTests() {
           copy('x', 'bundle/a.md', path.join(targetRoot, 'bundle', 'a.md')),
           copy('x', 'bundle/nested/b.md', path.join(targetRoot, 'bundle', 'nested', 'b.md')),
           copy('x', 'bundle/.gitignore', path.join(targetRoot, 'bundle', '.gitignore')),
+          copy('x', 'bundle/egc/install-state.json', path.join(targetRoot, 'bundle', 'egc', 'install-state.json')),
           copy('y', 'rootcopy/kept.md', path.join(targetRoot, 'kept.md')),
           copy('z', 'scripts/dropped.js', path.join(targetRoot, 'scripts', 'dropped.js')),
         ],
@@ -3918,8 +3923,8 @@ function runTests() {
 
       assert.deepStrictEqual(
         adapter.planRetirements(planningInput).map(entry => path.relative(targetRoot, entry.destinationPath)).sort(),
-        [path.join('bundle', '.gitignore'), path.join('bundle', 'nested', 'b.md'), path.join('scripts', 'dropped.js')].sort(),
-        'b.md left the planned directory, .gitignore is no longer copied and dropped.js left its module; a.md and kept.md are still written'
+        [path.join('bundle', '.gitignore'), path.join('bundle', 'egc', 'install-state.json'), path.join('bundle', 'nested', 'b.md'), path.join('scripts', 'dropped.js')].sort(),
+        'b.md left the planned directory, .gitignore and the generated install-state are never copied, and dropped.js left its module; a.md and kept.md are still written'
       );
     } finally {
       fs.rmSync(repoRoot, { recursive: true, force: true });
