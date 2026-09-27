@@ -1094,41 +1094,43 @@ function commandBodyEnd(text, i, double) {
 }
 
 function joinContinuations(text) {
-  let out = '';
-  let single = false;
-  let double = false;
-  let comment = false;
-  let param = 0;
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    if (comment) {
-      comment = ch !== '\n';
-      out += ch;
-      continue;
-    }
-    const body = single ? null : commandBodyEnd(text, i, double);
-    if (body !== null) {
-      const span = text.slice(i, body === -1 ? text.length : body + 1);
-      out += span;
-      i += span.length - 1;
-      continue;
-    }
-    if (!single && !double) {
-      comment = opensComment(out, ch, param);
-      param = paramDepthAfter(text, i, param);
-    }
-    if (ch === '\\' && !single) {
-      // A continuation is dropped; any other escape is kept with its character.
-      const skip = continuationLength(text, i);
-      if (skip === 0) out += text.slice(i, i + 2);
-      i += skip === 0 ? 1 : skip - 1;
-      continue;
-    }
-    if (ch === '"' && !single) double = !double;
-    else if (ch === "'" && !double) single = !single;
-    out += ch;
+  const state = { out: '', single: false, double: false, comment: false, param: 0 };
+  let i = 0;
+  while (i < text.length) i = joinStep(text, i, state);
+  return state.out;
+}
+
+// Reads the character at `i` into `state.out`; the index to read next.
+function joinStep(text, i, state) {
+  const ch = text[i];
+  if (state.comment) {
+    state.comment = ch !== '\n';
+    state.out += ch;
+    return i + 1;
   }
-  return out;
+  const body = state.single ? null : commandBodyEnd(text, i, state.double);
+  if (body !== null) {
+    const end = body === -1 ? text.length : body + 1;
+    state.out += text.slice(i, end);
+    return end;
+  }
+  if (!state.single && !state.double) {
+    state.comment = opensComment(state.out, ch, state.param);
+    state.param = paramDepthAfter(text, i, state.param);
+  }
+  if (ch === '\\' && !state.single) return escapeStep(text, i, state);
+  if (ch === '"' && !state.single) state.double = !state.double;
+  else if (ch === "'" && !state.double) state.single = !state.single;
+  state.out += ch;
+  return i + 1;
+}
+
+// A continuation is dropped; any other escape is kept with its character.
+function escapeStep(text, i, state) {
+  const skip = continuationLength(text, i);
+  if (skip > 0) return i + skip;
+  state.out += text.slice(i, i + 2);
+  return i + 2;
 }
 
 

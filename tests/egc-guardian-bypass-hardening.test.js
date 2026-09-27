@@ -664,10 +664,19 @@ run('a # inside a ${...} that holds a nested expansion is not a comment', () => 
     // A ) in a comment of the command body does not close it: bash reads the
     // comment to its newline, and the } after it is still inside $(...).
     'cat ${x:-$(echo # )\necho }) #} ~/.ssh/id_rsa',
+    // An escaped backquote inside backquotes does not close them.
+    'cat ${x:-`echo \\`}` #} ~/.ssh/id_rsa',
   ]) {
     const v = validateCommand(command);
     assert.strictEqual(v.allowed, false, `${command}: ${v.reason}`);
     assert.ok(/protected path/.test(v.reason), `${command}: the real path must be what denies it, got: ${v.reason}`);
+  }
+});
+
+run('a # glued mid-word inside a command body is text, so a comment after the expansion stays inert', () => {
+  for (const command of ['ls ${x:-$(echo a#)} # see ~/.ssh/id_rsa', 'ls $(echo a#) # see ~/.ssh/id_rsa']) {
+    const v = validateCommand(command);
+    assert.ok(!/protected path/.test(v.reason ?? ''), `${command}: the path only sits in a comment, got: ${v.reason}`);
   }
 });
 
