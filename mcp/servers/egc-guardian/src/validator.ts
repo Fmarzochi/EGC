@@ -2056,16 +2056,46 @@ function isNarrowTarget(candidate: string, cwd?: string): boolean {
 }
 
 // A value a committed script sets a variable to is narrow when it is a
-// fresh temporary path (`$(mktemp ...)`), a narrow literal path, or ends in
-// at least two literal components below whatever it starts from (a named
-// file deep in some directory, as `$BASE/.mvn/wrapper/maven-wrapper.jar`).
-function isNarrowValue(value: string, cwd?: string): boolean {
-  if (/^(?:\$\(|`)mktemp\b/.test(value)) return true;
+// fresh temporary path (`$(mktemp ...)`), a narrow literal path, a path
+// below another variable the script sets whose every value keeps it narrow
+// (`BASE=/; tmp=$BASE/etc/passwd` is /etc/passwd), or otherwise ends in at
+// least two literal components below whatever it starts from (a named file
+// deep in some directory, as `$BASE/.mvn/wrapper/maven-wrapper.jar`).
+const MAX_BOUND_DEPTH = 4;
+// `$(mktemp ...)` or backquoted mktemp, and what follows it.
+const MKTEMP_RE = /^(?:\$\(mktemp\b[^()]*\)|`mktemp\b[^`]*`)(.*)$/s;
+
+// What follows a fresh temporary path stays inside it: nothing, or literal
+// components that never climb out with `..`.
+function staysInFreshTemp(rest: string): boolean {
+  if (rest === '') return true;
+  return /^[\\/]/.test(rest) && !/[$`*?[]/.test(rest) && !rest.split(/[\\/]/).includes('..');
+}
+
+function isNarrowValue(value: string, cwd?: string, depth = 0): boolean {
+  const temp = MKTEMP_RE.exec(value);
+  if (temp) return staysInFreshTemp(temp[1]);
   if (!/[$`]/.test(value)) return isNarrowTarget(value, cwd);
+  const variable = VARIABLE_TARGET_RE.exec(value);
+  const prefixes = variable ? committedBound.get(variable[1] ?? variable[2]) ?? [] : [];
+  if (variable && prefixes.length > 0) {
+    if (depth >= MAX_BOUND_DEPTH) return false;
+    const rest = value.slice(variable[0].length);
+    return prefixes.every(prefix => isNarrowValue(prefix + rest, cwd, depth + 1));
+  }
+  return hasNarrowLiteralTail(value);
+}
+
+// At least two literal components at the end of a path whose start is only
+// known when the script runs, naming no protected path whether that start is
+// the root or the home directory (`$(cd ~ && pwd)/.ssh/id_rsa` is grave).
+function hasNarrowLiteralTail(value: string): boolean {
   const parts = value.split(/[\\/]/);
   let literal = 0;
   while (literal < parts.length - 1 && /^[^$`*?[]+$/.test(parts[parts.length - 1 - literal]) && !['.', '..'].includes(parts[parts.length - 1 - literal])) literal += 1;
-  return literal >= 2;
+  if (literal < 2) return false;
+  const tail = parts.slice(parts.length - literal).join('/');
+  return !isProtectedPath(`/${tail}`) && !isProtectedPath(path.join(os.homedir(), tail));
 }
 
 // A glob component with no literal part of its own (`*`, `.*`, `[a-z]*`)

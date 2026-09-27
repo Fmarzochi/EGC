@@ -71,6 +71,12 @@ run('a delete or move is flagged only when its target is known to be narrow', ()
     [`${wipe} "$tmp"`, { tmp: ['$(mktemp -d)'] }],
     ['rm -f "$wrapperJarPath"', { wrapperJarPath: ['$MAVEN_PROJECTBASEDIR/.mvn/wrapper/maven-wrapper.jar'] }],
     [`${wipe} "\${BUILD}/out"`, { BUILD: ['build'] }],
+    // A path below another variable the script sets is judged with that
+    // variable's own values, down the chain.
+    [`${wipe} "$out"`, { out: ['$BUILD/cache'], BUILD: ['build'] }],
+    ['rm -f "$f"', { f: ['$(mktemp -d)/work/file'] }],
+    ['rm -f "$f"', { f: ['$APP_HOME/bin/startup.sh'] }],
+    ['rm -f "$jar"', { jar: ['$BASE/.mvn/wrapper/maven-wrapper.jar'], BASE: ['$(cd "$(dirname "$0")" && pwd)'] }],
   ];
   for (const [command, bound] of flagged) {
     const verdict = validateCommittedScriptCommand(command, cwd, bound);
@@ -92,6 +98,23 @@ run('a delete or move whose target is broad, protected, top-level or chosen outs
   }
   for (const bound of [{ other: ['build'] }, { tmp: ['/usr'] }, { tmp: ['${tmp:-build}'] }, { tmp: ['build', '/'] }, { tmp: ['$BASE/x'] }, { tmp: [] }]) {
     assert.ok(blocks(validateCommittedScriptCommand(`${wipe} "$tmp"`, cwd, bound)), `a variable set to something not narrow: ${JSON.stringify(bound)}`);
+  }
+  // A chain of variables the script sets resolves to what it names, and a
+  // start only known when the script runs cannot make a protected end narrow.
+  for (const bound of [
+    { tmp: ['$BASE/etc/passwd'], BASE: ['/'] },
+    { tmp: ['$BASE/etc/passwd'], BASE: [''] },
+    { tmp: ['${BASE}/etc/passwd'], BASE: ['$ROOT'], ROOT: ['/'] },
+    { tmp: ['$BASE/etc/passwd'] },
+    { tmp: ['$(cd ~ && pwd)/.ssh/id_rsa'] },
+    { tmp: ['$A/x/y'], A: ['$B'], B: ['$A'] },
+    // A fresh temporary directory is narrow, not a path that climbs out of it.
+    { tmp: ['$(mktemp -d)/../../../../etc/passwd'] },
+    { tmp: ['$(mktemp -d)/$NAME'] },
+    // A chain deeper than this check follows is not read to its end.
+    { tmp: ['$V1/x'], V1: ['$V2'], V2: ['$V3'], V3: ['$V4'], V4: ['$V5'], V5: ['build'] },
+  ]) {
+    assert.ok(blocks(validateCommittedScriptCommand(`rm -f "$tmp"`, cwd, bound)), `a chain that reaches a grave target: ${JSON.stringify(bound)}`);
   }
 });
 
@@ -205,6 +228,9 @@ run('the command-batch CLI judges an entry marked committed as one, and anything
   const marked = batch({ commands: [`${wipe} "$tmp"`, `${wipe} "$tmp"`], cwd, committed: [{ bound: { tmp: ['$(mktemp -d)'] } }, { bound: { tmp: ['/'] } }] });
   assert.strictEqual(marked[0].advisory, true, `a variable the committed script sets narrowly: ${JSON.stringify(marked[0])}`);
   assert.ok(blocks(marked[1]), 'a variable the committed script sets to the root');
+  const malformed = [{ bound: null }, { bound: { tmp: 'x' } }, {}, { bound: { tmp: [1] } }, { bound: [] }];
+  const judged = batch({ commands: malformed.map(() => 'eval "set -- x"'), cwd, committed: malformed });
+  for (const [i, verdict] of judged.entries()) assert.ok(blocks(verdict), `a malformed marker is judged as typed: ${JSON.stringify(malformed[i])}`);
   assert.ok(blocks(batch(['eval "set -- x"'])[0]), 'legacy array: typed');
 });
 
