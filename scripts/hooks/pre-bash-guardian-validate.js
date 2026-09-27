@@ -234,7 +234,7 @@ function readShellWord(text, start) {
     }
   }
   // `tilde`: an unquoted ~ that the shell turns into a home directory.
-  return { value: word.value, globbed: /[*?[]/.test(word.code), unsure: word.unsure, expands: word.expands, tilde: word.code.startsWith('~'), end: i };
+  return { value: word.value, globbed: /[*?[]/.test(word.code), unsure: word.unsure, expands: word.expands, tilde: word.code.startsWith('~'), start, end: i };
 }
 
 function shellWords(segment) {
@@ -473,13 +473,15 @@ function interpreterOperands(words, cwdUnknown = null) {
 
 
   const name = head.value.split(/[\\/]/).pop().toLowerCase();
-  if (!head.value.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return found([]);
+  // A command whose name is a variable is only treated as an interpreter when
+  // that variable names the shell itself ($BASH, $SHELL, $0). Any other
+  // `$VAR` command (a resolvable one is already rewritten before this runs, so
+  // what remains is the environment's, like $EDITOR) is not an interpreter, so
+  // its operands are its own arguments, not a script to read.
+  const isShellVar = head.value.startsWith('$') && SHELL_VARIABLES.has(head.value);
+  if (!isShellVar && !SHELL_INTERPRETERS.has(name)) return found([]);
 
-
-  // A command reached through a variable is not known to be a shell, so its
-  // first word is not known to be a script, unless the variable is one that
-  // names the shell itself.
-  const shell = !head.value.startsWith('$') || SHELL_VARIABLES.has(head.value);
+  const shell = !head.value.startsWith('$') || isShellVar;
   return found(interpreterScriptOperands(words.slice(index + 1), shell), name === 'source' || name === '.');
 }
 
@@ -652,6 +654,49 @@ function resolvableScriptVars(segments) {
   }
   for (const name of unsafe) values.delete(name);
   return values;
+}
+
+// Names the command itself fixes from a source this hook cannot read: a
+// `read`/`mapfile` target, or an assignment to something not literal
+// (`X=$(cmd)`, `X=$Y`). A `$VAR` command word for one of these fails closed,
+// since the command chooses what runs and the hook cannot see it. A variable
+// that is only the environment's is not here, so `$EDITOR file` stays advisory.
+const READ_BUILTINS = new Set(['read', 'mapfile', 'readarray']);
+function opaqueCommandVars(segments, fixed) {
+  const opaque = new Set();
+  for (const segment of segments) {
+    const words = shellWords(segment);
+    const name = words[skipEnvAndWrappers(words)]?.value.split(/[\\/]/).pop();
+    if (!READ_BUILTINS.has(name)) continue;
+    for (const word of words.slice(1)) {
+      if (/^[A-Za-z_]\w*$/.test(word.value)) opaque.add(word.value);
+    }
+  }
+  for (const name of assignedNames(segments)) {
+    if (!fixed.has(name)) opaque.add(name);
+  }
+  return opaque;
+}
+
+// A segment whose command word is exactly $VAR: rewritten to the literal the
+// command fixes VAR to (so `X=rm; $X -rf /` is judged as `rm -rf /`), refused
+// when the command fixes VAR from a source this hook cannot read, or left as
+// is when VAR is only the environment's (a legitimate `$EDITOR file`).
+function resolveCommandName(segment, fixed, opaque) {
+  const words = shellWords(segment);
+  const cmd = words[skipEnvAndWrappers(words)];
+  if (!cmd || !cmd.expands) return { segment };
+  const reference = /^\$\{?([A-Za-z_]\w*)\}?$/.exec(cmd.value);
+  if (!reference) return { segment };
+  const name = reference[1];
+  const values = fixed.get(name);
+  if (values && values.length === 1 && !/[$`*?[\s]/.test(values[0])) {
+    return { segment: segment.slice(0, cmd.start) + values[0] + segment.slice(cmd.end) };
+  }
+  if (opaque.has(name)) {
+    return { blocked: `the command name comes from ${cmd.value}, which the command sets from a source this hook cannot read; run it by its real name` };
+  }
+  return { segment };
 }
 
 // A script operand that is exactly one resolvable variable, spread to the
@@ -1342,6 +1387,18 @@ function run(inputOrRaw) {
     };
   }
   if (segments.length === 0) return { exitCode: 0 };
+
+  // A command whose name comes from a variable the command itself fixes is
+  // judged by the name it resolves to (X=rm; $X -rf / -> rm -rf /), or fails
+  // closed when that source cannot be read; a variable only from the
+  // environment ($EDITOR) is left for the validator to weigh as before.
+  const fixedVars = resolvableScriptVars(segments);
+  const opaqueVars = opaqueCommandVars(segments, fixedVars);
+  for (let i = 0; i < segments.length; i += 1) {
+    const resolved = resolveCommandName(segments[i], fixedVars, opaqueVars);
+    if (resolved.blocked) return { exitCode: 2, stderr: `EGC Guardian BLOCKED this command: ${resolved.blocked}.` };
+    segments[i] = resolved.segment;
+  }
 
   const cli = resolveGuardianCli();
   // resolveGuardianCli() only returns falsy when all 3 of its resolution

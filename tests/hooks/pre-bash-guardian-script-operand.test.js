@@ -460,6 +460,30 @@ function runTests() {
       }
     }));
 
+    record(test('a command whose name comes from a variable the command fixes is judged by that name, opaque fails closed, environment stays advisory (EGC-670)', () => {
+      const blocked = [
+        `X=${['r', 'm'].join('')}; $X -rf /tmp/egc-victim`,
+        `CMD=${['r', 'm'].join('')}; $CMD -rf /tmp/x`,
+        `R=/bin/${['r', 'm'].join('')}; $R -rf /tmp/x`,
+        'read X; $X -rf /tmp/x',
+        'C=$(cat name.txt); $C -rf /tmp/x',
+      ];
+      for (const command of blocked) {
+        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+        assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+      }
+      const passing = [
+        'X=ls; $X -la',
+        'C=echo; $C hi',
+        '$EDITOR notes.txt',
+        '$X -rf /tmp/x',
+      ];
+      for (const command of passing) {
+        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+        assert.strictEqual(result.exitCode, 0, `${command}: ${JSON.stringify(result)}`);
+      }
+    }));
+
     record(test('a script the command writes, overwrites or extracts before running it fails closed, as does one that is not there', () => {
       fs.writeFileSync(path.join(dir, 'plain-source.sh'), 'echo plain\n');
       // Present and benign, so only the copy over it can be what blocks.
