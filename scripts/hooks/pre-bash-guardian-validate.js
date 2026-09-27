@@ -201,7 +201,7 @@ function parenStep(text, i, word) {
 }
 
 function readShellWord(text, start) {
-  const word = { value: '', code: '', unsure: false, expands: false, depth: 0 };
+  const word = { value: '', code: '', unsure: false, expands: false, bare: false, depth: 0 };
   let i = start;
 
   while (i < text.length) {
@@ -229,13 +229,15 @@ function readShellWord(text, start) {
       break;
     } else {
       word.expands = word.expands || ch === '$' || ch === '`';
+      word.bare = word.bare || ch === '$' || ch === '`';
       word.value += ch;
       word.code += ch;
       i += 1;
     }
   }
   // `tilde`: an unquoted ~ that the shell turns into a home directory.
-  return { value: word.value, globbed: /[*?[]/.test(word.code), unsure: word.unsure, expands: word.expands, tilde: word.code.startsWith('~'), start, end: i };
+  // `bare`: an expansion outside quotes, whose value the shell splits.
+  return { value: word.value, globbed: /[*?[]/.test(word.code), unsure: word.unsure, expands: word.expands, bare: word.bare, tilde: word.code.startsWith('~'), start, end: i };
 }
 
 function shellWords(segment) {
@@ -685,11 +687,16 @@ function resolveCommandWords(segments, bindings, unknownFails) {
 
 // A script operand that is exactly one resolvable variable, spread to the
 // literal filenames that variable takes; otherwise the operand unchanged.
+// Unquoted, a value is split on blanks as the shell splits it, and its first
+// field is the script that runs.
 function expandScriptVar(word, context) {
   const reference = word.script && word.expands && /^\$\{?([A-Za-z_]\w*)\}?$/.exec(word.value);
   const found = reference && context.scriptVars?.get(reference[1]);
   if (!found) return [word];
-  return found.map(({ value, optional }) => ({ ...word, value, optional, expands: false, globbed: /[*?[]/.test(value), tilde: value.startsWith('~') }));
+  return found
+    .map(({ value, optional }) => ({ value: word.bare ? value.trim().split(/[ \t\n]+/)[0] : value, optional }))
+    .filter(({ value }) => value !== '')
+    .map(({ value, optional }) => ({ ...word, value, optional, expands: false, globbed: /[*?[]/.test(value), tilde: value.startsWith('~') }));
 }
 
 // The file an operand names when it starts with the script's own
@@ -1433,7 +1440,7 @@ function run(inputOrRaw) {
   return { exitCode: 0 };
 }
 
-module.exports = { run, extractSegments, isAdvisory };
+module.exports = { run, extractSegments, isAdvisory, bindingsOfSegments };
 
 if (require.main === module) {
   let raw = '';

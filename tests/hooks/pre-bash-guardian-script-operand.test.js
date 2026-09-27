@@ -521,6 +521,10 @@ function runTests() {
         process.env.X = rm;
         process.env.S = 'danger.sh';
         expectBlocked(['$X -rf /tmp/x; X=ls', 'false && X=ls; $X -rf /tmp/x', 'X=ls | $X -rf /tmp/x', 'bash "$S"; S=build.sh'], 'destructive');
+        // Unquoted, a script operand's value is split as the shell splits it,
+        // and its first field is the script that runs.
+        process.env.S = 'danger.sh --flag';
+        expectBlocked(['bash $S; S=build.sh', "S='danger.sh --flag'; bash $S"], 'destructive');
         delete process.env.X;
         delete process.env.S;
         const passing = [
@@ -545,6 +549,7 @@ function runTests() {
           if (saved[name] === undefined) delete process.env[name];
           else process.env[name] = saved[name];
         }
+        for (const file of ['vars.sh', 'cmdvar.sh', 'passthru.sh', 'callervar.sh', 'danger.sh']) fs.rmSync(path.join(dir, file), { force: true });
       }
     }));
 

@@ -1,12 +1,13 @@
 /**
  * The variables a command fixes and the values a command word taken from an
  * expansion can stand for (scripts/lib/shell-bindings.js), as the Bash hook
- * judges them.
+ * judges them. Segments are read with the hook's own tokenizer.
  */
 'use strict';
 
 const assert = require('assert');
-const { collectBindings, mergeBindings, valuesOf, commandWordChoices, quoteField } = require('../../scripts/lib/shell-bindings');
+const { mergeBindings, valuesOf, commandWordChoices, quoteField } = require('../../scripts/lib/shell-bindings');
+const { bindingsOfSegments } = require('../../scripts/hooks/pre-bash-guardian-validate');
 
 function test(name, fn) {
   try {
@@ -20,19 +21,7 @@ function test(name, fn) {
   }
 }
 
-// Minimal shell words: whitespace-separated, with the flags the hook's
-// tokenizer sets on an expanding word.
-function entry(segment, commandIndex = 0) {
-  const words = [];
-  const re = /\S+/g;
-  let match;
-  while ((match = re.exec(segment)) !== null) {
-    const value = match[0].replaceAll(/["']/g, '');
-    words.push({ value, expands: /[$`]/.test(match[0]), globbed: false, start: match.index, end: match.index + match[0].length });
-  }
-  return { segment, words, commandIndex };
-}
-
+const bindingsOf = (...segments) => bindingsOfSegments(segments);
 const lookupFrom = table => name => (Object.hasOwn(table, name) ? table[name] : ['']);
 
 function runTests() {
@@ -45,6 +34,7 @@ function runTests() {
     const lookup = lookupFrom({ X: ['ls', 'rm -rf', ''] });
     assert.deepStrictEqual(commandWordChoices('$X', lookup).choices, [['ls'], ['rm', '-rf'], []]);
     assert.deepStrictEqual(commandWordChoices('r$X', lookupFrom({ X: ['m'] })).choices, [['rm']]);
+    assert.deepStrictEqual(commandWordChoices('x$', lookupFrom({})).choices, [['x$']], 'a lone $ is literal text');
   }));
 
   record(test('a quoted "$X" is one field, kept even when empty', () => {
@@ -68,9 +58,9 @@ function runTests() {
     assert.strictEqual(commandWordChoices('"$(git rev-parse --show-toplevel)/scripts/check.sh"', lookupFrom({})).keep, true);
   }));
 
-  record(test('what this hook cannot read is unknown: an unreadable variable, positional and special parameters, transformations, ANSI-C text', () => {
+  record(test('what this hook cannot read is unknown: an unreadable variable, positional and special parameters, transformations, ANSI-C text, an expansion that never closes', () => {
     const lookup = name => (name === 'O' ? null : ['']);
-    for (const raw of ['$O', '${O}', '$1', '"$@"', '${X,,}', '${!X}', '${#X}', '$((1+2))', "$'\\x72m'", '`date`']) {
+    for (const raw of ['$O', '${O}', '$1', '"$@"', '${X,,}', '${!X}', '${#X}', '$((1+2))', "$'\\x72m'", '`date`', '$(which rm', '${X', '`which rm']) {
       assert.ok(commandWordChoices(raw, lookup).unknown, raw);
     }
   }));
@@ -83,47 +73,48 @@ function runTests() {
   }));
 
   record(test('assignments, loops and builtins fix a name to literals, or leave it unreadable', () => {
-    const bindings = collectBindings([
-      entry('X=rm'),
-      entry('for L in ls cat', 0),
-      entry('read -rp Name: N', 0),
-      entry('read -p P', 0),
-      entry('printf -v F %s rm', 0),
-      entry('mapfile -t M', 0),
-      entry('A=r'),
-      entry('A+=m'),
-      entry(': ${D:=rm}', 0),
-      entry('declare -n R=X', 0),
-      entry('select S in a b', 0),
-    ]);
+    const bindings = bindingsOf(
+      'X=rm',
+      'for L in ls cat',
+      'for O in $(ls) rm',
+      'read -rp "Name: " N',
+      'read -p P',
+      'printf -v F %s rm',
+      'mapfile -t M',
+      'A=r',
+      'A+=m',
+      'Y=(rm)',
+      'Z[0]=rm',
+      ': ${D:=rm}',
+      'declare -n R=X',
+      'select S in a b',
+    );
     const values = name => valuesOf(bindings, name, {});
     assert.deepStrictEqual(values('X'), ['rm', '']);
     assert.deepStrictEqual(values('L'), ['ls', 'cat', '']);
     assert.strictEqual(values('N'), null, 'a read target');
     assert.deepStrictEqual(values('P'), [''], 'the value of read -p is a prompt, not a target');
     assert.strictEqual(values('REPLY'), null, 'read with no name fills REPLY');
-    for (const name of ['F', 'M', 'A', 'D', 'R', 'S']) assert.strictEqual(values(name), null, name);
+    for (const name of ['O', 'F', 'M', 'A', 'Y', 'Z', 'D', 'R', 'S']) assert.strictEqual(values(name), null, name);
     assert.deepStrictEqual(values('U'), [''], 'a name the line never fixes can still be unset');
   }));
 
   record(test('the environment value counts, and a sourced script or a name built at run time leaves every other name unreadable', () => {
-    assert.deepStrictEqual(valuesOf(collectBindings([]), 'EDITOR', { EDITOR: 'vi' }), ['vi', '']);
-    const sourced = collectBindings([entry('. ./vars.sh', 0)]);
-    assert.strictEqual(valuesOf(sourced, 'EDITOR', {}), null);
-    const dynamic = collectBindings([entry('export $(cat vars)', 0)]);
-    assert.strictEqual(valuesOf(dynamic, 'X', {}), null);
+    assert.deepStrictEqual(valuesOf(bindingsOf(), 'EDITOR', { EDITOR: 'vi' }), ['vi', '']);
+    assert.strictEqual(valuesOf(bindingsOf('. ./vars.sh'), 'EDITOR', {}), null);
+    assert.strictEqual(valuesOf(bindingsOf('export $(cat vars)'), 'X', {}), null);
     // A name the line already fixes is no safer once it sources a script or
     // sets a name it builds at run time: either can set that name too.
-    for (const late of ['printf -v $VAR rm', 'read $VAR', 'mapfile $VAR', 'source ./x.sh']) {
-      assert.strictEqual(valuesOf(collectBindings([entry('X=echo'), entry(late, 0)]), 'X', {}), null, late);
+    for (const late of ['printf -v "$VAR" rm', 'read "$VAR"', 'mapfile "$VAR"', 'source ./x.sh']) {
+      assert.strictEqual(valuesOf(bindingsOf('X=echo', late), 'X', {}), null, late);
     }
   }));
 
   record(test('IFS set as a prefix of one command does not change how the line splits; set on its own it does', () => {
-    assert.strictEqual(collectBindings([entry('IFS=, read -r a', 1)]).ifs, false);
-    assert.strictEqual(collectBindings([entry('IFS=,', 1)]).ifs, true);
-    assert.strictEqual(collectBindings([entry('export IFS=,', 0)]).ifs, true);
-    const merged = mergeBindings(collectBindings([entry('X=ls')]), collectBindings([entry('X=rm')]));
+    assert.strictEqual(bindingsOf('IFS=, read -r a').ifs, false);
+    assert.strictEqual(bindingsOf('IFS=,').ifs, true);
+    assert.strictEqual(bindingsOf('export IFS=,').ifs, true);
+    const merged = mergeBindings(bindingsOf('X=ls'), bindingsOf('X=rm'));
     assert.deepStrictEqual(valuesOf(merged, 'X', {}), ['ls', 'rm', '']);
   }));
 
