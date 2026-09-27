@@ -366,6 +366,17 @@ function isTerminating(name, word, names) {
     && (TERMINATING_WRAPPER_FLAGS.has(flag) || TERMINATING_BY_WRAPPER[name]?.has(flag)));
 }
 
+// taskset -p and chrt -p (--pid, which getopt_long also takes as any prefix
+// down to --p) act on a process that is already running: the words after
+// them are its mask or priority and its pid, and no command is run.
+const PID_MODE_WRAPPERS = new Set(['taskset', 'chrt']);
+
+function isPidMode(name, word, names) {
+  if (!PID_MODE_WRAPPERS.has(name)) return false;
+  if (word.startsWith('--')) return word.length >= 3 && '--pid'.startsWith(word.split('=', 1)[0]);
+  return names.includes('-p');
+}
+
 // The index of the first word after a wrapper's own options and the
 // positionals it takes (timeout's duration, flock's lock file, chrt's
 // priority when it is a number); -1 when an option ends the wrapper's work
@@ -378,7 +389,7 @@ function skipWrapperOptions(words, start, name) {
       break;
     }
     const option = readWrapperOption(name, words[i], words[i + 1]);
-    if (isTerminating(name, words[i], option.names)) return -1;
+    if (isTerminating(name, words[i], option.names) || isPidMode(name, words[i], option.names)) return -1;
     i += option.width;
   }
   const spec = WRAPPER_SPECS[name];
