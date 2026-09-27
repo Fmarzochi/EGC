@@ -336,6 +336,33 @@ test('a quote or a trailing backslash inside a comment does not reach past its n
   assert.deepStrictEqual(extractSubstitutionBodies("ls # it's\necho $(rm -rf /)"), ['rm -rf /']);
 });
 
+// A command body is read the way bash reads it: a `)` inside a backquoted
+// command or inside a comment of that body does not close it, and a `}`
+// inside a process substitution does not close a `${...}` around it
+// (checked against bash).
+test('a ) inside backquotes or a comment of a command body, and a } in a process substitution, close nothing early', () => {
+  for (const nested of ['$(echo `echo )`)', '<(echo })', '>(true })']) {
+    assert.deepStrictEqual(
+      splitShellSegments(`true \${x:-${nested} #}; rm -rf /`, { splitOnPipe: true, stripComments: true }),
+      [`true \${x:-${nested} #}`, 'rm -rf /'],
+      nested,
+    );
+  }
+  assert.deepStrictEqual(extractSubstitutionBodies('echo $(echo `echo )`; rm -rf /)'), ['echo `echo )`; rm -rf /']);
+  assert.deepStrictEqual(extractSubstitutionBodies('echo $(echo a # )\nrm -rf /)'), ['echo a # )\nrm -rf /']);
+});
+
+test('constructEnd finds where a construct closes, null where none opens, -1 where it never closes', () => {
+  const { constructEnd } = require('../../scripts/lib/shell-split');
+  assert.strictEqual(constructEnd('$(a "b)" c)', 0), 10);
+  assert.strictEqual(constructEnd('${x:-${y}}', 0), 9);
+  assert.strictEqual(constructEnd("$(a $'\\')' b)", 0), 12);
+  assert.strictEqual(constructEnd('`a \\` b`', 0), 7);
+  assert.strictEqual(constructEnd('echo', 0), null);
+  assert.strictEqual(constructEnd('$(a # b)', 0), -1, 'the comment runs past the ) to the end of the line');
+  assert.strictEqual(constructEnd('${x', 0), -1);
+});
+
 test('extractSubstitutionBodies reads a $(...) with a } in it whole inside ${...}, so a later substitution there is still found', () => {
   assert.deepStrictEqual(extractSubstitutionBodies(': ${x:-$(echo }) # $(rm -rf /)}'), ['echo }', 'rm -rf /']);
 });

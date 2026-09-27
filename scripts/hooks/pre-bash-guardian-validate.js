@@ -31,7 +31,7 @@ const { spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
-const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
+const { splitShellSegments, extractSubstitutionBodies, constructEnd } = require('../lib/shell-split');
 const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption } = require('../lib/wrapper-options');
 
 const MAX_STDIN = 1024 * 1024;
@@ -1081,6 +1081,16 @@ function paramDepthAfter(text, i, param) {
 // A backslash-newline outside single quotes is a line continuation and is
 // dropped; inside a comment it is comment text, and the newline still ends
 // the comment, as bash reads it.
+// A command body (`$(...)`, backquotes, and outside double quotes `<(...)`
+// and `>(...)`) is copied as written: bash reads its comments, and so its
+// line continuations, as a command of its own, and extractSegments joins it
+// when it reads that body in turn.
+function commandBodyEnd(text, i, double) {
+  if (text[i] === '$' && text[i + 1] === '{') return null;
+  if (double && text[i] !== '`' && !(text[i] === '$' && text[i + 1] === '(')) return null;
+  return constructEnd(text, i);
+}
+
 function joinContinuations(text) {
   let out = '';
   let single = false;
@@ -1092,6 +1102,13 @@ function joinContinuations(text) {
     if (comment) {
       comment = ch !== '\n';
       out += ch;
+      continue;
+    }
+    const body = single ? null : commandBodyEnd(text, i, double);
+    if (body !== null) {
+      const span = text.slice(i, body === -1 ? text.length : body + 1);
+      out += span;
+      i += span.length - 1;
       continue;
     }
     if (!single && !double) {

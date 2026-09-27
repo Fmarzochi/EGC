@@ -658,7 +658,13 @@ run('a mid-word # is not a comment, so a real path after it is still read', () =
 // expansion, command substitution or backquoted command: a # before it is
 // still inside the expansion, so the real path after it is read.
 run('a # inside a ${...} that holds a nested expansion is not a comment', () => {
-  for (const command of ['cat ${x:-${y} #} ~/.ssh/id_rsa', 'cat ${x:-$(echo }) #} ~/.ssh/id_rsa', 'cat ${x:-`echo }` #} ~/.ssh/id_rsa', 'cat ${x:-$((1+2)) #} ~/.ssh/id_rsa']) {
+  for (const command of [
+    'cat ${x:-${y} #} ~/.ssh/id_rsa', 'cat ${x:-$(echo }) #} ~/.ssh/id_rsa', 'cat ${x:-`echo }` #} ~/.ssh/id_rsa', 'cat ${x:-$((1+2)) #} ~/.ssh/id_rsa',
+    'cat ${x:-<(echo }) #} ~/.ssh/id_rsa', 'cat ${x:->(true }) #} ~/.ssh/id_rsa', 'cat ${x:-$(echo `echo )`) #} ~/.ssh/id_rsa',
+    // A ) in a comment of the command body does not close it: bash reads the
+    // comment to its newline, and the } after it is still inside $(...).
+    'cat ${x:-$(echo # )\necho }) #} ~/.ssh/id_rsa',
+  ]) {
     const v = validateCommand(command);
     assert.strictEqual(v.allowed, false, `${command}: ${v.reason}`);
     assert.ok(/protected path/.test(v.reason), `${command}: the real path must be what denies it, got: ${v.reason}`);

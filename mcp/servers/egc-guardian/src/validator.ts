@@ -2587,30 +2587,101 @@ function skipText(command: string, i: number): number {
   return i;
 }
 
-// Index past the `}` that closes the `${` whose body starts at `start`. A
-// nested `${...}`, a `$(...)` (or `$((...))`) and a backquoted command are
-// read whole, so a `}` of theirs does not close it, as bash reads it; the
+// Index past the `}` that closes the `${` whose body starts at `start`; the
 // end of the line when it never closes.
 function parameterExpansionEnd(command: string, start: number): number {
-  let i = start;
-  while (i < command.length) {
-    const skipped = skipText(command, i);
-    if (skipped !== i) {
-      i = skipped;
-      continue;
-    }
-    const ch = command[i];
-    if (ch === '}') return i + 1;
-    if (ch === '$' && command[i + 1] === '(') {
-      i = closingParenthesis(command, i + 2) + 1;
-    } else if (ch === '`') {
-      const close = command.indexOf('`', i + 1);
-      i = close === -1 ? command.length : close + 1;
-    } else {
-      i += 1;
-    }
+  const end = bodyEnd(command, start, '}', false);
+  return end === -1 ? command.length : end + 1;
+}
+
+// The constructs bash reads whole wherever they sit, read as the hooks read
+// them (scripts/lib/shell-split.js constructEnd): a command body (`$(...)`,
+// `<(...)`, `>(...)`, `$((...))`) closes at its own `)`, a parameter
+// expansion at its own `}`, a backquoted command at the next unescaped
+// backquote. Inside, an escape, a quoted string and a nested construct are
+// read whole, and in a command body a `(` of its own nests and a `#` that
+// opens a word is a comment up to its newline, so no quote, paren or brace
+// inside any of them closes the outer construct early.
+
+// Where the construct opening at `i` closes (the index of its closing
+// character); null when none opens there, -1 when it never closes.
+function constructEnd(command: string, i: number): number | null {
+  const ch = command[i];
+  const next = command[i + 1];
+  if (ch === '`') return backquoteEnd(command, i + 1);
+  if (ch === '$' && next === '{') return bodyEnd(command, i + 2, '}', false);
+  if ((ch === '$' || ch === '<' || ch === '>') && next === '(') return bodyEnd(command, i + 2, ')', true);
+  return null;
+}
+
+function backquoteEnd(command: string, start: number): number {
+  for (let j = start; j < command.length; j++) {
+    if (command[j] === '\\') j += 1;
+    else if (command[j] === '`') return j;
   }
-  return command.length;
+  return -1;
+}
+
+// A double-quoted string whose body starts at `start`: the index of its
+// closing quote, a construct inside it read whole; -1 when it never closes.
+function doubleQuoteEnd(command: string, start: number): number {
+  let j = start;
+  while (j < command.length) {
+    const ch = command[j];
+    if (ch === '"') return j;
+    const end = ch === '\\' ? j + 1 : constructEnd(command, j);
+    if (end === -1) return -1;
+    j = (end ?? j) + 1;
+  }
+  return -1;
+}
+
+// `$'...'`: backslash escapes, including an escaped quote.
+function ansiQuoteEnd(command: string, start: number): number {
+  for (let j = start; j < command.length; j++) {
+    if (command[j] === '\\') j += 1;
+    else if (command[j] === "'") return j;
+  }
+  return -1;
+}
+
+function opensWordAt(command: string, j: number): boolean {
+  const prev = j === 0 ? -1 : precedingCharIndex(command, j - 1);
+  return prev < 0 || COMMENT_WORD_START.has(command[prev]);
+}
+
+// The end of a span read whole at `j`: an escape, a quoted string, a
+// comment in a command body, or a nested construct. null when none starts
+// there, -1 when it never closes.
+function spanEnd(command: string, j: number, inCommand: boolean): number | null {
+  const ch = command[j];
+  if (ch === '\\') return j + 1;
+  if (ch === "'") return command.indexOf("'", j + 1);
+  if (ch === '$' && command[j + 1] === "'") return ansiQuoteEnd(command, j + 2);
+  if (ch === '"') return doubleQuoteEnd(command, j + 1);
+  if (inCommand && ch === '#' && opensWordAt(command, j)) {
+    const newline = command.indexOf('\n', j);
+    return newline === -1 ? -1 : newline - 1;
+  }
+  return constructEnd(command, j);
+}
+
+// Where a parameter expansion (closing at `}`) or a command body (closing at
+// its own `)`) whose content starts at `start` closes; -1 when it never does.
+function bodyEnd(command: string, start: number, close: string, inCommand: boolean): number {
+  let depth = 0;
+  let j = start;
+  while (j < command.length) {
+    const end = spanEnd(command, j, inCommand);
+    if (end === -1) return -1;
+    const ch = command[j];
+    if (end !== null) j = end;
+    else if (inCommand && ch === '(') depth += 1;
+    else if (ch === close && depth === 0) return j;
+    else if (inCommand && ch === ')') depth -= 1;
+    j += 1;
+  }
+  return -1;
 }
 
 // Characters before an unquoted `#` that let it open a word, so the `#`
@@ -2752,23 +2823,11 @@ function heredocBodiesEnd(command: string, newline: number, delimiters: string[]
 }
 
 // Index of the parenthesis closing the substitution whose body starts at
-// `start`, quoted spans and escapes skipped; the end of the line when it
-// never closes.
+// `start`, read as a command body (see constructEnd); the end of the line
+// when it never closes.
 function closingParenthesis(command: string, start: number): number {
-  let depth = 1;
-  let i = start;
-  while (i < command.length) {
-    const skipped = skipText(command, i);
-    if (skipped !== i) {
-      i = skipped;
-      continue;
-    }
-    if (command[i] === '(') depth += 1;
-    if (command[i] === ')') depth -= 1;
-    if (depth === 0) return i;
-    i += 1;
-  }
-  return command.length;
+  const end = bodyEnd(command, start, ')', true);
+  return end === -1 ? command.length : end;
 }
 
 // The bodies of the command substitutions of the line, `$(...)` and

@@ -547,6 +547,10 @@ function runTests() {
         `true # note \\\n${wipe} /tmp/egc-victim`,
         `ls # it's\necho $(${wipe} /tmp/egc-victim)`,
         `echo \${x:-a #}; r\\\nm -rf /tmp/egc-victim`,
+        `echo \${x:-$(true #\\\n${wipe} /tmp/egc-victim)}`,
+        `true \${x:-$(echo \`echo )\`) #}; ${wipe} /tmp/egc-victim`,
+        `true \${x:-<(echo }) #}; ${wipe} /tmp/egc-victim`,
+        `echo $(echo a # )\n${wipe} /tmp/egc-victim)`,
       ];
       for (const command of blocked) {
         const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });

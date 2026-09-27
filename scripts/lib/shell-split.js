@@ -289,15 +289,98 @@ function isCommentStart(command, i, quote, heredocState, paramDepth = 0) {
 }
 
 // The index of the character closing the command substitution (`$(...)`,
-// `$((...))`) or backquoted command that opens at `i`; -1 when none opens
-// there. One that never closes runs to the end of the line, since bash
-// reads no command out of it.
+// `$((...))`), process substitution (`<(...)`, `>(...)`) or backquoted
+// command that opens at `i`; -1 when none opens there. One that never
+// closes runs to the end of the line, since bash reads no command out of it.
 function nestedSubstitutionEnd(command, i) {
-  let end;
-  if (command[i] === '$' && command[i + 1] === '(') end = findMatchingParen(command, i + 2);
-  else if (command[i] === '`') end = findMatchingBacktick(command, i + 1);
-  else return -1;
+  if (command[i] === '$' && command[i + 1] === '{') return -1;
+  const end = constructEnd(command, i);
+  if (end === null) return -1;
   return end === -1 ? command.length - 1 : end;
+}
+
+// The constructs bash reads whole wherever they sit, as it reads them: a
+// command body (`$(...)`, `<(...)`, `>(...)`, `$((...))`) closes at its own
+// `)`, a parameter expansion at its own `}`, a backquoted command at the next
+// unescaped backquote. Inside, an escape, a quoted string and a nested
+// construct are read whole, and in a command body a `(` of its own nests and
+// a `#` that opens a word is a comment up to its newline, so no quote, paren
+// or brace inside any of those closes the outer construct early.
+
+// Where the construct opening at `i` closes (the index of its closing
+// character); null when none opens there, -1 when it never closes.
+function constructEnd(command, i) {
+  const ch = command[i];
+  const next = command[i + 1];
+  if (ch === '`') return backquoteEnd(command, i + 1);
+  if (ch === '$' && next === '{') return bodyEnd(command, i + 2, '}', false);
+  if ((ch === '$' || ch === '<' || ch === '>') && next === '(') return bodyEnd(command, i + 2, ')', true);
+  return null;
+}
+
+function backquoteEnd(command, start) {
+  for (let j = start; j < command.length; j++) {
+    if (command[j] === '\\') j += 1;
+    else if (command[j] === '`') return j;
+  }
+  return -1;
+}
+
+// A double-quoted string whose body starts at `start`: the index of its
+// closing quote, a construct inside it read whole; -1 when it never closes.
+function doubleQuoteEnd(command, start) {
+  let j = start;
+  while (j < command.length) {
+    const ch = command[j];
+    if (ch === '"') return j;
+    const end = ch === '\\' ? j + 1 : constructEnd(command, j);
+    if (end === -1) return -1;
+    j = (end ?? j) + 1;
+  }
+  return -1;
+}
+
+// `$'...'`: backslash escapes, including an escaped quote.
+function ansiQuoteEnd(command, start) {
+  for (let j = start; j < command.length; j++) {
+    if (command[j] === '\\') j += 1;
+    else if (command[j] === "'") return j;
+  }
+  return -1;
+}
+
+// The end of a span read whole at `j`: an escape, a quoted string, a
+// comment in a command body, or a nested construct. null when none starts
+// there, -1 when it never closes.
+function spanEnd(command, j, inCommand) {
+  const ch = command[j];
+  if (ch === '\\') return j + 1;
+  if (ch === "'") return command.indexOf("'", j + 1);
+  if (ch === '$' && command[j + 1] === "'") return ansiQuoteEnd(command, j + 2);
+  if (ch === '"') return doubleQuoteEnd(command, j + 1);
+  if (inCommand && ch === '#' && isCommentStart(command, j, null, null)) {
+    const newline = command.indexOf('\n', j);
+    return newline === -1 ? -1 : newline - 1;
+  }
+  return constructEnd(command, j);
+}
+
+// Where a parameter expansion (closing at `}`) or a command body (closing at
+// its own `)`) whose content starts at `start` closes; -1 when it never does.
+function bodyEnd(command, start, close, inCommand) {
+  let depth = 0;
+  let j = start;
+  while (j < command.length) {
+    const end = spanEnd(command, j, inCommand);
+    if (end === -1) return -1;
+    const ch = command[j];
+    if (end !== null) j = end;
+    else if (inCommand && ch === '(') depth += 1;
+    else if (ch === close && depth === 0) return j;
+    else if (inCommand && ch === ')') depth -= 1;
+    j += 1;
+  }
+  return -1;
 }
 
 /**
@@ -499,49 +582,13 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
   return segments;
 }
 
-// One scan step for findMatchingParen: given the current quote state,
-// returns how far to additionally advance past this char (an escaped char
-// consumes its pair), the quote state after this char, and how much this
-// char changes the paren depth (0 unless it's an unquoted paren). Splitting
-// this out of the loop keeps each branch a flat, single-condition early
-// return instead of nested ifs, which is what keeps cognitive complexity low.
-function scanParenChar(ch, i, command, quote) {
-  if (quote) {
-    if (ch === '\\' && quote === '"' && i + 1 < command.length) return { advance: 1, quote, delta: 0 };
-    return { advance: 0, quote: ch === quote ? null : quote, delta: 0 };
-  }
-  if (ch === '\\' && i + 1 < command.length) return { advance: 1, quote: null, delta: 0 };
-  if (ch === '"' || ch === "'") return { advance: 0, quote: ch, delta: 0 };
-  if (ch === '(') return { advance: 0, quote: null, delta: 1 };
-  if (ch === ')') return { advance: 0, quote: null, delta: -1 };
-  return { advance: 0, quote: null, delta: 0 };
-}
-
 // Finds the index of the `)` that matches the `(` implicitly opened at
-// `start` (i.e. `start` is the position right after that `(`), honoring
-// quotes so an unbalanced paren inside a quoted string doesn't close early.
-// Returns -1 if the input is malformed (no matching close) — callers must
-// treat that as "nothing to extract here", not throw.
+// `start` (i.e. `start` is the position right after that `(`), reading the
+// body the way bash reads a command body (see constructEnd): quotes,
+// backquoted commands, nested substitutions and comments inside it never
+// close it early. Returns -1 if the input is malformed (no matching close), // callers must treat that as "nothing to extract here", not throw.
 function findMatchingParen(command, start) {
-  let depth = 1;
-  let quote = null;
-  for (let i = start; i < command.length; i++) {
-    const r = scanParenChar(command[i], i, command, quote);
-    quote = r.quote;
-    i += r.advance;
-    depth += r.delta;
-    if (r.delta && depth === 0) return i;
-  }
-  return -1;
-}
-
-function findMatchingBacktick(command, start) {
-  for (let i = start; i < command.length; i++) {
-    const ch = command[i];
-    if (ch === '\\' && i + 1 < command.length) { i += 1; continue; }
-    if (ch === '`') return i;
-  }
-  return -1;
+  return bodyEnd(command, start, ')', true);
 }
 
 function pushSubstitutionAt(command, i, bodies) {
@@ -579,7 +626,7 @@ function pushSubstitutionAt(command, i, bodies) {
     }
   }
   if (ch === '`') {
-    const end = findMatchingBacktick(command, i + 1);
+    const end = backquoteEnd(command, i + 1);
     if (end !== -1) {
       bodies.push(command.slice(i + 1, end));
       return end;
@@ -721,4 +768,4 @@ function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state ma
   return bodies;
 }
 
-module.exports = { splitShellSegments, extractSubstitutionBodies };
+module.exports = { splitShellSegments, extractSubstitutionBodies, constructEnd };
