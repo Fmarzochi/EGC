@@ -215,13 +215,18 @@ const CHDIR_FLAGS = {
   nsenter: new Set(['-w', '--wd']),
 };
 const CHROOT_FLAGS = { sudo: new Set(['-R', '--chroot']), unshare: new Set(['-R', '--root']), nsenter: new Set(['-r', '--root']) };
-// chroot, unshare -R and nsenter -r start the command at the new root's `/`
-// unless a directory is given with them (checked in their sources).
-const ROOT_STARTS_AT_TOP = new Set(['chroot', 'unshare', 'nsenter']);
+// chroot, sudo -R, unshare -R and nsenter -r start the command at the new
+// root's `/` unless a directory is given with them (checked in their
+// sources: sudo's exec.c chroots, changes to `/` and only then to -D).
+const ROOT_STARTS_AT_TOP = new Set(['chroot', 'sudo', 'unshare', 'nsenter']);
+// sudo -i runs the command from the target user's home directory unless -D
+// names one (sudoers policy.c).
+const SUDO_LOGIN_FLAGS = new Set(['-i', '--login']);
 const NSENTER_TARGET_VIEW = new Set(['-m', '--mount', '-a', '--all']);
 const NSENTER_OPTIONAL_MOVES = new Set(['-r', '--root', '-w', '--wd']);
 const BWRAP_VIEW = 'bwrap runs the script in a filesystem of its own mounts, which cannot be resolved faithfully';
 const NSENTER_VIEW = "nsenter runs the script in the target process's mount namespace, root or directory, which cannot be resolved faithfully";
+const SUDO_LOGIN_VIEW = "sudo -i runs the script from the target user's home directory, which cannot be resolved faithfully for a relative path";
 const HOOK_ONLY_WRAPPERS = new Set(['builtin']);
 const NO_OPTION = { width: 1, valueName: null, value: undefined };
 
@@ -265,6 +270,7 @@ function within(value, state) {
 // and nsenter -r start at the new root's top, and a directory given with it
 // is inside it.
 function applyMoves(name, moves, state) {
+  if (name === 'sudo' && moves.login && moves.dir === undefined) state.cwdUnknown = SUDO_LOGIN_VIEW;
   if (moves.root !== undefined) {
     const inside = within(moves.root, state);
     state.chroot = state.chroot ? path.join(state.chroot, inside) : inside;
@@ -295,7 +301,7 @@ function skipLeadingPositionals(words, index, name, moves) {
 // Skips a wrapper's options and leading positionals; the directory and root
 // they move to become where later operands are resolved.
 function skipWrapperOptions(words, start, name, state) {
-  const moves = { root: undefined, dir: undefined, unsure: false, skipChdir: false };
+  const moves = { root: undefined, dir: undefined, unsure: false, skipChdir: false, login: false };
   if (name === 'bwrap') state.unresolved = BWRAP_VIEW;
   let index = start;
   while (index < words.length) {
@@ -311,6 +317,7 @@ function skipWrapperOptions(words, start, name, state) {
     }
     const option = readWrapperOption(name, word, words[index + 1]?.value) ?? NO_OPTION;
     moves.skipChdir = moves.skipChdir || Boolean(option.names?.includes('--skip-chdir'));
+    moves.login = moves.login || Boolean(option.names?.some(flag => SUDO_LOGIN_FLAGS.has(flag)));
     noteWrapperMove(name, optionMove(option, word), option.width === 2 ? words[index + 1] : words[index], moves, state);
     index += option.width;
   }
@@ -323,7 +330,7 @@ function skipWrapperOptions(words, start, name, state) {
 // nor a wrapper with its options; a chdir or chroot a wrapper carries is
 // noted on `state` for a caller that resolves operands against it.
 function skipEnvAndWrappers(words, state) {
-  const wrapperState = state === undefined ? { cwd: null, chroot: null, unsure: false, unresolved: null } : state;
+  const wrapperState = state === undefined ? { cwd: null, chroot: null, unsure: false, unresolved: null, cwdUnknown: null } : state;
   let index = 0;
   while (index < words.length) {
     const word = words[index].value;
@@ -343,8 +350,8 @@ function skipEnvAndWrappers(words, state) {
 // variable-expanded interpreter cannot be resolved, so its operands are
 // inspected as if it were a shell. After `--` every word is an operand.
 function interpreterOperands(words) {
-  const state = { cwd: null, chroot: null, unsure: false, unresolved: null };
-  const found = (operands) => ({ operands, cwd: state.cwd, chroot: state.chroot, unsure: state.unsure, unresolved: state.unresolved });
+  const state = { cwd: null, chroot: null, unsure: false, unresolved: null, cwdUnknown: null };
+  const found = (operands) => ({ operands, cwd: state.cwd, chroot: state.chroot, unsure: state.unsure, unresolved: state.unresolved, cwdUnknown: state.cwdUnknown });
 
 
   const index = skipEnvAndWrappers(words, state);
@@ -390,6 +397,11 @@ function operandPath(name, root, base) {
 // Existing files among the operands, resolved against the cwd; a file that
 // exists but cannot be read within the budget is reported so the caller
 // fails closed instead of skipping it.
+// Errors that mean the operand names no file the shell could run; any other
+// (a permission this hook lacks but sudo has, a resource limit) means it
+// could not be inspected.
+const MISSING_OPERAND_CODES = new Set(['ENOENT', 'ENOTDIR', 'ENAMETOOLONG', 'ELOOP', 'EINVAL']);
+
 // The script file one operand names, the reason it cannot be inspected, or
 // null when it names no file.
 function inspectOperand(operand, root, base) {
@@ -402,8 +414,11 @@ function inspectOperand(operand, root, base) {
   let stat;
   try {
     stat = fs.statSync(candidate);
-  } catch {
-    return null;
+  } catch (error) {
+    // A path that is not there is not a script the shell runs; one this hook
+    // may not look at can still be one a wrapper like sudo runs.
+    if (MISSING_OPERAND_CODES.has(error.code)) return null;
+    return { blocked: `operand ${operand.value} cannot be inspected (${error.code})` };
   }
   if (!stat.isFile()) return null;
   if (stat.size > MAX_SCRIPT_BYTES) return { blocked: `script ${operand.value} is too large to analyze` };
@@ -417,6 +432,8 @@ function scriptOperandsOf(segment, cwd) {
   const outcome = (blocked) => ({ files, blocked, base });
   if (found.unsure) return outcome('a wrapper path uses byte escapes that cannot be resolved faithfully');
   if (found.unresolved && found.operands.length > 0) return outcome(found.unresolved);
+  // A directory that cannot be known leaves an absolute path resolvable.
+  if (found.cwdUnknown && found.operands.some(operand => !path.isAbsolute(operand.value))) return outcome(found.cwdUnknown);
   for (const operand of found.operands) {
     const inspected = inspectOperand(operand, root, base);
     if (inspected?.blocked) return outcome(inspected.blocked);

@@ -140,6 +140,49 @@ function runTests() {
       }
     })) passed++; else failed++;
 
+    if (test('sudo -R starts at the new root top whatever directory an outer wrapper moved to, sudo -i fails closed on a script, and -D still moves it', () => {
+      const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-script-operand-sudo-'));
+      const quoted = JSON.stringify(dir);
+      try {
+        const topped = run({ tool_name: 'Bash', tool_input: { command: `env -C /tmp sudo -R ${quoted} bash notes.txt` }, cwd: elsewhere });
+        assert.strictEqual(topped.exitCode, 2, `sudo -R starts at the new root top: ${JSON.stringify(topped)}`);
+        for (const command of ['sudo -i bash build.sh', 'sudo --login bash build.sh', 'sudo -iu root bash build.sh', 'sudo -u root -i bash build.sh']) {
+          const login = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+          assert.strictEqual(login.exitCode, 2, `sudo -i runs in the target user's home: ${command}: ${JSON.stringify(login)}`);
+        }
+        const moved = run({ tool_name: 'Bash', tool_input: { command: `sudo -i -D ${quoted} bash build.sh` }, cwd: elsewhere });
+        assert.strictEqual(moved.exitCode, 0, `sudo -i -D dir runs in dir, where the script is benign: ${JSON.stringify(moved)}`);
+        const plain = run({ tool_name: 'Bash', tool_input: { command: 'sudo -i ls' }, cwd: dir });
+        assert.strictEqual(plain.exitCode, 0, `no script to follow: ${JSON.stringify(plain)}`);
+        const absoluteBenign = run({ tool_name: 'Bash', tool_input: { command: `sudo -i bash ${JSON.stringify(path.join(dir, 'build.sh'))}` }, cwd: elsewhere });
+        assert.strictEqual(absoluteBenign.exitCode, 0, `an absolute path does not depend on the home directory: ${JSON.stringify(absoluteBenign)}`);
+        const absoluteDenied = run({ tool_name: 'Bash', tool_input: { command: `sudo -i bash ${JSON.stringify(path.join(dir, 'notes.txt'))}` }, cwd: elsewhere });
+        assert.strictEqual(absoluteDenied.exitCode, 2, `an absolute path behind sudo -i is still judged: ${JSON.stringify(absoluteDenied)}`);
+      } finally {
+        fs.rmSync(elsewhere, { recursive: true, force: true });
+      }
+    })) passed++; else failed++;
+
+    if (process.platform !== 'win32' && process.getuid && process.getuid() !== 0) {
+      if (test('a script the hook cannot read fails closed, while a missing one changes nothing', () => {
+        const locked = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-script-operand-locked-'));
+        fs.writeFileSync(path.join(locked, 'x.sh'), `${wipe} /tmp/egc-victim\n`);
+        fs.chmodSync(locked, 0o000);
+        try {
+          const unreadable = run({ tool_name: 'Bash', tool_input: { command: `sudo bash ${path.join(locked, 'x.sh')}` }, cwd: dir });
+          assert.strictEqual(unreadable.exitCode, 2, `unreadable: ${JSON.stringify(unreadable)}`);
+          assert.ok(unreadable.stderr.includes('cannot be inspected'), unreadable.stderr);
+          for (const command of ['bash does-not-exist.sh "an argument that is not a file"', 'bash build.sh/inside']) {
+            const missing = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+            assert.strictEqual(missing.exitCode, 0, `a path that names no file: ${command}: ${JSON.stringify(missing)}`);
+          }
+        } finally {
+          fs.chmodSync(locked, 0o700);
+          fs.rmSync(locked, { recursive: true, force: true });
+        }
+      })) passed++; else failed++;
+    }
+
     if (test('a script run in a filesystem view the hook cannot follow fails closed (bwrap, nsenter into a mount namespace or the target root)', () => {
       const commands = [
         'bwrap --ro-bind / / bash build.sh',
