@@ -299,13 +299,11 @@ if (test('writeStateFile: a umask that strips the owner bits still leaves the st
   const oldUmask = process.umask(0o777);
   try {
     writeStateFile(filePath, 'secret', key);
-  } finally {
     process.umask(oldUmask);
-  }
-  try {
     assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o600);
     assert.strictEqual(readStateFile(filePath, key), 'secret');
   } finally {
+    process.umask(oldUmask);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;
