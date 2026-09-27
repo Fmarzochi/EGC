@@ -15,15 +15,18 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { createManifestInstallPlan } = require('../../scripts/lib/install-executor');
+const { HOST_PLACED_SOURCES } = require('../../scripts/lib/install-source-filters');
 const { listInstallTargetAdapters } = require('../../scripts/lib/install-targets/registry');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
-const HOST_PLACED = new Set([
-  'scripts/hooks/amp-guardian-crusher-plugin.ts',
-  'scripts/hooks/amp-mesh-notice-plugin.ts',
-  'scripts/hooks/cline-pretooluse-shim.js',
-  'scripts/hooks/opencode-egc-plugin.js',
-]);
+// Each host-placed source, the target that writes it and where it lands
+// there (the host's own plugin location).
+const HOSTS = {
+  'scripts/hooks/amp-guardian-crusher-plugin.ts': { target: 'amp', destination: /\/plugins\/egc-guardian-crusher\.ts$/ },
+  'scripts/hooks/amp-mesh-notice-plugin.ts': { target: 'amp', destination: /\/plugins\/egc-mesh-notice\.ts$/ },
+  'scripts/hooks/cline-pretooluse-shim.js': { target: 'cline', destination: /\/hooks\/PreToolUse$/ },
+  'scripts/hooks/opencode-egc-plugin.js': { target: 'opencode', destination: /\/plugins\/opencode-egc-plugin\.js$/ },
+};
 
 let passed = 0;
 let failed = 0;
@@ -43,28 +46,34 @@ const normalized = value => String(value || '').replaceAll('\\', '/');
 
 console.log('\n=== Testing where the host-placed hook sources land ===\n');
 
-const placed = new Map();
+run('the filter and this test name the same host-placed sources', () => {
+  assert.deepStrictEqual([...HOST_PLACED_SOURCES].sort(), Object.keys(HOSTS).sort());
+});
+
+const reached = new Set();
 for (const target of [...new Set(listInstallTargetAdapters().map(adapter => adapter.target))]) {
-  run(`${target}: no host-placed source is copied into scripts/hooks`, () => {
+  run(`${target}: a host-placed source is copied only to its host's plugin location`, () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), `egc-host-placed-${target}-`));
     try {
       const plan = createManifestInstallPlan({ sourceRoot: REPO_ROOT, target, profileId: 'full', homeDir: home, projectRoot: home });
-      const copies = plan.operations.filter(op => op.kind === 'copy-file' && HOST_PLACED.has(normalized(op.sourceRelativePath)));
-      const misplaced = copies.filter(op => /\/scripts\/hooks\/[^/]+$/.test(normalized(op.destinationPath)));
-      for (const op of copies.filter(copy => !misplaced.includes(copy))) {
-        placed.set(normalized(op.sourceRelativePath), (placed.get(normalized(op.sourceRelativePath)) || 0) + 1);
+      const wrong = [];
+      for (const op of plan.operations) {
+        const source = normalized(op.sourceRelativePath);
+        if (op.kind !== 'copy-file' || !Object.hasOwn(HOSTS, source)) continue;
+        const host = HOSTS[source];
+        const destination = normalized(op.destinationPath);
+        if (host.target === target && host.destination.test(destination)) reached.add(source);
+        else wrong.push(`${source} -> ${normalized(path.relative(home, op.destinationPath))}`);
       }
-      assert.deepStrictEqual(misplaced.map(op => normalized(path.relative(home, op.destinationPath))), []);
+      assert.deepStrictEqual(wrong, []);
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
     }
   });
 }
 
-run('each host-placed source still reaches its own host', () => {
-  for (const source of HOST_PLACED) {
-    assert.ok(placed.get(source) > 0, `${source} is copied by no target`);
-  }
+run('each host-placed source reaches its host', () => {
+  assert.deepStrictEqual([...reached].sort(), Object.keys(HOSTS).sort());
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);

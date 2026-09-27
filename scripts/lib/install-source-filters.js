@@ -62,6 +62,7 @@ function isGeneratedRuntimeSourcePath(sourceRelativePath) {
 }
 
 module.exports = {
+  HOST_PLACED_SOURCES,
   isGeneratedRuntimeSourcePath,
   isHostPlacedSourcePath,
   isIgnoredSourceDirectory,
