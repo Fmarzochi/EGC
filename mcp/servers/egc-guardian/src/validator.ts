@@ -955,6 +955,9 @@ const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
 // the directory. Deny the credential file by pattern instead. Sources: each
 // tool's official docs, verified 2026-07-11 (see docs/architecture or the
 // PR that introduced this comment for the full per-tool research).
+// The disk and memory devices under /dev, listed at the end.
+const DEVICE_DIR = String.raw`^(?:[a-z]:)?[\\/]dev[\\/]`;
+const NUMBERED_DEVICES = ['nvme', 'mmcblk', 'dm-', 'md', 'loop', 'sr', 'nbd', 'zram', 'fd', 'ram', 'rbd', 'pmem', 'mtdblock', 'mtd', 'sg', 'disk', 'rdisk'];
 export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // EGC install-state: egc repair and uninstall replay what it records, so a
   // planted entry would turn either into a write or delete of its choosing.
@@ -1048,6 +1051,20 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // through the `git config` CLI, so a raw file write must be denied too.
   /(^|[\\/])\.git[\\/]hooks([\\/]|$)/,
   /(^|[\\/])\.git[\\/]config$/,
+  // A disk or memory device holds every file on the disk, secrets included:
+  // reading one reads them all and writing one overwrites them. The
+  // character devices commands use every day (null, zero, random, urandom,
+  // tty, stdin, the fd links) are not matched. macOS names its disks disk0
+  // and rdisk0. Under Git for Windows /dev/sda is the first physical drive,
+  // and it resolves below the current drive; there, and on macOS, the path
+  // is already folded to lower case when it is matched.
+  new RegExp(String.raw`${DEVICE_DIR}(?:sd|hd|vd|xvd)[a-z]`),
+  new RegExp(String.raw`${DEVICE_DIR}(?:${NUMBERED_DEVICES.join('|')})\d`),
+  new RegExp(String.raw`${DEVICE_DIR}(?:k?mem|port)$`),
+  new RegExp(String.raw`${DEVICE_DIR}(?:disk[\\/][^\\/]+|mapper|block)[\\/].`),
+  /^[\\/]proc[\\/]kcore$/,
+  /^[\\/]proc[\\/](?:\d+|self|thread-self)[\\/](?:task[\\/]\d+[\\/])?mem$/,
+  /^\\\\[.?]\\(?:physicaldrive\d|[a-z]:|globalroot\\|harddisk|cdrom\d|tape\d)/,
 ];
 
 export function buildDeniedPaths(): string[] {
