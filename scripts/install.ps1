@@ -169,7 +169,7 @@ Write-Host "EGC install"
 # gate here would let 18/19 reach the better-sqlite3 build and the
 # TypeScript build steps below.
 try {
-    $nodeVersion = node -e "process.stdout.write(process.versions.node.split('.')[0])"
+    $nodeVersion = (node --version).TrimStart('v').Split('.')[0]
     if ([int]$nodeVersion -lt 20) {
         Write-Error "Node.js >= 20 is required (found: $(node --version))"
         exit 1
@@ -417,6 +417,10 @@ if (-not $DryRun) {
     } finally {
         Pop-Location
     }
+
+    # Install git pre-commit hook in a clone (strips egc:state blocks before
+    # commits), through the helper install.sh runs as well.
+    node (Join-Path $RootDir (Join-Path "scripts" (Join-Path "lib" "git-pre-commit-install.js"))) $RootDir
 
     # Token Crusher PATH-level binary shim (git, npm, gh, ...). Best-effort:
     # a failure here (permission, unsupported shell profile, ...) must never
