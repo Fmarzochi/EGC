@@ -2062,8 +2062,18 @@ function isNarrowTarget(candidate: string, cwd?: string): boolean {
 // least two literal components below whatever it starts from (a named file
 // deep in some directory, as `$BASE/.mvn/wrapper/maven-wrapper.jar`).
 const MAX_BOUND_DEPTH = 4;
-// `$(mktemp ...)` or backquoted mktemp, and what follows it.
-const MKTEMP_RE = /^(?:\$\(mktemp\b[^()]*\)|`mktemp\b[^`]*`)(.*)$/s;
+
+// What follows `$(mktemp ...)` or backquoted mktemp given nothing but options
+// and a template; null for anything else, such as a second command after it
+// (`$(mktemp -d >/dev/null; printf /etc)` prints /etc).
+function freshTempRest(value: string): string | null {
+  const open = ['$(', '`'].find(prefix => value.startsWith(`${prefix}mktemp`));
+  if (open === undefined) return null;
+  const close = value.indexOf(open === '$(' ? ')' : '`', open.length);
+  if (close === -1) return null;
+  const args = value.slice(open.length + 'mktemp'.length, close);
+  return /^(?:\s[\w\s./%=+,:@-]*)?$/.test(args) ? value.slice(close + 1) : null;
+}
 
 // What follows a fresh temporary path stays inside it: nothing, or literal
 // components that never climb out with `..`.
@@ -2073,8 +2083,8 @@ function staysInFreshTemp(rest: string): boolean {
 }
 
 function isNarrowValue(value: string, cwd?: string, depth = 0): boolean {
-  const temp = MKTEMP_RE.exec(value);
-  if (temp) return staysInFreshTemp(temp[1]);
+  const tempRest = freshTempRest(value);
+  if (tempRest !== null) return staysInFreshTemp(tempRest);
   if (!/[$`]/.test(value)) return isNarrowTarget(value, cwd);
   const variable = VARIABLE_TARGET_RE.exec(value);
   const prefixes = variable ? committedBound.get(variable[1] ?? variable[2]) ?? [] : [];
@@ -2089,13 +2099,45 @@ function isNarrowValue(value: string, cwd?: string, depth = 0): boolean {
 // At least two literal components at the end of a path whose start is only
 // known when the script runs, naming no protected path whether that start is
 // the root or the home directory (`$(cd ~ && pwd)/.ssh/id_rsa` is grave).
+// The components are counted only after the last expansion closes, so a
+// slash inside a substitution (`$(printf /tmp/x/.env)`) is not one of them.
 function hasNarrowLiteralTail(value: string): boolean {
-  const parts = value.split(/[\\/]/);
-  let literal = 0;
-  while (literal < parts.length - 1 && /^[^$`*?[]+$/.test(parts[parts.length - 1 - literal]) && !['.', '..'].includes(parts[parts.length - 1 - literal])) literal += 1;
-  if (literal < 2) return false;
-  const tail = parts.slice(parts.length - literal).join('/');
+  const rest = afterLastExpansion(value).replaceAll('"', '');
+  if (!/^[\\/]/.test(rest)) return false;
+  const parts = rest.split(/[\\/]/).filter(Boolean);
+  if (parts.length < 2 || parts.some(part => /[*?[]/.test(part) || part === '.' || part === '..')) return false;
+  const tail = parts.join('/');
   return !isProtectedPath(`/${tail}`) && !isProtectedPath(path.join(os.homedir(), tail));
+}
+
+// What a value holds after its last `$NAME`, `${...}`, `$(...)` or
+// backquoted command.
+function afterLastExpansion(value: string): string {
+  let start = 0;
+  let i = 0;
+  while (i < value.length) {
+    const end = expansionEnd(value, i);
+    if (end === null) {
+      i += value[i] === '\\' ? 2 : 1;
+    } else {
+      start = end;
+      i = end;
+    }
+  }
+  return value.slice(start);
+}
+
+// Index past the expansion opening at `i`; null when none opens there.
+function expansionEnd(value: string, i: number): number | null {
+  if (value[i] === '`') {
+    const close = value.indexOf('`', i + 1);
+    return close === -1 ? value.length : close + 1;
+  }
+  if (value[i] !== '$') return null;
+  if (value[i + 1] === '(') return Math.min(closingParenthesis(value, i + 2) + 1, value.length);
+  if (value[i + 1] === '{') return skipText(value, i);
+  const name = /^(?:[A-Za-z_]\w*|[\d@*#?$!-])/.exec(value.slice(i + 1));
+  return name ? i + 1 + name[0].length : null;
 }
 
 // A glob component with no literal part of its own (`*`, `.*`, `[a-z]*`)

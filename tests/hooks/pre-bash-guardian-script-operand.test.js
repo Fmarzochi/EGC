@@ -395,6 +395,7 @@ function runTests() {
           'src-probe.sh': '[ -f ./probe-rc.sh ] && . ./probe-rc.sh\necho done\n',
           'root-var.sh': `ROOT=/\n${wipe} "$ROOT"\n`,
           'up-var.sh': `DIR=build\n${wipe} "$DIR/../../etc"\n`,
+          'glob-var.sh': `TMP=$(mktemp -d)\n${wipe} "$TMP/*"\n`,
           'sub/nested.sh': `${wipe} build\n`,
         };
         fs.mkdirSync(path.join(repo, 'sub'), { recursive: true });
@@ -422,6 +423,7 @@ function runTests() {
         assert.strictEqual(judged('bash src-probe.sh'), 0, 'a committed script that sources an optional file that is not there');
         assert.strictEqual(judged('bash root-var.sh'), 2, 'a delete of a variable the committed script sets to the root');
         assert.strictEqual(judged('bash up-var.sh'), 2, 'a delete that climbs out of a variable the committed script sets narrowly');
+        assert.strictEqual(judged('bash glob-var.sh'), 2, 'a delete of a glob below a variable the committed script sets narrowly');
         assert.strictEqual(judged(`echo '${wipe} ~' > probe-rc.sh; bash src-probe.sh`), 2, 'the same optional file, written by the command first');
         for (const name of ['grave.sh', 'hidden.sh', 'inline-grave.sh', 'find-grave.sh']) assert.strictEqual(judged(`bash ${name}`), 2, `grave in a committed script: ${name}`);
         // What a committed script runs but the hook cannot look at fails closed:

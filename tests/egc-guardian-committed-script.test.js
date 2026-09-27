@@ -77,6 +77,10 @@ run('a delete or move is flagged only when its target is known to be narrow', ()
     ['rm -f "$f"', { f: ['$(mktemp -d)/work/file'] }],
     ['rm -f "$f"', { f: ['$APP_HOME/bin/startup.sh'] }],
     ['rm -f "$jar"', { jar: ['$BASE/.mvn/wrapper/maven-wrapper.jar'], BASE: ['$(cd "$(dirname "$0")" && pwd)'] }],
+    ['rm -f "$tmp"', { tmp: ['$(mktemp)'] }],
+    [`${wipe} "$tmp"`, { tmp: ['$(mktemp -d -t egc.XXXXXX)'] }],
+    [`${wipe} "$tmp"`, { tmp: ['`mktemp -d`'] }],
+    ['rm -f "$f"', { f: ['$(dirname "$0")/build/out.log'] }],
   ];
   for (const [command, bound] of flagged) {
     const verdict = validateCommittedScriptCommand(command, cwd, bound);
@@ -111,6 +115,20 @@ run('a delete or move whose target is broad, protected, top-level or chosen outs
     // A fresh temporary directory is narrow, not a path that climbs out of it.
     { tmp: ['$(mktemp -d)/../../../../etc/passwd'] },
     { tmp: ['$(mktemp -d)/$NAME'] },
+    // A substitution that runs anything besides mktemp is not a fresh
+    // temporary directory, and a slash inside a substitution is not part of
+    // the path below it.
+    { tmp: ['$(mktemp -d >/dev/null; printf /etc)'] },
+    { tmp: ['`mktemp -d; echo /etc`'] },
+    { tmp: ['$(mktemp -d && echo /)'] },
+    { tmp: ['$(printf /tmp/foo/.env)'] },
+    { tmp: ['$(echo /usr/lib)'] },
+    // A backquoted command that never closes holds the rest of the value.
+    { tmp: ['`/opt/app/data'] },
+    // Below a start only known when the script runs, every component must
+    // be literal: no climb and no glob.
+    { tmp: ['$BASE/../a/b'] },
+    { tmp: ['$BASE/*/a/b'] },
     // A chain deeper than this check follows is not read to its end.
     { tmp: ['$V1/x'], V1: ['$V2'], V2: ['$V3'], V3: ['$V4'], V4: ['$V5'], V5: ['build'] },
   ]) {
