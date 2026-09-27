@@ -81,6 +81,15 @@ run('a delete or move is flagged only when its target is known to be narrow', ()
     [`${wipe} "$tmp"`, { tmp: ['$(mktemp -d -t egc.XXXXXX)'] }],
     [`${wipe} "$tmp"`, { tmp: ['`mktemp -d`'] }],
     ['rm -f "$f"', { f: ['$(dirname "$0")/build/out.log'] }],
+    // A quoted template, and an expansion in a quoted template or in an
+    // option's value, still give mktemp nothing but a template.
+    [`${wipe} "$tmp"`, { tmp: ['$(mktemp -d -t "tmp.XXXXXX")'] }],
+    [`${wipe} "$tmp"`, { tmp: ["$(mktemp -d -t 'tmp.XXXXXX')"] }],
+    [`${wipe} "$tmp"`, { tmp: ['$(mktemp -d "${TMPDIR:-/tmp}/egc.XXXXXX")'] }],
+    [`${wipe} "$tmp"`, { tmp: ['$(mktemp -d -p "$TMPDIR")'] }],
+    // A directory below it stays narrow even where mktemp fails, as long as
+    // it starts in no system directory and names no protected path.
+    [`${wipe} "$tmp/build"`, { tmp: ['$(mktemp -d)'] }],
   ];
   for (const [command, bound] of flagged) {
     const verdict = validateCommittedScriptCommand(command, cwd, bound);
@@ -125,6 +134,21 @@ run('a delete or move whose target is broad, protected, top-level or chosen outs
     { tmp: ['$(echo /usr/lib)'] },
     // A backquoted command that never closes holds the rest of the value.
     { tmp: ['`/opt/app/data'] },
+    // mktemp that fails prints nothing, leaving what follows it read from
+    // the root; --help and --version print text, not a path; an unquoted
+    // expansion can turn into either.
+    { tmp: ['$(mktemp -d)/etc'] },
+    { tmp: ['$(mktemp -d)/usr/lib'] },
+    { tmp: ['$(mktemp -d)/.ssh/id_rsa'] },
+    { tmp: ['$(mktempfoo)'] },
+    { tmp: ['$(mktemp --help)'] },
+    { tmp: ['$(mktemp --he)'] },
+    { tmp: ['$(mktemp --version)'] },
+    { tmp: ['$(mktemp $OPTS)'] },
+    { tmp: ['$(mktemp -d "$DIR")'] },
+    // The tail is read as the shell hands it over, quotes and escapes resolved.
+    { tmp: ["$BASE/'etc'/passwd"] },
+    { tmp: ['$BASE/".ssh"/id_rsa'] },
     // Below a start only known when the script runs, every component must
     // be literal: no climb and no glob.
     { tmp: ['$BASE/../a/b'] },

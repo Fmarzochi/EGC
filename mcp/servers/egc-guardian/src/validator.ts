@@ -2072,14 +2072,46 @@ function freshTempRest(value: string): string | null {
   const close = value.indexOf(open === '$(' ? ')' : '`', open.length);
   if (close === -1) return null;
   const args = value.slice(open.length + 'mktemp'.length, close);
-  return /^(?:\s[\w\s./%=+,:@-]*)?$/.test(args) ? value.slice(close + 1) : null;
+  if (args !== '' && !/^\s/.test(args)) return null;
+  return mktempPrintsAPath(tokenizeWords(args)) ? value.slice(close + 1) : null;
 }
 
-// What follows a fresh temporary path stays inside it: nothing, or literal
-// components that never climb out with `..`.
+const MKTEMP_VALUE_OPTIONS = new Set(['-p', '--tmpdir', '--suffix']);
+
+// Whether mktemp given these words prints nothing but a fresh path: words
+// of plain characters or quoted, never another command, never --help or
+// --version (whose text, split into words, names real paths). A parameter
+// expansion may only sit in a double-quoted template (it holds XXX) or in
+// the value of an option, where its value can never turn into an option.
+function mktempPrintsAPath(words: string[]): boolean {
+  return words.every((word, i) => {
+    if (/[`;&|<>()]/.test(word) || isHelpOrVersion(shellWord(word))) return false;
+    if (!word.includes('$')) return /^(?:[\w./%=+,:@-]|"[^"]*"|'[^']*')+$/.test(word);
+    return /^"[^"`]*"$/.test(word) && (word.includes('XXX') || MKTEMP_VALUE_OPTIONS.has(words[i - 1] ?? ''));
+  });
+}
+
+function isHelpOrVersion(word: string): boolean {
+  const name = word.split('=', 1)[0];
+  return name.length >= 3 && ['--help', '--version'].some(option => option.startsWith(name));
+}
+
+// The directories at the root of a system whose contents a delete must never
+// reach, compared without case.
+const ROOT_SYSTEM_DIRS = new Set([
+  'bin', 'boot', 'dev', 'etc', 'lib', 'lib32', 'lib64', 'libx32', 'opt', 'proc', 'root', 'run', 'sbin', 'srv', 'sys', 'usr', 'var', 'home',
+  'snap', 'mnt', 'media', 'nix', 'private', 'system', 'library', 'applications', 'users', 'volumes', 'windows', 'program files', 'programdata',
+]);
+
+// What follows a fresh temporary path stays inside it, and names nothing
+// grave where mktemp fails and prints nothing, which leaves it read from the
+// root (`$(mktemp -d)/usr/lib` is /usr/lib then): nothing, or literal
+// components that neither climb out nor start in a system directory nor
+// name a protected path.
 function staysInFreshTemp(rest: string): boolean {
   if (rest === '') return true;
-  return /^[\\/]/.test(rest) && !/[$`*?[]/.test(rest) && !rest.split(/[\\/]/).includes('..');
+  const parts = literalParts(shellWord(rest));
+  return parts !== null && parts.length > 0 && !ROOT_SYSTEM_DIRS.has(parts[0].toLowerCase()) && namesNoProtectedPath(parts);
 }
 
 function isNarrowValue(value: string, cwd?: string, depth = 0): boolean {
@@ -2102,10 +2134,30 @@ function isNarrowValue(value: string, cwd?: string, depth = 0): boolean {
 // The components are counted only after the last expansion closes, so a
 // slash inside a substitution (`$(printf /tmp/x/.env)`) is not one of them.
 function hasNarrowLiteralTail(value: string): boolean {
-  const rest = afterLastExpansion(value).replaceAll('"', '');
-  if (!/^[\\/]/.test(rest)) return false;
+  return isNarrowTail(shellWord(afterLastExpansion(value)));
+}
+
+// A path below a start that is unknown or may be empty, as the shell hands
+// it over (quotes and escapes resolved): at least two components, every one
+// literal, with no glob, no expansion and no `..`, naming no protected path
+// from the root or from the home directory.
+function isNarrowTail(rest: string): boolean {
+  const parts = literalParts(rest);
+  return parts !== null && parts.length >= 2 && namesNoProtectedPath(parts);
+}
+
+// The components of a path that continues below something else (it starts
+// with a separator), when every one is literal: no glob, no expansion, no
+// `.` or `..`. null otherwise.
+function literalParts(rest: string): string[] | null {
+  if (!/^[\\/]/.test(rest)) return null;
   const parts = rest.split(/[\\/]/).filter(Boolean);
-  if (parts.length < 2 || parts.some(part => /[*?[]/.test(part) || part === '.' || part === '..')) return false;
+  return parts.some(part => /[$`*?[]/.test(part) || part === '.' || part === '..') ? null : parts;
+}
+
+// Whether these components name no protected path read from the root or
+// from the home directory.
+function namesNoProtectedPath(parts: string[]): boolean {
   const tail = parts.join('/');
   return !isProtectedPath(`/${tail}`) && !isProtectedPath(path.join(os.homedir(), tail));
 }
