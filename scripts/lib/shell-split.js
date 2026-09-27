@@ -281,8 +281,8 @@ function skipLineContinuations(command, i) {
 // already-open heredoc body, and only when it begins a new word — `foo#bar`
 // is one identifier, not a comment, matching bash's own rule that `#` is
 // only special in a word-start position.
-function isCommentStart(command, i, quote, heredocState) {
-  if (heredocState === 'in-body' || quote || command[i] !== '#') return false;
+function isCommentStart(command, i, quote, heredocState, paramDepth = 0) {
+  if (heredocState === 'in-body' || quote || paramDepth > 0 || command[i] !== '#') return false;
   if (i === 0) return true;
   const precedingIndex = skipLineContinuations(command, i - 1);
   return precedingIndex < 0 || COMMENT_WORD_START_RE.test(command[precedingIndex]);
@@ -322,6 +322,11 @@ function isCommentStart(command, i, quote, heredocState) {
  */
 function splitShellSegments(command, options = {}) { // NOSONAR: shell segment parser state machine kept inline for auditability
   const splitOnPipe = Boolean(options.splitOnPipe);
+  // When set, the inert text of a `# comment` is left out of the segment
+  // instead of folded into it, so a caller that judges the segment (the
+  // Guardian) never reads a path or an operator that only sits in a comment.
+  // Off by default, so callers that want the verbatim line are unaffected.
+  const stripComments = Boolean(options.stripComments);
   const segments = [];
   let current = '';
   let quote = null;
@@ -340,6 +345,11 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
   // newline -- reset unconditionally on every newline below, same as
   // extractSubstitutionBodies's inComment tracking.
   let inComment = false;
+  // Open ${...} parameter expansions. Inside one, a `#` is a literal part of
+  // the expansion (`${x:-a # b}`), not a comment, so the segment after it
+  // (e.g. `; rm -rf /`) is still live and must be split and judged. Tracked
+  // only outside quotes; a quote already keeps `#` from starting a comment.
+  let paramDepth = 0;
 
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
@@ -381,14 +391,27 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
       continue;
     }
 
-    if (!inComment && isCommentStart(command, i, quote, hd.state)) {
-      inComment = true;
+    if (!inComment && ch === '$' && command[i + 1] === '{') {
+      paramDepth += 1;
+      current += '${';
+      i += 1;
+      continue;
+    }
+
+    if (!inComment && ch === '}' && paramDepth > 0) {
+      paramDepth -= 1;
       current += ch;
       continue;
     }
 
+    if (!inComment && isCommentStart(command, i, quote, hd.state, paramDepth)) {
+      inComment = true;
+      if (!stripComments) current += ch;
+      continue;
+    }
+
     if (inComment) {
-      current += ch;
+      if (!stripComments) current += ch;
       continue;
     }
 
@@ -577,6 +600,8 @@ function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state ma
   // splitShellSegments above.
   const hd = createHeredocState();
   let inComment = false;
+  // See splitShellSegments: inside ${...} a `#` is literal, not a comment.
+  let paramDepth = 0;
 
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
@@ -622,7 +647,18 @@ function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state ma
       continue;
     }
 
-    if (!inComment && isCommentStart(command, i, quote, hd.state)) {
+    if (!inComment && ch === '$' && command[i + 1] === '{') {
+      paramDepth += 1;
+      i += 1;
+      continue;
+    }
+
+    if (!inComment && ch === '}' && paramDepth > 0) {
+      paramDepth -= 1;
+      continue;
+    }
+
+    if (!inComment && isCommentStart(command, i, quote, hd.state, paramDepth)) {
       inComment = true;
       continue;
     }

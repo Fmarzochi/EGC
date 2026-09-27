@@ -1254,7 +1254,7 @@ function extractSegments(rawCommand, depth = 0) {
   if (bodies.length > 0 && depth >= MAX_SUBSTITUTION_DEPTH) return null;
 
   const segments = [];
-  for (const raw of splitShellSegments(command, { splitOnPipe: true })) {
+  for (const raw of splitShellSegments(command, { splitOnPipe: true, stripComments: true })) {
     const stage = segmentsOfStage(raw, depth);
     if (stage === null) return null;
     segments.push(...stage);

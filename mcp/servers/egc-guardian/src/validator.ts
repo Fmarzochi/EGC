@@ -2122,6 +2122,10 @@ function withHomeSpelled(target: string): string {
 }
 
 function validateCommandVerdict(command: string, cwd?: string): ValidationResult {
+  // A trailing `# comment` is inert text, not part of any command, so it is
+  // removed before anything reads the line; a `#` in quotes or in a ${...}
+  // expansion stays (stripTrailingComment walks those spans).
+  command = stripTrailingComment(command);
   // 1. Tokenize quote-aware (so a quoted wrapper-flag value with embedded
   // whitespace can't misalign the unwrap below), then peel off leading
   // environment-variable assignments and known wrapper commands (sudo,
@@ -2577,6 +2581,54 @@ function skipText(command: string, i: number): number {
     return close === -1 ? command.length : close + 1;
   }
   return i;
+}
+
+// Characters before an unquoted `#` that let it open a word, so the `#`
+// starts a comment. Deliberately excludes `)`, `<` and `>`: `$(date)#c` is
+// one word, and `>#x` redirects to a file named `#x` (matches shell-split.js
+// and bash itself), so those do not begin a comment.
+const COMMENT_WORD_START = new Set([' ', '\t', '\n', '\r', ';', '&', '|', '(']);
+
+// The character before `i` that the shell reads as preceding it, walking back
+// over backslash-newline line continuations: bash removes such a pair before
+// tokenizing, so `foo\<newline>#bar` is the one word `foo#bar` and the `#` is
+// mid-word, not a comment. A run of backslashes continues the line only when
+// it is odd (each pair is an escaped literal backslash).
+function precedingCharIndex(command: string, i: number): number {
+  let j = i;
+  while (j >= 0 && command[j] === '\n') {
+    let backslashes = 0;
+    let k = j - 1;
+    while (k >= 0 && command[k] === '\\') { backslashes += 1; k -= 1; }
+    if (backslashes % 2 === 0) break;
+    j = k;
+  }
+  return j;
+}
+
+// The command line with the inert text of a trailing `# comment` removed, so
+// a path or an operator that only sits in a comment is never judged. A `#`
+// inside quotes, a `${...}` expansion, or mid-word is left in place (skipText
+// walks those spans, and a line continuation before it keeps it mid-word);
+// the comment runs to the end of its line.
+function stripTrailingComment(command: string): string {
+  let i = 0;
+  while (i < command.length) {
+    const skipped = skipText(command, i);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
+    if (command[i] === '#') {
+      const prev = i === 0 ? -1 : precedingCharIndex(command, i - 1);
+      if (prev < 0 || COMMENT_WORD_START.has(command[prev])) {
+        const newline = command.indexOf('\n', i);
+        return newline === -1 ? command.slice(0, i) : command.slice(0, i) + command.slice(newline);
+      }
+    }
+    i += 1;
+  }
+  return command;
 }
 
 // The word at `start`, leading blanks skipped, up to the next unquoted blank

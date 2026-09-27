@@ -502,6 +502,26 @@ function runTests() {
       }
     }));
 
+    record(test('a trailing comment is inert: its path is not judged, but a real command and a # in ${...} or quotes still are (EGC-669)', () => {
+      const passing = [
+        'ls # see ~/.ssh/id_rsa',
+        'ls ~/x # and ~/.ssh/id_rsa',
+      ];
+      for (const command of passing) {
+        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+        assert.strictEqual(result.exitCode, 0, `${command}: ${JSON.stringify(result)}`);
+      }
+      const blocked = [
+        'ls ~/.ssh/id_rsa # a real path outside the comment',
+        `true \${x:-a #}; ${wipe} /tmp/egc-victim`,
+        `${wipe} / # cleanup`,
+      ];
+      for (const command of blocked) {
+        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+        assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+      }
+    }));
+
     record(test('-n reads without running, a cd moves the base, and a variable the command fixes to a file is followed', () => {
       fs.mkdirSync(path.join(dir, 'sub'), { recursive: true });
       fs.writeFileSync(path.join(dir, 'sub', 'inner.sh'), 'echo inner\n');

@@ -264,6 +264,56 @@ test('# inside a heredoc body is literal body text, not a comment (no change fro
   assert.deepStrictEqual(segs, ['cat <<EOF\n# not a comment && rm -rf /\nEOF', 'echo done']);
 });
 
+// EGC-669: a `#` inside a ${...} parameter expansion is a literal part of the
+// expansion (confirmed against a real bash shell), not a comment, so a
+// separator after the expansion is still live and must split. Reusing the
+// comment rule there once hid a `; rm -rf /` behind what looked like a
+// comment inside `${x:-a #}`.
+test('# inside ${...} is literal, so a separator after the expansion still splits', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('true ${x:-a #}; rm -rf /', { splitOnPipe: true }),
+    ['true ${x:-a #}', 'rm -rf /'],
+  );
+});
+test('# inside ${...} does not open a comment that swallows the rest of the word', () => {
+  assert.deepStrictEqual(splitShellSegments('echo ${x:-a # b}'), ['echo ${x:-a # b}']);
+});
+test('a real comment after a closed ${...} still starts (the brace has closed)', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo ${x:-a} # rm -rf / && y', { splitOnPipe: true }),
+    ['echo ${x:-a} # rm -rf / && y'],
+  );
+});
+
+// EGC-669: with stripComments the inert text of a real comment is left out of
+// the segment, so the Guardian never judges a path or operator that only
+// sits in a comment; without the option the verbatim line is kept.
+test('stripComments removes the inert comment text from the segment', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('ls # see ~/.ssh/id_rsa', { stripComments: true }),
+    ['ls'],
+  );
+});
+test('stripComments keeps a # that is inside quotes or a ${...} expansion', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo "# not a comment"', { stripComments: true }),
+    ['echo "# not a comment"'],
+  );
+  assert.deepStrictEqual(
+    splitShellSegments('true ${x:-a #}; rm x', { splitOnPipe: true, stripComments: true }),
+    ['true ${x:-a #}', 'rm x'],
+  );
+});
+test('stripComments does not change a line that has no comment', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo hi && echo bye', { stripComments: true }),
+    ['echo hi', 'echo bye'],
+  );
+});
+test('extractSubstitutionBodies still finds a $(...) after a # inside ${...} (the # there is not a comment)', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('echo ${x:-a #} $(id)'), ['id']);
+});
+
 // Cubic review (EGC-539, PR #1147): the first comment-detection fix above
 // introduced its own two false-comment regressions -- a live && hidden
 // behind a # that only LOOKS like a comment start. Both are real bash

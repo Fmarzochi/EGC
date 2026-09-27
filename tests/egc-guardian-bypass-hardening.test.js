@@ -635,5 +635,24 @@ run('local wrappers: su and runuser with only a user are not hard-blocked', () =
   }
 });
 
+// EGC-669: a trailing `# comment` is inert; the validator must not read a
+// path or a command that only sits in a comment, and must not treat a `#`
+// inside quotes or a ${...} expansion as one.
+run('a path that only sits in a comment is not judged', () => assertAllowed('ls # see ~/.ssh/id_rsa'));
+run('a real protected path is still denied', () => {
+  const v = validateCommand('ls ~/.ssh/id_rsa');
+  assert.strictEqual(v.allowed, false, 'a real ~/.ssh path must stay denied');
+});
+run('a # inside double quotes is not a comment', () => {
+  const v = validateCommand('grep -r "# TODO" ~/.ssh/id_rsa');
+  assert.strictEqual(v.allowed, false, 'the real path outside the quotes is still read');
+});
+run('a comment does not excuse a destructive command before it', () => assertHardBlocked('rm -rf / # cleanup'));
+run('a mid-word # is not a comment, so a real path after it is still read', () => {
+  const v = validateCommand('cat a#b ~/.ssh/id_rsa');
+  assert.strictEqual(v.allowed, false, 'the # is glued mid-word, so it opens no comment and the real path is read');
+  assert.ok(/protected path/.test(v.reason), `the real path must be what denies it, got: ${v.reason}`);
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
