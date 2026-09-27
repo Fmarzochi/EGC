@@ -26,10 +26,13 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
+const { spawnSync } = require('node:child_process');
+const crypto = require('node:crypto');
 const path = require('node:path');
 const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
-const { WRAPPER_SPECS, readWrapperOption } = require('../lib/wrapper-options');
+const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption } = require('../lib/wrapper-options');
 
 const MAX_STDIN = 1024 * 1024;
 const DEFAULT_VALIDATE_TIMEOUT_MS = 4000;
@@ -69,6 +72,20 @@ const MAX_SUBSTITUTION_DEPTH = 5;
 // closed.
 const SHELL_INTERPRETERS = new Set(['bash', 'sh', 'zsh', 'ksh', 'dash', 'ash', 'source', '.']);
 const MAX_SCRIPT_BYTES = 512 * 1024;
+// Shell options whose value is the next word, not the script it runs.
+const SHELL_VALUE_OPTIONS = new Set(['-o', '+o', '-O', '+O', '--rcfile', '--init-file']);
+const HOME_PARAMETER_RE = /^\$(?:HOME|\{HOME\})(?=[\\/]|$)/;
+const SHELL_VARIABLES = new Set(['$BASH', '${BASH}', '$SHELL', '${SHELL}', '$0', '${0}']);
+// The directory of the script being read, as scripts spell it to reach a
+// file beside them: `$(dirname "$0")`, `$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)`,
+// `${BASH_SOURCE%/*}` and their variants, quotes already removed.
+const SCRIPT_PATH_WORDS = ['$0', '${0}', '$BASH_SOURCE', '${BASH_SOURCE}', '${BASH_SOURCE[0]}'];
+const SCRIPT_DIRNAMES = SCRIPT_PATH_WORDS.flatMap(word => [`$(dirname ${word})`, `$(dirname -- ${word})`, `\`dirname ${word}\``]);
+const SCRIPT_DIR_IDIOMS = [
+  ...SCRIPT_DIRNAMES,
+  ...SCRIPT_DIRNAMES.flatMap(dir => ['', ' >/dev/null', ' >/dev/null 2>&1', ' 2>/dev/null'].flatMap(quiet => ['pwd', 'pwd -P'].flatMap(pwd => ['cd', 'cd --', 'cd -P'].map(cd => `$(${cd} ${dir}${quiet} && ${pwd})`)))),
+  '${0%/*}', '${BASH_SOURCE%/*}', '${BASH_SOURCE[0]%/*}',
+].sort((a, b) => b.length - a.length);
 const MAX_SCRIPT_DEPTH = 8;
 
 const BACKSLASH_ESCAPES = process.platform !== 'win32';
@@ -137,13 +154,16 @@ function readQuoted(text, start) {
   let value = '';
   let i = start + (ansi ? 2 : 1);
   let unsure = false;
+  let expands = false;
   while (i < text.length && text[i] !== quote) {
     const escaped = text[i] === '\\' && decodes ? decodedEscape(text, i, quote === "'") : null;
+    // Double quotes keep $ and ` live: the shell still expands them.
+    expands = expands || (!escaped && quote === '"' && (text[i] === '$' || text[i] === '`'));
     value += escaped ? escaped.value : text[i];
     unsure = unsure || Boolean(escaped?.unsure);
     i = escaped ? escaped.end : i + 1;
   }
-  return { value, unsure, end: Math.min(i + 1, text.length) };
+  return { value, unsure, expands, end: Math.min(i + 1, text.length) };
 }
 
 
@@ -153,37 +173,68 @@ function readQuoted(text, start) {
 // Windows it is a path separator instead). `code` masks every literal
 // character, so an unquoted wildcard (which the shell would expand) is told
 // apart from a quoted one.
+// `(` and `)` outside quotes are shell operators, not word characters: a
+// subshell `(bash x.sh)` opens and closes around the words it runs. They
+// belong to a word only as a substitution or pattern opened after one of
+// these characters ($(...), <(...), @(...)), as the `()` of a function
+// name, or nested inside such a run, where the matching `)` closes them.
+const PAREN_RUN_OPENERS = '$<>@!+?*';
+
+// How a `(` or `)` at `i` is read into `word`: null when it ends the word
+// (an operator), otherwise the text it adds and where reading goes on.
+function parenStep(text, i, word) {
+  if (text[i] === ')') {
+    if (word.depth === 0) return null;
+    word.depth -= 1;
+    return { text: ')', end: i + 1 };
+  }
+  const before = text[i - 1] ?? '';
+  if (word.depth === 0 && !PAREN_RUN_OPENERS.includes(before)) {
+    if (text[i + 1] !== ')' || word.value === '') return null;
+    return { text: '()', end: i + 2 };
+  }
+  // <(...) and >(...) stand for a path the shell makes when it runs.
+  word.expands = word.expands || (word.depth === 0 && '<>'.includes(before));
+  word.depth += 1;
+  return { text: '(', end: i + 1 };
+}
+
 function readShellWord(text, start) {
-  let value = '';
-  let code = '';
-  let unsure = false;
+  const word = { value: '', code: '', unsure: false, expands: false, depth: 0 };
   let i = start;
 
   while (i < text.length) {
     const ch = text[i];
-    if (ch === '\\' && text[i + 1] === '\n') {
+    if (ch === '(' || ch === ')') {
+      const step = parenStep(text, i, word);
+      if (step === null) break;
+      word.value += step.text;
+      word.code += step.text;
+      i = step.end;
+    } else if (ch === '\\' && text[i + 1] === '\n') {
       i += 2;
     } else if (isQuoteOpener(text, i)) {
       const quoted = readQuoted(text, i);
-      value += quoted.value;
-      code += LITERAL.repeat(quoted.value.length);
-      unsure = unsure || quoted.unsure;
+      word.value += quoted.value;
+      word.code += LITERAL.repeat(quoted.value.length);
+      word.unsure = word.unsure || quoted.unsure;
+      word.expands = word.expands || quoted.expands;
       i = quoted.end;
-
     } else if (ch === '\\' && BACKSLASH_ESCAPES && i + 1 < text.length) {
-      value += text[i + 1];
-      code += LITERAL;
+      word.value += text[i + 1];
+      word.code += LITERAL;
       i += 2;
-    } else if (/\s/.test(ch)) {
+    } else if (/\s/.test(ch) && word.depth === 0) {
       break;
     } else {
-      value += ch;
-      code += ch;
+      word.expands = word.expands || ch === '$' || ch === '`';
+      word.value += ch;
+      word.code += ch;
       i += 1;
     }
   }
-  return { value, globbed: /[*?[]/.test(code), unsure, end: i };
-
+  // `tilde`: an unquoted ~ that the shell turns into a home directory.
+  return { value: word.value, globbed: /[*?[]/.test(word.code), unsure: word.unsure, expands: word.expands, tilde: word.code.startsWith('~'), end: i };
 }
 
 function shellWords(segment) {
@@ -191,6 +242,11 @@ function shellWords(segment) {
   let i = 0;
   while (i < segment.length) {
     if (/\s/.test(segment[i])) {
+      i += 1;
+      continue;
+    }
+    if (segment[i] === '(' || segment[i] === ')') {
+      words.push({ value: segment[i], globbed: false, unsure: false, end: i + 1 });
       i += 1;
       continue;
     }
@@ -334,9 +390,53 @@ function skipWrapperOptions(words, start, name, state) {
   return index;
 }
 
-// The index of the first word that is neither an environment assignment
-// nor a wrapper with its options; a chdir or chroot a wrapper carries is
-// noted on `state` for a caller that resolves operands against it.
+// The egc subcommands that run the command after their options, as the
+// validator unwraps them; `egc run --shell` hands a whole script to a shell
+// and is read by egcShellScriptOf instead.
+const EGC_EXECUTOR_SUBCOMMANDS = new Set(['run', 'verify']);
+
+function skipEgcExecutor(words, index) {
+  let i = index + 1;
+  while (i < words.length && words[i].value.startsWith('-')) i += 1;
+  if (!EGC_EXECUTOR_SUBCOMMANDS.has(words[i]?.value)) return index;
+  i += 1;
+  while (i < words.length && words[i].value.startsWith('-')) {
+    if (words[i].value === '--shell') return index;
+    i += 1;
+  }
+  return i;
+}
+
+// `case word in pattern) command`: the command starts after the pattern.
+function skipCaseClause(words, index) {
+  const at = words.findIndex((word, i) => i > index && word.value === 'in');
+  let i = at === -1 ? index + 1 : at + 1;
+  if (words[i]?.value === '(') i += 1;
+  return words[i + 1]?.value === ')' ? i + 2 : words.length;
+}
+
+// The index past a shell keyword or grouping opener, a case arm, a
+// coprocess, function header or egc executor in front of the command
+// actually run, as the validator peels them (validator.ts
+// tryUnwrapShellKeyword); the same index when there is none.
+function skipCommandCarrier(words, index) {
+  const head = words[index].value;
+  if (SHELL_KEYWORDS.has(head)) return index + 1;
+  if (head === 'case') return skipCaseClause(words, index);
+  if (head === 'coproc') return ['{', '('].includes(words[index + 2]?.value) ? index + 2 : index + 1;
+  if (head === 'function') return index + 2;
+  if (head.endsWith('()')) return index + 1;
+  // A later arm of a case (`b) command`) starts its own segment.
+  if (words[index + 1]?.value === ')') return index + 2;
+  if (words[index + 1]?.value === '(' && words[index + 2]?.value === ')') return index + 3;
+  if (head.split(/[\\/]/).pop() === 'egc') return skipEgcExecutor(words, index);
+  return index;
+}
+
+// The index of the first word that is neither an environment assignment,
+// a wrapper with its options, nor a keyword or construct that carries the
+// command; a chdir or chroot a wrapper carries is noted on `state` for a
+// caller that resolves operands against it.
 function skipEnvAndWrappers(words, state) {
   const wrapperState = state === undefined ? { cwd: null, chroot: null, unsure: false, unresolved: null, cwdUnknown: null } : state;
   let index = 0;
@@ -347,8 +447,13 @@ function skipEnvAndWrappers(words, state) {
       continue;
     }
     const name = word.split(/[\\/]/).pop();
-    if (!isWrapper(name)) break;
-    index = skipWrapperOptions(words, index + 1, name, wrapperState);
+    if (isWrapper(name)) {
+      index = skipWrapperOptions(words, index + 1, name, wrapperState);
+      continue;
+    }
+    const next = skipCommandCarrier(words, index);
+    if (next === index) break;
+    index = next;
   }
   return index;
 }
@@ -359,7 +464,7 @@ function skipEnvAndWrappers(words, state) {
 // inspected as if it were a shell. After `--` every word is an operand.
 function interpreterOperands(words, cwdUnknown = null) {
   const state = { cwd: null, chroot: null, unsure: false, unresolved: null, cwdUnknown };
-  const found = (operands) => ({ operands, cwd: state.cwd, chroot: state.chroot, unsure: state.unsure, unresolved: state.unresolved, cwdUnknown: state.cwdUnknown });
+  const found = (operands, sources = false) => ({ operands, sources, cwd: state.cwd, chroot: state.chroot, unsure: state.unsure, unresolved: state.unresolved, cwdUnknown: state.cwdUnknown });
 
 
   const index = skipEnvAndWrappers(words, state);
@@ -371,16 +476,47 @@ function interpreterOperands(words, cwdUnknown = null) {
   if (!head.value.startsWith('$') && !SHELL_INTERPRETERS.has(name)) return found([]);
 
 
+  // A command reached through a variable is not known to be a shell, so its
+  // first word is not known to be a script, unless the variable is one that
+  // names the shell itself.
+  const shell = !head.value.startsWith('$') || SHELL_VARIABLES.has(head.value);
+  return found(interpreterScriptOperands(words.slice(index + 1), shell), name === 'source' || name === '.');
+}
+
+// A short option bundle (-nx) or --noexec asks the shell to read its script
+// without running it; then its commands never execute and need no inspection.
+function isNoexecFlag(value) {
+  if (value === '--noexec') return true;
+  return /^-[a-zA-Z]+$/.test(value) && value.includes('n');
+}
+
+// A word consumed as the value of the previous option (bash -o noexec): true
+// once it is taken, after noting a noexec that arrived that way.
+function consumedAsOptionValue(word, state) {
+  if (!state.awaiting) return false;
+  if ((state.awaiting === '-o' || state.awaiting === '-O') && word.value === 'noexec') state.noexec = true;
+  state.awaiting = null;
+  return true;
+}
+
+// The operands after the interpreter's options: the first is the script the
+// shell reads (unless -n or -o noexec keeps it from running), the rest its
+// arguments.
+function interpreterScriptOperands(words, shell) {
   const operands = [];
-  let literal = false;
-  for (const word of words.slice(index + 1)) {
-    if (!literal && word.value === '--') {
-      literal = true;
-    } else if (literal || !word.value.startsWith('-')) {
-      operands.push(word);
+  const state = { literal: false, awaiting: null, noexec: false };
+  for (const word of words) {
+    if (consumedAsOptionValue(word, state)) continue;
+    if (!state.literal && word.value === '--') {
+      state.literal = true;
+    } else if (state.literal || !/^[-+]/.test(word.value)) {
+      operands.push({ ...word, script: shell && !state.noexec && operands.length === 0, noRun: state.noexec });
+    } else {
+      if (isNoexecFlag(word.value)) state.noexec = true;
+      state.awaiting = SHELL_VALUE_OPTIONS.has(word.value) ? word.value : null;
     }
   }
-  return found(operands);
+  return operands;
 }
 
 
@@ -410,6 +546,21 @@ function operandPath(name, root, base) {
 // could not be inspected.
 const MISSING_OPERAND_CODES = new Set(['ENOENT', 'ENOTDIR', 'ENAMETOOLONG', 'ELOOP', 'EINVAL']);
 
+// The path an operand names once the shell has expanded it: ~ and $HOME
+// lead to the home directory; any other expansion (a variable, $(...),
+// backticks, ~user) is only known when the command runs, so null.
+function expandedOperandValue(operand, homeKnown) {
+  if (!homeKnown && (operand.tilde || HOME_PARAMETER_RE.test(operand.value))) return null;
+  if (operand.tilde) {
+    if (operand.value !== '~' && !/^~[\\/]/.test(operand.value)) return null;
+    return os.homedir() + operand.value.slice(1);
+  }
+  if (!operand.expands) return operand.value;
+  const home = HOME_PARAMETER_RE.exec(operand.value);
+  const rest = home ? operand.value.slice(home[0].length) : '';
+  return home && !/[$`]/.test(rest) ? os.homedir() + rest : null;
+}
+
 // The script file one operand names, the reason it cannot be inspected, or
 // null when it names no file.
 function inspectOperand(operand, root, base) {
@@ -433,23 +584,213 @@ function inspectOperand(operand, root, base) {
   return { file: candidate };
 }
 
+// Commands that can set HOME without an assignment word.
+const HOME_CHANGERS = new Set(['unset', 'read', 'printf', 'declare', 'typeset', 'local', 'readonly', 'export', 'mapfile', 'readarray']);
+
+// Whether a segment may set or clear HOME: an assignment to it, a builtin
+// that sets it by name, or a name reference that could alias it. The code
+// an eval runs is read as segments of its own, and a sourced script is
+// read for the same (see scriptSegmentsOf). After such a segment, ~ and
+// $HOME no longer name the home directory this hook knows.
+function changesHome(segment) {
+  const words = shellWords(segment).map(word => word.value);
+  if (words.some(word => /^HOME\+?=/.test(word))) return true;
+  if (['declare', 'typeset', 'local'].some(word => words.includes(word)) && words.some(word => /^-[A-Za-z]*n/.test(word))) return true;
+  return words.includes('HOME') && words.some(word => HOME_CHANGERS.has(word));
+}
+
+// Variables a script sets to its own directory, spelled as above.
+function scriptDirVariables(segments) {
+  const names = new Set();
+  for (const segment of segments) {
+    for (const word of shellWords(segment)) {
+      const assignment = /^([A-Za-z_]\w*)=(.*)$/s.exec(word.value);
+      if (assignment && SCRIPT_DIR_IDIOMS.includes(assignment[2].replaceAll(/\s+/g, ' '))) names.add(assignment[1]);
+    }
+  }
+  return names;
+}
+
+// A word that stands for one plain value the shell will not expand further.
+function isPlainValue(word) {
+  return word !== undefined && !word.expands && !word.globbed && !word.tilde && !/[$`]/.test(word.value);
+}
+
+const ASSIGNMENT_RE = /^([A-Za-z_]\w*)=(.*)$/s;
+const ASSIGNMENT_KEYWORDS = new Set(['export', 'declare', 'typeset', 'local', 'readonly']);
+
+// The name and value words a segment fixes: the loop variable and items of a
+// `for VAR in a.sh b.sh` header, or each assignment of a segment that is only
+// assignments (VAR=value, or export VAR=value). Anything else fixes nothing.
+function fixedValues(words) {
+  if (words[0]?.value === 'for' && /^[A-Za-z_]\w*$/.test(words[1]?.value ?? '') && words[2]?.value === 'in') {
+    return words.slice(3).map(item => [words[1].value, item]);
+  }
+  if (words.length === 0 || !words.every(word => ASSIGNMENT_RE.test(word.value) || ASSIGNMENT_KEYWORDS.has(word.value))) return [];
+  return words.flatMap(word => {
+    const assignment = ASSIGNMENT_RE.exec(word.value);
+    if (!assignment) return [];
+    const value = assignment[2];
+    return [[assignment[1], { value, expands: /[$`]/.test(value), globbed: /[*?[]/.test(value), tilde: value.startsWith('~') }]];
+  });
+}
+
+// Variables the command itself fixes to literal filenames, and so can be
+// followed to the scripts they name. A variable with any run-time source
+// (a glob, a substitution, `read`, or one the environment can set) is left
+// out, so `bash "$VAR"` for it still fails closed.
+function resolvableScriptVars(segments) {
+  const values = new Map();
+  const unsafe = new Set(Object.keys(process.env));
+  for (const segment of segments) {
+    for (const [name, word] of fixedValues(shellWords(segment))) {
+      if (!isPlainValue(word)) unsafe.add(name);
+      else values.set(name, [...(values.get(name) ?? []), word.value]);
+    }
+  }
+  for (const name of unsafe) values.delete(name);
+  return values;
+}
+
+// A script operand that is exactly one resolvable variable, spread to the
+// literal filenames that variable takes; otherwise the operand unchanged.
+function expandScriptVar(word, context) {
+  const reference = word.script && word.expands && /^\$\{?([A-Za-z_]\w*)\}?$/.exec(word.value);
+  const found = reference && context.scriptVars?.get(reference[1]);
+  if (!found) return [word];
+  return found.map(value => ({ ...word, value, expands: false, globbed: /[*?[]/.test(value), tilde: value.startsWith('~') }));
+}
+
+// The file an operand names when it starts with the script's own
+// directory, spelled as a scripts do; null when it does not.
+function scriptRelative(value, context) {
+  if (!context.scriptDir) return null;
+  const spelled = value.replaceAll(/\s+/g, ' ');
+  const prefixes = [...SCRIPT_DIR_IDIOMS, ...[...context.dirVars].flatMap(name => [`\${${name}}`, `$${name}`])];
+  const prefix = prefixes.find(candidate => spelled.startsWith(candidate) && /^(?:$|[\\/])/.test(spelled.slice(candidate.length)));
+  if (prefix === undefined) return null;
+  const rest = spelled.slice(prefix.length);
+  return /[$`]/.test(rest) ? null : context.scriptDir + rest;
+}
+
 // `cwdUnknown` carries a directory the script runs from but that cannot be
 // known (sudo -i's target home), down to the scripts it runs.
-function scriptOperandsOf(segment, cwd, cwdUnknown = null) {
+const COPY_WRITERS = new Set(['cp', 'mv', 'install', 'ln']);
+const REDIRECT_OUT_RE = /^\d*(?:>>?|>\||&>>?)/;
+
+// The path a written word names, or null when it is only known at run time.
+function writtenPath(value, base) {
+  if (value === '~' || value.startsWith('~/')) return path.join(os.homedir(), value.slice(1));
+  const home = HOME_PARAMETER_RE.exec(value);
+  if (home) return /[$`]/.test(value.slice(home[0].length)) ? null : path.join(os.homedir(), value.slice(home[0].length));
+  return /[$`*?[]/.test(value) ? null : path.resolve(base, value);
+}
+
+function valueAfter(args, names) {
+  for (const [i, arg] of args.entries()) {
+    if (names.includes(arg)) return args[i + 1];
+    const long = names.find(name => name.startsWith('--') && arg.startsWith(`${name}=`));
+    if (long) return arg.slice(long.length + 1);
+  }
+  return undefined;
+}
+
+// The files these segments write where the hook can see it (redirections,
+// tee, touch, cp and its kin, curl -o, wget -O, dd of=) and whether one of
+// them writes files it does not name, or names one only known at run time
+// (`bulk`, counted for the command's own segments).
+function writesOf(segments, base, own) {
+  const paths = new Set();
+  let bulk = false;
+  const add = value => {
+    if (!value || value.startsWith('&') || value === '/dev/null') return;
+    const resolved = writtenPath(value, base);
+    if (resolved === null) bulk = bulk || own;
+    else paths.add(resolved);
+  };
+  for (const segment of segments) {
+    const words = shellWords(segment);
+    redirectedFiles(words).forEach(add);
+    commandWrites(words, add);
+  }
+  return { paths, bulk };
+}
+
+// The files a segment's output redirections name.
+function redirectedFiles(words) {
   const files = [];
-  const found = interpreterOperands(shellWords(segment), cwdUnknown);
+  for (const [i, word] of words.entries()) {
+    const redirect = REDIRECT_OUT_RE.exec(word.value);
+    if (redirect) files.push(redirect[0].length === word.value.length ? words[i + 1]?.value : word.value.slice(redirect[0].length));
+  }
+  return files;
+}
+
+// Hands `add` each file the segment's command names as one it writes. The
+// files a command writes without naming (a checkout, an extraction) are not
+// treated as the script that runs next: their content comes from the repo
+// or an archive, which is code inspected on its own terms, not bytes this
+// command puts under the agent's control.
+function commandWrites(words, add) {
+  const index = skipEnvAndWrappers(words);
+  const name = words[index]?.value.split(/[\\/]/).pop();
+  const args = words.slice(index + 1).map(word => word.value);
+  const operands = args.filter(arg => !arg.startsWith('-'));
+  if (name === 'tee' || name === 'touch') operands.forEach(add);
+  else if (COPY_WRITERS.has(name) && operands.length >= 2) {
+    add(operands.at(-1));
+    for (const source of operands.slice(0, -1)) add(path.join(operands.at(-1), path.basename(source)));
+  } else if (name === 'curl') add(valueAfter(args, ['-o', '--output']));
+  else if (name === 'wget') add(valueAfter(args, ['-O', '--output-document']));
+  else if (name === 'dd') add(args.find(arg => arg.startsWith('of='))?.slice(3));
+}
+
+function scriptOperandsOf(segment, cwd, context) {
+  const files = [];
+  const found = interpreterOperands(shellWords(segment), context.cwdUnknown);
   const { root, base } = operandBases(found, cwd || process.cwd());
-  const outcome = (blocked) => ({ files, blocked, base, cwdUnknown: found.cwdUnknown });
+  const outcome = (blocked) => ({ files, blocked, base, sources: found.sources, cwdUnknown: found.cwdUnknown });
   if (found.unsure) return outcome('a wrapper path uses byte escapes that cannot be resolved faithfully');
   if (found.unresolved && found.operands.length > 0) return outcome(found.unresolved);
   // A directory that cannot be known leaves an absolute path resolvable.
   if (found.cwdUnknown && found.operands.some(operand => !path.isAbsolute(operand.value))) return outcome(found.cwdUnknown);
-  for (const operand of found.operands) {
-    const inspected = inspectOperand(operand, root, base);
-    if (inspected?.blocked) return outcome(inspected.blocked);
-    if (inspected) files.push(inspected.file);
+  for (const word of found.operands) {
+    for (const target of expandScriptVar(word, context)) {
+      const read = readOperand(target, context, root, base);
+      if (read?.blocked) return outcome(read.blocked);
+      if (read) files.push(read.file);
+    }
   }
   return outcome(null);
+}
+
+// One operand of an interpreter: the script file it names, the reason it
+// cannot be inspected, or null when it names no file to read.
+function readOperand(word, context, root, base) {
+  // Under -n or -o noexec the shell reads its operands but runs none of them.
+  if (word.noRun) return null;
+  const beside = word.expands ? scriptRelative(word.value, context) : null;
+  const value = beside ?? expandedOperandValue(word, context.homeKnown);
+  // An argument the shell expands at run time is not the script; the
+  // script itself cannot be found before it runs.
+  if (value === null) return word.script ? { blocked: `operand ${word.value} is expanded by the shell when it runs and cannot be inspected` } : null;
+  const candidate = operandPath(value, root, base);
+  // A script the command writes before it runs is not the file read here.
+  if (word.script && candidate !== null && (context.written.bulk || context.written.paths.has(candidate))) {
+    return { blocked: `script ${word.value} may be written by this command before it runs, so what runs is not what was read; run it in a command of its own` };
+  }
+  const inspected = inspectOperand({ ...word, value, expands: false, tilde: false }, root, base);
+  if (inspected || !word.script) return inspected;
+  // A file beside the script that is not there is not one this hook read.
+  if (beside !== null) return { blocked: `operand ${word.value} names ${beside}, which is not a file this hook can read` };
+  // A script the command itself runs must be there to be read: one that is
+  // not could be written by this very command before it runs. A cd in an
+  // earlier segment moves the directory the hook cannot follow, so the file
+  // may well be there under the real one; then this cannot be claimed.
+  if (context.own && context.cwdKnown && candidate !== null && !fs.existsSync(candidate)) {
+    return { blocked: `script ${word.value} is not there when the command is checked, so it cannot be inspected; write it first, then run it in a command of its own` };
+  }
+  return null;
 }
 
 // The segments of one script file: its real path is remembered so a script
@@ -479,23 +820,165 @@ function nestedSegmentsOf(file, depth, seen) {
 
 // Segments of every script the command runs, following scripts that run
 // scripts; `blocked` names the reason when one of them cannot be inspected.
-function scriptSegmentsOf(segments, cwd, depth = 0, seen = new Set(), cwdUnknown = null) {
+const GIT_TIMEOUT_MS = 2000;
+
+// git run to read, never to act: the variables that point it at another
+// repository are dropped and fsmonitor, the one command the repository's
+// config could have these subcommands start, is switched off.
+function gitIn(dir, args) {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  const result = spawnSync('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...args], { // NOSONAR javascript:S4036 -- the user's own git knows their repositories; fixed argv, no shell
+    cwd: dir,
+    env,
+    encoding: 'utf8',
+    timeout: GIT_TIMEOUT_MS,
+    stdio: ['ignore', 'pipe', 'ignore'],
+    windowsHide: true,
+  });
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+// The id git gives a blob of these bytes, in the repository's hash.
+function blobId(bytes, format) {
+  const hash = crypto.createHash(format === 'sha256' ? 'sha256' : 'sha1');
+  hash.update(`blob ${bytes.length}\0`);
+  hash.update(bytes);
+  return hash.digest('hex');
+}
+
+// Whether a script is committed in git and unchanged since: its bytes are
+// the committed blob, or are it with CRLF line endings, as a checkout with
+// core.autocrlf writes it. Project code rather than something written
+// moments ago, its commands are then held only to the grave denials.
+// Untracked, changed, staged or outside a repository, it is judged in full.
+// The hashing is done here, so no filter the repository configures runs.
+function isCommittedUnchanged(file) {
+  const dir = path.dirname(file);
+  const name = path.basename(file);
+  if (gitIn(dir, ['ls-files', '--error-unmatch', '--', name]) === null) return false;
+  const entry = /^\d+ blob ([0-9a-f]+)\t/.exec(gitIn(dir, ['ls-tree', 'HEAD', '--', name]) ?? '');
+  if (entry === null) return false;
+  const format = gitIn(dir, ['rev-parse', '--show-object-format']) ?? 'sha1';
+  let bytes;
+  try {
+    bytes = fs.readFileSync(file);
+  } catch {
+    return false;
+  }
+  if (blobId(bytes, format) === entry[1]) return true;
+  return bytes.includes(13) && blobId(Buffer.from(bytes.toString('latin1').replaceAll('\r\n', '\n'), 'latin1'), format) === entry[1];
+}
+
+// Segments of every script the command runs, and for each whether it was
+// read out of a committed, unchanged script. A committed script is held
+// only to grave denials, so a script it runs that cannot be inspected is
+// passed over there, while one the command itself names fails closed.
+// What the command line itself leaves the scripts it runs to know: the
+// variables it or the environment sets (a committed script cannot count
+// those as its own), and no script directory.
+function commandContext(segments, cwd) {
+  return {
+    own: true,
+    cwdUnknown: null,
+    cwdKnown: true,
+    homeKnown: true,
+    scriptDir: null,
+    dirVars: new Set(),
+    scriptVars: resolvableScriptVars(segments),
+    callerSet: new Set([...Object.keys(process.env), ...assignedNames(segments)]),
+    written: writesOf(segments, cwd || process.cwd(), true),
+  };
+}
+
+// Commands that move the working directory somewhere the hook does not
+// follow, so a relative operand after them resolves against the wrong base.
+const CWD_CHANGERS = new Set(['cd', 'pushd', 'popd', 'chdir']);
+
+function changesCwd(segment) {
+  const words = shellWords(segment);
+  const name = words[skipEnvAndWrappers(words)]?.value.split(/[\\/]/).pop();
+  return CWD_CHANGERS.has(name);
+}
+
+function scriptSegmentsOf(segments, cwd, depth, seen, context) {
   const collected = [];
+  const committed = [];
+  const outcome = blocked => ({ segments: collected, committed, blocked });
+  let homeKnown = context.homeKnown;
+  let cwdKnown = context.cwdKnown;
   for (const segment of segments) {
-    const operands = scriptOperandsOf(segment, cwd, cwdUnknown);
-    if (operands.blocked) return { segments: collected, blocked: operands.blocked };
+    const here = { ...context, homeKnown, cwdKnown };
+    const operands = scriptOperandsOf(segment, cwd, here);
+    if (operands.blocked) return outcome(operands.blocked);
+    let sourcedChangesHome = false;
     for (const file of operands.files) {
-      const nested = nestedSegmentsOf(file, depth, seen);
-      if (nested.blocked) return { segments: collected, blocked: nested.blocked };
-      if (nested.segments === null) continue;
-      collected.push(...nested.segments);
-      // A script the wrapper moved into a directory runs its own children there.
-      const inner = scriptSegmentsOf(nested.segments, operands.base, depth + 1, seen, operands.cwdUnknown);
-      collected.push(...inner.segments);
-      if (inner.blocked) return { segments: collected, blocked: inner.blocked };
+      const found = fileSegmentsOf(file, operands, depth, seen, here);
+      collected.push(...found.segments);
+      committed.push(...found.committed);
+      if (found.blocked) return outcome(found.blocked);
+      sourcedChangesHome = sourcedChangesHome || (operands.sources && found.segments.some(changesHome));
+    }
+    homeKnown = homeKnown && !changesHome(segment) && !sourcedChangesHome;
+    cwdKnown = cwdKnown && !changesCwd(segment);
+  }
+  return outcome(null);
+}
+
+// The segments one script file brings, its own and those of the scripts it
+// runs in turn, each marked committed or not. A script that cannot be
+// analyzed fails closed whoever runs it: its commands could be anything.
+function fileSegmentsOf(file, operands, depth, seen, context) {
+  const nested = nestedSegmentsOf(file, depth, seen);
+  if (nested.blocked) return { segments: [], committed: [], blocked: nested.blocked };
+  if (nested.segments === null) return { segments: [], committed: [], blocked: null };
+  const mark = isCommittedUnchanged(file) ? { bound: boundAssignments(nested.segments, context.callerSet) } : false;
+  // A script the wrapper moved into a directory runs its own children there.
+  const ownWrites = writesOf(nested.segments, operands.base, false);
+  const inner = scriptSegmentsOf(nested.segments, operands.base, depth + 1, seen, {
+    own: false,
+    cwdUnknown: operands.cwdUnknown,
+    cwdKnown: true,
+    homeKnown: context.homeKnown,
+    scriptDir: path.dirname(file),
+    dirVars: scriptDirVariables(nested.segments),
+    scriptVars: resolvableScriptVars(nested.segments),
+    callerSet: new Set([...context.callerSet, ...assignedNames(nested.segments)]),
+    written: { paths: new Set([...context.written.paths, ...ownWrites.paths]), bulk: context.written.bulk },
+  });
+  return {
+    segments: [...nested.segments, ...inner.segments],
+    committed: [...nested.segments.map(() => mark), ...inner.committed],
+    blocked: inner.blocked,
+  };
+}
+
+// Names these segments assign or export.
+function assignedNames(segments) {
+  const names = new Set();
+  for (const segment of segments) {
+    const words = shellWords(segment).map(word => word.value);
+    for (const [i, word] of words.entries()) {
+      const assignment = /^([A-Za-z_]\w*)\+?=/.exec(word);
+      if (assignment) names.add(assignment[1]);
+      else if (words[i - 1] === 'export' && /^[A-Za-z_]\w*$/.test(word)) names.add(word);
     }
   }
-  return { segments: collected, blocked: null };
+  return names;
+}
+
+// What a committed script sets each variable to, for the ones neither the
+// command nor the environment can set before it runs: the validator counts
+// a variable as the script's own only when every value is a narrow target.
+function boundAssignments(segments, callerSet) {
+  const values = {};
+  for (const segment of segments) {
+    for (const word of shellWords(segment)) {
+      const assignment = /^([A-Za-z_]\w*)=(.*)$/s.exec(word.value);
+      if (!assignment || callerSet.has(assignment[1])) continue;
+      values[assignment[1]] = [...(values[assignment[1]] ?? []), assignment[2]];
+    }
+  }
+  return values;
 }
 
 const ADVISORY_REASONS = [
@@ -652,6 +1135,86 @@ function withNested(own, script, depth) {
   return [...own, ...inner];
 }
 
+// The code `eval` or a shell's -c runs, read as the command line it is, so
+// the commands inside are judged like any other: in a committed script the
+// eval itself is only flagged, and what it runs still meets the grave
+// denials. null when the stage runs no such code.
+function inlineShellCodeOf(line) {
+  const words = shellWords(line);
+  const index = skipEnvAndWrappers(words);
+  const name = words[index]?.value.split(/[\\/]/).pop().toLowerCase();
+  if (name === 'eval') return words.length > index + 1 ? words.slice(index + 1).map(word => word.value).join(' ') : null;
+  if (!SHELL_INTERPRETERS.has(name) || name === 'source' || name === '.') return null;
+  return shellCommandString(words.slice(index + 1));
+}
+
+// The string a shell's -c runs: its first operand after the options, when
+// one of them is -c, alone or in a cluster such as -ec. The words after it
+// are its $0, $1 and on, read into the code where it names them.
+function shellCommandString(words) {
+  let runsString = false;
+  let takesValue = false;
+  for (const [i, word] of words.entries()) {
+    const value = word.value;
+    if (takesValue) {
+      takesValue = false;
+    } else if (/^-[A-Za-z]+$/.test(value) && value.includes('c')) {
+      runsString = true;
+    } else if (/^[-+]/.test(value)) {
+      takesValue = SHELL_VALUE_OPTIONS.has(value);
+    } else {
+      return runsString ? withPositionals(value, words.slice(i + 1)) : null;
+    }
+  }
+  return null;
+}
+
+// A positional parameter the code of a shell's -c reads, replaced by the
+// word given for it: a find action's {} or a literal path is then judged as
+// the target it is. One with no word given stays as written, a value the
+// caller chooses.
+function withPositionals(code, given) {
+  return code.replace(/\$(?:\{(\d+|[@*])\}|(\d|[@*]))/g, (whole, braced, bare) => {
+    const name = braced ?? bare;
+    if (name === '@' || name === '*') return given.length > 1 ? given.slice(1).map(word => word.value).join(' ') : whole;
+    const index = Number(name);
+    return index < given.length ? given[index].value : whole;
+  });
+}
+
+// find's actions that run a command, which ends at a `;` or `+`.
+const FIND_EXEC_FLAGS = new Set(['-exec', '-execdir', '-ok', '-okdir']);
+const FIND_EXEC_ENDS = new Set([';', '\\;', '+']);
+
+// A word as the shell would read it back: single-quoted, so the command a
+// find action runs keeps each of its words whole when it is read again.
+function quotedWord(value) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+// The commands a find in this stage runs through -exec and its kin, each
+// read as its own command line, so what they run (a shell's -c included)
+// is judged too.
+function findExecCommandsOf(line) {
+  const words = shellWords(line);
+  const index = skipEnvAndWrappers(words);
+  if (words[index]?.value.split(/[\\/]/).pop() !== 'find') return [];
+  const commands = [];
+  let current = null;
+  for (const word of words.slice(index + 1)) {
+    if (current === null) {
+      if (FIND_EXEC_FLAGS.has(word.value)) current = [];
+    } else if (FIND_EXEC_ENDS.has(word.value)) {
+      commands.push(current.map(quotedWord).join(' '));
+      current = null;
+    } else {
+      current.push(word.value);
+    }
+  }
+  // find refuses an action that has no end, so nothing runs past the last one.
+  return commands;
+}
+
 // The segments one pipeline stage contributes: the stage itself and, when
 // it hands a script to a shell, the segments of that script.
 function segmentsOfStage(raw, depth) {
@@ -665,7 +1228,12 @@ function segmentsOfStage(raw, depth) {
   }
   const { command: line, body } = splitHeredoc(raw);
   const trimmed = line.trim();
-  const own = trimmed ? [trimmed] : [];
+  const inline = inlineShellCodeOf(line);
+  let own = trimmed ? [trimmed] : [];
+  for (const code of [...(inline === null ? [] : [inline]), ...findExecCommandsOf(line)]) {
+    own = own === null ? null : withNested(own, code, depth);
+  }
+  if (own === null) return null;
   // The body is stdin data, except when a shell is the one reading it:
   // there it is a script, and it is judged like any other script.
   if (body === null || !readsItsInputAsCode(line)) return own;
@@ -786,18 +1354,19 @@ function run(inputOrRaw) {
   }
 
   const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
-  const scripts = scriptSegmentsOf(segments, cwd);
+  const scripts = scriptSegmentsOf(segments, cwd, 0, new Set(), commandContext(segments, cwd));
   if (scripts.blocked) {
     return {
       exitCode: 2,
       stderr: `EGC Guardian BLOCKED this command: ${scripts.blocked}.`,
     };
   }
+  const committed = [...segments.map(() => false), ...scripts.committed];
   segments.push(...scripts.segments);
   const answer = callGuardianVerdict(
     cli,
     ['command-batch'],
-    JSON.stringify({ commands: segments, cwd }),
+    JSON.stringify({ commands: segments, cwd, committed }),
     VALIDATE_TIMEOUT_MS,
   );
   if (!answer.ok) return withoutVerdict(answer);

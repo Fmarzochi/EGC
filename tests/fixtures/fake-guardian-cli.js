@@ -62,6 +62,24 @@ function verdictForCommand(segment) {
   return { allowed: true, trust_level: 'SAFE_READONLY' };
 }
 
+// The real validator holds a command read out of a committed, unchanged
+// script only to the grave denials; the fixture mirrors that for the one
+// the hook tests assert: a delete is flagged there only when its target is
+// narrow, a variable counting as narrow when the script sets it (`bound`).
+function committedVerdict(segment, bound) {
+  const verdict = verdictForCommand(segment);
+  if (verdict.allowed !== false || !verdict.reason.includes('destructive')) return verdict;
+  const targets = unwrapCarriers(segment.trim().split(/\s+/).filter(Boolean)).slice(1)
+    .filter(target => !target.startsWith('-'))
+    .map(target => target.replaceAll(/["']/g, ''));
+  const grave = targets.some(target => {
+    const variable = /^\$\{?([A-Za-z_]\w*)\}?/.exec(target);
+    if (variable) return !Object.hasOwn(bound, variable[1]);
+    return target.includes('$') || /^[/~]/.test(target) || target === '.' || target === '..' || target === '*' || target.startsWith('../');
+  });
+  return grave ? verdict : { ...verdict, advisory: true };
+}
+
 const mode = process.argv[2];
 let payload;
 try { payload = fs.readFileSync(0, 'utf8'); } catch { payload = ''; }
@@ -74,7 +92,16 @@ if (mode === 'command') {
   const segments = Array.isArray(parsed)
     ? parsed
     : Array.isArray(parsed && parsed.commands) ? parsed.commands : [];
-  process.stdout.write(JSON.stringify(segments.map(verdictForCommand)));
+  const committed = !Array.isArray(parsed) && Array.isArray(parsed && parsed.committed) ? parsed.committed : [];
+  const markOf = flag => {
+    if (flag === true) return {};
+    if (flag && typeof flag === 'object') return flag.bound || {};
+    return null;
+  };
+  process.stdout.write(JSON.stringify(segments.map((segment, i) => {
+    const bound = markOf(committed[i]);
+    return bound === null ? verdictForCommand(segment) : committedVerdict(segment, bound);
+  })));
 } else if (mode === 'write') {
   if (PROTECTED_RE.test(payload)) {
     process.stdout.write(JSON.stringify({ allowed: false, reason: `Path '${payload}' is protected`, trust_level: 'BLOCKED' }));

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
-import { validateCommand, validateWrite } from './validator.js';
+import { validateCommand, validateCommittedScriptCommand, validateWrite } from './validator.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
 import { llmRoute, keywordRoute } from './llm-router.js';
 import { detectIntent, digestTranscript, mineTranscript } from './intuition.js';
@@ -13,22 +13,51 @@ import { autoLearn } from './learn-writer.js';
 
 const MAX_ROUTE_ITEMS = { agents: 3, skills: 5 };
 
+// One command of a batch, and whether it was read out of a script committed
+// in git and unchanged since (`committed[i]` in the payload: exactly true, or
+// an object whose `bound` maps the variables that script sets to the values
+// it sets them to), which holds it to the grave denials only.
+interface BatchEntry {
+  command: string;
+  committed: { bound: Record<string, string[]> } | null;
+}
+
+function committedMark(flag: unknown): BatchEntry['committed'] {
+  if (flag === true) return { bound: {} };
+  if (flag === null || typeof flag !== 'object' || Array.isArray(flag)) return null;
+  const given = (flag as { bound?: unknown }).bound;
+  const bound: Record<string, string[]> = {};
+  if (given !== null && typeof given === 'object' && !Array.isArray(given)) {
+    for (const [name, values] of Object.entries(given)) {
+      if (Array.isArray(values)) bound[name] = values.filter((value): value is string => typeof value === 'string');
+    }
+  }
+  return { bound };
+}
+
+function batchEntries(values: unknown[], committed: unknown): BatchEntry[] {
+  const flags = Array.isArray(committed) ? committed : [];
+  return values
+    .map((value, i) => ({ command: value, committed: committedMark(flags[i]) }))
+    .filter((entry): entry is BatchEntry => typeof entry.command === 'string');
+}
+
 function commandBatch(payload: string): unknown {
-  let commands: string[] = [];
+  let entries: BatchEntry[] = [];
   let cwd: string | undefined;
   try {
     const parsed = JSON.parse(payload);
     if (Array.isArray(parsed)) {
       // Legacy shape: a bare array of command strings, no cwd available.
-      commands = parsed.filter((c): c is string => typeof c === 'string');
+      entries = batchEntries(parsed, undefined);
     } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.commands)) {
-      commands = parsed.commands.filter((c: unknown): c is string => typeof c === 'string');
+      entries = batchEntries(parsed.commands, parsed.committed);
       if (typeof parsed.cwd === 'string') cwd = parsed.cwd;
     }
   } catch {
     return [{ allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS' }];
   }
-  if (commands.length === 0) {
+  if (entries.length === 0) {
     // Fail closed: an empty verdict array reads to the caller as "nothing to
     // check", which allows the batch through instead of blocking it. The
     // only caller (pre-bash-guardian-validate.js) already short-circuits
@@ -39,7 +68,7 @@ function commandBatch(payload: string): unknown {
     // silently.
     return [{ allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS' }];
   }
-  return commands.map(c => validateCommand(c, cwd));
+  return entries.map(entry => (entry.committed ? validateCommittedScriptCommand(entry.command, cwd, entry.committed.bound) : validateCommand(entry.command, cwd)));
 }
 
 async function route(payload: string): Promise<unknown> {

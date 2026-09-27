@@ -275,4 +275,8 @@ function readWrapperOption(name, word, next) {
   return readGetoptOption(word, spec, next);
 }
 
-module.exports = { WRAPPER_SPECS, PARALLEL_SPECS, readWrapperOption, readParallelOption, readBwrapOption };
+// Shell keywords and grouping openers that stand in front of the command
+// actually run (validator.ts SHELL_KEYWORDS): `then bash x.sh`, `( bash x.sh )`.
+const SHELL_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
+
+module.exports = { WRAPPER_SPECS, PARALLEL_SPECS, SHELL_KEYWORDS, readWrapperOption, readParallelOption, readBwrapOption };

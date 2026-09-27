@@ -27,6 +27,32 @@ export const SHELL_META_REGEX = /[&|;<>$`\n\r]/;
 // entirely because the base command is 'find', which is SAFE_READONLY.
 export const FIND_ACTION_FLAGS = ['-delete', '-exec', '-execdir', '-ok', '-okdir', '-fprint', '-fprint0', '-fprintf', '-fls'];
 
+// A command read out of a script committed in git and unchanged since is
+// project code, not something the agent may have just written: it is held
+// to the grave denials (writing or deleting a protected or top-level path,
+// git and container overrides), while a rule that exists only to stop a
+// command from hiding (eval, -c, reading a protected file) records its
+// reason and lets the remaining checks run, so the verdict flags the command
+// instead of blocking it. Both are set only for one synchronous validation.
+let committedScript = false;
+let committedFlag: ValidationResult | null = null;
+// What the committed script itself sets its variables to, for the ones the
+// command and the environment cannot set first (see isNarrowTarget).
+let committedBound: ReadonlyMap<string, readonly string[]> = new Map();
+
+function flagsInCommittedScript(denial: ValidationResult): boolean {
+  if (!committedScript) return false;
+  committedFlag ??= denial;
+  return true;
+}
+
+// A read of a protected file: the denial for a typed command, null in a
+// committed script, where it is flagged instead.
+function readDenial(reason: string, trustLevel: ValidationResult['trust_level'] = 'SAFE_READONLY'): ValidationResult | null {
+  const denial: ValidationResult = { allowed: false, reason, trust_level: trustLevel };
+  return flagsInCommittedScript(denial) ? null : denial;
+}
+
 // Interpreters/shells whose inline-eval flags let an agent execute arbitrary
 // code that bypasses every path- and content-based check in this file (the
 // interpreter reads/writes/execs whatever the inline string tells it to,
@@ -68,11 +94,12 @@ function inlineEvalVerdict(baseCommand: string, args: string[]): ValidationResul
   const isEvalFlag = (a: string, flags: string[]): boolean =>
     matchesEvalFlag(bareToken(a), flags, clusters ? stripQuotes(a) : null) || (abbreviates && abbreviatesEvalFlag(bareToken(a), flags));
   if (evalFlags && args.some(a => isEvalFlag(a, evalFlags))) {
-    return {
+    const denial: ValidationResult = {
       allowed: false,
       reason: `inline code execution via '${baseCommand}' eval flag is forbidden — write the code to a file and run it instead`,
       trust_level: 'DANGEROUS',
     };
+    if (HANDOFF_EVAL_COMMANDS.has(evalName) || !flagsInCommittedScript(denial)) return denial;
   }
   return suShellOperandsVerdict(evalName, args);
 }
@@ -80,6 +107,10 @@ function inlineEvalVerdict(baseCommand: string, args: string[]): ValidationResul
 // su, runuser and script read long options with getopt_long, which takes any
 // prefix of `--command` (`--comm`) as the option itself.
 const ABBREVIATING_EVAL_COMMANDS = new Set(['su', 'runuser', 'script']);
+// They also run the code they are given as another user or through a
+// terminal of their own, which nothing reads back out of: even in a
+// committed script their -c stays a denial.
+const HANDOFF_EVAL_COMMANDS = ABBREVIATING_EVAL_COMMANDS;
 
 function abbreviatesEvalFlag(arg: string, flags: string[]): boolean {
   if (!arg.startsWith('--')) return false;
@@ -556,7 +587,7 @@ function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
 // actually run: `if rm ...; then`, `then rm ...`, `(rm ...)`, `{ rm ...; }`,
 // `! rm ...`. Judged as "the command", the keyword would read as a mere
 // allowlist miss and let whatever follows it pass.
-const SHELL_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
+export const SHELL_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
 
 // `case word in pattern) command`: the command starts after the pattern.
 function unwrapCaseClause(current: string[]): string[] {
@@ -1706,11 +1737,7 @@ function checkGitFileOperands(subcommand: string, rest: string[], cwd?: string):
   if (spelling === undefined) return null;
   const protectedFile = fileOperandsOf(rest, spelling.short, spelling.long).find(p => isReadDeniedOperand(p, cwd));
   if (protectedFile === undefined) return null;
-  return {
-    allowed: false,
-    reason: `git ${subcommand} would read the protected file '${protectedFile}' and is forbidden.`,
-    trust_level: 'DANGEROUS',
-  };
+  return readDenial(`git ${subcommand} would read the protected file '${protectedFile}' and is forbidden.`, 'DANGEROUS');
 }
 
 function validateGitArgs(args: string[], cwd?: string): ValidationResult {
@@ -1771,21 +1798,17 @@ function collectGrepPatternFlags(args: string[]): { fileFlagValues: string[]; pa
   return { fileFlagValues, patternViaFlag };
 }
 
-function denyGrepTarget(reason: string): ValidationResult {
-  return { allowed: false, reason, trust_level: 'SAFE_READONLY' };
-}
-
 function checkRecursiveGrepPaths(pathArgs: string[], positionalArgs: string[], cwd?: string): ValidationResult | null {
   const home = os.homedir();
   for (const p of pathArgs) {
-    if (pathSpellings(p).some(s => s === '/' || s === home) || isProtectedOperand(p, cwd)) {
-      return denyGrepTarget(`grep recursive over protected path '${p}' is forbidden`);
-    }
+    const covers = pathSpellings(p).some(s => s === '/' || s === home) || isProtectedOperand(p, cwd);
+    const denial = covers ? readDenial(`grep recursive over protected path '${p}' is forbidden`) : null;
+    if (denial) return denial;
   }
   // If no explicit path args, grep defaults to '.', which is fine.
   // But if the only non-flag positional IS '/' (i.e., pattern was empty), still block.
   if (positionalArgs.length === 1 && (pathSpellings(positionalArgs[0]).includes('/') || isProtectedOperand(positionalArgs[0], cwd))) {
-    return denyGrepTarget(`grep over protected path '${positionalArgs[0]}' is forbidden`);
+    return readDenial(`grep over protected path '${positionalArgs[0]}' is forbidden`);
   }
   return null;
 }
@@ -1793,7 +1816,8 @@ function checkRecursiveGrepPaths(pathArgs: string[], positionalArgs: string[], c
 function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
   const { fileFlagValues, patternViaFlag } = collectGrepPatternFlags(args);
   for (const p of fileFlagValues) {
-    if (isReadDeniedOperand(p, cwd)) return denyGrepTarget(`grep pattern file '${p}' is a protected path`);
+    const denial = isReadDeniedOperand(p, cwd) ? readDenial(`grep pattern file '${p}' is a protected path`) : null;
+    if (denial) return denial;
   }
 
   // Non-flag, non-empty args are candidates for pattern or path.
@@ -1813,7 +1837,8 @@ function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
 
   // Even without -r, block explicit protected paths
   for (const p of pathArgs) {
-    if (isReadDeniedOperand(p, cwd)) return denyGrepTarget(`grep over protected path '${p}' is forbidden`);
+    const denial = isReadDeniedOperand(p, cwd) ? readDenial(`grep over protected path '${p}' is forbidden`) : null;
+    if (denial) return denial;
   }
 
   return { allowed: true, trust_level: 'SAFE_READONLY' };
@@ -1821,14 +1846,9 @@ function validateGrepArgs(args: string[], cwd?: string): ValidationResult {
 
 function validateCatArgs(args: string[], cwd?: string): ValidationResult {
   for (const arg of args) {
-const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isReadDeniedOperand(candidate, cwd)) {
-  return {
-    allowed: false,
-    reason: `cat of protected path '${arg}' is forbidden`,
-    trust_level: 'SAFE_READONLY',
-  };
-}
+    const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
+    const denial = candidate !== null && isReadDeniedOperand(candidate, cwd) ? readDenial(`cat of protected path '${arg}' is forbidden`) : null;
+    if (denial) return denial;
   }
   return { allowed: true, trust_level: 'SAFE_READONLY' };
 }
@@ -1850,27 +1870,56 @@ function findStartingPoints(args: string[]): string[] {
   return points;
 }
 
+// find's actions that run a command, up to the `;` or `+` that ends it.
+const FIND_EXEC_FLAGS = new Set(['-exec', '-execdir', '-ok', '-okdir']);
+// find's actions that write the list of found files to a file.
+const FIND_WRITE_FLAGS = new Set(['-fprint', '-fprint0', '-fprintf', '-fls']);
+
+function findExecCommands(args: string[]): string[] {
+  const commands: string[] = [];
+  let at = args.findIndex(arg => FIND_EXEC_FLAGS.has(arg));
+  while (at !== -1) {
+    const end = args.findIndex((arg, j) => j > at && (arg === ';' || arg === '+'));
+    const stop = end === -1 ? args.length : end;
+    commands.push(args.slice(at + 1, stop).join(' '));
+    at = args.findIndex((arg, j) => j > stop && FIND_EXEC_FLAGS.has(arg));
+  }
+  return commands;
+}
+
+// In a committed script a find action is grave when it acts on a protected
+// or top-level tree, writes its list over one, or runs a command that is
+// itself grave there.
+function findActionIsGrave(args: string[], cwd?: string): boolean {
+  // A find with no starting point starts at `.`; what it acts on under a
+  // starting point that is not narrow cannot be told from its tests.
+  const points = findStartingPoints(args);
+  const actsOnFound = args.some(arg => arg === '-delete' || FIND_EXEC_FLAGS.has(arg));
+  if (actsOnFound && (points.length === 0 ? ['.'] : points).some(p => isGraveTarget(p, cwd))) return true;
+  if (args.some((arg, i) => FIND_WRITE_FLAGS.has(arg) && args[i + 1] !== undefined && isGraveTarget(args[i + 1], cwd))) return true;
+  return findExecCommands(args).some(command => {
+    const verdict = validateCommandVerdict(command, cwd);
+    return !verdict.allowed && verdict.advisory !== true;
+  });
+}
+
 function validateFindArgs(args: string[], cwd?: string): ValidationResult {
   // -delete/-exec/etc. make find perform an action instead of just
   // filtering, which reproduces 'rm -rf' through a base command that
   // isn't in the DANGEROUS list. Deny regardless of path.
   const actionFlag = args.find(a => FIND_ACTION_FLAGS.includes(a));
   if (actionFlag) {
-return {
-  allowed: false,
-  reason: `find with action flag '${actionFlag}' is forbidden (use a read-only find, then a separate reviewed command)`,
-  trust_level: 'DANGEROUS',
-};
+    const denial: ValidationResult = {
+      allowed: false,
+      reason: `find with action flag '${actionFlag}' is forbidden (use a read-only find, then a separate reviewed command)`,
+      trust_level: 'DANGEROUS',
+    };
+    if (!committedScript || findActionIsGrave(args, cwd) || !flagsInCommittedScript(denial)) return denial;
   }
 
   for (const p of findStartingPoints(args)) {
-if (isProtectedOperand(p, cwd)) {
-  return {
-    allowed: false,
-    reason: `find over protected path '${p}' is forbidden`,
-    trust_level: 'SAFE_READONLY',
-  };
-}
+    const denial = isProtectedOperand(p, cwd) ? readDenial(`find over protected path '${p}' is forbidden`) : null;
+    if (denial) return denial;
   }
   return { allowed: true, trust_level: 'SAFE_READONLY' };
 }
@@ -1878,14 +1927,9 @@ if (isProtectedOperand(p, cwd)) {
 function validateReadOnlyPathArgs(baseCommand: string, args: string[], cwd?: string): ValidationResult {
   // These are read-only but we still block protected paths
   for (const arg of args) {
-const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
-if (candidate !== null && isReadDeniedOperand(candidate, cwd)) {
-  return {
-    allowed: false,
-    reason: `${baseCommand} on protected path '${arg}' is forbidden`,
-    trust_level: 'SAFE_READONLY',
-  };
-}
+    const candidate = arg.startsWith('-') ? embeddedPathCandidate(arg) : arg;
+    const denial = candidate !== null && isReadDeniedOperand(candidate, cwd) ? readDenial(`${baseCommand} on protected path '${arg}' is forbidden`) : null;
+    if (denial) return denial;
   }
   return { allowed: true, trust_level: 'SAFE_READONLY' };
 }
@@ -1898,11 +1942,12 @@ function validateDevToolArgs(baseCommand: string, args: string[], cwd?: string):
   // is still safe even if it's ever reached directly.
   const evalFlags = INLINE_EVAL_COMMANDS[baseCommand];
   if (evalFlags && args.some(a => matchesEvalFlag(bareToken(a), evalFlags, stripQuotes(a)))) {
-return {
-  allowed: false,
-  reason: `inline code execution via '${baseCommand}' eval flag is forbidden`,
-  trust_level: 'DANGEROUS',
-};
+    const denial: ValidationResult = {
+      allowed: false,
+      reason: `inline code execution via '${baseCommand}' eval flag is forbidden`,
+      trust_level: 'DANGEROUS',
+    };
+    if (!flagsInCommittedScript(denial)) return denial;
   }
 
   // Any argument that resolves to a protected path (a script path, a
@@ -1955,6 +2000,127 @@ export function validateCommand(command: string, cwd?: string): ValidationResult
   return { ...verdict, advisory: verdict.advisory === true };
 }
 
+// A command out of a script committed in git and unchanged since: a grave
+// denial blocks it as usual; a rule it met that only exists to stop hiding
+// flags it, unless something grave follows.
+export function validateCommittedScriptCommand(command: string, cwd?: string, bound: Readonly<Record<string, readonly string[]>> = {}): ValidationResult {
+  committedScript = true;
+  committedFlag = null;
+  committedBound = new Map(Object.entries(bound));
+  try {
+    const verdict = validateCommand(command, cwd);
+    if (committedFlag === null || (!verdict.allowed && !verdict.advisory)) return verdict;
+    return {
+      ...committedFlag,
+      advisory: true,
+      reason: `${committedFlag.reason} (flagged, not blocked: it runs from a script committed in git and unchanged since)`,
+    };
+  } finally {
+    committedScript = false;
+    committedFlag = null;
+    committedBound = new Map();
+  }
+}
+
+// Where a delete, move or overwrite in a committed script is grave: a
+// protected path, the filesystem root, the home directory, the directory
+// that holds it, a directory right under the root, or everything inside
+// one of them (`/*`, `~/*`). `dd of=...` names its target after the `=`.
+// In a committed script a delete, move or overwrite is flagged only when
+// its target is known to be narrow: a literal path below the directory the
+// script stands in (not climbing out with `..`, a pattern with a literal
+// part), a literal path inside a temporary directory or at least two levels
+// down the home, or a variable the script itself sets to a file (`bound`).
+// Anything else, a path the caller or the environment chooses included, is
+// grave. dd names what it writes as `of=`; its `if=` is only read.
+function isGraveTarget(arg: string, cwd?: string): boolean {
+  return pathCandidatesOf([arg])
+    .map(candidate => (candidate.startsWith('of=') ? candidate.slice(3) : candidate))
+    .some(candidate => !isNarrowTarget(candidate, cwd));
+}
+
+// `$NAME` or `${NAME}` leading a target, and what follows it.
+const VARIABLE_TARGET_RE = /^\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/;
+
+function isNarrowTarget(candidate: string, cwd?: string): boolean {
+  const variable = VARIABLE_TARGET_RE.exec(candidate);
+  if (variable) {
+    const rest = candidate.slice(variable[0].length);
+    const values = committedBound.get(variable[1] ?? variable[2]) ?? [];
+    if (values.length === 0 || (rest !== '' && !/^[\\/]/.test(rest)) || /[$`*?[]/.test(rest)) return false;
+    return values.every(value => isNarrowValue(value + rest, cwd));
+  }
+  if (/[$`]/.test(candidate) || isProtectedOperand(candidate, cwd)) return false;
+  const expanded = expandHome(withHomeSpelled(candidate));
+  return path.isAbsolute(expanded) ? isNarrowAbsolute(path.resolve(expanded)) : isNarrowRelative(expanded);
+}
+
+// A value a committed script sets a variable to is narrow when it is a
+// fresh temporary path (`$(mktemp ...)`), a narrow literal path, or ends in
+// at least two literal components below whatever it starts from (a named
+// file deep in some directory, as `$BASE/.mvn/wrapper/maven-wrapper.jar`).
+function isNarrowValue(value: string, cwd?: string): boolean {
+  if (/^(?:\$\(|`)mktemp\b/.test(value)) return true;
+  if (!/[$`]/.test(value)) return isNarrowTarget(value, cwd);
+  const parts = value.split(/[\\/]/);
+  let literal = 0;
+  while (literal < parts.length - 1 && /^[^$`*?[]+$/.test(parts[parts.length - 1 - literal]) && !['.', '..'].includes(parts[parts.length - 1 - literal])) literal += 1;
+  return literal >= 2;
+}
+
+// A glob component with no literal part of its own (`*`, `.*`, `[a-z]*`)
+// matches everything in its directory.
+function isNarrowPattern(component: string): boolean {
+  if (!/[*?[]/.test(component)) return true;
+  let literal = '';
+  let inBracket = false;
+  for (const ch of component) {
+    if (inBracket) inBracket = ch !== ']';
+    else if (ch === '[') inBracket = true;
+    else literal += ch;
+  }
+  return /[^.*?]/.test(literal);
+}
+
+function isNarrowRelative(target: string): boolean {
+  const parts = target.split(/[\\/]/).filter(part => part !== '' && part !== '.');
+  return parts.length > 0 && !parts.includes('..') && isNarrowPattern(parts[0]);
+}
+
+function isNarrowAbsolute(resolved: string): boolean {
+  const home = os.homedir();
+  if (isDevice(resolved) || resolved === home || home.startsWith(resolved + path.sep)) return false;
+  const below = (base: string): string[] | null => {
+    const relative = path.relative(base, resolved);
+    return relative === '' || relative.startsWith('..') || path.isAbsolute(relative) ? null : relative.split(/[\\/]/);
+  };
+  // The home rule comes first: a home directory may itself sit under /tmp.
+  const inHome = below(home);
+  if (inHome !== null) return inHome.length >= 2 && !/[*?[]/.test(inHome[0]) && isNarrowPattern(inHome[1]);
+  const temporary = [os.tmpdir(), '/tmp', '/var/tmp'].map(base => below(path.resolve(base))).find(parts => parts !== null);
+  return temporary !== undefined && isNarrowPattern(temporary[0]);
+}
+
+// Devices a script may name without touching a disk.
+const HARMLESS_DEVICES = new Set(['/dev/null', '/dev/zero', '/dev/random', '/dev/urandom', '/dev/stdin', '/dev/stdout', '/dev/stderr', '/dev/tty']);
+
+function isDevice(resolved: string): boolean {
+  if (process.platform === 'win32' || !resolved.startsWith('/dev/')) return false;
+  return !HARMLESS_DEVICES.has(resolved) && !resolved.startsWith('/dev/fd/');
+}
+
+// ${HOME:?}, ${HOME:-x} and the like still name the home directory; ~name
+// names that user's.
+function withHomeSpelled(target: string): string {
+  let spelled = target;
+  const close = spelled.indexOf('}');
+  if (spelled.startsWith('${HOME') && close !== -1 && '}:-?=+#%/'.includes(spelled[6])) spelled = `$HOME${spelled.slice(close + 1)}`;
+  if (!spelled.startsWith('~') || spelled.length === 1 || spelled[1] === '/' || spelled[1] === '\\') return spelled;
+  const separator = spelled.search(/[\\/]/);
+  const name = separator === -1 ? spelled.slice(1) : spelled.slice(1, separator);
+  return path.join(path.dirname(os.homedir()), name, separator === -1 ? '' : spelled.slice(separator));
+}
+
 function validateCommandVerdict(command: string, cwd?: string): ValidationResult {
   // 1. Tokenize quote-aware (so a quoted wrapper-flag value with embedded
   // whitespace can't misalign the unwrap below), then peel off leading
@@ -2003,20 +2169,23 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // (the invocation itself IS the eval), so it is always denied rather than
   // matched via INLINE_EVAL_COMMANDS' flag detection below.
   if (baseCommand === 'eval' && args.length > 0) {
-    return {
+    const denial: ValidationResult = {
       allowed: false,
       reason: `inline code execution via 'eval' is forbidden — write the code to a file and run it instead`,
       trust_level: 'DANGEROUS',
     };
+    if (!flagsInCommittedScript(denial)) return denial;
   }
 
-  // 3. Dangerous commands: denied regardless of args
+  // 3. Dangerous commands: denied regardless of args, except in a committed
+  // script, where only a protected or top-level target is grave.
   if (DANGEROUS.includes(baseCommand)) {
-    return {
+    const denial: ValidationResult = {
       allowed: false,
       reason: `'${baseCommand}' is a destructive command and is always denied`,
       trust_level: 'DANGEROUS',
     };
+    if (!committedScript || args.some(arg => isGraveTarget(arg, cwd)) || !flagsInCommittedScript(denial)) return denial;
   }
 
   // 4. Inline code execution (python3 -c, bash -c, node -e, su -c, etc.) is a
@@ -2064,7 +2233,7 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // behind the metacharacter step below, so any `2>/dev/null`, pipe or `$`
   // in the command made that advisory-only step return first and the
   // protected-path denial for `cat ~/.ssh/id_rsa 2>/dev/null` never ran.
-  const verdict = validateAgainstAllowlist(baseCommand, args, cwd);
+  const verdict = validateAgainstAllowlist(baseCommand, args, cwd, tokens.slice(1));
   if (!verdict.allowed && !isAllowlistMissVerdict(verdict)) return verdict;
 
   // 7. Shell metacharacters: an advisory-only signal (see ADVISORY_REASONS
@@ -2581,13 +2750,14 @@ function redirectionVerdict(command: string, cwd?: string): ValidationResult | n
     const denies = writes ? isProtectedPath : isReadDeniedPath;
     const denied = targetSpellings(target).find(spelling => denies(spelling, cwd));
     if (denied === undefined) continue;
-    return {
+    const denial: ValidationResult = {
       allowed: false,
       reason: writes
         ? `redirecting output onto protected file '${denied}' is forbidden: the command would write over it, so send the output to another path`
         : `redirecting input from protected file '${denied}' is forbidden: it would hand the command a credential, so read another file`,
       trust_level: 'DANGEROUS',
     };
+    if (writes || !flagsInCommittedScript(denial)) return denial;
   }
   return null;
 }
@@ -2598,17 +2768,46 @@ function redirectionVerdict(command: string, cwd?: string): ValidationResult | n
 // targets a protected file, which hard-blocks here (EGC-494): without this,
 // `wget -O ~/.bashrc <url>` had zero protected-path coverage because the
 // generic allowlist-miss advisory swallowed every case.
-function validateAgainstAllowlist(baseCommand: string, args: string[], cwd?: string): ValidationResult {
+// The words a command is handed, without the files it reads through `<`:
+// redirectionVerdict judges those as the reads they are, before this check.
+// Output redirections stay, so a write is caught here too.
+const INPUT_REDIRECTION_RE = /^\d*<(?![<(&>])/;
+
+// Read from the words as written (`raw`), so a quoted `'<'` stays the
+// argument it is: only an unquoted `<` is a redirection.
+function withoutInputRedirections(args: string[], raw: string[]): string[] {
+  const kept: string[] = [];
+  let skipNext = false;
+  for (const [i, arg] of args.entries()) {
+    if (skipNext) {
+      skipNext = false;
+      continue;
+    }
+    const operator = INPUT_REDIRECTION_RE.exec(raw[i] ?? '');
+    if (operator === null) kept.push(arg);
+    else skipNext = operator[0].length === raw[i].length;
+  }
+  return kept;
+}
+
+// Builtins that only test or read the files they name: in a committed
+// script, naming a protected file with them is flagged, not grave.
+const COMMITTED_READ_BUILTINS = new Set(['[', '[[', 'test', '.', 'source']);
+
+function validateAgainstAllowlist(baseCommand: string, args: string[], cwd?: string, rawArgs: string[] = args): ValidationResult {
   if (SAFE_READONLY.includes(baseCommand) || SAFE_DEV.includes(baseCommand)) {
     return validateCommandArgs(baseCommand, args, cwd);
   }
-  const protectedTarget = pathCandidatesOf(args).find(arg => isProtectedPath(arg, cwd));
+  // A committed script reads files through `<` as the reads they are.
+  const candidates = committedScript ? withoutInputRedirections(args, rawArgs) : args;
+  const protectedTarget = pathCandidatesOf(candidates).find(arg => isProtectedPath(arg, cwd));
   if (protectedTarget) {
-    return {
+    const denial: ValidationResult = {
       allowed: false,
       reason: `'${baseCommand}' targets a protected file (${protectedTarget}) and is always denied, regardless of allowlist status`,
       trust_level: 'DANGEROUS',
     };
+    if (!COMMITTED_READ_BUILTINS.has(baseCommand) || !flagsInCommittedScript(denial)) return denial;
   }
   return {
     allowed: false,

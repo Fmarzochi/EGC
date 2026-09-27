@@ -136,5 +136,10 @@ run('every bwrap option word spans the same words', () => {
   assert.deepStrictEqual([lib.readWrapperOption('bwrap', '--chdir', '/x').valueName, lib.readWrapperOption('bwrap', '--chdir', '/x').value], ['--chdir', '/x']);
 });
 
+
+run('the shell keywords the hook peels are the validator\'s', () => {
+  assert.deepStrictEqual(sorted(lib.SHELL_KEYWORDS), sorted(validator.SHELL_KEYWORDS));
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
