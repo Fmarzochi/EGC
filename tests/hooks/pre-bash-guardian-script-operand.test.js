@@ -393,6 +393,9 @@ function runTests() {
           'scripts/build3.sh': 'source "$(dirname "$0")/missing.sh"\n',
           'scripts/build4.sh': 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"\n. "$SCRIPT_DIR/lib.sh"\n',
           'src-probe.sh': '[ -f ./probe-rc.sh ] && . ./probe-rc.sh\necho done\n',
+          'launcher.sh': 'JAVACMD=$JAVA_HOME/bin/java\nexec "$JAVACMD" "$@"\n',
+          'cmdvar-narrow.sh': `X=${wipe.split(' ')[0]}\n$X -rf build\n`,
+          'cmdvar-grave.sh': `X=${wipe.split(' ')[0]}\n$X -rf ~\n`,
           'sub/nested.sh': `${wipe} build\n`,
         };
         fs.mkdirSync(path.join(repo, 'sub'), { recursive: true });
@@ -418,6 +421,9 @@ function runTests() {
         assert.strictEqual(judged('bash scripts/build4.sh'), 0, 'a file beside the script, reached through a variable set to its directory');
         assert.strictEqual(judged('read EGC_PROBE_T <<< /; export EGC_PROBE_T; bash cond.sh'), 2, 'a variable the command exports before the committed script runs');
         assert.strictEqual(judged('bash src-probe.sh'), 0, 'a committed script that sources an optional file that is not there');
+        assert.strictEqual(judged('bash launcher.sh'), 0, 'a committed launcher that runs the program a variable it sets from the environment names');
+        assert.strictEqual(judged('bash cmdvar-narrow.sh'), 0, 'a narrow delete behind a variable command name in a committed script');
+        assert.strictEqual(judged('bash cmdvar-grave.sh'), 2, 'a grave delete behind a variable command name in a committed script');
         assert.strictEqual(judged(`echo '${wipe} ~' > probe-rc.sh; bash src-probe.sh`), 2, 'the same optional file, written by the command first');
         for (const name of ['grave.sh', 'hidden.sh', 'inline-grave.sh', 'find-grave.sh']) assert.strictEqual(judged(`bash ${name}`), 2, `grave in a committed script: ${name}`);
         // What a committed script runs but the hook cannot look at fails closed:
@@ -460,27 +466,90 @@ function runTests() {
       }
     }));
 
-    record(test('a command whose name comes from a variable the command fixes is judged by that name, opaque fails closed, environment stays advisory (EGC-670)', () => {
-      const blocked = [
-        `X=${['r', 'm'].join('')}; $X -rf /tmp/egc-victim`,
-        `CMD=${['r', 'm'].join('')}; $CMD -rf /tmp/x`,
-        `R=/bin/${['r', 'm'].join('')}; $R -rf /tmp/x`,
-        'read X; $X -rf /tmp/x',
-        'C=$(cat name.txt); $C -rf /tmp/x',
-      ];
-      for (const command of blocked) {
-        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
-        assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
-      }
-      const passing = [
-        'X=ls; $X -la',
-        'C=echo; $C hi',
-        '$EDITOR notes.txt',
-        '$X -rf /tmp/x',
-      ];
-      for (const command of passing) {
-        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
-        assert.strictEqual(result.exitCode, 0, `${command}: ${JSON.stringify(result)}`);
+    record(test('a command word from an expansion is judged by every value it can take, and one this hook cannot read fails closed (EGC-670)', () => {
+      const names = ['X', 'C', 'CMD', 'R', 'L', 'S', 'EDITOR'];
+      const saved = Object.fromEntries(names.map(name => [name, process.env[name]]));
+      for (const name of names) delete process.env[name];
+      const rm = wipe.split(' ')[0];
+      const judge = command => run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+      const expectBlocked = (commands, reason) => {
+        for (const command of commands) {
+          const result = judge(command);
+          assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+          assert.ok(result.stderr.includes('BLOCKED') && result.stderr.includes(reason), `${command}: ${result.stderr}`);
+        }
+      };
+      fs.writeFileSync(path.join(dir, 'vars.sh'), 'EDITOR=vi\n');
+      fs.writeFileSync(path.join(dir, 'cmdvar.sh'), `X=${rm}\n$X -rf /tmp/egc-victim\n`);
+      fs.writeFileSync(path.join(dir, 'passthru.sh'), 'exec "$@"\n');
+      fs.writeFileSync(path.join(dir, 'callervar.sh'), '$X -rf /tmp/egc-victim\n');
+      fs.writeFileSync(path.join(dir, 'danger.sh'), `${rm} -rf /tmp/egc-victim\n`);
+      try {
+        expectBlocked([
+          `X=${rm}; $X -rf /tmp/egc-victim`,
+          `CMD=${rm}; $CMD -rf /tmp/x`,
+          `R=/bin/${rm}; $R -rf /tmp/x`,
+          `for X in ls ${rm}; do $X -rf /tmp/x; done`,
+          `$X ${rm} -rf /tmp/x`,
+          `X='${rm} -rf'; $X /tmp/x`,
+          `X=ls; unset X; $X ${rm} -rf /tmp/x`,
+          `\${X:-${rm}} -rf /tmp/x`,
+          `$(which ${rm}) -rf /tmp/x`,
+          `X=${rm}; sudo $X -rf /tmp/x`,
+          'bash cmdvar.sh',
+          `export X=${rm}; bash callervar.sh`,
+        ], 'destructive');
+        expectBlocked([
+          'read X; $X -rf /tmp/x',
+          'C=$(cat name.txt); $C -rf /tmp/x',
+          'X=r; X+=m; $X -rf /tmp/x',
+          `X[0]=${rm}; $X -rf /tmp/x`,
+          `X=(${rm}); $X -rf /tmp/x`,
+          `printf -v X ${rm}; $X -rf /tmp/x`,
+          `: \${X:=${rm}}; $X -rf /tmp/x`,
+          'X=RM; ${X,,} -rf /tmp/x',
+          '. ./vars.sh; $EDITOR notes.txt',
+          'X=echo; . ./vars.sh; $X -rf /tmp/x',
+          `V=X; X=echo; printf -v "$V" ${rm}; $X -rf /tmp/x`,
+          `V=X; X=echo; read "$V" <<< ${rm}; $X -rf /tmp/x`,
+          'IFS=/; X=a; $X -rf /tmp/x',
+          '$1 -rf /tmp/x',
+          `bash passthru.sh ${rm} -rf /tmp/x`,
+        ], 'cannot read');
+        // The line fixing the name elsewhere, later or on a branch, does not
+        // hide the value the environment gives it where it runs.
+        process.env.X = rm;
+        process.env.S = 'danger.sh';
+        expectBlocked(['$X -rf /tmp/x; X=ls', 'false && X=ls; $X -rf /tmp/x', 'X=ls | $X -rf /tmp/x', 'bash "$S"; S=build.sh'], 'destructive');
+        // Unquoted, a script operand's value is split as the shell splits it,
+        // and its first field is the script that runs.
+        process.env.S = 'danger.sh --flag';
+        expectBlocked(['bash $S; S=build.sh', "S='danger.sh --flag'; bash $S"], 'destructive');
+        delete process.env.X;
+        delete process.env.S;
+        const passing = [
+          'X=ls; $X -la',
+          'C=echo; $C hi',
+          '$EDITOR notes.txt',
+          '$X -rf /tmp/x',
+          '$X -rf /tmp/x; X=ls',
+          'read -p X; $X -rf /tmp/x',
+          'read -rp "Name: " N; echo "$N"',
+          'for L in ls cat; do $L notes.txt; done',
+          '${EDITOR:-vi} notes.txt',
+          '"$(which ls)" -la',
+          'IFS=, read -r a < notes.txt; $EDITOR notes.txt',
+        ];
+        for (const command of passing) {
+          const result = judge(command);
+          assert.strictEqual(result.exitCode, 0, `${command}: ${JSON.stringify(result)}`);
+        }
+      } finally {
+        for (const name of names) {
+          if (saved[name] === undefined) delete process.env[name];
+          else process.env[name] = saved[name];
+        }
+        for (const file of ['vars.sh', 'cmdvar.sh', 'passthru.sh', 'callervar.sh', 'danger.sh']) fs.rmSync(path.join(dir, file), { force: true });
       }
     }));
 
