@@ -144,12 +144,12 @@ run('reading a protected file is flagged, writing over one is still blocked', ()
 });
 
 run('find runs what -exec names under the same rules, from a narrow starting point only', () => {
-  for (const command of ["find build -name '*.o' -delete", "find build -name '*.pyc' -exec rm {} +", "find src -type f -exec chmod 644 {} \;", 'find . -fprint list.txt']) {
+  for (const command of ["find build -name '*.o' -delete", "find build -name '*.pyc' -exec rm {} +", "find src -type f -exec chmod 644 {} ;", 'find . -fprint list.txt']) {
     const verdict = validateCommittedScriptCommand(command, cwd);
     assert.strictEqual(verdict.advisory, true, `${command}: ${JSON.stringify(verdict)}`);
   }
   for (const command of [
-    `find build -exec ${wipe} ~ \;`, 'find ~/.ssh -delete', 'find / -delete', 'find build -exec mv {} ~/.bashrc \;', 'find . -fprint ~/.bashrc',
+    `find build -exec ${wipe} ~ ;`, 'find ~/.ssh -delete', 'find / -delete', 'find build -exec mv {} ~/.bashrc ;', 'find . -fprint ~/.bashrc',
     'find . -delete', 'find -delete', "find . -name '*' -delete", 'find . -type f -delete', 'find .. -mindepth 1 -delete', "find . -name '*.pyc' -exec rm {} +",
   ]) {
     assert.ok(blocks(validateCommittedScriptCommand(command, cwd)), command);
