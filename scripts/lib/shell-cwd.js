@@ -1,0 +1,85 @@
+'use strict';
+
+/**
+ * The directories a command line can be in as it runs, followed through cd,
+ * pushd and popd, so the Bash hook finds a script named after them where the
+ * shell does.
+ *
+ * A move is added to the directories the line could already be in, never put
+ * in their place: a cd that fails leaves the next command after `;` where it
+ * was, and one inside a subshell does not outlive it, and the hook does not
+ * follow either. A target only known when the command runs (a variable the
+ * line does not fix, a substitution, a CDPATH search, a directory stack the
+ * shell had before the line) leaves the directory unknown from there on,
+ * with the reason, and the caller fails closed on a script named by a
+ * relative path after it.
+ */
+
+const path = require('node:path');
+
+const CWD_CHANGERS = new Set(['cd', 'pushd', 'popd', 'chdir']);
+const MAX_DIRS = 16;
+const CD_OPTION_RE = /^-[LPe@]+$/;
+const STACK_INDEX_RE = /^[+-]\d+$/;
+const INHERITED_STACK = 'uses a directory stack the shell had before this command, which this hook does not know';
+
+function startCwd(dir) {
+  return { dirs: [dir], stack: [], previous: null, unknown: null };
+}
+
+// The operands after the options cd, pushd and popd take.
+function moveOperands(args) {
+  const operands = [];
+  let literal = false;
+  for (const word of args) {
+    if (!literal && word.value === '--') literal = true;
+    else if (literal || !CD_OPTION_RE.test(word.value)) operands.push(word);
+  }
+  return operands;
+}
+
+function unknownAfter(state, reason) {
+  return { ...state, unknown: reason };
+}
+
+// `state` with `targets` added: each resolved against each directory the
+// line could be in. Too many to follow is unknown.
+function movedTo(state, targets, name) {
+  const moved = state.dirs.flatMap(dir => targets.map(target => path.resolve(dir, target)));
+  const dirs = [...new Set([...state.dirs, ...moved])];
+  if (dirs.length > MAX_DIRS) return unknownAfter(state, `${name} moves through more directories than this hook follows`);
+  return { ...state, dirs, previous: state.dirs, stack: name === 'pushd' ? [...state.stack, state.dirs] : state.stack };
+}
+
+// popd returns to the directories the last pushd of this line left.
+function popped(state, operands) {
+  if (operands.length > 0) return unknownAfter(state, `popd ${operands[0].value} takes a directory from a stack this hook does not follow`);
+  if (state.stack.length === 0) return unknownAfter(state, `popd ${INHERITED_STACK}`);
+  const back = state.stack.at(-1);
+  return { ...state, dirs: [...new Set([...state.dirs, ...back])], previous: state.dirs, stack: state.stack.slice(0, -1) };
+}
+
+// The directories the line can be in after the command `name` with `args`.
+// `targetsOf(word)` gives the directories a target word names (null when
+// only the running shell knows it; `word` null asks for the home directory).
+function afterMove(state, name, args, targetsOf) {
+  if (!CWD_CHANGERS.has(name) || state.unknown) return state;
+  const operands = moveOperands(args);
+  if (name === 'popd') return popped(state, operands);
+  if (name === 'pushd' && operands.length === 0) {
+    return state.stack.length === 0 ? unknownAfter(state, `pushd ${INHERITED_STACK}`) : movedTo(state, state.stack.at(-1), name);
+  }
+  // Too many operands is an error, and the directory stays.
+  if (operands.length > 1) return state;
+  const word = operands[0];
+  if (name === 'pushd' && STACK_INDEX_RE.test(word.value)) return unknownAfter(state, `pushd ${word.value} rotates a stack this hook does not follow`);
+  if (word?.value === '-') {
+    return state.previous ? movedTo(state, state.previous, name) : unknownAfter(state, `${name} - returns to a directory only the running shell knows`);
+  }
+  const targets = targetsOf(word ?? null);
+  const spelled = word ? `${name} ${word.value}` : name;
+  if (targets === null) return unknownAfter(state, `${spelled} moves to a directory only known when the command runs`);
+  return movedTo(state, targets, name);
+}
+
+module.exports = { startCwd, afterMove, CWD_CHANGERS };
