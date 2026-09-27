@@ -269,14 +269,22 @@ function within(value, state) {
 // A wrapper's new root is read from the view before it; chroot, unshare -R
 // and nsenter -r start at the new root's top, and a directory given with it
 // is inside it.
+// A new root's top or an absolute directory is known again, whatever came
+// before; sudo -i then moves to the target user's home, which is not.
 function applyMoves(name, moves, state) {
-  if (name === 'sudo' && moves.login && moves.dir === undefined) state.cwdUnknown = SUDO_LOGIN_VIEW;
   if (moves.root !== undefined) {
     const inside = within(moves.root, state);
     state.chroot = state.chroot ? path.join(state.chroot, inside) : inside;
-    if (ROOT_STARTS_AT_TOP.has(name)) state.cwd = null;
+    if (ROOT_STARTS_AT_TOP.has(name)) {
+      state.cwd = null;
+      state.cwdUnknown = null;
+    }
   }
-  if (moves.dir !== undefined) state.cwd = within(moves.dir, state);
+  if (moves.dir !== undefined) {
+    state.cwd = within(moves.dir, state);
+    if (path.isAbsolute(state.cwd)) state.cwdUnknown = null;
+  }
+  if (name === 'sudo' && moves.login && moves.dir === undefined) state.cwdUnknown = SUDO_LOGIN_VIEW;
   state.unsure = state.unsure || moves.unsure;
 }
 
@@ -349,8 +357,8 @@ function skipEnvAndWrappers(words, state) {
 // the wrappers above, with the directory they are resolved against. A
 // variable-expanded interpreter cannot be resolved, so its operands are
 // inspected as if it were a shell. After `--` every word is an operand.
-function interpreterOperands(words) {
-  const state = { cwd: null, chroot: null, unsure: false, unresolved: null, cwdUnknown: null };
+function interpreterOperands(words, cwdUnknown = null) {
+  const state = { cwd: null, chroot: null, unsure: false, unresolved: null, cwdUnknown };
   const found = (operands) => ({ operands, cwd: state.cwd, chroot: state.chroot, unsure: state.unsure, unresolved: state.unresolved, cwdUnknown: state.cwdUnknown });
 
 
@@ -425,11 +433,13 @@ function inspectOperand(operand, root, base) {
   return { file: candidate };
 }
 
-function scriptOperandsOf(segment, cwd) {
+// `cwdUnknown` carries a directory the script runs from but that cannot be
+// known (sudo -i's target home), down to the scripts it runs.
+function scriptOperandsOf(segment, cwd, cwdUnknown = null) {
   const files = [];
-  const found = interpreterOperands(shellWords(segment));
+  const found = interpreterOperands(shellWords(segment), cwdUnknown);
   const { root, base } = operandBases(found, cwd || process.cwd());
-  const outcome = (blocked) => ({ files, blocked, base });
+  const outcome = (blocked) => ({ files, blocked, base, cwdUnknown: found.cwdUnknown });
   if (found.unsure) return outcome('a wrapper path uses byte escapes that cannot be resolved faithfully');
   if (found.unresolved && found.operands.length > 0) return outcome(found.unresolved);
   // A directory that cannot be known leaves an absolute path resolvable.
@@ -469,10 +479,10 @@ function nestedSegmentsOf(file, depth, seen) {
 
 // Segments of every script the command runs, following scripts that run
 // scripts; `blocked` names the reason when one of them cannot be inspected.
-function scriptSegmentsOf(segments, cwd, depth = 0, seen = new Set()) {
+function scriptSegmentsOf(segments, cwd, depth = 0, seen = new Set(), cwdUnknown = null) {
   const collected = [];
   for (const segment of segments) {
-    const operands = scriptOperandsOf(segment, cwd);
+    const operands = scriptOperandsOf(segment, cwd, cwdUnknown);
     if (operands.blocked) return { segments: collected, blocked: operands.blocked };
     for (const file of operands.files) {
       const nested = nestedSegmentsOf(file, depth, seen);
@@ -480,7 +490,7 @@ function scriptSegmentsOf(segments, cwd, depth = 0, seen = new Set()) {
       if (nested.segments === null) continue;
       collected.push(...nested.segments);
       // A script the wrapper moved into a directory runs its own children there.
-      const inner = scriptSegmentsOf(nested.segments, operands.base, depth + 1, seen);
+      const inner = scriptSegmentsOf(nested.segments, operands.base, depth + 1, seen, operands.cwdUnknown);
       collected.push(...inner.segments);
       if (inner.blocked) return { segments: collected, blocked: inner.blocked };
     }
