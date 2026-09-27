@@ -157,9 +157,13 @@ function writeAll(fd: number, bytes: Buffer): void {
 // The temp file is created exclusively (wx): a link planted at the temp
 // path is never followed, so the key is written only into a file this call
 // created, private from the first byte and complete before it is published.
+// The umask can only narrow the creation mode, so the descriptor is set to
+// exactly 0600 before the first byte: a umask that strips the owner's own
+// bits would otherwise leave a file its writer cannot read back.
 export function writePrivateTemp(tmpPath: string, content: string | Buffer): void {
   const fd = fs.openSync(tmpPath, 'wx', 0o600);
   try {
+    try { fs.fchmodSync(fd, 0o600); } catch { /* Windows has no mode bits to set */ }
     writeAll(fd, typeof content === 'string' ? Buffer.from(content, 'utf-8') : content);
   } finally {
     fs.closeSync(fd);

@@ -138,11 +138,10 @@ if (test('loadOrCreateEncKey: refuses a key whose permissions cannot be tightene
   const errorLines = [];
   console.error = (...args) => errorLines.push(args.join(' '));
   // The mode is set through the descriptor of the key file, so the
-  // descriptor call is the one to fail; it restores itself on the first
-  // call, and the path-based chmod stays real for the temp file.
+  // descriptor calls are the ones to fail, every one of them, as on a
+  // filesystem without permission bits; the path-based chmod stays real.
   const originalFchmodSync = fs.fchmodSync;
   fs.fchmodSync = () => {
-    fs.fchmodSync = originalFchmodSync;
     throw new Error('EPERM: simulated filesystem without permission bit support');
   };
   try {
@@ -285,6 +284,28 @@ if (test('writeStateFile: concurrent writers to the same path use distinct temp 
     assert.strictEqual(readStateFile(filePath, key), 'write #4', 'final content must be the last write, uncorrupted');
   } finally {
     fs.openSync = originalOpenSync;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('writeStateFile: a umask that strips the owner bits still leaves the state readable by its owner', () => {
+  // The creation mode is masked by the umask, so under 0777 the temp file
+  // would be born 000 and the state unreadable after the rename; its mode is
+  // set on the descriptor, before any byte is written.
+  if (process.platform === 'win32') return;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
+  const filePath = path.join(tmpDir, 'main.md');
+  const key = crypto.randomBytes(32);
+  const oldUmask = process.umask(0o777);
+  try {
+    writeStateFile(filePath, 'secret', key);
+  } finally {
+    process.umask(oldUmask);
+  }
+  try {
+    assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o600);
+    assert.strictEqual(readStateFile(filePath, key), 'secret');
+  } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;
