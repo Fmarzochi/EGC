@@ -8,7 +8,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { randomInt, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
@@ -48,6 +48,7 @@ import { llmCompress, loadRawObservations, replaceObservation } from './compress
 import { sanitize, sanitizeStrings, sanitizeStateFields, scrubPresentedLines, scrubStateFields } from './sanitize.js';
 import { teamInit, teamSync, teamStatus } from './sync/TeamSync.js';
 import { resolveStateStoreDbPath } from './state-store-path.js';
+import { SQLiteArbitrationQueue } from './write-queue.js';
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
@@ -192,85 +193,7 @@ let lessonsSearchIndexReady = false;
 // SQLite Arbitration & Message Queue (Cross-Runtime Synchronization)
 // Orchestrates shared memory writes with exponential backoff to prevent IDE crashes
 // ============================================================================
-interface QueueTask<T> {
-  operation: () => Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
-  retries: number;
-}
-
-class SQLiteArbitrationQueue {
-  private readonly queue: QueueTask<unknown>[] = [];
-  private isProcessing = false;
-  private readonly MAX_RETRIES = 12;
-  private readonly BASE_BACKOFF_MS = 50;
-  private readonly MAX_BACKOFF_MS = 5000;
-
-  async enqueue<T>(operation: () => Promise<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
-      this.queue.push({ operation, resolve, reject, retries: 0 });
-      this.processNext();
-    });
-  }
-
-  private async processNext() { // NOSONAR: queue processor keeps the single-threaded invariant and SQLITE_BUSY retry logic in one read
-    // SINGLE-THREADED INVARIANT:
-    // In Node.js, async functions run to the first await synchronously.
-    // This synchronous execution until the first await guarantees that
-    // checking and setting this.isProcessing is atomic and free of race conditions.
-    // This makes it safe even under concurrent SQLITE_BUSY retries.
-    if (this.isProcessing || this.queue.length === 0) return;
-    this.isProcessing = true;
-
-    const task = this.queue.shift();
-    if (!task) {
-      this.isProcessing = false;
-      return;
-    }
-
-    try {
-      const result = await task.operation();
-      task.resolve(result);
-    } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error(JSON.stringify(err));
-      if (error.message && (error.message.includes('SQLITE_BUSY') || error.message.includes('database is locked'))) {
-        if (task.retries < this.MAX_RETRIES) {
-          task.retries++;
-          let backoff = Math.pow(2, task.retries) * this.BASE_BACKOFF_MS;
-          if (backoff > this.MAX_BACKOFF_MS) backoff = this.MAX_BACKOFF_MS;
-          // Equal jitter: with N MCP server processes (one per IDE/CLI session)
-          // colliding on the same ~/.egc database, deterministic backoff wakes
-          // them all on the same tick and the collision repeats (thundering herd).
-          const half = Math.floor(backoff / 2);
-          backoff = half + randomInt(0, half + 1);
-          log('WARN', `Write Collision Detected (SQLITE_BUSY). Arbitration retrying...`, {
-            queue_depth: this.queue.length,
-            retry_count: task.retries,
-            backoff_ms: backoff
-          });
-
-          setTimeout(() => {
-            this.queue.push(task); // Requeue at the end instead of unshift to prevent queue poisoning
-            this.processNext();
-          }, backoff);
-
-          this.isProcessing = false;
-          return;
-        } else {
-          log('ERROR', `Arbitration Failed. Write lock unrecoverable. Dead-lettering task.`, { retries: task.retries });
-          task.reject(new Error(`Arbitration Failed after ${this.MAX_RETRIES} retries: ` + error.message));
-        }
-      } else {
-        task.reject(err);
-      }
-    }
-
-    this.isProcessing = false;
-    this.processNext();
-  }
-}
-
-const writeArbitrator = new SQLiteArbitrationQueue();
+const writeArbitrator = new SQLiteArbitrationQueue({ log });
 
 // ============================================================================
 // Boot & Migrations
