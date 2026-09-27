@@ -57,6 +57,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The Bash hook reads the command line as the shell does to find the script it runs, and holds scripts committed in git and unchanged to the grave denials only (#1557).
 - The Bash hook and the Guardian read a shell comment as bash does: a `#` that opens a word is inert, one inside quotes or `${...}` or glued to a word is not (#1558).
 - A command whose name comes from a variable the command fixes is judged by the name it resolves to; opaque sources fail closed, the environment stays advisory (#1559).
+- A command word that comes from an expansion is judged by every value it can take, in the command and in the scripts it runs; a value the hook cannot read fails closed (#1560).
 - The fact-forcing gate reads `taskset -p` and `chrt -p` as acting on a running process, so the words after them are never taken for a command (#1563).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
