@@ -1068,12 +1068,36 @@ function continuationLength(text, at) {
   return text[at + 1] === '\r' && text[at + 2] === '\n' ? 3 : 0;
 }
 
+// A `#` opening a word outside quotes and outside ${...} starts a comment.
+function opensComment(out, ch, param) {
+  return ch === '#' && param === 0 && (out === '' || /[\s;&|(]/.test(out.at(-1)));
+}
+
+function paramDepthAfter(text, i, param) {
+  if (text[i] === '$' && text[i + 1] === '{') return param + 1;
+  return text[i] === '}' && param > 0 ? param - 1 : param;
+}
+
+// A backslash-newline outside single quotes is a line continuation and is
+// dropped; inside a comment it is comment text, and the newline still ends
+// the comment, as bash reads it.
 function joinContinuations(text) {
   let out = '';
   let single = false;
   let double = false;
+  let comment = false;
+  let param = 0;
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
+    if (comment) {
+      comment = ch !== '\n';
+      out += ch;
+      continue;
+    }
+    if (!single && !double) {
+      comment = opensComment(out, ch, param);
+      param = paramDepthAfter(text, i, param);
+    }
     if (ch === '\\' && !single) {
       // A continuation is dropped; any other escape is kept with its character.
       const skip = continuationLength(text, i);

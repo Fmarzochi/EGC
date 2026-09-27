@@ -2121,6 +2121,33 @@ function withHomeSpelled(target: string): string {
   return path.join(path.dirname(os.homedir()), name, separator === -1 ? '' : spelled.slice(separator));
 }
 
+function evalOrDangerousVerdict(baseCommand: string, args: string[], cwd?: string): ValidationResult | null {
+  // 2. `eval` executes its entire argument list as shell code, the same
+  // risk class as `bash -c`, but with no separate flag to opt into eval mode
+  // (the invocation itself IS the eval), so it is always denied rather than
+  // matched via INLINE_EVAL_COMMANDS' flag detection below.
+  if (baseCommand === 'eval' && args.length > 0) {
+    const denial: ValidationResult = {
+      allowed: false,
+      reason: `inline code execution via 'eval' is forbidden, write the code to a file and run it instead`,
+      trust_level: 'DANGEROUS',
+    };
+    if (!flagsInCommittedScript(denial)) return denial;
+  }
+
+  // 3. Dangerous commands: denied regardless of args, except in a committed
+  // script, where only a protected or top-level target is grave.
+  if (DANGEROUS.includes(baseCommand)) {
+    const denial: ValidationResult = {
+      allowed: false,
+      reason: `'${baseCommand}' is a destructive command and is always denied`,
+      trust_level: 'DANGEROUS',
+    };
+    if (!committedScript || args.some(arg => isGraveTarget(arg, cwd)) || !flagsInCommittedScript(denial)) return denial;
+  }
+  return null;
+}
+
 function validateCommandVerdict(command: string, cwd?: string): ValidationResult {
   // A trailing `# comment` is inert text, not part of any command, so it is
   // removed before anything reads the line; a `#` in quotes or in a ${...}
@@ -2168,29 +2195,9 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // scan reads the raw line on its own.
   const args = tokens.slice(1).map(shellWord);
 
-  // 2. `eval` executes its entire argument list as shell code — the same
-  // risk class as `bash -c`, but with no separate flag to opt into eval mode
-  // (the invocation itself IS the eval), so it is always denied rather than
-  // matched via INLINE_EVAL_COMMANDS' flag detection below.
-  if (baseCommand === 'eval' && args.length > 0) {
-    const denial: ValidationResult = {
-      allowed: false,
-      reason: `inline code execution via 'eval' is forbidden — write the code to a file and run it instead`,
-      trust_level: 'DANGEROUS',
-    };
-    if (!flagsInCommittedScript(denial)) return denial;
-  }
-
-  // 3. Dangerous commands: denied regardless of args, except in a committed
-  // script, where only a protected or top-level target is grave.
-  if (DANGEROUS.includes(baseCommand)) {
-    const denial: ValidationResult = {
-      allowed: false,
-      reason: `'${baseCommand}' is a destructive command and is always denied`,
-      trust_level: 'DANGEROUS',
-    };
-    if (!committedScript || args.some(arg => isGraveTarget(arg, cwd)) || !flagsInCommittedScript(denial)) return denial;
-  }
+  // 2 and 3. `eval`, and the destructive commands.
+  const evalOrDangerous = evalOrDangerousVerdict(baseCommand, args, cwd);
+  if (evalOrDangerous) return evalOrDangerous;
 
   // 4. Inline code execution (python3 -c, bash -c, node -e, su -c, etc.) is a
   // hard deny, not an allowlist check. This runs before the allowlist-
@@ -2576,11 +2583,34 @@ function skipText(command: string, i: number): number {
   const ch = command[i];
   if (ch === '"' || ch === "'") return readQuoted(command, i).end;
   if (ch === '\\') return Math.min(i + 2, command.length);
-  if (ch === '$' && command[i + 1] === '{') {
-    const close = command.indexOf('}', i + 2);
-    return close === -1 ? command.length : close + 1;
-  }
+  if (ch === '$' && command[i + 1] === '{') return parameterExpansionEnd(command, i + 2);
   return i;
+}
+
+// Index past the `}` that closes the `${` whose body starts at `start`. A
+// nested `${...}`, a `$(...)` (or `$((...))`) and a backquoted command are
+// read whole, so a `}` of theirs does not close it, as bash reads it; the
+// end of the line when it never closes.
+function parameterExpansionEnd(command: string, start: number): number {
+  let i = start;
+  while (i < command.length) {
+    const skipped = skipText(command, i);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
+    const ch = command[i];
+    if (ch === '}') return i + 1;
+    if (ch === '$' && command[i + 1] === '(') {
+      i = closingParenthesis(command, i + 2) + 1;
+    } else if (ch === '`') {
+      const close = command.indexOf('`', i + 1);
+      i = close === -1 ? command.length : close + 1;
+    } else {
+      i += 1;
+    }
+  }
+  return command.length;
 }
 
 // Characters before an unquoted `#` that let it open a word, so the `#`

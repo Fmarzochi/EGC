@@ -539,10 +539,19 @@ function runTests() {
         'ls ~/.ssh/id_rsa # a real path outside the comment',
         `true \${x:-a #}; ${wipe} /tmp/egc-victim`,
         `${wipe} / # cleanup`,
+        `echo '#'; ${wipe} /tmp/egc-victim`,
+        `echo "a # b" && ${wipe} /tmp/egc-victim`,
+        `true \${x:-$(echo }) #}; ${wipe} /tmp/egc-victim`,
+        `true \${x:-\`echo }\` #}; ${wipe} /tmp/egc-victim`,
+        `ls # it's\n${wipe} /tmp/egc-victim`,
+        `true # note \\\n${wipe} /tmp/egc-victim`,
+        `ls # it's\necho $(${wipe} /tmp/egc-victim)`,
+        `echo \${x:-a #}; r\\\nm -rf /tmp/egc-victim`,
       ];
       for (const command of blocked) {
         const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+        assert.ok(result.stderr.includes('BLOCKED'), result.stderr);
       }
     }));
 

@@ -314,6 +314,41 @@ test('extractSubstitutionBodies still finds a $(...) after a # inside ${...} (th
   assert.deepStrictEqual(extractSubstitutionBodies('echo ${x:-a #} $(id)'), ['id']);
 });
 
+// A `}` inside a command substitution or a backquoted command nested in
+// ${...} does not close the expansion (checked against bash), so a # after
+// it is still inside the expansion and the separator after is live.
+test('a } inside $(...) or backquotes nested in ${...} does not close the expansion', () => {
+  for (const nested of ['$(echo })', '`echo }`', '$((1+2))', '${y}']) {
+    assert.deepStrictEqual(
+      splitShellSegments(`true \${x:-${nested} #}; rm -rf /`, { splitOnPipe: true, stripComments: true }),
+      [`true \${x:-${nested} #}`, 'rm -rf /'],
+      nested,
+    );
+  }
+});
+
+// A comment is inert up to its newline: a quote or a backslash inside it
+// opens nothing (checked against bash), so the next line is its own command.
+test('a quote or a trailing backslash inside a comment does not reach past its newline', () => {
+  assert.deepStrictEqual(splitShellSegments("ls # it's\nrm -rf /", { stripComments: true }), ['ls', 'rm -rf /']);
+  assert.deepStrictEqual(splitShellSegments('true # note \\\nrm -rf /', { stripComments: true }), ['true', 'rm -rf /']);
+  assert.deepStrictEqual(splitShellSegments('ls # say "hi\nrm -rf /'), ['ls # say "hi', 'rm -rf /']);
+  assert.deepStrictEqual(extractSubstitutionBodies("ls # it's\necho $(rm -rf /)"), ['rm -rf /']);
+});
+
+test('extractSubstitutionBodies reads a $(...) with a } in it whole inside ${...}, so a later substitution there is still found', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies(': ${x:-$(echo }) # $(rm -rf /)}'), ['echo }', 'rm -rf /']);
+});
+
+test('stripComments keeps a mid-word #, a # glued after $(...) and a # in a heredoc body', () => {
+  assert.deepStrictEqual(splitShellSegments('echo foo#bar # c', { stripComments: true }), ['echo foo#bar']);
+  assert.deepStrictEqual(splitShellSegments('echo $(date)#tag # c', { stripComments: true }), ['echo $(date)#tag']);
+  assert.deepStrictEqual(
+    splitShellSegments('cat <<EOF\n# body\nEOF\necho done', { stripComments: true }),
+    ['cat <<EOF\n# body\nEOF', 'echo done'],
+  );
+});
+
 // Cubic review (EGC-539, PR #1147): the first comment-detection fix above
 // introduced its own two false-comment regressions -- a live && hidden
 // behind a # that only LOOKS like a comment start. Both are real bash

@@ -288,6 +288,18 @@ function isCommentStart(command, i, quote, heredocState, paramDepth = 0) {
   return precedingIndex < 0 || COMMENT_WORD_START_RE.test(command[precedingIndex]);
 }
 
+// The index of the character closing the command substitution (`$(...)`,
+// `$((...))`) or backquoted command that opens at `i`; -1 when none opens
+// there. One that never closes runs to the end of the line, since bash
+// reads no command out of it.
+function nestedSubstitutionEnd(command, i) {
+  let end;
+  if (command[i] === '$' && command[i + 1] === '(') end = findMatchingParen(command, i + 2);
+  else if (command[i] === '`') end = findMatchingBacktick(command, i + 1);
+  else return -1;
+  return end === -1 ? command.length - 1 : end;
+}
+
 /**
  * Split a shell command into segments by operators (&&, ||, ;, &)
  * while respecting quoting (single/double) and escaped characters.
@@ -354,7 +366,16 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
 
-    if (ch === '\n') inComment = false;
+    // A comment runs to the end of its line as inert text: a quote or a
+    // backslash inside it opens nothing, as bash reads it, so the next line
+    // is split and judged like any other.
+    if (inComment) {
+      if (ch !== '\n') {
+        if (!stripComments) current += ch;
+        continue;
+      }
+      inComment = false;
+    }
 
     if (hd.state === 'in-body') {
       if (hd.atLineStart) {
@@ -391,26 +412,31 @@ function splitShellSegments(command, options = {}) { // NOSONAR: shell segment p
       continue;
     }
 
-    if (!inComment && ch === '$' && command[i + 1] === '{') {
+    // Inside ${...}, a command substitution or a backquoted command is read
+    // whole: a `}` of its own does not close the expansion.
+    const nested = paramDepth > 0 ? nestedSubstitutionEnd(command, i) : -1;
+    if (nested !== -1) {
+      const text = command.slice(i, nested + 1);
+      current += text;
+      i += text.length - 1;
+      continue;
+    }
+
+    if (ch === '$' && command[i + 1] === '{') {
       paramDepth += 1;
       current += '${';
       i += 1;
       continue;
     }
 
-    if (!inComment && ch === '}' && paramDepth > 0) {
+    if (ch === '}' && paramDepth > 0) {
       paramDepth -= 1;
       current += ch;
       continue;
     }
 
-    if (!inComment && isCommentStart(command, i, quote, hd.state, paramDepth)) {
+    if (isCommentStart(command, i, quote, hd.state, paramDepth)) {
       inComment = true;
-      if (!stripComments) current += ch;
-      continue;
-    }
-
-    if (inComment) {
       if (!stripComments) current += ch;
       continue;
     }
@@ -606,7 +632,12 @@ function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state ma
   for (let i = 0; i < command.length; i++) {
     const ch = command[i];
 
-    if (ch === '\n') inComment = false;
+    // See splitShellSegments: a comment is inert up to its newline, whatever
+    // quote or backslash it holds.
+    if (inComment) {
+      if (ch !== '\n') continue;
+      inComment = false;
+    }
 
     if (hd.state === 'in-body') {
       if (hd.atLineStart) {
@@ -647,23 +678,21 @@ function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state ma
       continue;
     }
 
-    if (!inComment && ch === '$' && command[i + 1] === '{') {
+    if (ch === '$' && command[i + 1] === '{') {
       paramDepth += 1;
       i += 1;
       continue;
     }
 
-    if (!inComment && ch === '}' && paramDepth > 0) {
+    if (ch === '}' && paramDepth > 0) {
       paramDepth -= 1;
       continue;
     }
 
-    if (!inComment && isCommentStart(command, i, quote, hd.state, paramDepth)) {
+    if (isCommentStart(command, i, quote, hd.state, paramDepth)) {
       inComment = true;
       continue;
     }
-
-    if (inComment) continue;
 
     if (hd.state === 'awaiting-body' && ch === '\n') {
       hd.state = 'in-body';
