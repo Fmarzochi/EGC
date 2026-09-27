@@ -72,6 +72,29 @@ function runTests() {
     for (const [input, expected] of cases) assert.strictEqual(sanitizeCommand(input), expected, input);
   })) passed++; else failed++;
 
+  if (test('sanitizeCommand covers a password named pass or pwd, and one a database or sshpass client takes on its command line', () => {
+    const cases = [
+      ['DBPASS=hunter2 ./run', 'DBPASS=<REDACTED> ./run'],
+      ['DB_PASS=hunter2 REDIS_PASS=x SMTP_PASSPHRASE=y ./run', 'DB_PASS=<REDACTED> REDIS_PASS=<REDACTED> SMTP_PASSPHRASE=<REDACTED> ./run'],
+      ['MYSQL_PWD=hunter2 mysql', 'MYSQL_PWD=<REDACTED> mysql'],
+      ['mysql -uroot -psenha123 db', 'mysql -uroot -p<REDACTED> db'],
+      ['mysqldump -h db -psenha123 app', 'mysqldump -h db -p<REDACTED> app'],
+      ['mariadb.exe -psenha123', 'mariadb.exe -p<REDACTED>'],
+      ['sshpass -p senha123 ssh host', 'sshpass -p <REDACTED> ssh host'],
+      ['sshpass -psenha123 ssh host', 'sshpass -p<REDACTED> ssh host'],
+      ['redis-cli -a senha123 ping', 'redis-cli -a <REDACTED> ping'],
+      ['redis-cli --pass senha123 ping', 'redis-cli --pass <REDACTED> ping'],
+      ['BYPASS=1 COMPASS=north PASSPORT=x SKIP_BYPASS=1 ./run', 'BYPASS=1 COMPASS=north PASSPORT=x SKIP_BYPASS=1 ./run'],
+      ['PWD=/x OLDPWD=/y ./run', 'PWD=/x OLDPWD=/y ./run'],
+      ['mysql -p db', 'mysql -p db'],
+      ['mysql -P3306 -h db', 'mysql -P3306 -h db'],
+      ['grep -p pattern file', 'grep -p pattern file'],
+      ['tar -a -cf x.tar.gz dir', 'tar -a -cf x.tar.gz dir'],
+      ['mysql -u root; grep -pattern file', 'mysql -u root; grep -pattern file'],
+    ];
+    for (const [input, expected] of cases) assert.strictEqual(sanitizeCommand(input), expected, input);
+  })) passed++; else failed++;
+
   if (test('sanitizeCommand keeps -u outside curl, covers key aliases and api secrets, and skips flags without a value', () => {
     const cases = [
       ['rsync -u user@host:src dest', 'rsync -u user@host:src dest'],

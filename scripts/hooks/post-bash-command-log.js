@@ -35,6 +35,11 @@ const SECRET_VALUE_PREFIXES = [
   /\b[\w-]*(?:token|password|passwd|secret|apikey)[\w-]*\s*=\s*/gi,
   /\b[\w-]*(?:api|access|private)[-_]?key[\w-]*\s*=\s*/gi,
   /\b(?:auth|authorization|credentials?)\s*=\s*/gi,
+  // A name whose part is pass or passphrase (DBPASS, DB_PASS), not a word
+  // that only ends that way (BYPASS, COMPASS), nor PASSPORT.
+  /\b[\w-]*(?<!by|com|sur|tres|over|under|encom)pass(?:phrase)?(?:[_-][\w-]*)?\s*=\s*/gi,
+  // pwd after a name (MYSQL_PWD), never PWD or OLDPWD, the shell's own.
+  /\b[\w-]*(?<=[\w-])(?<!old)pwd(?:[_-][\w-]*)?\s*=\s*/gi,
 ];
 const SECRET_SHAPES = [
   /(:\/\/[^\s/:@]+:)[^\s@]+(?=@)/g,
@@ -295,6 +300,32 @@ const SHELL_NAMES = new Set(['sh', 'bash', 'zsh', 'ksh', 'dash', 'ash']);
 const CURL_NAME_RE = /^curl(?:\.exe|\.cmd|\.bat)?$/i;
 const GLUED_USER_FLAGS = ['--user=', '-u=', '-u'];
 
+// Clients that take a password on their own command line: the flags it
+// comes glued to, and the flags it follows as the next word. A bare -p makes
+// the mysql family prompt for one instead. The Guardian audit log carries the
+// same table.
+const MYSQL_CLIENTS = ['mysql', 'mysqldump', 'mysqladmin', 'mysqlimport', 'mysqlcheck', 'mysqlshow', 'mariadb', 'mariadb-dump', 'mariadb-admin', 'mariadb-import', 'mariadb-check'];
+const PASSWORD_CLIENTS = new Map([
+  ...MYSQL_CLIENTS.map(name => [name, { glued: ['-p'], separate: [] }]),
+  ['sshpass', { glued: ['-p'], separate: ['-p'] }],
+  ['redis-cli', { glued: [], separate: ['-a', '--pass'] }],
+]);
+
+function passwordClient(value) {
+  return PASSWORD_CLIENTS.get(basename(value).toLowerCase().replace(/\.exe$/, '')) ?? null;
+}
+
+// A word of a password client: the password glued to its flag, or its flag,
+// whose next word is the password.
+function passwordWord(word, state) {
+  if (state.client.separate.includes(word.value)) {
+    state.secretNext = true;
+    return word.raw;
+  }
+  const glued = state.client.glued.find(flag => word.raw.startsWith(flag) && word.raw.length > flag.length);
+  return glued ? `${glued}${REDACTED}` : word.raw;
+}
+
 function basename(value) {
   return value.split(/[\\/]/).pop();
 }
@@ -453,6 +484,10 @@ function redactWord(word, state) {
     state.valueNext = false;
     return redactCredential(word.raw, word.value);
   }
+  if (state.secretNext) {
+    state.secretNext = false;
+    return REDACTED;
+  }
   if (SHELL_NAMES.has(basename(word.value).toLowerCase())) {
     state.sawShell = true;
   } else if (state.sawShell && isCommandStringFlag(word.value)) {
@@ -464,12 +499,16 @@ function redactWord(word, state) {
   } else if (state.sawCurl) {
     const glued = GLUED_USER_FLAGS.find(flag => word.raw.startsWith(flag) && word.raw.length > flag.length);
     if (glued) return `${glued}${redactCredential(word.raw.slice(glued.length), word.value.slice(glued.length))}`;
+  } else if (passwordClient(word.value)) {
+    state.client = passwordClient(word.value);
+  } else if (state.client) {
+    return passwordWord(word, state);
   }
   return word.raw;
 }
 
 function freshCurlState() {
-  return { sawCurl: false, sawShell: false, valueNext: false, bodyNext: false };
+  return { sawCurl: false, sawShell: false, valueNext: false, bodyNext: false, client: null, secretNext: false };
 }
 
 // Nested command lines recurse through this entry; the counter bounds them.
