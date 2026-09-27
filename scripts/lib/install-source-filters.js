@@ -40,6 +40,22 @@ function isIgnoredSourceFile(fileName) {
   return IGNORED_FILE_SUFFIXES.some(suffix => fileName.endsWith(suffix));
 }
 
+// Files under scripts/hooks that only their host's adapter writes, to that
+// host's own plugin location (Amp's plugins, Cline's PreToolUse shim,
+// OpenCode's plugin), where their relative requires resolve. A copy of the
+// scripts/hooks directory leaves them out: under <root>/scripts/hooks they
+// could never load.
+const HOST_PLACED_SOURCES = new Set([
+  'scripts/hooks/amp-guardian-crusher-plugin.ts',
+  'scripts/hooks/amp-mesh-notice-plugin.ts',
+  'scripts/hooks/cline-pretooluse-shim.js',
+  'scripts/hooks/opencode-egc-plugin.js',
+]);
+
+function isHostPlacedSourcePath(sourceRelativePath) {
+  return HOST_PLACED_SOURCES.has(String(sourceRelativePath || '').replaceAll('\\', '/'));
+}
+
 function isGeneratedRuntimeSourcePath(sourceRelativePath) {
   const normalizedPath = String(sourceRelativePath || '').replaceAll('\\', '/');
   return GENERATED_SOURCE_PATTERNS.some(pattern => pattern.test(normalizedPath));
@@ -47,6 +63,7 @@ function isGeneratedRuntimeSourcePath(sourceRelativePath) {
 
 module.exports = {
   isGeneratedRuntimeSourcePath,
+  isHostPlacedSourcePath,
   isIgnoredSourceDirectory,
   isIgnoredSourceFile,
 };

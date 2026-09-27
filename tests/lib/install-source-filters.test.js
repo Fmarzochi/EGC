@@ -9,6 +9,7 @@ const assert = require('node:assert');
 
 const {
   isGeneratedRuntimeSourcePath,
+  isHostPlacedSourcePath,
   isIgnoredSourceDirectory,
   isIgnoredSourceFile,
 } = require('../../scripts/lib/install-source-filters');
@@ -53,6 +54,20 @@ run('a file that only looks like one is still a source', () => {
     '',
   ]) {
     assert.strictEqual(isGeneratedRuntimeSourcePath(sourcePath), false, sourcePath);
+  }
+});
+
+run('the host-placed hook sources are recognized with either separator, and only they', () => {
+  for (const sourcePath of [
+    'scripts/hooks/amp-guardian-crusher-plugin.ts',
+    'scripts/hooks/amp-mesh-notice-plugin.ts',
+    'scripts/hooks/cline-pretooluse-shim.js',
+    'scripts\\hooks\\opencode-egc-plugin.js',
+  ]) {
+    assert.strictEqual(isHostPlacedSourcePath(sourcePath), true, sourcePath);
+  }
+  for (const sourcePath of ['scripts/hooks/pre-bash-guardian-validate.js', 'plugins/opencode-egc-plugin.js', '']) {
+    assert.strictEqual(isHostPlacedSourcePath(sourcePath), false, sourcePath);
   }
 });
 

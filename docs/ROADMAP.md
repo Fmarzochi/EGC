@@ -52,6 +52,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The fact-forcing gate reads the wrappers in front of a destructive command through the Guardian's own tables, and every target is checked to copy both hooks with their helpers (#1552).
 - The PreCompact memory save is installed with every helper it loads on any Claude profile, and the package-only auto-update script is no longer copied into targets (#1553).
 - A file an earlier install wrote and today's plan no longer writes is retired on every target, OpenCode, Cursor, Codex and egc included, when EGC recorded writing it and it still holds the bytes EGC copied; a file the person changed, or a directory that cannot be listed, stays (#1554).
+- Host plugins (Amp, Cline, OpenCode) are installed only where their host loads them, and the unloadable copies earlier installs left under scripts/hooks are retired (#1555).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
 - Routing on this machine, without an API key: the catalog index records the source of every component, the prompt router and `orchestrate_task` read the install state of the active tool and never offer what it has not installed (a named `Not installed for this tool` line and `not_installed` carry the command that adds them), the local scorers weigh tokens by rarity, name and activation text, stem plurals and ignore Portuguese and Spanish function words, and the decision stays with the tool's model, by intent (#1453).

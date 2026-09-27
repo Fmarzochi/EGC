@@ -12,7 +12,7 @@ const {
   resolveInstallPlan,
 } = require('./install-manifests');
 const { getInstallTargetAdapter } = require('./install-targets/registry');
-const { isGeneratedRuntimeSourcePath, isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-source-filters');
+const { isGeneratedRuntimeSourcePath, isHostPlacedSourcePath, isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-source-filters');
 const { HOOK_OPERATION_KIND } = require('./claude-settings-hooks');
 const { MERGE_YAML_READ_LIST_KIND } = require('./aider-config-merge');
 const { MERGE_MARKDOWN_INDEX_KIND } = require('./warp-agents-merge');
@@ -650,7 +650,7 @@ function materializeScaffoldOperation(sourceRoot, operation) {
 
   const relativeFiles = listFilesRecursive(sourcePath).filter(relativeFile => {
     const sourceRelativePath = path.join(operation.sourceRelativePath, relativeFile);
-    return !isGeneratedRuntimeSourcePath(sourceRelativePath);
+    return !isGeneratedRuntimeSourcePath(sourceRelativePath) && !isHostPlacedSourcePath(sourceRelativePath);
   });
   return relativeFiles.map(relativeFile => {
     const sourceRelativePath = path.join(operation.sourceRelativePath, relativeFile);

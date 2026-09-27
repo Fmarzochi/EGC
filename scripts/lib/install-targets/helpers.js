@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { isGeneratedRuntimeSourcePath, isIgnoredSourceDirectory, isIgnoredSourceFile } = require('../install-source-filters');
+const { isGeneratedRuntimeSourcePath, isHostPlacedSourcePath, isIgnoredSourceDirectory, isIgnoredSourceFile } = require('../install-source-filters');
 
 const PLATFORM_SOURCE_PATH_OWNERS = Object.freeze({
   '.gemini-plugin': 'egc',
@@ -409,13 +409,15 @@ function createDefaultScaffoldOperations(input, adapter) {
 
 // The destinations one scaffold operation writes, added to `covered`. A
 // directory copy covers the files it copies today, listed as
-// materializeScaffoldOperation lists them (names unchanged, ignored names
-// and generated install-states left out), not every path under its
-// destination; a directory that cannot be listed shields its whole subtree.
+// materializeScaffoldOperation lists them (names unchanged; ignored names,
+// generated install-states and host-placed sources left out), not every
+// path under its destination; a directory that cannot be listed shields
+// its whole subtree.
 function addDirectoryCoverage(source, sourceDir, resolvedDestination, covered) {
   try {
     for (const relativeFile of listRelativeFiles(sourceDir)) {
-      if (isGeneratedRuntimeSourcePath(`${source}/${relativeFile}`)) continue;
+      const sourceFile = `${source}/${relativeFile}`;
+      if (isGeneratedRuntimeSourcePath(sourceFile) || isHostPlacedSourcePath(sourceFile)) continue;
       covered.files.add(path.join(resolvedDestination, ...relativeFile.split('/')));
     }
   } catch {
