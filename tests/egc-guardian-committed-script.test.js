@@ -88,8 +88,9 @@ run('a delete or move is flagged only when its target is known to be narrow', ()
     [`${wipe} "$tmp"`, { tmp: ['$(mktemp -d "${TMPDIR:-/tmp}/egc.XXXXXX")'] }],
     [`${wipe} "$tmp"`, { tmp: ['$(mktemp -d -p "$TMPDIR")'] }],
     // A directory below it stays narrow even where mktemp fails, as long as
-    // it starts in no system directory and names no protected path.
-    [`${wipe} "$tmp/build"`, { tmp: ['$(mktemp -d)'] }],
+    // the path it leaves from the root is narrow itself: two components at
+    // least, starting in no system directory and naming no protected path.
+    [`${wipe} "$tmp/build/out"`, { tmp: ['$(mktemp -d)'] }],
   ];
   for (const [command, bound] of flagged) {
     const verdict = validateCommittedScriptCommand(command, cwd, bound);
@@ -139,6 +140,7 @@ run('a delete or move whose target is broad, protected, top-level or chosen outs
     // expansion can turn into either.
     { tmp: ['$(mktemp -d)/etc'] },
     { tmp: ['$(mktemp -d)/usr/lib'] },
+    { tmp: ['$(mktemp -d)/build'] },
     { tmp: ['$(mktemp -d)/.ssh/id_rsa'] },
     { tmp: ['$(mktempfoo)'] },
     { tmp: ['$(mktemp --help)'] },

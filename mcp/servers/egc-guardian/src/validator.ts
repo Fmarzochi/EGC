@@ -2139,13 +2139,14 @@ const ROOT_SYSTEM_DIRS = new Set([
 
 // What follows a fresh temporary path stays inside it, and names nothing
 // grave where mktemp fails and prints nothing, which leaves it read from the
-// root (`$(mktemp -d)/usr/lib` is /usr/lib then): nothing, or literal
-// components that neither climb out nor start in a system directory nor
-// name a protected path.
+// root (`$(mktemp -d)/usr/lib` is /usr/lib then, `$(mktemp -d)/build` is
+// /build): nothing, or a narrow tail of literal components that neither
+// climb out nor start in a system directory.
 function staysInFreshTemp(rest: string): boolean {
   if (rest === '') return true;
-  const parts = literalParts(shellWord(rest));
-  return parts !== null && parts.length > 0 && !ROOT_SYSTEM_DIRS.has(parts[0].toLowerCase()) && namesNoProtectedPath(parts);
+  const tail = shellWord(rest);
+  const parts = literalParts(tail);
+  return parts !== null && !ROOT_SYSTEM_DIRS.has(parts[0]?.toLowerCase() ?? '') && isNarrowTail(tail);
 }
 
 function isNarrowValue(value: string, cwd?: string, depth = 0): boolean {
