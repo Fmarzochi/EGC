@@ -59,6 +59,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A command whose name comes from a variable the command fixes is judged by the name it resolves to; opaque sources fail closed, the environment stays advisory (#1559).
 - A command word that comes from an expansion is judged by every value it can take, in the command and in the scripts it runs; a value the hook cannot read fails closed (#1560).
 - A `${...}` expansion closes where bash closes it, past nested expansions and substitutions, and a comment ends at its newline whatever quote or backslash it holds (#1561).
+- The fact-forcing gate reads `taskset -p` and `chrt -p` as acting on a running process, so the words after them are never taken for a command (#1563).
 - A hook input larger than the 1 MiB the guards read is refused instead of judged by its start, and the write hook blocks a write its validator gave no verdict on (#1574).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
