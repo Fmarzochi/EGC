@@ -60,6 +60,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A command word that comes from an expansion is judged by every value it can take, in the command and in the scripts it runs; a value the hook cannot read fails closed (#1560).
 - A `${...}` expansion closes where bash closes it, past nested expansions and substitutions, and a comment ends at its newline whatever quote or backslash it holds (#1561).
 - The fact-forcing gate reads `taskset -p` and `chrt -p` as acting on a running process, so the words after them are never taken for a command (#1563).
+- Code a shell reads after the line expands it (an unquoted heredoc, `-c` or `eval` code in a word that expands) is judged once per value the line gives its variables; a value the hook cannot read fails closed (#1588).
 - Encrypted state and compressed observations are written through a temp file that is exclusive and 0600 from its creation (#1564).
 - A memory write that meets another process's lock waits its backoff without holding up the writes behind it (#1567).
 - A committed script's delete target is narrow only when every variable on the way to it is, a start known only at run time cannot make a protected end narrow, and a malformed committed marker is judged as typed (#1562).
