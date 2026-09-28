@@ -4,6 +4,8 @@
 // to each other (direct or broadcast) through a durable pub/sub table, with
 // a per-session read cursor so every session consumes each event once.
 
+import path from 'node:path';
+
 // Text form of a column read from a bus row: rows arrive as loosely typed
 // records, so a value is rendered explicitly instead of relying on the
 // default object stringification.
@@ -113,14 +115,87 @@ export interface ClaimResult {
   holderTerritory?: string;
 }
 
-// Fail-fast claim: a conflicting live lock is reported, never queued.
-// Every acquisition path is a conditional write (INSERT OR IGNORE or a
-// session-guarded UPDATE/DELETE), so two concurrent claimers can never both
-// win: whoever lands the row first owns it and the loser sees changes === 0.
+// The key a claim is held under: the path it names, resolved against the
+// project of the session that claims it (the same words in another project
+// are another file), normalized, with no trailing separator.
+async function claimKey(db: BusDb, sessionId: string, claimed: string): Promise<string> {
+  if (path.isAbsolute(claimed)) return path.resolve(claimed);
+  const session = await db.get('SELECT project_path FROM bus_sessions WHERE id = ?', sessionId);
+  const project = session?.project_path ? rowText(session.project_path) : '';
+  return project ? path.resolve(project, claimed) : path.resolve(claimed);
+}
+
+// Whether two claim keys cover a common file: the same path, or one inside
+// the other.
+export function claimsOverlap(a: string, b: string): boolean {
+  const inside = (inner: string, outer: string) => inner.startsWith(outer.endsWith(path.sep) ? outer : outer + path.sep);
+  return a === b || inside(a, b) || inside(b, a);
+}
+
+// The live foreign locks above or inside `key` (not on it: that path has its
+// own handling), a stale one removed on the way.
+async function overlappingLocks(db: BusDb, key: string, sessionId: string): Promise<Record<string, unknown>[]> {
+  const rows = await db.all('SELECT path, session_id, acquired_at FROM bus_locks WHERE session_id != ?', sessionId);
+  const live: Record<string, unknown>[] = [];
+  for (const row of rows) {
+    const held = rowText(row.path);
+    if (held === key || !claimsOverlap(held, key)) continue;
+    const holder = await db.get('SELECT id, territory FROM bus_sessions WHERE id = ?', row.session_id);
+    if (holder) live.push({ ...row, territory: holder.territory });
+    else await db.run('DELETE FROM bus_locks WHERE path = ? AND session_id = ?', held, row.session_id);
+  }
+  return live;
+}
+
+const refusedBy = (row: Record<string, unknown>): ClaimResult => ({
+  ok: false,
+  holder: rowText(row.session_id),
+  holderTerritory: row.territory ? rowText(row.territory) : undefined,
+});
+
+// A claim that landed at the same time as an overlapping one from another
+// session: the later of the two (by acquisition time, then session id)
+// yields its row, so exactly one of them holds the tree.
+async function yieldToEarlierOverlap(db: BusDb, key: string, sessionId: string): Promise<ClaimResult> {
+  const mine = await db.get('SELECT acquired_at FROM bus_locks WHERE path = ? AND session_id = ?', key, sessionId);
+  const mineAt = rowText(mine?.acquired_at);
+  const earlier = (await overlappingLocks(db, key, sessionId)).find(row => {
+    const theirs = rowText(row.acquired_at);
+    return theirs < mineAt || (theirs === mineAt && rowText(row.session_id) < sessionId);
+  });
+  if (!earlier) return { ok: true };
+  await db.run('DELETE FROM bus_locks WHERE path = ? AND session_id = ?', key, sessionId);
+  return refusedBy(earlier);
+}
+
+// Fail-fast claim: a conflicting live lock is reported, never queued. A
+// claim covers the tree under its path, so a live lock above or inside it
+// refuses it too.
 export async function claimPath(
   db: BusDb,
   input: { sessionId: string; path: string; ttlSeconds?: number },
   nowMs: number = Date.now()
+): Promise<ClaimResult> {
+  const key = await claimKey(db, input.sessionId, input.path);
+  const blocking = await overlappingLocks(db, key, input.sessionId);
+  if (blocking.length > 0) {
+    // Already holding it when an overlapping lock appeared: the order of
+    // the two decides which one stays.
+    const held = await db.get('SELECT session_id FROM bus_locks WHERE path = ? AND session_id = ?', key, input.sessionId);
+    return held ? yieldToEarlierOverlap(db, key, input.sessionId) : refusedBy(blocking[0]);
+  }
+  const claimed = await claimExactPath(db, { ...input, path: key }, nowMs);
+  return claimed.ok ? yieldToEarlierOverlap(db, key, input.sessionId) : claimed;
+}
+
+// Every acquisition path is a conditional write (INSERT OR IGNORE or a
+// session-guarded UPDATE/DELETE), so two concurrent claimers of the same
+// path can never both win: whoever lands the row first owns it and the
+// loser sees changes === 0.
+async function claimExactPath(
+  db: BusDb,
+  input: { sessionId: string; path: string; ttlSeconds?: number },
+  nowMs: number
 ): Promise<ClaimResult> {
   const ttl = Math.min(Math.max(input.ttlSeconds || DEFAULT_LOCK_TTL_SECONDS, 1), MAX_LOCK_TTL_SECONDS);
   const now = new Date(nowMs).toISOString();
@@ -163,9 +238,10 @@ export async function claimPath(
 }
 
 export async function releasePath(db: BusDb, input: { sessionId: string; path: string }): Promise<boolean> {
-  const existing = await db.get('SELECT session_id FROM bus_locks WHERE path = ?', input.path);
+  const key = await claimKey(db, input.sessionId, input.path);
+  const existing = await db.get('SELECT session_id FROM bus_locks WHERE path = ?', key);
   if (existing?.session_id !== input.sessionId) return false;
-  await db.run('DELETE FROM bus_locks WHERE path = ?', input.path);
+  await db.run('DELETE FROM bus_locks WHERE path = ?', key);
   return true;
 }
 

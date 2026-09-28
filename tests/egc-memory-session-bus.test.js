@@ -73,6 +73,101 @@ async function main() {
     assert.strictEqual(second.holderTerritory, 'docs');
   });
 
+  await run('a claim covers the tree under it: a path inside a held one, or above it, is refused', async () => {
+    const db = await freshDb();
+    await bus.announce(db, { sessionId: 's1', projectPath: '/p', territory: 'src' });
+    await bus.announce(db, { sessionId: 's2', projectPath: '/p' });
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 's1', path: 'src' })).ok, true);
+    const inside = await bus.claimPath(db, { sessionId: 's2', path: 'src/index.ts' });
+    assert.strictEqual(inside.ok, false, 'a file inside a claimed directory');
+    assert.strictEqual(inside.holder, 's1');
+    assert.strictEqual(inside.holderTerritory, 'src');
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 's2', path: 'src2/a.ts' })).ok, true, 'a sibling that only shares a prefix');
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 's2', path: 'lib/a.ts' })).ok, true);
+    const above = await bus.claimPath(db, { sessionId: 's1', path: 'lib' });
+    assert.strictEqual(above.ok, false, 'a directory above a claimed file');
+    assert.strictEqual(above.holder, 's2');
+  });
+
+  await run('a claim is held under the path it names, however it is spelled, in the project of the session', async () => {
+    const db = await freshDb();
+    await bus.announce(db, { sessionId: 's1', projectPath: '/p' });
+    await bus.announce(db, { sessionId: 's2', projectPath: '/p' });
+    await bus.announce(db, { sessionId: 's3', projectPath: '/q' });
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 's1', path: 'src/./a.ts' })).ok, true);
+    for (const spelling of ['src/a.ts', './src/a.ts', 'src//a.ts', 'lib/../src/a.ts', path.join(path.resolve('/p'), 'src', 'a.ts')]) {
+      const claim = await bus.claimPath(db, { sessionId: 's2', path: spelling });
+      assert.strictEqual(claim.ok, false, spelling);
+    }
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 's3', path: 'src/a.ts' })).ok, true, 'the same words in another project are another file');
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 's1', path: 'docs/' })).ok, true);
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 's2', path: 'docs' })).ok, false, 'a trailing separator names the same directory');
+    assert.strictEqual(await bus.releasePath(db, { sessionId: 's1', path: './src/a.ts' }), true, 'released by another spelling');
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 's2', path: 'src/a.ts' })).ok, true);
+  });
+
+  await run('a claim above or inside a lock from a vanished session is not blocked, and the stale lock goes', async () => {
+    const db = await freshDb();
+    await bus.announce(db, { sessionId: 'alive', projectPath: '/p' });
+    await db.run(
+      'INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)',
+      path.join(path.resolve('/p'), 'src'), 'ghost', new Date().toISOString()
+    );
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 'alive', path: 'src/index.ts' })).ok, true);
+    assert.deepStrictEqual((await bus.listLocks(db)).map(lock => lock.session_id), ['alive']);
+  });
+
+  await run('two sessions that land overlapping claims at once: the later one yields', async () => {
+    const db = await freshDb();
+    await bus.announce(db, { sessionId: 'first', projectPath: '/p' });
+    await bus.announce(db, { sessionId: 'second', projectPath: '/p' });
+    const root = path.resolve('/p');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src'), 'first', '2026-09-28T00:00:00.000Z');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src', 'a.ts'), 'second', '2026-09-28T00:00:00.000Z');
+    const second = await bus.claimPath(db, { sessionId: 'second', path: 'src/a.ts' }, Date.parse('2026-09-28T00:00:01.000Z'));
+    assert.strictEqual(second.ok, false, 'the later claim of the pair yields');
+    assert.strictEqual(second.holder, 'first');
+    assert.deepStrictEqual((await bus.listLocks(db)).map(lock => lock.session_id), ['first'], 'its row is gone');
+  });
+
+  await run('of two overlapping claims held at once, the earlier one stays', async () => {
+    const db = await freshDb();
+    await bus.announce(db, { sessionId: 'b', projectPath: '/p' });
+    await bus.announce(db, { sessionId: 'a', projectPath: '/p' });
+    const root = path.resolve('/p');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src'), 'b', '2026-09-28T00:00:00.000Z');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src', 'a.ts'), 'a', '2026-09-28T00:00:05.000Z');
+    const earlier = await bus.claimPath(db, { sessionId: 'b', path: 'src' }, Date.parse('2026-09-28T00:00:06.000Z'));
+    assert.strictEqual(earlier.ok, true, 'the earlier holder keeps its claim');
+    const later = await bus.claimPath(db, { sessionId: 'a', path: 'src/a.ts' }, Date.parse('2026-09-28T00:00:07.000Z'));
+    assert.strictEqual(later.ok, false);
+    assert.deepStrictEqual((await bus.listLocks(db)).map(lock => lock.session_id), ['b']);
+  });
+
+  await run('a claim another session lands between the check and the write makes the later one yield', async () => {
+    const db = await freshDb();
+    await bus.announce(db, { sessionId: 'racer', projectPath: '/p' });
+    await bus.announce(db, { sessionId: 'me', projectPath: '/p' });
+    const root = path.resolve('/p');
+    let landed = false;
+    const racing = {
+      run: async (sql, ...params) => {
+        if (!landed && /INSERT OR IGNORE INTO bus_locks/.test(sql)) {
+          landed = true;
+          await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src'), 'racer', '2026-01-01T00:00:00.000Z');
+        }
+        return db.run(sql, ...params);
+      },
+      get: (...args) => db.get(...args),
+      all: (...args) => db.all(...args),
+      exec: (...args) => db.exec(...args),
+    };
+    const claim = await bus.claimPath(racing, { sessionId: 'me', path: 'src/a.ts' });
+    assert.strictEqual(claim.ok, false, 'the claim that landed later yields');
+    assert.strictEqual(claim.holder, 'racer');
+    assert.deepStrictEqual((await bus.listLocks(db)).map(lock => lock.session_id), ['racer']);
+  });
+
   await run('holder can re-claim its own path and only the holder releases', async () => {
     const db = await freshDb();
     await bus.announce(db, { sessionId: 's1', projectPath: '/p' });
