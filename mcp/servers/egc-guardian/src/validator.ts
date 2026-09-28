@@ -559,12 +559,17 @@ function programValueDenied(text: string, alone: boolean): boolean {
 function envValueDenial(name: string, value: string, command: string | undefined, persists: boolean, cwd?: string): string | null {
   const upper = name.toUpperCase();
   const text = stripQuotes(value);
-  if (GIT_PATH_ENV_VAR_RE.test(upper) && isProtectedPath(text)) {
-    return `'${name}' makes git write to the protected path ${text}, which is forbidden`;
+  const spellings = pathSpellings(shellWord(value));
+  const written = GIT_PATH_ENV_VAR_RE.test(upper) ? spellings.find(p => isProtectedPath(p)) : undefined;
+  if (written !== undefined) {
+    return `'${name}' makes git write to the protected path ${written}, which is forbidden`;
   }
   // Read from where the command runs, so a relative link is followed there.
-  if (REPOSITORY_ENV_VARS.has(upper) && !isTrustedGitDirectory(followedGitDirectory(path.resolve(cwd ?? process.cwd(), expandHome(text))))) {
-    return `'${name}' points git at ${text}, a repository whose config this line can choose, which is forbidden: name a .git or <name>.git directory`;
+  const untrusted = REPOSITORY_ENV_VARS.has(upper)
+    ? spellings.find(p => !isTrustedGitDirectory(followedGitDirectory(path.resolve(cwd ?? process.cwd(), expandHome(p)))))
+    : undefined;
+  if (untrusted !== undefined) {
+    return `'${name}' points git at ${untrusted}, a repository whose config this line can choose, which is forbidden: name a .git or <name>.git directory`;
   }
   // When it persists (export, a bare assignment) it holds for the git
   // commands later on the line; git's own programs (git-upload-pack) read
@@ -1706,7 +1711,7 @@ function isDangerousAliasValue(value: string, cwd?: string): boolean {
   const words = tokenizeWords(trimmed);
   // An alias is judged by the git command it expands to: one that hides
   // a refused force or a clean is as dangerous as typing it.
-  if (!validateGitArgs(words, cwd).allowed) return true;
+  if (!validateGitArgs(words.map(shellWord), cwd).allowed) return true;
 
   let i = 0;
   while (i < words.length) {
@@ -1796,8 +1801,8 @@ function readGitConfigCluster(rest: string[], i: number, call: GitConfigCall): n
       continue;
     }
     const glued = cluster.slice(j + 1);
-    const value = glued === '' ? rest[i + 1] : glued;
-    if (kind === 'file' && value !== undefined) call.files.push(stripQuotes(value));
+    const value = glued === '' ? rest[i + 1] : rest[i];
+    if (kind === 'file' && value !== undefined) call.files.push(glued === '' ? value : pathValue(value, cluster, j + 1));
     return glued === '' ? i + 1 : i;
   }
   return i;
@@ -1835,8 +1840,8 @@ function readGitConfigOption(rest: string[], i: number, call: GitConfigCall): nu
   }
   if (GIT_CONFIG_SWITCHES.has(valued)) return i;
   const glued = option.includes('=');
-  const value = glued ? option.slice(option.indexOf('=') + 1) : rest[i + 1];
-  if ((valued === '--file' || valued === '--blob') && value !== undefined) call.files.push(stripQuotes(value));
+  const value = glued ? pathValue(rest[i], option, option.indexOf('=') + 1) : rest[i + 1];
+  if ((valued === '--file' || valued === '--blob') && value !== undefined) call.files.push(value);
   return glued ? i : i + 1;
 }
 
@@ -2217,9 +2222,10 @@ function gitOptionFiles(rest: string[], longFlags: string[], shortFlag: string |
     const option = stripQuotes(rest[i]);
     const isLong = longFlags.some(flag => abbreviates(option, flag));
     if (!isLong && (shortFlag === null || !option.startsWith(shortFlag))) continue;
-    const glued = isLong ? option.split('=').slice(1).join('=') : option.slice(shortFlag?.length);
-    if (option.includes('=') || (!isLong && glued !== '')) files.push(glued);
-    else if (rest[i + 1] !== undefined) files.push(stripQuotes(rest[i + 1]));
+    const at = isLong ? option.indexOf('=') + 1 : shortFlag?.length ?? 0;
+    const glued = isLong && at === 0 ? '' : option.slice(at);
+    if (option.includes('=') || (!isLong && glued !== '')) files.push(pathValue(rest[i], option, at));
+    else if (rest[i + 1] !== undefined) files.push(rest[i + 1]);
   }
   return files;
 }
@@ -2249,15 +2255,15 @@ function nearestGitTop(dir: string): string {
 // Where git runs and the top of the work tree it reads, as its global
 // options set them: each -C moves on from the last, --work-tree names the
 // top outright, and otherwise the top is found up from where git runs.
-function gitPlaces(globals: string[], cwd?: string): { dir: string; top: string } {
+function gitPlaces(globals: string[], cwd?: string, reading = 0): { dir: string; top: string } {
   let dir = path.resolve(cwd ?? process.cwd());
   let top: string | null = null;
   for (let i = 0; i < globals.length; i++) {
     const option = stripQuotes(globals[i]);
-    const next = globals[i + 1] === undefined ? undefined : expandHome(stripQuotes(globals[i + 1]));
+    const next = globals[i + 1] === undefined ? undefined : expandHome(pathValue(globals[i + 1], '', 0, reading));
     if (option === '-C' && next !== undefined) dir = path.resolve(dir, next);
     else if (option === '--work-tree' && next !== undefined) top = path.resolve(dir, next);
-    else if (option.startsWith('--work-tree=')) top = path.resolve(dir, expandHome(option.slice('--work-tree='.length)));
+    else if (option.startsWith('--work-tree=')) top = path.resolve(dir, expandHome(pathValue(globals[i], option, '--work-tree='.length, reading)));
   }
   return { dir, top: top ?? nearestGitTop(dir) };
 }
@@ -2309,26 +2315,32 @@ function discoveredGitDirectory(dir: string): string | null {
   }
 }
 
-// The last --git-dir among git's global options, as written.
-function namedGitDirectory(globals: string[]): string | undefined {
+// The last --git-dir among git's global options, in one reading of its path.
+function namedGitDirectory(globals: string[], reading = 0): string | undefined {
   let named: string | undefined;
   for (let i = 0; i < globals.length; i++) {
     const option = stripQuotes(globals[i]);
-    if (option === '--git-dir' && globals[i + 1] !== undefined) named = stripQuotes(globals[i + 1]);
-    else if (option.startsWith('--git-dir=')) named = option.slice('--git-dir='.length);
+    if (option === '--git-dir' && globals[i + 1] !== undefined) named = pathValue(globals[i + 1], '', 0, reading);
+    else if (option.startsWith('--git-dir=')) named = pathValue(globals[i], option, '--git-dir='.length, reading);
   }
   return named;
+}
+
+// The git directory git uses in one reading of the paths its options name:
+// the one --git-dir names, or the one found up from where it runs.
+function usedGitDirectory(globals: string[], cwd: string | undefined, reading: number): string | null {
+  const { dir } = gitPlaces(globals, cwd, reading);
+  const named = namedGitDirectory(globals, reading);
+  return named === undefined ? discoveredGitDirectory(dir) : followedGitDirectory(path.resolve(dir, expandHome(named)));
 }
 
 // git loads the config and runs the hooks of the git directory it uses,
 // named by --git-dir or found up from where it runs. One outside the .git
 // convention has neither protected from a write, so what was planted there
-// would run: git is refused it.
+// would run: git is refused it, in every reading of the paths it is handed.
 function checkGitDirectory(globals: string[], cwd?: string): ValidationResult | null {
-  const { dir } = gitPlaces(globals, cwd);
-  const named = namedGitDirectory(globals);
-  const gitDir = named === undefined ? discoveredGitDirectory(dir) : followedGitDirectory(path.resolve(dir, expandHome(named)));
-  if (gitDir === null || isTrustedGitDirectory(gitDir)) return null;
+  const gitDir = pathReadings().map(reading => usedGitDirectory(globals, cwd, reading)).find(found => found !== null && !isTrustedGitDirectory(found));
+  if (gitDir === undefined || gitDir === null) return null;
   return {
     allowed: false,
     reason: `git would load the config and run the hooks of '${gitDir}', a git directory not named .git or <name>.git, where nothing protects them from a write, and is forbidden`,
@@ -3471,6 +3483,23 @@ function expandArguments(words: string[]): string[] | null {
 
 function pathSpellings(arg: string): string[] {
   return process.platform === 'win32' ? [arg, unquoteWord(arg)] : [arg];
+}
+
+// The readings of a path value, one per spelling pathSpellings gives.
+function pathReadings(): number[] {
+  return process.platform === 'win32' ? [0, 1] : [0];
+}
+
+// A path value read out of an option word the shell handed over (see
+// shellWord), in one of its spellings (see pathSpellings), so a quoted
+// backslash stays in it and on Windows separates it. `stripped` is the word
+// without quotes and backslashes the option was recognized by, and `at`
+// where the value starts there; when the flag part does not read the same,
+// `stripped` decides.
+function pathValue(word: string, stripped: string, at: number, reading = 0): string {
+  const spellings = pathSpellings(word);
+  const spelled = spellings[Math.min(reading, spellings.length - 1)];
+  return spelled.startsWith(stripped.slice(0, at)) ? spelled.slice(at) : stripped.slice(at);
 }
 
 function isProtectedOperand(arg: string, cwd?: string): boolean {

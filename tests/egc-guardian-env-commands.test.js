@@ -102,6 +102,9 @@ denied("EDITOR='nano -w' git commit");
 notDenied('LESS=FRX git log');
 notDenied('LESS=-R git log');
 notDenied('GIT_INDEX_FILE=/tmp/idx git add .');
+// The path is judged as the shell hands it: a backslash inside single quotes
+// stays in it, and on Windows it separates the path.
+denied("GIT_INDEX_FILE='idx\\egc-install-state.json' git add .");
 notDenied('GIT_DIR=.git git status');
 notDenied('HOME=/tmp/x npm install');
 notDenied('MAKEFLAGS=-k make');

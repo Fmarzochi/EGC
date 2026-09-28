@@ -209,6 +209,49 @@ record(test('a .git file is followed to the git directory it names', () => {
   passes('git status', at('broken'));
 }));
 
+// A path git is handed is judged as the shell hands it: a backslash is a
+// character of a quoted word, and on Windows a separator of an unquoted one
+// as well, so reading the word without it would judge a path that does not
+// exist, trusted by its name alone. A backslash is a character of a file
+// name outside Windows, which lets both readings be set up here.
+if (process.platform !== 'win32') {
+  fs.symlinkSync(at('evil'), at('a\\link.git'), 'dir');
+  gitDirectory(at('b\\bare'));
+
+  record(test('a git directory is judged as the shell hands its path, a backslash in it included', () => {
+    for (const command of [
+      `git --git-dir='${at('a\\link.git')}' status`, `git --git-dir="${at('a\\\\link.git')}" status`,
+      `git --git-dir '${at('a\\link.git')}' status`, `git -C '${at('b\\bare')}' status`,
+      `GIT_DIR='${at('a\\link.git')}' git status`,
+    ]) {
+      assert.match(denied(command, at('plain')).reason, /git directory/, command);
+    }
+    passes(`git --git-dir='${at('repo.git')}' status`, at('plain'));
+  }));
+
+  // A shell there may read the backslash either way, so each reading is
+  // judged: one leading to a sound git directory does not clear the other.
+  gitDirectory(at('c\\ok.git'));
+  fs.symlinkSync(at('evil'), at('cok.git'), 'dir');
+  fs.mkdirSync(at('d\\ok'));
+  gitDirectory(at('dok'));
+
+  record(test('on Windows an unquoted backslash is read both as a separator and as an escape', () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      for (const command of [
+        `git --git-dir=${at('a\\link.git')} status`, `git -C ${at('b\\bare')} status`, `GIT_DIR=${at('a\\link.git')} git status`,
+        `git --git-dir=${at('c\\ok.git')} status`, `git -C ${at('d\\ok')} status`, `GIT_DIR=${at('c\\ok.git')} git status`,
+      ]) {
+        assert.match(denied(command, at('plain')).reason, /git directory/, command);
+      }
+    } finally {
+      Object.defineProperty(process, 'platform', platform);
+    }
+  }));
+}
+
 const cli = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'guardian-cli.js');
 
 record(test('the command-batch CLI judges an entry in every directory it can run in, and a malformed list where the batch runs', () => {

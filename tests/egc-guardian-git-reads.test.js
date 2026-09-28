@@ -129,6 +129,33 @@ run('a repository whose top is above the current directory is read from its top'
   }
 });
 
+// A shell on Windows may read an unquoted backslash as an escape: the
+// directory -C names is also judged that way, and the home it then leads
+// to keeps its key. A backslash is a character of a name outside Windows,
+// which lets both directories be set up here.
+if (process.platform !== 'win32') {
+  run('on Windows the directory -C names is also read with its backslash escapes resolved', () => {
+    const { spawnSync } = require('node:child_process');
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-git-home-'));
+    try {
+      const fakeHome = path.join(base, 'home');
+      fs.mkdirSync(path.join(fakeHome, '.git'), { recursive: true });
+      fs.mkdirSync(path.join(fakeHome, '.ssh'));
+      fs.mkdirSync(path.join(base, 'h\\ome'));
+      const command = `git -C ${path.join(base, 'h\\ome')} show HEAD:.ssh/config`;
+      const probe = `const { validateCommand } = require(${JSON.stringify(buildPath)});
+        Object.defineProperty(process, 'platform', { value: 'win32' });
+        process.stdout.write(JSON.stringify(validateCommand(${JSON.stringify(command)}, ${JSON.stringify(base)})));`;
+      const result = spawnSync(process.execPath, ['-e', probe], { encoding: 'utf8', env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome } });
+      assert.strictEqual(result.status, 0, result.stderr);
+      const verdict = JSON.parse(result.stdout);
+      assert.strictEqual(verdict.allowed, false, `the key of the home -C may lead to: ${verdict.reason}`);
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  });
+}
+
 console.log('\na file a path-only subcommand reads its pathspecs or patterns from:');
 denied('git status --pathspec-from-file=~/.ssh/id_rsa', READ);
 denied('git status --pathspec-from-file ~/.ssh/id_rsa', READ);
@@ -176,6 +203,10 @@ allowed('git --config-env user.signingkey=KEY commit -S -m x');
 allowed('git check-attr -a .env');
 allowed('git log -o ~/.bashrc');
 allowed('git -C src log -1');
+// A file an option reads is judged as the shell hands its name: a backslash
+// inside single quotes stays in it, so it names neither more nor less.
+allowed("git ls-files --exclude-from='x.en\\v'");
+allowed("git ls-files --exclude-from 'x.en\\v'");
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
