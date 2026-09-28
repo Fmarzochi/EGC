@@ -23,7 +23,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The Crowdin sync translates what it uploads: the pre-translation request carries the file and the languages the repository ships, a refusal fails the run instead of hiding behind a warning, and a language directory the repository does not track is dropped after the download (#1505).
 - A script handed to `egc run --shell` is validated segment by segment by the Guardian hook, so a compound script cannot carry a refused command past the advisory metacharacter verdict (#1503).
 - The Guardian reads `git config` and `git grep` the way git reads them, subcommands, option clusters and the file `--file` names included (#1569).
-- The guardian hooks' unexpected-error paths and the second reading's limit on combinations are covered by tests, and the #1569 entry listed twice is listed once (#1596).
+- The guardian hooks' unexpected-error paths and the second reading's limit on combinations are covered by tests, and the #1569 entry listed twice is listed once (#1595).
 - The contributing guide lists the twelve translations the repository carries instead of two with hand-kept percentages (#1506).
 - The context files receive project memory only after the commit-privacy filter is in place: the hook library and the memory server mirror the block once the filter is armed or the path is outside any git working tree, leave the files as they are and say why on stderr when a checkout cannot take the filter, and the planner tells a checkout git cannot open apart from a directory that is no repository (#1510).
 - Disk and memory devices are protected paths, read or written (#1570).
