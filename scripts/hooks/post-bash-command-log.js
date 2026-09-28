@@ -35,11 +35,12 @@ const SECRET_VALUE_PREFIXES = [
   /\b[\w-]*(?:token|password|passwd|secret|apikey)[\w-]*\s*=\s*/gi,
   /\b[\w-]*(?:api|access|private)[-_]?key[\w-]*\s*=\s*/gi,
   /\b(?:auth|authorization|credentials?)\s*=\s*/gi,
-  // A name whose part is pass or passphrase (DBPASS, DB_PASS), not a word
-  // that only ends that way (BYPASS, COMPASS), nor PASSPORT.
-  /\b[\w-]*(?<!by|com|sur|tres|over|under|encom)pass(?:phrase)?(?:[_-][\w-]*)?\s*=\s*/gi,
-  // pwd after a name (MYSQL_PWD), never PWD or OLDPWD, the shell's own.
-  /\b[\w-]*(?<=[\w-])(?<!old)pwd(?:[_-][\w-]*)?\s*=\s*/gi,
+  // A name whose part is pass or passphrase (DBPASS, DB_PASS, DBPASS2), not
+  // a word that only ends that way (BYPASS, COMPASS), nor PASSPORT.
+  /\b[\w-]*(?<!by|com|sur|tres|over|under|encom)pass(?:phrase)?\d*(?:[_-][\w-]*)?\s*=\s*/gi,
+  // pwd after a name (MYSQL_PWD, DB_OLDPWD), never the shell's own PWD or
+  // OLDPWD.
+  /\b(?!(?:old)?pwd\s*=)[\w-]*(?<=[\w-])pwd\d*(?:[_-][\w-]*)?\s*=\s*/gi,
 ];
 const SECRET_SHAPES = [
   /(:\/\/[^\s/:@]+:)[^\s@]+(?=@)/g,
@@ -308,21 +309,23 @@ const MYSQL_CLIENTS = ['mysql', 'mysqldump', 'mysqladmin', 'mysqlimport', 'mysql
 const PASSWORD_CLIENTS = new Map([
   ...MYSQL_CLIENTS.map(name => [name, { glued: ['-p'], separate: [] }]),
   ['sshpass', { glued: ['-p'], separate: ['-p'] }],
-  ['redis-cli', { glued: [], separate: ['-a', '--pass'] }],
+  ['redis-cli', { glued: ['-a'], separate: ['-a', '--pass'] }],
 ]);
 
+// A client by its name, with or without a Windows executable suffix.
 function passwordClient(value) {
-  return PASSWORD_CLIENTS.get(basename(value).toLowerCase().replace(/\.exe$/, '')) ?? null;
+  return PASSWORD_CLIENTS.get(basename(value).toLowerCase().replace(/\.(?:exe|cmd|bat)$/, '')) ?? null;
 }
 
-// A word of a password client: the password glued to its flag, or its flag,
-// whose next word is the password.
+// A word of a password client, read as the shell passes it ('-psecret' is
+// -psecret): the password glued to its flag, or its flag, whose next word
+// is the password.
 function passwordWord(word, state) {
   if (state.client.separate.includes(word.value)) {
     state.secretNext = true;
     return word.raw;
   }
-  const glued = state.client.glued.find(flag => word.raw.startsWith(flag) && word.raw.length > flag.length);
+  const glued = state.client.glued.find(flag => word.value.startsWith(flag) && word.value.length > flag.length);
   return glued ? `${glued}${REDACTED}` : word.raw;
 }
 
@@ -474,6 +477,15 @@ function maskSubstitutions(raw) {
   }
   return out;
 }
+// A word after curl: the credential glued to -u or --user=, read as the
+// shell passes it ('-uuser:pass' and \-uuser:pass are -u).
+function curlUserWord(word) {
+  const glued = GLUED_USER_FLAGS.find(flag => word.value.startsWith(flag) && word.value.length > flag.length);
+  if (!glued) return word.raw;
+  const rest = (word.raw.startsWith(glued) ? word.raw : word.value).slice(glued.length);
+  return `${glued}${redactCredential(rest, word.value.slice(glued.length))}`;
+}
+
 // One word of a command, with the state of the command it belongs to.
 function redactWord(word, state) {
   if (state.bodyNext) {
@@ -497,8 +509,7 @@ function redactWord(word, state) {
   } else if (state.sawCurl && (word.value === '-u' || word.value === '--user')) {
     state.valueNext = true;
   } else if (state.sawCurl) {
-    const glued = GLUED_USER_FLAGS.find(flag => word.raw.startsWith(flag) && word.raw.length > flag.length);
-    if (glued) return `${glued}${redactCredential(word.raw.slice(glued.length), word.value.slice(glued.length))}`;
+    return curlUserWord(word);
   } else if (passwordClient(word.value)) {
     state.client = passwordClient(word.value);
   } else if (state.client) {

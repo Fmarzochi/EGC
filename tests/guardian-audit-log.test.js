@@ -100,6 +100,28 @@ if (test('redactSecretsInText: a password named pass or pwd, and one a database 
   for (const [input, expected] of cases) assert.strictEqual(redactSecretsInText(input), expected, input);
 })) passed++; else failed++;
 
+if (test('redactSecretsInText reads a password flag as the shell passes it, a client by any Windows suffix, and a name by its digits', () => {
+  const cases = [
+    ["mysql '-psenha123' db", 'mysql -p[REDACTED] db'],
+    ['mysql "-psenha123" db', 'mysql -p[REDACTED] db'],
+    ['mysql \\-psenha123 db', 'mysql -p[REDACTED] db'],
+    ['mysql.cmd -psenha123', 'mysql.cmd -p[REDACTED]'],
+    ['mariadb.bat -psenha123', 'mariadb.bat -p[REDACTED]'],
+    ['MYSQL.EXE -psenha123', 'MYSQL.EXE -p[REDACTED]'],
+    ["sshpass '-psenha123' ssh host", 'sshpass -p[REDACTED] ssh host'],
+    ['redis-cli -asenha123 ping', 'redis-cli -a[REDACTED] ping'],
+    ['DB_OLDPWD=hunter2 ./run', 'DB_OLDPWD=[REDACTED] ./run'],
+    ['DBPASS2=hunter2 MYSQL_PWD2=x ./run', 'DBPASS2=[REDACTED] MYSQL_PWD2=[REDACTED] ./run'],
+    ['OLDPWD=/y PWD=/x ./run', 'OLDPWD=/y PWD=/x ./run'],
+    ["mysql '-p' db", "mysql '-p' db"],
+    ["curl '-uadmin:hunter2' http://x", 'curl -uadmin:[REDACTED] http://x'],
+    ['curl \\-uadmin:hunter2 http://x', 'curl -uadmin:[REDACTED] http://x'],
+    ['curl -uadmin:hunter2 http://x', 'curl -uadmin:[REDACTED] http://x'],
+    ["curl -u'admin:hunter2' http://x", "curl -u'admin:[REDACTED]' http://x"],
+  ];
+  for (const [input, expected] of cases) assert.strictEqual(redactSecretsInText(input), expected, input);
+})) passed++; else failed++;
+
 if (test('redactSecretsInText: -u only inside curl, key aliases with surrounding names, api secrets, flags without a value', () => {
   const cases = [
     ['rsync -u user@host:src dest', 'rsync -u user@host:src dest'],

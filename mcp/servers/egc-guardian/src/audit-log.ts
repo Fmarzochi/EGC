@@ -61,11 +61,12 @@ const SECRET_VALUE_PREFIXES: RegExp[] = [
   /\b[\w-]*(?:token|password|passwd|secret|apikey)[\w-]*\s*=\s*/gi,
   /\b[\w-]*(?:api|access|private)[-_]?key[\w-]*\s*=\s*/gi,
   /\b(?:auth|authorization|credentials?)\s*=\s*/gi,
-  // A name whose part is pass or passphrase (DBPASS, DB_PASS), not a word
-  // that only ends that way (BYPASS, COMPASS), nor PASSPORT.
-  /\b[\w-]*(?<!by|com|sur|tres|over|under|encom)pass(?:phrase)?(?:[_-][\w-]*)?\s*=\s*/gi,
-  // pwd after a name (MYSQL_PWD), never PWD or OLDPWD, the shell's own.
-  /\b[\w-]*(?<=[\w-])(?<!old)pwd(?:[_-][\w-]*)?\s*=\s*/gi,
+  // A name whose part is pass or passphrase (DBPASS, DB_PASS, DBPASS2), not
+  // a word that only ends that way (BYPASS, COMPASS), nor PASSPORT.
+  /\b[\w-]*(?<!by|com|sur|tres|over|under|encom)pass(?:phrase)?\d*(?:[_-][\w-]*)?\s*=\s*/gi,
+  // pwd after a name (MYSQL_PWD, DB_OLDPWD), never the shell's own PWD or
+  // OLDPWD.
+  /\b(?!(?:old)?pwd\s*=)[\w-]*(?<=[\w-])pwd\d*(?:[_-][\w-]*)?\s*=\s*/gi,
 ];
 const SECRET_SHAPES: RegExp[] = [
   /(:\/\/[^\s/:@]+:)[^\s@]+(?=@)/g,
@@ -385,15 +386,16 @@ const PASSWORD_CLIENTS: Record<string, PasswordFlags> = {
   'mariadb-import': MYSQL_FLAGS,
   'mariadb-check': MYSQL_FLAGS,
   sshpass: { glued: ['-p'], separate: ['-p'] },
-  'redis-cli': { glued: [], separate: ['-a', '--pass'] },
+  'redis-cli': { glued: ['-a'], separate: ['-a', '--pass'] },
 };
 
 function basename(value: string): string {
   return value.split(/[\\/]/).pop() ?? '';
 }
 
+// A client by its name, with or without a Windows executable suffix.
 function passwordClient(value: string): PasswordFlags | null {
-  const name = basename(value).toLowerCase().replace(/\.exe$/, '');
+  const name = basename(value).toLowerCase().replace(/\.(?:exe|cmd|bat)$/, '');
   return Object.hasOwn(PASSWORD_CLIENTS, name) ? PASSWORD_CLIENTS[name] : null;
 }
 
@@ -515,8 +517,7 @@ class CurlRedactor {
     } else if (this.sawCurl && (word.value === '-u' || word.value === '--user')) {
       this.valueNext = true;
     } else if (this.sawCurl) {
-      const glued = GLUED_USER_FLAGS.find(flag => word.raw.startsWith(flag) && word.raw.length > flag.length);
-      if (glued) return `${glued}${this.credential(word.raw.slice(glued.length), word.value.slice(glued.length))}`;
+      return this.curlUser(word);
     } else if (passwordClient(word.value)) {
       this.client = passwordClient(word.value);
     } else if (this.client) {
@@ -525,14 +526,24 @@ class CurlRedactor {
     return word.raw;
   }
 
-  // A word of a password client: the password glued to its flag, or its
-  // flag, whose next word is the password.
+  // A word after curl: the credential glued to -u or --user=, read as the
+  // shell passes it ('-uuser:pass' and \-uuser:pass are -u).
+  private curlUser(word: ShellWord): string {
+    const flag = GLUED_USER_FLAGS.find(glued => word.value.startsWith(glued) && word.value.length > glued.length);
+    if (flag === undefined) return word.raw;
+    const typed = word.raw.startsWith(flag) ? word.raw : word.value;
+    return flag + this.credential(typed.slice(flag.length), word.value.slice(flag.length));
+  }
+
+  // A word of a password client, read as the shell passes it ('-psecret'
+  // is -psecret): the password glued to its flag, or its flag, whose next
+  // word is the password.
   private passwordWord(word: ShellWord, flags: PasswordFlags): string {
     if (flags.separate.includes(word.value)) {
       this.secretNext = true;
       return word.raw;
     }
-    const glued = flags.glued.find(flag => word.raw.startsWith(flag) && word.raw.length > flag.length);
+    const glued = flags.glued.find(flag => word.value.startsWith(flag) && word.value.length > flag.length);
     return glued ? `${glued}${REDACTED}` : word.raw;
   }
 
