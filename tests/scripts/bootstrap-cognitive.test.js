@@ -367,6 +367,7 @@ async function runCursorAndCodexUpgradeTests() {
       const rules = JSON.parse(fs.readFileSync(settingsFile, 'utf8'))['cursor.rules'];
       assert.strictEqual((rules.match(/\[egc-memory-protocol:v\d+\]/g) || []).length, 1, 'exactly one protocol block');
       assert.ok(rules.includes(`[egc-memory-protocol:${V}]`) && !rules.includes('Old closed block'), 'the current block stays, the stale one goes');
+      assert.ok(rules.indexOf(`[egc-memory-protocol:${V}]`) < rules.indexOf('Never commit secrets.'), 'the current block keeps the place of the first');
       assert.ok(rules.includes('Always use tabs.') && rules.includes('Never commit secrets.'), 'the user rules survive');
       assert.ok(run(home).includes(`Cursor: already configured (${V})`), 'a rerun finds it configured');
     } finally {

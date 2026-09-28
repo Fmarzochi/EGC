@@ -138,7 +138,7 @@ const HOME = os.homedir();
 
 // Every protocol block in a file: an older install could append a second one,
 // which a check of the first alone would then leave in place for good.
-const MARKER_BLOCKS_RE = new RegExp(MARKER_BLOCK_RE.source, 'g');
+const MARKER_BLOCKS_RE = new RegExp(MARKER_BLOCK_RE.source, `${MARKER_BLOCK_RE.flags.replace('g', '')}g`);
 
 // How a file that carried the block more than once is reported.
 function keptOnce(stale) {
@@ -246,7 +246,7 @@ function cursorRulesBlock() {
 // the user wrote is ever deleted.
 // Every closed protocol block in the rules: an older install could leave a
 // second one, kept for good if only the first were checked.
-const CURSOR_BLOCKS_RE = new RegExp(CURSOR_BLOCK_RE.source, 'g');
+const CURSOR_BLOCKS_RE = new RegExp(CURSOR_BLOCK_RE.source, `${CURSOR_BLOCK_RE.flags.replace('g', '')}g`);
 
 function computeCursorRulesUpdate(existing) {
   const blocks = [...existing.matchAll(CURSOR_BLOCKS_RE)];
