@@ -420,7 +420,13 @@ if (-not $DryRun) {
 
     # Install git pre-commit hook in a clone (strips egc:state blocks before
     # commits), through the helper install.sh runs as well.
+    # A native command's failure is no terminating error in PowerShell, so the
+    # exit code is read here, the way install.sh stops on it under set -e.
     node (Join-Path $RootDir (Join-Path "scripts" (Join-Path "lib" "git-pre-commit-install.js")))
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  git pre-commit hook could not be installed (exit code $LASTEXITCODE); the install stops here." -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
 
     # Token Crusher PATH-level binary shim (git, npm, gh, ...). Best-effort:
     # a failure here (permission, unsupported shell profile, ...) must never

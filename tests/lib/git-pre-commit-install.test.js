@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { installPreCommitHook } = require('../../scripts/lib/git-pre-commit-install');
+const { installPreCommitHook, HOOK, PREVIOUS_NAME } = require('../../scripts/lib/git-pre-commit-install');
 
 function test(name, fn) {
   try {
@@ -36,6 +36,7 @@ function withRepo(fn, { git = true } = {}) {
 }
 
 const CALL = 'bash "$ROOT/scripts/hooks/git-pre-commit.sh"';
+const EARLIER_CALL = 'ROOT="$(git rev-parse --show-toplevel)"\nbash "$ROOT/scripts/hooks/git-pre-commit.sh"\n';
 
 function runTests() {
   console.log('\n=== Testing the git pre-commit hook the installers put in place ===\n');
@@ -56,23 +57,110 @@ function runTests() {
     });
   }));
 
-  record(test('a hook someone already has keeps its lines and gets the call appended', () => {
+  record(test('a hook someone already has is kept whole under its own name and runs after the strip', () => {
     withRepo((root, hook) => {
       fs.mkdirSync(path.dirname(hook), { recursive: true });
-      fs.writeFileSync(hook, '#!/bin/sh\necho mine\n');
-      assert.strictEqual(installPreCommitHook(root), 'updated');
-      const text = fs.readFileSync(hook, 'utf8');
-      assert.ok(text.startsWith('#!/bin/sh\necho mine\n'), text);
-      assert.ok(text.includes(CALL), text);
+      fs.writeFileSync(hook, '#!/usr/bin/env python3\nprint("mine")\n', { mode: 0o755 });
+      assert.strictEqual(installPreCommitHook(root), 'wrapped');
+      const previous = path.join(path.dirname(hook), PREVIOUS_NAME);
+      assert.strictEqual(fs.readFileSync(previous, 'utf8'), '#!/usr/bin/env python3\nprint("mine")\n');
+      if (process.platform !== 'win32') assert.ok(fs.statSync(previous).mode & 0o100, 'still executable');
+      assert.strictEqual(fs.readFileSync(hook, 'utf8'), HOOK);
+      assert.strictEqual(installPreCommitHook(root), 'present');
     });
   }));
 
-  record(test('a hook that already runs it is left as it is', () => {
+  record(test('the call an earlier installer appended is taken off the hook it kept', () => {
     withRepo((root, hook) => {
-      installPreCommitHook(root);
-      const before = fs.readFileSync(hook, 'utf8');
-      assert.strictEqual(installPreCommitHook(root), 'present');
-      assert.strictEqual(fs.readFileSync(hook, 'utf8'), before);
+      fs.mkdirSync(path.dirname(hook), { recursive: true });
+      fs.writeFileSync(hook, `#!/bin/sh\necho mine\nexit 0\n\n${EARLIER_CALL}`);
+      assert.strictEqual(installPreCommitHook(root), 'wrapped');
+      assert.strictEqual(fs.readFileSync(path.join(path.dirname(hook), PREVIOUS_NAME), 'utf8'), '#!/bin/sh\necho mine\nexit 0\n');
+    });
+  }));
+
+  record(test('the hook an earlier installer wrote is replaced, with nothing kept beside it', () => {
+    withRepo((root, hook) => {
+      fs.mkdirSync(path.dirname(hook), { recursive: true });
+      fs.writeFileSync(hook, `#!/usr/bin/env bash\n${EARLIER_CALL}`);
+      assert.strictEqual(installPreCommitHook(root), 'updated');
+      assert.strictEqual(fs.readFileSync(hook, 'utf8'), HOOK);
+      assert.ok(!fs.existsSync(path.join(path.dirname(hook), PREVIOUS_NAME)));
+    });
+  }));
+
+  record(test('a hook that only names the strip script, in a comment, is not taken for it', () => {
+    withRepo((root, hook) => {
+      fs.mkdirSync(path.dirname(hook), { recursive: true });
+      fs.writeFileSync(hook, '#!/bin/sh\n# TODO: run scripts/hooks/git-pre-commit.sh\nexit 0\n');
+      assert.strictEqual(installPreCommitHook(root), 'wrapped');
+      assert.strictEqual(fs.readFileSync(hook, 'utf8'), HOOK);
+    });
+  }));
+
+  record(test('a hook kept from before is not overwritten when another hook takes its place', () => {
+    withRepo((root, hook) => {
+      fs.mkdirSync(path.dirname(hook), { recursive: true });
+      const previous = path.join(path.dirname(hook), PREVIOUS_NAME);
+      fs.writeFileSync(previous, 'kept\n');
+      fs.writeFileSync(hook, 'someone else\n');
+      assert.strictEqual(installPreCommitHook(root), 'conflict');
+      assert.strictEqual(fs.readFileSync(previous, 'utf8'), 'kept\n');
+      assert.strictEqual(fs.readFileSync(hook, 'utf8'), 'someone else\n');
+    });
+  }));
+
+  record(test('a linked hook, or a linked hooks directory, is read and never written through', () => {
+    withRepo((root, hook) => {
+      const outside = path.join(root, 'shared-hook.sh');
+      fs.writeFileSync(outside, '#!/bin/sh\necho shared\n');
+      fs.mkdirSync(path.dirname(hook), { recursive: true });
+      try {
+        fs.symlinkSync(outside, hook);
+      } catch {
+        console.log('    - skipped: this system does not let the test create a symlink');
+        return;
+      }
+      assert.strictEqual(installPreCommitHook(root), 'linked');
+      assert.strictEqual(fs.readFileSync(outside, 'utf8'), '#!/bin/sh\necho shared\n');
+      fs.unlinkSync(hook);
+      const strip = path.join(root, 'scripts', 'hooks', 'git-pre-commit.sh');
+      fs.mkdirSync(path.dirname(strip), { recursive: true });
+      fs.writeFileSync(strip, '#!/usr/bin/env bash\n');
+      fs.symlinkSync(strip, hook);
+      assert.strictEqual(installPreCommitHook(root), 'present', 'a link to the strip script already runs it');
+      fs.unlinkSync(hook);
+      const sharedDir = path.join(root, 'shared-hooks');
+      fs.mkdirSync(sharedDir);
+      fs.rmSync(path.dirname(hook), { recursive: true });
+      fs.symlinkSync(sharedDir, path.dirname(hook), 'dir');
+      assert.strictEqual(installPreCommitHook(root), 'linked');
+      assert.deepStrictEqual(fs.readdirSync(sharedDir), []);
+    });
+  }));
+
+  record(test('the hook runs the strip, then the hook kept from before with its arguments, and stops when the strip fails', () => {
+    if (process.platform === 'win32' || spawnSync('bash', ['--version']).status !== 0) {
+      console.log('    - skipped: needs a POSIX bash');
+      return;
+    }
+    withRepo((root, hook) => {
+      fs.rmSync(path.join(root, '.git'), { recursive: true });
+      assert.strictEqual(spawnSync('git', ['init', '-q', root]).status, 0);
+      const log = path.join(root, 'order.log');
+      const strip = path.join(root, 'scripts', 'hooks', 'git-pre-commit.sh');
+      fs.mkdirSync(path.dirname(strip), { recursive: true });
+      fs.writeFileSync(strip, `echo strip >> "${log}"\nexit "\${STRIP_EXIT:-0}"\n`);
+      fs.mkdirSync(path.dirname(hook), { recursive: true });
+      fs.writeFileSync(hook, `#!/bin/sh\necho "previous $*" >> "${log}"\nexit 7\n`, { mode: 0o755 });
+      assert.strictEqual(installPreCommitHook(root), 'wrapped');
+      const ran = spawnSync('bash', [hook, 'a b'], { cwd: root, encoding: 'utf8' });
+      assert.strictEqual(ran.status, 7, 'the kept hook decides the exit');
+      assert.strictEqual(fs.readFileSync(log, 'utf8'), 'strip\nprevious a b\n');
+      fs.writeFileSync(log, '');
+      const failed = spawnSync('bash', [hook], { cwd: root, encoding: 'utf8', env: { ...process.env, STRIP_EXIT: '3' } });
+      assert.strictEqual(failed.status, 3, 'a failing strip stops the commit');
+      assert.strictEqual(fs.readFileSync(log, 'utf8'), 'strip\n');
     });
   }));
 
@@ -107,10 +195,23 @@ function runTests() {
   const ps1 = fs.readFileSync(path.join(scripts, 'install.ps1'), 'utf8').replaceAll('\r\n', '\n');
   const sh = fs.readFileSync(path.join(scripts, 'install.sh'), 'utf8').replaceAll('\r\n', '\n');
 
-  record(test('both installers put the hook in a clone through this helper, outside a dry run', () => {
+  // Where the block that opens at `start` closes, by its braces.
+  const blockEnd = (source, start) => {
+    let depth = 0;
+    for (let i = source.indexOf('{', start); i < source.length; i += 1) {
+      if (source[i] === '{') depth += 1;
+      else if (source[i] === '}' && --depth === 0) return i;
+    }
+    return -1;
+  };
+
+  record(test('both installers put the hook in a clone through this helper, outside a dry run, and stop when it fails', () => {
     const block = ps1.indexOf('if (-not $DryRun) {\n    # MCP auto-registration');
     const ps1Call = ps1.indexOf('(Join-Path "lib" "git-pre-commit-install.js")))\n');
-    assert.ok(block >= 0 && ps1Call > block, 'install.ps1 must install the hook inside the non-dry-run block');
+    assert.ok(block >= 0 && ps1Call > block && ps1Call < blockEnd(ps1, block), 'install.ps1 must install the hook inside the non-dry-run block');
+    assert.ok(/git-pre-commit-install\.js"\)\)\)\n\s*if \(\$LASTEXITCODE -ne 0\) \{\n[^}]*\n\s*exit \$LASTEXITCODE\n/.test(ps1),
+      'install.ps1 must stop when the helper fails, as install.sh does under set -e');
+    assert.ok(/^set -e$/m.test(sh.slice(0, sh.indexOf('git-pre-commit-install.js'))), 'install.sh runs the helper under set -e');
     assert.ok(/if \[\[ "\$DRY_RUN" = false \]\]; then\n\s*node "\$ROOT_DIR\/scripts\/lib\/git-pre-commit-install\.js"\n/.test(sh),
       'install.sh must install the hook through the same helper, outside a dry run');
   }));
