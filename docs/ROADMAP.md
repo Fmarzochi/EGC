@@ -59,13 +59,13 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A command whose name comes from a variable the command fixes is judged by the name it resolves to; opaque sources fail closed, the environment stays advisory (#1559).
 - A command word that comes from an expansion is judged by every value it can take, in the command and in the scripts it runs; a value the hook cannot read fails closed (#1560).
 - A `${...}` expansion closes where bash closes it, past nested expansions and substitutions, and a comment ends at its newline whatever quote or backslash it holds (#1561).
-- The dashboard's data routes ask for the dashboard token, which every page it serves carries (#1581).
 - The fact-forcing gate reads `taskset -p` and `chrt -p` as acting on a running process, so the words after them are never taken for a command (#1563).
 - Encrypted state and compressed observations are written through a temp file that is exclusive and 0600 from its creation (#1564).
 - A memory write that meets another process's lock waits its backoff without holding up the writes behind it (#1567).
 - A committed script's delete target is narrow only when every variable on the way to it is, a start known only at run time cannot make a protected end narrow, and a malformed committed marker is judged as typed (#1562).
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
 - The command log and the Guardian audit log mask passwords named with pass or pwd and those the mysql, mariadb, sshpass and redis-cli clients take on their command line (#1566).
+- The dashboard's data routes ask for the dashboard token, which every page it serves carries (#1581).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
 - Routing on this machine, without an API key: the catalog index records the source of every component, the prompt router and `orchestrate_task` read the install state of the active tool and never offer what it has not installed (a named `Not installed for this tool` line and `not_installed` carry the command that adds them), the local scorers weigh tokens by rarity, name and activation text, stem plurals and ignore Portuguese and Spanish function words, and the decision stays with the tool's model, by intent (#1453).

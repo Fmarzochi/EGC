@@ -326,7 +326,7 @@ const server = http.createServer((req, res) => {
   }
 
   // ── GET /replay/events?id=<sessionId> ────────────────
-  if (req.method === 'GET' && req.url.startsWith('/replay/events')) {
+  if (req.method === 'GET' && req.url.split('?')[0] === '/replay/events') {
     const urlObj = new URL(req.url, 'http://localhost');
     const sessionId = urlObj.searchParams.get('id');
     if (!sessionId) {
