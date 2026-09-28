@@ -711,20 +711,19 @@ function manualClaudeEntry([name, bin]) {
   return `${JSON.stringify(name)}: ${JSON.stringify({ type: 'stdio', command: 'node', args: [bin] })}`;
 }
 
-function claudeRunner(cli, servers) {
+const CMD_EXPANDS = /[%!]/;
+
+function byHand(cli, expanded, pending) {
+  return new Error(`cmd.exe would expand the % or ! in '${expanded}', so ${pending.map(([name]) => name).join(' and ')} cannot be registered through ${path.basename(cli)}; with Claude Code closed, add by hand under "mcpServers" in ${path.join(os.homedir(), '.claude.json')}: ${pending.map(manualClaudeEntry).join(', ')}`);
+}
+
+function claudeRunner(cli) {
   // Same Windows rule as the crusher shim: .cmd/.bat need a shell.
   const { needsShellOnWindows } = require('./crusher/shim-dispatch');
-  if (!needsShellOnWindows(cli)) return args => spawnSync(cli, args, { encoding: 'utf8' }); // NOSONAR javascript:S4036 -- cli was resolved from the user's own PATH on purpose; fixed argv
+  if (!needsShellOnWindows(cli)) return { viaCmd: false, run: args => spawnSync(cli, args, { encoding: 'utf8' }) }; // NOSONAR javascript:S4036 -- cli was resolved from the user's own PATH on purpose; fixed argv
   const script = claudeScriptBehindShim(cli);
-  if (script) return args => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });
-  return args => {
-    const expanded = [cli, ...args].find(arg => /[%!]/.test(arg));
-    if (expanded !== undefined) {
-      const pending = expanded === cli ? servers : servers.filter(([name]) => args.includes(name));
-      throw new Error(`cmd.exe would expand the % or ! in '${expanded}', so ${pending.map(([name]) => name).join(' and ')} cannot be registered through ${path.basename(cli)}; with Claude Code closed, add by hand under "mcpServers" in ${path.join(os.homedir(), '.claude.json')}: ${pending.map(manualClaudeEntry).join(', ')}`);
-    }
-    return spawnSync(quoteForCmdShell(cli), args.map(quoteForCmdShell), { encoding: 'utf8', shell: true }); // NOSONAR javascript:S4036 -- cli was resolved from the user's own PATH on purpose; fixed argv
-  };
+  if (script) return { viaCmd: false, run: args => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' }) };
+  return { viaCmd: true, run: args => spawnSync(quoteForCmdShell(cli), args.map(quoteForCmdShell), { encoding: 'utf8', shell: true }) }; // NOSONAR javascript:S4036 -- cli was resolved from the user's own PATH on purpose; fixed argv
 }
 
 function registerClaudeCli(_targetPath, bins) {
@@ -736,7 +735,12 @@ function registerClaudeCli(_targetPath, bins) {
     ['egc-guardian', guardianBin],
     ['egc-memory', memoryBin],
   ];
-  const runCli = claudeRunner(cli, servers);
+  const { run: runCli, viaCmd } = claudeRunner(cli);
+  // Through cmd.exe, a CLI path it would expand cannot run at all, and a
+  // server path it would expand is left for the way by hand, every such
+  // server named, after the others are registered.
+  if (viaCmd && CMD_EXPANDS.test(cli)) throw byHand(cli, cli, servers);
+  const refused = [];
   let changed = false;
   for (const [name, bin] of servers) {
     const existing = runCli(['mcp', 'get', name]);
@@ -744,6 +748,10 @@ function registerClaudeCli(_targetPath, bins) {
     // instead of piling a doomed `add` on top.
     if (existing.error) throw existing.error;
     if (existing.status === 0) continue;
+    if (viaCmd && CMD_EXPANDS.test(bin)) {
+      refused.push([name, bin]);
+      continue;
+    }
     const added = runCli(['mcp', 'add', '-s', 'user', name, '--', 'node', bin]);
     if (added.error) throw added.error;
     if (added.status !== 0) {
@@ -751,6 +759,7 @@ function registerClaudeCli(_targetPath, bins) {
     }
     changed = true;
   }
+  if (refused.length > 0) throw byHand(cli, refused[0][1], refused);
   return changed;
 }
 

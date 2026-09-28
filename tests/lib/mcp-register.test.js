@@ -543,6 +543,7 @@ function runTests() {
             assert.throws(() => registerClaudeCli('/ignored', risky), error => {
               assert.match(error.message, /cmd\.exe would expand/);
               assert.ok(error.message.includes(`"egc-guardian": ${JSON.stringify({ type: 'stdio', command: 'node', args: [risky.guardianBin] })}`), error.message);
+              assert.ok(error.message.includes(`"egc-memory": ${JSON.stringify({ type: 'stdio', command: 'node', args: [risky.memoryBin] })}`), error.message);
               assert.ok(error.message.includes(`"mcpServers" in ${path.join(os.homedir(), '.claude.json')}`), error.message);
               assert.ok(!error.message.includes('claude mcp add'), 'the way by hand never goes back through claude.cmd');
               return true;
@@ -551,6 +552,26 @@ function runTests() {
           const calls = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
           assert.strictEqual(calls.filter(call => call[1] === 'add').length, 0, 'nothing is added with a path cmd.exe would change');
           assert.strictEqual(registerClaudeCli('/ignored', bins), true, 'a path without them still goes through the shell');
+        } finally {
+          dispatch.needsShellOnWindows = originalNeedsShell;
+        }
+      });
+    }) ? passed++ : failed++);
+
+    (test('without a script to run directly, the server cmd.exe would not change is still added and only the other is left by hand', () => {
+      withFakeClaude('1', (logPath) => {
+        const dispatch = require('../../scripts/lib/crusher/shim-dispatch');
+        const originalNeedsShell = dispatch.needsShellOnWindows;
+        dispatch.needsShellOnWindows = () => true;
+        const mixed = { guardianBin: bins.guardianBin, memoryBin: '/home/100%USERNAME%dir/egc-memory/build/index.js' };
+        try {
+          assert.throws(() => registerClaudeCli('/ignored', mixed), error => {
+            assert.ok(error.message.includes(`"egc-memory": ${JSON.stringify({ type: 'stdio', command: 'node', args: [mixed.memoryBin] })}`), error.message);
+            assert.ok(!error.message.includes('"egc-guardian"'), error.message);
+            return true;
+          });
+          const adds = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(line => JSON.parse(line)).filter(call => call[1] === 'add');
+          assert.deepStrictEqual(adds.map(call => call[4]), ['egc-guardian'], 'the guardian is registered before the memory is refused');
         } finally {
           dispatch.needsShellOnWindows = originalNeedsShell;
         }
