@@ -215,6 +215,11 @@ notDenied("sed 'i\\\nr .env' f.txt");
 notDenied("sed -n 'w out\\\np' f.txt");
 denied("sed '1e echo a\\\\\nw .env' f.txt");
 notDenied("sed '1e echo a\\\\\np' f.txt");
+denied("gawk 'BEGIN { a[1]=\"sys\" \"tem\"; @a[1](\"cat .env\") }' f.txt");
+denied("yq 'load(\".\" + \"env\")' file.yml");
+denied("yq 'load_props(\".\" + \"env\")' file.yml");
+notDenied("yq '.a = load(\"other.yml\")' file.yml");
+notDenied("yq '.a = load( \"other.yml\" ) | .b' file.yml");
 notDenied("sed '1e echo a\\\\\ns/a/b|c/' f.txt");
 denied("ag --pager 'less; ls' pattern f.txt");
 

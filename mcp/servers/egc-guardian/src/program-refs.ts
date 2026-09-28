@@ -147,7 +147,7 @@ function readSedSubstitute(script: string, at: number, refs: ProgramRefs): numbe
 // print or a printf (an output redirection or a pipe). A program that has
 // one is inline code with effects the Guardian cannot follow, as perl -e is;
 // the plain text processing awk is used for passes.
-const AWK_EFFECT_WORDS = /\b(?:system|getline|ARGV)\b|@(?:load|include)\b|@\s*[A-Za-z_]\w*\s*\(/;
+const AWK_EFFECT_WORDS = /\b(?:system|getline|ARGV)\b|@(?:load|include)\b|@\s*[A-Za-z_]\w*(?:\[[^\]]*\])*\s*\(/;
 
 function awkRefs(text: string): ProgramRefs {
   // A backslash before a newline continues the line in awk; joined, the
@@ -162,21 +162,24 @@ function awkRefs(text: string): ProgramRefs {
 // The string literals right after a pattern in a jq or yq program, and
 // whether one of the places takes no plain literal: an escape can spell any
 // path (a folded line, a \u sequence, a jq \(...)), so a literal with one is
-// not read.
-function quotedAfter(text: string, pattern: RegExp): { values: string[]; computed: boolean } {
+// not read, and where the place takes an expression (a yq load), a literal
+// is the whole path only when `closer` comes right after it.
+function quotedAfter(text: string, pattern: RegExp, closer?: string): { values: string[]; computed: boolean } {
   const values: string[] = [];
   let computed = false;
   for (const match of text.matchAll(pattern)) {
     const from = nextVisible(text, (match.index ?? 0) + match[0].length);
-    const literal = text[from] === '"' ? text.slice(from + 1, pastDelimiter(text, from + 1, '"') - 1) : null;
-    if (literal === null || literal.includes('\\')) computed = true;
+    const end = text[from] === '"' ? pastDelimiter(text, from + 1, '"') : -1;
+    const literal = end < 0 ? null : text.slice(from + 1, end - 1);
+    const whole = closer === undefined || text[nextVisible(text, end)] === closer;
+    if (literal === null || literal.includes('\\') || !whole) computed = true;
     else values.push(literal);
   }
   return { values, computed };
 }
 
 function yqRefs(expression: string): ProgramRefs {
-  const loads = quotedAfter(expression, /\bload(?:_str|_xml|_props|_base64|_sops)?\s*\(/g);
+  const loads = quotedAfter(expression, /\bload(?:_str|_xml|_props|_base64|_sops)?\s*\(/g, ')');
   return { files: loads.values, commands: [], opaque: loads.computed ? 'loads a file whose path the expression computes (yq load)' : null };
 }
 
