@@ -623,7 +623,7 @@ function inspectOperand(operand, root, base) {
     return { blocked: `operand ${operand.value} cannot be inspected (${error.code})` };
   }
   if (!stat.isFile()) return null;
-  if (stat.size > MAX_SCRIPT_BYTES) return { blocked: `script ${operand.value} is too large to analyze` };
+  if (stat.size > MAX_SCRIPT_BYTES) return { blocked: `script ${operand.value} is too large to analyze`, oversized: candidate };
   return { file: candidate };
 }
 
@@ -1183,10 +1183,12 @@ function descriptorOperand(word, value) {
 }
 
 // The file an operand names once inspected; a file run by its path counts
-// only when it is a shell script.
+// only when it is a shell script, whatever its size: a binary or another
+// interpreter's script past the size limit is left to the program it is.
 function inspectedFile(word, value, root, base) {
   const inspected = inspectOperand({ ...word, value, expands: false, tilde: false }, root, base);
-  return word.direct && inspected?.file && !runsAsShellScript(inspected.file) ? null : inspected;
+  const file = inspected?.file ?? inspected?.oversized;
+  return word.direct && file && !runsAsShellScript(file) ? null : inspected;
 }
 
 // Why a script the command runs, which the hook did not find as a regular

@@ -984,6 +984,27 @@ function runTests() {
       }
     }));
 
+    record(test('a binary or another interpreter\'s script run by its path is left to the program it is whatever its size, and a shell script past the limit is still refused', () => {
+      const writeLarge = (name, head) => {
+        const file = path.join(dir, name);
+        fs.writeFileSync(file, Buffer.concat([Buffer.from(head, 'latin1'), Buffer.alloc(600 * 1024, 0x41)]));
+        fs.chmodSync(file, 0o755);
+      };
+      writeLarge('large-binary', '\u007fELF\u0002\u0001\u0001\u0000');
+      writeLarge('large-tool.py', '#!/usr/bin/env python3\n');
+      writeLarge('large-script.sh', '#!/bin/sh\n');
+      const judge = command => run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+      for (const command of ['./large-binary', 'sudo ./large-binary', JSON.stringify(path.join(dir, 'large-binary')), './large-tool.py']) {
+        const result = judge(command);
+        assert.strictEqual(result.exitCode, 0, `${command}: ${JSON.stringify(result)}`);
+      }
+      for (const command of ['./large-script.sh', 'sudo ./large-script.sh', 'bash ./large-binary']) {
+        const result = judge(command);
+        assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+        assert.ok(result.stderr.includes('too large'), `${command}: ${result.stderr}`);
+      }
+    }));
+
     record(test('a non-interpreter command with a script operand is not read', () => {
       const result = run({ tool_name: 'Bash', tool_input: { command: `cat ${denied}` }, cwd: dir });
       assert.strictEqual(result.exitCode, 0, JSON.stringify(result));

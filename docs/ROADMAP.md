@@ -85,6 +85,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A memory write that meets another process's lock waits its backoff without holding up the writes behind it (#1567).
 - A committed script's delete target is narrow only when every variable on the way to it is, a start known only at run time cannot make a protected end narrow, and a malformed committed marker is judged as typed (#1562).
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
+- A binary or another interpreter's script run by its path is left to the program it is whatever its size; only a shell script past the limit is refused (#1592).
 - The shell splitter's two scanners read one character per step through named steps and fit the complexity limit, with no change in behavior (#1590).
 - The command log and the Guardian audit log mask passwords named with pass or pwd and those the mysql, mariadb, sshpass and redis-cli clients take on their command line (#1566).
 - `install.ps1` puts the git pre-commit hook in a clone through the same helper as `install.sh` (#1568).
