@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { resolveStateStoreDbPath } from './state-store-path.js';
+import { writePrivateTemp } from './encryption.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -322,10 +323,16 @@ export async function replaceObservation(projectPath: string, id: string, compre
     }
   }
 
+  // The observations carry tool output, secrets included: the rewrite goes
+  // through a temp file of its own, created exclusive and private.
   if (replaced) {
-    const tempPath = `${obsPath}.tmp`;
-    fs.writeFileSync(tempPath, lines.join("\n"), "utf8");
-    fs.renameSync(tempPath, obsPath);
+    const tempPath = `${obsPath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+    try {
+      writePrivateTemp(tempPath, lines.join("\n"));
+      fs.renameSync(tempPath, obsPath);
+    } finally {
+      try { fs.unlinkSync(tempPath); } catch { /* already renamed away */ }
+    }
   }
 }
 
