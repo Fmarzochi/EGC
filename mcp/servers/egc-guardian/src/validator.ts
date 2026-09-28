@@ -989,6 +989,9 @@ const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
 // the directory. Deny the credential file by pattern instead. Sources: each
 // tool's official docs, verified 2026-07-11 (see docs/architecture or the
 // PR that introduced this comment for the full per-tool research).
+// The disk and memory devices under /dev, listed at the end.
+const DEVICE_DIR = String.raw`^(?:[a-z]:)?[\\/]dev[\\/]`;
+const NUMBERED_DEVICES = ['nvme', 'mmcblk', 'dm-', 'md', 'loop', 'sr', 'nbd', 'zram', 'fd', 'ram', 'rbd', 'pmem', 'mtdblock', 'mtd', 'sg', 'disk', 'rdisk'];
 export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // EGC install-state: egc repair and uninstall replay what it records, so a
   // planted entry would turn either into a write or delete of its choosing.
@@ -1082,6 +1085,42 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // through the `git config` CLI, so a raw file write must be denied too.
   /(^|[\\/])\.git[\\/]hooks([\\/]|$)/,
   /(^|[\\/])\.git[\\/]config$/,
+  // A disk or memory device holds every file on the disk, secrets included:
+  // reading one reads them all and writing one overwrites them. The
+  // character devices commands use every day (null, zero, random, urandom,
+  // tty, stdin, the fd links) are not matched. macOS names its disks disk0
+  // and rdisk0. Under Git for Windows /dev/sda is the first physical drive,
+  // and it resolves below the current drive; there, and on macOS, the path
+  // is already folded to lower case when it is matched.
+  new RegExp(String.raw`${DEVICE_DIR}(?:sd|hd|vd|xvd)[a-z]`),
+  new RegExp(String.raw`${DEVICE_DIR}(?:${NUMBERED_DEVICES.join('|')})\d`),
+  new RegExp(String.raw`${DEVICE_DIR}(?:k?mem|port)$`),
+  new RegExp(String.raw`${DEVICE_DIR}(?:disk[\\/][^\\/]+|mapper|block)[\\/].`),
+  /^[\\/]proc[\\/]kcore$/,
+  /^[\\/]proc[\\/](?:\d+|self|thread-self)[\\/](?:task[\\/]\d+[\\/])?mem$/,
+  /^\\\\[.?]\\(?:physicaldrive\d|[a-z]:|globalroot\\|harddisk|cdrom\d|tape\d)/,
+];
+
+// Where common command-line tools keep a token, a password or a private key,
+// at each tool's documented location relative to the home directory: a
+// directory when the whole of it is secret, a single file when its
+// neighbors are settings, caches or packages an agent may need to read.
+const CREDENTIAL_STORES = [
+  '.netrc', '_netrc', '.git-credentials', '.config/git/credentials', '.config/gh/hosts.yml', '.config/hub',
+  '.docker/config.json', '.kube/config', '.pgpass', '.my.cnf', '.mylogin.cnf', '.yarnrc.yml',
+  '.config/gcloud', '.azure', '.terraform.d/credentials.tfrc.json', '.vault-token', '.gem/credentials',
+  '.cargo/credentials.toml', '.cargo/credentials', '.m2/settings.xml', '.m2/settings-security.xml',
+  '.gradle/gradle.properties', '.s3cfg', '.boto', '.databrickscfg', '.config/rclone/rclone.conf',
+  '.password-store', '.local/share/keyrings', '.config/op', '.config/doctl', '.fly/config.yml', '.config/netlify',
+  '.local/share/com.vercel.cli', '.config/configstore/firebase-tools.json', '.cache/huggingface/token',
+  '.huggingface/token', '.config/composer/auth.json', '.composer/auth.json', '.kaggle', '.oci',
+  '.pulumi/credentials.json', '.config/ngrok', '.config/stripe', '.config/sops/age', '.supabase/access-token', '.railway',
+  // Browser profiles: saved passwords and session cookies.
+  '.mozilla/firefox', '.config/google-chrome', '.config/chromium', '.config/BraveSoftware', '.config/microsoft-edge',
+  // macOS: the keychains, and the same tools and browsers under Application Support.
+  'Library/Keychains', 'Library/Application Support/Google/Chrome', 'Library/Application Support/Firefox',
+  'Library/Application Support/BraveSoftware', 'Library/Application Support/Microsoft Edge',
+  'Library/Application Support/com.vercel.cli', 'Library/Application Support/doctl',
 ];
 
 export function buildDeniedPaths(): string[] {
@@ -1093,6 +1132,7 @@ export function buildDeniedPaths(): string[] {
     path.join(home, '.ssh'),
     path.join(home, '.aws'),
     path.join(home, '.gnupg'),
+    ...CREDENTIAL_STORES.map(store => path.join(home, ...store.split('/'))),
     path.join(home, '.egc'),
     // A binary planted here (named e.g. 'git' or 'node') sits ahead of
     // /usr/bin on most PATH configurations, silently hijacking every
@@ -1112,12 +1152,19 @@ export function buildDeniedPaths(): string[] {
   ];
 
   if (isWindows) {
-    const appData = process.env.APPDATA || '';
     const userProfile = process.env.USERPROFILE || home;
+    // Where Windows puts them when the variables are unset: a process started
+    // with a stripped environment still reads and writes the same folders.
+    const appData = process.env.APPDATA || path.join(userProfile, 'AppData', 'Roaming');
+    const localAppData = process.env.LOCALAPPDATA || path.join(userProfile, 'AppData', 'Local');
+    // The browser profiles Windows keeps under LocalAppData.
+    const browsers = ['Google/Chrome/User Data', 'Microsoft/Edge/User Data', 'BraveSoftware/Brave-Browser/User Data']
+      .map(profile => path.join(localAppData, ...profile.split('/')));
     paths.push(
       path.join(userProfile, '.ssh'),
       path.join(userProfile, '.aws'),
       appData,
+      ...browsers,
     );
   }
 

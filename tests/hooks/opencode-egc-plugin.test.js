@@ -200,14 +200,17 @@ async function runTests() {
           attempts += 1;
           return new Promise(() => {});
         } } };
-        await withEnvironment('EGC_SESSION_CONTEXT_TIMEOUT_MS', '150', async () => {
+        // One variable bounds both the bridge spawn and the prompt: a budget
+        // a cold runner's spawn cannot exceed, so the prompt is the stage that
+        // times out here (the bridge's own timeout has the case below).
+        await withEnvironment('EGC_SESSION_CONTEXT_TIMEOUT_MS', '1500', async () => {
           const hooks = await EgcGuardianCrusher({ client, directory: tempDir });
           const started = Date.now();
           await assert.doesNotReject(() => hooks.event({ event: sessionEvent('ses_prompt_timeout', tempDir) }));
           const elapsed = Date.now() - started;
-          assert.ok(elapsed >= 75, `expected prompt timeout path, completed in ${elapsed}ms`);
-          assert.ok(elapsed < 2000, `prompt timeout path took ${elapsed}ms`);
-          assert.strictEqual(attempts, 1);
+          assert.strictEqual(attempts, 1, `the prompt was attempted ${attempts} times: 0 means the bridge stage timed out first, after ${elapsed}ms`);
+          assert.ok(elapsed >= 750, `expected prompt timeout path, completed in ${elapsed}ms`);
+          assert.ok(elapsed < 5000, `prompt timeout path took ${elapsed}ms`);
         });
       } finally { restore(); }
     })) passed++; else failed++;

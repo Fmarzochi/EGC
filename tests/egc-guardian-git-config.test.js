@@ -78,8 +78,6 @@ denied('git config --ed', /editable session/);
 denied('git config --rep core.hooksPath /opt/evil', KEY);
 denied('git config --ad core.hooksPath /opt/evil', KEY);
 denied('git config --fil ~/.gitconfig user.name x', WRITE);
-denied('git config --get= core.hooksPath /opt/evil', KEY);
-denied('git config --unse core.hooksPath /opt/evil', KEY);
 allowed('git config --ren old new');
 allowed('git config --li');
 allowed('git config --get-a core.hooksPath');
@@ -89,6 +87,10 @@ allowed('git config --glo --get core.hooksPath');
 allowed('git config --unset core.hooksPath');
 allowed('git config --unset-a core.hooksPath');
 allowed('git config --get core.hooksPath /opt/evil');
+
+console.log('\nan option git refuses (an ambiguous prefix, or a value given to one that takes none) is not resolved; the words after it are read as a write:');
+denied('git config --get= core.hooksPath /opt/evil', KEY);
+denied('git config --unse core.hooksPath /opt/evil', KEY);
 
 console.log('\nan option value is not an action, and options end at the first operand:');
 denied('git config --comment --get core.hooksPath /opt/evil', KEY);
