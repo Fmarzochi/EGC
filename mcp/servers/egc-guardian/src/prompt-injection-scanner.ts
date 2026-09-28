@@ -13,6 +13,11 @@ export interface InjectionFinding {
 
 const MAX_SNIPPET_LEN = 80;
 
+// A curl or wget whose output goes into a pipe, and the programs that run
+// what they read there.
+const FETCH_PIPED_INTO = String.raw`\b(?:curl|wget)\b[^\n|]{0,300}\|\s{0,5}(?:sudo(?:\s{1,5}-\S{1,20}){0,3}\s{1,5})?`;
+const FETCH_RUNNERS = ['(?:ba|z|da|k)?sh', String.raw`python[\d.]{0,5}`, 'perl', 'ruby', 'node'];
+
 const PATTERNS: Array<{ category: string; pattern: RegExp; reason: string }> = [
   { category: 'instruction_override', pattern: /ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions?|context|prompts?)/i, reason: 'attempt to override prior instructions' },
   { category: 'disregard_directive', pattern: /disregard\s+(all\s+|the\s+)?(system\s+)?(prompt|instructions?|rules?)/i, reason: 'attempt to discard system rules' },
@@ -25,8 +30,10 @@ const PATTERNS: Array<{ category: string; pattern: RegExp; reason: string }> = [
   { category: 'new_instructions', pattern: /^\s{0,20}#{1,3}\s{0,20}(new|updated)\s+(task|instructions?)/im, reason: 'injected heading claiming new task/instructions' },
   { category: 'exfiltration', pattern: /send\s+(this|the\s+above|it)\s+to\s+https?:\/\//i, reason: 'directive to exfiltrate content to a URL' },
   { category: 'exfiltration', pattern: /\bexfiltrate\b/i, reason: 'explicit exfiltration wording' },
-  { category: 'exfiltration', pattern: /curl\s+https?:\/\/[^\s]+\s*\|\s*(ba)?sh/i, reason: 'remote shell execution payload' },
-  { category: 'exfiltration', pattern: /wget\s+https?:\/\/[^\s]+\s*[|>]/i, reason: 'remote download payload' },
+  // A fetch piped into a shell or an interpreter, on one line, whatever
+  // options stand before the URL (curl -fsSL, wget -qO-, sudo -E bash).
+  ...FETCH_RUNNERS.map(runner => ({ category: 'exfiltration', pattern: new RegExp(`${FETCH_PIPED_INTO}${runner}\\b`, 'i'), reason: 'remote shell execution payload' })),
+  { category: 'exfiltration', pattern: /\bwget\b[^\n|>]{0,300}https?:\/\/[^\s|>]{1,2000}[^\n|>]{0,200}[|>]/i, reason: 'remote download payload' },
   { category: 'exfiltration', pattern: /require\s*\(\s*['"](?:node:)?child_process['"]\s*\)/, reason: 'child_process injection' },
   { category: 'exfiltration', pattern: /import\s*\{[^}]*\bexec(?:Sync)?\b[^}]*\}\s*from\s*['"](?:node:)?child_process['"]/, reason: 'child_process injection' },
   { category: 'exfiltration', pattern: /\bexecSync\s*\(\s*[`'"]/, reason: 'execSync injection' },
