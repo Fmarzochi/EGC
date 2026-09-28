@@ -210,17 +210,21 @@ interface TokenizerState {
 function consumeTokenChar(command: string, i: number, state: TokenizerState): number {
   const ch = command[i];
 
-  if (state.quote) {
-    state.current += ch;
-    state.hasToken = true;
-    if (ch === state.quote) state.quote = null;
-    return i + 1;
-  }
+  if (state.quote) return consumeQuotedChar(command, i, state);
 
   if (ch === '\\' && i + 1 < command.length) {
     state.current += ch + command[i + 1];
     state.hasToken = true;
     return i + 2;
+  }
+
+  // `$'...'` is read whole, its backslash escapes (an escaped quote too)
+  // included.
+  if (ch === '$' && command[i + 1] === "'") {
+    const end = readAnsiC(command, i + 1).end;
+    state.current += command.slice(i, end);
+    state.hasToken = true;
+    return end;
   }
 
   if (ch === '"' || ch === "'") {
@@ -238,6 +242,36 @@ function consumeTokenChar(command: string, i: number, state: TokenizerState): nu
   state.current += ch;
   state.hasToken = true;
   return i + 1;
+}
+
+// One character inside a quoted span. In double quotes a backslash escapes
+// the next character and a `${...}`, `$(...)` or backquoted command is read
+// whole, so a quote of theirs does not close the string; in single quotes
+// every character is literal up to the closing quote.
+function consumeQuotedChar(command: string, i: number, state: TokenizerState): number {
+  const ch = command[i];
+  state.hasToken = true;
+  if (state.quote === '"') {
+    const end = doubleQuotedSpanEnd(command, i);
+    if (end !== i) {
+      state.current += command.slice(i, end);
+      return end;
+    }
+  }
+  state.current += ch;
+  if (ch === state.quote) state.quote = null;
+  return i + 1;
+}
+
+// Index past an escaped character, a parameter expansion, a command
+// substitution or a backquoted command opening at `i` inside double quotes;
+// `i` itself when none opens there.
+function doubleQuotedSpanEnd(command: string, i: number): number {
+  const ch = command[i];
+  if (ch === '\\' && i + 1 < command.length) return i + 2;
+  if (ch === '$' && command[i + 1] === '{') return parameterExpansionEnd(command, i + 2);
+  if (ch === '`' || (ch === '$' && command[i + 1] === '(')) return skipSubstitution(command, i);
+  return i;
 }
 
 function tokenizeWords(command: string): string[] {
@@ -2245,6 +2279,33 @@ function withHomeSpelled(target: string): string {
   return path.join(path.dirname(os.homedir()), name, separator === -1 ? '' : spelled.slice(separator));
 }
 
+function evalOrDangerousVerdict(baseCommand: string, args: string[], cwd?: string): ValidationResult | null {
+  // 2. `eval` executes its entire argument list as shell code, the same
+  // risk class as `bash -c`, but with no separate flag to opt into eval mode
+  // (the invocation itself IS the eval), so it is always denied rather than
+  // matched via INLINE_EVAL_COMMANDS' flag detection below.
+  if (baseCommand === 'eval' && args.length > 0) {
+    const denial: ValidationResult = {
+      allowed: false,
+      reason: `inline code execution via 'eval' is forbidden, write the code to a file and run it instead`,
+      trust_level: 'DANGEROUS',
+    };
+    if (!flagsInCommittedScript(denial)) return denial;
+  }
+
+  // 3. Dangerous commands: denied regardless of args, except in a committed
+  // script, where only a protected or top-level target is grave.
+  if (DANGEROUS.includes(baseCommand)) {
+    const denial: ValidationResult = {
+      allowed: false,
+      reason: `'${baseCommand}' is a destructive command and is always denied`,
+      trust_level: 'DANGEROUS',
+    };
+    if (!committedScript || args.some(arg => isGraveTarget(arg, cwd)) || !flagsInCommittedScript(denial)) return denial;
+  }
+  return null;
+}
+
 function validateCommandVerdict(command: string, cwd?: string): ValidationResult {
   // A trailing `# comment` is inert text, not part of any command, so it is
   // removed before anything reads the line; a `#` in quotes or in a ${...}
@@ -2292,29 +2353,9 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // scan reads the raw line on its own.
   const args = tokens.slice(1).map(shellWord);
 
-  // 2. `eval` executes its entire argument list as shell code — the same
-  // risk class as `bash -c`, but with no separate flag to opt into eval mode
-  // (the invocation itself IS the eval), so it is always denied rather than
-  // matched via INLINE_EVAL_COMMANDS' flag detection below.
-  if (baseCommand === 'eval' && args.length > 0) {
-    const denial: ValidationResult = {
-      allowed: false,
-      reason: `inline code execution via 'eval' is forbidden — write the code to a file and run it instead`,
-      trust_level: 'DANGEROUS',
-    };
-    if (!flagsInCommittedScript(denial)) return denial;
-  }
-
-  // 3. Dangerous commands: denied regardless of args, except in a committed
-  // script, where only a protected or top-level target is grave.
-  if (DANGEROUS.includes(baseCommand)) {
-    const denial: ValidationResult = {
-      allowed: false,
-      reason: `'${baseCommand}' is a destructive command and is always denied`,
-      trust_level: 'DANGEROUS',
-    };
-    if (!committedScript || args.some(arg => isGraveTarget(arg, cwd)) || !flagsInCommittedScript(denial)) return denial;
-  }
+  // 2 and 3. `eval`, and the destructive commands.
+  const evalOrDangerous = evalOrDangerousVerdict(baseCommand, args, cwd);
+  if (evalOrDangerous) return evalOrDangerous;
 
   // 4. Inline code execution (python3 -c, bash -c, node -e, su -c, etc.) is a
   // hard deny, not an allowlist check. This runs before the allowlist-
@@ -2664,6 +2705,14 @@ function readQuoted(command: string, start: number): { value: string; end: numbe
       i += 2;
       continue;
     }
+    // A `${...}`, `$(...)` or backquoted command inside double quotes is read
+    // whole: a quote inside it opens a string of its own.
+    const nested = quote === '"' && command[i] !== '\\' ? doubleQuotedSpanEnd(command, i) : i;
+    if (nested !== i) {
+      value += command.slice(i, nested);
+      i = nested;
+      continue;
+    }
     if (quote === '"' && command[i] === '\\' && DOUBLE_QUOTE_ESCAPES.has(command[i + 1] ?? '')) i += 1;
     value += command[i];
     i += 1;
@@ -2698,13 +2747,65 @@ function joinContinuations(command: string): string {
 // braces); `i` itself when no such span starts there.
 function skipText(command: string, i: number): number {
   const ch = command[i];
+  if (ch === '$' && command[i + 1] === "'") return readAnsiC(command, i + 1).end;
   if (ch === '"' || ch === "'") return readQuoted(command, i).end;
   if (ch === '\\') return Math.min(i + 2, command.length);
-  if (ch === '$' && command[i + 1] === '{') {
-    const close = command.indexOf('}', i + 2);
-    return close === -1 ? command.length : close + 1;
-  }
+  if (ch === '$' && command[i + 1] === '{') return parameterExpansionEnd(command, i + 2);
   return i;
+}
+
+// Index past the `}` that closes the `${` whose body starts at `start`. A
+// nested `${...}`, a command or process substitution and a backquoted
+// command are read whole, so a `}` of theirs does not close it, as bash
+// reads it; the end of the line when it never closes.
+function parameterExpansionEnd(command: string, start: number): number {
+  let i = start;
+  while (i < command.length) {
+    const skipped = skipNested(command, i, false);
+    if (skipped !== i) {
+      i = skipped;
+    } else if (command[i] === '}') {
+      return i + 1;
+    } else {
+      i += 1;
+    }
+  }
+  return command.length;
+}
+
+// Index past the command or process substitution (`$(...)`, `$((...))`,
+// `<(...)`, `>(...)`) or backquoted command opening at `i`; `i` itself when
+// none opens there.
+function skipSubstitution(command: string, i: number): number {
+  if (command[i] === '`') {
+    let j = i + 1;
+    while (j < command.length && command[j] !== '`') j += command[j] === '\\' ? 2 : 1;
+    return Math.min(j + 1, command.length);
+  }
+  if ('$<>'.includes(command[i]) && command[i + 1] === '(') return Math.min(closingParenthesis(command, i + 2) + 1, command.length);
+  return i;
+}
+
+// Index of the newline that ends the comment a `#` opening a word starts at
+// `i` (the end of the line when none follows); `i` itself when no comment
+// starts there.
+function skipComment(command: string, i: number): number {
+  if (command[i] !== '#') return i;
+  const prev = i === 0 ? -1 : precedingCharIndex(command, i - 1);
+  if (prev >= 0 && !COMMENT_WORD_START.has(command[prev])) return i;
+  const newline = command.indexOf('\n', i);
+  return newline === -1 ? command.length : newline;
+}
+
+// Index past a span read whole at `i`: text (skipText), a substitution, and
+// in a command body a comment up to its newline, which a `)` in it does not
+// close; `i` itself when none starts there.
+function skipNested(command: string, i: number, inCommand: boolean): number {
+  const text = skipText(command, i);
+  if (text !== i) return text;
+  const substitution = skipSubstitution(command, i);
+  if (substitution !== i || !inCommand) return substitution;
+  return skipComment(command, i);
 }
 
 // Characters before an unquoted `#` that let it open a word, so the `#`
@@ -2846,13 +2947,14 @@ function heredocBodiesEnd(command: string, newline: number, delimiters: string[]
 }
 
 // Index of the parenthesis closing the substitution whose body starts at
-// `start`, quoted spans and escapes skipped; the end of the line when it
-// never closes.
+// `start`, quoted spans, nested substitutions, backquoted commands and
+// comments read whole (skipNested); the end of the line when it never
+// closes.
 function closingParenthesis(command: string, start: number): number {
   let depth = 1;
   let i = start;
   while (i < command.length) {
-    const skipped = skipText(command, i);
+    const skipped = skipNested(command, i, true);
     if (skipped !== i) {
       i = skipped;
       continue;

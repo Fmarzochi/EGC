@@ -601,6 +601,33 @@ function runTests() {
       }
     }));
 
+    record(test("quotes are read as bash reads them: a backslash in single quotes escapes nothing, $'...' keeps its escapes, and a quote inside ${...} in double quotes opens a string of its own", () => {
+      for (const command of [
+        `echo 'a\\'; ${wipe} /tmp/egc-victim`,
+        `x=; echo "\${x:-"a # b"}"; ${wipe} /tmp/egc-victim`,
+        `echo $'\\'' $(${wipe} /tmp/egc-victim)`,
+        `x=; echo "\${x:-"a"}" 'b # c'; ${wipe} /tmp/egc-victim`,
+        `x=; echo "\${x:-"a # b"}"; r\\\nm -rf /tmp/egc-victim`,
+        `echo "a\\"b # c"; ${wipe} /tmp/egc-victim`,
+      ]) {
+        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+        assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+      }
+      for (const command of [
+        "echo 'it''s' # see ~/.ssh/id_rsa",
+        'echo "${x:-"a"}" # see ~/.ssh/id_rsa',
+        "echo $'a\\'b' # see ~/.ssh/id_rsa",
+        'echo "a\\"b" # see ~/.ssh/id_rsa',
+      ]) {
+        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+        assert.strictEqual(result.exitCode, 0, `${command}: ${JSON.stringify(result)}`);
+      }
+      // A line continuation after $'...' is joined, its escaped quote closing
+      // nothing.
+      const { extractSegments } = require('../../scripts/hooks/pre-bash-guardian-validate');
+      assert.ok(extractSegments(`echo $'\\''; r\\\nm -rf /tmp/egc-victim`).includes(`${wipe} /tmp/egc-victim`));
+    }));
+
     record(test('a trailing comment is inert: its path is not judged, but a real command and a # in ${...} or quotes still are (EGC-669)', () => {
       const passing = [
         'ls # see ~/.ssh/id_rsa',
@@ -614,10 +641,23 @@ function runTests() {
         'ls ~/.ssh/id_rsa # a real path outside the comment',
         `true \${x:-a #}; ${wipe} /tmp/egc-victim`,
         `${wipe} / # cleanup`,
+        `echo '#'; ${wipe} /tmp/egc-victim`,
+        `echo "a # b" && ${wipe} /tmp/egc-victim`,
+        `true \${x:-$(echo }) #}; ${wipe} /tmp/egc-victim`,
+        `true \${x:-\`echo }\` #}; ${wipe} /tmp/egc-victim`,
+        `ls # it's\n${wipe} /tmp/egc-victim`,
+        `true # note \\\n${wipe} /tmp/egc-victim`,
+        `ls # it's\necho $(${wipe} /tmp/egc-victim)`,
+        `echo \${x:-a #}; r\\\nm -rf /tmp/egc-victim`,
+        `echo \${x:-$(true #\\\n${wipe} /tmp/egc-victim)}`,
+        `true \${x:-$(echo \`echo )\`) #}; ${wipe} /tmp/egc-victim`,
+        `true \${x:-<(echo }) #}; ${wipe} /tmp/egc-victim`,
+        `echo $(echo a # )\n${wipe} /tmp/egc-victim)`,
       ];
       for (const command of blocked) {
         const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+        assert.ok(result.stderr.includes('BLOCKED'), result.stderr);
       }
     }));
 
