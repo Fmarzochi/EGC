@@ -59,6 +59,12 @@ function runTests() {
   }));
 
   record(test('cd -P follows a symlink before its .., as the system does, and cd -L or plain cd reads .. by name', () => {
+    // Windows reads `..` by name before it follows a link, so -P and -L
+    // land in the same place there.
+    if (process.platform === 'win32') {
+      console.log('    - skipped: Windows resolves .. before it follows a link');
+      return;
+    }
     const fs = require('fs');
     const os = require('os');
     const top = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-cd-physical-')));
