@@ -1204,15 +1204,6 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   /(^|[\\/])\.zprofile$/,
   /(^|[\\/])\.profile$/,
   /(^|[\\/])\.gitconfig$/,
-  // A hook planted directly in .git/hooks/ fires on the next matching git
-  // operation (pre-commit, pre-push, ...) without touching any config file
-  // at all — the same persistence effect as the core.hooksPath/git-config
-  // checks above, via a path validateWrite previously never inspected.
-  // .git/config is the repo-local counterpart of ~/.gitconfig above; both
-  // can carry the same dangerous keys checkGitConfigWrite denies when set
-  // through the `git config` CLI, so a raw file write must be denied too.
-  /(^|[\\/])\.git[\\/]hooks([\\/]|$)/,
-  /(^|[\\/])\.git[\\/]config$/,
   // A disk or memory device holds every file on the disk, secrets included:
   // reading one reads them all and writing one overwrites them. The
   // character devices commands use every day (null, zero, random, urandom,
@@ -1355,6 +1346,37 @@ function expandHome(p: string): string {
   return parameter ? path.join(os.homedir(), p.slice(parameter[0].length)) : p;
 }
 
+// The files of a git directory that git reads as its settings or runs:
+// config (the repo-local counterpart of ~/.gitconfig, which can carry every
+// key checkGitConfigWrite denies through the CLI), config.worktree,
+// commondir (which names the directory whose config git loads) and any
+// hook, which fires on the next matching git operation without a config
+// change at all. They are kept in the directory itself and in the ones it
+// holds for a linked work tree (worktrees/<name>) or a submodule
+// (modules/<name>, which may nest).
+const GIT_CONTROL_FILES = new Set(['config', 'config.worktree', 'commondir']);
+
+function isGitControlPath(rest: string[]): boolean {
+  if (rest[0] === 'hooks') return true;
+  if (rest.length === 1) return GIT_CONTROL_FILES.has(rest[0]);
+  if (rest[0] !== 'worktrees' && rest[0] !== 'modules') return false;
+  return rest.slice(2).some((part, i, below) => part === 'hooks' || (i === below.length - 1 && GIT_CONTROL_FILES.has(part)));
+}
+
+// A git directory is one named `.git` or `<name>.git`: only there are its
+// control files protected from a write, whatever repository they belong to.
+function isGitControlFile(candidate: string): boolean {
+  const parts = candidate.split(/[\\/]/);
+  return parts.some((part, i) => part.endsWith('.git') && isGitControlPath(parts.slice(i + 1)));
+}
+
+// Whether git may use `dir` as its git directory: its config is protected
+// from a write, and wherever it is, so are its hooks, so nothing planted
+// there runs.
+function isTrustedGitDirectory(dir: string): boolean {
+  return isGitControlFile(path.join(foldCase(dir), 'config'));
+}
+
 export function isProtectedPath(p: string, baseDir: string = process.cwd()): boolean {
   // Trim first: a trailing newline (routine for anything piped through
   // `echo`) or stray whitespace survives path.resolve() into the final
@@ -1389,7 +1411,7 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
     }
   }
 
-  return false;
+  return isGitControlFile(candidate);
 }
 
 // Reading and writing carry different risk, and treating them alike is what
@@ -1439,8 +1461,6 @@ export const READ_SAFE_PATHS: string[] = buildReadSafePaths();
 const READ_SAFE_FILE_PATTERNS: RegExp[] = [
   /(^|[\\/])\.(bashrc|zshrc|bash_profile|zprofile|profile)$/,
   /(^|[\\/])\.gitconfig$/,
-  /(^|[\\/])\.git[\\/](config|hooks)$/,
-  /(^|[\\/])\.git[\\/]hooks[\\/]/,
 ];
 
 function isUnder(candidate: string, parent: string): boolean {
@@ -1474,7 +1494,9 @@ export function isReadDeniedPath(p: string, baseDir: string = process.cwd()): bo
   // Folded on the same terms as the denial side: where the filesystem opens
   // ~/.BASHRC and ~/.bashrc as one file, both spellings have to be readable,
   // or the case fix would have quietly turned a harmless read into a denial.
-  return !READ_SAFE_FILE_PATTERNS.some(pattern => pattern.test(foldCase(normalizedP)));
+  // A git directory's config and hooks are persistence too.
+  const folded = foldCase(normalizedP);
+  return !READ_SAFE_FILE_PATTERNS.some(pattern => pattern.test(folded)) && !isGitControlFile(folded);
 }
 
 export interface ValidationResult {
@@ -2121,6 +2143,74 @@ function gitPlaces(globals: string[], cwd?: string): { dir: string; top: string 
   return { dir, top: top ?? nearestGitTop(dir) };
 }
 
+// Whether `dir` is a git directory as git recognizes one: HEAD, objects and
+// refs. A git directory made by hand, its config written first, counts.
+function isGitDirectory(dir: string): boolean {
+  try {
+    return fs.statSync(path.join(dir, 'HEAD')).isFile()
+      && fs.statSync(path.join(dir, 'objects')).isDirectory()
+      && fs.statSync(path.join(dir, 'refs')).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// The directory a `.git` file names, relative to the file: git reads it
+// only when the file starts with `gitdir: `, and refuses any other.
+const GITFILE_PREFIX = 'gitdir: ';
+
+function gitfileTarget(file: string): string | null {
+  try {
+    if (!fs.statSync(file).isFile()) return null;
+    const [first] = fs.readFileSync(file, 'utf8').split('\n');
+    if (!first.startsWith(GITFILE_PREFIX)) return null;
+    return path.resolve(path.dirname(file), first.slice(GITFILE_PREFIX.length).trim());
+  } catch {
+    return null;
+  }
+}
+
+// The git directory git finds up from `dir`, in git's order at each level:
+// a `.git` directory it recognizes, a `.git` file's gitdir:, then the
+// level itself as a bare repository. null when there is none.
+function discoveredGitDirectory(dir: string): string | null {
+  for (let current = dir; ; current = path.dirname(current)) {
+    const dotGit = path.join(current, '.git');
+    if (isGitDirectory(dotGit)) return dotGit;
+    const linked = gitfileTarget(dotGit);
+    if (linked !== null) return linked;
+    if (isGitDirectory(current)) return current;
+    if (path.dirname(current) === current) return null;
+  }
+}
+
+// The last --git-dir among git's global options, as written.
+function namedGitDirectory(globals: string[]): string | undefined {
+  let named: string | undefined;
+  for (let i = 0; i < globals.length; i++) {
+    const option = stripQuotes(globals[i]);
+    if (option === '--git-dir' && globals[i + 1] !== undefined) named = stripQuotes(globals[i + 1]);
+    else if (option.startsWith('--git-dir=')) named = option.slice('--git-dir='.length);
+  }
+  return named;
+}
+
+// git loads the config and runs the hooks of the git directory it uses,
+// named by --git-dir or found up from where it runs. One outside the .git
+// convention has neither protected from a write, so what was planted there
+// would run: git is refused it.
+function checkGitDirectory(globals: string[], cwd?: string): ValidationResult | null {
+  const { dir } = gitPlaces(globals, cwd);
+  const named = namedGitDirectory(globals);
+  const gitDir = named === undefined ? discoveredGitDirectory(dir) : path.resolve(dir, expandHome(named));
+  if (gitDir === null || isTrustedGitDirectory(gitDir)) return null;
+  return {
+    allowed: false,
+    reason: `git would load the config and run the hooks of '${gitDir}', a git directory not named .git or <name>.git, where nothing protects them from a write, and is forbidden`,
+    trust_level: 'DANGEROUS',
+  };
+}
+
 // The files that <rev>:<path>, :<stage>:<path> and :<path> objects among
 // `operands` name in the work tree: git reads <path> from the top of the
 // tree, or from where it runs when <path> starts with ./ or ../. A <path>
@@ -2404,6 +2494,8 @@ function validateGitArgs(args: string[], cwd?: string): ValidationResult {
   if (pathDenial) return pathDenial;
 
   if (subcommandIdx < 0) return { allowed: true, trust_level: 'SAFE_READONLY' };
+  const directoryDenial = checkGitDirectory(args.slice(0, subcommandIdx), cwd);
+  if (directoryDenial) return directoryDenial;
   const subcommand = bareToken(args[subcommandIdx]);
   const rest = args.slice(subcommandIdx + 1);
   const fileDenial = checkGitFileOperands(subcommand, rest, cwd);

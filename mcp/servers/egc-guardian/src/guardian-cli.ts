@@ -16,10 +16,18 @@ const MAX_ROUTE_ITEMS = { agents: 3, skills: 5 };
 // One command of a batch, and whether it was read out of a script committed
 // in git and unchanged since (`committed[i]` in the payload: exactly true, or
 // an object whose `bound` maps the variables that script sets to the values
-// it sets them to), which holds it to the grave denials only.
+// it sets them to), which holds it to the grave denials only. `dirs`
+// (`cwds[i]`) are the directories the command can run in, when the line
+// moves before it; otherwise it runs where the batch does.
 interface BatchEntry {
   command: string;
   committed: { bound: Record<string, string[]> } | null;
+  dirs: string[] | null;
+}
+
+function batchDirs(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  return value.every((dir): dir is string => typeof dir === 'string') ? value : null;
 }
 
 // A marker of any other shape is not one: the entry is judged as typed,
@@ -37,11 +45,20 @@ function committedMark(flag: unknown): BatchEntry['committed'] {
   return { bound };
 }
 
-function batchEntries(values: unknown[], committed: unknown): BatchEntry[] {
+function batchEntries(values: unknown[], committed: unknown, cwds?: unknown): BatchEntry[] {
   const flags = Array.isArray(committed) ? committed : [];
+  const places = Array.isArray(cwds) ? cwds : [];
   return values
-    .map((value, i) => ({ command: value, committed: committedMark(flags[i]) }))
+    .map((value, i) => ({ command: value, committed: committedMark(flags[i]), dirs: batchDirs(places[i]) }))
     .filter((entry): entry is BatchEntry => typeof entry.command === 'string');
+}
+
+// A command that can run in several directories is refused if it is
+// refused in any of them.
+function judgeEntry(entry: BatchEntry, cwd: string | undefined): ReturnType<typeof validateCommand> {
+  if (entry.committed) return validateCommittedScriptCommand(entry.command, cwd, entry.committed.bound);
+  const verdicts = (entry.dirs ?? [cwd]).map(dir => validateCommand(entry.command, dir));
+  return verdicts.find(verdict => !verdict.allowed && !verdict.advisory) ?? verdicts.find(verdict => !verdict.allowed) ?? verdicts[0];
 }
 
 function commandBatch(payload: string): unknown {
@@ -53,7 +70,7 @@ function commandBatch(payload: string): unknown {
       // Legacy shape: a bare array of command strings, no cwd available.
       entries = batchEntries(parsed, undefined);
     } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.commands)) {
-      entries = batchEntries(parsed.commands, parsed.committed);
+      entries = batchEntries(parsed.commands, parsed.committed, parsed.cwds);
       if (typeof parsed.cwd === 'string') cwd = parsed.cwd;
     }
   } catch {
@@ -70,7 +87,7 @@ function commandBatch(payload: string): unknown {
     // silently.
     return [{ allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS' }];
   }
-  return entries.map(entry => (entry.committed ? validateCommittedScriptCommand(entry.command, cwd, entry.committed.bound) : validateCommand(entry.command, cwd)));
+  return entries.map(entry => judgeEntry(entry, cwd));
 }
 
 async function route(payload: string): Promise<unknown> {

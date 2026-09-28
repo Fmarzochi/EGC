@@ -1430,13 +1430,17 @@ function sourcedMove(where, operands, own) {
   return where.unknown ? where : { ...where, unknown: 'a script it sources moves the directory, which this hook does not follow' };
 }
 
+// Also gives, for each of `segments`, the directories it can run in (null
+// when only the running shell knows them), so each is judged there.
 function scriptSegmentsOf(segments, cwd, depth, seen, context) {
   const collected = [];
   const committed = [];
-  const outcome = blocked => ({ segments: collected, committed, blocked });
+  const places = [];
+  const outcome = blocked => ({ segments: collected, committed, places, blocked });
   let homeKnown = context.homeKnown;
   let where = startCwd(cwd || process.cwd());
   for (const segment of segments) {
+    places.push(where.unknown ? null : where.dirs);
     const here = { ...context, homeKnown, cwdKnown: context.cwdKnown && where.dirs.length === 1, cwdUnknown: context.cwdUnknown ?? where.unknown };
     const operands = scriptOperandsOf(segment, where.dirs, here);
     if (operands.blocked) return outcome(operands.blocked);
@@ -2175,11 +2179,16 @@ function judgeCommand(inputOrRaw) {
     };
   }
   const committed = [...segments.map(() => false), ...scripts.committed];
+  // A segment of the line itself is judged in every directory a cd before
+  // it can have left it in (`cd dir && git status` runs git in dir); the
+  // rest, and one after a move only the running shell knows, where the
+  // line starts.
+  const cwds = segments.map((_, i) => (i < words.segments.length ? scripts.places[i] ?? null : null));
   segments.push(...scripts.segments);
   const answer = callGuardianVerdict(
     cli,
     ['command-batch'],
-    JSON.stringify({ commands: segments, cwd, committed }),
+    JSON.stringify({ commands: segments, cwd, cwds, committed }),
     VALIDATE_TIMEOUT_MS,
   );
   if (!answer.ok) return withoutVerdict(answer);
