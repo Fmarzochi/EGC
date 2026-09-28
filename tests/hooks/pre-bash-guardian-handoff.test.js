@@ -9,6 +9,10 @@
 
 const assert = require('assert');
 const path = require('path');
+
+// The verdicts come from the deterministic stand-in for the guardian CLI,
+// so these cases do not depend on the egc-guardian build being there.
+process.env.EGC_GUARDIAN_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 const { run } = require('../../scripts/hooks/pre-bash-guardian-validate');
 const { handoffCommandsOf } = require('../../scripts/lib/handoff-commands');
 
@@ -68,6 +72,24 @@ function runTests() {
     }
   }));
 
+  record(test('ssh: a command given as an option is judged, where it runs remotely or on this machine', () => {
+    for (const command of [
+      `ssh -o RemoteCommand='${wipe}' host`, `ssh -oRemoteCommand='${wipe}' host`, `ssh -o 'RemoteCommand ${wipe}' host`,
+      `ssh -o remotecommand='${wipe}' host`, `ssh -o 'RemoteCommand = ${wipe}' host`, `ssh host -o RemoteCommand='${wipe}'`,
+      `ssh -o ProxyCommand='${wipe}' host`, `ssh -o PermitLocalCommand=yes -o LocalCommand='${wipe}' host ls`,
+      `ssh -o KnownHostsCommand='${wipe}' host`, `ssh -N -o ProxyCommand='${wipe}' host`, `docker exec -- web ${wipe}`,
+    ]) {
+      assert.strictEqual(judge(command).exitCode, 2, command);
+    }
+    for (const command of ["ssh -o RemoteCommand='ls -la' host", 'ssh -o RemoteCommand=none host', 'ssh -o ProxyCommand=none host', "ssh -o 'ServerAliveInterval 30' host ls"]) {
+      assert.strictEqual(judge(command).exitCode, 0, command);
+    }
+    assert.deepStrictEqual(handoffCommandsOf(['ssh', '-o', 'RemoteCommand=ls -la', 'host']), ['ls -la']);
+    assert.deepStrictEqual(handoffCommandsOf(['ssh', '-o', 'ProxyCommand nc %h %p', '-o', 'StrictHostKeyChecking=no', 'host', 'uptime']), ['nc %h %p', 'uptime']);
+    assert.deepStrictEqual(handoffCommandsOf(['ssh', '-G', '-o', 'RemoteCommand=ls', 'host']), ['ls']);
+    assert.deepStrictEqual(handoffCommandsOf(['ssh', '-o', 'RemoteCommand=None', '-o', 'ProxyCommand none', 'host']), [], 'none turns the command off');
+  }));
+
   record(test('ssh, docker exec and kubectl exec: what they run remotely or in a container is judged', () => {
     for (const command of [
       `ssh host ${wipe}`, `ssh -p 22 -i key user@host '${wipe}'`, `ssh -o StrictHostKeyChecking=no host -- ${wipe}`,
@@ -116,6 +138,8 @@ function runTests() {
     assert.deepStrictEqual(handoffCommandsOf(['screen', '-r', 'dev']), []);
     assert.deepStrictEqual(handoffCommandsOf(['screen', '-d', '-m', 'ls']), ["'ls'"]);
     assert.deepStrictEqual(handoffCommandsOf(['ssh', '--', 'host', 'ls']), ['ls']);
+    assert.deepStrictEqual(handoffCommandsOf(['docker', 'exec', '--', 'web', 'rm', '-rf', '/']), ["'rm' '-rf' '/'"]);
+    assert.deepStrictEqual(handoffCommandsOf(['docker', 'exec', '-it', '--', 'web', '--', 'ls']), ["'ls'"]);
   }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

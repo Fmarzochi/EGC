@@ -218,9 +218,35 @@ function screenRuns(values) {
 // a forwarding, a control or a query). Options may follow the destination.
 const SSH_VALUES = 'BbcDEeFIiJLlmOoPpQRSWw';
 const SSH_NO_COMMAND = 'NGVsWOQ';
+// The ssh_config keywords, given with -o, whose value is a command ssh runs:
+// on the remote host (RemoteCommand) or on this machine (ProxyCommand,
+// LocalCommand, KnownHostsCommand), whatever else the line asks for.
+const SSH_COMMAND_KEYWORDS = new Set(['remotecommand', 'proxycommand', 'localcommand', 'knownhostscommand']);
+
+// The command an -o option gives, as `Keyword=value` or `Keyword value`
+// with the keyword in any case; null for another option or for `none`.
+function sshOptionCommand(option) {
+  const text = String(option ?? '').trim();
+  const keywordEnd = text.search(/[\s=]/);
+  if (keywordEnd <= 0 || !SSH_COMMAND_KEYWORDS.has(text.slice(0, keywordEnd).toLowerCase())) return null;
+  let value = text.slice(keywordEnd).trimStart();
+  if (value.startsWith('=')) value = value.slice(1).trimStart();
+  return value && value.toLowerCase() !== 'none' ? value : null;
+}
+
+// Reads the ssh option cluster at `i` into `letters`, keeps the command an
+// -o option gives, and returns the index after it.
+function readSshOption(values, i, letters, optionCommands) {
+  const given = new Map();
+  const next = readCluster(values, i, SSH_VALUES, letters, given);
+  const command = given.has('o') ? sshOptionCommand(given.get('o')) : null;
+  if (command) optionCommands.push(command);
+  return next;
+}
 
 function sshRuns(values) {
   const letters = new Set();
+  const optionCommands = [];
   let destination = null;
   let i = 1;
   while (i < values.length) {
@@ -229,7 +255,7 @@ function sshRuns(values) {
       i += 1;
       break;
     }
-    if (word.startsWith('-') && word !== '-') i = readCluster(values, i, SSH_VALUES, letters, new Map());
+    if (word.startsWith('-') && word !== '-') i = readSshOption(values, i, letters, optionCommands);
     else if (destination === null) {
       destination = word;
       i += 1;
@@ -240,7 +266,8 @@ function sshRuns(values) {
     i += 1;
   }
   const runsNothing = [...letters].some(letter => SSH_NO_COMMAND.includes(letter));
-  return destination === null || i >= values.length || runsNothing ? [] : [values.slice(i).join(' ')];
+  const positional = destination === null || i >= values.length || runsNothing ? [] : [values.slice(i).join(' ')];
+  return [...optionCommands, ...positional];
 }
 
 // The options of docker, podman and kubectl, before and after their exec,
@@ -275,7 +302,9 @@ function containerRuns(name, values) {
   let start;
   if (KUBE_TOOLS.has(name) && dashes >= 0) start = dashes + 1;
   else {
-    const target = afterLongOptions(values, i + 1);
+    // The container follows the options, past a `--` that ends them.
+    let target = afterLongOptions(values, i + 1);
+    if (values[target] === '--') target += 1;
     start = values[target + 1] === '--' ? target + 2 : target + 1;
   }
   return values.length > start ? [argvLine(values.slice(start))] : [];
