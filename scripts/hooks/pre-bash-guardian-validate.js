@@ -1008,10 +1008,17 @@ function cdTargetsOf(word, context) {
   return searched ? null : [word.value];
 }
 
+// Whether a sourced script, whose own commands run in its caller, has one
+// that `acts` does. A script it sources in turn may bring anything; one it
+// runs with a shell of its own acts only in that shell.
+function actsInCaller(own, acts) {
+  return own.some(segment => acts(segment) || ['source', '.'].includes(commandOf(segment).name));
+}
+
 // Where the line can be after a segment that runs a script it sources: that
 // script's own cd moves the caller too, which this hook does not follow.
-function sourcedMove(where, operands, segments) {
-  if (!operands.sources || !segments.some(segment => CWD_CHANGERS.has(commandOf(segment).name))) return where;
+function sourcedMove(where, operands, own) {
+  if (!operands.sources || !actsInCaller(own, segment => CWD_CHANGERS.has(commandOf(segment).name))) return where;
   return where.unknown ? where : { ...where, unknown: 'a script it sources moves the directory, which this hook does not follow' };
 }
 
@@ -1031,8 +1038,8 @@ function scriptSegmentsOf(segments, cwd, depth, seen, context) {
       collected.push(...found.segments);
       committed.push(...found.committed);
       if (found.blocked) return outcome(found.blocked);
-      sourcedChangesHome = sourcedChangesHome || (operands.sources && found.segments.some(changesHome));
-      where = sourcedMove(where, operands, found.segments);
+      sourcedChangesHome = sourcedChangesHome || (operands.sources && actsInCaller(found.own, changesHome));
+      where = sourcedMove(where, operands, found.own);
     }
     homeKnown = homeKnown && !changesHome(segment) && !sourcedChangesHome;
     const { name, args } = commandOf(segment);
@@ -1046,8 +1053,8 @@ function scriptSegmentsOf(segments, cwd, depth, seen, context) {
 // analyzed fails closed whoever runs it: its commands could be anything.
 function fileSegmentsOf(file, operands, depth, seen, context) {
   const nested = nestedSegmentsOf(file, depth, seen);
-  if (nested.blocked) return { segments: [], committed: [], blocked: nested.blocked };
-  if (nested.segments === null) return { segments: [], committed: [], blocked: null };
+  if (nested.blocked) return { segments: [], own: [], committed: [], blocked: nested.blocked };
+  if (nested.segments === null) return { segments: [], own: [], committed: [], blocked: null };
   const committedFile = isCommittedUnchanged(file);
   // A script's command words are judged by every value they can take, from
   // what the script and its caller fix; one the hook cannot read fails closed
@@ -1055,7 +1062,7 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
   const ownBindings = bindingsOfSegments(nested.segments);
   const bindings = mergeBindings(context.bindings, ownBindings);
   const words = resolveCommandWords(nested.segments, bindings, !committedFile);
-  if (words.blocked) return { segments: [], committed: [], blocked: `script ${file}: ${words.blocked}` };
+  if (words.blocked) return { segments: [], own: [], committed: [], blocked: `script ${file}: ${words.blocked}` };
   const own = words.segments;
   const mark = committedFile ? { bound: boundAssignments(nested.segments, context.callerSet) } : false;
   // A script the wrapper moved into a directory runs its own children there.
@@ -1074,6 +1081,7 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
   });
   return {
     segments: [...own, ...inner.segments],
+    own,
     committed: [...own.map(() => mark), ...inner.committed],
     blocked: inner.blocked,
   };
@@ -1319,7 +1327,7 @@ function findExecCommandsOf(line) {
     if (current === null) {
       if (FIND_EXEC_FLAGS.has(word.value)) current = [];
     } else if (FIND_EXEC_ENDS.has(word.value)) {
-      commands.push(current.map(singleQuoted).join(' '));
+      commands.push(current.map(word => singleQuoted(word)).join(' '));
       current = null;
     } else {
       current.push(word.value);

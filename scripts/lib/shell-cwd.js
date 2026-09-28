@@ -27,13 +27,14 @@ function startCwd(dir) {
   return { dirs: [dir], stack: [], previous: null, unknown: null };
 }
 
-// The operands after the options cd, pushd and popd take.
+// The operands of cd, pushd and popd. Options come before the first operand
+// only, so `cd dir -P` is two operands, an error that leaves the directory.
 function moveOperands(args) {
   const operands = [];
   let literal = false;
   for (const word of args) {
-    if (!literal && word.value === '--') literal = true;
-    else if (literal || !CD_OPTION_RE.test(word.value)) operands.push(word);
+    if (!literal && operands.length === 0 && word.value === '--') literal = true;
+    else if (literal || operands.length > 0 || !CD_OPTION_RE.test(word.value)) operands.push(word);
   }
   return operands;
 }
@@ -73,13 +74,21 @@ function afterMove(state, name, args, targetsOf) {
   if (operands.length > 1) return state;
   const word = operands[0];
   if (name === 'pushd' && STACK_INDEX_RE.test(word.value)) return unknownAfter(state, `pushd ${word.value} rotates a stack this hook does not follow`);
-  if (word?.value === '-') {
-    return state.previous ? movedTo(state, state.previous, name) : unknownAfter(state, `${name} - returns to a directory only the running shell knows`);
-  }
+  if (word?.value === '-') return returned(state, name, `${name} -`);
   const targets = targetsOf(word ?? null);
   const spelled = word ? `${name} ${word.value}` : name;
   if (targets === null) return unknownAfter(state, `${spelled} moves to a directory only known when the command runs`);
+  // The shell reads options after expanding the word: `cd "$X"` with X set
+  // to - is cd -, and to -P or +1 an option or a stack rotation.
+  const expanded = targets.filter(target => target !== word?.value);
+  if (expanded.length > 0 && targets.every(target => target === '-')) return returned(state, name, spelled);
+  if (expanded.some(target => /^[-+]/.test(target))) return unknownAfter(state, `${spelled} expands to an option, which moves where only the running shell knows`);
   return movedTo(state, targets, name);
+}
+
+// cd - returns to where the last move of this line started.
+function returned(state, name, spelled) {
+  return state.previous ? movedTo(state, state.previous, name) : unknownAfter(state, `${spelled} returns to a directory only the running shell knows`);
 }
 
 module.exports = { startCwd, afterMove, CWD_CHANGERS };

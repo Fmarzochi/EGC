@@ -54,6 +54,21 @@ function runTests() {
     assert.deepStrictEqual(through('cd -- -dir').dirs, [root, path.join(root, '-dir')]);
     assert.deepStrictEqual(through('ls sub').dirs, [root]);
     assert.deepStrictEqual(through('cd a b').dirs, [root], 'too many operands is an error and stays');
+    assert.deepStrictEqual(through('cd sub -P').dirs, [root], 'an option after the operand is a second operand');
+    assert.deepStrictEqual(through('cd sub --').dirs, [root], '-- after the operand is a second operand');
+  }));
+
+  record(test('a target that expands to - is cd -, and one that expands to an option is unknown', () => {
+    const expandsTo = values => word => (word?.value === '$X' ? values : literal(word));
+    const moveX = (state, name, values) => afterMove(state, name, words('$X'), expandsTo(values));
+    const back = moveX(through('cd sub', 'cd /abs'), 'cd', ['-']);
+    assert.strictEqual(back.unknown, null);
+    assert.ok(back.dirs.includes(path.join(root, 'sub')));
+    assert.match(moveX(startCwd(root), 'cd', ['-']).unknown, /returns to a directory only the running shell knows/);
+    assert.match(moveX(startCwd(root), 'cd', ['-P']).unknown, /expands to an option/);
+    assert.match(moveX(startCwd(root), 'pushd', ['+1']).unknown, /expands to an option/);
+    assert.match(moveX(startCwd(root), 'cd', ['sub', '-']).unknown, /expands to an option/);
+    assert.deepStrictEqual(moveX(startCwd(root), 'cd', ['sub']).dirs, [root, path.join(root, 'sub')]);
   }));
 
   record(test('cd - returns to where the last move started, and is unknown with no move before it on the line', () => {

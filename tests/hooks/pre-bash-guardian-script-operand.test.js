@@ -276,6 +276,8 @@ function runTests() {
       fs.writeFileSync(path.join(home, 'fine.sh'), 'echo fine\n');
       fs.writeFileSync(path.join(dir, 'plain2.sh'), 'echo plain\n');
       fs.writeFileSync(path.join(dir, 'sethome.sh'), 'HOME=/tmp/egc-elsewhere\n');
+      fs.writeFileSync(path.join(dir, 'runs-sethome.sh'), 'bash sethome.sh\n');
+      fs.writeFileSync(path.join(dir, 'sources-sethome.sh'), 'source ./sethome.sh\n');
       // Inside a script a missing file is passed over, so these can only
       // fail closed for the value the shell expands.
       const inScripts = { 'n-var.sh': 'bash $S\n', 'n-user.sh': 'bash ~nobody/evil.sh\n', 'n-option.sh': 'bash -o pipefail "$S"\n', 'n-subst.sh': 'bash <(cat build.sh)\n' };
@@ -310,6 +312,8 @@ function runTests() {
           'declare -n h=HOME; h=/tmp/x; bash ~/fine.sh',
           'source ./nothing.sh; bash ~/fine.sh',
           'source ./sethome.sh; bash ~/fine.sh',
+          // A script it sources in turn runs in the caller too.
+          'source ./sources-sethome.sh; bash ~/fine.sh',
           'bash n-var.sh',
           'bash n-user.sh',
           'bash n-option.sh',
@@ -332,6 +336,8 @@ function runTests() {
           '$PYTHON "$f"',
           'source ~/fine.sh',
           'source ./plain2.sh; bash ~/fine.sh',
+          // A script run with its own shell sets HOME only there.
+          'source ./runs-sethome.sh; bash ~/fine.sh',
           '"$(git rev-parse --show-toplevel)/scripts/check.sh" "$FILE"',
         ];
         for (const command of passing) {
@@ -677,6 +683,9 @@ function runTests() {
       fs.writeFileSync(path.join(dir, 'moved', 'fine.sh'), 'echo fine\n');
       fs.writeFileSync(path.join(dir, 'moved', 'deeper', 'danger.sh'), `${wipe} /tmp/egc-victim\n`);
       fs.writeFileSync(path.join(dir, 'mover.sh'), 'cd moved\n');
+      fs.writeFileSync(path.join(dir, 'runs-mover.sh'), 'bash mover.sh\n');
+      fs.writeFileSync(path.join(dir, 'sources-mover.sh'), 'source ./mover.sh\n');
+      fs.writeFileSync(path.join(dir, 'dots-mover.sh'), '. ./mover.sh\n');
       const judge = command => run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
       for (const command of [
         'cd moved && bash danger.sh',
@@ -705,10 +714,14 @@ function runTests() {
         'cd - && bash fine.sh',
         'cd "$(echo moved)"; cd moved; bash fine.sh',
         'source ./mover.sh && bash fine.sh',
+        'source ./sources-mover.sh && bash fine.sh',
+        '. ./dots-mover.sh && bash fine.sh',
+        'X=-; cd "$X" && bash fine.sh',
+        'X=-P; cd "$X" && bash fine.sh',
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
-        assert.ok(/moves to a directory only known|directory stack|rotates a stack|returns to a directory only|sources moves the directory/.test(result.stderr), `${command}: ${result.stderr}`);
+        assert.ok(/moves to a directory only known|directory stack|rotates a stack|returns to a directory only|sources moves the directory|expands to an option/.test(result.stderr), `${command}: ${result.stderr}`);
       }
       for (const command of [
         'cd moved && bash fine.sh',
@@ -717,7 +730,9 @@ function runTests() {
         `cd "$(echo moved)" && bash ${JSON.stringify(path.join(dir, 'moved', 'fine.sh'))}`,
         'cd moved && ls; bash build.sh',
         'cd moved deeper && bash build.sh',
+        'cd moved -P && bash build.sh',
         'cd "$(echo moved)" && ls',
+        'source ./runs-mover.sh && bash build.sh',
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 0, `${command}: ${JSON.stringify(result)}`);
