@@ -84,5 +84,27 @@ notDenied("EDITOR='code --wait' git commit");
 notDenied('export EDITOR=nano');
 notDenied('OUT=./build/out.txt npm run build');
 
+console.log('\n=== A program handed an argument, a path git writes, a config home, less options ===\n');
+denied("PAGER='awk -f evil.awk' git log");
+denied("EDITOR=\"vim -c '!x'\" git commit");
+denied("PAGER='less +!id' git log");
+denied('LESSKEY=evil.key git log');
+denied("LESS='+!id' git log");
+denied("LESS='-k evil.key' git log");
+denied('GIT_INDEX_FILE=~/.bashrc git add .');
+denied('GIT_DIR=~/.ssh git init');
+denied('GIT_WORK_TREE=~/.ssh git checkout -f');
+denied('HOME=/tmp/evil git status');
+denied('XDG_CONFIG_HOME=/tmp/evil git log');
+denied('env HOME=/tmp/evil git status');
+notDenied("PAGER='bat --paging=always' git log");
+notDenied("EDITOR='nano -w' git commit");
+notDenied('LESS=FRX git log');
+notDenied('LESS=-R git log');
+notDenied('GIT_INDEX_FILE=/tmp/idx git add .');
+notDenied('GIT_DIR=.git git status');
+notDenied('HOME=/tmp/x npm install');
+notDenied('MAKEFLAGS=-k make');
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

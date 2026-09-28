@@ -500,7 +500,8 @@ const DANGEROUS_ENV_VAR_EXACT = new Set([
   // prompt, a proxy), a config file it loads whole, a template it copies
   // hooks from, and the input filters of less, git's pager.
   'GIT_EXTERNAL_DIFF', 'GIT_SEQUENCE_EDITOR', 'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_PROXY_COMMAND',
-  'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_TEMPLATE_DIR', 'LESSOPEN', 'LESSCLOSE',
+  'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_TEMPLATE_DIR',
+  'LESSOPEN', 'LESSCLOSE', 'LESSKEY', 'LESSKEYIN', 'LESSKEY_SRC', 'LESSKEY_CONTENT',
 ]);
 const DANGEROUS_ENV_VAR_PATTERN = /^GIT_CONFIG_(KEY|VALUE)_\d+$/;
 
@@ -512,33 +513,55 @@ function isDangerousEnvVarName(varName: string): boolean {
 }
 
 // A pager or an editor may be named by itself or from the system's program
-// directories; one named by another path is a script the hook never sees run.
+// directories, with plain flags only; one named by another path is a script
+// the hook never sees run, and an argument can hand it a command (vim -c,
+// less +) or a script (awk -f).
 const PROGRAM_ENV_VARS = new Set(['PAGER', 'MANPAGER', 'EDITOR', 'VISUAL']);
 const SYSTEM_PROGRAM_DIRS = ['/usr/', '/bin/', '/sbin/', '/opt/'];
-const TRACE_ENV_VAR_RE = /^GIT_TRACE/;
+const PLAIN_FLAG_RE = /^--?[A-Za-z][\w-]*(?:=[\w.,:-]*)?$/;
+// A file or a directory git writes to: its trace, its index, the repository.
+const GIT_PATH_ENV_VAR_RE = /^GIT_(?:TRACE\w*|INDEX_FILE|DIR|WORK_TREE|OBJECT_DIRECTORY|COMMON_DIR)$/;
+// Where git finds its global config, which can name commands it runs.
+const CONFIG_HOME_ENV_VARS = new Set(['HOME', 'XDG_CONFIG_HOME']);
+// less options that hand it an initial command or a key file.
+const LESS_COMMAND_RE = /\+|--lesskey|(?:^|\s)-?[A-Za-z]*k/;
 
-// Why the value a line gives a variable is refused: a trace git writes to a
-// protected file, or a pager or an editor that is inline code or a script
-// named by its path. null when the value is free.
-function envValueDenial(name: string, value: string): string | null {
-  const upper = name.toUpperCase();
-  const text = stripQuotes(value);
-  if (TRACE_ENV_VAR_RE.test(upper)) {
-    return /^[/~]/.test(text) && isProtectedPath(text) ? `'${name}' makes git write its trace to the protected file ${text}, which is forbidden` : null;
-  }
-  if (!PROGRAM_ENV_VARS.has(upper)) return null;
-  const program = text.trim().split(/\s+/)[0] ?? '';
+function programValueDenied(text: string): boolean {
+  const words = text.trim().split(/\s+/);
+  const program = words[0] ?? '';
   const byPath = program.includes('/') && !SYSTEM_PROGRAM_DIRS.some(dir => program.startsWith(dir));
-  if (!isInlineProgram(text) && !byPath) return null;
-  return `'${name}' is run as a pager or an editor, and '${text}' is inline code or a script named by its path, which is forbidden: name the program itself`;
+  return isInlineProgram(text) || byPath || words.slice(1).some(arg => !PLAIN_FLAG_RE.test(arg));
 }
 
-// The block a `VAR=value` or `export VAR=value` gets, if any.
-function envAssignmentBlock(name: string, value: string, verb: string): ValidationResultLike | null {
+// Why the value a line gives a variable is refused: a path git writes that
+// is protected, a config home for the git command it prefixes, less options
+// that run a command, or a pager or an editor that is inline code, a script
+// named by its path or a program handed an argument. null when it is free.
+function envValueDenial(name: string, value: string, command?: string): string | null {
+  const upper = name.toUpperCase();
+  const text = stripQuotes(value);
+  if (GIT_PATH_ENV_VAR_RE.test(upper) && isProtectedPath(text)) {
+    return `'${name}' makes git write to the protected path ${text}, which is forbidden`;
+  }
+  if (CONFIG_HOME_ENV_VARS.has(upper) && command === 'git') {
+    return `'${name}' points git at a config this line chooses, which can name commands git runs, and is forbidden`;
+  }
+  if (upper === 'LESS' && LESS_COMMAND_RE.test(text)) {
+    return `'LESS' hands less an initial command or a key file, which is forbidden`;
+  }
+  if (PROGRAM_ENV_VARS.has(upper) && programValueDenied(text)) {
+    return `'${name}' is run as a pager or an editor, and '${text}' is inline code, a script named by its path or a program handed an argument, which is forbidden: name the program itself`;
+  }
+  return null;
+}
+
+// The block a `VAR=value` or `export VAR=value` gets, if any; `command` is
+// the command the assignment prefixes, when there is one.
+function envAssignmentBlock(name: string, value: string, verb: string, command?: string): ValidationResultLike | null {
   if (isDangerousEnvVarName(name)) {
     return { allowed: false, reason: `${verb} '${name}' persists a git execution/config override and is forbidden`, trust_level: 'DANGEROUS' };
   }
-  const reason = envValueDenial(name, value);
+  const reason = envValueDenial(name, value, command);
   return reason ? { allowed: false, reason, trust_level: 'DANGEROUS' } : null;
 }
 
@@ -572,7 +595,9 @@ interface UnwrapStep {
 function tryUnwrapEnvAssignment(current: string[]): UnwrapStep | null {
   const envMatch = ENV_ASSIGNMENT_RE.exec(current[0]);
   if (!envMatch) return null;
-  const blocked = envAssignmentBlock(envMatch[1], current[0].slice(envMatch[0].length), 'setting');
+  const commandWord = current.find(token => !ENV_ASSIGNMENT_RE.test(token));
+  const command = commandWord === undefined ? undefined : commandName(stripQuotes(commandWord));
+  const blocked = envAssignmentBlock(envMatch[1], current[0].slice(envMatch[0].length), 'setting', command);
   return blocked ? { blocked } : { remaining: current.slice(1) };
 }
 
