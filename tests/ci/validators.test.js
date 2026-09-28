@@ -220,23 +220,24 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // ==========================================
   // ==========================================
   console.log('validate-agents.js:');
 
-  if (test('strips CRLF shebangs before writing temp wrappers', () => {
+  tally(test('strips CRLF shebangs before writing temp wrappers', () => {
     const source = '#!/usr/bin/env node\r\nconsole.log("ok");';
     assert.strictEqual(stripShebang(source), 'console.log("ok");');
-  })) passed++; else failed++;
+  }));
 
-  if (test('passes on real project agents', () => {
+  tally(test('passes on real project agents', () => {
     const result = runValidator('validate-agents');
     assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on agent without frontmatter', () => {
+  tally(test('fails on agent without frontmatter', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'bad-agent.md'), '# No frontmatter here\nJust content.');
 
@@ -244,9 +245,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should exit 1 for missing frontmatter');
     assert.ok(result.stderr.includes('Missing frontmatter'), 'Should report missing frontmatter');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on agent missing required model field', () => {
+  tally(test('fails on agent missing required model field', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'no-model.md'), '---\ntools: Read, Write\n---\n# Agent');
 
@@ -254,9 +255,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should exit 1 for missing model');
     assert.ok(result.stderr.includes('model'), 'Should report missing model field');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on agent missing required tools field', () => {
+  tally(test('fails on agent missing required tools field', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'no-tools.md'), '---\nmodel: sonnet\n---\n# Agent');
 
@@ -264,9 +265,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should exit 1 for missing tools');
     assert.ok(result.stderr.includes('tools'), 'Should report missing tools field');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('passes on valid agent with all required fields', () => {
+  tally(test('passes on valid agent with all required fields', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'good-agent.md'), '---\nmodel: sonnet\ntools: Read, Write\n---\n# Agent');
 
@@ -274,9 +275,9 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should pass for valid agent');
     assert.ok(result.stdout.includes('Validated 1'), 'Should report 1 validated');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles frontmatter with BOM and CRLF', () => {
+  tally(test('handles frontmatter with BOM and CRLF', () => {
     const testDir = createTestDir();
     const content = '\uFEFF---\r\nmodel: sonnet\r\ntools: Read, Write\r\n---\r\n# Agent';
     fs.writeFileSync(path.join(testDir, 'bom-agent.md'), content);
@@ -284,18 +285,18 @@ function runTests() {
     const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
     assert.strictEqual(result.code, 0, 'Should handle BOM and CRLF');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles frontmatter with colons in values', () => {
+  tally(test('handles frontmatter with colons in values', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'colon-agent.md'), '---\nmodel: sonnet\ntools: Read, Write, Bash\ndescription: Run this: always check: everything\n---\n# Agent');
 
     const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
     assert.strictEqual(result.code, 0, 'Should handle colons in values');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('skips non-md files', () => {
+  tally(test('skips non-md files', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'readme.txt'), 'Not an agent');
     fs.writeFileSync(path.join(testDir, 'valid.md'), '---\nmodel: sonnet\ntools: Read\n---\n# Agent');
@@ -304,54 +305,54 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should only validate .md files');
     assert.ok(result.stdout.includes('Validated 1'), 'Should count only .md files');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('exits 0 when directory does not exist', () => {
+  tally(test('exits 0 when directory does not exist', () => {
     const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', '/nonexistent/dir');
     assert.strictEqual(result.code, 0, 'Should skip when no agents dir');
     assert.ok(result.stdout.includes('skipping'), 'Should say skipping');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects agent with empty model value', () => {
+  tally(test('rejects agent with empty model value', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'empty.md'), '---\nmodel:\ntools: Read, Write\n---\n# Empty model');
     const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
     assert.strictEqual(result.code, 1, 'Should reject empty model');
     assert.ok(result.stderr.includes('model'), 'Should mention model field');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects agent with empty tools value', () => {
+  tally(test('rejects agent with empty tools value', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'empty.md'), '---\nmodel: egc-sonnet-4-5-20250929\ntools:\n---\n# Empty tools');
     const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
     assert.strictEqual(result.code, 1, 'Should reject empty tools');
     assert.ok(result.stderr.includes('tools'), 'Should mention tools field');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ==========================================
   // ==========================================
   console.log('\nvalidate-hooks.js:');
 
-  if (test('passes on real project hooks.json', () => {
+  tally(test('passes on real project hooks.json', () => {
     const result = runValidator('validate-hooks');
     assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
-  })) passed++; else failed++;
+  }));
 
   // ==========================================
   // catalog.js
   // ==========================================
   console.log('\ncatalog.js:');
 
-  if (test('passes on real project catalog counts', () => {
+  tally(test('passes on real project catalog counts', () => {
     const result = runCatalogValidator();
     assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('Documentation counts match the repository catalog.'), 'Should report matching counts');
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when README and AGENTS catalog counts drift', () => {
+  tally(test('fails when README and AGENTS catalog counts drift', () => {
     const testDir = createTestDir();
     const {
       readmePath,
@@ -391,9 +392,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail when catalog counts drift');
     assert.ok((result.stdout + result.stderr).includes('Documentation count mismatches found:'), 'Should report mismatches');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when a tracked catalog document is missing', () => {
+  tally(test('fails when a tracked catalog document is missing', () => {
     const testDir = createTestDir();
     const {
       readmePath,
@@ -422,9 +423,9 @@ function runTests() {
       'Should mention the missing tracked document'
     );
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('syncs tracked catalog docs in write mode without rewriting unrelated tables', () => {
+  tally(test('syncs tracked catalog docs in write mode without rewriting unrelated tables', () => {
     const testDir = createTestDir();
     const {
       readmePath,
@@ -478,9 +479,9 @@ function runTests() {
     assert.ok(zhAgentsDoc.includes('commands/       : 1 个斜杠命令'), 'Should sync docs/zh-CN/AGENTS structure');
 
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts AGENTS project structure entries with varied spacing and dash styles', () => {
+  tally(test('accepts AGENTS project structure entries with varied spacing and dash styles', () => {
     const testDir = createTestDir();
     const {
       readmePath,
@@ -512,14 +513,14 @@ function runTests() {
 
     assert.strictEqual(result.code, 0, `Should accept formatting variations, got stderr: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('exits 0 when hooks.json does not exist', () => {
+  tally(test('exits 0 when hooks.json does not exist', () => {
     const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', '/nonexistent/hooks.json');
     assert.strictEqual(result.code, 0, 'Should skip when no hooks.json');
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on invalid JSON', () => {
+  tally(test('fails on invalid JSON', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, '{ not valid json }}}');
@@ -528,9 +529,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on invalid JSON');
     assert.ok(result.stderr.includes('Invalid JSON'), 'Should report invalid JSON');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on invalid event type', () => {
+  tally(test('fails on invalid event type', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -543,9 +544,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on invalid event type');
     assert.ok(result.stderr.includes('Invalid event type'), 'Should report invalid event type');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on hook entry missing type field', () => {
+  tally(test('fails on hook entry missing type field', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -558,9 +559,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on missing type');
     assert.ok(result.stderr.includes('type'), 'Should report missing type');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on hook entry missing command field', () => {
+  tally(test('fails on hook entry missing command field', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -573,9 +574,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on missing command');
     assert.ok(result.stderr.includes('command'), 'Should report missing command');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on invalid async field type', () => {
+  tally(test('fails on invalid async field type', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -588,9 +589,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on non-boolean async');
     assert.ok(result.stderr.includes('async'), 'Should report async type error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on negative timeout', () => {
+  tally(test('fails on negative timeout', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -603,9 +604,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on negative timeout');
     assert.ok(result.stderr.includes('timeout'), 'Should report timeout error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on invalid inline JS syntax', () => {
+  tally(test('fails on invalid inline JS syntax', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -618,9 +619,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on invalid inline JS');
     assert.ok(result.stderr.includes('invalid inline JS'), 'Should report JS syntax error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('passes valid inline JS commands', () => {
+  tally(test('passes valid inline JS commands', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -632,9 +633,9 @@ function runTests() {
     const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
     assert.strictEqual(result.code, 0, 'Should pass valid inline JS');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('validates array command format', () => {
+  tally(test('validates array command format', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -646,9 +647,9 @@ function runTests() {
     const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
     assert.strictEqual(result.code, 0, 'Should accept array command format');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('validates legacy array format', () => {
+  tally(test('validates legacy array format', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify([
@@ -658,9 +659,9 @@ function runTests() {
     const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
     assert.strictEqual(result.code, 0, 'Should accept legacy array format');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on matcher missing hooks array', () => {
+  tally(test('fails on matcher missing hooks array', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -672,24 +673,24 @@ function runTests() {
     const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
     assert.strictEqual(result.code, 1, 'Should fail on missing hooks array');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ==========================================
   // ==========================================
   console.log('\nvalidate-skills.js:');
 
-  if (test('passes on real project skills', () => {
+  tally(test('passes on real project skills', () => {
     const result = runValidator('validate-skills');
     assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
-  })) passed++; else failed++;
+  }));
 
-  if (test('exits 0 when directory does not exist', () => {
+  tally(test('exits 0 when directory does not exist', () => {
     const result = runValidatorWithDir('validate-skills', 'SKILLS_DIR', '/nonexistent/dir');
     assert.strictEqual(result.code, 0, 'Should skip when no skills dir');
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on skill directory without SKILL.md', () => {
+  tally(test('fails on skill directory without SKILL.md', () => {
     const testDir = createTestDir();
     fs.mkdirSync(path.join(testDir, 'broken-skill'));
     // No SKILL.md inside
@@ -698,9 +699,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on missing SKILL.md');
     assert.ok(result.stderr.includes('Missing SKILL.md'), 'Should report missing SKILL.md');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on empty SKILL.md', () => {
+  tally(test('fails on empty SKILL.md', () => {
     const testDir = createTestDir();
     const skillDir = path.join(testDir, 'empty-skill');
     fs.mkdirSync(skillDir);
@@ -710,9 +711,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on empty SKILL.md');
     assert.ok(result.stderr.includes('Empty'), 'Should report empty file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('passes on valid skill directory', () => {
+  tally(test('passes on valid skill directory', () => {
     const testDir = createTestDir();
     const skillDir = path.join(testDir, 'good-skill');
     fs.mkdirSync(skillDir);
@@ -722,9 +723,9 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should pass for valid skill');
     assert.ok(result.stdout.includes('Validated 1'), 'Should report 1 validated');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('ignores non-directory entries', () => {
+  tally(test('ignores non-directory entries', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'not-a-skill.md'), '# README');
     const skillDir = path.join(testDir, 'real-skill');
@@ -735,9 +736,9 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should ignore non-directory entries');
     assert.ok(result.stdout.includes('Validated 1'), 'Should count only directories');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on whitespace-only SKILL.md', () => {
+  tally(test('fails on whitespace-only SKILL.md', () => {
     const testDir = createTestDir();
     const skillDir = path.join(testDir, 'blank-skill');
     fs.mkdirSync(skillDir);
@@ -747,24 +748,24 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject whitespace-only SKILL.md');
     assert.ok(result.stderr.includes('Empty file'), 'Should report empty file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ==========================================
   // ==========================================
   console.log('\nvalidate-commands.js:');
 
-  if (test('passes on real project commands', () => {
+  tally(test('passes on real project commands', () => {
     const result = runValidator('validate-commands');
     assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
-  })) passed++; else failed++;
+  }));
 
-  if (test('exits 0 when directory does not exist', () => {
+  tally(test('exits 0 when directory does not exist', () => {
     const result = runValidatorWithDir('validate-commands', 'COMMANDS_DIR', '/nonexistent/dir');
     assert.strictEqual(result.code, 0, 'Should skip when no commands dir');
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on empty command file', () => {
+  tally(test('fails on empty command file', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'empty.md'), '');
 
@@ -772,9 +773,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on empty file');
     assert.ok(result.stderr.includes('Empty'), 'Should report empty file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('passes on valid command files', () => {
+  tally(test('passes on valid command files', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'deploy.md'), '# Deploy\nDeploy the application.');
     fs.writeFileSync(path.join(testDir, 'test.md'), '# Test\nRun all tests.');
@@ -783,9 +784,9 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should pass for valid commands');
     assert.ok(result.stdout.includes('Validated 2'), 'Should report 2 validated');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('ignores non-md files', () => {
+  tally(test('ignores non-md files', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'script.js'), 'console.log(1)');
     fs.writeFileSync(path.join(testDir, 'valid.md'), '# Command');
@@ -794,9 +795,9 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should ignore non-md files');
     assert.ok(result.stdout.includes('Validated 1'), 'Should count only .md files');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects broken command cross-reference', () => {
+  tally(test('detects broken command cross-reference', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -808,9 +809,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on broken command ref');
     assert.ok(result.stderr.includes('nonexistent-cmd'), 'Should report broken command');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects broken agent path reference', () => {
+  tally(test('detects broken agent path reference', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -822,9 +823,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on broken agent ref');
     assert.ok(result.stderr.includes('fake-agent'), 'Should report broken agent');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('skips references inside fenced code blocks', () => {
+  tally(test('skips references inside fenced code blocks', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -836,9 +837,9 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Should skip refs inside code blocks');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects broken workflow agent reference', () => {
+  tally(test('detects broken workflow agent reference', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -851,9 +852,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on broken workflow agent');
     assert.ok(result.stderr.includes('ghost-agent'), 'Should report broken workflow agent');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('skips command references on creates: lines', () => {
+  tally(test('skips command references on creates: lines', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -866,9 +867,9 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Should skip creates: lines');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts valid cross-reference between commands', () => {
+  tally(test('accepts valid cross-reference between commands', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -881,9 +882,9 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should accept valid cross-refs');
     assert.ok(result.stdout.includes('Validated 2'), 'Should validate both');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('checks references in unclosed code blocks', () => {
+  tally(test('checks references in unclosed code blocks', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -898,9 +899,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should check refs in unclosed code blocks');
     assert.ok(result.stderr.includes('phantom-cmd'), 'Should report broken ref from unclosed block');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('captures ALL command references on a single line (multi-ref)', () => {
+  tally(test('captures ALL command references on a single line (multi-ref)', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -916,9 +917,9 @@ function runTests() {
     assert.ok(result.stderr.includes('ghost-a'), 'Should report first ref /ghost-a');
     assert.ok(result.stderr.includes('ghost-b'), 'Should report second ref /ghost-b');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('captures three command refs on one line', () => {
+  tally(test('captures three command refs on one line', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -933,9 +934,9 @@ function runTests() {
     assert.ok(result.stderr.includes('beta'), 'Should report /beta');
     assert.ok(result.stderr.includes('gamma'), 'Should report /gamma');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('multi-ref line with one valid and one invalid ref', () => {
+  tally(test('multi-ref line with one valid and one invalid ref', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -952,9 +953,9 @@ function runTests() {
     // real-cmd should NOT appear in errors
     assert.ok(!result.stderr.includes('real-cmd'), 'Should not report valid /real-cmd');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('creates: line with multiple refs skips entire line', () => {
+  tally(test('creates: line with multiple refs skips entire line', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -967,9 +968,9 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Should skip all refs on creates: line');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('validates valid workflow diagram with known agents', () => {
+  tally(test('validates valid workflow diagram with known agents', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -982,24 +983,24 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Should pass on valid workflow');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   // ==========================================
   // ==========================================
   console.log('\nvalidate-rules.js:');
 
-  if (test('passes on real project rules', () => {
+  tally(test('passes on real project rules', () => {
     const result = runValidator('validate-rules');
     assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
-  })) passed++; else failed++;
+  }));
 
-  if (test('exits 0 when directory does not exist', () => {
+  tally(test('exits 0 when directory does not exist', () => {
     const result = runValidatorWithDir('validate-rules', 'RULES_DIR', '/nonexistent/dir');
     assert.strictEqual(result.code, 0, 'Should skip when no rules dir');
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on empty rule file', () => {
+  tally(test('fails on empty rule file', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'empty.md'), '');
 
@@ -1007,9 +1008,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on empty rule file');
     assert.ok(result.stderr.includes('Empty'), 'Should report empty file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('passes on valid rule files', () => {
+  tally(test('passes on valid rule files', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'coding.md'), '# Coding Rules\nUse immutability.');
 
@@ -1017,9 +1018,9 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should pass for valid rules');
     assert.ok(result.stdout.includes('Validated 1'), 'Should report 1 validated');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on whitespace-only rule file', () => {
+  tally(test('fails on whitespace-only rule file', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'blank.md'), '   \n\t\n  ');
 
@@ -1027,9 +1028,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject whitespace-only rule file');
     assert.ok(result.stderr.includes('Empty'), 'Should report empty file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('validates rules in subdirectories recursively', () => {
+  tally(test('validates rules in subdirectories recursively', () => {
     const testDir = createTestDir();
     const subDir = path.join(testDir, 'sub');
     fs.mkdirSync(subDir);
@@ -1040,7 +1041,7 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should validate nested rules');
     assert.ok(result.stdout.includes('Validated 2'), 'Should find both rules');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ==========================================
   // Round 19: Whitespace and edge-case tests
@@ -1049,7 +1050,7 @@ function runTests() {
   // --- validate-hooks.js whitespace/null edge cases ---
   console.log('\nvalidate-hooks.js (whitespace edge cases):');
 
-  if (test('rejects whitespace-only command string', () => {
+  tally(test('rejects whitespace-only command string', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1062,9 +1063,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject whitespace-only command');
     assert.ok(result.stderr.includes('command'), 'Should report command field error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects null command value', () => {
+  tally(test('rejects null command value', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1077,9 +1078,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject null command');
     assert.ok(result.stderr.includes('command'), 'Should report command field error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects numeric command value', () => {
+  tally(test('rejects numeric command value', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1092,12 +1093,12 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject numeric command');
     assert.ok(result.stderr.includes('command'), 'Should report command field error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // --- validate-agents.js whitespace edge cases ---
   console.log('\nvalidate-agents.js (whitespace edge cases):');
 
-  if (test('rejects agent with whitespace-only model value', () => {
+  tally(test('rejects agent with whitespace-only model value', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'ws-model.md'), '---\nmodel:   \t  \ntools: Read, Write\n---\n# Agent');
 
@@ -1105,9 +1106,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject whitespace-only model');
     assert.ok(result.stderr.includes('model'), 'Should report model field error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects agent with whitespace-only tools value', () => {
+  tally(test('rejects agent with whitespace-only tools value', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'ws-tools.md'), '---\nmodel: sonnet\ntools:   \t  \n---\n# Agent');
 
@@ -1115,18 +1116,18 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject whitespace-only tools');
     assert.ok(result.stderr.includes('tools'), 'Should report tools field error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts agent with extra unknown frontmatter fields', () => {
+  tally(test('accepts agent with extra unknown frontmatter fields', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'extra.md'), '---\nmodel: sonnet\ntools: Read, Write\ncustom_field: some value\nauthor: test\n---\n# Agent');
 
     const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
     assert.strictEqual(result.code, 0, 'Should accept extra unknown fields');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects agent with invalid model value', () => {
+  tally(test('rejects agent with invalid model value', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'bad-model.md'), '---\nmodel: gpt-4\ntools: Read\n---\n# Agent');
 
@@ -1135,12 +1136,12 @@ function runTests() {
     assert.ok(result.stderr.includes('Invalid model'), 'Should report invalid model');
     assert.ok(result.stderr.includes('gpt-4'), 'Should show the invalid value');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // --- validate-commands.js additional edge cases ---
   console.log('\nvalidate-commands.js (additional edge cases):');
 
-  if (test('reports all invalid agents in mixed agent references', () => {
+  tally(test('reports all invalid agents in mixed agent references', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1156,9 +1157,9 @@ function runTests() {
     assert.ok(result.stderr.includes('fake-two'), 'Should report second invalid agent');
     assert.ok(!result.stderr.includes('real-agent'), 'Should NOT report valid agent');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('validates workflow with hyphenated agent names', () => {
+  tally(test('validates workflow with hyphenated agent names', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1171,9 +1172,9 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Should pass on hyphenated agent names in workflow');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects skill directory reference warning', () => {
+  tally(test('detects skill directory reference warning', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1188,7 +1189,7 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Skill warnings should not cause failure');
     assert.ok(result.stdout.includes('warning'), 'Should report warning count');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   // ==========================================
   // Round 22: Hook schema edge cases & empty directory paths
@@ -1197,7 +1198,7 @@ function runTests() {
   // --- validate-hooks.js: schema edge cases ---
   console.log('\nvalidate-hooks.js (schema edge cases):');
 
-  if (test('rejects event type value that is not an array', () => {
+  tally(test('rejects event type value that is not an array', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1208,9 +1209,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on non-array event type value');
     assert.ok(result.stderr.includes('must be an array'), 'Should report must be an array');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects matcher entry that is null', () => {
+  tally(test('rejects matcher entry that is null', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1221,9 +1222,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on null matcher entry');
     assert.ok(result.stderr.includes('is not an object'), 'Should report not an object');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects matcher entry that is a string', () => {
+  tally(test('rejects matcher entry that is a string', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1234,9 +1235,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on string matcher entry');
     assert.ok(result.stderr.includes('is not an object'), 'Should report not an object');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects top-level data that is a string', () => {
+  tally(test('rejects top-level data that is a string', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, '"just a string"');
@@ -1245,9 +1246,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on string data');
     assert.ok(result.stderr.includes('must be an object or array'), 'Should report must be object or array');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects top-level data that is a number', () => {
+  tally(test('rejects top-level data that is a number', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, '42');
@@ -1256,9 +1257,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on numeric data');
     assert.ok(result.stderr.includes('must be an object or array'), 'Should report must be object or array');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects empty string command', () => {
+  tally(test('rejects empty string command', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1271,9 +1272,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject empty string command');
     assert.ok(result.stderr.includes('command'), 'Should report command field error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects empty array command', () => {
+  tally(test('rejects empty array command', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1286,9 +1287,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject empty array command');
     assert.ok(result.stderr.includes('command'), 'Should report command field error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects array command with non-string elements', () => {
+  tally(test('rejects array command with non-string elements', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1301,9 +1302,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject non-string array elements');
     assert.ok(result.stderr.includes('command'), 'Should report command field error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects non-string type field', () => {
+  tally(test('rejects non-string type field', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1316,9 +1317,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject non-string type');
     assert.ok(result.stderr.includes('type'), 'Should report type field error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects non-number timeout type', () => {
+  tally(test('rejects non-number timeout type', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1331,9 +1332,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject string timeout');
     assert.ok(result.stderr.includes('timeout'), 'Should report timeout type error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts timeout of exactly 0', () => {
+  tally(test('accepts timeout of exactly 0', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1345,9 +1346,9 @@ function runTests() {
     const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
     assert.strictEqual(result.code, 0, 'Should accept timeout of 0');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('validates object format without wrapping hooks key', () => {
+  tally(test('validates object format without wrapping hooks key', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     // data.hooks is undefined, so fallback to data itself
@@ -1358,12 +1359,12 @@ function runTests() {
     const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
     assert.strictEqual(result.code, 0, 'Should accept object format without hooks wrapper');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // --- validate-hooks.js: legacy format error paths ---
   console.log('\nvalidate-hooks.js (legacy format errors):');
 
-  if (test('legacy format: rejects matcher missing matcher field', () => {
+  tally(test('legacy format: rejects matcher missing matcher field', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify([
@@ -1374,9 +1375,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on missing matcher in legacy format');
     assert.ok(result.stderr.includes('matcher'), 'Should report missing matcher');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('legacy format: rejects matcher missing hooks array', () => {
+  tally(test('legacy format: rejects matcher missing hooks array', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify([
@@ -1387,12 +1388,12 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on missing hooks array in legacy format');
     assert.ok(result.stderr.includes('hooks'), 'Should report missing hooks');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // --- validate-agents.js: empty directory ---
   console.log('\nvalidate-agents.js (empty directory):');
 
-  if (test('passes on empty agents directory', () => {
+  tally(test('passes on empty agents directory', () => {
     const testDir = createTestDir();
     // No .md files, just an empty dir
 
@@ -1400,12 +1401,12 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should pass on empty directory');
     assert.ok(result.stdout.includes('Validated 0'), 'Should report 0 validated');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // --- validate-commands.js: whitespace-only file ---
   console.log('\nvalidate-commands.js (whitespace edge cases):');
 
-  if (test('fails on whitespace-only command file', () => {
+  tally(test('fails on whitespace-only command file', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'blank.md'), '   \n\t\n  ');
 
@@ -1413,9 +1414,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject whitespace-only command file');
     assert.ok(result.stderr.includes('Empty'), 'Should report empty file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts valid skill directory reference', () => {
+  tally(test('accepts valid skill directory reference', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1429,12 +1430,12 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should pass on valid skill reference');
     assert.ok(!result.stdout.includes('warning'), 'Should have no warnings');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   // --- validate-rules.js: mixed valid/invalid ---
   console.log('\nvalidate-rules.js (mixed files):');
 
-  if (test('fails on mix of valid and empty rule files', () => {
+  tally(test('fails on mix of valid and empty rule files', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'good.md'), '# Good Rule\nContent here.');
     fs.writeFileSync(path.join(testDir, 'bad.md'), '');
@@ -1443,12 +1444,12 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail when any rule is empty');
     assert.ok(result.stderr.includes('bad.md'), 'Should report the bad file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 27: hook validation edge cases ──
   console.log('\nvalidate-hooks.js (Round 27 edge cases):');
 
-  if (test('rejects array command with empty string element', () => {
+  tally(test('rejects array command with empty string element', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1461,9 +1462,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject array with empty string element');
     assert.ok(result.stderr.includes('command'), 'Should report command field error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects negative timeout', () => {
+  tally(test('rejects negative timeout', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1476,9 +1477,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject negative timeout');
     assert.ok(result.stderr.includes('timeout'), 'Should report timeout error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects non-boolean async field', () => {
+  tally(test('rejects non-boolean async field', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1491,9 +1492,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject non-boolean async');
     assert.ok(result.stderr.includes('async'), 'Should report async type error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('reports correct index for error in deeply nested hook', () => {
+  tally(test('reports correct index for error in deeply nested hook', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     const manyHooks = [];
@@ -1511,9 +1512,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on invalid hook at high index');
     assert.ok(result.stderr.includes('hooks[5]'), 'Should report correct hook index 5');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('validates node -e with escaped quotes in inline JS', () => {
+  tally(test('validates node -e with escaped quotes in inline JS', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1525,9 +1526,9 @@ function runTests() {
     const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
     assert.strictEqual(result.code, 0, 'Should pass valid multi-statement inline JS');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts multiple valid event types in single hooks file', () => {
+  tally(test('accepts multiple valid event types in single hooks file', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1542,12 +1543,12 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should accept multiple valid event types');
     assert.ok(result.stdout.includes('3'), 'Should report 3 matchers validated');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 27: command validation edge cases ──
   console.log('\nvalidate-commands.js (Round 27 edge cases):');
 
-  if (test('validates multiple command refs on same non-creates line', () => {
+  tally(test('validates multiple command refs on same non-creates line', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1561,9 +1562,9 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Should pass when multiple refs on same line are all valid');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when one of multiple refs on same line is invalid', () => {
+  tally(test('fails when one of multiple refs on same line is invalid', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1579,9 +1580,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail when any ref is invalid');
     assert.ok(result.stderr.includes('cmd-z'), 'Should report the invalid reference');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('code blocks are stripped before checking references', () => {
+  tally(test('code blocks are stripped before checking references', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1594,12 +1595,12 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Should ignore command refs inside code blocks');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   // --- validate-skills.js: mixed valid/invalid ---
   console.log('\nvalidate-skills.js (mixed dirs):');
 
-  if (test('fails on mix of valid and invalid skill directories', () => {
+  tally(test('fails on mix of valid and invalid skill directories', () => {
     const testDir = createTestDir();
     // Valid skill
     const goodSkill = path.join(testDir, 'good-skill');
@@ -1618,12 +1619,12 @@ function runTests() {
     assert.ok(result.stderr.includes('bad-skill'), 'Should report missing SKILL.md');
     assert.ok(result.stderr.includes('empty-skill'), 'Should report empty SKILL.md');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 30: validate-commands skill warnings and workflow edge cases ──
   console.log('\nRound 30: validate-commands (skill warnings):');
 
-  if (test('warns (not errors) when skill directory reference is not found', () => {
+  tally(test('warns (not errors) when skill directory reference is not found', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1637,9 +1638,9 @@ function runTests() {
     // Skill directory references produce warnings, not errors: exit 0
     assert.strictEqual(result.code, 0, 'Skill path references should warn, not error');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('passes when command has no slash references at all', () => {
+  tally(test('passes when command has no slash references at all', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1651,11 +1652,11 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Should pass with no references');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 30: validate-agents (model validation):');
 
-  if (test('rejects agent with unrecognized model value', () => {
+  tally(test('rejects agent with unrecognized model value', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'bad-model.md'),
       '---\nmodel: gpt-4\ntools: Read, Write\n---\n# Bad Model Agent');
@@ -1664,9 +1665,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject unrecognized model');
     assert.ok(result.stderr.includes('gpt-4'), 'Should mention the invalid model');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts all valid model values (haiku, sonnet, gemini-2.5-pro)', () => {
+  tally(test('accepts all valid model values (haiku, sonnet, gemini-2.5-pro)', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'haiku.md'),
       '---\nmodel: haiku\ntools: Read\n---\n# Haiku Agent');
@@ -1679,12 +1680,12 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'All valid models should pass');
     assert.ok(result.stdout.includes('3'), 'Should validate 3 agent files');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 32: empty frontmatter & edge cases ──
   console.log('\nRound 32: validate-agents (empty frontmatter):');
 
-  if (test('rejects agent with empty frontmatter block (no key-value pairs)', () => {
+  tally(test('rejects agent with empty frontmatter block (no key-value pairs)', () => {
     const testDir = createTestDir();
     // Blank line between --- markers creates a valid but empty frontmatter block
     fs.writeFileSync(path.join(testDir, 'empty-fm.md'), '---\n\n---\n# Agent with empty frontmatter');
@@ -1694,9 +1695,9 @@ function runTests() {
     assert.ok(result.stderr.includes('model'), 'Should report missing model');
     assert.ok(result.stderr.includes('tools'), 'Should report missing tools');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects agent with no content between --- markers (Missing frontmatter)', () => {
+  tally(test('rejects agent with no content between --- markers (Missing frontmatter)', () => {
     const testDir = createTestDir();
     // ---\n--- with no blank line → regex doesn't match → "Missing frontmatter"
     fs.writeFileSync(path.join(testDir, 'no-fm.md'), '---\n---\n# Agent');
@@ -1705,9 +1706,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject missing frontmatter');
     assert.ok(result.stderr.includes('Missing frontmatter'), 'Should report missing frontmatter');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects agent with partial frontmatter (only model, no tools)', () => {
+  tally(test('rejects agent with partial frontmatter (only model, no tools)', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'partial.md'), '---\nmodel: haiku\n---\n# Partial agent');
 
@@ -1716,9 +1717,9 @@ function runTests() {
     assert.ok(result.stderr.includes('tools'), 'Should report missing tools');
     assert.ok(!result.stderr.includes('model'), 'Should NOT report model (it is present)');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles multiple agents where only one is invalid', () => {
+  tally(test('handles multiple agents where only one is invalid', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'good.md'), '---\nmodel: sonnet\ntools: Read\n---\n# Good');
     fs.writeFileSync(path.join(testDir, 'bad.md'), '---\nmodel: invalid-model\ntools: Read\n---\n# Bad');
@@ -1727,11 +1728,11 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail when any agent is invalid');
     assert.ok(result.stderr.includes('bad.md'), 'Should identify the bad file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 32: validate-rules (non-file entries):');
 
-  if (test('skips directory entries even if named with .md extension', () => {
+  tally(test('skips directory entries even if named with .md extension', () => {
     const testDir = createTestDir();
     fs.mkdirSync(path.join(testDir, 'tricky.md'));
     fs.writeFileSync(path.join(testDir, 'real.md'), '# A real rule');
@@ -1740,9 +1741,9 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should skip directory entries');
     assert.ok(result.stdout.includes('Validated 1'), 'Should count only the real file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles deeply nested rule in subdirectory', () => {
+  tally(test('handles deeply nested rule in subdirectory', () => {
     const testDir = createTestDir();
     const deepDir = path.join(testDir, 'cat1', 'sub1');
     fs.mkdirSync(deepDir, { recursive: true });
@@ -1752,11 +1753,11 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should validate deeply nested rules');
     assert.ok(result.stdout.includes('Validated 1'), 'Should find the nested rule');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 32: validate-commands (agent reference with valid workflow):');
 
-  if (test('passes workflow with three chained agents', () => {
+  tally(test('passes workflow with three chained agents', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1770,9 +1771,9 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Should pass on valid 3-agent workflow');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects broken agent in middle of workflow chain', () => {
+  tally(test('detects broken agent in middle of workflow chain', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1787,12 +1788,12 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should detect broken agent in workflow chain');
     assert.ok(result.stderr.includes('missing-agent'), 'Should report the missing agent');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 42: case sensitivity, space-before-colon, missing dirs, empty matchers ──
   console.log('\nRound 42: validate-agents (case sensitivity):');
 
-  if (test('rejects uppercase model value (case-sensitive check)', () => {
+  tally(test('rejects uppercase model value (case-sensitive check)', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'upper.md'), '---\nmodel: Haiku\ntools: Read\n---\n# Uppercase model');
 
@@ -1801,9 +1802,9 @@ function runTests() {
     assert.ok(result.stderr.includes('Invalid model'), 'Should report invalid model');
     assert.ok(result.stderr.includes('Haiku'), 'Should show the rejected value');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles space before colon in frontmatter key', () => {
+  tally(test('handles space before colon in frontmatter key', () => {
     const testDir = createTestDir();
     // "model : sonnet": space before colon. extractFrontmatter uses indexOf(':') + trim()
     fs.writeFileSync(path.join(testDir, 'space.md'), '---\nmodel : sonnet\ntools : Read, Write\n---\n# Agent with space-colon');
@@ -1811,11 +1812,11 @@ function runTests() {
     const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
     assert.strictEqual(result.code, 0, 'Should accept space before colon (trim handles it)');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 42: validate-commands (missing agents dir):');
 
-  if (test('flags agent path references when AGENTS_DIR does not exist', () => {
+  tally(test('flags agent path references when AGENTS_DIR does not exist', () => {
     const testDir = createTestDir();
     const skillsDir = createTestDir();
     // AGENTS_DIR points to non-existent path → validAgents set stays empty
@@ -1827,11 +1828,11 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail when agents dir missing but agent referenced');
     assert.ok(result.stderr.includes('planner'), 'Should report the unresolvable agent reference');
     cleanupTestDir(testDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 42: validate-hooks (empty matchers array):');
 
-  if (test('accepts event type with empty matchers array', () => {
+  tally(test('accepts event type with empty matchers array', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -1844,12 +1845,12 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should accept empty matchers array');
     assert.ok(result.stdout.includes('Validated 0'), 'Should report 0 matchers');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 47: escape sequence and frontmatter edge cases ──
   console.log('\nRound 47: validate-hooks (inline JS escape sequences):');
 
-  if (test('validates inline JS with mixed escape sequences (newline + escaped quote)', () => {
+  tally(test('validates inline JS with mixed escape sequences (newline + escaped quote)', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     // Command value after JSON parse: node -e "var a = \"ok\"\nconsole.log(a)"
@@ -1865,9 +1866,9 @@ function runTests() {
     const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
     assert.strictEqual(result.code, 0, 'Should handle escaped quotes and newline separators');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects inline JS with syntax error after unescaping', () => {
+  tally(test('rejects inline JS with syntax error after unescaping', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     // After unescape this becomes: var x = {: missing closing brace
@@ -1882,11 +1883,11 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject JS syntax error after unescaping');
     assert.ok(result.stderr.includes('invalid inline JS'), 'Should report inline JS error');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 47: validate-agents (frontmatter lines without colon):');
 
-  if (test('silently ignores frontmatter line without colon', () => {
+  tally(test('silently ignores frontmatter line without colon', () => {
     const testDir = createTestDir();
     // Line "just some text" has no colon: should be skipped, not cause crash
     fs.writeFileSync(path.join(testDir, 'mixed.md'),
@@ -1895,12 +1896,12 @@ function runTests() {
     const result = runValidatorWithDir('validate-agents', 'AGENTS_DIR', testDir);
     assert.strictEqual(result.code, 0, 'Should ignore lines without colon in frontmatter');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 52: command inline backtick refs, workflow whitespace, code-only rules ──
   console.log('\nRound 52: validate-commands (inline backtick refs):');
 
-  if (test('validates command refs inside inline backticks (not stripped by code block removal)', () => {
+  tally(test('validates command refs inside inline backticks (not stripped by code block removal)', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1914,11 +1915,11 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Inline backtick command refs should be validated');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 52: validate-commands (workflow whitespace):');
 
-  if (test('validates workflow arrows with irregular whitespace', () => {
+  tally(test('validates workflow arrows with irregular whitespace', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -1933,11 +1934,11 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0, 'Workflow arrows with irregular whitespace should be valid');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 52: validate-rules (code-only content):');
 
-  if (test('passes rule file containing only a fenced code block', () => {
+  tally(test('passes rule file containing only a fenced code block', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'code-only.md'),
       '```javascript\nfunction example() {\n  return true;\n}\n```');
@@ -1946,12 +1947,12 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Rule with only code block should pass (non-empty)');
     assert.ok(result.stdout.includes('Validated 1'), 'Should count the code-only file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 57: readFileSync error path, statSync catch block, adjacent code blocks ──
   console.log('\nRound 57: validate-skills.js (SKILL.md is a directory: readFileSync error):');
 
-  if (test('fails gracefully when SKILL.md is a directory instead of a file', () => {
+  tally(test('fails gracefully when SKILL.md is a directory instead of a file', () => {
     const testDir = createTestDir();
     const skillDir = path.join(testDir, 'dir-skill');
     fs.mkdirSync(skillDir);
@@ -1962,11 +1963,11 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail when SKILL.md is a directory');
     assert.ok(result.stderr.includes('dir-skill'), 'Should report the problematic skill');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 57: validate-rules.js (broken symlink: statSync catch block):');
 
-  if (test('reports error for broken symlink .md file in rules directory', () => {
+  tally(test('reports error for broken symlink .md file in rules directory', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'valid.md'), '# Valid Rule');
     // statSync follows symlinks and throws ENOENT, exercising catch (lines 35-38)
@@ -1983,11 +1984,11 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on broken symlink');
     assert.ok(result.stderr.includes('broken.md'), 'Should report the broken symlink file');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 57: validate-commands.js (adjacent code blocks both stripped):');
 
-  if (test('strips multiple adjacent code blocks before checking references', () => {
+  tally(test('strips multiple adjacent code blocks before checking references', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -2008,12 +2009,12 @@ function runTests() {
     assert.ok(!result.stderr.includes('phantom-b'), 'Second block ref should be stripped');
     assert.ok(!result.stderr.includes('ghost-agent'), 'Agent ref in second block should be stripped');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 58: readFileSync catch block, colonIdx edge case, command-as-object ──
   console.log('\nRound 58: validate-agents.js (unreadable agent file: readFileSync catch):');
 
-  if (test('reports error when agent .md file is unreadable (chmod 000)', () => {
+  tally(test('reports error when agent .md file is unreadable (chmod 000)', () => {
     // Skip on Windows or when running as root (permissions won't work)
     if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
       console.log('    (skipped: not supported on this platform)');
@@ -2032,11 +2033,11 @@ function runTests() {
       fs.chmodSync(agentFile, 0o644);
       cleanupTestDir(testDir);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 58: validate-agents.js (frontmatter line with colon at position 0):');
 
-  if (test('rejects agent when required field key has colon at position 0 (no key name)', () => {
+  tally(test('rejects agent when required field key has colon at position 0 (no key name)', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'bad-colon.md'),
       '---\n:sonnet\ntools: Read\n---\n# Agent with leading colon');
@@ -2045,11 +2046,11 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail: model field is missing (colon at idx 0 skipped)');
     assert.ok(result.stderr.includes('model'), 'Should report missing model field');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 58: validate-hooks.js (command is a plain object: not string or array):');
 
-  if (test('rejects hook entry where command is a plain object', () => {
+  tally(test('rejects hook entry where command is a plain object', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -2062,12 +2063,12 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should reject object command (not string or array)');
     assert.ok(result.stderr.includes('command'), 'Should report invalid command field');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 63: object-format missing matcher, unreadable command file, empty commands dir ──
   console.log('\nRound 63: validate-hooks.js (object-format matcher missing matcher field):');
 
-  if (test('rejects object-format matcher entry missing matcher field', () => {
+  tally(test('rejects object-format matcher entry missing matcher field', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     // Object format: matcher entry has hooks array but NO matcher field
@@ -2081,11 +2082,11 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on missing matcher field in object format');
     assert.ok(result.stderr.includes("missing 'matcher' field"), 'Should report missing matcher field');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 63: validate-commands.js (unreadable command file):');
 
-  if (test('reports error when command .md file is unreadable (chmod 000)', () => {
+  tally(test('reports error when command .md file is unreadable (chmod 000)', () => {
     if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
       console.log('    (skipped: not supported on this platform)');
       return;
@@ -2105,11 +2106,11 @@ function runTests() {
       fs.chmodSync(cmdFile, 0o644);
       cleanupTestDir(testDir);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 63: validate-commands.js (empty commands directory):');
 
-  if (test('passes on empty commands directory (no .md files)', () => {
+  tally(test('passes on empty commands directory (no .md files)', () => {
     const testDir = createTestDir();
     // Only non-.md files: no .md files to validate
     fs.writeFileSync(path.join(testDir, 'readme.txt'), 'not a command');
@@ -2120,12 +2121,12 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should pass on empty commands directory');
     assert.ok(result.stdout.includes('Validated 0'), 'Should report 0 validated');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 65: empty directories for rules and skills ──
   console.log('\nRound 65: validate-rules.js (empty directory: no .md files):');
 
-  if (test('passes on rules directory with no .md files (Validated 0)', () => {
+  tally(test('passes on rules directory with no .md files (Validated 0)', () => {
     const testDir = createTestDir();
     // Only non-.md files: readdirSync filter yields empty array
     fs.writeFileSync(path.join(testDir, 'notes.txt'), 'not a rule');
@@ -2135,11 +2136,11 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should pass on empty rules directory');
     assert.ok(result.stdout.includes('Validated 0'), 'Should report 0 validated rule files');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 65: validate-skills.js (empty directory: no subdirectories):');
 
-  if (test('passes on skills directory with only files, no subdirectories (Validated 0)', () => {
+  tally(test('passes on skills directory with only files, no subdirectories (Validated 0)', () => {
     const testDir = createTestDir();
     // Only files, no subdirectories: isDirectory filter yields empty array
     fs.writeFileSync(path.join(testDir, 'README.md'), '# Skills');
@@ -2149,12 +2150,12 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should pass on skills directory with no subdirectories');
     assert.ok(result.stdout.includes('Validated 0'), 'Should report 0 validated skill directories');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 70: validate-commands.js "would create:" line skip ──
   console.log('\nRound 70: validate-commands.js (would create: skip):');
 
-  if (test('skips command references on "would create:" lines', () => {
+  tally(test('skips command references on "would create:" lines', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -2171,12 +2172,12 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should skip "would create:" lines');
     assert.ok(!result.stderr.includes('phantom-cmd'), 'Should not flag ref on "would create:" line');
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 72: validate-hooks.js async/timeout type validation ──
   console.log('\nRound 72: validate-hooks.js (async and timeout type validation):');
 
-  if (test('rejects hook with non-boolean async field', () => {
+  tally(test('rejects hook with non-boolean async field', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -2194,9 +2195,9 @@ function runTests() {
     assert.ok(result.stderr.includes('async'), 'Should mention async in error');
     assert.ok(result.stderr.includes('boolean'), 'Should mention boolean type');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects hook with negative timeout value', () => {
+  tally(test('rejects hook with negative timeout value', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, JSON.stringify({
@@ -2214,12 +2215,12 @@ function runTests() {
     assert.ok(result.stderr.includes('timeout'), 'Should mention timeout in error');
     assert.ok(result.stderr.includes('non-negative'), 'Should mention non-negative');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 73: validate-commands.js skill directory statSync catch ──
   console.log('\nRound 73: validate-commands.js (unreadable skill entry: statSync catch):');
 
-  if (test('skips unreadable skill directory entries without error (broken symlink)', () => {
+  tally(test('skips unreadable skill directory entries without error (broken symlink)', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -2244,12 +2245,12 @@ function runTests() {
     cleanupTestDir(testDir);
     cleanupTestDir(agentsDir);
     fs.rmSync(skillsDir, { recursive: true, force: true });
-  })) passed++; else failed++;
+  }));
 
   // ── Round 76: validate-hooks.js invalid JSON in hooks.json ──
   console.log('\nRound 76: validate-hooks.js (invalid JSON in hooks.json):');
 
-  if (test('reports error for invalid JSON in hooks.json', () => {
+  tally(test('reports error for invalid JSON in hooks.json', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     fs.writeFileSync(hooksFile, '{not valid json!!!');
@@ -2260,12 +2261,12 @@ function runTests() {
     assert.ok(result.stderr.includes('Invalid JSON'),
       `stderr should mention Invalid JSON, got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 78: validate-hooks.js wrapped { hooks: { ... } } format ──
   console.log('\nRound 78: validate-hooks.js (wrapped hooks format):');
 
-  if (test('validates wrapped format { hooks: { PreToolUse: [...] } }', () => {
+  tally(test('validates wrapped format { hooks: { PreToolUse: [...] } }', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
     // The production hooks.json uses this wrapped format: { hooks: { ... } }
@@ -2284,12 +2285,12 @@ function runTests() {
     assert.ok(result.stdout.includes('Validated 2'),
       `Should validate 2 matchers, got: ${result.stdout}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 79: validate-commands.js warnings count suffix in output ──
   console.log('\nRound 79: validate-commands.js (warnings count in output):');
 
-  if (test('output includes (N warnings) suffix when skill references produce warnings', () => {
+  tally(test('output includes (N warnings) suffix when skill references produce warnings', () => {
     const testDir = createTestDir();
     const agentsDir = createTestDir();
     const skillsDir = createTestDir();
@@ -2305,12 +2306,12 @@ function runTests() {
     assert.ok(result.stdout.includes('(2 warnings)'),
       `Output should include "(2 warnings)" suffix, got: ${result.stdout}`);
     cleanupTestDir(testDir); cleanupTestDir(agentsDir); cleanupTestDir(skillsDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 80: validate-hooks.js legacy array format (lines 115-135) ──
   console.log('\nRound 80: validate-hooks.js (legacy array format):');
 
-  if (test('validates hooks in legacy array format (hooks is an array, not object)', () => {
+  tally(test('validates hooks in legacy array format (hooks is an array, not object)', () => {
     const testDir = createTestDir();
     // The legacy array format wraps hooks as { hooks: [...] } where the array
     // contains matcher objects directly. This exercises lines 115-135 of
@@ -2330,13 +2331,13 @@ function runTests() {
     assert.ok(result.stdout.includes('Validated 1 hook'),
       `Should report 1 validated matcher, got: ${result.stdout}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 82: Notification and SubagentStop event types ──
 
   console.log('\nRound 82: validate-hooks (Notification and SubagentStop event types):');
 
-  if (test('accepts Notification and SubagentStop as valid event types', () => {
+  tally(test('accepts Notification and SubagentStop as valid event types', () => {
     const testDir = createTestDir();
     const hooksJson = JSON.stringify({
       hooks: [
@@ -2357,11 +2358,11 @@ function runTests() {
     assert.ok(result.stdout.includes('Validated 2 hook'),
       `Should report 2 validated matchers, got: ${result.stdout}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 82b: validate-hooks (current official events and hook types):');
 
-  if (test('accepts UserPromptSubmit with omitted matcher and prompt/http/agent hooks', () => {
+  tally(test('accepts UserPromptSubmit with omitted matcher and prompt/http/agent hooks', () => {
     const testDir = createTestDir();
     const hooksJson = JSON.stringify({
       hooks: {
@@ -2382,13 +2383,13 @@ function runTests() {
     const result = runValidatorWithDir('validate-hooks', 'HOOKS_FILE', hooksFile);
     assert.strictEqual(result.code, 0, 'Should accept current official hook event/type combinations');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 83: validate-agents whitespace-only field, validate-skills empty SKILL.md ──
 
   console.log('\nRound 83: validate-agents (whitespace-only frontmatter field value):');
 
-  if (test('rejects agent with whitespace-only model field (trim guard)', () => {
+  tally(test('rejects agent with whitespace-only model field (trim guard)', () => {
     const testDir = createTestDir();
     // model has only whitespace: extractFrontmatter produces { model: '   ', tools: 'Read' }
     // The condition: typeof frontmatter[field] === 'string' && !frontmatter[field].trim()
@@ -2400,11 +2401,11 @@ function runTests() {
     assert.ok(result.stderr.includes('model'), 'Should report missing model field');
     assert.ok(!result.stderr.includes('tools'), 'tools field is valid and should NOT be flagged');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 83: validate-skills (empty SKILL.md file):');
 
-  if (test('rejects skill directory with empty SKILL.md file', () => {
+  tally(test('rejects skill directory with empty SKILL.md file', () => {
     const testDir = createTestDir();
     const skillDir = path.join(testDir, 'empty-skill');
     fs.mkdirSync(skillDir, { recursive: true });
@@ -2415,19 +2416,19 @@ function runTests() {
     assert.ok(result.stderr.includes('Empty file'),
       `Should report "Empty file", got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ==========================================
   // ==========================================
   console.log('\nvalidate-install-manifests.js:');
 
-  if (test('passes on real project install manifests', () => {
+  tally(test('passes on real project install manifests', () => {
     const result = runValidator('validate-install-manifests');
     assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
-  })) passed++; else failed++;
+  }));
 
-  if (test('exits 0 when install manifests do not exist', () => {
+  tally(test('exits 0 when install manifests do not exist', () => {
     const testDir = createTestDir();
     const result = runValidatorWithDirs('validate-install-manifests', {
       REPO_ROOT: testDir,
@@ -2437,9 +2438,9 @@ function runTests() {
     assert.strictEqual(result.code, 0, 'Should skip when manifests are missing');
     assert.ok(result.stdout.includes('skipping'), 'Should say skipping');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on invalid install manifest JSON', () => {
+  tally(test('fails on invalid install manifest JSON', () => {
     const testDir = createTestDir();
     const manifestsDir = path.join(testDir, 'manifests');
     fs.mkdirSync(manifestsDir, { recursive: true });
@@ -2461,9 +2462,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on invalid JSON');
     assert.ok(result.stderr.includes('Invalid JSON'), 'Should report invalid JSON');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when install module references a missing path', () => {
+  tally(test('fails when install module references a missing path', () => {
     const testDir = createTestDir();
     writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
       version: 1,
@@ -2532,9 +2533,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail when a referenced path is missing');
     assert.ok(result.stderr.includes('references missing path'), 'Should report missing path');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a missing path fails by default and only warns with EGC_MANIFEST_STRICT=0', () => {
+  tally(test('a missing path fails by default and only warns with EGC_MANIFEST_STRICT=0', () => {
     const testDir = createTestDir();
     writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
       version: 1,
@@ -2559,9 +2560,9 @@ function runTests() {
     const relaxed = runValidatorWithDirs('validate-install-manifests', { ...dirs, env: { EGC_MANIFEST_STRICT: '0' } });
     assert.strictEqual(relaxed.code, 0, `EGC_MANIFEST_STRICT=0 relaxes the missing path to a warning: ${relaxed.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects manifest paths that are absolute or climb out of the repository', () => {
+  tally(test('rejects manifest paths that are absolute or climb out of the repository', () => {
     for (const unsafe of ['../outside', 'rules/../../etc', '/etc/passwd']) {
       const testDir = createTestDir();
       writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
@@ -2584,7 +2585,7 @@ function runTests() {
       assert.ok(/unsafe path|must match pattern/.test(result.stderr), result.stderr);
       cleanupTestDir(testDir);
     }
-  })) passed++; else failed++;
+  }));
 
   {
     // The validator applies the loader's symlink check; skipped, not passed,
@@ -2599,7 +2600,7 @@ function runTests() {
       console.log(`  - skipped (symlink escape): cannot create symlinks here (${error.code})`);
     }
     if (linked) {
-      if (test('rejects a manifest path that escapes the repository through a symlink', () => {
+      tally(test('rejects a manifest path that escapes the repository through a symlink', () => {
         writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
           version: 1,
           modules: [{ id: 'rules-core', kind: 'rules', description: 'Rules', paths: ['rules'], targets: ['egc'], dependencies: [], defaultInstall: true, cost: 'light', stability: 'stable' }]
@@ -2618,13 +2619,13 @@ function runTests() {
         });
         assert.strictEqual(result.code, 1, 'a link escaping the repository must fail even in relaxed mode');
         assert.ok(result.stderr.includes('through a link'), result.stderr);
-      })) passed++; else failed++;
+      }));
     }
     cleanupTestDir(testDir);
     cleanupTestDir(outside);
   }
 
-  if (test('fails when two install modules claim the same path', () => {
+  tally(test('fails when two install modules claim the same path', () => {
     const testDir = createTestDir();
     writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
       version: 1,
@@ -2691,9 +2692,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail on duplicate claimed paths');
     assert.ok(result.stderr.includes('claimed by both'), 'Should report duplicate path claims');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when an install profile references an unknown module', () => {
+  tally(test('fails when an install profile references an unknown module', () => {
     const testDir = createTestDir();
     writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
       version: 1,
@@ -2744,9 +2745,9 @@ function runTests() {
     assert.ok(result.stderr.includes('references unknown module ghost-module'),
       'Should report unknown module reference');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('passes on a valid standalone install manifest fixture', () => {
+  tally(test('passes on a valid standalone install manifest fixture', () => {
     const testDir = createTestDir();
     writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
       version: 1,
@@ -2816,9 +2817,9 @@ function runTests() {
     assert.ok(result.stdout.includes('Validated 2 install modules, 2 install components, and 5 profiles'),
       'Should report validated install manifest counts');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when an install component references an unknown module', () => {
+  tally(test('fails when an install component references an unknown module', () => {
     const testDir = createTestDir();
     writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
       version: 1,
@@ -2869,17 +2870,17 @@ function runTests() {
     assert.ok(result.stderr.includes('references unknown module ghost-module'),
       'Should report unknown component module');
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nvalidate-llm-providers.js:');
 
-  if (test('passes against the real repository', () => {
+  tally(test('passes against the real repository', () => {
     const result = runValidator('validate-llm-providers');
     assert.strictEqual(result.code, 0, `Expected success, got: ${result.stderr}`);
     assert.ok(result.stdout.includes('Validated'), 'Should report how many providers were validated');
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when README claims a provider with no matching file', () => {
+  tally(test('fails when README claims a provider with no matching file', () => {
     const testDir = createTestDir();
     const providersDir = path.join(testDir, 'providers');
     fs.mkdirSync(providersDir, { recursive: true });
@@ -2899,9 +2900,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail when a claimed provider has no file');
     assert.ok(result.stderr.includes('Cohere') && result.stderr.includes('cohere.py'));
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when a mapped provider file exists but is not mentioned in README', () => {
+  tally(test('fails when a mapped provider file exists but is not mentioned in README', () => {
     const testDir = createTestDir();
     const providersDir = path.join(testDir, 'providers');
     fs.mkdirSync(providersDir, { recursive: true });
@@ -2921,19 +2922,19 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should fail when a shipped provider is not advertised');
     assert.ok(result.stderr.includes('cohere.py') && result.stderr.includes('not mentioned'));
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ==========================================
   // ==========================================
   console.log('\nvalidate-skill-frontmatter.js:');
 
-  if (test('passes on real project skills', () => {
+  tally(test('passes on real project skills', () => {
     const result = runValidator('validate-skill-frontmatter');
     assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on skill with no frontmatter block', () => {
+  tally(test('fails on skill with no frontmatter block', () => {
     const testDir = createTestDir();
     fs.mkdirSync(path.join(testDir, 'no-frontmatter'), { recursive: true });
     fs.writeFileSync(path.join(testDir, 'no-frontmatter', 'SKILL.md'), '# No Frontmatter\n\nJust content.');
@@ -2942,9 +2943,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should exit 1 for missing frontmatter');
     assert.ok(result.stderr.includes('Missing frontmatter'), `Should report missing frontmatter, got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on skill with unterminated frontmatter block', () => {
+  tally(test('fails on skill with unterminated frontmatter block', () => {
     const testDir = createTestDir();
     fs.mkdirSync(path.join(testDir, 'unterminated'), { recursive: true });
     fs.writeFileSync(path.join(testDir, 'unterminated', 'SKILL.md'), '---\nname: unterminated\ndescription: no closing marker\n\n# Body');
@@ -2953,9 +2954,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should exit 1 for unterminated frontmatter');
     assert.ok(result.stderr.includes('Malformed frontmatter'), `Should report malformed frontmatter, got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on skill missing the name field', () => {
+  tally(test('fails on skill missing the name field', () => {
     const testDir = createTestDir();
     fs.mkdirSync(path.join(testDir, 'no-name'), { recursive: true });
     fs.writeFileSync(path.join(testDir, 'no-name', 'SKILL.md'), '---\ndescription: Has a description but no name\n---\n# Body');
@@ -2965,9 +2966,9 @@ function runTests() {
     assert.ok(result.stderr.includes("Missing required frontmatter field: name"),
       `Should report missing name field, got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on skill missing the description field', () => {
+  tally(test('fails on skill missing the description field', () => {
     const testDir = createTestDir();
     fs.mkdirSync(path.join(testDir, 'no-description'), { recursive: true });
     fs.writeFileSync(path.join(testDir, 'no-description', 'SKILL.md'), '---\nname: no-description\n---\n# Body');
@@ -2977,9 +2978,9 @@ function runTests() {
     assert.ok(result.stderr.includes('Missing required frontmatter field: description'),
       `Should report missing description field, got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when name does not match its directory', () => {
+  tally(test('fails when name does not match its directory', () => {
     const testDir = createTestDir();
     fs.mkdirSync(path.join(testDir, 'my-skill-dir'), { recursive: true });
     fs.writeFileSync(path.join(testDir, 'my-skill-dir', 'SKILL.md'), '---\nname: unrelated-name\ndescription: A skill\n---\n# Body');
@@ -2989,9 +2990,9 @@ function runTests() {
     assert.ok(result.stderr.includes("does not match directory 'my-skill-dir'"),
       `Should report name/directory mismatch, got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('allows name to be a suffix of a category-prefixed directory', () => {
+  tally(test('allows name to be a suffix of a category-prefixed directory', () => {
     const testDir = createTestDir();
     fs.mkdirSync(path.join(testDir, 'topic-my-thing'), { recursive: true });
     fs.writeFileSync(path.join(testDir, 'topic-my-thing', 'SKILL.md'), '---\nname: my-thing\ndescription: A skill grouped under a shared topic prefix\n---\n# Body');
@@ -2999,9 +3000,9 @@ function runTests() {
     const result = runValidatorWithDirs('validate-skill-frontmatter', { SKILLS_DIR: testDir });
     assert.strictEqual(result.code, 0, `Should pass for suffix-matched name, got stderr: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails on non-kebab-case name', () => {
+  tally(test('fails on non-kebab-case name', () => {
     const testDir = createTestDir();
     fs.mkdirSync(path.join(testDir, 'Bad_Name'), { recursive: true });
     fs.writeFileSync(path.join(testDir, 'Bad_Name', 'SKILL.md'), '---\nname: Bad_Name\ndescription: A skill\n---\n# Body');
@@ -3010,19 +3011,19 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should exit 1 for non-kebab-case name');
     assert.ok(result.stderr.includes('not lowercase kebab-case'), `Should report kebab-case violation, got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // ==========================================
   // ==========================================
   console.log('\nvalidate-translation-structure.js:');
 
-  if (test('passes on real project translations', () => {
+  tally(test('passes on real project translations', () => {
     const result = runValidator('validate-translation-structure');
     assert.strictEqual(result.code, 0, `Should pass, got stderr: ${result.stderr}`);
     assert.ok(result.stdout.includes('Validated'), 'Should output validation count');
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when a translation is missing a heading present in README.md', () => {
+  tally(test('fails when a translation is missing a heading present in README.md', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'README.md'), [
       '## Intro',
@@ -3045,9 +3046,9 @@ function runTests() {
       `Should report the missing heading position, got: ${result.stderr}`);
     assert.ok(result.stderr.includes('### "Sub A"'), `Should name the missing heading, got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when a translation has an extra heading not in README.md', () => {
+  tally(test('fails when a translation has an extra heading not in README.md', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'README.md'), [
       '## Intro',
@@ -3067,9 +3068,9 @@ function runTests() {
     assert.ok(result.stderr.includes('EXTRA heading at translation position 1'),
       `Should report the extra heading position, got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when a translation README.md is missing entirely', () => {
+  tally(test('fails when a translation README.md is missing entirely', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'README.md'), '## Intro\n');
     fs.mkdirSync(path.join(testDir, 'translations'), { recursive: true });
@@ -3078,9 +3079,9 @@ function runTests() {
     assert.strictEqual(result.code, 1, 'Should exit 1 for missing translation file');
     assert.ok(result.stderr.includes('File not found'), `Should report file not found, got: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
-  if (test('passes when translation headings match in level and order', () => {
+  tally(test('passes when translation headings match in level and order', () => {
     const testDir = createTestDir();
     fs.writeFileSync(path.join(testDir, 'README.md'), [
       '## Intro',
@@ -3103,7 +3104,7 @@ function runTests() {
     const result = runValidatorWithDirs('validate-translation-structure', { ROOT: testDir, LANGUAGES: ['es'] });
     assert.strictEqual(result.code, 0, `Should pass when structure matches despite different text, got stderr: ${result.stderr}`);
     cleanupTestDir(testDir);
-  })) passed++; else failed++;
+  }));
 
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

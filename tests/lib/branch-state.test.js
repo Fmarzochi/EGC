@@ -66,45 +66,46 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('projectSlug uses last two path segments', () => {
+  tally(test('projectSlug uses last two path segments', () => {
     assert.strictEqual(projectSlug('/home/user/Projects/my-app'), 'Projects--my-app');
-  })) passed++; else failed++;
+  }));
 
-  if (test('projectSlug sanitizes unsafe characters', () => {
+  tally(test('projectSlug sanitizes unsafe characters', () => {
     assert.strictEqual(projectSlug('/home/user/Pro jects/my.app'), 'Pro_jects--my_app');
-  })) passed++; else failed++;
+  }));
 
-  if (test('projectSlug falls back to default for empty path', () => {
+  tally(test('projectSlug falls back to default for empty path', () => {
     assert.strictEqual(projectSlug(''), 'default');
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeBranchName replaces slashes with hyphens', () => {
+  tally(test('sanitizeBranchName replaces slashes with hyphens', () => {
     assert.strictEqual(sanitizeBranchName('feature/auth'), 'feature-auth');
     assert.strictEqual(sanitizeBranchName('hotfix/login/v2'), 'hotfix-login-v2');
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeBranchName strips unsafe filename characters', () => {
+  tally(test('sanitizeBranchName strips unsafe filename characters', () => {
     assert.strictEqual(sanitizeBranchName('release/1.0.8'), 'release-1_0_8');
     assert.strictEqual(sanitizeBranchName('fix/issue#137'), 'fix-issue_137');
-  })) passed++; else failed++;
+  }));
 
-  if (test('branchStateKey prevents collisions after filename sanitization', () => {
+  tally(test('branchStateKey prevents collisions after filename sanitization', () => {
     assert.match(branchStateKey('feature/auth'), /^feature-auth--[0-9a-f]{64}$/);
     assert.notStrictEqual(branchStateKey('feature/auth'), branchStateKey('feature-auth'));
     assert.notStrictEqual(branchStateKey('release/1.0'), branchStateKey('release-1_0'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('getStateDir resolves under the provided home directory', () => {
+  tally(test('getStateDir resolves under the provided home directory', () => {
     assert.strictEqual(getStateDir('/tmp/fake-home'), path.join('/tmp/fake-home', '.egc', 'state'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('detectBranch returns the current branch in a git repo', () => {
+  tally(test('detectBranch returns the current branch in a git repo', () => {
     const repo = makeGitRepo('feature/auth');
     assert.strictEqual(detectBranch(repo), 'feature/auth');
-  })) passed++; else failed++;
+  }));
 
-  if (test('trustedGitPath returns the canonical path only under a trusted root with a .git segment', () => {
+  tally(test('trustedGitPath returns the canonical path only under a trusted root with a .git segment', () => {
     const realTmp = fs.realpathSync.native(os.tmpdir());
     const under = path.join(realTmp, 'egc-trusted', '.git', 'HEAD');
     assert.strictEqual(trustedGitPath(path.join(os.tmpdir(), 'egc-trusted', 'sub', '..', '.git', 'HEAD')), under, 'resolved, normalised and canonical');
@@ -154,20 +155,20 @@ function runTests() {
         fs.rmSync(base, { recursive: true, force: true });
       }
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('detectBranch returns null outside a git repo', () => {
+  tally(test('detectBranch returns null outside a git repo', () => {
     const dir = makeTmpDir('egc-branch-state-norepo-');
     assert.strictEqual(detectBranch(dir), null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('detectBranch returns null on detached HEAD', () => {
+  tally(test('detectBranch returns null on detached HEAD', () => {
     const repo = makeGitRepo(null);
     git(repo, 'checkout -q --detach');
     assert.strictEqual(detectBranch(repo), null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('flatStateFile and branchStateFile build expected paths', () => {
+  tally(test('flatStateFile and branchStateFile build expected paths', () => {
     const stateDir = '/tmp/fake-home/.egc/state';
     const project = '/home/user/Projects/my-app';
     assert.strictEqual(
@@ -178,9 +179,9 @@ function runTests() {
       branchStateFile(stateDir, project, 'feature/auth'),
       path.join(stateDir, 'Projects--my-app', `${branchStateKey('feature/auth')}.md`)
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('colliding legacy branch names write to independent state files', () => {
+  tally(test('colliding legacy branch names write to independent state files', () => {
     const stateDir = makeTmpDir('egc-branch-state-collision-');
     const project = '/home/user/Projects/my-app';
     const slashBranchFile = branchStateFile(stateDir, project, 'feature/auth');
@@ -191,9 +192,9 @@ function runTests() {
     writeState(dashBranchFile, 'dash branch');
     assert.match(fs.readFileSync(slashBranchFile, 'utf8'), /slash branch/);
     assert.match(fs.readFileSync(dashBranchFile, 'utf8'), /dash branch/);
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolveStateRead prefers the current branch file', () => {
+  tally(test('resolveStateRead prefers the current branch file', () => {
     const stateDir = makeTmpDir('egc-branch-state-read1-');
     const project = '/home/user/Projects/my-app';
     writeState(branchStateFile(stateDir, project, 'feature/auth'), 'branch state');
@@ -203,9 +204,9 @@ function runTests() {
     const resolved = resolveStateRead(stateDir, project, 'feature/auth');
     assert.strictEqual(resolved.source, 'branch');
     assert.strictEqual(resolved.filePath, branchStateFile(stateDir, project, 'feature/auth'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolveStateRead falls back to main.md when branch file is missing', () => {
+  tally(test('resolveStateRead falls back to main.md when branch file is missing', () => {
     const stateDir = makeTmpDir('egc-branch-state-read2-');
     const project = '/home/user/Projects/my-app';
     writeState(path.join(stateDir, 'Projects--my-app', 'main.md'), 'main state');
@@ -213,9 +214,9 @@ function runTests() {
     const resolved = resolveStateRead(stateDir, project, 'feature/auth');
     assert.strictEqual(resolved.source, 'default-branch');
     assert.strictEqual(resolved.filePath, path.join(stateDir, 'Projects--my-app', 'main.md'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolveStateRead migrates safely from legacy branch filenames', () => {
+  tally(test('resolveStateRead migrates safely from legacy branch filenames', () => {
     const stateDir = makeTmpDir('egc-branch-state-legacy-');
     const project = '/home/user/Projects/my-app';
     const legacyFile = legacyBranchStateFile(stateDir, project, 'feature/auth');
@@ -229,9 +230,9 @@ function runTests() {
     writeState(currentFile, 'current branch state');
     const fromCurrent = resolveStateRead(stateDir, project, 'feature/auth');
     assert.strictEqual(fromCurrent.filePath, currentFile);
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolveStateRead falls back to the legacy flat file', () => {
+  tally(test('resolveStateRead falls back to the legacy flat file', () => {
     const stateDir = makeTmpDir('egc-branch-state-read3-');
     const project = '/home/user/Projects/my-app';
     writeState(flatStateFile(stateDir, project), 'flat state');
@@ -239,9 +240,9 @@ function runTests() {
     const resolved = resolveStateRead(stateDir, project, 'feature/auth');
     assert.strictEqual(resolved.source, 'flat');
     assert.strictEqual(resolved.filePath, flatStateFile(stateDir, project));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolveStateRead reads the flat file when there is no branch', () => {
+  tally(test('resolveStateRead reads the flat file when there is no branch', () => {
     const stateDir = makeTmpDir('egc-branch-state-read4-');
     const project = '/home/user/Projects/my-app';
     writeState(flatStateFile(stateDir, project), 'flat state');
@@ -249,9 +250,9 @@ function runTests() {
     const resolved = resolveStateRead(stateDir, project, null);
     assert.strictEqual(resolved.source, 'flat');
     assert.strictEqual(resolved.filePath, flatStateFile(stateDir, project));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolveStateRead reports none when no state exists', () => {
+  tally(test('resolveStateRead reports none when no state exists', () => {
     const stateDir = makeTmpDir('egc-branch-state-read5-');
     const project = '/home/user/Projects/my-app';
 
@@ -262,9 +263,9 @@ function runTests() {
     const withoutBranch = resolveStateRead(stateDir, project, null);
     assert.strictEqual(withoutBranch.source, 'none');
     assert.strictEqual(withoutBranch.filePath, flatStateFile(stateDir, project));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolveStateWrite targets the branch file when a branch exists', () => {
+  tally(test('resolveStateWrite targets the branch file when a branch exists', () => {
     const stateDir = '/tmp/fake-home/.egc/state';
     const project = '/home/user/Projects/my-app';
     assert.strictEqual(
@@ -275,9 +276,9 @@ function runTests() {
       resolveStateWrite(stateDir, project, null),
       flatStateFile(stateDir, project)
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('collectMemoryState reports the active branch state', () => {
+  tally(test('collectMemoryState reports the active branch state', () => {
     const home = makeTmpDir('egc-branch-state-home1-');
     const repo = makeGitRepo('feature/auth');
     const stateFile = branchStateFile(getStateDir(home), repo, 'feature/auth');
@@ -288,9 +289,9 @@ function runTests() {
     assert.strictEqual(result.source, 'branch');
     assert.strictEqual(result.stateFile, stateFile);
     assert.strictEqual(result.slug, projectSlug(repo));
-  })) passed++; else failed++;
+  }));
 
-  if (test('collectMemoryState reports flat fallback and missing state', () => {
+  tally(test('collectMemoryState reports flat fallback and missing state', () => {
     const home = makeTmpDir('egc-branch-state-home2-');
     const repo = makeGitRepo('feature/auth');
     writeState(flatStateFile(getStateDir(home), repo), 'flat state');
@@ -303,9 +304,9 @@ function runTests() {
     const none = collectMemoryState(repo, emptyHome);
     assert.strictEqual(none.source, 'none');
     assert.strictEqual(none.stateFile, null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('egc-memory-load hook injects the branch state', () => {
+  tally(test('egc-memory-load hook injects the branch state', () => {
     const home = makeTmpDir('egc-branch-state-home4-');
     const repo = makeGitRepo('feature/auth');
     writeState(branchStateFile(getStateDir(home), repo, 'feature/auth'), 'BRANCH_MARKER_137');
@@ -322,9 +323,9 @@ function runTests() {
     const output = JSON.parse(result.stdout);
     assert.ok(output.promptForAssistant.includes('BRANCH_MARKER_137'));
     assert.ok(!output.promptForAssistant.includes('FLAT_MARKER_137'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('egc-memory-load hook falls back to the flat state', () => {
+  tally(test('egc-memory-load hook falls back to the flat state', () => {
     const home = makeTmpDir('egc-branch-state-home5-');
     const repo = makeGitRepo('feature/auth');
     writeState(flatStateFile(getStateDir(home), repo), 'FLAT_MARKER_137');
@@ -339,9 +340,9 @@ function runTests() {
     assert.strictEqual(result.status, 0);
     const output = JSON.parse(result.stdout);
     assert.ok(output.promptForAssistant.includes('FLAT_MARKER_137'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('egc-memory-load hook passes input through when no state exists', () => {
+  tally(test('egc-memory-load hook passes input through when no state exists', () => {
     const home = makeTmpDir('egc-branch-state-home6-');
     const repo = makeGitRepo('feature/auth');
 
@@ -356,7 +357,7 @@ function runTests() {
     const output = JSON.parse(result.stdout);
     assert.strictEqual(output.session, 'abc');
     assert.strictEqual(output.promptForAssistant, undefined);
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

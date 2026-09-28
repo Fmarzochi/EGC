@@ -55,41 +55,42 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // Rule definitions tests
   console.log('Rule Definitions:');
 
-  if (test('LANGUAGE_RULES is non-empty array', () => {
+  tally(test('LANGUAGE_RULES is non-empty array', () => {
     assert.ok(Array.isArray(LANGUAGE_RULES));
     assert.ok(LANGUAGE_RULES.length > 0);
-  })) passed++; else failed++;
+  }));
 
-  if (test('FRAMEWORK_RULES is non-empty array', () => {
+  tally(test('FRAMEWORK_RULES is non-empty array', () => {
     assert.ok(Array.isArray(FRAMEWORK_RULES));
     assert.ok(FRAMEWORK_RULES.length > 0);
-  })) passed++; else failed++;
+  }));
 
-  if (test('each language rule has type, markers, and extensions', () => {
+  tally(test('each language rule has type, markers, and extensions', () => {
     for (const rule of LANGUAGE_RULES) {
       assert.ok(typeof rule.type === 'string', `Missing type`);
       assert.ok(Array.isArray(rule.markers), `Missing markers for ${rule.type}`);
       assert.ok(Array.isArray(rule.extensions), `Missing extensions for ${rule.type}`);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('each framework rule has framework, language, markers, packageKeys', () => {
+  tally(test('each framework rule has framework, language, markers, packageKeys', () => {
     for (const rule of FRAMEWORK_RULES) {
       assert.ok(typeof rule.framework === 'string', `Missing framework`);
       assert.ok(typeof rule.language === 'string', `Missing language for ${rule.framework}`);
       assert.ok(Array.isArray(rule.markers), `Missing markers for ${rule.framework}`);
       assert.ok(Array.isArray(rule.packageKeys), `Missing packageKeys for ${rule.framework}`);
     }
-  })) passed++; else failed++;
+  }));
 
   // Empty directory detection
   console.log('\nEmpty Directory:');
 
-  if (test('empty directory returns unknown primary', () => {
+  tally(test('empty directory returns unknown primary', () => {
     const dir = createTempDir();
     try {
       const result = detectProjectType(dir);
@@ -100,12 +101,12 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // Python detection
   console.log('\nPython Detection:');
 
-  if (test('detects python from requirements.txt', () => {
+  tally(test('detects python from requirements.txt', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'requirements.txt', 'flask==3.0.0\nrequests>=2.31');
@@ -114,9 +115,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects python from pyproject.toml', () => {
+  tally(test('detects python from pyproject.toml', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'pyproject.toml', '[project]\nname = "test"');
@@ -125,9 +126,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects flask framework from requirements.txt', () => {
+  tally(test('detects flask framework from requirements.txt', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'requirements.txt', 'flask==3.0.0\nrequests>=2.31');
@@ -136,9 +137,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects django framework from manage.py', () => {
+  tally(test('detects django framework from manage.py', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'manage.py', '#!/usr/bin/env python');
@@ -148,9 +149,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects fastapi from pyproject.toml dependencies', () => {
+  tally(test('detects fastapi from pyproject.toml dependencies', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'pyproject.toml', '[project]\nname = "test"\ndependencies = [\n  "fastapi>=0.100",\n  "uvicorn"\n]');
@@ -159,12 +160,12 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // TypeScript/JavaScript detection
   console.log('\nTypeScript/JavaScript Detection:');
 
-  if (test('detects typescript from tsconfig.json', () => {
+  tally(test('detects typescript from tsconfig.json', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'tsconfig.json', '{}');
@@ -176,9 +177,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects nextjs from next.config.mjs', () => {
+  tally(test('detects nextjs from next.config.mjs', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'tsconfig.json', '{}');
@@ -190,9 +191,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects react from package.json', () => {
+  tally(test('detects react from package.json', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'package.json', '{"dependencies":{"react":"18.0.0","react-dom":"18.0.0"}}');
@@ -201,9 +202,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects angular from angular.json', () => {
+  tally(test('detects angular from angular.json', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'angular.json', '{}');
@@ -214,11 +215,11 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log('\nC Detection:');
 
-  if (test('detects c from top-level .c files', () => {
+  tally(test('detects c from top-level .c files', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'main.c', 'int main(void) { return 0; }\n');
@@ -228,12 +229,12 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // Go detection
   console.log('\nGo Detection:');
 
-  if (test('detects golang from go.mod', () => {
+  tally(test('detects golang from go.mod', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'go.mod', 'module github.com/test/app\n\ngo 1.22\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.9.1\n)');
@@ -243,12 +244,12 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // Rust detection
   console.log('\nRust Detection:');
 
-  if (test('detects rust from Cargo.toml', () => {
+  tally(test('detects rust from Cargo.toml', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'Cargo.toml', '[package]\nname = "test"\n\n[dependencies]\naxum = "0.7"');
@@ -258,12 +259,12 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // Ruby detection
   console.log('\nRuby Detection:');
 
-  if (test('detects ruby and rails', () => {
+  tally(test('detects ruby and rails', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'Gemfile', 'source "https://rubygems.org"\ngem "rails"');
@@ -274,12 +275,12 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // PHP detection
   console.log('\nPHP Detection:');
 
-  if (test('detects php and laravel', () => {
+  tally(test('detects php and laravel', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'composer.json', '{"require":{"laravel/framework":"^10.0"}}');
@@ -290,12 +291,12 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // Fullstack detection
   console.log('\nFullstack Detection:');
 
-  if (test('detects fullstack when frontend + backend frameworks present', () => {
+  tally(test('detects fullstack when frontend + backend frameworks present', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'package.json', '{"dependencies":{"react":"18.0.0","express":"4.18.0"}}');
@@ -306,12 +307,12 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // Dependency reader tests
   console.log('\nDependency Readers:');
 
-  if (test('getPackageJsonDeps reads deps and devDeps', () => {
+  tally(test('getPackageJsonDeps reads deps and devDeps', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'package.json', '{"dependencies":{"react":"18.0.0"},"devDependencies":{"typescript":"5.0.0"}}');
@@ -321,9 +322,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getPythonDeps reads requirements.txt', () => {
+  tally(test('getPythonDeps reads requirements.txt', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'requirements.txt', 'flask>=3.0\n# comment\nrequests==2.31\n-r other.txt');
@@ -334,9 +335,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getGoDeps reads go.mod require block', () => {
+  tally(test('getGoDeps reads go.mod require block', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'go.mod', 'module test\n\ngo 1.22\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.9.1\n\tgithub.com/lib/pq v1.10.9\n)');
@@ -346,9 +347,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getGoDeps reads multiple require blocks in go.mod', () => {
+  tally(test('getGoDeps reads multiple require blocks in go.mod', () => {
     const dir = createTempDir();
     try {
       const gomod = [
@@ -373,9 +374,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getRustDeps reads Cargo.toml', () => {
+  tally(test('getRustDeps reads Cargo.toml', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'Cargo.toml', '[package]\nname = "test"\n\n[dependencies]\nserde = "1.0"\ntokio = { version = "1.0", features = ["full"] }');
@@ -385,9 +386,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns empty arrays for missing files', () => {
+  tally(test('returns empty arrays for missing files', () => {
     const dir = createTempDir();
     try {
       assert.deepStrictEqual(getPackageJsonDeps(dir), []);
@@ -399,12 +400,12 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // Elixir detection
   console.log('\nElixir Detection:');
 
-  if (test('detects elixir from mix.exs', () => {
+  tally(test('detects elixir from mix.exs', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'mix.exs', 'defmodule Test.MixProject do\n  defp deps do\n    [{:phoenix, "~> 1.7"},\n     {:ecto, "~> 3.0"}]\n  end\nend');
@@ -414,18 +415,18 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // Edge cases
   console.log('\nEdge Cases:');
 
-  if (test('handles non-existent directory gracefully', () => {
+  tally(test('handles non-existent directory gracefully', () => {
     const result = detectProjectType('/tmp/nonexistent-dir-' + Date.now());
     assert.strictEqual(result.primary, 'unknown');
     assert.deepStrictEqual(result.languages, []);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles malformed package.json', () => {
+  tally(test('handles malformed package.json', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'package.json', 'not valid json{{{');
@@ -434,9 +435,9 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles malformed composer.json', () => {
+  tally(test('handles malformed composer.json', () => {
     const dir = createTempDir();
     try {
       writeTestFile(dir, 'composer.json', '{invalid');
@@ -445,7 +446,7 @@ function runTests() {
     } finally {
       cleanupDir(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // Summary
   console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

@@ -95,10 +95,11 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // ── buildMcpRegistrationTargets ──────────────────────────────────
 
-  (test('the retired tools are not registration targets, even when their directories exist', () => {
+  (tally(test('the retired tools are not registration targets, even when their directories exist', () => {
     const tmpHome = makeTempDir();
     fs.mkdirSync(path.join(tmpHome, '.continue', 'mcpServers'), { recursive: true });
     fs.mkdirSync(path.join(tmpHome, '.gemini', 'config'), { recursive: true });
@@ -112,17 +113,17 @@ function runTests() {
       assert.notStrictEqual(target.path, path.join(tmpHome, '.gemini', 'config', 'mcp_config.json'), `${target.name} must not write the standalone Gemini CLI config`);
     }
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('the registration list is the seven tools the documentation names, in order', () => {
+  (tally(test('the registration list is the seven tools the documentation names, in order', () => {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity CLI', 'Claude Code (user scope)', 'Cursor',
       'Kiro', 'Codex CLI', 'OpenCode', 'Zed',
     ]);
-  }) ? passed++ : failed++);
+  })));
 
-  (test('OpenCode: a fresh install gets opencode.json with both servers under mcp in OpenCode\'s own shape', () => {
+  (tally(test('OpenCode: a fresh install gets opencode.json with both servers under mcp in OpenCode\'s own shape', () => {
     const tmpHome = makeTempDir();
     // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.
     const savedXdg = process.env.XDG_CONFIG_HOME;
@@ -145,9 +146,9 @@ function runTests() {
       if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('OpenCode: an existing opencode.json keeps its other servers and keys', () => {
+  (tally(test('OpenCode: an existing opencode.json keeps its other servers and keys', () => {
     const tmpHome = makeTempDir();
     // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.
     const savedXdg = process.env.XDG_CONFIG_HOME;
@@ -173,9 +174,9 @@ function runTests() {
       if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('OpenCode: a legacy config.json written by an older EGC is used, and its dead mcpServers block is retired', () => {
+  (tally(test('OpenCode: a legacy config.json written by an older EGC is used, and its dead mcpServers block is retired', () => {
     const tmpHome = makeTempDir();
     // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.
     const savedXdg = process.env.XDG_CONFIG_HOME;
@@ -200,9 +201,9 @@ function runTests() {
       if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('OpenCode: a foreign mcpServers block keeps its own entries, only ours are removed', () => {
+  (tally(test('OpenCode: a foreign mcpServers block keeps its own entries, only ours are removed', () => {
     const tmpHome = makeTempDir();
     // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.
     const savedXdg = process.env.XDG_CONFIG_HOME;
@@ -224,9 +225,9 @@ function runTests() {
       if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('OpenCode: with both files present, opencode.json gets the servers and the legacy config.json loses only our stale block', () => {
+  (tally(test('OpenCode: with both files present, opencode.json gets the servers and the legacy config.json loses only our stale block', () => {
     const tmpHome = makeTempDir();
     const savedXdg = process.env.XDG_CONFIG_HOME;
     delete process.env.XDG_CONFIG_HOME;
@@ -252,9 +253,9 @@ function runTests() {
       if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('OpenCode: an unparsable legacy config.json next to opencode.json is left alone', () => {
+  (tally(test('OpenCode: an unparsable legacy config.json next to opencode.json is left alone', () => {
     const tmpHome = makeTempDir();
     const savedXdg = process.env.XDG_CONFIG_HOME;
     delete process.env.XDG_CONFIG_HOME;
@@ -272,9 +273,9 @@ function runTests() {
       if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('OpenCode: an entry the person set to null is theirs and is not replaced', () => {
+  (tally(test('OpenCode: an entry the person set to null is theirs and is not replaced', () => {
     const tmpHome = makeTempDir();
     const savedXdg = process.env.XDG_CONFIG_HOME;
     delete process.env.XDG_CONFIG_HOME;
@@ -291,9 +292,9 @@ function runTests() {
       if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('OpenCode: invalid mcp containers are refused and the file is left untouched', () => {
+  (tally(test('OpenCode: invalid mcp containers are refused and the file is left untouched', () => {
     const tmpHome = makeTempDir();
     // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.
     const savedXdg = process.env.XDG_CONFIG_HOME;
@@ -310,9 +311,9 @@ function runTests() {
       if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('OpenCode: the same gate on every platform, no AppData target, PATH opens it for a never-launched install', () => {
+  (tally(test('OpenCode: the same gate on every platform, no AppData target, PATH opens it for a never-launched install', () => {
     const tmpHome = makeTempDir();
     const binDir = makeTempDir();
     // A PATH holding only an empty directory: the machine running the tests
@@ -348,9 +349,9 @@ function runTests() {
       fs.rmSync(binDir, { recursive: true, force: true });
       fs.rmSync(emptyBinDir, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('OpenCode: XDG_CONFIG_HOME moves the directory, matching OpenCode\'s own resolution', () => {
+  (tally(test('OpenCode: XDG_CONFIG_HOME moves the directory, matching OpenCode\'s own resolution', () => {
     const tmpHome = makeTempDir();
     const xdg = makeTempDir();
     const savedXdg = process.env.XDG_CONFIG_HOME;
@@ -362,10 +363,10 @@ function runTests() {
       fs.rmSync(tmpHome, { recursive: true, force: true });
       fs.rmSync(xdg, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
 
-  (test('a tool present on PATH but not yet configured is still registered', () => {
+  (tally(test('a tool present on PATH but not yet configured is still registered', () => {
     // Someone who installed Cursor and has not launched it owns no ~/.cursor
     // yet; an existence-only gate would skip them, which is exactly what the
     // shell installers used to prevent with their own `command -v` checks.
@@ -386,11 +387,11 @@ function runTests() {
       fs.rmSync(tmpHome, { recursive: true, force: true });
       fs.rmSync(binDir, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
   // ── registerClaudeCli (Claude Code user scope via the CLI) ────────
 
-  (test('quoteForCmdShell quotes cmd-sensitive arguments and leaves plain ones untouched', () => {
+  (tally(test('quoteForCmdShell quotes cmd-sensitive arguments and leaves plain ones untouched', () => {
     const { quoteForCmdShell } = require('../../scripts/lib/mcp-register');
     assert.strictEqual(quoteForCmdShell('plain-arg'), 'plain-arg');
     assert.strictEqual(
@@ -405,9 +406,9 @@ function runTests() {
       'C:\\pct%path%\\index.js',
       'percent is not a quoting trigger: cmd expands %var% even inside quotes, so quoting would only fake safety'
     );
-  }) ? passed++ : failed++);
+  })));
 
-  (test('no target points at claude_desktop_config.json (dead-file regression)', () => {
+  (tally(test('no target points at claude_desktop_config.json (dead-file regression)', () => {
     const targets = buildMcpRegistrationTargets('/home/person');
     for (const target of targets) {
       assert.ok(
@@ -415,7 +416,7 @@ function runTests() {
         `${target.name} must not point at claude_desktop_config.json - Claude Code never reads it`
       );
     }
-  }) ? passed++ : failed++);
+  })));
 
   if (process.platform !== 'win32') {
     // A fake `claude` CLI on PATH: logs every invocation, and `mcp get`
@@ -456,7 +457,7 @@ function runTests() {
       }
     };
 
-    (test('registerClaudeCli adds both servers in user scope when none are registered', () => {
+    (tally(test('registerClaudeCli adds both servers in user scope when none are registered', () => {
       withFakeClaude('1', (logPath) => {
         const changed = registerClaudeCli('/ignored', bins);
         assert.strictEqual(changed, true);
@@ -467,18 +468,18 @@ function runTests() {
           ['mcp', 'add', '-s', 'user', 'egc-memory', '--', 'node', bins.memoryBin],
         ]);
       });
-    }) ? passed++ : failed++);
+    })));
 
-    (test('registerClaudeCli is a silent no-op when both servers are already registered', () => {
+    (tally(test('registerClaudeCli is a silent no-op when both servers are already registered', () => {
       withFakeClaude('0', (logPath) => {
         const changed = registerClaudeCli('/ignored', bins);
         assert.strictEqual(changed, false);
         const calls = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
         assert.strictEqual(calls.filter(call => call[1] === 'add').length, 0, 'must not re-add registered servers');
       });
-    }) ? passed++ : failed++);
+    })));
 
-    (test('the shell branch delivers intact argv end to end (quoting exercised through a real shell)', () => {
+    (tally(test('the shell branch delivers intact argv end to end (quoting exercised through a real shell)', () => {
       withFakeClaude('1', (logPath) => {
         // Forcing the shell branch on POSIX runs the exact quoting path the
         // Windows .cmd flow uses; /bin/sh applies the same double-quote
@@ -504,9 +505,9 @@ function runTests() {
           dispatch.needsShellOnWindows = originalNeedsShell;
         }
       });
-    }) ? passed++ : failed++);
+    })));
 
-    (test('registerClaudeCli throws when the CLI refuses an add, so init warns instead of reporting success', () => {
+    (tally(test('registerClaudeCli throws when the CLI refuses an add, so init warns instead of reporting success', () => {
       withFakeClaude('1', () => {
         const savedAdd = process.env.FAKE_ADD_STATUS;
         process.env.FAKE_ADD_STATUS = '2';
@@ -519,9 +520,9 @@ function runTests() {
           if (savedAdd === undefined) delete process.env.FAKE_ADD_STATUS; else process.env.FAKE_ADD_STATUS = savedAdd;
         }
       });
-    }) ? passed++ : failed++);
+    })));
 
-    (test('Claude Code gate follows the claude CLI presence on PATH', () => {
+    (tally(test('Claude Code gate follows the claude CLI presence on PATH', () => {
       withFakeClaude('1', () => {
         const targets = buildMcpRegistrationTargets('/home/person');
         const target = targets.find(t => t.name === 'Claude Code (user scope)');
@@ -538,12 +539,12 @@ function runTests() {
         process.env.PATH = savedPath;
         fs.rmSync(emptyDir, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
   }
 
   // ── registerJson (generic - used by Cursor, Claude, Gemini, Kiro, etc.) ──
 
-  (test('registerJson creates a fresh file with both mcp servers', () => {
+  (tally(test('registerJson creates a fresh file with both mcp servers', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.cursor', 'mcp.json');
     const changed = registerJson(target, bins);
@@ -554,9 +555,9 @@ function runTests() {
     assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerJson preserves unrelated existing mcpServers entries', () => {
+  (tally(test('registerJson preserves unrelated existing mcpServers entries', () => {
     const tmpHome = makeTempDir();
     const dir = path.join(tmpHome, '.cursor');
     fs.mkdirSync(dir, { recursive: true });
@@ -573,9 +574,9 @@ function runTests() {
     assert.ok(written.mcpServers['egc-memory'], 'egc-memory should be added');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerJson is idempotent: second run reports no change', () => {
+  (tally(test('registerJson is idempotent: second run reports no change', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.cursor', 'mcp.json');
 
@@ -586,9 +587,9 @@ function runTests() {
     assert.strictEqual(secondRun, false, 'second run should report no change (already registered)');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerJson throws (not returns false) on unparseable existing content', () => {
+  (tally(test('registerJson throws (not returns false) on unparseable existing content', () => {
     const tmpHome = makeTempDir();
     const dir = path.join(tmpHome, '.cursor');
     fs.mkdirSync(dir, { recursive: true });
@@ -603,9 +604,9 @@ function runTests() {
     assert.strictEqual(fs.readFileSync(target, 'utf8'), 'not valid json {{{', 'existing content should be untouched, not clobbered');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerJson treats a 0-byte empty file as an empty object and adds both servers', () => {
+  (tally(test('registerJson treats a 0-byte empty file as an empty object and adds both servers', () => {
     const tmpHome = makeTempDir();
     const dir = path.join(tmpHome, '.gemini', 'config');
     fs.mkdirSync(dir, { recursive: true });
@@ -619,9 +620,9 @@ function runTests() {
     assert.ok(written.mcpServers['egc-memory']);
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerJson treats a whitespace-only file as an empty object and adds both servers', () => {
+  (tally(test('registerJson treats a whitespace-only file as an empty object and adds both servers', () => {
     const tmpHome = makeTempDir();
     const dir = path.join(tmpHome, '.gemini', 'config');
     fs.mkdirSync(dir, { recursive: true });
@@ -635,9 +636,9 @@ function runTests() {
     assert.ok(written.mcpServers['egc-memory']);
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerJson throws on invalid root shape (array or primitive) to protect user data', () => {
+  (tally(test('registerJson throws on invalid root shape (array or primitive) to protect user data', () => {
     const tmpHome = makeTempDir();
     const dir = path.join(tmpHome, '.cursor');
     fs.mkdirSync(dir, { recursive: true });
@@ -648,9 +649,9 @@ function runTests() {
     assert.strictEqual(fs.readFileSync(target, 'utf8'), '[1, 2, 3]', 'invalid root file must be left untouched');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerJson throws on invalid mcpServers shape (array or primitive) to protect user data', () => {
+  (tally(test('registerJson throws on invalid mcpServers shape (array or primitive) to protect user data', () => {
     const tmpHome = makeTempDir();
     const dir = path.join(tmpHome, '.cursor');
     fs.mkdirSync(dir, { recursive: true });
@@ -660,11 +661,11 @@ function runTests() {
     assert.throws(() => registerJson(target, bins), /invalid mcpServers object/);
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
   // ── registerToml (unchanged behavior, guards against regressions) ──
 
-  (test('registerToml appends both mcp_servers blocks to a fresh file', () => {
+  (tally(test('registerToml appends both mcp_servers blocks to a fresh file', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -678,9 +679,9 @@ function runTests() {
     assert.ok(content.includes('name = "egc-memory"'));
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml escapes backslashes in Windows-style bin paths', () => {
+  (tally(test('registerToml escapes backslashes in Windows-style bin paths', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -699,9 +700,9 @@ function runTests() {
     );
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml output (including Windows paths) parses with a real TOML parser', () => {
+  (tally(test('registerToml output (including Windows paths) parses with a real TOML parser', () => {
     let TOML;
     try {
       TOML = require('@iarna/toml');
@@ -723,9 +724,9 @@ function runTests() {
     assert.strictEqual(guardianEntry.args[0], winPath, 'path should round-trip exactly through a real TOML parser');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml escapes double quotes so a POSIX path with a quote stays valid TOML', () => {
+  (tally(test('registerToml escapes double quotes so a POSIX path with a quote stays valid TOML', () => {
     let TOML;
     try {
       TOML = require('@iarna/toml');
@@ -750,9 +751,9 @@ function runTests() {
     assert.strictEqual(guardianEntry.args[0], quotedPath, 'a path containing a double quote should round-trip exactly');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml keeps a path with a line break or another control character one valid string', () => {
+  (tally(test('registerToml keeps a path with a line break or another control character one valid string', () => {
     let TOML;
     try {
       TOML = require('@iarna/toml');
@@ -791,9 +792,9 @@ function runTests() {
     withoutTomlParser((parserlessRegisterToml) => roundTrips('no-parser', parserlessRegisterToml));
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml restores a commented-out entry instead of treating it as already registered (audit EGC-128)', () => {
+  (tally(test('registerToml restores a commented-out entry instead of treating it as already registered (audit EGC-128)', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -817,9 +818,9 @@ function runTests() {
     );
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml treats an existing active entry as already registered (no duplicate)', () => {
+  (tally(test('registerToml treats an existing active entry as already registered (no duplicate)', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -832,9 +833,9 @@ function runTests() {
     assert.strictEqual(fs.readFileSync(target, 'utf8'), firstWrite, 'should not duplicate the entries');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml drops an empty inline mcp_servers array before appending (what `vibe mcp remove` leaves behind)', () => {
+  (tally(test('registerToml drops an empty inline mcp_servers array before appending (what `vibe mcp remove` leaves behind)', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.vibe', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -865,9 +866,9 @@ function runTests() {
     assert.strictEqual(parsed.mcp_servers.length, 2, 'the result must be valid TOML holding both servers');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml leaves a non-empty inline mcp_servers array untouched rather than corrupting it', () => {
+  (tally(test('registerToml leaves a non-empty inline mcp_servers array untouched rather than corrupting it', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.vibe', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -882,9 +883,9 @@ function runTests() {
     assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml still appends normally when mcp_servers is already an array of tables', () => {
+  (tally(test('registerToml still appends normally when mcp_servers is already an array of tables', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -901,9 +902,9 @@ function runTests() {
     assert.ok(content.includes('name = "egc-memory"'));
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml only reads the root table, so an mcp_servers under a [table] header is left alone', () => {
+  (tally(test('registerToml only reads the root table, so an mcp_servers under a [table] header is left alone', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -928,9 +929,9 @@ function runTests() {
     assert.strictEqual(parsed.mcp_servers.length, 2, 'our two tables are appended at the root');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml ignores a closing bracket that sits inside a comment', () => {
+  (tally(test('registerToml ignores a closing bracket that sits inside a comment', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -954,9 +955,9 @@ function runTests() {
     assert.strictEqual(parsed.mcp_servers.length, 2, 'both lines of the empty array are gone and the file parses');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml recognises the quoted spellings of the mcp_servers key', () => {
+  (tally(test('registerToml recognises the quoted spellings of the mcp_servers key', () => {
     const tmpHome = makeTempDir();
     // "mcp_servers" and 'mcp_servers' name the same root key as the bare
     // spelling; missing either leaves the file invalid after the append.
@@ -973,9 +974,9 @@ function runTests() {
       assert.ok(content.includes('name = "egc-memory"'));
     }
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml does not cut a line out of a multi-line string', () => {
+  (tally(test('registerToml does not cut a line out of a multi-line string', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -999,9 +1000,9 @@ function runTests() {
     assert.strictEqual(parsed.mcp_servers.length, 2);
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml is a silent no-op when an inline array already holds both servers', () => {
+  (tally(test('registerToml is a silent no-op when an inline array already holds both servers', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.vibe', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -1017,9 +1018,9 @@ function runTests() {
     assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml does not mistake a delimiter inside a comment for a multi-line string', () => {
+  (tally(test('registerToml does not mistake a delimiter inside a comment for a multi-line string', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -1045,9 +1046,9 @@ function runTests() {
     assert.strictEqual(TOML.parse(content).mcp_servers.length, 2, 'the result must be valid TOML');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml refuses to write a file the scan would have broken', () => {
+  (tally(test('registerToml refuses to write a file the scan would have broken', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -1070,9 +1071,9 @@ function runTests() {
     assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml refuses rather than act on a delimiter it read inside a single-line string', () => {
+  (tally(test('registerToml refuses rather than act on a delimiter it read inside a single-line string', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -1095,9 +1096,9 @@ function runTests() {
     assert.strictEqual(fs.readFileSync(target, 'utf8'), original, 'the file must be byte-identical');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml keeps a `"""` inside a `\'\'\'` string as content, not as a delimiter', () => {
+  (tally(test('registerToml keeps a `"""` inside a `\'\'\'` string as content, not as a delimiter', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -1123,9 +1124,9 @@ function runTests() {
     assert.strictEqual(parsed.mcp_servers.length, 2);
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml recognises a table header whose key is quoted and holds any character', () => {
+  (tally(test('registerToml recognises a table header whose key is quoted and holds any character', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.codex', 'config.toml');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -1150,9 +1151,9 @@ function runTests() {
     assert.strictEqual(parsed.mcp_servers.length, 2, 'our two tables are appended at the root');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('the scan alone gets the string and the quoted table right, with no parser to fall back on', () => {
+  (tally(test('the scan alone gets the string and the quoted table right, with no parser to fall back on', () => {
     // @iarna/toml is a devDependency that never ships, so on a user's machine
     // the parse comparison cannot run and the scan is the only thing standing
     // between an install and a damaged config. Both cases above are checked
@@ -1186,9 +1187,9 @@ function runTests() {
 
       fs.rmSync(tmpHome, { recursive: true, force: true });
     });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerToml does not take a comment naming both servers as proof they are registered', () => {
+  (tally(test('registerToml does not take a comment naming both servers as proof they are registered', () => {
     const tmpHome = makeTempDir();
     // Only a parse can confirm an entry. Without one tomlHasActiveServer
     // falls back to a substring search over the whole file, and a comment
@@ -1208,11 +1209,11 @@ function runTests() {
     withoutTomlParser((parserlessRegisterToml) => refuses('no-parser', parserlessRegisterToml));
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
   // ── registerZedContextServers ───────────────────────────────────
 
-  (test('registerZedContextServers keeps a Windows bin path valid JSON (backslash escape)', () => {
+  (tally(test('registerZedContextServers keeps a Windows bin path valid JSON (backslash escape)', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
     const winPath = 'C:\\Users\\person\\egc\\mcp\\servers\\egc-guardian\\build\\index.js';
@@ -1231,9 +1232,9 @@ function runTests() {
     );
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerZedContextServers keeps a POSIX path with a double quote valid JSON', () => {
+  (tally(test('registerZedContextServers keeps a POSIX path with a double quote valid JSON', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
     // A double quote is legal in a POSIX directory name; unescaped it would
@@ -1246,9 +1247,9 @@ function runTests() {
     assert.strictEqual(parsed.context_servers['egc-guardian'].command.args[0], quotedPath, 'a path with a double quote should round-trip exactly');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerZedContextServers treats a 0-byte empty file as an empty object and adds servers', () => {
+  (tally(test('registerZedContextServers treats a 0-byte empty file as an empty object and adds servers', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -1261,9 +1262,9 @@ function runTests() {
     assert.ok(parsed.context_servers['egc-memory']);
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerZedContextServers treats a whitespace-only file as an empty object and adds servers', () => {
+  (tally(test('registerZedContextServers treats a whitespace-only file as an empty object and adds servers', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -1276,9 +1277,9 @@ function runTests() {
     assert.ok(parsed.context_servers['egc-memory']);
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerZedContextServers throws on invalid settings root or context_servers shape to protect user data', () => {
+  (tally(test('registerZedContextServers throws on invalid settings root or context_servers shape to protect user data', () => {
     const tmpHome = makeTempDir();
     const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
     fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -1291,11 +1292,11 @@ function runTests() {
     assert.throws(() => registerZedContextServers(target, bins), /invalid context_servers object/);
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
   // ── registerMcpServers orchestrator ─────────────────────────────
 
-  (test('registerMcpServers in dry-run mode writes nothing', () => {
+  (tally(test('registerMcpServers in dry-run mode writes nothing', () => {
     const tmpHome = makeTempDir();
     fs.mkdirSync(path.join(tmpHome, '.kiro'));
 
@@ -1309,13 +1310,13 @@ function runTests() {
     assert.ok(!fs.existsSync(path.join(tmpHome, '.kiro', 'settings')), 'dry-run must not write any files');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
   // Regression guard for the P1 fix: onRegister must never fire when
   // nothing was actually written. A gated target (Cursor) whose existing
   // config is unparseable should report through onWarn instead, and the
   // file must be left alone rather than overwritten.
-  (test('registerMcpServers calls onWarn (not onRegister) when an existing JSON target is broken', () => {
+  (tally(test('registerMcpServers calls onWarn (not onRegister) when an existing JSON target is broken', () => {
     const tmpHome = makeTempDir();
     const dir = path.join(tmpHome, '.cursor');
     fs.mkdirSync(dir, { recursive: true });
@@ -1338,13 +1339,13 @@ function runTests() {
     );
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
   // The other side of the same fix: a target that's already fully
   // registered is a legitimate no-op, not a failure, and must stay
   // silent - re-running `egc init` on an already-set-up machine shouldn't
   // print a warning for every tool that's already correctly configured.
-  (test('registerMcpServers stays silent (no onRegister, no onWarn) on an already-registered target', () => {
+  (tally(test('registerMcpServers stays silent (no onRegister, no onWarn) on an already-registered target', () => {
     const tmpHome = makeTempDir();
     const dir = path.join(tmpHome, '.cursor');
     fs.mkdirSync(dir, { recursive: true });
@@ -1374,9 +1375,9 @@ function runTests() {
     assert.ok(unchanged.includes('Cursor'), 'the caller is told the target was already registered');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
-  (test('registerMcpServers reports a fresh target through onRegister only, never onUnchanged', () => {
+  (tally(test('registerMcpServers reports a fresh target through onRegister only, never onUnchanged', () => {
     const tmpHome = makeTempDir();
     fs.mkdirSync(path.join(tmpHome, '.cursor'), { recursive: true });
     const savedXdg = process.env.XDG_CONFIG_HOME;
@@ -1398,7 +1399,7 @@ function runTests() {
     assert.ok(!unchanged.includes('Cursor'), 'a target that was just written is not reported as unchanged');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
-  }) ? passed++ : failed++);
+  })));
 
   // ── configs reached through links ──────────────────────────────────
   // A config kept in a dotfiles folder and linked into place is written
@@ -1430,7 +1431,7 @@ function runTests() {
       return { base, home, outside };
     };
 
-    (test('a config whose link leads outside the home is left untouched, destination included', () => {
+    (tally(test('a config whose link leads outside the home is left untouched, destination included', () => {
       const { base, home, outside } = makeLayout();
       try {
         fs.mkdirSync(path.join(home, '.cursor'));
@@ -1448,9 +1449,9 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('a config folder whose link leads outside the home gets nothing created behind it', () => {
+    (tally(test('a config folder whose link leads outside the home gets nothing created behind it', () => {
       const { base, home, outside } = makeLayout();
       try {
         fs.symlinkSync(outside, path.join(home, '.kiro'), 'dir');
@@ -1463,9 +1464,9 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('a config link to a missing file outside the home does not create that file', () => {
+    (tally(test('a config link to a missing file outside the home does not create that file', () => {
       const { base, home, outside } = makeLayout();
       try {
         fs.mkdirSync(path.join(home, '.cursor'));
@@ -1479,9 +1480,9 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('a relative config link is followed from the folder it really sits in', () => {
+    (tally(test('a relative config link is followed from the folder it really sits in', () => {
       const { base, home, outside } = makeLayout();
       try {
         fs.symlinkSync(outside, path.join(home, '.cursor'), 'dir');
@@ -1495,9 +1496,9 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('a config linked from a dotfiles folder under the home is registered through the link', () => {
+    (tally(test('a config linked from a dotfiles folder under the home is registered through the link', () => {
       const { base, home } = makeLayout();
       try {
         const dotfile = path.join(home, 'dotfiles', 'cursor', 'mcp.json');
@@ -1515,9 +1516,9 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('a config folder linked from a dotfiles folder under the home is registered through the link', () => {
+    (tally(test('a config folder linked from a dotfiles folder under the home is registered through the link', () => {
       const { base, home } = makeLayout();
       try {
         fs.mkdirSync(path.join(home, 'dotfiles', 'zed'), { recursive: true });
@@ -1532,9 +1533,9 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('a config link to a missing file under the home creates that file', () => {
+    (tally(test('a config link to a missing file under the home creates that file', () => {
       const { base, home } = makeLayout();
       try {
         fs.mkdirSync(path.join(home, 'dotfiles'));
@@ -1549,9 +1550,9 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('a home folder reached through a link still registers', () => {
+    (tally(test('a home folder reached through a link still registers', () => {
       const { base, outside } = makeLayout();
       try {
         fs.mkdirSync(path.join(outside, '.cursor'));
@@ -1565,9 +1566,9 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('OpenCode: an XDG config folder outside the home still registers', () => {
+    (tally(test('OpenCode: an XDG config folder outside the home still registers', () => {
       const { base, home, outside } = makeLayout();
       const savedXdg = process.env.XDG_CONFIG_HOME;
       try {
@@ -1583,9 +1584,9 @@ function runTests() {
         if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg;
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('OpenCode: a legacy config.json that is a link is left alone', () => {
+    (tally(test('OpenCode: a legacy config.json that is a link is left alone', () => {
       const { base, home, outside } = makeLayout();
       try {
         const dir = path.join(home, '.config', 'opencode');
@@ -1602,9 +1603,9 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('OpenCode: a lone legacy config.json linked from under the home is registered through the link', () => {
+    (tally(test('OpenCode: a lone legacy config.json linked from under the home is registered through the link', () => {
       const { base, home } = makeLayout();
       try {
         const dotfile = path.join(home, 'dotfiles', 'opencode-config.json');
@@ -1623,7 +1624,7 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
     const runRegisterCli = (projectDir, homeDir) => {
       const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, PATH: homeDir };
@@ -1636,7 +1637,7 @@ function runTests() {
       });
     };
 
-    (test('installer CLI: a project .mcp.json whose link leads outside the project is left untouched', () => {
+    (tally(test('installer CLI: a project .mcp.json whose link leads outside the project is left untouched', () => {
       const { base, home, outside } = makeLayout();
       try {
         const project = path.join(base, 'project');
@@ -1654,9 +1655,9 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('installer CLI: a project .mcp.json linked inside the project is registered', () => {
+    (tally(test('installer CLI: a project .mcp.json linked inside the project is registered', () => {
       const { base, home } = makeLayout();
       try {
         const project = path.join(base, 'project');
@@ -1674,7 +1675,7 @@ function runTests() {
       } finally {
         fs.rmSync(base, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
   }
 
   // ── configs are replaced in one step ───────────────────────────────
@@ -1694,7 +1695,7 @@ function runTests() {
     }
   };
 
-  (test('a JSON write that fails part way leaves the previous config whole and nothing beside it', () => {
+  (tally(test('a JSON write that fails part way leaves the previous config whole and nothing beside it', () => {
     const tmp = makeTempDir();
     try {
       const configPath = path.join(tmp, 'mcp.json');
@@ -1708,9 +1709,9 @@ function runTests() {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('a TOML write that fails part way leaves the previous config whole and nothing beside it', () => {
+  (tally(test('a TOML write that fails part way leaves the previous config whole and nothing beside it', () => {
     const tmp = makeTempDir();
     try {
       const configPath = path.join(tmp, 'config.toml');
@@ -1724,9 +1725,9 @@ function runTests() {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
-  (test('a config that cannot be renamed over, like one mounted on its own, is written in place', () => {
+  (tally(test('a config that cannot be renamed over, like one mounted on its own, is written in place', () => {
     const tmp = makeTempDir();
     const realRenameSync = fs.renameSync;
     try {
@@ -1745,10 +1746,10 @@ function runTests() {
       fs.renameSync = realRenameSync;
       fs.rmSync(tmp, { recursive: true, force: true });
     }
-  }) ? passed++ : failed++);
+  })));
 
   if (process.platform !== 'win32') {
-    (test('a config is replaced, so a hard link to it elsewhere keeps the previous content', () => {
+    (tally(test('a config is replaced, so a hard link to it elsewhere keeps the previous content', () => {
       const tmp = makeTempDir();
       try {
         const configPath = path.join(tmp, 'mcp.json');
@@ -1764,12 +1765,12 @@ function runTests() {
       } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
     // Folder and file permissions do not bind root, so these two only mean
     // something for a regular user.
     if (process.getuid?.() !== 0) {
-      (test('a config in a folder that refuses new files is updated in place', () => {
+      (tally(test('a config in a folder that refuses new files is updated in place', () => {
         const tmp = makeTempDir();
         const folder = path.join(tmp, 'locked');
         try {
@@ -1786,9 +1787,9 @@ function runTests() {
           fs.chmodSync(folder, 0o755);
           fs.rmSync(tmp, { recursive: true, force: true });
         }
-      }) ? passed++ : failed++);
+      })));
 
-      (test('a config its owner made read-only is left as it is', () => {
+      (tally(test('a config its owner made read-only is left as it is', () => {
         const tmp = makeTempDir();
         const configPath = path.join(tmp, 'mcp.json');
         try {
@@ -1803,14 +1804,14 @@ function runTests() {
           fs.chmodSync(configPath, 0o644);
           fs.rmSync(tmp, { recursive: true, force: true });
         }
-      }) ? passed++ : failed++);
+      })));
     }
 
     const refuseRenames = () => {
       throw Object.assign(new Error('EBUSY: resource busy or locked, rename'), { code: 'EBUSY' });
     };
 
-    (test('a new config written in place is readable by its owner only', () => {
+    (tally(test('a new config written in place is readable by its owner only', () => {
       const tmp = makeTempDir();
       const realRenameSync = fs.renameSync;
       try {
@@ -1825,9 +1826,9 @@ function runTests() {
         fs.renameSync = realRenameSync;
         fs.rmSync(tmp, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('a config written in place reaches the disk too', () => {
+    (tally(test('a config written in place reaches the disk too', () => {
       const tmp = makeTempDir();
       const realRenameSync = fs.renameSync;
       const realFsyncSync = fs.fsyncSync;
@@ -1847,9 +1848,9 @@ function runTests() {
         fs.fsyncSync = realFsyncSync;
         fs.rmSync(tmp, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('an existing config keeps its permission bits', () => {
+    (tally(test('an existing config keeps its permission bits', () => {
       const tmp = makeTempDir();
       try {
         const configPath = path.join(tmp, 'mcp.json');
@@ -1862,9 +1863,9 @@ function runTests() {
       } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('a new config is readable by its owner only', () => {
+    (tally(test('a new config is readable by its owner only', () => {
       const tmp = makeTempDir();
       try {
         const configPath = path.join(tmp, 'settings', 'mcp.json');
@@ -1875,9 +1876,9 @@ function runTests() {
       } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('a config linked from a dotfiles folder is replaced where the link leads, the link kept', () => {
+    (tally(test('a config linked from a dotfiles folder is replaced where the link leads, the link kept', () => {
       const tmp = makeTempDir();
       try {
         const dotfiles = path.join(tmp, 'dotfiles');
@@ -1895,9 +1896,9 @@ function runTests() {
       } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('the new content reaches the disk before it replaces the config, and the folder after', () => {
+    (tally(test('the new content reaches the disk before it replaces the config, and the folder after', () => {
       const tmp = makeTempDir();
       const realFsyncSync = fs.fsyncSync;
       const realRenameSync = fs.renameSync;
@@ -1919,9 +1920,9 @@ function runTests() {
         fs.renameSync = realRenameSync;
         fs.rmSync(tmp, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('run as a regular user, the owner of a config is left alone', () => {
+    (tally(test('run as a regular user, the owner of a config is left alone', () => {
       const tmp = makeTempDir();
       const realGetuid = process.getuid;
       const realFchownSync = fs.fchownSync;
@@ -1940,9 +1941,9 @@ function runTests() {
         fs.fchownSync = realFchownSync;
         fs.rmSync(tmp, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('run as root, a config keeps the owner it had', () => {
+    (tally(test('run as root, a config keeps the owner it had', () => {
       const tmp = makeTempDir();
       const realGetuid = process.getuid;
       const realFchownSync = fs.fchownSync;
@@ -1962,7 +1963,7 @@ function runTests() {
         fs.fchownSync = realFchownSync;
         fs.rmSync(tmp, { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
   }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

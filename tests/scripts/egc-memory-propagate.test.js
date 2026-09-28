@@ -42,6 +42,7 @@ async function runTests() {
   console.log('\n=== Testing egc-memory propagate.ts ===\n');
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   const args = {
     context: 'Test project in alpha phase.',
@@ -49,7 +50,7 @@ async function runTests() {
     next: ['Add rate limiting', 'Write integration tests'],
   };
 
-  if (await test('returns null for all tools when no config dirs exist', () => {
+  tally(await test('returns null for all tools when no config dirs exist', () => {
     const dir = mktemp();
     try {
       const result = propagateStateToTools({ projectPath: dir, ...args });
@@ -59,9 +60,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('writes egc-context.mdc when .cursor/ exists', () => {
+  tally(await test('writes egc-context.mdc when .cursor/ exists', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor'));
@@ -80,9 +81,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('does NOT create copilot-instructions.md when only .github/ exists (bug fix)', () => {
+  tally(await test('does NOT create copilot-instructions.md when only .github/ exists (bug fix)', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.github'));
@@ -95,9 +96,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('writes to copilot-instructions.md only when file already exists', () => {
+  tally(await test('writes to copilot-instructions.md only when file already exists', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.github'));
@@ -111,9 +112,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('upserts egc section in copilot-instructions.md without destroying user content', () => {
+  tally(await test('upserts egc section in copilot-instructions.md without destroying user content', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.github'));
@@ -144,9 +145,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('upserts egc section in existing GEMINI.md', () => {
+  tally(await test('upserts egc section in existing GEMINI.md', () => {
     const dir = mktemp();
     try {
       const geminiPath = path.join(dir, 'GEMINI.md');
@@ -159,9 +160,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('skips GEMINI.md when file does not exist', () => {
+  tally(await test('skips GEMINI.md when file does not exist', () => {
     const dir = mktemp();
     try {
       const result = propagateStateToTools({ projectPath: dir, ...args });
@@ -169,9 +170,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('upserts egc section in .cursor/rules/egc-context.mdc without destroying user content', () => {
+  tally(await test('upserts egc section in .cursor/rules/egc-context.mdc without destroying user content', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor'), { recursive: true });
@@ -202,9 +203,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('migrates a pre-fix unmarked egc-context.mdc without duplicating memory', () => {
+  tally(await test('migrates a pre-fix unmarked egc-context.mdc without duplicating memory', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
@@ -223,9 +224,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('preserves real hand-written content added after the legacy frontmatter', () => {
+  tally(await test('preserves real hand-written content added after the legacy frontmatter', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
@@ -252,9 +253,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('does not delete real content when the end marker is orphaned (missing)', () => {
+  tally(await test('does not delete real content when the end marker is orphaned (missing)', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
@@ -275,9 +276,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('collapses duplicated marker pairs to one without losing real content', () => {
+  tally(await test('collapses duplicated marker pairs to one without losing real content', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), 'REAL AGENTS CONTENT\n<!-- egc:start -->\nblock A\n<!-- egc:end -->\n<!-- egc:start -->\nblock B\n<!-- egc:end -->\n', 'utf-8');
@@ -288,9 +289,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('does not delete real content when markers are in inverted order', () => {
+  tally(await test('does not delete real content when markers are in inverted order', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'GEMINI.md'), 'REAL GEMINI CONTENT\n<!-- egc:end -->\nstray\n<!-- egc:start -->\n', 'utf-8');
@@ -300,9 +301,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('migrates a legacy cursor file saved with CRLF line endings', () => {
+  tally(await test('migrates a legacy cursor file saved with CRLF line endings', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
@@ -317,9 +318,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('upserts egc section in existing local CLAUDE.md', () => {
+  tally(await test('upserts egc section in existing local CLAUDE.md', () => {
     const dir = mktemp();
     try {
       const claudePath = path.join(dir, 'CLAUDE.md');
@@ -332,9 +333,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('skips local CLAUDE.md when file does not exist', () => {
+  tally(await test('skips local CLAUDE.md when file does not exist', () => {
     const dir = mktemp();
     try {
       const result = propagateStateToTools({ projectPath: dir, ...args });
@@ -342,9 +343,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('leaves .roo/ and .roorules alone: Roo Code was retired in #1279', () => {
+  tally(await test('leaves .roo/ and .roorules alone: Roo Code was retired in #1279', () => {
     const dir = mktemp();
     try {
       const rulesDir = path.join(dir, '.roo', 'rules');
@@ -361,9 +362,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('leaves .continue/ alone: Continue.dev was retired in #1279', () => {
+  tally(await test('leaves .continue/ alone: Continue.dev was retired in #1279', () => {
     const dir = mktemp();
     try {
       const rulesDir = path.join(dir, '.continue', 'rules');
@@ -377,9 +378,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('handles missing context and next gracefully', () => {
+  tally(await test('handles missing context and next gracefully', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor'));
@@ -390,9 +391,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('configures the commit-privacy git filter automatically, without a separate egc init step (audit EGC-547)', () => {
+  tally(await test('configures the commit-privacy git filter automatically, without a separate egc init step (audit EGC-547)', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -409,9 +410,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('does not throw when projectPath is not a git repository (audit EGC-547)', () => {
+  tally(await test('does not throw when projectPath is not a git repository (audit EGC-547)', () => {
     const dir = mktemp();
     try {
       const result = propagateStateToTools({ projectPath: dir, ...args });
@@ -419,13 +420,13 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // A mirror rewritten with another size reads as modified to git until the
   // index entry is refreshed, even when the clean side of the filter takes it
   // back to the committed blob; propagation refreshes the entries it wrote,
   // so a branch switch after a session start is never refused for them.
-  if (await test('a mirror rewritten by propagation reads as unmodified to git', () => {
+  tally(await test('a mirror rewritten by propagation reads as unmodified to git', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -443,11 +444,11 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // The refresh only re-reads the files: a change of the user's own in a
   // mirror stays an unstaged change, and the index never takes content.
-  if (await test('a change of the user\'s own in a mirror stays unstaged after propagation', () => {
+  tally(await test('a change of the user\'s own in a mirror stays unstaged after propagation', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -466,9 +467,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('keeps project memory out of the context files when git cannot open the repository', () => {
+  tally(await test('keeps project memory out of the context files when git cannot open the repository', () => {
     const dir = mktemp();
     try {
       // A .git file whose gitdir does not exist: the directory sits inside a
@@ -501,7 +502,7 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   const links = await runLinkTests(args);
   passed += links.passed;
@@ -517,10 +518,11 @@ async function runTests() {
 async function runLinkTests(args) {
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // A link to a file needs a privilege Windows runners do not grant.
   if (process.platform !== 'win32') {
-    if (await test('leaves a context file that is a link, and the file behind it, as they were', () => {
+    tally(await test('leaves a context file that is a link, and the file behind it, as they were', () => {
       const dir = mktemp();
       const outside = mktemp();
       try {
@@ -539,12 +541,12 @@ async function runLinkTests(args) {
         cleanup(dir);
         cleanup(outside);
       }
-    })) passed++; else failed++;
+    }));
   }
 
   // A junction needs no privilege on Windows and is an ordinary link
   // elsewhere, so the folder cases run on every runner.
-  if (await test('writes nothing into a tool folder that is a link', () => {
+  tally(await test('writes nothing into a tool folder that is a link', () => {
     const dir = mktemp();
     const outside = mktemp();
     try {
@@ -558,9 +560,9 @@ async function runLinkTests(args) {
       cleanup(dir);
       cleanup(outside);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('leaves a context file alone when a folder on its way is a link', () => {
+  tally(await test('leaves a context file alone when a folder on its way is a link', () => {
     const dir = mktemp();
     const outside = mktemp();
     try {
@@ -578,9 +580,9 @@ async function runLinkTests(args) {
       cleanup(dir);
       cleanup(outside);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('writes into a project opened through a link', () => {
+  tally(await test('writes into a project opened through a link', () => {
     const dir = mktemp();
     const linkParent = mktemp();
     try {
@@ -597,7 +599,7 @@ async function runLinkTests(args) {
       cleanup(linkParent);
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   return { passed, failed };
 }
