@@ -103,7 +103,12 @@ function afterMove(state, name, args, targetsOf) {
   const word = operands[0];
   if (name === 'pushd' && STACK_INDEX_RE.test(word.value)) return unknownAfter(state, `pushd ${word.value} rotates a stack this hook does not follow`);
   if (word?.value === '-') return returned(state, name, `${name} -`);
-  const targets = targetsOf(word ?? null);
+  return movedToTargets(state, name, args, word, targetsOf(word ?? null));
+}
+
+// Where a move to the directories `targets` (the target word's values, null
+// when only the running shell knows them) leads.
+function movedToTargets(state, name, args, word, targets) {
   const spelled = word ? `${name} ${word.value}` : name;
   if (targets === null) return unknownAfter(state, `${spelled} moves to a directory only known when the command runs`);
   // The shell reads options after expanding the word: `cd "$X"` with X set
