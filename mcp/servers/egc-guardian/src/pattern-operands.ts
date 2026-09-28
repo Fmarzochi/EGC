@@ -26,6 +26,8 @@ interface ProgramSpec {
   assignOptions?: Set<string>;
   // Options whose value is a command the tool runs (ag --pager, rg --pre).
   commandOptions?: Set<string>;
+  // The short option whose value names a long one (awk -W exec=f is --exec=f).
+  longVia?: string;
   // jq --arg NAME VALUE: two words, the second a file when true.
   pairs?: Map<string, boolean>;
   // yq: a first word that names the mode, not the filter.
@@ -49,6 +51,7 @@ const AWK: ProgramSpec = {
   language: 'awk',
   programValues: set('-e --source'),
   assignOptions: set('-v --assign'),
+  longVia: '-W',
   assignments: true,
 };
 
@@ -162,10 +165,22 @@ function readLongOption(spec: ProgramSpec, word: string, args: string[], at: num
   return null;
 }
 
+// awk's -W names a long option, glued on or in the next word, with its value
+// after = or in the word after that: -W exec=f, -Wexec=f and -W exec f are
+// all --exec f.
+function readLongVia(spec: ProgramSpec, glued: string, args: string[], at: number): OptionRead | null {
+  const inner = glued === '' ? args[at + 1] : glued;
+  if (inner === undefined) return null;
+  const own = glued === '' ? 1 : 0;
+  const read = readLongOption(spec, `--${bare(inner)}`, args, at + own);
+  return read === null ? null : { ...read, consumed: read.consumed + own };
+}
+
 function readShortOptions(spec: ProgramSpec, word: string, args: string[], at: number): OptionRead | null {
   for (let letter = 1; letter < word.length; letter++) {
     const name = `-${word[letter]}`;
     const rest = word.slice(letter + 1);
+    if (name === spec.longVia) return readLongVia(spec, rest, args, at);
     if (spec.values.has(name)) return optionValue(spec, name, rest === '' ? null : rest, args[at + 1]);
     if (spec.optional?.has(name)) return optionalRead(rest);
     if (!spec.flags.has(name)) return null;
