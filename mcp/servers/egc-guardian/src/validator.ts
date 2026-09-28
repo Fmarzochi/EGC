@@ -2335,6 +2335,37 @@ function bisectRunDenial(rest: string[], cwd?: string): ValidationResult | null 
   return verdict.allowed || verdict.advisory ? null : verdict;
 }
 
+// Settings git applies to the repository clone or init makes before
+// anything in it runs: clone's -c/--config key=value, written into the new
+// repository before the fetch, and the --template of both, whose hooks the
+// new repository gets (post-checkout runs on the clone itself). They take
+// effect in that very call, as `git -c` does, and are judged by its rules.
+const GIT_NEW_REPO_CONFIG: GitCommandOptions = { long: ['--config'], short: 'c', valued: 'obucj' };
+const GIT_TEMPLATE_OPTION: GitCommandOptions = { long: ['--template'] };
+
+function checkNewRepositorySettings(subcommand: string, rest: string[], cwd?: string): ValidationResult | null {
+  if (subcommand !== 'clone' && subcommand !== 'init') return null;
+  if (gitCommandOptionValues(GIT_TEMPLATE_OPTION, rest).length > 0) {
+    return {
+      allowed: false,
+      reason: `git ${subcommand} --template copies the hooks of that directory into the new repository, where they run as init.templateDir's would, and is forbidden`,
+      trust_level: 'DANGEROUS',
+    };
+  }
+  if (subcommand !== 'clone') return null;
+  for (const { value } of gitCommandOptionValues(GIT_NEW_REPO_CONFIG, rest)) {
+    const eq = value.indexOf('=');
+    const key = (eq > 0 ? value.slice(0, eq) : value).toLowerCase();
+    if (!isDangerousGitConfigWrite(key, eq > 0 ? value.slice(eq + 1) : '', cwd)) continue;
+    return {
+      allowed: false,
+      reason: `git clone config for '${key}' is set in the new repository before it is fetched and persists a hook/execution-bypass override, and is forbidden`,
+      trust_level: 'DANGEROUS',
+    };
+  }
+  return null;
+}
+
 function checkGitCommandOptions(subcommand: string, rest: string[], cwd?: string): ValidationResult | null {
   if (subcommand === 'bisect') return bisectRunDenial(rest, cwd);
   const values = subcommand === 'submodule' ? submoduleForeachCommand(rest) : gitCommandOptionValues(GIT_COMMAND_OPTIONS[subcommand], rest);
@@ -2361,7 +2392,7 @@ function validateGitArgs(args: string[], cwd?: string): ValidationResult {
   const rest = args.slice(subcommandIdx + 1);
   const fileDenial = checkGitFileOperands(subcommand, rest, cwd);
   if (fileDenial) return fileDenial;
-  const commandDenial = checkGitCommandOptions(subcommand, rest, cwd);
+  const commandDenial = checkGitCommandOptions(subcommand, rest, cwd) ?? checkNewRepositorySettings(subcommand, rest, cwd);
   if (commandDenial) return commandDenial;
   if (subcommand === 'config') {
     const configDenial = checkGitConfigWrite(args.slice(subcommandIdx), cwd);
