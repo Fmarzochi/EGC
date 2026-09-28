@@ -54,10 +54,11 @@ function batchEntries(values: unknown[], committed: unknown, cwds?: unknown): Ba
 }
 
 // A command that can run in several directories is refused if it is
-// refused in any of them.
+// refused in any of them, one read out of a committed script as well.
 function judgeEntry(entry: BatchEntry, cwd: string | undefined): ReturnType<typeof validateCommand> {
-  if (entry.committed) return validateCommittedScriptCommand(entry.command, cwd, entry.committed.bound);
-  const verdicts = (entry.dirs ?? [cwd]).map(dir => validateCommand(entry.command, dir));
+  const { committed } = entry;
+  const judge = (dir: string | undefined) => (committed ? validateCommittedScriptCommand(entry.command, dir, committed.bound) : validateCommand(entry.command, dir));
+  const verdicts = (entry.dirs ?? [cwd]).map(judge);
   return verdicts.find(verdict => !verdict.allowed && !verdict.advisory) ?? verdicts.find(verdict => !verdict.allowed) ?? verdicts[0];
 }
 

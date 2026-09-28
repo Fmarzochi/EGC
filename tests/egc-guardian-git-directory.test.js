@@ -180,6 +180,22 @@ record(test('the command-batch CLI judges an entry in every directory it can run
   assert.strictEqual(malformed.allowed, true, JSON.stringify(malformed));
   assert.strictEqual(missing.allowed, true, JSON.stringify(missing));
   assert.strictEqual(empty?.allowed, true, JSON.stringify(empty));
+  // A command read out of a committed script is judged in each directory
+  // too: `> config` there writes .git/config once a cd has moved into .git.
+  const committed = spawnSync(process.execPath, [cli, 'command-batch'], {
+    input: JSON.stringify({
+      commands: ['echo x > config', 'echo x > config'],
+      cwd: at('work'),
+      cwds: [[at('work'), at('work', '.git')], [at('work')]],
+      committed: [true, true],
+    }),
+    encoding: 'utf8',
+    timeout: 20000,
+  });
+  const [intoGitDir, atTop] = JSON.parse(committed.stdout);
+  const refused = verdict => !verdict.allowed && verdict.advisory !== true;
+  assert.ok(refused(intoGitDir), JSON.stringify(intoGitDir));
+  assert.ok(!refused(atTop), JSON.stringify(atTop));
 }));
 
 record(test('the Bash hook judges git in the directory a cd before it leaves the line in', () => {
