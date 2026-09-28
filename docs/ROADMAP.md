@@ -46,6 +46,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The dashboard answers only to its loopback names: a request or WebSocket upgrade whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` is refused before any route (#1545).
 - The Economy tab shows a provider name as text: a provider the panel does not know is labeled with its escaped id (#1546).
 - A wrapper's long options are read in any abbreviation the wrapper accepts: a unique prefix counts as the option it names, an exact name keeps its own meaning, and `env --split` is refused like `--split-string` (#1548).
+- The dashboard's data routes ask for the dashboard token, which every page it serves carries (#1581).
 - GNU parallel's options are read the way parallel reads them: its own Getopt::Long table, letter case, abbreviations and optional values included (#1549).
 - The Bash hook finds the command behind a wrapper by the validator's own rules, through a shared copy that a test keeps in step with the validator (#1550).
 - The Guardian reads through the local wrappers that run a command (setsid, taskset, chrt, unshare, nsenter, runuser, prlimit, chroot, numactl, pkexec, busybox, bwrap) by their own option tables, and denies the ones that hand a string or the words after a user to a shell (#1551).
@@ -65,7 +66,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A committed script's delete target is narrow only when every variable on the way to it is, a start known only at run time cannot make a protected end narrow, and a malformed committed marker is judged as typed (#1562).
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
 - The command log and the Guardian audit log mask passwords named with pass or pwd and those the mysql, mariadb, sshpass and redis-cli clients take on their command line (#1566).
-- The dashboard's data routes ask for the dashboard token, which every page it serves carries (#1581).
+- `install.ps1` puts the git pre-commit hook in a clone through the same helper as `install.sh` (#1568).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
 - Routing on this machine, without an API key: the catalog index records the source of every component, the prompt router and `orchestrate_task` read the install state of the active tool and never offer what it has not installed (a named `Not installed for this tool` line and `not_installed` carry the command that adds them), the local scorers weigh tokens by rarity, name and activation text, stem plurals and ignore Portuguese and Spanish function words, and the decision stays with the tool's model, by intent (#1453).
