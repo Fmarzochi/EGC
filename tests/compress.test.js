@@ -97,6 +97,84 @@ if (
   })
 ) passed++; else failed++;
 
-console.log(`\nPassed: ${passed}`);
-console.log(`Failed: ${failed}`);
-process.exit(failed > 0 ? 1 : 0);
+async function asyncTest(name, fn) {
+  try {
+    await fn();
+    console.log(`  ✓ ${name}`);
+    return true;
+  } catch (err) {
+    console.log(`  ✗ ${name}`);
+    console.log(`    Error: ${err.stack}`);
+    return false;
+  }
+}
+
+// A project whose observations.jsonl holds one observation, `o1`, under a
+// throwaway home; `run` gets the file's directory and path.
+async function withObservationFile(run) {
+  const os = require('node:os');
+  const crypto = require('node:crypto');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-compress-home-'));
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-compress-project-'));
+  const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, EGC_STATE_DB: process.env.EGC_STATE_DB };
+  Object.assign(process.env, { HOME: home, USERPROFILE: home, EGC_STATE_DB: path.join(home, 'no-such.db') });
+  const oldUmask = process.umask(0);
+  try {
+    const id = crypto.createHash('sha256').update(project, 'utf8').digest('hex').slice(0, 12);
+    const dir = path.join(home, '.gemini', 'homunculus', 'projects', id);
+    fs.mkdirSync(dir, { recursive: true });
+    const obsPath = path.join(dir, 'observations.jsonl');
+    fs.writeFileSync(obsPath, `${JSON.stringify({ id: 'o1', tool: 'bash', output: 'token=abc' })}\n`, { mode: 0o644 });
+    await run({ project, dir, obsPath });
+  } finally {
+    process.umask(oldUmask);
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(project, { recursive: true, force: true });
+  }
+}
+
+const COMPRESSED = { title: 'compressed', type: 'tool_success', facts: [], importance: 0.1 };
+
+// The observation file holds tool output, secrets included: its rewrite goes
+// through a temp file created private and exclusive, under a name of its
+// own, and never leaves one behind.
+async function replaceObservationWritesPrivately() {
+  const { replaceObservation } = require(buildPath);
+  await withObservationFile(async ({ project, dir, obsPath }) => {
+    fs.writeFileSync(`${obsPath}.tmp`, 'stale');
+    await replaceObservation(project, 'o1', COMPRESSED);
+    assert.match(fs.readFileSync(obsPath, 'utf8'), /"title":"compressed"/);
+    assert.strictEqual(fs.readFileSync(`${obsPath}.tmp`, 'utf8'), 'stale', 'a file already at a temp-like name is neither reused nor replaced');
+    assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['observations.jsonl', 'observations.jsonl.tmp'], 'no temp file is left behind');
+    if (process.platform !== 'win32') assert.strictEqual(fs.statSync(obsPath).mode & 0o777, 0o600, 'the rewritten file is private');
+  });
+}
+
+async function replaceObservationCleansUpAfterAFailedRename() {
+  const { replaceObservation } = require(buildPath);
+  await withObservationFile(async ({ project, dir, obsPath }) => {
+    const originalRenameSync = fs.renameSync;
+    fs.renameSync = () => { throw new Error('rename refused'); };
+    try {
+      await assert.rejects(replaceObservation(project, 'o1', COMPRESSED), /rename refused/);
+    } finally {
+      fs.renameSync = originalRenameSync;
+    }
+    assert.deepStrictEqual(fs.readdirSync(dir), ['observations.jsonl'], 'the temp file is removed when the rename fails');
+    assert.match(fs.readFileSync(obsPath, 'utf8'), /token=abc/, 'the original file is untouched');
+  });
+}
+
+(async () => {
+  if (await asyncTest('replaceObservation rewrites observations.jsonl through a private temp file of its own', replaceObservationWritesPrivately)) passed++;
+  else failed++;
+  if (await asyncTest('replaceObservation removes its temp file when the rename fails', replaceObservationCleansUpAfterAFailedRename)) passed++;
+  else failed++;
+  console.log(`\nPassed: ${passed}`);
+  console.log(`Failed: ${failed}`);
+  process.exit(failed > 0 ? 1 : 0);
+})();
