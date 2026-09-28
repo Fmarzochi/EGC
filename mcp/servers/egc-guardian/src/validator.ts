@@ -2298,16 +2298,141 @@ function isNarrowTarget(candidate: string, cwd?: string): boolean {
 }
 
 // A value a committed script sets a variable to is narrow when it is a
-// fresh temporary path (`$(mktemp ...)`), a narrow literal path, or ends in
-// at least two literal components below whatever it starts from (a named
-// file deep in some directory, as `$BASE/.mvn/wrapper/maven-wrapper.jar`).
-function isNarrowValue(value: string, cwd?: string): boolean {
-  if (/^(?:\$\(|`)mktemp\b/.test(value)) return true;
+// fresh temporary path (`$(mktemp ...)`), a narrow literal path, a path
+// below another variable the script sets whose every value keeps it narrow
+// (`BASE=/; tmp=$BASE/etc/passwd` is /etc/passwd), or otherwise ends in at
+// least two literal components below whatever it starts from (a named file
+// deep in some directory, as `$BASE/.mvn/wrapper/maven-wrapper.jar`).
+const MAX_BOUND_DEPTH = 4;
+
+// What follows `$(mktemp ...)` or backquoted mktemp given nothing but options
+// and a template; null for anything else, such as a second command after it
+// (`$(mktemp -d >/dev/null; printf /etc)` prints /etc).
+function freshTempRest(value: string): string | null {
+  const open = ['$(', '`'].find(prefix => value.startsWith(`${prefix}mktemp`));
+  if (open === undefined) return null;
+  const close = value.indexOf(open === '$(' ? ')' : '`', open.length);
+  if (close === -1) return null;
+  const args = value.slice(open.length + 'mktemp'.length, close);
+  if (args !== '' && !/^\s/.test(args)) return null;
+  return mktempPrintsAPath(tokenizeWords(args)) ? value.slice(close + 1) : null;
+}
+
+const MKTEMP_VALUE_OPTIONS = new Set(['-p', '--tmpdir', '--suffix']);
+
+// Whether mktemp given these words prints nothing but a fresh path: words
+// of plain characters or quoted, never another command, never --help or
+// --version (whose text, split into words, names real paths). A parameter
+// expansion may only sit in a double-quoted template (it holds XXX) or in
+// the value of an option, where its value can never turn into an option.
+function mktempPrintsAPath(words: string[]): boolean {
+  return words.every((word, i) => {
+    if (/[`;&|<>()]/.test(word) || isHelpOrVersion(shellWord(word))) return false;
+    if (!word.includes('$')) return /^(?:[\w./%=+,:@-]|"[^"]*"|'[^']*')+$/.test(word);
+    return /^"[^"`]*"$/.test(word) && (word.includes('XXX') || MKTEMP_VALUE_OPTIONS.has(words[i - 1] ?? ''));
+  });
+}
+
+function isHelpOrVersion(word: string): boolean {
+  const name = word.split('=', 1)[0];
+  return name.length >= 3 && ['--help', '--version'].some(option => option.startsWith(name));
+}
+
+// The directories at the root of a system whose contents a delete must never
+// reach, compared without case.
+const ROOT_SYSTEM_DIRS = new Set([
+  'bin', 'boot', 'dev', 'etc', 'lib', 'lib32', 'lib64', 'libx32', 'opt', 'proc', 'root', 'run', 'sbin', 'srv', 'sys', 'usr', 'var', 'home',
+  'snap', 'mnt', 'media', 'nix', 'private', 'system', 'library', 'applications', 'users', 'volumes', 'windows', 'program files', 'programdata',
+]);
+
+// What follows a fresh temporary path stays inside it, and names nothing
+// grave where mktemp fails and prints nothing, which leaves it read from the
+// root (`$(mktemp -d)/usr/lib` is /usr/lib then, `$(mktemp -d)/build` is
+// /build): nothing, or a narrow tail of literal components that neither
+// climb out nor start in a system directory.
+function staysInFreshTemp(rest: string): boolean {
+  if (rest === '') return true;
+  const tail = shellWord(rest);
+  const parts = literalParts(tail);
+  return parts !== null && !ROOT_SYSTEM_DIRS.has(parts[0]?.toLowerCase() ?? '') && isNarrowTail(tail);
+}
+
+function isNarrowValue(value: string, cwd?: string, depth = 0): boolean {
+  const tempRest = freshTempRest(value);
+  if (tempRest !== null) return staysInFreshTemp(tempRest);
   if (!/[$`]/.test(value)) return isNarrowTarget(value, cwd);
-  const parts = value.split(/[\\/]/);
-  let literal = 0;
-  while (literal < parts.length - 1 && /^[^$`*?[]+$/.test(parts[parts.length - 1 - literal]) && !['.', '..'].includes(parts[parts.length - 1 - literal])) literal += 1;
-  return literal >= 2;
+  const variable = VARIABLE_TARGET_RE.exec(value);
+  const prefixes = variable ? committedBound.get(variable[1] ?? variable[2]) ?? [] : [];
+  if (variable && prefixes.length > 0) {
+    if (depth >= MAX_BOUND_DEPTH) return false;
+    const rest = value.slice(variable[0].length);
+    return prefixes.every(prefix => isNarrowValue(prefix + rest, cwd, depth + 1));
+  }
+  return hasNarrowLiteralTail(value);
+}
+
+// At least two literal components at the end of a path whose start is only
+// known when the script runs, naming no protected path whether that start is
+// the root or the home directory (`$(cd ~ && pwd)/.ssh/id_rsa` is grave).
+// The components are counted only after the last expansion closes, so a
+// slash inside a substitution (`$(printf /tmp/x/.env)`) is not one of them.
+function hasNarrowLiteralTail(value: string): boolean {
+  return isNarrowTail(shellWord(afterLastExpansion(value)));
+}
+
+// A path below a start that is unknown or may be empty, as the shell hands
+// it over (quotes and escapes resolved): at least two components, every one
+// literal, with no glob, no expansion and no `..`, naming no protected path
+// from the root or from the home directory.
+function isNarrowTail(rest: string): boolean {
+  const parts = literalParts(rest);
+  return parts !== null && parts.length >= 2 && namesNoProtectedPath(parts);
+}
+
+// The components of a path that continues below something else (it starts
+// with a separator), when every one is literal: no glob, no expansion, no
+// `.` or `..`. null otherwise.
+function literalParts(rest: string): string[] | null {
+  if (!/^[\\/]/.test(rest)) return null;
+  const parts = rest.split(/[\\/]/).filter(Boolean);
+  return parts.some(part => /[$`*?[]/.test(part) || part === '.' || part === '..') ? null : parts;
+}
+
+// Whether these components name no protected path read from the root or
+// from the home directory.
+function namesNoProtectedPath(parts: string[]): boolean {
+  const tail = parts.join('/');
+  return !isProtectedPath(`/${tail}`) && !isProtectedPath(path.join(os.homedir(), tail));
+}
+
+// What a value holds after its last `$NAME`, `${...}`, `$(...)` or
+// backquoted command.
+function afterLastExpansion(value: string): string {
+  let start = 0;
+  let i = 0;
+  while (i < value.length) {
+    const end = expansionEnd(value, i);
+    if (end === null) {
+      i += value[i] === '\\' ? 2 : 1;
+    } else {
+      start = end;
+      i = end;
+    }
+  }
+  return value.slice(start);
+}
+
+// Index past the expansion opening at `i`; null when none opens there.
+function expansionEnd(value: string, i: number): number | null {
+  if (value[i] === '`') {
+    const close = value.indexOf('`', i + 1);
+    return close === -1 ? value.length : close + 1;
+  }
+  if (value[i] !== '$') return null;
+  if (value[i + 1] === '(') return Math.min(closingParenthesis(value, i + 2) + 1, value.length);
+  if (value[i + 1] === '{') return skipText(value, i);
+  const name = /^(?:[A-Za-z_]\w*|[\d@*#?$!-])/.exec(value.slice(i + 1));
+  return name ? i + 1 + name[0].length : null;
 }
 
 // A glob component with no literal part of its own (`*`, `.*`, `[a-z]*`)
