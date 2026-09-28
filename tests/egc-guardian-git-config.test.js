@@ -184,6 +184,14 @@ denied('git grep --file ~/.ssh/id_rsa x', READ);
 allowed('git grep -e -f x');
 allowed('git grep -n -e foo');
 allowed('git grep -m5 foo');
+// The file is judged as the shell hands its name: inside single quotes a
+// backslash stays in it, and on Windows it separates the path.
+denied("git config --file 'cfg\\egc-install-state.json' user.name x");
+denied("git config --file='cfg\\egc-install-state.json' user.name x");
+denied("git config -f 'cfg\\egc-install-state.json' user.name x");
+denied("git config -f'cfg\\egc-install-state.json' user.name x");
+// An alias is judged by the words git splits it into, as a shell hands them.
+allowed("git config alias.st \"--git-dir='/tmp/egc-nowhere/r.git' status\"");
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
