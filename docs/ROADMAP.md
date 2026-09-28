@@ -72,6 +72,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A path claim covers the tree under it and is held under the path it names in the claiming session's project, so a claim above or inside another session's lock is refused whatever its spelling (#1586).
 - A command whose name comes from a variable the command fixes is judged by the name it resolves to; opaque sources fail closed, the environment stays advisory (#1559).
 - A command word that comes from an expansion is judged by every value it can take, in the command and in the scripts it runs; a value the hook cannot read fails closed (#1560).
+- The memory server answers its tools from one map of handlers, and the complex production functions eslint flagged are split into named steps with no change in behavior (#1587).
 - A `${...}` expansion closes where bash closes it, past nested expansions and substitutions, and a comment ends at its newline whatever quote or backslash it holds (#1561).
 - The fact-forcing gate reads `taskset -p` and `chrt -p` as acting on a running process, so the words after them are never taken for a command (#1563).
 - Encrypted state and compressed observations are written through a temp file that is exclusive and 0600 from its creation (#1564).
@@ -80,7 +81,6 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
 - The command log and the Guardian audit log mask passwords named with pass or pwd and those the mysql, mariadb, sshpass and redis-cli clients take on their command line (#1566).
 - `install.ps1` puts the git pre-commit hook in a clone through the same helper as `install.sh` (#1568).
-- The memory server answers its tools from one map of handlers, and the complex production functions eslint flagged are split into named steps with no change in behavior (#1587).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
 - Routing on this machine, without an API key: the catalog index records the source of every component, the prompt router and `orchestrate_task` read the install state of the active tool and never offer what it has not installed (a named `Not installed for this tool` line and `not_installed` carry the command that adds them), the local scorers weigh tokens by rarity, name and activation text, stem plurals and ignore Portuguese and Spanish function words, and the decision stays with the tool's model, by intent (#1453).
