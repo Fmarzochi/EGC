@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { readParallelOption } from './parallel-options.js';
 import { LOCAL_WRAPPER_SPECS } from './local-wrappers.js';
 import { RUNNER_SPECS, type RunnerSpec } from './runner-wrappers.js';
-import { programCommandOf, gitWordsNamingFiles, gitGrepPagers, type ProgramRead } from './pattern-operands.js';
+import { programCommandOf, gitWordsNamingFiles, type ProgramRead } from './pattern-operands.js';
 import { programRefs } from './program-refs.js';
 
 export { RUNNER_SPECS } from './runner-wrappers.js';
@@ -2141,9 +2141,6 @@ function checkGitPathArguments(args: string[], subcommandIdx: number, cwd?: stri
   const globals = (subcommandIdx < 0 ? args : args.slice(0, subcommandIdx)).filter(arg => !isGluedGitSetting(arg));
   const rest = subcommandIdx < 0 ? [] : args.slice(subcommandIdx + 1);
   const pathOnly = GIT_PATH_ONLY_SUBCOMMANDS.has(subcommand);
-  // The pager git grep -O runs is a command.
-  const pagerDenial = subcommand === 'grep' ? gitGrepPagers(rest).map(pager => embeddedCommandDenial('git grep', pager)).find(Boolean) : undefined;
-  if (pagerDenial) return pagerDenial;
   // A message, a search or a grep pattern is text, not a file it names.
   const named = pathOnly ? [] : gitWordsNamingFiles(subcommand, rest);
   const reached = pathOnly ? [...globals, ...gitReadOptionFiles(subcommand, rest)] : [...globals, ...named];

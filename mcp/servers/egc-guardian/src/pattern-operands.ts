@@ -44,7 +44,7 @@ const set = (words: string): Set<string> => new Set(words.split(' '));
 
 const AWK: ProgramSpec = {
   values: set('-F --field-separator -v --assign -f --file -e --source -i --include -l --load -E --exec -W'),
-  flags: set('-b --characters-as-bytes -c --traditional -C --copyright -g --gen-pot -h --help -M --bignum -n --non-decimal-data -N --use-lc-numeric -O --optimize -P --posix -r --re-interval -s --no-optimize -S --sandbox -t --lint-old -V --version'),
+  flags: set('-b --characters-as-bytes -c --traditional -C --copyright -g --gen-pot -h --help -I --trace -k --csv -M --bignum -n --non-decimal-data -N --use-lc-numeric -O --optimize -P --posix -r --re-interval -s --no-optimize -S --sandbox -t --lint-old -V --version'),
   optional: set('-d --dump-variables -D --debug -L --lint -o --pretty-print -p --profile'),
   program: set('-f --file -e --source -E --exec'),
   files: set('-f --file -i --include -l --load -E --exec'),
@@ -153,9 +153,23 @@ const optionalRead = (glued: string | null): OptionRead => ({ consumed: 0, file:
 const pairRead = (fileSecond: boolean, args: string[], at: number): OptionRead =>
   fileSecond ? { consumed: 2, file: args[at + 2] } : { consumed: 2 };
 
+const longNames = (spec: ProgramSpec): string[] =>
+  [...spec.values, ...spec.flags, ...(spec.optional ?? []), ...(spec.pairs?.keys() ?? [])].filter(name => name.startsWith('--'));
+
+// getopt_long takes an unambiguous prefix of a long option for the option
+// itself (sed --exp is --expression); an ambiguous or unknown one is not
+// resolved.
+function longNameOf(spec: ProgramSpec, written: string): string | null {
+  const names = longNames(spec);
+  if (names.includes(written)) return written;
+  const matches = names.filter(name => name.startsWith(written));
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function readLongOption(spec: ProgramSpec, word: string, args: string[], at: number): OptionRead | null {
   const eq = word.indexOf('=');
-  const name = eq < 0 ? word : word.slice(0, eq);
+  const name = longNameOf(spec, eq < 0 ? word : word.slice(0, eq));
+  if (name === null) return null;
   const glued = eq < 0 ? null : word.slice(eq + 1);
   const pair = spec.pairs?.get(name);
   if (pair !== undefined) return glued === null ? pairRead(pair, args, at) : null;
@@ -245,11 +259,28 @@ function readOperands(spec: ProgramSpec, state: OperandState, operands: Operand[
   });
 }
 
+// What a word may hand a program in: an operand whole, an option only the
+// value after its =.
+function programTextIn(raw: string): string | null {
+  const word = bare(raw);
+  if (!isOption(word)) return programText(raw);
+  const eq = word.indexOf('=');
+  return eq < 0 ? null : word.slice(eq + 1);
+}
+
+// A command with an option its table does not know may be read astray, so
+// every word is also judged as a file and read as the program it may be.
+function readEveryWay(args: string[], out: ProgramRead): ProgramRead {
+  const texts = args.map(programTextIn).filter((text): text is string => text !== null);
+  return { ...out, files: [...out.files, ...args], programs: [...out.programs, ...texts] };
+}
+
 /**
  * What a command whose first operand is a program, a pattern or a filter
- * names: its operands after that one, the values of its file options and
- * the program texts it runs. null when the command is not one of these, or
- * uses an option its table does not know; then every word is judged.
+ * names: its operands after that one, the values of its file options, the
+ * program texts it runs and the commands its options run. An option its
+ * table does not know is read on as a flag, and then every word is judged
+ * both as a file and as a program. null when the command is not one of these.
  */
 export function programCommandOf(command: string, args: string[]): ProgramRead | null {
   const spec = PROGRAM_SPECS[command];
@@ -258,6 +289,7 @@ export function programCommandOf(command: string, args: string[]): ProgramRead |
   const state: OperandState = { programBefore: false, programAnywhere: false, argsOnly: false };
   const operands: Operand[] = [];
   let options = true;
+  let unknown = false;
   for (let at = 0; at < args.length; at++) {
     const word = bare(args[at]);
     if (options && word === '--') {
@@ -266,14 +298,14 @@ export function programCommandOf(command: string, args: string[]): ProgramRead |
     }
     if (options && isOption(word)) {
       const read = readOption(spec, args, at);
-      if (read === null) return null;
-      at += noteOption(state, out, read, operands.length === 0);
+      unknown ||= read === null;
+      if (read !== null) at += noteOption(state, out, read, operands.length === 0);
       continue;
     }
     operands.push({ raw: args[at], word, value: state.argsOnly });
   }
   readOperands(spec, state, operands, out);
-  return out;
+  return unknown ? readEveryWay(args, out) : out;
 }
 
 const isOption = (word: string): boolean => word.length > 1 && word.startsWith('-');
@@ -345,8 +377,8 @@ const GIT_GREP_VALUED = set('-A -B -C -m --max-count --max-depth --threads --con
 
 // A short bundle of git grep: whether it hands the pattern in (-e, which is
 // text, or -f, whose file stays judged) and whether its value is the next
-// word. -O takes the rest of the bundle as the pager it runs, so the letters
-// after it are not options.
+// word. -O takes the rest of the bundle as a pager, so the letters after it
+// are not options.
 function gitGrepBundle(word: string): { pattern: boolean; text: boolean; next: boolean } {
   for (let letter = 1; letter < word.length; letter++) {
     const last = letter === word.length - 1;
@@ -355,32 +387,6 @@ function gitGrepBundle(word: string): { pattern: boolean; text: boolean; next: b
     if ('fABCm'.includes(word[letter])) return { pattern: word[letter] === 'f', text: false, next: last };
   }
   return { pattern: false, text: false, next: false };
-}
-
-// The pager git grep -O<pager> or --open-files-in-pager=<pager> hands the
-// matching files to, which git runs as a command (spelled out or abbreviated
-// down to --op, the shortest prefix no other option shares). Alone, -O runs
-// the configured pager.
-function grepPagerOf(word: string): string | null {
-  const eq = word.indexOf('=');
-  if (word.startsWith('--')) return eq >= 4 && '--open-files-in-pager'.startsWith(word.slice(0, eq)) ? word.slice(eq + 1) : null;
-  for (let letter = 1; letter < word.length; letter++) {
-    if (word[letter] === 'O') return word.slice(letter + 1) || null;
-    if ('efABCm'.includes(word[letter])) return null;
-  }
-  return null;
-}
-
-/** The pagers a git grep command runs, from its options before any `--`. */
-export function gitGrepPagers(rest: string[]): string[] {
-  const pagers: string[] = [];
-  for (const raw of rest) {
-    const word = bare(raw);
-    if (word === '--') break;
-    const pager = word.startsWith('-') ? grepPagerOf(word) : null;
-    if (pager) pagers.push(pager);
-  }
-  return pagers;
 }
 
 // git grep [options] <pattern> [<rev>...] [--] [<pathspec>...]: the pattern
