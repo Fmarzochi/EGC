@@ -73,6 +73,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A `${...}` expansion closes where bash closes it, past nested expansions and substitutions, and a comment ends at its newline whatever quote or backslash it holds (#1561).
 - The fact-forcing gate reads `taskset -p` and `chrt -p` as acting on a running process, so the words after them are never taken for a command (#1563).
 - Encrypted state and compressed observations are written through a temp file that is exclusive and 0600 from its creation (#1564).
+- install.ps1 reads the last line of node --version, and three tests check what they claim (#1589).
 - A memory write that meets another process's lock waits its backoff without holding up the writes behind it (#1567).
 - A committed script's delete target is narrow only when every variable on the way to it is, a start known only at run time cannot make a protected end narrow, and a malformed committed marker is judged as typed (#1562).
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
