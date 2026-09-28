@@ -542,7 +542,9 @@ function runTests() {
             const risky = { guardianBin: `${dir}/egc-guardian/build/index.js`, memoryBin: `${dir}/egc-memory/build/index.js` };
             assert.throws(() => registerClaudeCli('/ignored', risky), error => {
               assert.match(error.message, /cmd\.exe would expand/);
-              assert.ok(error.message.includes(`claude mcp add -s user egc-guardian -- node "${risky.guardianBin}"`), error.message);
+              assert.ok(error.message.includes(`"egc-guardian": ${JSON.stringify({ type: 'stdio', command: 'node', args: [risky.guardianBin] })}`), error.message);
+              assert.ok(error.message.includes(`"mcpServers" in ${path.join(os.homedir(), '.claude.json')}`), error.message);
+              assert.ok(!error.message.includes('claude mcp add'), 'the way by hand never goes back through claude.cmd');
               return true;
             });
           }
@@ -553,6 +555,35 @@ function runTests() {
           dispatch.needsShellOnWindows = originalNeedsShell;
         }
       });
+    }) ? passed++ : failed++);
+
+    (test('without a script to run directly, a Claude CLI path that cmd.exe would expand is never run', () => {
+      const binDir = path.join(makeTempDir(), '100%USERNAME%dir');
+      fs.mkdirSync(binDir);
+      const logPath = makeFakeClaude(binDir);
+      const saved = { PATH: process.env.PATH, FAKE_CLAUDE_LOG: process.env.FAKE_CLAUDE_LOG, FAKE_GET_STATUS: process.env.FAKE_GET_STATUS };
+      const dispatch = require('../../scripts/lib/crusher/shim-dispatch');
+      const originalNeedsShell = dispatch.needsShellOnWindows;
+      dispatch.needsShellOnWindows = () => true;
+      process.env.PATH = `${binDir}${path.delimiter}${saved.PATH}`;
+      process.env.FAKE_CLAUDE_LOG = logPath;
+      process.env.FAKE_GET_STATUS = '1';
+      try {
+        assert.throws(() => registerClaudeCli('/ignored', bins), error => {
+          assert.ok(error.message.includes(`cmd.exe would expand the % or ! in '${path.join(binDir, 'claude')}'`), error.message);
+          for (const [name, bin] of [['egc-guardian', bins.guardianBin], ['egc-memory', bins.memoryBin]]) {
+            assert.ok(error.message.includes(`"${name}": ${JSON.stringify({ type: 'stdio', command: 'node', args: [bin] })}`), error.message);
+          }
+          return true;
+        });
+        assert.ok(!fs.existsSync(logPath), 'the CLI never runs through cmd.exe with a path it would change');
+      } finally {
+        dispatch.needsShellOnWindows = originalNeedsShell;
+        for (const [key, value] of Object.entries(saved)) {
+          if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+        fs.rmSync(path.dirname(binDir), { recursive: true, force: true });
+      }
     }) ? passed++ : failed++);
 
     (test('registerClaudeCli throws when the CLI refuses an add, so init warns instead of reporting success', () => {
