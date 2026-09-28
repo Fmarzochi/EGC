@@ -139,6 +139,43 @@ function runTests() {
     });
   }));
 
+  record(test('a hard-linked hook is left as it is, and so is the file it shares its content with', () => {
+    for (const content of [`#!/bin/sh\necho shared\n\n${EARLIER_CALL}`, `#!/usr/bin/env bash\n${EARLIER_CALL}`, 'someone else\n']) {
+      withRepo((root, hook) => {
+        const outside = path.join(root, 'tracked-hook.sh');
+        fs.writeFileSync(outside, content);
+        fs.mkdirSync(path.dirname(hook), { recursive: true });
+        fs.linkSync(outside, hook);
+        const modeBefore = fs.statSync(outside).mode;
+        assert.strictEqual(installPreCommitHook(root), 'linked', JSON.stringify(content));
+        assert.strictEqual(fs.readFileSync(outside, 'utf8'), content);
+        assert.strictEqual(fs.statSync(outside).mode, modeBefore);
+        assert.ok(!fs.existsSync(path.join(path.dirname(hook), PREVIOUS_NAME)));
+      });
+    }
+    withRepo((root, hook) => {
+      const outside = path.join(root, 'tracked-hook.sh');
+      fs.writeFileSync(outside, HOOK);
+      fs.mkdirSync(path.dirname(hook), { recursive: true });
+      fs.linkSync(outside, hook);
+      assert.strictEqual(installPreCommitHook(root), 'present', 'a hard link that already is this hook');
+    });
+  }));
+
+  record(test('a hook that is not UTF-8 is kept byte for byte, less the call an earlier installer appended', () => {
+    withRepo((root, hook) => {
+      fs.mkdirSync(path.dirname(hook), { recursive: true });
+      const own = Buffer.concat([Buffer.from('#!/bin/sh\necho '), Buffer.from([0xe9, 0xff, 0xfe, 0x80]), Buffer.from('\nexit 0\n')]);
+      fs.writeFileSync(hook, Buffer.concat([own, Buffer.from(`\n${EARLIER_CALL}`)]));
+      assert.strictEqual(installPreCommitHook(root), 'wrapped');
+      assert.ok(fs.readFileSync(path.join(path.dirname(hook), PREVIOUS_NAME)).equals(own));
+      fs.writeFileSync(hook, own);
+      fs.unlinkSync(path.join(path.dirname(hook), PREVIOUS_NAME));
+      assert.strictEqual(installPreCommitHook(root), 'wrapped');
+      assert.ok(fs.readFileSync(path.join(path.dirname(hook), PREVIOUS_NAME)).equals(own), 'kept whole when nothing was appended');
+    });
+  }));
+
   record(test('the hook runs the strip, then the hook kept from before with its arguments, and stops when the strip fails', () => {
     if (process.platform === 'win32' || spawnSync('bash', ['--version']).status !== 0) {
       console.log('    - skipped: needs a POSIX bash');

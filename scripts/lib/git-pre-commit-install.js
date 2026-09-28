@@ -29,9 +29,10 @@ const HOOK = [
   '',
 ].join('\n');
 // What the installers wrote before this hook: a hook of their own, or the
-// call appended to one someone had.
-const EARLIER_HOOK = `#!/usr/bin/env bash\n${CALL}`;
-const APPENDED_CALL = `\n${CALL}`;
+// call appended to one someone had. A hook is compared and cut as bytes, so
+// one that is not UTF-8 is kept as it was.
+const EARLIER_HOOK = Buffer.from(`#!/usr/bin/env bash\n${CALL}`);
+const APPENDED_CALL = Buffer.from(`\n${CALL}`);
 
 const MESSAGES = {
   installed: 'git pre-commit hook installed',
@@ -44,6 +45,12 @@ const MESSAGES = {
 
 function isLink(file) {
   return fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink() ?? false;
+}
+
+// A hook with another name elsewhere shares its content with that file, so
+// writing to it would change a file outside .git/hooks.
+function isHardLinked(file) {
+  return fs.statSync(file).nlink > 1;
 }
 
 // A link is read, never written through: it points to a file outside
@@ -60,11 +67,14 @@ function linkedOutcome(rootDir, hook) {
 
 // A hook of someone else's is kept whole under PREVIOUS_NAME, less the call
 // an earlier installer appended to it, and the hook wraps it.
-function wrapPrevious(hook, text) {
+function wrapPrevious(hook, bytes) {
   const previous = path.join(path.dirname(hook), PREVIOUS_NAME);
   if (fs.lstatSync(previous, { throwIfNoEntry: false })) return 'conflict';
   fs.renameSync(hook, previous);
-  if (text.endsWith(APPENDED_CALL)) fs.writeFileSync(previous, text.slice(0, -APPENDED_CALL.length));
+  const tail = bytes.subarray(bytes.length - APPENDED_CALL.length);
+  if (bytes.length >= APPENDED_CALL.length && tail.equals(APPENDED_CALL)) {
+    fs.writeFileSync(previous, bytes.subarray(0, bytes.length - APPENDED_CALL.length));
+  }
   fs.writeFileSync(hook, HOOK);
   return 'wrapped';
 }
@@ -87,9 +97,10 @@ function installPreCommitHook(rootDir) {
   if (isLink(hook)) return linkedOutcome(rootDir, hook);
   let outcome;
   if (fs.existsSync(hook)) {
-    const text = fs.readFileSync(hook, 'utf8');
-    if (text === HOOK) return 'present';
-    outcome = text === EARLIER_HOOK ? writeHook(hook, 'updated') : wrapPrevious(hook, text);
+    const bytes = fs.readFileSync(hook);
+    if (bytes.equals(Buffer.from(HOOK))) return 'present';
+    if (isHardLinked(hook)) return 'linked';
+    outcome = bytes.equals(EARLIER_HOOK) ? writeHook(hook, 'updated') : wrapPrevious(hook, bytes);
   } else {
     fs.mkdirSync(hooksDir, { recursive: true });
     outcome = writeHook(hook, 'installed');
