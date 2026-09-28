@@ -180,20 +180,48 @@ const SCREEN_SESSION_LETTERS = /[dDrRx]/;
 const stuffed = text => text.replaceAll(/\\[nr]|\^[MJ]|\\01[25]/g, '\n');
 
 // What a screen command sent with -X or -Q runs.
-function screenCommand(words) {
-  const [name, ...rest] = words;
-  if (name === 'stuff') return rest.length > 0 && rest[0].trim() ? [stuffed(rest[0])] : [];
-  if (name === 'exec') {
+// A screen command line split into its words, quotes read as screen reads
+// them: a word is a run of quoted and bare pieces, its quotes taken off.
+const SCREEN_WORD_RE = /(?:"[^"]*"|'[^']*'|[^\s"']+)+/g;
+function screenLineWords(line) {
+  return (String(line).match(SCREEN_WORD_RE) ?? []).map(word => word.replaceAll(/"([^"]*)"|'([^']*)'/g, '$1$2'));
+}
+
+// A command bind or bindkey keeps for a key, after the key and its options.
+function carriedCommand(rest) {
+  const at = rest.findIndex(word => Object.hasOwn(SCREEN_COMMANDS, word));
+  return at >= 0 ? screenCommand(rest.slice(at)) : [];
+}
+
+// The screen commands that run or type a command, and those that carry one:
+// eval runs each of its arguments as a screen command, at runs one in other
+// windows, and bind and bindkey keep one for a key.
+const SCREEN_COMMANDS = {
+  stuff: rest => (rest.length > 0 && rest[0].trim() ? [stuffed(rest[0])] : []),
+  exec: rest => {
     const argv = /^[.!:|]+$/.test(rest[0] ?? '') ? rest.slice(1) : rest;
     return argv.length > 0 ? [argvLine(argv)] : [];
-  }
-  if (name !== 'screen') return [];
-  const options = readShortOptions(rest, 0, 'tThs');
-  return rest.length > options.end ? [argvLine(rest.slice(options.end))] : [];
+  },
+  eval: rest => rest.flatMap(line => screenCommand(screenLineWords(line))),
+  at: rest => screenCommand(rest.slice(1)),
+  bind: carriedCommand,
+  bindkey: carriedCommand,
+  screen: rest => {
+    const options = readShortOptions(rest, 0, 'tThs');
+    return rest.length > options.end ? [argvLine(rest.slice(options.end))] : [];
+  },
+};
+
+function screenCommand(words) {
+  const [name, ...rest] = words;
+  return Object.hasOwn(SCREEN_COMMANDS, name) ? SCREEN_COMMANDS[name](rest) : [];
 }
 
 function screenRuns(values) {
   const runs = [];
+  // -m anywhere among the options makes -d and -r start a session detached
+  // instead of naming one.
+  const letters = new Set();
   let i = 1;
   while (i < values.length && values[i].startsWith('-')) {
     const word = values[i];
@@ -204,9 +232,9 @@ function screenRuns(values) {
       continue;
     }
     const given = new Map();
-    const next = readCluster(values, i, SCREEN_VALUES, new Set(), given);
+    const next = readCluster(values, i, SCREEN_VALUES, letters, given);
     if (given.has('s')) runs.push(singleQuoted(given.get('s')));
-    const namesSession = next === i + 1 && SCREEN_SESSION_LETTERS.test(word) && !word.includes('m');
+    const namesSession = next === i + 1 && SCREEN_SESSION_LETTERS.test(word) && !letters.has('m');
     i = next;
     if (namesSession && i < values.length && !values[i].startsWith('-')) return runs;
   }
@@ -302,10 +330,12 @@ function containerRuns(name, values) {
   let start;
   if (KUBE_TOOLS.has(name) && dashes >= 0) start = dashes + 1;
   else {
-    // The container follows the options, past a `--` that ends them.
+    // The container follows the options, past a `--` that ends them;
+    // kubectl reads options after the pod too, docker's end at the container.
     let target = afterLongOptions(values, i + 1);
     if (values[target] === '--') target += 1;
-    start = values[target + 1] === '--' ? target + 2 : target + 1;
+    const after = KUBE_TOOLS.has(name) ? afterLongOptions(values, target + 1) : target + 1;
+    start = values[after] === '--' ? after + 1 : after;
   }
   return values.length > start ? [argvLine(values.slice(start))] : [];
 }

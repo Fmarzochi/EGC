@@ -78,6 +78,7 @@ function runTests() {
       `ssh -o remotecommand='${wipe}' host`, `ssh -o 'RemoteCommand = ${wipe}' host`, `ssh host -o RemoteCommand='${wipe}'`,
       `ssh -o ProxyCommand='${wipe}' host`, `ssh -o PermitLocalCommand=yes -o LocalCommand='${wipe}' host ls`,
       `ssh -o KnownHostsCommand='${wipe}' host`, `ssh -N -o ProxyCommand='${wipe}' host`, `docker exec -- web ${wipe}`,
+      'kubectl exec pod -c app rm /data', `screen -m -d ${wipe}`, `screen -X eval 'exec ${wipe}'`, `screen -X bind x exec ${wipe}`,
     ]) {
       assert.strictEqual(judge(command).exitCode, 2, command);
     }
@@ -139,6 +140,17 @@ function runTests() {
     assert.deepStrictEqual(handoffCommandsOf(['screen', '-d', '-m', 'ls']), ["'ls'"]);
     assert.deepStrictEqual(handoffCommandsOf(['ssh', '--', 'host', 'ls']), ['ls']);
     assert.deepStrictEqual(handoffCommandsOf(['docker', 'exec', '--', 'web', 'rm', '-rf', '/']), ["'rm' '-rf' '/'"]);
+    assert.deepStrictEqual(handoffCommandsOf(['kubectl', 'exec', 'pod', '-c', 'app', 'rm', '/data']), ["'rm' '/data'"]);
+    assert.deepStrictEqual(handoffCommandsOf(['kubectl', '-n', 'x', 'exec', 'pod', '--container', 'app', '-i', 'ls']), ["'ls'"]);
+    assert.deepStrictEqual(handoffCommandsOf(['docker', 'exec', 'web', '-c', 'x']), ["'-c' 'x'"], 'docker options end at the container');
+    assert.deepStrictEqual(handoffCommandsOf(['screen', '-m', '-d', 'rm', '-rf', '/']), ["'rm' '-rf' '/'"]);
+    assert.deepStrictEqual(handoffCommandsOf(['screen', '-d', '-m', 'rm', '-rf', '/']), ["'rm' '-rf' '/'"]);
+    assert.deepStrictEqual(handoffCommandsOf(['screen', '-d', 'mysession']), [], '-d without -m names a session');
+    assert.deepStrictEqual(handoffCommandsOf(['screen', '-X', 'eval', 'exec rm -rf /', 'stuff "ls^M"']), ["'rm' '-rf' '/'", 'ls\n']);
+    assert.deepStrictEqual(handoffCommandsOf(['screen', '-X', 'at', '0', 'exec', 'rm', '-rf', '/']), ["'rm' '-rf' '/'"]);
+    assert.deepStrictEqual(handoffCommandsOf(['screen', '-X', 'bind', 'x', 'exec', 'rm', '-rf', '/']), ["'rm' '-rf' '/'"]);
+    assert.deepStrictEqual(handoffCommandsOf(['screen', '-X', 'bindkey', '-k', 'k1', 'exec', 'rm']), ["'rm'"]);
+    assert.deepStrictEqual(handoffCommandsOf(['screen', '-X', 'bind', 'x', 'kill']), []);
     assert.deepStrictEqual(handoffCommandsOf(['docker', 'exec', '-it', '--', 'web', '--', 'ls']), ["'ls'"]);
   }));
 
