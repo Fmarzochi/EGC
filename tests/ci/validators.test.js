@@ -1348,6 +1348,34 @@ function runTests() {
     cleanupTestDir(testDir);
   }));
 
+  tally(test('the hooks schema reads the four shapes the validator reads, and still refuses a malformed one', () => {
+    const schemaPath = path.join(repoRoot, 'schemas', 'hooks.schema.json');
+    const entry = { matcher: 'test', hooks: [{ type: 'command', command: 'echo ok' }] };
+    const shapes = [
+      ['an event map under hooks', { hooks: { PreToolUse: [entry] } }],
+      ['a matcher list under hooks', { hooks: [entry] }],
+      ['a bare event map', { PreToolUse: [entry] }],
+      ['a bare matcher list', [entry]],
+    ];
+    for (const [label, data] of shapes) {
+      const testDir = createTestDir();
+      const hooksFile = path.join(testDir, 'hooks.json');
+      fs.writeFileSync(hooksFile, JSON.stringify(data));
+      const result = runValidatorWithDirs('validate-hooks', { HOOKS_FILE: hooksFile, HOOKS_SCHEMA_PATH: schemaPath });
+      cleanupTestDir(testDir);
+      assert.strictEqual(result.code, 0, `${label} must pass the schema: ${result.stderr}`);
+      assert.ok(!/strict mode/.test(result.stderr), `${label}: the schema compiles cleanly: ${result.stderr}`);
+    }
+    for (const [label, data] of [['hooks as a string', { hooks: 'x' }], ['an unknown event', { NotAnEvent: [entry] }], ['a matcher without hooks', [{ matcher: 'x' }]]]) {
+      const testDir = createTestDir();
+      const hooksFile = path.join(testDir, 'hooks.json');
+      fs.writeFileSync(hooksFile, JSON.stringify(data));
+      const result = runValidatorWithDirs('validate-hooks', { HOOKS_FILE: hooksFile, HOOKS_SCHEMA_PATH: schemaPath });
+      cleanupTestDir(testDir);
+      assert.strictEqual(result.code, 1, `${label} must fail`);
+    }
+  }));
+
   tally(test('validates object format without wrapping hooks key', () => {
     const testDir = createTestDir();
     const hooksFile = path.join(testDir, 'hooks.json');
