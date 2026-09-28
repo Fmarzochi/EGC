@@ -13,6 +13,7 @@ const {
   appendFile,
   getEGCDir,
 } = require('../lib/utils');
+const { estimateModelCost } = require('../lib/llm-costs');
 
 const MAX_STDIN = 1024 * 1024;
 let raw = '';
@@ -20,27 +21,6 @@ let raw = '';
 function toNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
-}
-
-function estimateCost(model, inputTokens, outputTokens) {
-  // Approximate per-1M-token blended rates. Conservative defaults.
-  const table = {
-    'lite': { in: 0.8, out: 4.0 },      // 2.5-flash-lite / 1.5-flash-8b
-    'flash': { in: 3.0, out: 15.0 },    // 2.5-flash / 1.5-flash
-    'pro': { in: 15.0, out: 75.0 },     // 2.5-pro / 1.5-pro
-  };
-
-  const normalized = String(model || '').toLowerCase();
-  let rates = table.flash;
-
-  if (normalized.includes('lite') || normalized.includes('8b') || normalized.includes('haiku')) {
-    rates = table.lite;
-  } else if (normalized.includes('pro') || normalized.includes('ultra') || normalized.includes('opus')) {
-    rates = table.pro;
-  }
-
-  const cost = (inputTokens / 1_000_000) * rates.in + (outputTokens / 1_000_000) * rates.out;
-  return Math.round(cost * 1e6) / 1e6;
 }
 
 process.stdin.setEncoding('utf8');
@@ -70,7 +50,7 @@ process.stdin.on('end', () => {
       model,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      estimated_cost_usd: estimateCost(model, inputTokens, outputTokens),
+      estimated_cost_usd: estimateModelCost(model, inputTokens, outputTokens),
     };
 
     appendFile(path.join(metricsDir, 'costs.jsonl'), `${JSON.stringify(row)}\n`);
