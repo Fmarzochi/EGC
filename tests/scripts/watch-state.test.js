@@ -7,6 +7,10 @@ const path = require('path');
 
 const { extractEgcBlock, parseBlockToStateContent, StateWatcher, mergeBlockIntoStateFile, resolveStateFilePath } = require('../../scripts/lib/watch-state');
 
+// How long a file event may take to reach the watcher: fs.watch on Windows
+// runners delivers it later than on Linux or macOS.
+const EVENT_BUDGET_MS = process.platform === 'win32' ? 8000 : 2000;
+
 function mktemp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-watch-state-'));
 }
@@ -149,8 +153,8 @@ async function runTests() {
         setTimeout(() => {
           watcher.stop();
           cleanup(dir);
-          reject(new Error('onSync did not fire within 2s after file change'));
-        }, 2000);
+          reject(new Error(`onSync did not fire within ${EVENT_BUDGET_MS} ms after file change`));
+        }, EVENT_BUDGET_MS);
       } catch (err) {
         if (watcher) watcher.stop();
         cleanup(dir);
@@ -206,8 +210,8 @@ async function runTests() {
         setTimeout(() => {
           watcher.stop();
           cleanup(dir);
-          reject(new Error('onSync did not fire within 2s after atomic rename'));
-        }, 2000);
+          reject(new Error(`onSync did not fire within ${EVENT_BUDGET_MS} ms after atomic rename`));
+        }, EVENT_BUDGET_MS);
       } catch (err) {
         if (watcher) watcher.stop();
         cleanup(dir);

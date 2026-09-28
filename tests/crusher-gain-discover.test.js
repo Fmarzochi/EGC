@@ -30,13 +30,21 @@ function run(name, fn) {
   }
 }
 
+// Every directory a case makes, removed once the cases have run.
+const tempDirs = [];
+function tempDir(prefix) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
 console.log('\n=== Testing egc gain --history and egc discover ===\n');
 
 run('gain --history --json returns the raw ledger entries', () => {
   // Point the spawned child at a synthetic HOME so --json reports exactly the
   // seeded ledger instead of the real ~/.egc ledger, whose size would exceed
   // the spawn buffer and kill the child with status === null.
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-gain-home-'));
+  const home = tempDir('egc-gain-home-');
   const ledgerDir = path.join(home, '.egc', 'metrics');
   fs.mkdirSync(ledgerDir, { recursive: true });
   const entry = { ts: '2026-07-26T04:00:00Z', kind: 'git-log', cmd: 'git log --stat', tokensSaved: 5000, bytesIn: 100000, bytesOut: 2000 };
@@ -61,7 +69,7 @@ run('gain --history --json returns the raw ledger entries', () => {
 });
 
 run('gain summary prints the biggest crush with its command', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-gain-home-'));
+  const home = tempDir('egc-gain-home-');
   const ledgerDir = path.join(home, '.egc', 'metrics');
   fs.mkdirSync(ledgerDir, { recursive: true });
   const entry = { ts: '2026-07-26T04:00:00Z', kind: 'git-log', cmd: 'git log --stat', tokensSaved: 5000, bytesIn: 100000, bytesOut: 2000 };
@@ -78,7 +86,7 @@ run('gain summary prints the biggest crush with its command', () => {
 });
 
 run('discover finds a crushable run in a fixture transcript', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-discover-'));
+  const dir = tempDir('egc-discover-');
   const bigLog = 'commit abc123 something\n'.repeat(200);
   const lines = [
     JSON.stringify({
@@ -126,7 +134,7 @@ run('discover finds a crushable run in a fixture transcript', () => {
 });
 
 run('discover reports zero on an empty directory', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-discover-empty-'));
+  const dir = tempDir('egc-discover-empty-');
   const res = spawnSync('node', [DISCOVER, '--json'], {
     encoding: 'utf8',
     env: { ...process.env, EGC_DISCOVER_DIR: dir },
@@ -134,6 +142,11 @@ run('discover reports zero on an empty directory', () => {
   assert.strictEqual(res.status, 0, res.stderr);
   const report = JSON.parse(res.stdout);
   assert.strictEqual(report.missedRuns, 0);
+});
+
+for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
+run('every directory the cases made is removed', () => {
+  for (const dir of tempDirs) assert.ok(!fs.existsSync(dir), dir);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
