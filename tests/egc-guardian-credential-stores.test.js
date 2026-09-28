@@ -17,7 +17,7 @@ if (!fs.existsSync(buildPath)) {
   console.log('[SKIP] build not found. Run npm run build in mcp/servers/egc-guardian first.');
   process.exit(0);
 }
-const { validateCommand, isProtectedPath, isReadDeniedPath } = require(buildPath);
+const { validateCommand, isProtectedPath, isReadDeniedPath, buildDeniedPaths } = require(buildPath);
 
 let passed = 0;
 let failed = 0;
@@ -85,6 +85,33 @@ for (const neighbor of neighbors) {
 run('a project .yarnrc.yml, .netrc-like names and a .kube folder in a project stay free', () => {
   for (const relative of ['.yarnrc.yml', 'docs/netrc.md', 'k8s/.kube/config.example']) {
     assert.strictEqual(isReadDeniedPath(path.join(process.cwd(), relative)), false, relative);
+  }
+});
+
+run('on Windows the browser profiles and the roaming settings are found under the profile when LOCALAPPDATA or APPDATA is unset', () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const saved = { LOCALAPPDATA: process.env.LOCALAPPDATA, APPDATA: process.env.APPDATA, USERPROFILE: process.env.USERPROFILE };
+  const profile = path.join(os.tmpdir(), 'egc-profile');
+  try {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    delete process.env.LOCALAPPDATA;
+    delete process.env.APPDATA;
+    process.env.USERPROFILE = profile;
+    const denied = buildDeniedPaths();
+    for (const store of ['AppData/Local/Google/Chrome/User Data', 'AppData/Local/Microsoft/Edge/User Data', 'AppData/Local/BraveSoftware/Brave-Browser/User Data', 'AppData/Roaming']) {
+      assert.ok(denied.includes(path.join(profile, ...store.split('/'))), `${store} under the profile, got ${denied.join(', ')}`);
+    }
+    process.env.LOCALAPPDATA = path.join(profile, 'Local');
+    process.env.APPDATA = path.join(profile, 'Roaming');
+    const set = buildDeniedPaths();
+    assert.ok(set.includes(path.join(profile, 'Local', 'Google', 'Chrome', 'User Data')), 'LOCALAPPDATA when it is set');
+    assert.ok(set.includes(path.join(profile, 'Roaming')), 'APPDATA when it is set');
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   }
 });
 

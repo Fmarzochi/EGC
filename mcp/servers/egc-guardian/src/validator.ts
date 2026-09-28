@@ -1135,13 +1135,14 @@ export function buildDeniedPaths(): string[] {
   ];
 
   if (isWindows) {
-    const appData = process.env.APPDATA || '';
-    const localAppData = process.env.LOCALAPPDATA || '';
     const userProfile = process.env.USERPROFILE || home;
+    // Where Windows puts them when the variables are unset: a process started
+    // with a stripped environment still reads and writes the same folders.
+    const appData = process.env.APPDATA || path.join(userProfile, 'AppData', 'Roaming');
+    const localAppData = process.env.LOCALAPPDATA || path.join(userProfile, 'AppData', 'Local');
     // The browser profiles Windows keeps under LocalAppData.
-    const browsers = localAppData
-      ? ['Google/Chrome/User Data', 'Microsoft/Edge/User Data', 'BraveSoftware/Brave-Browser/User Data'].map(profile => path.join(localAppData, ...profile.split('/')))
-      : [];
+    const browsers = ['Google/Chrome/User Data', 'Microsoft/Edge/User Data', 'BraveSoftware/Brave-Browser/User Data']
+      .map(profile => path.join(localAppData, ...profile.split('/')));
     paths.push(
       path.join(userProfile, '.ssh'),
       path.join(userProfile, '.aws'),
