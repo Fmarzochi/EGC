@@ -96,12 +96,14 @@ function tmuxCommandName(word) {
 // `\;` reaching it is a literal semicolon. The Bash hook keeps backslashes
 // on Windows, where Git Bash still hands tmux `x;` for a typed `x\;`: there
 // the word's own `\;` ends the command too. The word before the end, or null.
+const ESCAPED_SEMICOLON = String.raw`\;`;
+
 function tmuxCommandEnd(value, platform = process.platform) {
   if (platform === 'win32') {
     if (!/(^|[^\\])\\?;$/.test(value)) return null;
-    return value.slice(0, value.length - (value.endsWith('\\;') ? 2 : 1));
+    return value.slice(0, value.length - (value.endsWith(ESCAPED_SEMICOLON) ? 2 : 1));
   }
-  return value.endsWith(';') && !value.endsWith('\\;') ? value.slice(0, -1) : null;
+  return value.endsWith(';') && !value.endsWith(ESCAPED_SEMICOLON) ? value.slice(0, -1) : null;
 }
 
 function tmuxCommands(values) {
