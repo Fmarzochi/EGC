@@ -159,6 +159,16 @@ jobs:
             *) echo "Unsupported package manager: ${{ matrix.pm }}" && exit 1 ;;
           esac
 
+      # The Guardian suites skip when the compiled validator is absent
+      # (build/ is gitignored). Building it on every OS runs them where
+      # paths and shells differ, not on the Linux coverage job alone; the
+      # memory server keeps to that job for its native sqlite3 build.
+      - name: Build the Guardian
+        shell: bash
+        run: |
+          npm --prefix mcp/servers/egc-guardian ci
+          npm --prefix mcp/servers/egc-guardian run build
+
       # Run tests
       - name: Run tests
         run: node tests/run-all.js
