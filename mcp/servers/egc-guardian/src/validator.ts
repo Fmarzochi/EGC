@@ -1827,6 +1827,52 @@ function checkGitFileOperands(subcommand: string, rest: string[], cwd?: string):
   return readDenial(`git grep would read the protected file '${protectedFile}' and is forbidden.`, 'DANGEROUS');
 }
 
+// Subcommands that name paths without reading what is in them, so a
+// protected path among their arguments exposes nothing. Any other
+// subcommand that names a protected file reads it: into its output (diff
+// --no-index, grep, blame, show <rev>:<path>, archive), into the object
+// store where the next command prints it (add, hash-object), into a message
+// (commit -F), or under a new name (mv). config is judged on its own.
+const GIT_PATH_ONLY_SUBCOMMANDS = new Set([
+  'status', 'ls-files', 'check-ignore', 'check-attr', 'rm', 'reset', 'restore', 'checkout', 'config',
+]);
+// A setting glued to -c (-ckey=value) configures git rather than name a
+// file it reads, so its value is not read as a path.
+function isGluedGitSetting(arg: string): boolean {
+  return /^-c./.test(stripQuotes(arg));
+}
+
+// The files git writes its output into instead of standard output: --output
+// (the diff family, log, show, archive) and archive -o.
+function gitOutputFiles(subcommand: string, rest: string[]): string[] {
+  const files: string[] = [];
+  for (let i = 0; i < rest.length && rest[i] !== '--'; i++) {
+    const option = stripQuotes(rest[i]);
+    const isOutput = abbreviates(option, '--output') || (subcommand === 'archive' && /^-o/.test(option));
+    if (!isOutput) continue;
+    const glued = option.startsWith('--') ? option.split('=').slice(1).join('=') : option.slice(2);
+    if (option.includes('=') || (!option.startsWith('--') && glued !== '')) files.push(glued);
+    else if (rest[i + 1] !== undefined) files.push(stripQuotes(rest[i + 1]));
+  }
+  return files;
+}
+
+function checkGitPathArguments(args: string[], subcommandIdx: number, cwd?: string): ValidationResult | null {
+  const subcommand = subcommandIdx < 0 ? '' : bareToken(args[subcommandIdx]);
+  const globals = (subcommandIdx < 0 ? args : args.slice(0, subcommandIdx)).filter(arg => !isGluedGitSetting(arg));
+  const rest = subcommandIdx < 0 ? [] : args.slice(subcommandIdx + 1);
+  const reached = GIT_PATH_ONLY_SUBCOMMANDS.has(subcommand) ? globals : [...globals, ...rest];
+  const read = pathCandidatesOf(reached).find(p => isReadDeniedOperand(p, cwd));
+  if (read !== undefined) return readDenial(`git ${subcommand} would read the protected file '${read}' and is forbidden.`, 'DANGEROUS');
+  const written = gitOutputFiles(subcommand, rest).find(p => isProtectedOperand(p, cwd));
+  if (written === undefined) return null;
+  return {
+    allowed: false,
+    reason: `git ${subcommand} would write the protected file '${written}' and is forbidden.`,
+    trust_level: 'DANGEROUS',
+  };
+}
+
 function validateGitArgs(args: string[], cwd?: string): ValidationResult {
   const subcommandIdx = findGitSubcommandIndex(args);
   const forceDenial = checkGitForceFlag(args, subcommandIdx, cwd);
@@ -1834,6 +1880,9 @@ function validateGitArgs(args: string[], cwd?: string): ValidationResult {
 
   const inlineOverrideDenial = checkInlineGitConfigOverrides(args, cwd);
   if (inlineOverrideDenial) return inlineOverrideDenial;
+
+  const pathDenial = checkGitPathArguments(args, subcommandIdx, cwd);
+  if (pathDenial) return pathDenial;
 
   if (subcommandIdx < 0) return { allowed: true, trust_level: 'SAFE_READONLY' };
   const subcommand = bareToken(args[subcommandIdx]);
