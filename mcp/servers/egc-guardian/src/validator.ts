@@ -563,7 +563,7 @@ function envValueDenial(name: string, value: string, command: string | undefined
     return `'${name}' makes git write to the protected path ${text}, which is forbidden`;
   }
   // Read from where the command runs, so a relative link is followed there.
-  if (REPOSITORY_ENV_VARS.has(upper) && !isTrustedGitDirectory(path.resolve(cwd ?? process.cwd(), expandHome(text)))) {
+  if (REPOSITORY_ENV_VARS.has(upper) && !isTrustedGitDirectory(followedGitDirectory(path.resolve(cwd ?? process.cwd(), expandHome(text))))) {
     return `'${name}' points git at ${text}, a repository whose config this line can choose, which is forbidden: name a .git or <name>.git directory`;
   }
   // When it persists (export, a bare assignment) it holds for the git
@@ -2289,6 +2289,12 @@ function gitfileTarget(file: string): string | null {
   }
 }
 
+// A git directory named outright (--git-dir, GIT_DIR) that is a file git
+// reads as a .git file, following its gitdir: line to the directory it uses.
+function followedGitDirectory(dir: string): string {
+  return gitfileTarget(dir) ?? dir;
+}
+
 // The git directory git finds up from `dir`, in git's order at each level:
 // a `.git` directory it recognizes, a `.git` file's gitdir:, then the
 // level itself as a bare repository. null when there is none.
@@ -2321,7 +2327,7 @@ function namedGitDirectory(globals: string[]): string | undefined {
 function checkGitDirectory(globals: string[], cwd?: string): ValidationResult | null {
   const { dir } = gitPlaces(globals, cwd);
   const named = namedGitDirectory(globals);
-  const gitDir = named === undefined ? discoveredGitDirectory(dir) : path.resolve(dir, expandHome(named));
+  const gitDir = named === undefined ? discoveredGitDirectory(dir) : followedGitDirectory(path.resolve(dir, expandHome(named)));
   if (gitDir === null || isTrustedGitDirectory(gitDir)) return null;
   return {
     allowed: false,

@@ -175,8 +175,18 @@ record(test('a directory is not copied, synced or linked into a git directory, a
     assert.match(denied(command, cwd).reason, /git directory/, `${command} in ${cwd}`);
   }
   passes('GIT_DIR=repo.git git status', root);
-  // A regular file named like a git directory is none, and writing it makes
-  // none; a new path so named may become one, and a .git file only points.
+  // A git directory named outright may be a file git reads as a .git file,
+  // following its gitdir: line: the directory it leads to is judged.
+  fs.writeFileSync(at('pointer.git'), `gitdir: ${at('evil')}\n`);
+  fs.writeFileSync(at('good.git'), `gitdir: ${at('repo.git')}\n`);
+  for (const [command, cwd] of [[`git --git-dir=${at('pointer.git')} status`, at('plain')], ['GIT_DIR=pointer.git git status', root]]) {
+    assert.match(denied(command, cwd).reason, /git directory/, `${command} in ${cwd}`);
+  }
+  passes(`git --git-dir=${at('good.git')} status`, at('plain'));
+  passes('GIT_DIR=good.git git status', root);
+  // Overwriting a regular file that already exists under a name ending in
+  // .git makes no git directory, so it is free; a new path so named stays
+  // protected, since it may become one, and a .git file only points.
   fs.writeFileSync(at('notes.git'), 'x\n');
   assert.strictEqual(isProtectedPath(at('notes.git')), false, 'an existing regular file named x.git');
   assert.strictEqual(isProtectedPath(at('linked', '.git')), false, 'a .git file');
