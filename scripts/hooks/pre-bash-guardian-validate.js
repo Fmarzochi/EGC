@@ -32,7 +32,7 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies, constructEnd } = require('../lib/shell-split');
-const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption, runnerCommandStart } = require('../lib/wrapper-options');
+const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption, runnerCommandStart, commandName } = require('../lib/wrapper-options');
 const { collectBindings, mergeBindings, valuesOf, commandWordChoices, quoteField, singleQuoted } = require('../lib/shell-bindings');
 const { startCwd, afterMove, CWD_CHANGERS } = require('../lib/shell-cwd');
 
@@ -433,7 +433,7 @@ function skipCommandCarrier(words, index) {
   // A later arm of a case (`b) command`) starts its own segment.
   if (words[index + 1]?.value === ')') return index + 2;
   if (words[index + 1]?.value === '(' && words[index + 2]?.value === ')') return index + 3;
-  if (head.split(/[\\/]/).pop() === 'egc') return skipEgcExecutor(words, index);
+  if (commandName(head) === 'egc') return skipEgcExecutor(words, index);
   return index;
 }
 
@@ -450,7 +450,7 @@ function skipEnvAndWrappers(words, state) {
       index += 1;
       continue;
     }
-    const name = word.split(/[\\/]/).pop();
+    const name = commandName(word);
     if (isWrapper(name)) {
       index = skipWrapperOptions(words, index + 1, name, wrapperState);
       continue;
@@ -481,7 +481,7 @@ function interpreterOperands(words, cwdUnknown = null) {
   if (!head) return found([]);
 
 
-  const name = head.value.split(/[\\/]/).pop().toLowerCase();
+  const name = commandName(head.value);
   // A command whose name is a variable is only treated as an interpreter when
   // that variable names the shell itself ($BASH, $SHELL, $0). Any other
   // `$VAR` command (a resolvable one is already rewritten before this runs, so
@@ -811,7 +811,7 @@ function redirectedFiles(words) {
 // command puts under the agent's control.
 function commandWrites(words, add) {
   const index = skipEnvAndWrappers(words);
-  const name = words[index]?.value.split(/[\\/]/).pop();
+  const name = commandName(words[index]?.value);
   const args = words.slice(index + 1).map(word => word.value);
   const operands = args.filter(arg => !arg.startsWith('-'));
   if (name === 'tee' || name === 'touch') operands.forEach(add);
@@ -984,7 +984,7 @@ function commandContext(segments, cwd, bindings) {
 function commandOf(segment) {
   const words = shellWords(segment);
   const index = skipEnvAndWrappers(words);
-  return { name: words[index]?.value.split(/[\\/]/).pop(), args: words.slice(index + 1) };
+  return { name: words[index] ? commandName(words[index].value) : undefined, args: words.slice(index + 1) };
 }
 
 // Whether a CDPATH search can decide where a relative cd lands: the
@@ -1283,7 +1283,7 @@ function readsItsInputAsCode(line) {
   const index = skipEnvAndWrappers(words);
   const head = words[index];
   if (!head) return false;
-  const isShell = head.value.startsWith('$') || SHELL_INTERPRETERS.has(head.value.split(/[\\/]/).pop().toLowerCase());
+  const isShell = head.value.startsWith('$') || SHELL_INTERPRETERS.has(commandName(head.value));
   if (!isShell) return false;
   // A file operand names the script the shell will run, and its standard
   // input is then that script's data. Anything else keeps the body as code:
@@ -1327,7 +1327,7 @@ function readsItsInputAsCode(line) {
 function egcShellScriptOf(segment) {
   const words = shellWords(segment);
   const index = skipEnvAndWrappers(words);
-  if (words[index]?.value.split(/[\\/]/).pop() !== 'egc') return null;
+  if (commandName(words[index]?.value) !== 'egc') return null;
   if (words[index + 1]?.value !== 'run' || words[index + 2]?.value !== '--shell') return null;
   const script = words.slice(index + 3);
   if (script.length === 0) return null;
@@ -1354,7 +1354,7 @@ function withNested(own, script, depth) {
 function inlineShellCodeOf(line) {
   const words = shellWords(line);
   const index = skipEnvAndWrappers(words);
-  const name = words[index]?.value.split(/[\\/]/).pop().toLowerCase();
+  const name = commandName(words[index]?.value);
   if (name === 'eval') return words.length > index + 1 ? words.slice(index + 1).map(word => word.value).join(' ') : null;
   if (!SHELL_INTERPRETERS.has(name) || name === 'source' || name === '.') return null;
   return shellCommandString(words.slice(index + 1));
@@ -1397,7 +1397,7 @@ const FIND_EXEC_ENDS = new Set([';', String.raw`\;`, '+']);
 function findExecCommandsOf(line) {
   const words = shellWords(line);
   const index = skipEnvAndWrappers(words);
-  if (words[index]?.value.split(/[\\/]/).pop() !== 'find') return [];
+  if (commandName(words[index]?.value) !== 'find') return [];
   const commands = [];
   let current = null;
   for (const word of words.slice(index + 1)) {

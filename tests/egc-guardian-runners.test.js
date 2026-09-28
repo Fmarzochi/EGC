@@ -116,8 +116,54 @@ run('the hooks find a runner\'s command where the validator does, so a script be
     for (const command of ['uv run bash x.sh', 'poetry run sh x.sh', 'npx bash x.sh', 'pnpm exec bash ./x.sh']) {
       assert.strictEqual(hook({ tool_name: 'Bash', tool_input: { command }, cwd: dir }).exitCode, 2, command);
     }
+    // A shell, a wrapper or a runner named with its Windows extension or in
+    // capitals is the same program, and the script behind it is read.
+    for (const command of ['bash.exe x.sh', 'BASH x.sh', 'sh.exe x.sh', 'sudo.exe bash x.sh', 'env.exe bash x.sh', 'nohup.exe bash x.sh',
+      "bash.exe -c 'bash x.sh'", 'NPX.CMD bash x.sh', 'Uv run bash x.sh']) {
+      assert.strictEqual(hook({ tool_name: 'Bash', tool_input: { command }, cwd: dir }).exitCode, 2, command);
+    }
+    assert.strictEqual(lib.commandName('/usr/bin/Bash.EXE'), 'bash');
+    assert.strictEqual(lib.commandName('C:/Tools/npx.cmd'), 'npx');
+    assert.strictEqual(lib.commandName('run.bat'), 'run');
+    assert.strictEqual(lib.commandName('tool.exe.bak'), 'tool.exe.bak');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+run('a command is known by its name whatever its case or Windows extension, runners and interpreters included', () => {
+  for (const command of [
+    wipe.replace('rm', 'rm.exe'), wipe.replace('rm', 'RM.EXE'), wipe.replace('rm', '/usr/bin/rm.exe'), `sudo.exe ${wipe}`, `env.exe ${wipe}`,
+    `xargs.exe ${wipe}`, 'git.exe push --force', 'docker.exe system prune -af', `NPX ${wipe}`, `Npx ${wipe}`, `NPM.CMD exec -- ${wipe}`,
+    `npx.cmd ${wipe}`, `pnpm.CMD dlx ${wipe}`, `UV run ${wipe}`, "node.exe -e 'x'", "NODE -e 'x'", "python.exe -c 'x'", "bash.exe -c 'x'",
+    "pwsh.exe -c 'x'", "deno.exe eval 'x'", "bun.exe -e 'x'", "eval.exe 'x'", 'cat.exe ~/.ssh/id_rsa',
+  ]) {
+    assert.ok(hard(command), command);
+  }
+  for (const command of ['npx.cmd tsc --noEmit', 'NPM.CMD exec -- tsc', 'node.exe script.js', 'git.exe status']) {
+    assert.ok(!hard(command), command);
+  }
+  for (const values of [['NPM.CMD', 'exec', '--', 'ls'], ['npx.exe', 'ls'], ['Uvx', 'ls']]) {
+    assert.deepStrictEqual(lib.runnerCommandStart(values), runnerCommandStart(values), values.join(' '));
+    assert.notStrictEqual(lib.runnerCommandStart(values), null, values.join(' '));
+  }
+});
+
+run('npm reads -p as --parseable, which takes no value, and npx reads it as --package', () => {
+  for (const command of [`npm -p exec -- ${wipe}`, `npm -p x ${wipe}`, `npm exec -p -- ${wipe}`, `npx -p pkg ${wipe}`]) {
+    assert.ok(hard(command), command);
+  }
+  assert.deepStrictEqual(runnerCommandStart(['npm', '-p', 'exec', '--', 'ls']), { start: 4, shellFlag: null });
+  assert.deepStrictEqual(runnerCommandStart(['npx', '-p', 'pkg', 'ls']), { start: 3, shellFlag: null });
+  assert.ok(!hard('npm -p ls'), 'npm -p ls runs no command');
+});
+
+run('deno eval is found past the values of the options before it', () => {
+  for (const command of ["deno --config deno.json eval 'x'", "deno -c deno.json eval 'x'", "deno -L debug eval 'x'", "deno --lock l.json --quiet eval 'x'", "deno --cert c.pem eval 'x'"]) {
+    assert.ok(hard(command), command);
+  }
+  for (const command of ['deno --config deno.json run main.ts', 'deno -L debug run eval.ts', 'deno run main.ts eval']) {
+    assert.ok(!hard(command), command);
   }
 });
 

@@ -16,7 +16,9 @@ export interface RunnerSpec extends WrapperSpec {
 
 const set = (values: string[]): Set<string> => new Set(values);
 
-const NPM_VALUES = ['-p', '--package', '-c', '--call', '-w', '--workspace', '--prefix', '--registry', '--cache', '--userconfig'];
+// npx reads -p as --package; npm reads it as --parseable, which takes no value.
+const NPM_VALUES = ['--package', '-c', '--call', '-w', '--workspace', '--prefix', '--registry', '--cache', '--userconfig'];
+const NPX_VALUES = ['-p', ...NPM_VALUES];
 const PNPM_VALUES = ['-C', '--dir', '--filter', '-F', '--workspace-dir', '--package', '--reporter', '--resume-from', '--loglevel'];
 const UV_VALUES = [
   '--from', '--with', '--with-editable', '--with-requirements', '-p', '--python', '--directory', '--project', '--package',
@@ -29,7 +31,7 @@ const UV_VALUES = [
 const CONDA_VALUES = ['-n', '--name', '-p', '--prefix', '--cwd'];
 
 export const RUNNER_SPECS: Record<string, RunnerSpec> = {
-  npx: { valueFlags: set(NPM_VALUES), shellFlags: set(['-c', '--call']) },
+  npx: { valueFlags: set(NPX_VALUES), shellFlags: set(['-c', '--call']) },
   npm: { valueFlags: set(NPM_VALUES), subcommands: [['exec'], ['x']], shellFlags: set(['-c', '--call']) },
   pnpx: { valueFlags: set(PNPM_VALUES), exactLongFlags: set(['--shell-mode']), shellFlags: set(['-c', '--shell-mode']) },
   pnpm: { valueFlags: set(PNPM_VALUES), exactLongFlags: set(['--shell-mode']), subcommands: [['exec'], ['dlx']], shellFlags: set(['-c', '--shell-mode']) },

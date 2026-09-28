@@ -59,7 +59,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A command whose name comes from a variable the command fixes is judged by the name it resolves to; opaque sources fail closed, the environment stays advisory (#1559).
 - A command word that comes from an expansion is judged by every value it can take, in the command and in the scripts it runs; a value the hook cannot read fails closed (#1560).
 - A `${...}` expansion closes where bash closes it, past nested expansions and substitutions, and a comment ends at its newline whatever quote or backslash it holds (#1561).
-- A command run through npx, npm/pnpm/yarn exec, uv run, poetry run and the other runners is judged as the command it is, and PowerShell, php, bun and deno inline code is found in every form (#1576).
+- A command run through npx, npm/pnpm/yarn exec, uv run, poetry run and the other runners is judged as the command it is, and PowerShell, php, bun and deno inline code is found in every form; a command is known by its name whatever its case or Windows extension (#1576).
 - The fact-forcing gate reads `taskset -p` and `chrt -p` as acting on a running process, so the words after them are never taken for a command (#1563).
 - Encrypted state and compressed observations are written through a temp file that is exclusive and 0600 from its creation (#1564).
 - A memory write that meets another process's lock waits its backoff without holding up the writes behind it (#1567).

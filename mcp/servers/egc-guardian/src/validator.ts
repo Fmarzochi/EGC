@@ -112,15 +112,29 @@ function isPhpCodeFlag(word: string): boolean {
   return /^-[a-zA-Z]/.test(word) && PHP_CODE_FLAGS.some(flag => word[1] === flag || (SHORT_FLAG_CLUSTER.test(word) && word.includes(flag)));
 }
 
-// A subcommand of an interpreter that runs the code given to it.
+// A subcommand of an interpreter that runs the code given to it, and the
+// options before it that take the next word as their value.
 const EVAL_SUBCOMMANDS: Record<string, string> = { deno: 'eval' };
+const EVAL_SUBCOMMAND_VALUE_OPTIONS: Record<string, Set<string>> = {
+  deno: new Set(['-c', '--config', '-L', '--log-level', '--import-map', '--lock', '--cert', '--location', '--seed']),
+};
+
+// The first word that is neither an option nor an option's value.
+function subcommandOf(evalName: string, words: string[]): string | undefined {
+  const valueOptions = EVAL_SUBCOMMAND_VALUE_OPTIONS[evalName];
+  for (let i = 0; i < words.length; i += 1) {
+    if (!words[i].startsWith('-')) return words[i];
+    if (valueOptions?.has(words[i])) i += 1;
+  }
+  return undefined;
+}
 
 function runsGivenCode(evalName: string, args: string[]): boolean {
   const words = args.map(stripQuotes);
   if (POWERSHELL_NAMES.has(evalName) && words.some(isPowerShellEvalFlag)) return true;
   if (evalName === 'php' && words.some(isPhpCodeFlag)) return true;
   const subcommand = EVAL_SUBCOMMANDS[evalName];
-  return subcommand !== undefined && words.find(word => !word.startsWith('-')) === subcommand;
+  return subcommand !== undefined && subcommandOf(evalName, words) === subcommand;
 }
 
 function inlineEvalVerdict(baseCommand: string, args: string[]): ValidationResult | null {
@@ -214,6 +228,14 @@ function bareToken(a: string): string {
 // misidentifying the real wrapped command.
 function stripQuotes(a: string): string {
   return a.replaceAll('\\', '').replaceAll(/["']/g, '');
+}
+
+// The name a command word runs by: its file name, without quotes, in lower
+// case and without a Windows executable extension, so rm.exe, RM and
+// /usr/bin/rm are all rm (Windows and a default macOS disk find a program
+// whatever the case, and Windows runs it with or without its extension).
+export function commandName(word: string): string {
+  return path.basename(bareToken(word)).replace(/\.(?:exe|cmd|bat|com)$/, '');
 }
 
 function stripEnclosingQuotes(s: string): string {
@@ -634,7 +656,7 @@ function readRunnerOptions(values: string[], from: number, spec: RunnerSpec): { 
 // instead; null when the runner runs no command here (`uv pip install`,
 // `pnpm install`).
 export function runnerCommandStart(values: string[]): { start: number; shellFlag: string | null } | null {
-  const spec = RUNNER_SPECS[path.basename(values[0] ?? '').replace(/\.(?:cmd|exe)$/i, '')];
+  const spec = RUNNER_SPECS[commandName(values[0] ?? '')];
   if (!spec) return null;
   const first = readRunnerOptions(values, 1, spec);
   let names = first.names;
@@ -667,7 +689,7 @@ function runnerVerdict(tokens: string[], cwd?: string): ValidationResult | null 
 // Unwraps a known wrapper command (sudo, timeout, xargs, ...), skipping its
 // flags and any mandatory leading positionals to reach the wrapped command.
 function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
-  const head = bareToken(current[0]);
+  const head = commandName(current[0]);
   if (head === 'sg' && sgRunsCommand(current)) {
     return forbiddenCommandString(`'sg' runs its command through a shell and is forbidden`);
   }
@@ -755,7 +777,7 @@ function tryUnwrapShellKeyword(current: string[]): UnwrapStep | null {
 const EGC_EXECUTOR_SUBCOMMANDS = new Set(['run', 'verify']);
 
 function tryUnwrapEgcExecutor(current: string[]): UnwrapStep | null {
-  if (path.basename(bareToken(current[0])) !== 'egc') return null;
+  if (commandName(current[0]) !== 'egc') return null;
   let i = 1;
   while (i < current.length && bareToken(current[i]).startsWith('-')) i += 1;
   if (!EGC_EXECUTOR_SUBCOMMANDS.has(bareToken(current[i] ?? ''))) return null;
@@ -1034,7 +1056,7 @@ function destructiveVerdict(baseCommand: string, args: string[]): ValidationResu
   }
   if (i >= args.length) return null;
   // prisma@5.x and ./node_modules/.bin/prisma both resolve to prisma.
-  let inner = path.basename(bareToken(args[i]));
+  let inner = commandName(args[i]);
   if (!inner.startsWith('@')) inner = inner.split('@')[0];
   const innerCheck = DESTRUCTIVE_CLI_CHECKS[inner];
   return innerCheck ? innerCheck(args.slice(i + 1)) : null;
@@ -2439,7 +2461,7 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   const runnerDenial = runnerVerdict(tokens, cwd);
   if (runnerDenial) return runnerDenial;
 
-  const baseCommand = path.basename(bareToken(tokens[0]));
+  const baseCommand = commandName(tokens[0]);
   // The checks below read each argument as the word the shell hands the
   // command (the brace expansions already made above), so a flag or a path
   // written between quotes is the flag or the path it is; the redirection

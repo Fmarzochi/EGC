@@ -378,6 +378,7 @@ function runTests() {
           'hidden.sh': `eval "${wipe} ~"\n`,
           'inline.sh': `sh -c "${wipe} build"\n`,
           'inline-grave.sh': `sh -c "${wipe} /"\n`,
+          'inline-grave-exe.sh': `bash.exe -c "${wipe} /"\nSH.EXE -c "${wipe} /"\n`,
           'runner.sh': 'bash ./payload.sh\n',
           'dynamic.sh': 'bash "$TARGET"\n',
           'loop.sh': 'for f in migrations/*.sh; do bash "$f"; done\n',
@@ -451,7 +452,7 @@ function runTests() {
         assert.strictEqual(judged('bash up-var.sh'), 2, 'a delete that climbs out of a variable the committed script sets narrowly');
         assert.strictEqual(judged('bash glob-var.sh'), 2, 'a delete of a glob below a variable the committed script sets narrowly');
         assert.strictEqual(judged(`echo '${wipe} ~' > probe-rc.sh; bash src-probe.sh`), 2, 'the same optional file, written by the command first');
-        for (const name of ['grave.sh', 'hidden.sh', 'inline-grave.sh', 'find-grave.sh']) assert.strictEqual(judged(`bash ${name}`), 2, `grave in a committed script: ${name}`);
+        for (const name of ['grave.sh', 'hidden.sh', 'inline-grave.sh', 'inline-grave-exe.sh', 'find-grave.sh']) assert.strictEqual(judged(`bash ${name}`), 2, `grave in a committed script: ${name}`);
         // What a committed script runs but the hook cannot look at fails closed:
         // an untracked script could be anything.
         for (const command of ['bash dynamic.sh', 'bash loop.sh', 'bash by-arg.sh "$PWD/evil.sh"', 'bash deep-committed.sh']) {

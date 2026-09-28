@@ -279,7 +279,9 @@ function readWrapperOption(name, word, next) {
 // (runner-wrappers.ts): a runner with `subcommands` runs one only after one
 // of them and reads its options again after it; a subcommand in
 // `keepsSubcommand` is the command itself; `shellFlags` hand it to a shell.
-const NPM_VALUES = ['-p', '--package', '-c', '--call', '-w', '--workspace', '--prefix', '--registry', '--cache', '--userconfig'];
+// npx reads -p as --package; npm reads it as --parseable, which takes no value.
+const NPM_VALUES = ['--package', '-c', '--call', '-w', '--workspace', '--prefix', '--registry', '--cache', '--userconfig'];
+const NPX_VALUES = ['-p', ...NPM_VALUES];
 const PNPM_VALUES = ['-C', '--dir', '--filter', '-F', '--workspace-dir', '--package', '--reporter', '--resume-from', '--loglevel'];
 const UV_VALUES = [
   '--from', '--with', '--with-editable', '--with-requirements', '-p', '--python', '--directory', '--project', '--package',
@@ -292,7 +294,7 @@ const UV_VALUES = [
 const CONDA_VALUES = ['-n', '--name', '-p', '--prefix', '--cwd'];
 
 const RUNNER_SPECS = {
-  npx: { valueFlags: set(NPM_VALUES), shellFlags: set(['-c', '--call']) },
+  npx: { valueFlags: set(NPX_VALUES), shellFlags: set(['-c', '--call']) },
   npm: { valueFlags: set(NPM_VALUES), subcommands: [['exec'], ['x']], shellFlags: set(['-c', '--call']) },
   pnpx: { valueFlags: set(PNPM_VALUES), exactLongFlags: set(['--shell-mode']), shellFlags: set(['-c', '--shell-mode']) },
   pnpm: { valueFlags: set(PNPM_VALUES), exactLongFlags: set(['--shell-mode']), subcommands: [['exec'], ['dlx']], shellFlags: set(['-c', '--shell-mode']) },
@@ -331,8 +333,14 @@ function readRunnerOptions(values, from, spec) {
 // Where the command a runner runs starts among `values` (the runner first),
 // and the option that hands it to a shell as one string instead; null when
 // the runner runs no command here (`uv pip install`, `pnpm install`).
+// The name a command word runs by, as the validator reads it (commandName):
+// its file name, in lower case and without a Windows executable extension.
+function commandName(word) {
+  return String(word ?? '').split(/[\\/]/).pop().toLowerCase().replace(/\.(?:exe|cmd|bat|com)$/, '');
+}
+
 function runnerCommandStart(values) {
-  const spec = RUNNER_SPECS[String(values[0] ?? '').split(/[\\/]/).pop().replace(/\.(?:cmd|exe)$/i, '')];
+  const spec = RUNNER_SPECS[commandName(values[0])];
   if (!spec) return null;
   const first = readRunnerOptions(values, 1, spec);
   let names = first.names;
@@ -354,4 +362,4 @@ function runnerCommandStart(values) {
 // actually run (validator.ts SHELL_KEYWORDS): `then bash x.sh`, `( bash x.sh )`.
 const SHELL_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
 
-module.exports = { WRAPPER_SPECS, RUNNER_SPECS, PARALLEL_SPECS, SHELL_KEYWORDS, readWrapperOption, readParallelOption, readBwrapOption, runnerCommandStart };
+module.exports = { WRAPPER_SPECS, RUNNER_SPECS, PARALLEL_SPECS, SHELL_KEYWORDS, readWrapperOption, readParallelOption, readBwrapOption, runnerCommandStart, commandName };
