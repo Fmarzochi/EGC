@@ -138,11 +138,10 @@ if (test('loadOrCreateEncKey: refuses a key whose permissions cannot be tightene
   const errorLines = [];
   console.error = (...args) => errorLines.push(args.join(' '));
   // The mode is set through the descriptor of the key file, so the
-  // descriptor call is the one to fail; it restores itself on the first
-  // call, and the path-based chmod stays real for the temp file.
+  // descriptor calls are the ones to fail, every one of them, as on a
+  // filesystem without permission bits; the path-based chmod stays real.
   const originalFchmodSync = fs.fchmodSync;
   fs.fchmodSync = () => {
-    fs.fchmodSync = originalFchmodSync;
     throw new Error('EPERM: simulated filesystem without permission bit support');
   };
   try {
@@ -258,19 +257,19 @@ if (test('writeStateFile: concurrent writers to the same path use distinct temp 
   // writers (e.g. two egc-memory processes racing an update_state on the
   // same state file) could each write to the same temp path and clobber
   // each other's bytes before either renamed, producing ciphertext that
-  // decrypts to nothing — indistinguishable from disk corruption. This
-  // spies on fs.writeFileSync to capture every temp path writeStateFile
-  // uses across concurrent-looking calls and asserts none collide.
+  // decrypts to nothing, indistinguishable from disk corruption. This
+  // spies on fs.openSync to capture every temp path writeStateFile creates
+  // across concurrent-looking calls and asserts none collide.
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
   const filePath = path.join(tmpDir, 'main.md');
   const key = crypto.randomBytes(32);
   const seenTmpPaths = [];
-  const originalWriteFileSync = fs.writeFileSync;
-  fs.writeFileSync = (target, ...rest) => {
+  const originalOpenSync = fs.openSync;
+  fs.openSync = (target, ...rest) => {
     if (typeof target === 'string' && target.startsWith(`${filePath}.tmp`)) {
       seenTmpPaths.push(target);
     }
-    return originalWriteFileSync(target, ...rest);
+    return originalOpenSync(target, ...rest);
   };
   try {
     for (let i = 0; i < 5; i++) {
@@ -284,7 +283,53 @@ if (test('writeStateFile: concurrent writers to the same path use distinct temp 
     );
     assert.strictEqual(readStateFile(filePath, key), 'write #4', 'final content must be the last write, uncorrupted');
   } finally {
-    fs.writeFileSync = originalWriteFileSync;
+    fs.openSync = originalOpenSync;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('writeStateFile: a umask that strips the owner bits still leaves the state readable by its owner', () => {
+  // The creation mode is masked by the umask, so under 0777 the temp file
+  // would be born 000 and the state unreadable after the rename; its mode is
+  // set on the descriptor, before any byte is written.
+  if (process.platform === 'win32') return;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
+  const filePath = path.join(tmpDir, 'main.md');
+  const key = crypto.randomBytes(32);
+  const oldUmask = process.umask(0o777);
+  try {
+    writeStateFile(filePath, 'secret', key);
+    process.umask(oldUmask);
+    assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o600);
+    assert.strictEqual(readStateFile(filePath, key), 'secret');
+  } finally {
+    process.umask(oldUmask);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('writeStateFile: the temp file is private and exclusive from its creation, whatever the umask', () => {
+  // The temp file used to be created with the process umask and only made
+  // 0600 afterwards, so another user could open it in between and keep the
+  // descriptor.
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-encryption-test-'));
+  const filePath = path.join(tmpDir, 'main.md');
+  const key = crypto.randomBytes(32);
+  const opened = [];
+  const originalOpenSync = fs.openSync;
+  fs.openSync = (target, flags, mode) => {
+    if (typeof target === 'string' && target.startsWith(`${filePath}.tmp`)) opened.push({ flags, mode });
+    return originalOpenSync(target, flags, mode);
+  };
+  const oldUmask = process.umask(0);
+  try {
+    writeStateFile(filePath, 'secret', key);
+    assert.deepStrictEqual(opened, [{ flags: 'wx', mode: 0o600 }], 'one exclusive open, private from the first byte');
+    if (process.platform !== 'win32') assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o600);
+    assert.strictEqual(readStateFile(filePath, key), 'secret');
+  } finally {
+    process.umask(oldUmask);
+    fs.openSync = originalOpenSync;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 })) passed++; else failed++;
