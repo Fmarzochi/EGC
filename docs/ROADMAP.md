@@ -34,6 +34,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The memory server waits for a store lock held at startup instead of exiting: the busy timeout is set before the switch to WAL, so two tools starting together on a fresh machine both come up (#1526).
 - Project memory is written only into regular files inside the project: a context file or a tool folder that is a link, a Windows junction included, is left as it is by the memory server and the session hooks, and the files beside it are written as before (#1528).
 - A decision the user asks to remember goes to `update_state` and comes back through `get_state`; `store_decision` stays the searchable decision history, every protocol copy and `egc-context` mirror carries the same route, and the cognitive protocol moves to v8 so installs in place receive it (#1531 by @Akisolu, closes #1524).
+- A command handed to tmux, screen, ssh, docker exec or kubectl exec is judged as the command it is (#1575).
 - A lesson is stored and handed back as data: `lesson_save` refuses text that reads as an instruction to the model in any of its fields, the way `store_decision` and `update_state` do, and `lesson_recall` and `lesson_reinforce` hand back such a stored field as the blocked marker, never as its text (#1533).
 - A new OpenCode session opens with the project memory again: the restore starts a Node found on an absolute `PATH` entry when OpenCode runs the plugin inside its own runtime, instead of looking `node` up in the project folder (#1530 by @Akisolu, closes #1529).
 - An inline `mcp_servers` array no longer breaks a TOML config on install: the registrar removes an empty one before appending, leaves a non-empty one untouched, and, where the TOML parser is installed, writes only when the result keeps everything else in the file unchanged (#1521 by @Rishindra1430, part of #1497).
@@ -59,7 +60,6 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A command whose name comes from a variable the command fixes is judged by the name it resolves to; opaque sources fail closed, the environment stays advisory (#1559).
 - A command word that comes from an expansion is judged by every value it can take, in the command and in the scripts it runs; a value the hook cannot read fails closed (#1560).
 - A `${...}` expansion closes where bash closes it, past nested expansions and substitutions, and a comment ends at its newline whatever quote or backslash it holds (#1561).
-- A command handed to tmux, screen, ssh, docker exec or kubectl exec is judged as the command it is (#1575).
 - The fact-forcing gate reads `taskset -p` and `chrt -p` as acting on a running process, so the words after them are never taken for a command (#1563).
 - Encrypted state and compressed observations are written through a temp file that is exclusive and 0600 from its creation (#1564).
 - A memory write that meets another process's lock waits its backoff without holding up the writes behind it (#1567).
