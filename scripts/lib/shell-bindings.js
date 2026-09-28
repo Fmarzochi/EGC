@@ -247,19 +247,31 @@ const PARAMETER_OPERATORS = {
   ':?': value => (value === '' ? [] : [value]),
   '?': value => [value],
 };
-const PARAMETER_RE = /^([A-Za-z_]\w*)(?:(:?[-=+?])(.*))?$/s;
+const PARAMETER_RE = /^([A-Za-z_]\w*|\d+|[@*#])(?:(:?[-=+?])(.*))?$/s;
+const POSITIONAL_NAME_RE = /^(?:\d+|[@*#])$/;
+
+// A positional parameter, from the words a script was given when the caller
+// knows them (`positional`: `zero`, the script, and `words`): $1 and on (one
+// past the last is empty), $# their count, and $@ and $* the whole list,
+// marked `list`. Null values when the caller does not know them.
+function positionalValues(name, positional) {
+  if (positional === null) return { values: null };
+  if (name === '@' || name === '*') return { values: [positional.words], list: name };
+  if (name === '#') return { values: [String(positional.words.length)] };
+  const index = Number(name);
+  return { values: [index === 0 ? positional.zero : positional.words[index - 1] ?? ''] };
+}
 
 // The values a `${...}` expansion can take: a plain reference, or one with a
 // default, alternative or error operator and a literal word.
-function parameterValues(inner, lookup) {
+function parameterValues(inner, lookup, positional) {
   const match = PARAMETER_RE.exec(inner);
-  if (!match) return null;
+  if (!match) return { values: null };
   const [, name, operator, word] = match;
-  const values = lookup(name);
-  if (values === null) return null;
-  if (operator === undefined) return values;
-  if (/[$`'"\\]/.test(word)) return null;
-  return [...new Set(values.flatMap(value => PARAMETER_OPERATORS[operator](value, word)))];
+  const found = POSITIONAL_NAME_RE.test(name) ? positionalValues(name, positional) : { values: lookup(name) };
+  if (found.values === null || operator === undefined) return found;
+  if (found.list || /[$`'"\\]/.test(word)) return { values: null };
+  return { values: [...new Set(found.values.flatMap(value => PARAMETER_OPERATORS[operator](value, word)))] };
 }
 
 // A command substitution's values: the program a lookup names, or null.
@@ -270,7 +282,7 @@ function substitutionValues(body) {
 
 // One expansion of the word starting at `at` (a `$` or a backquote): its
 // values, or null when the hook cannot read them, and where it ends.
-function expansionAt(raw, at, lookup) {
+function expansionAt(raw, at, lookup, positional) {
   if (raw[at] === '`') {
     const end = raw.indexOf('`', at + 1);
     if (end === -1) return { values: null, end: raw.length };
@@ -285,11 +297,18 @@ function expansionAt(raw, at, lookup) {
   if (next === '{') {
     const end = closingIndex(raw, at + 2, '{', '}');
     if (end === -1) return { values: null, end: raw.length };
-    return { values: parameterValues(raw.slice(at + 2, end), lookup), end: end + 1 };
+    return { ...parameterValues(raw.slice(at + 2, end), lookup, positional), end: end + 1 };
   }
+  return plainExpansionAt(raw, at, lookup, positional);
+}
+
+// $NAME, a positional or special parameter, or a lone $ that is text.
+function plainExpansionAt(raw, at, lookup, positional) {
+  const next = raw[at + 1];
   const name = /^[A-Za-z_]\w*/.exec(raw.slice(at + 1))?.[0];
   if (name) return { values: lookup(name), end: at + 1 + name.length };
-  if (next !== undefined && /[\d@*#?$!'"-]/.test(next)) return { values: null, end: at + 2 };
+  if (next !== undefined && /[\d@*#]/.test(next)) return { ...positionalValues(next, positional), end: at + 2 };
+  if (next !== undefined && /[?$!'"-]/.test(next)) return { values: null, end: at + 2 };
   return { literal: '$', end: at + 1 };
 }
 
@@ -327,10 +346,10 @@ function wordStep(raw, i, state, lookup) {
     state.text += ch;
     return i + 1;
   }
-  const expansion = expansionAt(raw, i, lookup);
+  const expansion = expansionAt(raw, i, lookup, state.positional);
   if (expansion.literal === undefined) {
     flushText(state);
-    state.parts.push({ values: expansion.values, literal: false, quoted: state.quoted });
+    state.parts.push({ values: expansion.values, literal: false, quoted: state.quoted, list: expansion.list });
   } else {
     state.text += expansion.literal;
   }
@@ -340,8 +359,8 @@ function wordStep(raw, i, state, lookup) {
 // The word split into literal text and expansions, each expansion marked
 // quoted when it sits inside double quotes (the shell neither splits nor
 // drops it there).
-function wordParts(raw, lookup) {
-  const state = { parts: [], quoted: false, text: '' };
+function wordParts(raw, lookup, positional) {
+  const state = { parts: [], quoted: false, text: '', positional };
   let i = 0;
   while (i < raw.length) i = wordStep(raw, i, state, lookup);
   flushText(state);
@@ -350,10 +369,12 @@ function wordParts(raw, lookup) {
 
 // The fields one combination of values makes: an unquoted expansion is split
 // on blanks, and a word that comes out empty with no quotes in it is dropped.
+// A quoted "$@" gives each of its words a field of its own (none when it has
+// none, quotes and all); "$*" joins them with a blank into one.
 function fieldsOf(parts, pick, hasQuotes) {
   const fields = [];
   let current = '';
-  let started = hasQuotes;
+  let started = hasQuotes && !parts.some(part => part.list === '@' && part.quoted);
   const push = () => {
     if (current !== '' || started) fields.push(current);
     current = '';
@@ -361,12 +382,21 @@ function fieldsOf(parts, pick, hasQuotes) {
   };
   parts.forEach((part, index) => {
     const value = pick[index];
+    if (part.list === '@' && part.quoted) {
+      value.forEach((word, at) => {
+        if (at > 0) push();
+        current += word;
+        started = true;
+      });
+      return;
+    }
+    const text = part.list ? value.join(' ') : value;
     if (part.literal || part.quoted) {
-      current += value;
+      current += text;
       started = started || part.quoted;
       return;
     }
-    value.split(IFS_WHITESPACE).forEach((piece, at) => {
+    text.split(IFS_WHITESPACE).forEach((piece, at) => {
       if (at > 0) push();
       current += piece;
     });
@@ -401,15 +431,17 @@ function keepsLiteralName(parts) {
  * list of fields the word turns into (none when it vanishes); `{ keep }` when
  * only its literal last path component names the program; `{ unknown }` with
  * a reason otherwise. `ifsBound` says the command sets IFS, which decides how
- * an unquoted expansion splits.
+ * an unquoted expansion splits and how "$*" joins. `positional` holds the
+ * words a script was given (see positionalValues); without it $1, $@, $* and
+ * $# cannot be read.
  */
-function commandWordChoices(raw, lookup, ifsBound = false) {
-  const { parts, hasQuotes } = wordParts(raw, lookup);
+function commandWordChoices(raw, lookup, ifsBound = false, positional = null) {
+  const { parts, hasQuotes } = wordParts(raw, lookup, positional);
   if (parts.some(part => part.values === null)) {
     return keepsLiteralName(parts) ? { keep: true } : { unknown: 'its value cannot be read by this hook' };
   }
   const unquoted = parts.filter(part => !part.literal && !part.quoted);
-  if (unquoted.length > 0 && ifsBound) return { unknown: 'the command sets IFS, which decides how it splits' };
+  if (ifsBound && (unquoted.length > 0 || parts.some(part => part.list === '*'))) return { unknown: 'the command sets IFS, which decides how it splits' };
   if (unquoted.some(part => part.values.some(value => /[*?[]/.test(value)))) {
     return { unknown: 'it can expand to a pattern the shell matches against file names' };
   }

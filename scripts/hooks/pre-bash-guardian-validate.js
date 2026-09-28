@@ -501,7 +501,7 @@ function interpreterOperands(words, cwdUnknown = null) {
   // itself; readOperand reads it like `bash file` when it is a shell script.
   // One the line has not made yet (a build's output) need not be there.
   const direct = !isShellVar && !SHELL_INTERPRETERS.has(name);
-  if (direct && /[\\/]/.test(head.value)) return found([{ ...head, script: true, direct: true, optional: true }]);
+  if (direct && /[\\/]/.test(head.value)) return found([{ ...head, script: true, direct: true, optional: true, args: scriptArguments(words.slice(index + 1)) }]);
   if (direct) return found([]);
 
   const shell = !head.value.startsWith('$') || isShellVar;
@@ -548,10 +548,28 @@ function interpreterScriptOperands(words, shell) {
     }
     if (consumedAsOptionValue(word, state)) continue;
     if (!state.literal && word.value === '--') state.literal = true;
-    else if (state.literal || !/^[-+]/.test(word.value)) operands.push({ ...word, script: shell && !state.noexec && !state.command && operands.length === 0, noRun: state.noexec });
+    else if (state.literal || !/^[-+]/.test(word.value)) operands.push(interpreterOperand(words, i, state, shell && operands.length === 0));
     else noteShellOption(word.value, state);
   }
   return operands;
+}
+
+// The operand at `i`; the first one, `first`, is the script the shell runs,
+// and every word after it is that script's $1 and on.
+function interpreterOperand(words, i, state, first) {
+  const script = first && !state.noexec && !state.command;
+  return { ...words[i], script, noRun: state.noexec, args: script ? scriptArguments(words.slice(i + 1)) : undefined };
+}
+
+// The words a script is run with, its $1 and on: those after its name,
+// redirections and their targets left out.
+function scriptArguments(words) {
+  const args = [];
+  for (let i = 0; i < words.length; i += 1) {
+    if (!words[i].redirect) args.push(words[i]);
+    else if (takesTarget(words[i].value)) i += 1;
+  }
+  return args;
 }
 
 // What one of the shell's options tells: -n or --noexec, -c, or an option
@@ -703,7 +721,7 @@ function commandWordVariants(segment, context, round) {
   const cmd = words[skipEnvAndWrappers(words)];
   if (!cmd?.expands || cmd.start === undefined) return { segments: [segment] };
   const raw = segment.slice(cmd.start, cmd.end);
-  const outcome = commandWordChoices(raw, context.lookup, context.ifsBound);
+  const outcome = commandWordChoices(raw, context.lookup, context.ifsBound, context.positional);
   if (outcome.keep) return { segments: [segment] };
   if (outcome.unknown) {
     return { blocked: `the command name comes from ${raw}, which the command sets from a source this hook cannot read or which only the shell knows when it runs (${outcome.unknown}); run it by its real name, or quote the expansion when only a literal file name follows it` };
@@ -722,10 +740,11 @@ function commandWordVariants(segment, context, round) {
 
 const NESTED_TOO_DEEP = 'a command it runs nests command/process substitutions deeper than this validator can safely unwrap and analyze';
 
-function resolveCommandWords(segments, bindings, unknownFails) {
+function resolveCommandWords(segments, bindings, unknownFails, positional = null) {
   const context = {
     lookup: name => valuesOf(bindings, name, process.env),
     ifsBound: bindings.ifs,
+    positional,
   };
   const resolved = [];
   for (const segment of segments) {
@@ -1044,7 +1063,7 @@ function readOperands(found, dirs, context) {
     for (const { root, base } of places) {
       const read = readOperand(target, context, root, base);
       if (read?.blocked) return { files, blocked: read.blocked };
-      if (read) files.push({ file: read.file, base });
+      if (read) files.push({ file: read.file, base, args: target.args });
     }
   }
   return { files, blocked: null };
@@ -1366,8 +1385,8 @@ function scriptSegmentsOf(segments, cwd, depth, seen, context) {
     const operands = scriptOperandsOf(segment, where.dirs, here);
     if (operands.blocked) return outcome(operands.blocked);
     let sourcedChangesHome = false;
-    for (const { file, base } of operands.files) {
-      const found = fileSegmentsOf(file, { ...operands, base }, depth, seen, here);
+    for (const { file, base, args } of operands.files) {
+      const found = fileSegmentsOf(file, { ...operands, base, args }, depth, seen, here);
       collected.push(...found.segments);
       committed.push(...found.committed);
       if (found.blocked) return outcome(found.blocked);
@@ -1379,6 +1398,55 @@ function scriptSegmentsOf(segments, cwd, depth, seen, context) {
     where = afterMove(where, name, args, word => cdTargetsOf(word, { ...here, homeKnown }));
   }
   return outcome(null);
+}
+
+// The positional parameters a script gets from the words it is run with
+// (see commandWordChoices), when this hook can read them all as written.
+// Null otherwise: a word the shell expands, a script sourced without words
+// of its own (it shares its caller's), and one that can move or reset them
+// (shift, set, and eval or source, which may run either with code this hook
+// does not read here) or defines a function, whose $1 and on are its own.
+function scriptPositional(operands, file, segments, homeKnown) {
+  const { args } = operands;
+  if (!Array.isArray(args) || (operands.sources && args.length === 0)) return null;
+  if (segments.some(changesPositionals)) return null;
+  const words = positionalWords(args, homeKnown);
+  return words === null ? null : { zero: file, words };
+}
+
+// The values of the words a script is run with, a leading ~ already the
+// home directory, as the shell running the line hands them over; null when
+// one of them only that shell can read.
+function positionalWords(args, homeKnown) {
+  const words = [];
+  for (const word of args) {
+    if (!literalWords([{ ...word, tilde: false }])) return null;
+    const value = word.tilde ? expandedOperandValue(word, homeKnown) : word.value;
+    if (value === null) return null;
+    words.push(value);
+  }
+  return words;
+}
+
+const FUNCTION_DEFINITION_RE = /^\s*(?:function\s+\S|[\w.:-]+\s*\(\s*\))/;
+const POSITIONAL_CHANGERS = new Set(['shift', 'eval', 'source', '.']);
+
+function changesPositionals(segment) {
+  if (FUNCTION_DEFINITION_RE.test(segment)) return true;
+  const { name, args } = commandOf(segment);
+  if (POSITIONAL_CHANGERS.has(name)) return true;
+  return name === 'set' && setsPositionals(args.map(word => word.value));
+}
+
+// Whether set's words give the script new positional parameters: `--`, or
+// any word that is no option (the name after an o, as in -o or -euo, is the
+// option's).
+function setsPositionals(values) {
+  for (let i = 0; i < values.length; i += 1) {
+    if (values[i] === '--' || !/^[-+]./.test(values[i])) return true;
+    if (/^[-+][A-Za-z]*o$/.test(values[i])) i += 1;
+  }
+  return false;
 }
 
 // The segments one script file brings, its own and those of the scripts it
@@ -1394,7 +1462,8 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
   // unless the script is committed, where only the grave denials apply.
   const ownBindings = bindingsOfSegments(nested.segments);
   const bindings = mergeBindings(context.bindings, ownBindings);
-  const words = resolveCommandWords(nested.segments, bindings, !committedFile);
+  const positional = scriptPositional(operands, file, nested.segments, context.homeKnown);
+  const words = resolveCommandWords(nested.segments, bindings, !committedFile, positional);
   if (words.blocked) return { segments: [], own: [], committed: [], blocked: `script ${file}: ${words.blocked}` };
   const reread = secondReadings(nested.text, bindings, !committedFile);
   if (reread.blocked) return { segments: [], own: [], committed: [], blocked: `script ${file}: ${reread.blocked}` };
