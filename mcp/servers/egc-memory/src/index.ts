@@ -900,7 +900,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "claim_path",
-        description: "Cooperatively lock a path on the session bus before editing it. Fail-fast: if another live session holds the lock the claim is refused and the holder is returned; coordinate or pick another territory instead of retrying in a loop. Locks expire after ttl_seconds (default 900, max 3600) and die with their session.",
+        description: "Cooperatively lock a path on the session bus before editing it. Fail-fast: if another live session holds the lock the claim is refused and the holder is returned; coordinate or pick another territory instead of retrying in a loop. A lock on a folder covers everything under it, so a claim above or inside a path another session holds is refused too, and a relative path is read from this session's project. Locks expire after ttl_seconds (default 900, max 3600) and die with their session.",
         inputSchema: {
           type: "object",
           properties: {
@@ -1547,6 +1547,9 @@ async function handleClaimPath(db: Database, toolArgs: unknown) {
     await busSweepDead(db);
     return busClaimPath(db, { sessionId, path: args.path, ttlSeconds: args.ttl_seconds });
   });
+  if (!result.ok && result.reason) {
+    return { content: [{ type: "text", text: `Claim REFUSED: ${result.reason}.` }] };
+  }
   if (!result.ok) {
     const holderNote = territoryNote(result.holderTerritory);
     return { content: [{ type: "text", text: `Claim REFUSED: ${args.path} is locked by live session ${result.holder}${holderNote}.\nCoordinate with that session or work elsewhere; do not retry in a loop.` }] };

@@ -3,6 +3,9 @@ import os from 'node:os';
 import fs from 'node:fs';
 import { readParallelOption } from './parallel-options.js';
 import { LOCAL_WRAPPER_SPECS } from './local-wrappers.js';
+import { RUNNER_SPECS, type RunnerSpec } from './runner-wrappers.js';
+
+export { RUNNER_SPECS } from './runner-wrappers.js';
 
 // Trust level tiers
 export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git'];
@@ -64,7 +67,8 @@ function readDenial(reason: string, trustLevel: ValidationResult['trust_level'] 
 // misses every glued form, which the underlying interpreters all accept.
 // Interpreters whose single-dash options are long words (-NonInteractive,
 // -Command): a letter inside one of those is not a combined short flag.
-const NO_SHORT_FLAG_CLUSTERS = new Set(['pwsh', 'powershell', 'powershell.exe']);
+const POWERSHELL_NAMES = new Set(['pwsh', 'powershell', 'powershell.exe', 'pwsh.exe']);
+const NO_SHORT_FLAG_CLUSTERS = POWERSHELL_NAMES;
 const SHORT_FLAG_CLUSTER = /^-[A-Za-z]+$/;
 
 // `arg` is the lowercased token the exact and glued comparisons always used;
@@ -86,14 +90,63 @@ function matchesEvalFlag(arg: string, flags: string[], casedArg: string | null):
   return false;
 }
 
+// PowerShell reads a parameter from any prefix of its name, given with -,
+// -- or /, its value glued on after a colon: -Command, -EncodedCommand (and
+// its aliases -e and -ec) and -CommandWithArgs (-cwa) run the code they
+// carry. -ExecutionPolicy (-ex) and -ConfigurationName (-con) do not.
+function isPowerShellEvalFlag(word: string): boolean {
+  const match = /^(?:--?|\/)([a-z]+)(?::|$)/i.exec(word);
+  if (!match) return false;
+  const name = match[1].toLowerCase();
+  if (name === 'e' || name === 'ec' || name === 'cwa') return true;
+  return 'command'.startsWith(name) || (name.length >= 2 && 'encodedcommand'.startsWith(name)) || (name.length > 7 && 'commandwithargs'.startsWith(name));
+}
+
+// php's options that run code, by case (-e only turns on debug information):
+// alone, with the code glued on, or last in a group of short options.
+const PHP_CODE_FLAGS = ['r', 'B', 'R', 'E'];
+const PHP_CODE_LONG_FLAGS = ['--process-begin', '--process-code', '--process-end'];
+
+function isPhpCodeFlag(word: string): boolean {
+  if (word.startsWith('--')) return PHP_CODE_LONG_FLAGS.some(flag => word === flag || word.startsWith(`${flag}=`));
+  return /^-[a-zA-Z]/.test(word) && PHP_CODE_FLAGS.some(flag => word[1] === flag || (SHORT_FLAG_CLUSTER.test(word) && word.includes(flag)));
+}
+
+// A subcommand of an interpreter that runs the code given to it, and the
+// options before it that take the next word as their value.
+const EVAL_SUBCOMMANDS: Record<string, string> = { deno: 'eval' };
+const EVAL_SUBCOMMAND_VALUE_OPTIONS: Record<string, Set<string>> = {
+  deno: new Set(['-c', '--config', '-L', '--log-level', '--import-map', '--lock', '--cert', '--location', '--seed']),
+};
+
+// The first word that is neither an option nor an option's value.
+function subcommandOf(evalName: string, words: string[]): string | undefined {
+  const valueOptions = EVAL_SUBCOMMAND_VALUE_OPTIONS[evalName];
+  for (let i = 0; i < words.length; i += 1) {
+    if (!words[i].startsWith('-')) return words[i];
+    if (valueOptions?.has(words[i])) i += 1;
+  }
+  return undefined;
+}
+
+function runsGivenCode(evalName: string, args: string[]): boolean {
+  const words = args.map(stripQuotes);
+  if (POWERSHELL_NAMES.has(evalName) && words.some(isPowerShellEvalFlag)) return true;
+  if (evalName === 'php' && words.some(isPhpCodeFlag)) return true;
+  const subcommand = EVAL_SUBCOMMANDS[evalName];
+  return subcommand !== undefined && subcommandOf(evalName, words) === subcommand;
+}
+
 function inlineEvalVerdict(baseCommand: string, args: string[]): ValidationResult | null {
   const evalName = INLINE_EVAL_COMMANDS[baseCommand] ? baseCommand : bareInterpreterName(baseCommand);
-  const evalFlags = INLINE_EVAL_COMMANDS[evalName];
+  // PowerShell's parameters are read by name (isPowerShellEvalFlag): a glued
+  // short-flag match would take -ConfigurationName for -c.
+  const evalFlags = POWERSHELL_NAMES.has(evalName) ? undefined : INLINE_EVAL_COMMANDS[evalName];
   const clusters = !NO_SHORT_FLAG_CLUSTERS.has(evalName);
   const abbreviates = ABBREVIATING_EVAL_COMMANDS.has(evalName);
   const isEvalFlag = (a: string, flags: string[]): boolean =>
     matchesEvalFlag(bareToken(a), flags, clusters ? stripQuotes(a) : null) || (abbreviates && abbreviatesEvalFlag(bareToken(a), flags));
-  if (evalFlags && args.some(a => isEvalFlag(a, evalFlags))) {
+  if ((evalFlags && args.some(a => isEvalFlag(a, evalFlags))) || runsGivenCode(evalName, args)) {
     const denial: ValidationResult = {
       allowed: false,
       reason: `inline code execution via '${baseCommand}' eval flag is forbidden — write the code to a file and run it instead`,
@@ -175,6 +228,14 @@ function bareToken(a: string): string {
 // misidentifying the real wrapped command.
 function stripQuotes(a: string): string {
   return a.replaceAll('\\', '').replaceAll(/["']/g, '');
+}
+
+// The name a command word runs by: its file name, without quotes, in lower
+// case and without a Windows executable extension, so rm.exe, RM and
+// /usr/bin/rm are all rm (Windows and a default macOS disk find a program
+// whatever the case, and Windows runs it with or without its extension).
+export function commandName(word: string): string {
+  return path.basename(bareToken(word)).replace(/\.(?:exe|cmd|bat|com)$/, '');
 }
 
 function stripEnclosingQuotes(s: string): string {
@@ -577,10 +638,68 @@ function sgRunsCommand(current: string[]): boolean {
   return k < words.length;
 }
 
+// A runner's options from `from`, up to the first operand or past `--`.
+function readRunnerOptions(values: string[], from: number, spec: RunnerSpec): { names: string[]; end: number } {
+  const names: string[] = [];
+  let i = from;
+  while (i < values.length && values[i].startsWith('-') && values[i] !== '-') {
+    if (values[i] === '--') return { names, end: i + 1 };
+    const option = readWrapperOption(values[i], spec);
+    names.push(...option.names);
+    i += option.width;
+  }
+  return { names, end: i };
+}
+
+// Where the command a runner runs starts among `values` (the runner first,
+// quotes stripped), and the option that hands it to a shell as one string
+// instead; null when the runner runs no command here (`uv pip install`,
+// `pnpm install`).
+export function runnerCommandStart(values: string[]): { start: number; shellFlag: string | null } | null {
+  const spec = RUNNER_SPECS[commandName(values[0] ?? '')];
+  if (!spec) return null;
+  const first = readRunnerOptions(values, 1, spec);
+  let names = first.names;
+  let start = first.end;
+  if (spec.subcommands) {
+    const subcommandAt = (at: number) => spec.subcommands?.find(words => words.every((word, k) => values[at + k] === word));
+    let match = subcommandAt(start);
+    // An option the table does not know may take a value (`npm --loglevel
+    // info exec`): a word after an option that is not a subcommand is read
+    // as its value, and the options go on.
+    while (!match && start > 1 && start < values.length && values[start - 1].startsWith('-')) {
+      const more = readRunnerOptions(values, start + 1, spec);
+      names = [...names, ...more.names];
+      start = more.end;
+      match = subcommandAt(start);
+    }
+    if (!match) return null;
+    const after = start + match.length;
+    if (spec.keepsSubcommand?.includes(match.at(-1) ?? '')) return { start: after - 1, shellFlag: null };
+    const again = readRunnerOptions(values, after, spec);
+    names = [...names, ...again.names];
+    start = again.end;
+  }
+  const shellFlag = names.find(name => spec.shellFlags?.has(name)) ?? null;
+  return start < values.length || shellFlag !== null ? { start, shellFlag } : null;
+}
+
+// The command a runner runs is judged as if typed; only its denial stands,
+// so a runner of something harmless keeps its own standing (`npx tsc`).
+function runnerVerdict(tokens: string[], cwd?: string): ValidationResult | null {
+  const runner = runnerCommandStart(tokens.map(stripQuotes));
+  if (runner === null) return null;
+  if (runner.shellFlag !== null) {
+    return { allowed: false, reason: `'${bareToken(tokens[0])} ${runner.shellFlag}' runs its value through a shell and is forbidden`, trust_level: 'DANGEROUS' };
+  }
+  const verdict = validateCommandVerdict(tokens.slice(runner.start).join(' '), cwd);
+  return verdict.allowed || verdict.advisory ? null : verdict;
+}
+
 // Unwraps a known wrapper command (sudo, timeout, xargs, ...), skipping its
 // flags and any mandatory leading positionals to reach the wrapped command.
 function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
-  const head = bareToken(current[0]);
+  const head = commandName(current[0]);
   if (head === 'sg' && sgRunsCommand(current)) {
     return forbiddenCommandString(`'sg' runs its command through a shell and is forbidden`);
   }
@@ -668,7 +787,7 @@ function tryUnwrapShellKeyword(current: string[]): UnwrapStep | null {
 const EGC_EXECUTOR_SUBCOMMANDS = new Set(['run', 'verify']);
 
 function tryUnwrapEgcExecutor(current: string[]): UnwrapStep | null {
-  if (path.basename(bareToken(current[0])) !== 'egc') return null;
+  if (commandName(current[0]) !== 'egc') return null;
   let i = 1;
   while (i < current.length && bareToken(current[i]).startsWith('-')) i += 1;
   if (!EGC_EXECUTOR_SUBCOMMANDS.has(bareToken(current[i] ?? ''))) return null;
@@ -947,7 +1066,7 @@ function destructiveVerdict(baseCommand: string, args: string[]): ValidationResu
   }
   if (i >= args.length) return null;
   // prisma@5.x and ./node_modules/.bin/prisma both resolve to prisma.
-  let inner = path.basename(bareToken(args[i]));
+  let inner = commandName(args[i]);
   if (!inner.startsWith('@')) inner = inner.split('@')[0];
   const innerCheck = DESTRUCTIVE_CLI_CHECKS[inner];
   return innerCheck ? innerCheck(args.slice(i + 1)) : null;
@@ -962,6 +1081,8 @@ const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
   perl: ['-e', '-E'],
   ruby: ['-e'],
   php: ['-r'],
+  bun: ['-e', '--eval', '-p', '--print'],
+  deno: ['--eval'],
   bash: ['-c'],
   sh: ['-c'],
   zsh: ['-c'],
@@ -2497,7 +2618,10 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // strips quotes/backslashes so `"rm"`, 'rm', and \rm all resolve the same
   // as a bare rm — without it, a quoted or escaped base command slips past
   // every check below and falls through to the advisory allowlist-miss path.
-  const baseCommand = path.basename(bareToken(tokens[0]));
+  const runnerDenial = runnerVerdict(tokens, cwd);
+  if (runnerDenial) return runnerDenial;
+
+  const baseCommand = commandName(tokens[0]);
   // The checks below read each argument as the word the shell hands the
   // command (the brace expansions already made above), so a flag or a path
   // written between quotes is the flag or the path it is; the redirection
