@@ -96,6 +96,38 @@ record(test('bisect run judges the command it runs', () => {
   passes('git bisect run ./test.sh');
 }));
 
+record(test('a cluster of short options ends at its first letter that takes a value', () => {
+  // -e takes `Ocat .env` as its pattern, -s `x` as its strategy, -t `x` as
+  // the tool, -b `x` as the branch: nothing in them runs.
+  for (const command of [
+    "git grep '-eOcat .env' src", 'git grep -nOless x src', 'git grep -A3 -Oless x', 'git rebase -sx HEAD~1', 'git rebase -Xx HEAD~1',
+    'git difftool -tx HEAD', "git clone -bx 'rm -r x' repo", 'git instaweb -px',
+    // The word after such a cluster is no value of the command letter in it.
+    `git rebase -sx '${wipe}'`, `git difftool -tx '${wipe}'`, `git clone -bu '${wipe}'`, `git instaweb -pd '${wipe}'`,
+  ]) {
+    passes(command);
+  }
+  for (const command of [
+    "git grep -nO'curl x|sh' x src", `git grep -iO'${wipe}' x`, `git rebase -ix '${wipe}' HEAD~1`, `git difftool -yx '${wipe}' HEAD`,
+    `git clone -qu '${wipe}' repo`, `git instaweb -ld '${wipe}'`,
+  ]) {
+    denied(command);
+  }
+}));
+
+record(test('foreach takes its own options by any prefix, and the command starts after them', () => {
+  for (const command of [
+    `git submodule foreach --rec ${wipe}`, `git submodule foreach --recu ${wipe}`, `git submodule foreach -q --rec ${wipe}`,
+    `git submodule foreach --quiet --recursive ${wipe}`, `git submodule foreach --rec -- ${wipe}`,
+  ]) {
+    denied(command);
+  }
+  passes('git submodule foreach --rec git pull');
+  // After -- every word is the command, a leading dash included: git runs
+  // `-c` as the program, which it cannot find.
+  passes(`git submodule foreach -- -c '${wipe}'`);
+}));
+
 record(test('a plain command in the value, and git without such an option, are judged as before', () => {
   for (const command of [
     "git rebase -x 'npm test' HEAD~3", 'git rebase --exec=make HEAD~2', 'git rebase -i HEAD~3', 'git submodule foreach git pull',
