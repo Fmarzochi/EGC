@@ -147,7 +147,50 @@ function readSedSubstitute(script: string, at: number, refs: ProgramRefs): numbe
 // print or a printf (an output redirection or a pipe). A program that has
 // one is inline code with effects the Guardian cannot follow, as perl -e is;
 // the plain text processing awk is used for passes.
-const AWK_EFFECT_WORDS = /\b(?:system|getline|ARGV)\b|@(?:load|include)\b|@\s*[A-Za-z_]\w*(?:\[[^\]]*\])*\s*\(/;
+const AWK_EFFECT_WORDS = /\b(?:system|getline|ARGV)\b|@(?:load|include)\b/;
+
+// Where a bracket opened at `open` closes, nested brackets and the strings
+// inside them skipped; -1 when it never closes.
+function closingBracket(program: string, open: number): number {
+  let depth = 0;
+  let at = open;
+  while (at < program.length) {
+    const char = program[at];
+    if (char === '"') {
+      at = pastDelimiter(program, at + 1, '"');
+      continue;
+    }
+    if (char === '[') depth++;
+    if (char === ']') {
+      depth--;
+      if (depth === 0) return at + 1;
+    }
+    at++;
+  }
+  return -1;
+}
+
+// Where the array subscripts after a name end (a[i][b[j]]); -1 when one
+// never closes.
+function pastSubscripts(program: string, from: number): number {
+  let at = nextVisible(program, from);
+  while (program[at] === '[') {
+    at = closingBracket(program, at);
+    if (at < 0) return -1;
+    at = nextVisible(program, at);
+  }
+  return at;
+}
+
+// A gawk indirect call, @f(...), read wide: through any subscripts after the
+// name, and an unclosed one counts.
+function hasIndirectCall(program: string): boolean {
+  for (const match of program.matchAll(/@\s*[A-Za-z_]\w*/g)) {
+    const after = pastSubscripts(program, (match.index ?? 0) + match[0].length);
+    if (after < 0 || program[after] === '(') return true;
+  }
+  return false;
+}
 
 function awkRefs(text: string): ProgramRefs {
   // A backslash before a newline continues the line in awk; joined, the
@@ -155,7 +198,7 @@ function awkRefs(text: string): ProgramRefs {
   const program = text.replaceAll(/\\\r?\n/g, '');
   const print = /\bprintf?\b/.exec(program);
   const redirected = print !== null && /[>|]/.test(program.slice(print.index));
-  if (!AWK_EFFECT_WORDS.test(program) && !redirected) return noRefs();
+  if (!AWK_EFFECT_WORDS.test(program) && !redirected && !hasIndirectCall(program)) return noRefs();
   return { files: [], commands: [], opaque: 'runs a command, reads a file or writes one from its program (system(), getline, ARGV, or a print sent to a file or a pipe)' };
 }
 
