@@ -167,8 +167,11 @@ function runTests() {
 
     record(test('a script operand that is a pipe is refused, since its bytes exist only when it is read', () => {
       const fifo = path.join(dir, 'pipe.fifo');
-      if (spawnSync('mkfifo', [fifo]).status !== 0) {
-        console.log('    (skipped: no mkfifo here)');
+      // Windows has no FIFO a program can open by path (the mkfifo Git ships
+      // there exits 0 without making one), so the case runs where one exists.
+      const made = process.platform !== 'win32' && spawnSync('mkfifo', [fifo]).status === 0 && fs.existsSync(fifo) && fs.statSync(fifo).isFIFO();
+      if (!made) {
+        console.log('    [SKIP] no FIFO can be made here');
         return;
       }
       const result = judge('bash pipe.fifo');
