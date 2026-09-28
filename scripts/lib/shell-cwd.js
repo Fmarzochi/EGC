@@ -15,6 +15,7 @@
  * relative path after it.
  */
 
+const fs = require('node:fs');
 const path = require('node:path');
 
 const CWD_CHANGERS = new Set(['cd', 'pushd', 'popd', 'chdir']);
@@ -39,14 +40,40 @@ function moveOperands(args) {
   return operands;
 }
 
+// Whether a cd resolves its target physically: the last of -L and -P among
+// its options decides, and -L (logical) is the default.
+function isPhysicalMove(name, args) {
+  let physical = false;
+  if (name !== 'cd') return false;
+  for (const word of args) {
+    if (!CD_OPTION_RE.test(word.value)) break;
+    for (const letter of word.value) {
+      if (letter === 'P') physical = true;
+      else if (letter === 'L') physical = false;
+    }
+  }
+  return physical;
+}
+
+// Where cd -P lands: symlinks followed before each `..`, as the system does,
+// instead of `..` removing the name before it. A target that is not there
+// keeps the plain resolution; the cd fails and the line stays anyway.
+function physicalPath(dir, target) {
+  try {
+    return fs.realpathSync.native(path.isAbsolute(target) ? target : `${dir}${path.sep}${target}`);
+  } catch {
+    return path.resolve(dir, target);
+  }
+}
+
 function unknownAfter(state, reason) {
   return { ...state, unknown: reason };
 }
 
 // `state` with `targets` added: each resolved against each directory the
 // line could be in. Too many to follow is unknown.
-function movedTo(state, targets, name) {
-  const moved = state.dirs.flatMap(dir => targets.map(target => path.resolve(dir, target)));
+function movedTo(state, targets, name, physical = false) {
+  const moved = state.dirs.flatMap(dir => targets.map(target => (physical ? physicalPath(dir, target) : path.resolve(dir, target))));
   const dirs = [...new Set([...state.dirs, ...moved])];
   if (dirs.length > MAX_DIRS) return unknownAfter(state, `${name} moves through more directories than this hook follows`);
   return { ...state, dirs, previous: state.dirs, stack: name === 'pushd' ? [...state.stack, state.dirs] : state.stack };
@@ -83,7 +110,7 @@ function afterMove(state, name, args, targetsOf) {
   const expanded = targets.filter(target => target !== word?.value);
   if (expanded.length > 0 && targets.every(target => target === '-')) return returned(state, name, spelled);
   if (expanded.some(target => /^[-+]/.test(target))) return unknownAfter(state, `${spelled} expands to an option, which moves where only the running shell knows`);
-  return movedTo(state, targets, name);
+  return movedTo(state, targets, name, isPhysicalMove(name, args));
 }
 
 // cd - returns to where the last move of this line started.

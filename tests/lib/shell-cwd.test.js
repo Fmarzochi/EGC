@@ -58,6 +58,33 @@ function runTests() {
     assert.deepStrictEqual(through('cd sub --').dirs, [root], '-- after the operand is a second operand');
   }));
 
+  record(test('cd -P follows a symlink before its .., as the system does, and cd -L or plain cd reads .. by name', () => {
+    const fs = require('fs');
+    const os = require('os');
+    const top = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-cd-physical-')));
+    try {
+      fs.mkdirSync(path.join(top, 'real', 'sub'), { recursive: true });
+      try {
+        fs.symlinkSync(path.join(top, 'real', 'sub'), path.join(top, 'link'), 'dir');
+      } catch {
+        console.log('    - skipped: this system does not let the test create a symlink');
+        return;
+      }
+      const at = (...lines) => lines.reduce((state, line) => {
+        const [name, ...args] = line.split(' ');
+        return afterMove(state, name, words(...args), word => [word.value]);
+      }, startCwd(top));
+      assert.ok(at('cd -P link/..').dirs.includes(path.join(top, 'real')), 'the parent of the linked directory');
+      assert.ok(at('cd -LP link/..').dirs.includes(path.join(top, 'real')), 'the last of -L and -P decides');
+      assert.ok(at('cd -P link', 'cd ..').dirs.includes(path.join(top, 'real')), 'a later .. starts from the physical directory');
+      assert.ok(!at('cd link/..').dirs.includes(path.join(top, 'real')), 'plain cd reads .. by name');
+      assert.ok(!at('cd -PL link/..').dirs.includes(path.join(top, 'real')), '-L after -P is logical');
+      assert.ok(at('cd -P missing').dirs.includes(path.join(top, 'missing')), 'a target that is not there keeps the plain resolution');
+    } finally {
+      fs.rmSync(top, { recursive: true, force: true });
+    }
+  }));
+
   record(test('a target that expands to - is cd -, and one that expands to an option is unknown', () => {
     const expandsTo = values => word => (word?.value === '$X' ? values : literal(word));
     const moveX = (state, name, values) => afterMove(state, name, words('$X'), expandsTo(values));
