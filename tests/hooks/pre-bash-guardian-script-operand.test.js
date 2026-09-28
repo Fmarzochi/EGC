@@ -758,10 +758,11 @@ function runTests() {
         '. ./dots-mover.sh && bash fine.sh',
         'X=-; cd "$X" && bash fine.sh',
         'X=-P; cd "$X" && bash fine.sh',
+        'ln -sfn /tmp/egc-elsewhere link && cd -P link/.. && bash fine.sh',
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
-        assert.ok(/moves to a directory only known|directory stack|rotates a stack|returns to a directory only|sources moves the directory|expands to an option/.test(result.stderr), `${command}: ${result.stderr}`);
+        assert.ok(/moves to a directory only known|directory stack|rotates a stack|returns to a directory only|sources moves the directory|expands to an option|earlier command on this line may change/.test(result.stderr), `${command}: ${result.stderr}`);
       }
       for (const command of [
         'cd moved && bash fine.sh',
