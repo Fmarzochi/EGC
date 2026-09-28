@@ -158,6 +158,17 @@ run('npm reads -p as --parseable, which takes no value, and npx reads it as --pa
   assert.ok(!hard('npm -p ls'), 'npm -p ls runs no command');
 });
 
+run('a runner\'s subcommand is found past an option the table does not know and its value', () => {
+  for (const command of [`npm --loglevel info exec -- ${wipe}`, `npm --foo bar --baz qux exec ${wipe}`, `pnpm --workspace-concurrency 1 dlx ${wipe}`, `uv --native-tls x run ${wipe}`, `npm --yes exec ${wipe}`]) {
+    assert.ok(hard(command), command);
+  }
+  for (const line of ['npm --loglevel info exec -- ls', 'npm --foo bar --baz qux exec ls', 'npm --loglevel info install', 'npm install --save x']) {
+    assert.deepStrictEqual(lib.runnerCommandStart(line.split(' ')), runnerCommandStart(line.split(' ')), line);
+  }
+  assert.strictEqual(runnerCommandStart('npm --loglevel info install x'.split(' ')), null, 'no subcommand that runs a command');
+  assert.ok(!hard('npm --loglevel info install x'));
+});
+
 run('deno eval is found past the values of the options before it', () => {
   for (const command of ["deno --config deno.json eval 'x'", "deno -c deno.json eval 'x'", "deno -L debug eval 'x'", "deno --lock l.json --quiet eval 'x'", "deno --cert c.pem eval 'x'"]) {
     assert.ok(hard(command), command);

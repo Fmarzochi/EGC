@@ -330,15 +330,15 @@ function readRunnerOptions(values, from, spec) {
   return { names, end: i };
 }
 
-// Where the command a runner runs starts among `values` (the runner first),
-// and the option that hands it to a shell as one string instead; null when
-// the runner runs no command here (`uv pip install`, `pnpm install`).
 // The name a command word runs by, as the validator reads it (commandName):
 // its file name, in lower case and without a Windows executable extension.
 function commandName(word) {
   return String(word ?? '').split(/[\\/]/).pop().toLowerCase().replace(/\.(?:exe|cmd|bat|com)$/, '');
 }
 
+// Where the command a runner runs starts among `values` (the runner first),
+// and the option that hands it to a shell as one string instead; null when
+// the runner runs no command here (`uv pip install`, `pnpm install`).
 function runnerCommandStart(values) {
   const spec = RUNNER_SPECS[commandName(values[0])];
   if (!spec) return null;
@@ -346,7 +346,17 @@ function runnerCommandStart(values) {
   let names = first.names;
   let start = first.end;
   if (spec.subcommands) {
-    const match = spec.subcommands.find(words => words.every((word, k) => values[start + k] === word));
+    const subcommandAt = at => spec.subcommands.find(words => words.every((word, k) => values[at + k] === word));
+    let match = subcommandAt(start);
+    // An option the table does not know may take a value (`npm --loglevel
+    // info exec`): a word after an option that is not a subcommand is read
+    // as its value, and the options go on.
+    while (!match && start > 1 && start < values.length && values[start - 1].startsWith('-')) {
+      const more = readRunnerOptions(values, start + 1, spec);
+      names = [...names, ...more.names];
+      start = more.end;
+      match = subcommandAt(start);
+    }
     if (!match) return null;
     const after = start + match.length;
     if (spec.keepsSubcommand?.includes(match.at(-1))) return { start: after - 1, shellFlag: null };

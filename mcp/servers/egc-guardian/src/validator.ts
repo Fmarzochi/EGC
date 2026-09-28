@@ -662,7 +662,17 @@ export function runnerCommandStart(values: string[]): { start: number; shellFlag
   let names = first.names;
   let start = first.end;
   if (spec.subcommands) {
-    const match = spec.subcommands.find(words => words.every((word, k) => values[start + k] === word));
+    const subcommandAt = (at: number) => spec.subcommands?.find(words => words.every((word, k) => values[at + k] === word));
+    let match = subcommandAt(start);
+    // An option the table does not know may take a value (`npm --loglevel
+    // info exec`): a word after an option that is not a subcommand is read
+    // as its value, and the options go on.
+    while (!match && start > 1 && start < values.length && values[start - 1].startsWith('-')) {
+      const more = readRunnerOptions(values, start + 1, spec);
+      names = [...names, ...more.names];
+      start = more.end;
+      match = subcommandAt(start);
+    }
     if (!match) return null;
     const after = start + match.length;
     if (spec.keepsSubcommand?.includes(match.at(-1) ?? '')) return { start: after - 1, shellFlag: null };
