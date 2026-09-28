@@ -758,7 +758,7 @@ function runTests() {
         '. ./dots-mover.sh && bash fine.sh',
         'X=-; cd "$X" && bash fine.sh',
         'X=-P; cd "$X" && bash fine.sh',
-        'ln -sfn /tmp/egc-elsewhere link && cd -P link/.. && bash fine.sh',
+        `ln -sfn ${JSON.stringify(path.join(dir, 'moved', 'deeper'))} link && cd -P link/.. && bash fine.sh`,
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
