@@ -31,7 +31,7 @@ const { spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
-const { splitShellSegments, extractSubstitutionBodies } = require('../lib/shell-split');
+const { splitShellSegments, extractSubstitutionBodies, constructEnd } = require('../lib/shell-split');
 const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption } = require('../lib/wrapper-options');
 const { collectBindings, mergeBindings, valuesOf, commandWordChoices, quoteField, singleQuoted } = require('../lib/shell-bindings');
 const { startCwd, afterMove, CWD_CHANGERS } = require('../lib/shell-cwd');
@@ -1205,24 +1205,96 @@ function continuationLength(text, at) {
   return text[at + 1] === '\r' && text[at + 2] === '\n' ? 3 : 0;
 }
 
+// A `#` opening a word starts a comment; the caller asks only outside quotes
+// and outside ${...}.
+function opensComment(out, ch) {
+  return ch === '#' && (out === '' || /[\s;&|(]/.test(out.at(-1)));
+}
+
+// A backslash-newline outside single quotes is a line continuation and is
+// dropped; inside a comment it is comment text, and the newline still ends
+// the comment, as bash reads it.
+// A command body (`$(...)`, backquotes, and outside double quotes `<(...)`
+// and `>(...)`) is copied as written: bash reads its comments, and so its
+// line continuations, as a command of its own, and extractSegments joins it
+// when it reads that body in turn.
+function commandBodyEnd(text, i, double) {
+  if (text[i] === '$' && text[i + 1] === '{') return null;
+  if (double && text[i] !== '`' && !(text[i] === '$' && text[i + 1] === '(')) return null;
+  return constructEnd(text, i);
+}
+
+// `state.open` holds the quotes and ${...} expansions open around the
+// character, innermost last: a `"` inside a ${...} opens a string of its
+// own, even when that ${...} sits in double quotes, as bash reads it.
 function joinContinuations(text) {
-  let out = '';
-  let single = false;
-  let double = false;
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    if (ch === '\\' && !single) {
-      // A continuation is dropped; any other escape is kept with its character.
-      const skip = continuationLength(text, i);
-      if (skip === 0) out += text.slice(i, i + 2);
-      i += skip === 0 ? 1 : skip - 1;
-      continue;
-    }
-    if (ch === '"' && !single) double = !double;
-    else if (ch === "'" && !double) single = !single;
-    out += ch;
+  const state = { out: '', single: false, open: [], comment: false };
+  let i = 0;
+  while (i < text.length) i = joinStep(text, i, state);
+  return state.out;
+}
+
+// Reads the character at `i` into `state.out`; the index to read next.
+function joinStep(text, i, state) {
+  const ch = text[i];
+  if (state.comment) {
+    state.comment = ch !== '\n';
+    state.out += ch;
+    return i + 1;
   }
-  return out;
+  const double = state.open.includes('"');
+  const body = state.single ? null : commandBodyEnd(text, i, double);
+  if (body !== null) {
+    const end = body === -1 ? text.length : body + 1;
+    state.out += text.slice(i, end);
+    return end;
+  }
+  if (state.single) {
+    state.single = ch !== "'";
+    state.out += ch;
+    return i + 1;
+  }
+  if (state.open.length === 0) state.comment = opensComment(state.out, ch);
+  if (ch === '\\') return escapeStep(text, i, state);
+  return quoteStep(text, i, state, double);
+}
+
+// A quote, a `${` or its `}`, or any other character outside single quotes.
+// `$'...'` is copied whole: its escapes are its own, an escaped quote too.
+function quoteStep(text, i, state, double) {
+  const ch = text[i];
+  if (ch === '$' && text[i + 1] === "'" && !double) {
+    const end = constructEndOfAnsi(text, i);
+    state.out += text.slice(i, end);
+    return end;
+  }
+  if (ch === '$' && text[i + 1] === '{') {
+    state.open.push('{');
+    state.out += '${';
+    return i + 2;
+  }
+  const inner = state.open.at(-1);
+  if (ch === '}' && inner === '{') state.open.pop();
+  else if (ch === '"' && inner === '"') state.open.pop();
+  else if (ch === '"') state.open.push('"');
+  else if (ch === "'" && !double) state.single = true;
+  state.out += ch;
+  return i + 1;
+}
+
+// Index past the `$'...'` opening at `i`.
+function constructEndOfAnsi(text, i) {
+  let j = i + 2;
+  while (j < text.length && text[j] !== "'") j += text[j] === '\\' ? 2 : 1;
+  return Math.min(j + 1, text.length);
+}
+
+// A continuation is dropped; any other escape is kept with its character.
+function escapeStep(text, i, state) {
+  const skip = continuationLength(text, i);
+  if (skip > 0) return i + skip;
+  state.out += text.slice(i, i + 2);
+  return i + 2;
 }
 
 

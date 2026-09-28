@@ -69,9 +69,25 @@ test('escaped double quote inside double quotes', () => {
   const segs = splitShellSegments('echo "hello \\"world\\"" && echo bye');
   assert.strictEqual(segs.length, 2);
 });
-test('escaped single quote inside single quotes', () => {
-  const segs = splitShellSegments("echo 'hello \\'world\\'' && echo bye");
-  assert.strictEqual(segs.length, 2);
+// A backslash is literal inside single quotes: `'a\'` closes at the quote
+// after it, so the `&&` after it is live (checked against bash; the old
+// form `'hello \'world\''` leaves a quote open, and bash refuses it).
+test('a backslash inside single quotes escapes nothing, so the quote closes after it', () => {
+  assert.deepStrictEqual(splitShellSegments("echo 'a\\' && echo bye"), ["echo 'a\\'", 'echo bye']);
+  assert.deepStrictEqual(splitShellSegments("echo 'hello \\'world\\'' && echo bye"), ["echo 'hello \\'world\\'' && echo bye"]);
+});
+test("$'...' reads its backslash escapes, an escaped quote included", () => {
+  assert.deepStrictEqual(splitShellSegments("echo $'a\\'b' && echo bye"), ["echo $'a\\'b'", 'echo bye']);
+});
+test('inside double quotes <( and >( are plain text, so a separator after the string still splits', () => {
+  assert.deepStrictEqual(splitShellSegments('echo "<(foo"; rm -rf /'), ['echo "<(foo"', 'rm -rf /']);
+  assert.deepStrictEqual(splitShellSegments('echo ">(x"; rm -rf /'), ['echo ">(x"', 'rm -rf /']);
+});
+test('a double-quoted string holds a ${...} with quotes of its own whole', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo "${x:-"a # b"}"; rm -rf /', { splitOnPipe: true, stripComments: true }),
+    ['echo "${x:-"a # b"}"', 'rm -rf /'],
+  );
 });
 
 // Escaped operators outside quotes
@@ -312,6 +328,68 @@ test('stripComments does not change a line that has no comment', () => {
 });
 test('extractSubstitutionBodies still finds a $(...) after a # inside ${...} (the # there is not a comment)', () => {
   assert.deepStrictEqual(extractSubstitutionBodies('echo ${x:-a #} $(id)'), ['id']);
+});
+
+// A `}` inside a command substitution or a backquoted command nested in
+// ${...} does not close the expansion (checked against bash), so a # after
+// it is still inside the expansion and the separator after is live.
+test('a } inside $(...) or backquotes nested in ${...} does not close the expansion', () => {
+  for (const nested of ['$(echo })', '`echo }`', '$((1+2))', '${y}']) {
+    assert.deepStrictEqual(
+      splitShellSegments(`true \${x:-${nested} #}; rm -rf /`, { splitOnPipe: true, stripComments: true }),
+      [`true \${x:-${nested} #}`, 'rm -rf /'],
+      nested,
+    );
+  }
+});
+
+// A comment is inert up to its newline: a quote or a backslash inside it
+// opens nothing (checked against bash), so the next line is its own command.
+test('a quote or a trailing backslash inside a comment does not reach past its newline', () => {
+  assert.deepStrictEqual(splitShellSegments("ls # it's\nrm -rf /", { stripComments: true }), ['ls', 'rm -rf /']);
+  assert.deepStrictEqual(splitShellSegments('true # note \\\nrm -rf /', { stripComments: true }), ['true', 'rm -rf /']);
+  assert.deepStrictEqual(splitShellSegments('ls # say "hi\nrm -rf /'), ['ls # say "hi', 'rm -rf /']);
+  assert.deepStrictEqual(extractSubstitutionBodies("ls # it's\necho $(rm -rf /)"), ['rm -rf /']);
+});
+
+// A command body is read the way bash reads it: a `)` inside a backquoted
+// command or inside a comment of that body does not close it, and a `}`
+// inside a process substitution does not close a `${...}` around it
+// (checked against bash).
+test('a ) inside backquotes or a comment of a command body, and a } in a process substitution, close nothing early', () => {
+  for (const nested of ['$(echo `echo )`)', '<(echo })', '>(true })']) {
+    assert.deepStrictEqual(
+      splitShellSegments(`true \${x:-${nested} #}; rm -rf /`, { splitOnPipe: true, stripComments: true }),
+      [`true \${x:-${nested} #}`, 'rm -rf /'],
+      nested,
+    );
+  }
+  assert.deepStrictEqual(extractSubstitutionBodies('echo $(echo `echo )`; rm -rf /)'), ['echo `echo )`; rm -rf /']);
+  assert.deepStrictEqual(extractSubstitutionBodies('echo $(echo a # )\nrm -rf /)'), ['echo a # )\nrm -rf /']);
+});
+
+test('constructEnd finds where a construct closes, null where none opens, -1 where it never closes', () => {
+  const { constructEnd } = require('../../scripts/lib/shell-split');
+  assert.strictEqual(constructEnd('$(a "b)" c)', 0), 10);
+  assert.strictEqual(constructEnd('${x:-${y}}', 0), 9);
+  assert.strictEqual(constructEnd("$(a $'\\')' b)", 0), 12);
+  assert.strictEqual(constructEnd('`a \\` b`', 0), 7);
+  assert.strictEqual(constructEnd('echo', 0), null);
+  assert.strictEqual(constructEnd('$(a # b)', 0), -1, 'the comment runs past the ) to the end of the line');
+  assert.strictEqual(constructEnd('${x', 0), -1);
+});
+
+test('extractSubstitutionBodies reads a $(...) with a } in it whole inside ${...}, so a later substitution there is still found', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies(': ${x:-$(echo }) # $(rm -rf /)}'), ['echo }', 'rm -rf /']);
+});
+
+test('stripComments keeps a mid-word #, a # glued after $(...) and a # in a heredoc body', () => {
+  assert.deepStrictEqual(splitShellSegments('echo foo#bar # c', { stripComments: true }), ['echo foo#bar']);
+  assert.deepStrictEqual(splitShellSegments('echo $(date)#tag # c', { stripComments: true }), ['echo $(date)#tag']);
+  assert.deepStrictEqual(
+    splitShellSegments('cat <<EOF\n# body\nEOF\necho done', { stripComments: true }),
+    ['cat <<EOF\n# body\nEOF', 'echo done'],
+  );
 });
 
 // Cubic review (EGC-539, PR #1147): the first comment-detection fix above
