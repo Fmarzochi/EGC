@@ -210,6 +210,8 @@ function runTests() {
       fs.rmSync(path.join(root, '.git'), { recursive: true });
       fs.writeFileSync(path.join(root, '.git'), 'gitdir: /elsewhere\n');
       assert.strictEqual(installPreCommitHook(root), 'skipped');
+      assert.deepStrictEqual(fs.readdirSync(root), ['.git'], 'nothing is written beside the .git file');
+      assert.strictEqual(fs.readFileSync(path.join(root, '.git'), 'utf8'), 'gitdir: /elsewhere\n');
     });
   }));
 

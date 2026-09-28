@@ -169,12 +169,15 @@ Write-Host "EGC install"
 # gate here would let 18/19 reach the better-sqlite3 build and the
 # TypeScript build steps below.
 try {
-    $nodeVersion = (node --version).TrimStart('v').Split('.')[0]
+    # The last line node prints is its version, even when a wrapper prints
+    # something before it.
+    $nodeVersionText = "$(node --version | Select-Object -Last 1)".Trim()
+    $nodeVersion = $nodeVersionText.TrimStart('v').Split('.')[0]
     if ([int]$nodeVersion -lt 20) {
-        Write-Error "Node.js >= 20 is required (found: $(node --version))"
+        Write-Error "Node.js >= 20 is required (found: $nodeVersionText)"
         exit 1
     }
-    Write-Host "  node $(node --version)"
+    Write-Host "  node $nodeVersionText"
 } catch {
     Write-Error "Node.js not found. Install from https://nodejs.org"
     exit 1

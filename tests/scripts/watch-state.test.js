@@ -138,6 +138,7 @@ async function runTests() {
               cleanup(dir);
               resolve();
             } catch (err) {
+              clearTimeout(guard);
               watcher.stop();
               cleanup(dir);
               reject(err);
@@ -196,6 +197,7 @@ async function runTests() {
               cleanup(dir);
               resolve();
             } catch (err) {
+              clearTimeout(guard);
               watcher.stop();
               cleanup(dir);
               reject(err);

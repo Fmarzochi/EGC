@@ -120,6 +120,7 @@ denied('git config --file ~/.bashrc a.b --get', WRITE);
 denied('git config set --file ~/.bashrc a.b c', WRITE);
 denied('git config --file .git/config user.name x', WRITE);
 denied('git config -zf .git/config core.hooksPath /opt/evil');
+denied('git config -zf .git/config user.name x', WRITE);
 allowed('git config --file ~/.bashrc --get a.b');
 allowed('git config --file ~/.gitconfig --get user.name');
 allowed('git config get --file ~/.gitconfig user.name');
