@@ -30,7 +30,7 @@ function handleDoubleOperator(ch, next, current, segments) {
 
 function handleSingleAmpersand(ch, next, prev, current, segments) {
   if (ch !== '&') return { handled: false };
-  if (next === '>' || prev === '>') {
+  if (next === '>' || prev === '>' || prev === '<') {
     return { current: current + ch, handled: true };
   }
   pushSegment(current, segments);
