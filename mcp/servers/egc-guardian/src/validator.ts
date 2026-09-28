@@ -546,7 +546,7 @@ function programValueDenied(text: string, alone: boolean): boolean {
 // is protected, a config home for the git command it prefixes, less options
 // that run a command, or a pager or an editor that is inline code, a script
 // named by its path or a program handed an argument. null when it is free.
-function envValueDenial(name: string, value: string, command?: string): string | null {
+function envValueDenial(name: string, value: string, command: string | undefined, persists: boolean): string | null {
   const upper = name.toUpperCase();
   const text = stripQuotes(value);
   if (GIT_PATH_ENV_VAR_RE.test(upper) && isProtectedPath(text)) {
@@ -555,10 +555,10 @@ function envValueDenial(name: string, value: string, command?: string): string |
   if (REPOSITORY_ENV_VARS.has(upper) && !GIT_DIRECTORY_RE.test(text)) {
     return `'${name}' points git at ${text}, a repository whose config this line can choose, which is forbidden: name a .git directory`;
   }
-  // Without a command (export, a bare assignment) it holds for the git
+  // When it persists (export, a bare assignment) it holds for the git
   // commands later on the line; git's own programs (git-upload-pack) read
-  // the same config.
-  if (CONFIG_HOME_ENV_VARS.has(upper) && (command === undefined || CONFIG_HOME_COMMANDS.has(command) || command.startsWith('git-'))) {
+  // the same config; a wrapper (env, nice) passes it to the git it runs.
+  if (CONFIG_HOME_ENV_VARS.has(upper) && (persists || command === 'git' || CONFIG_HOME_COMMANDS.has(command ?? '') || (command ?? '').startsWith('git-'))) {
     return `'${name}' points git or gpg at a config this line chooses, which can name commands they run, and is forbidden`;
   }
   if (upper === 'LESS' && LESS_COMMAND_RE.test(text)) {
@@ -578,16 +578,32 @@ const CODE_INJECTION_ENV_VARS = new Set([
   'VIMINIT', 'EXINIT', 'GVIMINIT', 'VIM', 'VIMRUNTIME', 'EMACSLOADPATH',
 ]);
 
+// The command a line runs once its known wrappers (env, nice, nohup, sudo,
+// timeout, ...) are peeled off, so a config home that reaches git or gpg
+// through one of them is judged as a direct call is. undefined when nothing
+// but wrappers is left.
+function commandThroughWrappers(tokens: string[]): string | undefined {
+  let current = tokens;
+  for (let depth = 0; depth < 16 && current.length > 0; depth += 1) {
+    const head = commandName(current[0]);
+    const spec = WRAPPER_SPECS[head];
+    if (!spec) return head;
+    const { end } = readWrapperOptions(current, spec);
+    current = current.slice(end + (spec.leadingPositionals ?? 0));
+  }
+  return current.length > 0 ? commandName(current[0]) : undefined;
+}
+
 // The block a `VAR=value` or `export VAR=value` gets, if any; `command` is
 // the command the assignment prefixes, when there is one.
-function envAssignmentBlock(name: string, value: string, verb: string, command?: string): ValidationResultLike | null {
+function envAssignmentBlock(name: string, value: string, verb: string, command: string | undefined, persists: boolean): ValidationResultLike | null {
   if (isDangerousEnvVarName(name)) {
     return { allowed: false, reason: `${verb} '${name}' persists a git execution/config override and is forbidden`, trust_level: 'DANGEROUS' };
   }
   if (CODE_INJECTION_ENV_VARS.has(name.toUpperCase())) {
     return { allowed: false, reason: `${verb} '${name}' makes the next program run code this line chooses before its own (a startup script or a library), which is forbidden`, trust_level: 'DANGEROUS' };
   }
-  const reason = envValueDenial(name, value, command);
+  const reason = envValueDenial(name, value, command, persists);
   return reason ? { allowed: false, reason, trust_level: 'DANGEROUS' } : null;
 }
 
@@ -621,9 +637,11 @@ interface UnwrapStep {
 function tryUnwrapEnvAssignment(current: string[]): UnwrapStep | null {
   const envMatch = ENV_ASSIGNMENT_RE.exec(current[0]);
   if (!envMatch) return null;
-  const commandWord = current.find(token => !ENV_ASSIGNMENT_RE.test(token));
-  const command = commandWord === undefined ? undefined : commandName(stripQuotes(commandWord));
-  const blocked = envAssignmentBlock(envMatch[1], current[0].slice(envMatch[0].length), 'setting', command);
+  let start = 0;
+  while (start < current.length && ENV_ASSIGNMENT_RE.test(current[start])) start += 1;
+  const rest = current.slice(start);
+  const command = commandThroughWrappers(rest);
+  const blocked = envAssignmentBlock(envMatch[1], current[0].slice(envMatch[0].length), 'setting', command, rest.length === 0);
   return blocked ? { blocked } : { remaining: current.slice(1) };
 }
 
@@ -649,7 +667,7 @@ function tryUnwrapExport(current: string[]): UnwrapStep | null {
   const exportMatch = idx < current.length ? ENV_ASSIGNMENT_RE.exec(current[idx]) : null;
   if (!exportMatch) return null;
 
-  const blocked = envAssignmentBlock(exportMatch[1], current[idx].slice(exportMatch[0].length), 'exporting');
+  const blocked = envAssignmentBlock(exportMatch[1], current[idx].slice(exportMatch[0].length), 'exporting', undefined, true);
   return blocked ? { blocked } : { remaining: current.slice(idx + 1) };
 }
 

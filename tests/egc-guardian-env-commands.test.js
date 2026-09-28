@@ -144,5 +144,17 @@ denied('HOME=/tmp/evil gpg --sign f');
 denied('export GNUPGHOME=/tmp/evil');
 notDenied('GNUPGHOME=/tmp/x npm test');
 
+console.log('\n=== A config home that reaches git or gpg through a wrapper ===\n');
+denied('HOME=/tmp/evil env git fetch');
+denied('HOME=/tmp/evil nice git fetch');
+denied('HOME=/tmp/evil nohup git fetch');
+denied('HOME=/tmp/evil timeout 5 git fetch');
+denied('GNUPGHOME=/tmp/evil env gpg --sign f');
+denied('HOME=/tmp/evil env -- git fetch');
+denied('HOME=/tmp/evil env -u FOO git fetch');
+notDenied('HOME=/tmp/x env node app.js');
+notDenied('HOME=/tmp/x nice npm install');
+notDenied('HOME=/tmp/x env');
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
