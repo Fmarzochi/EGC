@@ -35,6 +35,7 @@ const { splitShellSegments, extractSubstitutionBodies, constructEnd } = require(
 const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption } = require('../lib/wrapper-options');
 const { handoffCommandsOf } = require('../lib/handoff-commands');
 const { collectBindings, mergeBindings, valuesOf, commandWordChoices, quoteField, singleQuoted } = require('../lib/shell-bindings');
+const { startCwd, afterMove, CWD_CHANGERS } = require('../lib/shell-cwd');
 
 const MAX_STDIN = 1024 * 1024;
 const DEFAULT_VALIDATE_TIMEOUT_MS = 4000;
@@ -505,24 +506,35 @@ function consumedAsOptionValue(word, state) {
   return true;
 }
 
+// A short option cluster that carries -c: the shell runs its first operand
+// as code rather than a script file.
+function isCommandStringFlag(value) {
+  return /^-[A-Za-z]+$/.test(value) && value.includes('c');
+}
+
 // The operands after the interpreter's options: the first is the script the
 // shell reads (unless -n or -o noexec keeps it from running), the rest its
-// arguments.
+// arguments. Under -c no operand is the script: the first is the code the
+// shell runs, read with the command line (inlineShellCodeOf), and the words
+// after it are its $0, $1 and on.
 function interpreterScriptOperands(words, shell) {
   const operands = [];
-  const state = { literal: false, awaiting: null, noexec: false };
+  const state = { literal: false, awaiting: null, noexec: false, command: false };
   for (const word of words) {
     if (consumedAsOptionValue(word, state)) continue;
-    if (!state.literal && word.value === '--') {
-      state.literal = true;
-    } else if (state.literal || !/^[-+]/.test(word.value)) {
-      operands.push({ ...word, script: shell && !state.noexec && operands.length === 0, noRun: state.noexec });
-    } else {
-      if (isNoexecFlag(word.value)) state.noexec = true;
-      state.awaiting = SHELL_VALUE_OPTIONS.has(word.value) ? word.value : null;
-    }
+    if (!state.literal && word.value === '--') state.literal = true;
+    else if (state.literal || !/^[-+]/.test(word.value)) operands.push({ ...word, script: shell && !state.noexec && !state.command && operands.length === 0, noRun: state.noexec });
+    else noteShellOption(word.value, state);
   }
   return operands;
+}
+
+// What one of the shell's options tells: -n or --noexec, -c, or an option
+// whose value is the next word.
+function noteShellOption(value, state) {
+  if (isNoexecFlag(value)) state.noexec = true;
+  if (isCommandStringFlag(value)) state.command = true;
+  state.awaiting = SHELL_VALUE_OPTIONS.has(value) ? value : null;
 }
 
 
@@ -672,6 +684,8 @@ function commandWordVariants(segment, context, round) {
   return { segments: [...new Set(variants)] };
 }
 
+const NESTED_TOO_DEEP = 'a command it runs nests command/process substitutions deeper than this validator can safely unwrap and analyze';
+
 function resolveCommandWords(segments, bindings, unknownFails) {
   const context = {
     lookup: name => valuesOf(bindings, name, process.env),
@@ -679,11 +693,32 @@ function resolveCommandWords(segments, bindings, unknownFails) {
   };
   const resolved = [];
   for (const segment of segments) {
-    const outcome = commandWordVariants(segment, context, 0);
-    if (outcome.blocked && unknownFails) return { blocked: outcome.blocked };
-    resolved.push(...new Set([segment, ...(outcome.segments ?? [])]));
+    const outcome = segmentWithVariants(segment, context, unknownFails, 0);
+    if (outcome.blocked) return outcome;
+    resolved.push(...outcome.segments);
   }
   return { segments: resolved };
+}
+
+// A segment with every value its command word takes, and the code each
+// resolved one runs through a shell's -c or eval (`S=sh; $S -c '...'` runs
+// that code as `sh -c` does), resolved in turn.
+function segmentWithVariants(segment, context, unknownFails, depth) {
+  const outcome = commandWordVariants(segment, context, 0);
+  if (outcome.blocked && unknownFails) return { blocked: outcome.blocked };
+  const found = [segment];
+  for (const variant of outcome.segments ?? []) {
+    if (variant === segment) continue;
+    const stage = segmentsOfStage(variant, depth);
+    if (stage === null) return { blocked: NESTED_TOO_DEEP };
+    found.push(variant);
+    for (const code of stage.slice(1)) {
+      const inner = segmentWithVariants(code, context, unknownFails, depth + 1);
+      if (inner.blocked) return inner;
+      found.push(...inner.segments);
+    }
+  }
+  return { segments: [...new Set(found)] };
 }
 
 // A script operand that is exactly one resolvable variable, spread to the
@@ -784,23 +819,31 @@ function commandWrites(words, add) {
   else if (name === 'dd') add(args.find(arg => arg.startsWith('of='))?.slice(3));
 }
 
-function scriptOperandsOf(segment, cwd, context) {
-  const files = [];
+// The scripts a segment runs, looked for in every directory the line can be
+// in at that point (`dirs`), each with the directory it then runs from.
+function scriptOperandsOf(segment, dirs, context) {
   const found = interpreterOperands(shellWords(segment), context.cwdUnknown);
-  const { root, base } = operandBases(found, cwd || process.cwd());
-  const outcome = (blocked) => ({ files, blocked, base, sources: found.sources, cwdUnknown: found.cwdUnknown });
+  const outcome = (blocked, files = []) => ({ files, blocked, sources: found.sources, cwdUnknown: found.cwdUnknown });
   if (found.unsure) return outcome('a wrapper path uses byte escapes that cannot be resolved faithfully');
   if (found.unresolved && found.operands.length > 0) return outcome(found.unresolved);
   // A directory that cannot be known leaves an absolute path resolvable.
   if (found.cwdUnknown && found.operands.some(operand => !path.isAbsolute(operand.value))) return outcome(found.cwdUnknown);
-  for (const word of found.operands) {
-    for (const target of expandScriptVar(word, context)) {
+  const read = readOperands(found, dirs, context);
+  return outcome(read.blocked, read.files);
+}
+
+// The script files the operands name in each directory the line can be in.
+function readOperands(found, dirs, context) {
+  const places = dirs.map(dir => operandBases(found, dir));
+  const files = [];
+  for (const target of found.operands.flatMap(word => expandScriptVar(word, context))) {
+    for (const { root, base } of places) {
       const read = readOperand(target, context, root, base);
-      if (read?.blocked) return outcome(read.blocked);
-      if (read) files.push(read.file);
+      if (read?.blocked) return { files, blocked: read.blocked };
+      if (read) files.push({ file: read.file, base });
     }
   }
-  return outcome(null);
+  return { files, blocked: null };
 }
 
 // One operand of an interpreter: the script file it names, the reason it
@@ -814,7 +857,9 @@ function readOperand(word, context, root, base) {
   // script itself cannot be found before it runs.
   if (value === null) return word.script ? { blocked: `operand ${word.value} is expanded by the shell when it runs and cannot be inspected` } : null;
   const candidate = operandPath(value, root, base);
-  // A script the command writes before it runs is not the file read here.
+  // A script the command writes is not the file read here, wherever the
+  // write sits on the line: a loop, a function called later, a background
+  // job or a pipeline can run the script after a write written after it.
   if (word.script && candidate !== null && (context.written.bulk || context.written.paths.has(candidate))) {
     return { blocked: `script ${word.value} may be written by this command before it runs, so what runs is not what was read; run it in a command of its own` };
   }
@@ -930,14 +975,52 @@ function commandContext(segments, cwd, bindings) {
   };
 }
 
-// Commands that move the working directory somewhere the hook does not
-// follow, so a relative operand after them resolves against the wrong base.
-const CWD_CHANGERS = new Set(['cd', 'pushd', 'popd', 'chdir']);
-
-function changesCwd(segment) {
+// The command a segment runs and its arguments, after env assignments and
+// wrappers.
+function commandOf(segment) {
   const words = shellWords(segment);
-  const name = words[skipEnvAndWrappers(words)]?.value.split(/[\\/]/).pop();
-  return CWD_CHANGERS.has(name);
+  const index = skipEnvAndWrappers(words);
+  return { name: words[index]?.value.split(/[\\/]/).pop(), args: words.slice(index + 1) };
+}
+
+// Whether a CDPATH search can decide where a relative cd lands: the
+// environment or the line sets one.
+function cdpathSearched(context) {
+  return Boolean(process.env.CDPATH) || Boolean(context.bindings?.names?.has('CDPATH'));
+}
+
+// The directories a cd target word names (see scripts/lib/shell-cwd.js);
+// null when only the running shell knows them. `word` null is a bare cd,
+// which goes home.
+function cdTargetsOf(word, context) {
+  if (word === null) return context.homeKnown ? [os.homedir()] : null;
+  if (word.globbed || word.unsure) return null;
+  if (word.tilde || word.expands) {
+    const beside = word.expands ? scriptRelative(word.value, context) : null;
+    const value = beside ?? expandedOperandValue(word, context.homeKnown);
+    if (value !== null) return [value];
+    // A variable the line fixes to literal directories names each of them.
+    const probe = { ...word, script: true };
+    const named = expandScriptVar(probe, context);
+    if (named.includes(probe) || named.length === 0 || named.some(target => target.globbed)) return null;
+    return named.map(target => target.value);
+  }
+  const searched = cdpathSearched(context) && !path.isAbsolute(word.value) && !/^\.{0,2}(?:[\\/]|$)/.test(word.value);
+  return searched ? null : [word.value];
+}
+
+// Whether a sourced script, whose own commands run in its caller, has one
+// that `acts` does. A script it sources in turn may bring anything; one it
+// runs with a shell of its own acts only in that shell.
+function actsInCaller(own, acts) {
+  return own.some(segment => acts(segment) || ['source', '.'].includes(commandOf(segment).name));
+}
+
+// Where the line can be after a segment that runs a script it sources: that
+// script's own cd moves the caller too, which this hook does not follow.
+function sourcedMove(where, operands, own) {
+  if (!operands.sources || !actsInCaller(own, segment => CWD_CHANGERS.has(commandOf(segment).name))) return where;
+  return where.unknown ? where : { ...where, unknown: 'a script it sources moves the directory, which this hook does not follow' };
 }
 
 function scriptSegmentsOf(segments, cwd, depth, seen, context) {
@@ -945,21 +1028,23 @@ function scriptSegmentsOf(segments, cwd, depth, seen, context) {
   const committed = [];
   const outcome = blocked => ({ segments: collected, committed, blocked });
   let homeKnown = context.homeKnown;
-  let cwdKnown = context.cwdKnown;
+  let where = startCwd(cwd || process.cwd());
   for (const segment of segments) {
-    const here = { ...context, homeKnown, cwdKnown };
-    const operands = scriptOperandsOf(segment, cwd, here);
+    const here = { ...context, homeKnown, cwdKnown: context.cwdKnown && where.dirs.length === 1, cwdUnknown: context.cwdUnknown ?? where.unknown };
+    const operands = scriptOperandsOf(segment, where.dirs, here);
     if (operands.blocked) return outcome(operands.blocked);
     let sourcedChangesHome = false;
-    for (const file of operands.files) {
-      const found = fileSegmentsOf(file, operands, depth, seen, here);
+    for (const { file, base } of operands.files) {
+      const found = fileSegmentsOf(file, { ...operands, base }, depth, seen, here);
       collected.push(...found.segments);
       committed.push(...found.committed);
       if (found.blocked) return outcome(found.blocked);
-      sourcedChangesHome = sourcedChangesHome || (operands.sources && found.segments.some(changesHome));
+      sourcedChangesHome = sourcedChangesHome || (operands.sources && actsInCaller(found.own, changesHome));
+      where = sourcedMove(where, operands, found.own);
     }
     homeKnown = homeKnown && !changesHome(segment) && !sourcedChangesHome;
-    cwdKnown = cwdKnown && !changesCwd(segment);
+    const { name, args } = commandOf(segment);
+    where = afterMove(where, name, args, word => cdTargetsOf(word, { ...here, homeKnown }));
   }
   return outcome(null);
 }
@@ -969,8 +1054,8 @@ function scriptSegmentsOf(segments, cwd, depth, seen, context) {
 // analyzed fails closed whoever runs it: its commands could be anything.
 function fileSegmentsOf(file, operands, depth, seen, context) {
   const nested = nestedSegmentsOf(file, depth, seen);
-  if (nested.blocked) return { segments: [], committed: [], blocked: nested.blocked };
-  if (nested.segments === null) return { segments: [], committed: [], blocked: null };
+  if (nested.blocked) return { segments: [], own: [], committed: [], blocked: nested.blocked };
+  if (nested.segments === null) return { segments: [], own: [], committed: [], blocked: null };
   const committedFile = isCommittedUnchanged(file);
   // A script's command words are judged by every value they can take, from
   // what the script and its caller fix; one the hook cannot read fails closed
@@ -978,7 +1063,7 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
   const ownBindings = bindingsOfSegments(nested.segments);
   const bindings = mergeBindings(context.bindings, ownBindings);
   const words = resolveCommandWords(nested.segments, bindings, !committedFile);
-  if (words.blocked) return { segments: [], committed: [], blocked: `script ${file}: ${words.blocked}` };
+  if (words.blocked) return { segments: [], own: [], committed: [], blocked: `script ${file}: ${words.blocked}` };
   const own = words.segments;
   const mark = committedFile ? { bound: boundAssignments(nested.segments, context.callerSet) } : false;
   // A script the wrapper moved into a directory runs its own children there.
@@ -997,6 +1082,7 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
   });
   return {
     segments: [...own, ...inner.segments],
+    own,
     committed: [...own.map(() => mark), ...inner.committed],
     blocked: inner.blocked,
   };
@@ -1272,21 +1358,14 @@ function inlineShellCodeOf(line) {
 
 // The string a shell's -c runs: its first operand after the options, when
 // one of them is -c, alone or in a cluster such as -ec. The words after it
-// are its $0, $1 and on, read into the code where it names them.
+// are its $0, $1 and on, read into the code where it names them. Under -n
+// or -o noexec the shell only parses the string, so it runs no code.
 function shellCommandString(words) {
-  let runsString = false;
-  let takesValue = false;
+  const state = { awaiting: null, noexec: false, command: false };
   for (const [i, word] of words.entries()) {
-    const value = word.value;
-    if (takesValue) {
-      takesValue = false;
-    } else if (/^-[A-Za-z]+$/.test(value) && value.includes('c')) {
-      runsString = true;
-    } else if (/^[-+]/.test(value)) {
-      takesValue = SHELL_VALUE_OPTIONS.has(value);
-    } else {
-      return runsString ? withPositionals(value, words.slice(i + 1)) : null;
-    }
+    if (consumedAsOptionValue(word, state)) continue;
+    if (!/^[-+]/.test(word.value)) return state.command && !state.noexec ? withPositionals(word.value, words.slice(i + 1)) : null;
+    noteShellOption(word.value, state);
   }
   return null;
 }
