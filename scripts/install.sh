@@ -122,7 +122,9 @@ done
 # Node.js version check. Keep this floor in lockstep with package.json "engines"
 # and scripts/preinstall.js, which both require Node 20; a lower gate here would
 # let 18/19 reach the better-sqlite3 build and the TypeScript build steps below.
-NODE_MAJOR=$(node -e "process.stdout.write(process.versions.node.split('.')[0])" 2>/dev/null || echo "0")
+NODE_VERSION=$(node --version 2>/dev/null || echo "v0")
+NODE_MAJOR=${NODE_VERSION#v}
+NODE_MAJOR=${NODE_MAJOR%%.*}
 if [[ "$NODE_MAJOR" -lt 20 ]]; then
   echo "Error: Node.js >= 20 is required (found: $(node --version 2>/dev/null || echo 'not found'))" >&2
   exit 1
@@ -341,21 +343,10 @@ echo "  registering MCP servers..."
 
 set -e
 
-# Install git pre-commit hook (strips egc:state blocks before commits)
-if [[ -d "$ROOT_DIR/.git" && "$DRY_RUN" = false ]]; then
-  GIT_HOOK="$ROOT_DIR/.git/hooks/pre-commit"
-  STRIP_SCRIPT="$ROOT_DIR/scripts/hooks/git-pre-commit.sh"
-  if [[ ! -f "$GIT_HOOK" ]]; then
-    printf '#!/usr/bin/env bash\nROOT="$(git rev-parse --show-toplevel)"\nbash "$ROOT/scripts/hooks/git-pre-commit.sh"\n' > "$GIT_HOOK"
-    chmod +x "$GIT_HOOK"
-    echo "  ✓ git pre-commit hook installed"
-  elif ! grep -q "git-pre-commit.sh" "$GIT_HOOK" 2>/dev/null; then
-    printf '\nROOT="$(git rev-parse --show-toplevel)"\nbash "$ROOT/scripts/hooks/git-pre-commit.sh"\n' >> "$GIT_HOOK"
-    chmod +x "$GIT_HOOK"
-    echo "  ✓ git pre-commit hook updated"
-  else
-    echo "  ✓ git pre-commit hook already installed"
-  fi
+# Install git pre-commit hook in a clone (strips egc:state blocks before
+# commits), through the helper install.ps1 runs as well.
+if [[ "$DRY_RUN" = false ]]; then
+  node "$ROOT_DIR/scripts/lib/git-pre-commit-install.js"
 fi
 
 # Token Crusher PATH-level binary shim (git, npm, gh, ...). Best-effort: a
