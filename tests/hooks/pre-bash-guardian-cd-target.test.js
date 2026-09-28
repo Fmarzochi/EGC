@@ -49,6 +49,7 @@ function runTests() {
   const abs = path.join(dir, 'abs');
   put(path.join(abs, 'sub', 'danger.sh'), `${wipe}\n`);
   put(path.join(abs, 'sub', 'fine.sh'), 'echo fine\n');
+  put(path.join(dir, 'here.sh'), `${wipe}\n`);
   put(path.join(dir, 'one', 'fine.sh'), 'echo fine\n');
   put(path.join(dir, 'two', 'danger.sh'), `${wipe}\n`);
   put(path.join(dir, 'two', 'fine.sh'), 'echo fine\n');
@@ -65,6 +66,8 @@ function runTests() {
         'D=two; cd $D && ./danger.sh', 'D=one; D=two; cd $D && ./danger.sh', 'if true; then D=one; else D=two; fi; cd $D && ./danger.sh',
         'for D in one two; do cd $D && ./danger.sh; done', 'D=tw; cd ${D}o && ./danger.sh',
         `CDPATH=/nowhere; D=${abs}; cd $D/sub && ./danger.sh`, 'D=; cd $D && ./athome.sh',
+        // A cd with too many operands fails and the line goes on where it was.
+        'D="two one"; cd $D; ./here.sh', 'D="two one"; cd $D; cd two; ./danger.sh',
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
