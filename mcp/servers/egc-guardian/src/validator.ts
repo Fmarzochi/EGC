@@ -1487,21 +1487,37 @@ function readGitConfigCluster(rest: string[], i: number, call: GitConfigCall): n
   return i;
 }
 
+const GIT_CONFIG_LONG_OPTIONS = [...GIT_CONFIG_ACTION_OPTIONS.keys(), ...GIT_CONFIG_SWITCHES, ...GIT_CONFIG_VALUE_OPTIONS];
+
+// The long option a word names, read as git reads it: its exact name, or
+// else the one option its name is a prefix of (`--ren` is
+// --rename-section). null when it names none or several, which git refuses;
+// a value glued on with = counts only for an option that takes one.
+function resolveGitConfigLong(option: string): string | null {
+  const eq = option.indexOf('=');
+  const name = eq < 0 ? option : option.slice(0, eq);
+  const matches = GIT_CONFIG_LONG_OPTIONS.filter(flag => flag.startsWith(name));
+  let full: string | null = null;
+  if (matches.includes(name)) full = name;
+  else if (matches.length === 1) full = matches[0];
+  return full !== null && (eq < 0 || GIT_CONFIG_VALUE_OPTIONS.includes(full)) ? full : null;
+}
+
 // The index of the last word the option at i uses.
 function readGitConfigOption(rest: string[], i: number, call: GitConfigCall): number {
   const option = stripQuotes(rest[i]);
   if (!option.startsWith('--')) return readGitConfigCluster(rest, i, call);
-  const action = GIT_CONFIG_ACTION_OPTIONS.get(option);
+  const valued = resolveGitConfigLong(option);
+  if (valued === null) {
+    call.unsure = true;
+    return i;
+  }
+  const action = GIT_CONFIG_ACTION_OPTIONS.get(valued);
   if (action !== undefined) {
     call.actions.push(action);
     return i;
   }
-  if (GIT_CONFIG_SWITCHES.has(option)) return i;
-  const valued = GIT_CONFIG_VALUE_OPTIONS.find(flag => abbreviates(option, flag));
-  if (valued === undefined) {
-    call.unsure = true;
-    return i;
-  }
+  if (GIT_CONFIG_SWITCHES.has(valued)) return i;
   const glued = option.includes('=');
   const value = glued ? option.slice(option.indexOf('=') + 1) : rest[i + 1];
   if ((valued === '--file' || valued === '--blob') && value !== undefined) call.files.push(stripQuotes(value));
