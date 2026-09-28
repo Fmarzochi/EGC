@@ -553,7 +553,9 @@ function envValueDenial(name: string, value: string, command?: string): string |
   if (REPOSITORY_ENV_VARS.has(upper) && !GIT_DIRECTORY_RE.test(text)) {
     return `'${name}' points git at ${text}, a repository whose config this line can choose, which is forbidden: name a .git directory`;
   }
-  if (CONFIG_HOME_ENV_VARS.has(upper) && command === 'git') {
+  // Without a command (export, a bare assignment) it holds for the git
+  // commands later on the line.
+  if (CONFIG_HOME_ENV_VARS.has(upper) && (command === 'git' || command === undefined)) {
     return `'${name}' points git at a config this line chooses, which can name commands git runs, and is forbidden`;
   }
   if (upper === 'LESS' && LESS_COMMAND_RE.test(text)) {
@@ -565,11 +567,18 @@ function envValueDenial(name: string, value: string, command?: string): string |
   return null;
 }
 
+// Code a shell sources before the script it runs, which the hook never
+// reads, and libraries the loader puts into a program before it starts.
+const CODE_INJECTION_ENV_VARS = new Set(['BASH_ENV', 'ENV', 'LD_PRELOAD', 'LD_AUDIT', 'DYLD_INSERT_LIBRARIES']);
+
 // The block a `VAR=value` or `export VAR=value` gets, if any; `command` is
 // the command the assignment prefixes, when there is one.
 function envAssignmentBlock(name: string, value: string, verb: string, command?: string): ValidationResultLike | null {
   if (isDangerousEnvVarName(name)) {
     return { allowed: false, reason: `${verb} '${name}' persists a git execution/config override and is forbidden`, trust_level: 'DANGEROUS' };
+  }
+  if (CODE_INJECTION_ENV_VARS.has(name.toUpperCase())) {
+    return { allowed: false, reason: `${verb} '${name}' makes the next program run code this line chooses before its own (a startup script or a library), which is forbidden`, trust_level: 'DANGEROUS' };
   }
   const reason = envValueDenial(name, value, command);
   return reason ? { allowed: false, reason, trust_level: 'DANGEROUS' } : null;

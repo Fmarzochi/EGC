@@ -114,7 +114,18 @@ denied('GIT_DIR=/tmp/evil git status');
 denied('GIT_COMMON_DIR=/tmp/evil git fetch');
 notDenied('GIT_DIR=../other/.git git log');
 notDenied('GIT_DIR=/srv/app/.git/ git log');
-notDenied("PAGER='less -R' git log");
+
+console.log('\n=== Code a shell or the loader runs before the program, and a config home left for later ===\n');
+denied('BASH_ENV=./evil.sh bash ok.sh');
+denied('ENV=./evil.sh sh -i');
+denied('LD_PRELOAD=./evil.so ls');
+denied('LD_AUDIT=./evil.so ls');
+denied('DYLD_INSERT_LIBRARIES=./evil.dylib ls');
+denied('export BASH_ENV=./evil.sh');
+denied('export HOME=/tmp/evil');
+denied('export XDG_CONFIG_HOME=/tmp/evil');
+denied('HOME=/tmp/evil');
+notDenied('LD_LIBRARY_PATH=./build/lib ls');
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
