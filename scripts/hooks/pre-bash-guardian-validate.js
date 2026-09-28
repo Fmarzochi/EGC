@@ -379,28 +379,42 @@ function skipLeadingPositionals(words, index, name, moves) {
 // they move to become where later operands are resolved.
 const COMMAND_LOOKUP_FLAGS = new Set(['-v', '-V']);
 
+// Where a wrapper's options end at the word at `index`: past a `--`, at a
+// word that is no option, and at a lone `-` (past it where the wrapper reads
+// it as an option, as env does); -1 while the options go on.
+function optionsEndAt(word, index, name) {
+  if (word === '--') return index + 1;
+  if (!word.startsWith('-')) return index;
+  if (word === '-') return WRAPPER_SPECS[name]?.loneDashIsOption ? index + 1 : index;
+  return -1;
+}
+
+// command -v and -V only say what each name would run: the words after
+// them are names, and nothing runs.
+function runsNothing(name, option) {
+  return name === 'command' && Boolean(option.names?.some(flag => COMMAND_LOOKUP_FLAGS.has(flag)));
+}
+
+// What one wrapper option at `index` tells about where the command runs.
+function noteWrapperOption(name, option, words, index, moves, state) {
+  moves.skipChdir = moves.skipChdir || Boolean(option.names?.includes('--skip-chdir'));
+  moves.login = moves.login || Boolean(option.names?.some(flag => SUDO_LOGIN_FLAGS.has(flag)));
+  noteWrapperMove(name, optionMove(option, words[index].value), option.width === 2 ? words[index + 1] : words[index], moves, state);
+}
+
 function skipWrapperOptions(words, start, name, state) {
   const moves = { root: undefined, dir: undefined, unsure: false, skipChdir: false, login: false };
   if (name === 'bwrap') state.unresolved = BWRAP_VIEW;
   let index = start;
   while (index < words.length) {
-    const word = words[index].value;
-    if (word === '--') {
-      index += 1;
+    const end = optionsEndAt(words[index].value, index, name);
+    if (end >= 0) {
+      index = end;
       break;
     }
-    if (!word.startsWith('-')) break;
-    if (word === '-') {
-      if (WRAPPER_SPECS[name]?.loneDashIsOption) index += 1;
-      break;
-    }
-    const option = readWrapperOption(name, word, words[index + 1]?.value) ?? NO_OPTION;
-    // command -v and -V only say what each name would run: the words after
-    // them are names, and nothing runs.
-    if (name === 'command' && option.names?.some(flag => COMMAND_LOOKUP_FLAGS.has(flag))) return words.length;
-    moves.skipChdir = moves.skipChdir || Boolean(option.names?.includes('--skip-chdir'));
-    moves.login = moves.login || Boolean(option.names?.some(flag => SUDO_LOGIN_FLAGS.has(flag)));
-    noteWrapperMove(name, optionMove(option, word), option.width === 2 ? words[index + 1] : words[index], moves, state);
+    const option = readWrapperOption(name, words[index].value, words[index + 1]?.value) ?? NO_OPTION;
+    if (runsNothing(name, option)) return words.length;
+    noteWrapperOption(name, option, words, index, moves, state);
     index += option.width;
   }
   index = skipLeadingPositionals(words, index, name, moves);

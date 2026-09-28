@@ -2160,26 +2160,29 @@ function checkGitPathArguments(args: string[], subcommandIdx: number, cwd?: stri
 // pages of git 2.51: long names (`--exec=cmd`, `--exec cmd`) and short
 // letters (`-xcmd`, `-x cmd`, or the last letter of a cluster such as -ix);
 // grep's -O takes its value glued only. submodule foreach and bisect run
-// are read apart.
+// are read apart. `valued` holds every short letter of the subcommand that
+// takes a value: a cluster ends at the first of them, so the letters after
+// `-e` in `-eOx` are its pattern, not an -O.
 interface GitCommandOptions {
   long: string[];
   short?: string;
+  valued?: string;
   gluedOnly?: boolean;
 }
 
 const GIT_COMMAND_OPTIONS: Record<string, GitCommandOptions> = {
-  difftool: { long: ['--extcmd'], short: 'x' },
-  rebase: { long: ['--exec'], short: 'x' },
+  difftool: { long: ['--extcmd'], short: 'x', valued: 'tx' },
+  rebase: { long: ['--exec'], short: 'x', valued: 'xsXCS' },
   'filter-branch': { long: ['--env-filter', '--tree-filter', '--index-filter', '--parent-filter', '--msg-filter', '--commit-filter', '--tag-name-filter'] },
   'send-email': { long: ['--sendmail-cmd', '--to-cmd', '--cc-cmd', '--header-cmd'] },
   archive: { long: ['--exec'] },
   fetch: { long: ['--upload-pack'] },
   pull: { long: ['--upload-pack'] },
   'ls-remote': { long: ['--upload-pack', '--exec'] },
-  clone: { long: ['--upload-pack'], short: 'u' },
+  clone: { long: ['--upload-pack'], short: 'u', valued: 'obucj' },
   push: { long: ['--receive-pack', '--exec'] },
-  instaweb: { long: ['--httpd', '--browser'], short: 'db' },
-  grep: { long: ['--open-files-in-pager'], short: 'O', gluedOnly: true },
+  instaweb: { long: ['--httpd', '--browser'], short: 'db', valued: 'dbpm' },
+  grep: { long: ['--open-files-in-pager'], short: 'O', valued: 'efABCmO', gluedOnly: true },
 };
 
 // Shells that read the rest of their input as a script: named alone as the
@@ -2217,12 +2220,15 @@ function longCommandOption(spec: GitCommandOptions, raw: string, word: string, n
 }
 
 // A short option of `spec` in the cluster `raw`: what follows its letter,
-// or the next word when nothing does and the option may take one.
+// or the next word when nothing does and the option may take one. The
+// cluster ends at its first letter that takes a value; when that letter is
+// no command option, the rest of the cluster is its value and runs nothing.
 function shortCommandOption(spec: GitCommandOptions, raw: string, word: string, next: string | undefined): GitCommandOptionRead | null {
   const letters = spec.short;
   if (letters === undefined || !/^-[A-Za-z]/.test(word)) return null;
-  const letterAt = [...word].findIndex((letter, at) => at > 0 && letters.includes(letter));
-  if (letterAt < 0) return null;
+  const valued = spec.valued ?? letters;
+  const letterAt = [...word].findIndex((letter, at) => at > 0 && valued.includes(letter));
+  if (letterAt < 0 || !letters.includes(word[letterAt])) return null;
   const option = `-${word[letterAt]}`;
   const glued = raw.slice(raw.indexOf(word[letterAt], 1) + 1);
   if (glued !== '') return { found: { option, value: glued }, width: 1 };
@@ -2250,7 +2256,9 @@ function submoduleForeachCommand(rest: string[]): GitCommandValue[] {
   while (i < rest.length && stripQuotes(rest[i]).startsWith('-')) i += 1;
   if (stripQuotes(rest[i] ?? '') !== 'foreach') return [];
   i += 1;
-  while (i < rest.length && ['--recursive', '-q', '--quiet'].includes(stripQuotes(rest[i]))) i += 1;
+  // foreach's own options (--recursive, --quiet), which git takes by any
+  // prefix; one it does not know stops it before anything runs.
+  while (i < rest.length && stripQuotes(rest[i]).startsWith('-') && stripQuotes(rest[i]) !== '--') i += 1;
   if (stripQuotes(rest[i] ?? '') === '--') i += 1;
   const words = rest.slice(i);
   return words.length === 0 ? [] : [{ option: 'foreach', value: words.join(' ') }];
