@@ -934,6 +934,10 @@ function runTests() {
       const envNotShell = ['-S -u FOO python3', '-Snode bash', '-S --chd /tmp python3', '--help sh'];
       envBangs.forEach((bang, i) => makeExecutable(`env-opt-${i}`, `#!/usr/bin/env ${bang}\n${wipe} /tmp/egc-victim\n`));
       envNotShell.forEach((bang, i) => makeExecutable(`env-other-${i}`, `#!/usr/bin/env ${bang}\n${wipe} /tmp/egc-victim\n`));
+      // A #! line that names no interpreter makes the kernel refuse the file,
+      // and the calling shell then runs it as a script of its own.
+      makeExecutable('empty-bang', `#!\n${wipe} /tmp/egc-victim\n`);
+      makeExecutable('blank-bang', `#!  \t\n${wipe} /tmp/egc-victim\n`);
       makeExecutable('py-tool', `#!/usr/bin/env python3\nprint("${wipe} /tmp/egc-victim")\n`);
       makeExecutable('binary', `\u007fELF\u0002\u0001\u0001\u0000\u0000\u0000${wipe} /tmp/egc-victim\n`);
       makeExecutable('tool.cmd', `@echo off\r\n${wipe} /tmp/egc-victim\r\n`);
@@ -942,7 +946,7 @@ function runTests() {
       const judge = command => run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
       for (const command of [
         './run-me.sh', JSON.stringify(path.join(dir, 'run-me.sh')), 'sudo ./run-me.sh', 'sudo -s ./run-me.sh', './no-bang',
-        './env-bang', 'bin/deep.sh', 'nohup ./run-me.sh', 'env A=1 ./run-me.sh', "echo 'x' > made.sh && ./made.sh",
+        './env-bang', './empty-bang', './blank-bang', 'bin/deep.sh', 'nohup ./run-me.sh', 'env A=1 ./run-me.sh', "echo 'x' > made.sh && ./made.sh",
         './build.sh && ./run-me.sh', '/bin/bash notes.txt', '/usr/bin/env bash notes.txt',
         ...envBangs.map((bang, i) => `./env-opt-${i}`),
       ]) {

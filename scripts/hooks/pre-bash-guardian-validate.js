@@ -905,8 +905,8 @@ function envProgram(words) {
 }
 
 // Whether a file run by its path is a shell script: its #! line names a
-// shell, directly or through env, or it has none, and then the calling shell
-// runs it as a script of its own. A binary, a Windows command file and
+// shell, directly or through env, or it has none or names no interpreter,
+// and then the calling shell runs it as a script of its own. A binary, a Windows command file and
 // another interpreter's script are not read as shell; an env line whose
 // options cannot be read is. A head that cannot be read is left to the full
 // read, which fails closed.
@@ -926,8 +926,10 @@ function runsAsShellScript(file) {
   }
   if (head.includes('\0')) return false;
   if (!head.startsWith('#!')) return true;
-  const words = head.slice(2).split('\n')[0].trim().split(/\s+/);
-  const program = path.basename(words[0] ?? '');
+  const line = head.slice(2).split('\n')[0].trim();
+  if (!line) return true;
+  const words = line.split(/\s+/);
+  const program = path.basename(words[0]);
   const run = program === 'env' ? envProgram(words.slice(1)) : program;
   return run === null || SHEBANG_SHELLS.has(path.basename(run ?? ''));
 }
