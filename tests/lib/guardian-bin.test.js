@@ -75,7 +75,18 @@ function main() {
     else failed++;
   }
 
-  console.log('\nguardian-bin.js — resolveGuardianCli()');
+  console.log('\nguardian-bin.js, guardianFailureReason()');
+
+  run('says why the validator gave no verdict, in words for each way it failed', () => {
+    const { guardianFailureReason } = freshGuardianBin();
+    assert.strictEqual(guardianFailureReason({ kind: 'timeout' }, 5000), 'the validator did not answer within 5 seconds');
+    assert.strictEqual(guardianFailureReason({ kind: 'unstartable', detail: 'spawn ENOENT' }, 5000), 'the validator could not be started (spawn ENOENT)');
+    assert.strictEqual(guardianFailureReason({ kind: 'crash', detail: 'exit code 3' }, 5000), 'the validator stopped with exit code 3');
+    assert.strictEqual(guardianFailureReason({ kind: 'unreadable', detail: 'an empty answer' }, 5000), 'the validator answered an empty answer, which this hook could not read');
+    assert.strictEqual(guardianFailureReason({ kind: 'something else' }, 5000), 'the validator gave no verdict');
+  });
+
+  console.log('\nguardian-bin.js, resolveGuardianCli()');
 
   run('never trusts a project-local .mcp.json (RCE closed)', () => {
     const fakeHome = createTempDir('egc-guardian-bin-home-');

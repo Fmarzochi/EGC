@@ -201,6 +201,17 @@ function runTests() {
     assert.ok(!result.stdout.includes('"prompt"'), `Raw input leaked: ${result.stdout}`);
   })) passed++; else failed++;
 
+  if (test('stays silent when the handler for the intent fails', () => {
+    const home = makeHome();
+    try {
+      const result = runHook({ prompt: 'what should I pick up next?', cwd: 123 }, { FAKE_GUARDIAN_INTENT: 'session_resume', HOME: home, PWD: home });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.strictEqual(result.stdout, '');
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

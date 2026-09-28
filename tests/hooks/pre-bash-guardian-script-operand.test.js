@@ -931,7 +931,7 @@ function runTests() {
       // An option env does not know leaves the line unread, so it is read as
       // shell; --help and --version run nothing.
       const envBangs = ['-S -u FOO sh', '-S -uFOO sh', '-S -C /tmp bash', '-S -iu FOO sh', '-Ssh -e', '-S --unset FOO bash', '-S --unset=FOO bash',
-        '-S --chd /tmp sh', '--split-string=sh', '-u FOO bash', '-S -- A=1 sh', '-S A=1 sh', '-S -a name sh', '-S -x python3'];
+        '-S --chd /tmp sh', '--split-string=sh', '-u FOO bash', '-S -- A=1 sh', '-S A=1 sh', '-S -a name sh', '-S -x python3', '-iv bash'];
       const envNotShell = ['-S -u FOO python3', '-Snode bash', '-S --chd /tmp python3', '--help sh'];
       envBangs.forEach((bang, i) => makeExecutable(`env-opt-${i}`, `#!/usr/bin/env ${bang}\n${wipe} /tmp/egc-victim\n`));
       envNotShell.forEach((bang, i) => makeExecutable(`env-other-${i}`, `#!/usr/bin/env ${bang}\n${wipe} /tmp/egc-victim\n`));
@@ -1009,6 +1009,74 @@ function runTests() {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
         assert.ok(result.stderr.includes('too large'), `${command}: ${result.stderr}`);
+      }
+    }));
+
+    record(test('a file that turns unreadable between the checks is read, which fails closed', () => {
+      const { openSync, statSync, readFileSync, realpathSync } = fs;
+      const sameAs = target => file => {
+        try {
+          return realpathSync(String(file)) === target;
+        } catch {
+          return false;
+        }
+      };
+      const refuse = code => Object.assign(new Error(code), { code });
+      // Run by its path, it cannot be opened, and then its owner cannot be
+      // told: it is read as a shell script, and what it holds is judged.
+      const vanishing = path.join(dir, 'vanishing-tool');
+      fs.writeFileSync(vanishing, `${wipe} /tmp/egc-victim\n`);
+      fs.chmodSync(vanishing, 0o755);
+      const isVanishing = sameAs(realpathSync(vanishing));
+      let stats = 0;
+      fs.openSync = (file, ...rest) => {
+        if (isVanishing(file)) throw refuse('EACCES');
+        return openSync(file, ...rest);
+      };
+      fs.statSync = (file, ...rest) => {
+        if (isVanishing(file) && ++stats > 1) throw refuse('ENOENT');
+        return statSync(file, ...rest);
+      };
+      try {
+        const result = run({ tool_name: 'Bash', tool_input: { command: './vanishing-tool' }, cwd: dir });
+        assert.strictEqual(result.exitCode, 2, JSON.stringify(result));
+      } finally {
+        fs.openSync = openSync;
+        fs.statSync = statSync;
+      }
+      // A committed script that cannot be read again when its commit is
+      // checked is not taken for the committed one: a narrow delete in it is
+      // judged in full, not only against the grave denials.
+      const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-unreadable-commit-'));
+      const emptyConfig = path.join(repo, '..', `${path.basename(repo)}.gitconfig`);
+      fs.writeFileSync(emptyConfig, '');
+      const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+      Object.assign(gitEnv, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: emptyConfig });
+      const git = (...args) => assert.strictEqual(spawnSync('git', args, { cwd: repo, env: gitEnv, encoding: 'utf8', timeout: 20000 }).status, 0, `git ${args.join(' ')}`);
+      const savedGitDir = process.env.GIT_DIR;
+      try {
+        delete process.env.GIT_DIR;
+        git('init', '-q');
+        git('config', 'user.email', 'test@example.com');
+        git('config', 'user.name', 'Test');
+        git('config', 'core.autocrlf', 'false');
+        fs.writeFileSync(path.join(repo, 'tool.sh'), `${wipe.split(' ')[0]} -rf build\n`);
+        git('add', 'tool.sh');
+        git('commit', '-q', '-m', 'tool');
+        const isTool = sameAs(realpathSync(path.join(repo, 'tool.sh')));
+        let reads = 0;
+        fs.readFileSync = (file, ...rest) => {
+          if (isTool(file) && ++reads > 1) throw refuse('EACCES');
+          return readFileSync(file, ...rest);
+        };
+        const result = run({ tool_name: 'Bash', tool_input: { command: 'bash tool.sh' }, cwd: repo });
+        assert.strictEqual(result.exitCode, 2, JSON.stringify(result));
+      } finally {
+        fs.readFileSync = readFileSync;
+        if (savedGitDir === undefined) delete process.env.GIT_DIR;
+        else process.env.GIT_DIR = savedGitDir;
+        fs.rmSync(repo, { recursive: true, force: true });
+        fs.rmSync(emptyConfig, { force: true });
       }
     }));
 

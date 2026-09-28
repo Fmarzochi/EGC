@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { installPreCommitHook, HOOK, PREVIOUS_NAME } = require('../../scripts/lib/git-pre-commit-install');
+const { installPreCommitHook, main, HOOK, PREVIOUS_NAME } = require('../../scripts/lib/git-pre-commit-install');
 
 function test(name, fn) {
   try {
@@ -55,6 +55,27 @@ function runTests() {
       assert.notStrictEqual(fs.readFileSync(hook)[0], 0xef, 'no byte order mark');
       if (process.platform !== 'win32') assert.ok(fs.statSync(hook).mode & 0o100, 'executable');
     });
+  }));
+
+  record(test("the installers' entry says what it did: a line when it installs, a warning when it leaves a hook, nothing outside a clone", () => {
+    const lines = [];
+    const log = console.log;
+    console.log = line => lines.push(line);
+    try {
+      withRepo(root => assert.strictEqual(main(root), 'installed'));
+      withRepo(root => assert.strictEqual(main(root), 'skipped'), { git: false });
+      withRepo((root, hook) => {
+        fs.mkdirSync(path.dirname(hook), { recursive: true });
+        fs.writeFileSync(hook, '#!/bin/sh\necho mine\n');
+        fs.writeFileSync(path.join(path.dirname(hook), PREVIOUS_NAME), '#!/bin/sh\necho earlier\n');
+        assert.strictEqual(main(root), 'conflict');
+      });
+    } finally {
+      console.log = log;
+    }
+    assert.strictEqual(lines.length, 2, JSON.stringify(lines));
+    assert.strictEqual(lines[0], '  ✓ git pre-commit hook installed');
+    assert.ok(lines[1].startsWith('  ! git pre-commit hook left as it is'), lines[1]);
   }));
 
   record(test('a hook someone already has is kept whole under its own name and runs after the strip', () => {
