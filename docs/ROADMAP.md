@@ -48,6 +48,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A wrapper's long options are read in any abbreviation the wrapper accepts: a unique prefix counts as the option it names, an exact name keeps its own meaning, and `env --split` is refused like `--split-string` (#1548).
 - GNU parallel's options are read the way parallel reads them: its own Getopt::Long table, letter case, abbreviations and optional values included (#1549).
 - The Bash hook finds the command behind a wrapper by the validator's own rules, through a shared copy that a test keeps in step with the validator (#1550).
+- The long test runners count through one tally, and the manifest install plan reads its request lists through one helper (#1582).
 - The Guardian reads through the local wrappers that run a command (setsid, taskset, chrt, unshare, nsenter, runuser, prlimit, chroot, numactl, pkexec, busybox, bwrap) by their own option tables, and denies the ones that hand a string or the words after a user to a shell (#1551).
 - The fact-forcing gate reads the wrappers in front of a destructive command through the Guardian's own tables, and every target is checked to copy both hooks with their helpers (#1552).
 - The PreCompact memory save is installed with every helper it loads on any Claude profile, and the package-only auto-update script is no longer copied into targets (#1553).
