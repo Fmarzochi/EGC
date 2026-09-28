@@ -125,6 +125,17 @@ record(test('--git-dir is refused a directory outside the .git convention', () =
   }
 }));
 
+record(test('GIT_DIR and GIT_COMMON_DIR are held to the same rule as --git-dir', () => {
+  for (const command of ['GIT_DIR=/tmp/evil git status', 'GIT_COMMON_DIR=$HOME/.cfg git fetch', "GIT_DIR='/tmp/evil' git log"]) {
+    assert.match(denied(command, at('plain')).reason, /\.git or <name>\.git directory/, command);
+  }
+  for (const command of [
+    'GIT_DIR=.git git status', 'GIT_DIR=/srv/repo.git git log', 'GIT_DIR=.git/worktrees/wt git status', "GIT_COMMON_DIR='/srv/app/.git' git log",
+  ]) {
+    passes(command, at('plain'));
+  }
+}));
+
 record(test('a bare repository outside the convention is refused where git runs, above it, and through -C', () => {
   for (const [command, cwd] of [
     ['git status', at('evil')], ['git fetch', at('evil', 'sub')], [`git -C ${at('evil')} log`, at('plain')],

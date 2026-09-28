@@ -523,10 +523,10 @@ const SYSTEM_PROGRAM_DIRS = ['/usr/', '/bin/', '/sbin/', '/opt/'];
 const PLAIN_FLAG_RE = /^--?[A-Za-z][\w-]*(?:=[\w.,:-]*)?$/;
 // A file or a directory git writes to: its trace, its index, its objects.
 const GIT_PATH_ENV_VAR_RE = /^GIT_(?:TRACE\w*|INDEX_FILE|WORK_TREE|OBJECT_DIRECTORY)$/;
-// The repository git reads its config and hooks from: a .git directory,
-// whose config is protected, and no other.
+// The repository git reads its config and hooks from: a .git or <name>.git
+// directory, whose config is protected (isTrustedGitDirectory, the rule
+// --git-dir and the directory git finds are held to), and no other.
 const REPOSITORY_ENV_VARS = new Set(['GIT_DIR', 'GIT_COMMON_DIR']);
-const GIT_DIRECTORY_RE = /(?:^|[\\/])\.git[\\/]?$/;
 // Where git and gpg, which git runs to sign, find their config, which can
 // name commands they run.
 const CONFIG_HOME_ENV_VARS = new Set(['HOME', 'XDG_CONFIG_HOME', 'GNUPGHOME']);
@@ -562,8 +562,8 @@ function envValueDenial(name: string, value: string, command: string | undefined
   if (GIT_PATH_ENV_VAR_RE.test(upper) && isProtectedPath(text)) {
     return `'${name}' makes git write to the protected path ${text}, which is forbidden`;
   }
-  if (REPOSITORY_ENV_VARS.has(upper) && !GIT_DIRECTORY_RE.test(text)) {
-    return `'${name}' points git at ${text}, a repository whose config this line can choose, which is forbidden: name a .git directory`;
+  if (REPOSITORY_ENV_VARS.has(upper) && !isTrustedGitDirectory(text)) {
+    return `'${name}' points git at ${text}, a repository whose config this line can choose, which is forbidden: name a .git or <name>.git directory`;
   }
   // When it persists (export, a bare assignment) it holds for the git
   // commands later on the line; git's own programs (git-upload-pack) read
