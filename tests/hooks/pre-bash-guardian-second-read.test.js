@@ -48,16 +48,28 @@ function runTests() {
         `if true; then X='ls; ${wipe}'; fi; bash <<EOF\nls $X\nEOF`, `X='ls; ${wipe}'; sudo bash <<EOF\nls $X\nEOF`,
         `X="x'; ${wipe}; '"; Y=ok; bash <<EOF\necho $Y '$X'\nEOF`, `LIST_CMD='ls; ${wipe}'; bash <<EOF\n$LIST_CMD\nEOF`,
         `A=ls; B='ls; ${wipe}'; bash <<EOF\n$A $B\nEOF`, `X='ls; ${wipe}'; bash <<EOF\nls \\\\$X\nEOF`,
+        `X='ls; ${wipe}'; bash <<EOF\nls \${X:-y}\nEOF`, `X=; bash <<EOF\nls \${X:-;${wipe}}\nEOF`, `X=a; bash <<EOF\n\${X:+ls; ${wipe}}\nEOF`,
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
       }
     }));
 
-    record(test('a variable the line fixes from a source the hook cannot read fails closed there', () => {
+    record(test('a variable the environment holds is read again with its value', () => {
+      const saved = process.env.EGC_SECOND_READ_PROBE;
+      process.env.EGC_SECOND_READ_PROBE = `ls; ${wipe}`;
+      try {
+        const result = judge('bash <<EOF\nls $EGC_SECOND_READ_PROBE\nEOF');
+        assert.strictEqual(result.exitCode, 2, JSON.stringify(result));
+      } finally {
+        if (saved === undefined) delete process.env.EGC_SECOND_READ_PROBE; else process.env.EGC_SECOND_READ_PROBE = saved;
+      }
+    }));
+
+    record(test('a variable the line fixes from a source the hook cannot read, or through an expansion it does not follow, fails closed there', () => {
       for (const command of [
         'X=$(cat f); bash <<EOF\nls $X\nEOF', 'read X; bash <<EOF\nls $X\nEOF', 'source env.sh; bash <<EOF\nls $X\nEOF',
-        'X=a; bash <<EOF\nls ${X:-b}\nEOF',
+        'X=a; bash <<EOF\nls ${X#a}\nEOF',
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
@@ -96,6 +108,8 @@ function runTests() {
           'reread-c.sh': `X='x; ${grave}'\nsh -c "echo $X"\n`,
           'reread-heredoc.sh': `X='x; ${grave}'\nbash <<EOF\necho $X\nEOF\n`,
           'reread-eval.sh': `X='x; ${grave}'\neval "echo $X"\n`,
+          'reread-op.sh': `X='x; ${grave}'\nsh -c "echo \${X#q}"\n`,
+          'positional.sh': `X='x; ${grave}'\nY=ok\nsh -c "ls \\$1 $Y" sh "$X"\n`,
           'single.sh': `X='x; ${grave}'\nsh -c 'echo $X'\n`,
           'env.sh': 'sh -c "cd $DIR && make"\n',
           'opaque.sh': 'X=$(git rev-parse HEAD)\nbash <<EOF\necho $X\nEOF\n',
@@ -106,6 +120,8 @@ function runTests() {
         assert.strictEqual(judged('bash reread-c.sh'), 2, 'the -c code a committed script expands is read with the value it sets');
         assert.strictEqual(judged('bash reread-heredoc.sh'), 2, 'the heredoc a committed script expands is read with the value it sets');
         assert.strictEqual(judged('bash reread-eval.sh'), 2, 'the eval code a committed script expands is read with the value it sets');
+        assert.strictEqual(judged('bash reread-op.sh'), 2, 'an expansion the hook does not follow still reads the values the script sets');
+        assert.strictEqual(judged('bash positional.sh'), 0, 'a $1 the code expands itself is not read as code a second time');
         assert.strictEqual(judged('bash single.sh'), 0, 'single quotes leave the expansion to the shell that runs the code');
         assert.strictEqual(judged('bash env.sh'), 0, 'a variable only the environment holds');
         assert.strictEqual(judged('bash opaque.sh'), 0, 'a committed script is held to the grave denials only');

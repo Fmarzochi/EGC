@@ -753,9 +753,20 @@ function expandedCodes(text) {
   for (const stage of splitShellSegments(joinContinuations(text), { stripComments: true }).flatMap(pipelineStages)) {
     const { command: line, body } = splitHeredoc(stage);
     if (body !== null && readsItsInputAsCode(line) && !literalHeredoc(line, body)) codes.push(body);
-    if (inlineCodeExpands(line)) codes.push(inlineShellCodeOf(line));
+    const inline = expandedInlineCode(line);
+    if (inline !== null) codes.push(inline);
   }
   return codes;
+}
+
+// The code of -c or eval as the line's own shell hands it over, when a word
+// of it expands: the -c operand as written, its $1 and on left alone, since
+// the shell running the code expands those without reading them as code.
+function expandedInlineCode(line) {
+  const carrier = inlineCodeWords(line);
+  if (carrier === null) return null;
+  if (carrier.evaluated) return carrier.words.some(word => word.expands) ? carrier.words.map(word => word.value).join(' ') : null;
+  return carrier.words[0].expands ? carrier.words[0].value : null;
 }
 
 const MAX_SECOND_READINGS = 64;
@@ -796,48 +807,80 @@ function variableReferences(code) {
   return references;
 }
 
-// The values each variable the code reads takes, for those this line fixes
-// (every one, once the line sources a script or builds a name at run time);
-// the reason it cannot be read when a value comes from a source this hook
-// cannot read or through an expansion it does not follow.
-function secondReadValues(references, bindings) {
+// The ${NAME...} operators this hook follows: those that fall back to their
+// word (-, =, ?) and the one that swaps it in (+), each with or without :.
+const FALLBACK_OPERATOR_RE = /^:?([-=?+])/;
+const referenceKey = ({ name, operator }) => `${name}${operator}`;
+
+// The values one reference takes the second time the code is read: those
+// the line gives the variable (every name counts as given once the line
+// sources a script or builds a name at run time), or the environment's own
+// value for a name the line leaves to it; null when there is nothing to
+// read again; the reason it cannot be read otherwise.
+function referenceValues(reference, bindings, unknownFails) {
+  const { name, operator } = reference;
+  if (!bindings.names.has(name) && !bindings.sources && !bindings.dynamic) {
+    const env = process.env[name];
+    return typeof env === 'string' && !operator ? { values: [env] } : null;
+  }
+  const own = valuesOf(bindings, name, process.env);
+  if (own === null) {
+    return { blocked: `the code a shell reads a second time takes $${name}, which this line sets from a source this hook cannot read; write the value out or quote the heredoc delimiter` };
+  }
+  return operatorValues(reference, own, unknownFails);
+}
+
+// The values a reference takes once its operator applies to the variable's.
+function operatorValues({ name, operator }, own, unknownFails) {
+  if (!operator) return { values: own };
+  const fallback = FALLBACK_OPERATOR_RE.exec(operator);
+  const word = fallback ? operator.slice(fallback[0].length) : '';
+  if (fallback && !/[$`]/.test(word)) {
+    if (fallback[1] === '+') return { values: [word, ''] };
+    return { values: fallback[1] === '?' ? own : [...new Set([...own, word])] };
+  }
+  // A committed script is held to the grave denials only: the variable's
+  // own values stand in for what the expansion makes of them.
+  if (!unknownFails) return { values: own };
+  return { blocked: `the code a shell reads a second time takes \${${name}${operator}}, an expansion this hook does not follow; write the value out or quote the heredoc delimiter` };
+}
+
+// The values each reference of the code takes, keyed by the reference.
+function secondReadValues(references, bindings, unknownFails) {
   const values = new Map();
-  for (const { name, operator } of references) {
-    if (values.has(name)) continue;
-    if (!bindings.names.has(name) && !bindings.sources && !bindings.dynamic) continue;
-    if (operator) {
-      return { blocked: `the code a shell reads a second time takes \${${name}${operator}}, an expansion this hook does not follow; write the value out or quote the heredoc delimiter` };
-    }
-    const taken = valuesOf(bindings, name, process.env);
-    if (taken === null) {
-      return { blocked: `the code a shell reads a second time takes $${name}, which this line sets from a source this hook cannot read; write the value out or quote the heredoc delimiter` };
-    }
-    values.set(name, taken);
+  for (const reference of references) {
+    const key = referenceKey(reference);
+    if (values.has(key)) continue;
+    const found = referenceValues(reference, bindings, unknownFails);
+    if (found === null) continue;
+    if (found.blocked) return found;
+    values.set(key, found.values);
   }
   return { values };
 }
 
-// The code with each reference to a variable in `choice` replaced by its value.
+// The code with each reference in `choice` replaced by its value.
 function substituted(code, references, choice) {
   let text = '';
   let from = 0;
-  for (const { name, start, end } of references) {
-    if (!choice.has(name)) continue;
-    text += code.slice(from, start) + choice.get(name);
-    from = end;
+  for (const reference of references) {
+    const key = referenceKey(reference);
+    if (!choice.has(key)) continue;
+    text += code.slice(from, reference.start) + choice.get(key);
+    from = reference.end;
   }
   return text + code.slice(from);
 }
 
 // The code as the shell reads it the second time, once per combination of
-// the values its variables take.
-function codeVariants(code, bindings) {
+// the values its references take.
+function codeVariants(code, bindings, unknownFails) {
   const references = variableReferences(code);
-  const found = secondReadValues(references, bindings);
+  const found = secondReadValues(references, bindings, unknownFails);
   if (found.blocked) return found;
   let choices = [new Map()];
-  for (const [name, values] of found.values) {
-    choices = choices.flatMap(choice => values.map(value => new Map([...choice, [name, value]])));
+  for (const [key, values] of found.values) {
+    choices = choices.flatMap(choice => values.map(value => new Map([...choice, [key, value]])));
     if (choices.length > MAX_SECOND_READINGS) {
       return { blocked: 'the code a shell reads a second time takes more combinations of values than this hook follows; write the values out' };
     }
@@ -853,7 +896,7 @@ function codeVariants(code, bindings) {
 function secondReadings(text, bindings, unknownFails) {
   const found = [];
   for (const code of expandedCodes(text)) {
-    const variants = codeVariants(code, bindings);
+    const variants = codeVariants(code, bindings, unknownFails);
     if (variants.blocked) {
       if (unknownFails) return { blocked: variants.blocked };
       continue;
@@ -1535,14 +1578,6 @@ function inlineCodeWords(line) {
   const rest = words.slice(index + 1);
   const at = shellCommandIndex(rest);
   return at < 0 ? null : { words: rest.slice(at), evaluated: false };
-}
-
-// Whether that code comes from a word this line's shell expands first, so
-// the shell running it reads the values it took as code.
-function inlineCodeExpands(line) {
-  const carrier = inlineCodeWords(line);
-  if (carrier === null) return false;
-  return carrier.evaluated ? carrier.words.some(word => word.expands) : carrier.words[0].expands;
 }
 
 // Where the string a shell's -c runs stands: its first operand after the
