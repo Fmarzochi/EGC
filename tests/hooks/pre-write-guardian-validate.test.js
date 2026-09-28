@@ -92,15 +92,40 @@ function runTests() {
     assert.strictEqual(code, 2, 'Expected block when the target arrives as TargetFile');
   })) passed++; else failed++;
 
-  if (test('fails open silently when the validator crashes', () => {
-    const brokenCli = path.join(os.tmpdir(), `egc-broken-cli-${Date.now()}.js`);
-    fs.writeFileSync(brokenCli, 'process.exit(1);\n');
+  if (test('blocks the write when the validator gives no verdict, and says why', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-broken-cli-'));
     try {
-      const result = runHook(path.join(os.homedir(), '.ssh', 'id_rsa'), { EGC_GUARDIAN_CLI: brokenCli });
-      assert.strictEqual(result.code, 0, 'Expected fail-open on validator crash');
-      assert.strictEqual(result.stderr, '', `Expected silent fail-open, got: ${result.stderr}`);
+      for (const [body, why] of [
+        ['process.exit(1);\n', /stopped with exit code 1/],
+        ['process.stdout.write("not json");\n', /not JSON/],
+        ['process.stdout.write("{}");\n', /not a verdict/],
+      ]) {
+        const brokenCli = path.join(dir, `cli-${why.source.length}.js`);
+        fs.writeFileSync(brokenCli, body);
+        const result = runHook(path.join(os.tmpdir(), 'egc-notes.txt'), { EGC_GUARDIAN_CLI: brokenCli });
+        assert.strictEqual(result.code, 2, `${body}: ${result.stderr}`);
+        assert.match(result.stderr, /could not validate this write/);
+        assert.match(result.stderr, why);
+      }
+      const listCli = path.join(dir, 'cli-list.js');
+      fs.writeFileSync(listCli, 'const a = process.argv[2]; process.stdout.write(a === "write" ? JSON.stringify({ allowed: true }) : "[]");\n');
+      const script = runHook('/tmp/egc-script.sh', { EGC_GUARDIAN_CLI: listCli }, { file_path: '/tmp/egc-script.sh', content: '#!/bin/bash\necho a\n' });
+      assert.strictEqual(script.code, 2, script.stderr);
+      assert.match(script.stderr, /not one verdict per command/);
+      for (const entry of ['{}', 'null', '{"allowed":"yes"}', '"allowed"', '[]']) {
+        const shapeCli = path.join(dir, `cli-shape-${entry.length}-${entry.charCodeAt(1)}.js`);
+        fs.writeFileSync(shapeCli, `const a = process.argv[2]; process.stdout.write(a === "write" ? JSON.stringify({ allowed: true }) : ${JSON.stringify(`[${entry}]`)});\n`);
+        const shaped = runHook('/tmp/egc-script.sh', { EGC_GUARDIAN_CLI: shapeCli }, { file_path: '/tmp/egc-script.sh', content: '#!/bin/bash\necho a\n' });
+        assert.strictEqual(shaped.code, 2, `[${entry}]: ${shaped.stderr}`);
+        assert.match(shaped.stderr, /could not validate this write/, `[${entry}]`);
+      }
+      const batchCrashCli = path.join(dir, 'cli-batch-crash.js');
+      fs.writeFileSync(batchCrashCli, 'if (process.argv[2] === "write") process.stdout.write(JSON.stringify({ allowed: true })); else process.exit(3);\n');
+      const crashed = runHook('/tmp/egc-script.sh', { EGC_GUARDIAN_CLI: batchCrashCli }, { file_path: '/tmp/egc-script.sh', content: '#!/bin/bash\necho a\n' });
+      assert.strictEqual(crashed.code, 2, crashed.stderr);
+      assert.match(crashed.stderr, /stopped with exit code 3/);
     } finally {
-      try { fs.rmSync(brokenCli, { force: true }); } catch { /* best-effort cleanup */ }
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 

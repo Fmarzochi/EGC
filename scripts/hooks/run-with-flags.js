@@ -12,28 +12,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { isHookEnabled } = require('../lib/hook-flags');
-
-const MAX_STDIN = 1024 * 1024;
+const { MAX_HOOK_INPUT_BYTES: MAX_STDIN, readHookInput } = require('../lib/guardian-bin');
 
 function readStdinRaw() {
-  return new Promise(resolve => {
-    let raw = '';
-    let truncated = false;
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', chunk => {
-      if (raw.length < MAX_STDIN) {
-        const remaining = MAX_STDIN - raw.length;
-        raw += chunk.substring(0, remaining);
-        if (chunk.length > remaining) {
-          truncated = true;
-        }
-      } else {
-        truncated = true;
-      }
-    });
-    process.stdin.on('end', () => resolve({ raw, truncated }));
-    process.stdin.on('error', () => resolve({ raw, truncated }));
-  });
+  return new Promise(resolve => readHookInput(resolve));
 }
 
 function writeStderr(stderr) {
