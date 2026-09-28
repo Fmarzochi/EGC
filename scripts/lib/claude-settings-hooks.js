@@ -892,6 +892,7 @@ const BASH_GUARDIAN_HOOK_LIB_SOURCES = [
   'scripts/lib/shell-split.js',
   'scripts/lib/wrapper-options.js',
   'scripts/lib/shell-bindings.js',
+  'scripts/lib/handoff-commands.js',
 ];
 
 function resolveBashGuardianHookScriptDestination(targetRoot) {
