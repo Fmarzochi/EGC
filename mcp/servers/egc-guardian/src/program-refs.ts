@@ -30,6 +30,20 @@ function lineEnd(text: string, from: number): number {
   return newline < 0 ? text.length : newline;
 }
 
+function escapesNewline(text: string, newline: number): boolean {
+  let backslashes = 0;
+  while (text[newline - backslashes - 1] === '\\') backslashes++;
+  return backslashes % 2 === 1;
+}
+
+// Where the text of a sed a, i, c or e command ends: a backslash before a
+// newline carries it on to the next line, as GNU sed reads it.
+function textEnd(text: string, from: number): number {
+  let end = lineEnd(text, from);
+  while (end < text.length && escapesNewline(text, end)) end = lineEnd(text, end + 1);
+  return end;
+}
+
 // Where a label ends: at a semicolon or a newline, as GNU sed reads one.
 function labelEnd(text: string, from: number): number {
   for (let at = from; at < text.length; at++) {
@@ -93,14 +107,16 @@ function readSedCommand(script: string, at: number, refs: ProgramRefs): number {
     return end;
   }
   if (command === 'e') {
-    const inner = script.slice(at + 1, end).trim();
+    const textAt = textEnd(script, at);
+    const inner = script.slice(at + 1, textAt).trim();
     if (inner) refs.commands.push(inner);
     else refs.opaque = 'runs its pattern space as a command (sed e)';
-    return end;
+    return textAt;
   }
   if (command === 's') return readSedSubstitute(script, at, refs);
   if (command === 'y') return pastDelimiter(script, pastDelimiter(script, at + 2, script[at + 1]), script[at + 1]);
-  if ('aic#'.includes(command)) return end;
+  if ('aic'.includes(command)) return textEnd(script, at);
+  if (command === '#') return end;
   if ('btT:v'.includes(command)) return labelEnd(script, at + 1);
   return at + 1;
 }
@@ -132,7 +148,10 @@ function readSedSubstitute(script: string, at: number, refs: ProgramRefs): numbe
 // the plain text processing awk is used for passes.
 const AWK_EFFECT_WORDS = /\b(?:system|getline|ARGV)\b|@(?:load|include)\b|@\s*[A-Za-z_]\w*\s*\(/;
 
-function awkRefs(program: string): ProgramRefs {
+function awkRefs(text: string): ProgramRefs {
+  // A backslash before a newline continues the line in awk; joined, the
+  // words it splits are looked for whole.
+  const program = text.replaceAll(/\\\r?\n/g, '');
   const print = /\bprintf?\b/.exec(program);
   const redirected = print !== null && /[>|]/.test(program.slice(print.index));
   if (!AWK_EFFECT_WORDS.test(program) && !redirected) return noRefs();
@@ -140,14 +159,17 @@ function awkRefs(program: string): ProgramRefs {
 }
 
 // The string literals right after a pattern in a jq or yq program, and
-// whether one of the places takes no literal.
+// whether one of the places takes no plain literal: an escape can spell any
+// path (a folded line, a \u sequence, a jq \(...)), so a literal with one is
+// not read.
 function quotedAfter(text: string, pattern: RegExp): { values: string[]; computed: boolean } {
   const values: string[] = [];
   let computed = false;
   for (const match of text.matchAll(pattern)) {
     const from = nextVisible(text, (match.index ?? 0) + match[0].length);
-    if (text[from] === '"') values.push(text.slice(from + 1, pastDelimiter(text, from + 1, '"') - 1).replaceAll(/\\(.)/g, '$1'));
-    else computed = true;
+    const literal = text[from] === '"' ? text.slice(from + 1, pastDelimiter(text, from + 1, '"') - 1) : null;
+    if (literal === null || literal.includes('\\')) computed = true;
+    else values.push(literal);
   }
   return { values, computed };
 }
