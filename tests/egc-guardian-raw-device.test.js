@@ -63,6 +63,14 @@ denied('cp /dev/sda disk.img');
 denied('cat < /dev/sda');
 denied('echo x > /dev/sda');
 
+console.log('\nwriting to a disk or memory device:');
+denied('echo x > /dev/mem');
+denied('echo x > /proc/kcore');
+denied('echo x > /dev/port');
+denied('printf x >> /dev/kmem');
+denied('tee /dev/sda < disk.img');
+denied('cp disk.img /dev/nvme0n1');
+
 console.log('\nthe character devices commands use every day:');
 allowed('cat /dev/null');
 allowed('head -c 4 /dev/zero');
@@ -89,6 +97,13 @@ run('\\\\.\\PhysicalDrive0 and \\\\.\\C: are protected', () => {
     assert.strictEqual(isProtectedPath(device), process.platform === 'win32', device);
   }
 });
+
+if (process.platform === 'win32') {
+  console.log('\nreading or writing the Windows device namespace:');
+  denied("cat '\\\\.\\PhysicalDrive0'");
+  denied("cat '\\\\.\\C:'");
+  denied("echo x > '\\\\.\\PhysicalDrive0'");
+}
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
