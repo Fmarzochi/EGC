@@ -1191,23 +1191,37 @@ function manifestsOrError(repoRoot) {
   }
 }
 
-function buildDoctorReport(options = {}) {
-  const repoRoot = options.repoRoot || DEFAULT_REPO_ROOT;
-  const loaded = manifestsOrError(repoRoot);
-  const records = discoverInstalledStates({
-    homeDir: options.homeDir,
-    projectRoot: options.projectRoot,
-    targets: options.targets,
-  }).filter(record => record.exists).map(record => (loaded.error ? { ...record, error: `Install manifests refused: ${loaded.error}` } : record));
-  const manifests = loaded.manifests || { modulesVersion: null };
-  const context = {
-
-    repoRoot,
+// The roots a lifecycle command works in, as the caller gave them or as
+// the environment has them.
+function lifecycleRoots(options) {
+  return {
+    repoRoot: options.repoRoot || DEFAULT_REPO_ROOT,
     homeDir: options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir(),
     projectRoot: options.projectRoot || process.cwd(),
-    manifestVersion: manifests.modulesVersion,
-    packageVersion: readPackageVersion(repoRoot),
   };
+}
+
+// The same roots with the manifests read from the repository (or the reason
+// they were refused) and the versions a report carries.
+function manifestContext(options) {
+  const roots = lifecycleRoots(options);
+  const loaded = manifestsOrError(roots.repoRoot);
+  const manifests = loaded.manifests || { modulesVersion: null };
+  return {
+    loaded,
+    context: { ...roots, manifestVersion: manifests.modulesVersion, packageVersion: readPackageVersion(roots.repoRoot) },
+  };
+}
+
+// The install-states that exist for the targets asked about.
+function existingInstallStates(homeDir, projectRoot, targets) {
+  return discoverInstalledStates({ homeDir, projectRoot, targets }).filter(record => record.exists);
+}
+
+function buildDoctorReport(options = {}) {
+  const { loaded, context } = manifestContext(options);
+  const records = existingInstallStates(options.homeDir, options.projectRoot, options.targets)
+    .map(record => (loaded.error ? { ...record, error: `Install manifests refused: ${loaded.error}` } : record));
   const results = records.map(record => analyzeRecord(record, context));
   const summary = results.reduce((accumulator, result) => {
     const errorCount = result.issues.filter(issue => issue.severity === 'error').length;
@@ -1469,22 +1483,8 @@ function repairRecord(record, context, options) {
 }
 
 function repairInstalledStates(options = {}) {
-  const repoRoot = options.repoRoot || DEFAULT_REPO_ROOT;
-  const loaded = manifestsOrError(repoRoot);
-  const manifests = loaded.manifests || { modulesVersion: null };
-  const context = {
-
-    repoRoot,
-    homeDir: options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir(),
-    projectRoot: options.projectRoot || process.cwd(),
-    manifestVersion: manifests.modulesVersion,
-    packageVersion: readPackageVersion(repoRoot),
-  };
-  const records = discoverInstalledStates({
-    homeDir: context.homeDir,
-    projectRoot: context.projectRoot,
-    targets: options.targets,
-  }).filter(record => record.exists);
+  const { loaded, context } = manifestContext(options);
+  const records = existingInstallStates(context.homeDir, context.projectRoot, options.targets);
 
   const results = records.map(record => (loaded.error
     ? { adapter: record.adapter, status: 'error', installStatePath: record.installStatePath, repairedPaths: [], plannedRepairs: [], error: `Install manifests refused: ${loaded.error}` }
@@ -1549,28 +1549,18 @@ function cleanupEmptyParentDirs(filePath, stopAt) {
   }
 }
 
+// One target's uninstall result.
+function uninstallResult(record, status, { removedPaths = [], plannedRemovals = [], error = null } = {}) {
+  return { adapter: record.adapter, status, installStatePath: record.installStatePath, removedPaths, plannedRemovals, error };
+}
+
 function uninstallInstalledStates(options = {}) {
-  const context = {
-    repoRoot: options.repoRoot || DEFAULT_REPO_ROOT,
-    homeDir: options.homeDir || process.env.HOME || process.env.USERPROFILE || os.homedir(),
-    projectRoot: options.projectRoot || process.cwd(),
-  };
-  const records = discoverInstalledStates({
-    homeDir: context.homeDir,
-    projectRoot: context.projectRoot,
-    targets: options.targets,
-  }).filter(record => record.exists);
+  const context = lifecycleRoots(options);
+  const records = existingInstallStates(context.homeDir, context.projectRoot, options.targets);
 
   const results = records.map(record => {
     if (record.error || !record.state) {
-      return {
-        adapter: record.adapter,
-        status: 'error',
-        installStatePath: record.installStatePath,
-        removedPaths: [],
-        plannedRemovals: [],
-        error: record.error || 'No valid install-state available',
-      };
+      return uninstallResult(record, 'error', { error: record.error || 'No valid install-state available' });
     }
 
     const state = record.state;
@@ -1579,14 +1569,7 @@ function uninstallInstalledStates(options = {}) {
     // today before anything is removed; one planted entry refuses the target.
     const escaping = findEscapingOperation(operations, record, context);
     if (escaping) {
-      return {
-        adapter: record.adapter,
-        status: 'error',
-        installStatePath: record.installStatePath,
-        removedPaths: [],
-        plannedRemovals: [],
-        error: `Recorded operation escapes the managed roots for ${record.adapter.id}: ${escaping.destinationPath}`,
-      };
+      return uninstallResult(record, 'error', { error: `Recorded operation escapes the managed roots for ${record.adapter.id}: ${escaping.destinationPath}` });
     }
     const plannedRemovals = Array.from(new Set([
       ...operations.map(operation => operation.destinationPath),
@@ -1594,14 +1577,7 @@ function uninstallInstalledStates(options = {}) {
     ]));
 
     if (options.dryRun) {
-      return {
-        adapter: record.adapter,
-        status: 'planned',
-        installStatePath: record.installStatePath,
-        removedPaths: [],
-        plannedRemovals,
-        error: null,
-      };
+      return uninstallResult(record, 'planned', { plannedRemovals });
     }
 
     try {
@@ -1624,23 +1600,9 @@ function uninstallInstalledStates(options = {}) {
         cleanupEmptyParentDirs(cleanupTarget, record.targetRoot);
       }
 
-      return {
-        adapter: record.adapter,
-        status: 'uninstalled',
-        installStatePath: record.installStatePath,
-        removedPaths,
-        plannedRemovals: [],
-        error: null,
-      };
+      return uninstallResult(record, 'uninstalled', { removedPaths });
     } catch (error) {
-      return {
-        adapter: record.adapter,
-        status: 'error',
-        installStatePath: record.installStatePath,
-        removedPaths: [],
-        plannedRemovals,
-        error: error.message,
-      };
+      return uninstallResult(record, 'error', { plannedRemovals, error: error.message });
     }
   });
 
