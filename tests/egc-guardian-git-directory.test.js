@@ -175,9 +175,22 @@ record(test('the Bash hook judges git in the directory a cd before it leaves the
   process.env.EGC_GUARDIAN_CLI = cli;
   const { run } = require(path.join(__dirname, '..', 'scripts', 'hooks', 'pre-bash-guardian-validate'));
   const blocked = command => run({ tool_name: 'Bash', tool_input: { command }, cwd: root }).exitCode === 2;
-  for (const command of ['cd evil && git status', 'cd evil/sub && git fetch', '(cd evil; git status)', 'D=evil; cd $D && git status', 'pushd evil && git status']) {
+  fs.writeFileSync(at('plain', 's.sh'), 'git status\n');
+  fs.writeFileSync(at('plain', 'lost.sh'), 'cd "$EGC_UNSET_DIR"\ngit status\n');
+  const script = at('plain', 's.sh').replaceAll('\\', '/');
+  const lost = at('plain', 'lost.sh').replaceAll('\\', '/');
+  for (const command of [
+    'cd evil && git status', 'cd evil/sub && git fetch', '(cd evil; git status)', 'D=evil; cd $D && git status', 'pushd evil && git status',
+    // A script run after the cd runs its commands there too, however it is
+    // reached: the same file from both directories, or only from the new one.
+    `cd evil && bash ${script}`, `cd evil && . ${script}`, 'cd evil && sh ../plain/s.sh',
+    // Past a move of its own only the running shell knows, a script's
+    // command is judged where the script may start.
+    `cd evil && bash ${lost}`,
+  ]) {
     assert.ok(blocked(command), command);
   }
+  assert.ok(!blocked(`bash ${script}`), 'a script run where the line starts');
   // A move only the running shell knows leaves the line where it starts.
   for (const command of ['cd work && git status', 'cd plain && git status', 'cd $EGC_UNSET_DIR && git status']) {
     assert.ok(!blocked(command), command);

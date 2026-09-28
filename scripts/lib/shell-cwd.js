@@ -24,8 +24,10 @@ const CD_OPTION_RE = /^-[LPe@]+$/;
 const STACK_INDEX_RE = /^[+-]\d+$/;
 const INHERITED_STACK = 'uses a directory stack the shell had before this command, which this hook does not know';
 
+// Where a line or a script starts: one directory, or each of several when
+// it may start in any of them (a script run after a cd that may fail).
 function startCwd(dir) {
-  return { dirs: [dir], stack: [], previous: null, unknown: null, ranOther: false };
+  return { dirs: Array.isArray(dir) ? [...new Set(dir)] : [dir], stack: [], previous: null, unknown: null, ranOther: false };
 }
 
 // The operands of cd, pushd and popd. Options come before the first operand

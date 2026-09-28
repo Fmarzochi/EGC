@@ -1082,7 +1082,12 @@ function readOperands(found, dirs, context) {
     for (const { root, base } of places) {
       const read = readOperand(target, context, root, base);
       if (read?.blocked) return { files, blocked: read.blocked };
-      if (read) files.push({ file: read.file, base, args: target.args });
+      if (!read) continue;
+      // One file reached from several directories is read once, and runs
+      // from any of them.
+      const same = files.find(entry => entry.file === read.file && entry.args === target.args);
+      if (same) same.bases.push(base);
+      else files.push({ file: read.file, base, bases: [base], args: target.args });
     }
   }
   return { files, blocked: null };
@@ -1430,13 +1435,15 @@ function sourcedMove(where, operands, own) {
   return where.unknown ? where : { ...where, unknown: 'a script it sources moves the directory, which this hook does not follow' };
 }
 
-// Also gives, for each of `segments`, the directories it can run in (null
-// when only the running shell knows them), so each is judged there.
+// Also gives, for each of `segments` and each segment collected from the
+// scripts they run, the directories it can run in (null when only the
+// running shell knows them), so each is judged there.
 function scriptSegmentsOf(segments, cwd, depth, seen, context) {
   const collected = [];
   const committed = [];
   const places = [];
-  const outcome = blocked => ({ segments: collected, committed, places, blocked });
+  const collectedPlaces = [];
+  const outcome = blocked => ({ segments: collected, committed, places, collectedPlaces, blocked });
   let homeKnown = context.homeKnown;
   let where = startCwd(cwd || process.cwd());
   for (const segment of segments) {
@@ -1445,10 +1452,11 @@ function scriptSegmentsOf(segments, cwd, depth, seen, context) {
     const operands = scriptOperandsOf(segment, where.dirs, here);
     if (operands.blocked) return outcome(operands.blocked);
     let sourcedChangesHome = false;
-    for (const { file, base, args } of operands.files) {
-      const found = fileSegmentsOf(file, { ...operands, base, args }, depth, seen, here);
+    for (const { file, base, bases, args } of operands.files) {
+      const found = fileSegmentsOf(file, { ...operands, base, bases, args }, depth, seen, here);
       collected.push(...found.segments);
       committed.push(...found.committed);
+      collectedPlaces.push(...found.places);
       if (found.blocked) return outcome(found.blocked);
       sourcedChangesHome = sourcedChangesHome || (operands.sources && actsInCaller(found.own, changesHome));
       where = sourcedMove(where, operands, found.own);
@@ -1512,10 +1520,12 @@ function setsPositionals(values) {
 // The segments one script file brings, its own and those of the scripts it
 // runs in turn, each marked committed or not. A script that cannot be
 // analyzed fails closed whoever runs it: its commands could be anything.
+const NO_FILE_SEGMENTS = { segments: [], own: [], committed: [], places: [] };
+
 function fileSegmentsOf(file, operands, depth, seen, context) {
   const nested = nestedSegmentsOf(file, depth, seen);
-  if (nested.blocked) return { segments: [], own: [], committed: [], blocked: nested.blocked };
-  if (nested.segments === null) return { segments: [], own: [], committed: [], blocked: null };
+  if (nested.blocked) return { ...NO_FILE_SEGMENTS, blocked: nested.blocked };
+  if (nested.segments === null) return { ...NO_FILE_SEGMENTS, blocked: null };
   const committedFile = isCommittedUnchanged(file);
   // A script's command words are judged by every value they can take, from
   // what the script and its caller fix; one the hook cannot read fails closed
@@ -1524,14 +1534,14 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
   const bindings = mergeBindings(context.bindings, ownBindings);
   const positional = scriptPositional(operands, file, nested.segments, context.homeKnown);
   const words = resolveCommandWords(nested.segments, bindings, !committedFile, positional);
-  if (words.blocked) return { segments: [], own: [], committed: [], blocked: `script ${file}: ${words.blocked}` };
+  if (words.blocked) return { ...NO_FILE_SEGMENTS, blocked: `script ${file}: ${words.blocked}` };
   const reread = secondReadings(nested.text, bindings, !committedFile);
-  if (reread.blocked) return { segments: [], own: [], committed: [], blocked: `script ${file}: ${reread.blocked}` };
+  if (reread.blocked) return { ...NO_FILE_SEGMENTS, blocked: `script ${file}: ${reread.blocked}` };
   const own = [...words.segments, ...reread.segments];
   const mark = committedFile ? { bound: boundAssignments(nested.segments, context.callerSet) } : false;
   // A script the wrapper moved into a directory runs its own children there.
   const ownWrites = writesOf(own, operands.base, false);
-  const inner = scriptSegmentsOf(own, operands.base, depth + 1, seen, {
+  const inner = scriptSegmentsOf(own, operands.bases ?? operands.base, depth + 1, seen, {
     own: false,
     cwdUnknown: operands.cwdUnknown,
     cwdKnown: true,
@@ -1543,10 +1553,15 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
     callerSet: new Set([...context.callerSet, ...assignedNames(nested.segments)]),
     written: { paths: new Set([...context.written.paths, ...ownWrites.paths]), bulk: context.written.bulk },
   });
+  // Its commands run where its own moves leave them, from where it starts;
+  // one past a move only the running shell knows, and code it reads after
+  // expanding, where it starts.
+  const ownPlaces = own.map((_, i) => (i < words.segments.length ? inner.places[i] : null) ?? operands.bases ?? [operands.base]);
   return {
     segments: [...own, ...inner.segments],
     own,
     committed: [...own.map(() => mark), ...inner.committed],
+    places: [...ownPlaces, ...inner.collectedPlaces],
     blocked: inner.blocked,
   };
 }
@@ -2179,11 +2194,11 @@ function judgeCommand(inputOrRaw) {
     };
   }
   const committed = [...segments.map(() => false), ...scripts.committed];
-  // A segment of the line itself is judged in every directory a cd before
-  // it can have left it in (`cd dir && git status` runs git in dir); the
-  // rest, and one after a move only the running shell knows, where the
-  // line starts.
-  const cwds = segments.map((_, i) => (i < words.segments.length ? scripts.places[i] ?? null : null));
+  // A segment is judged in every directory a cd before it can have left it
+  // in (`cd dir && git status` runs git in dir), a script's from where the
+  // script runs; code the line reads after expanding, and a segment after a
+  // move only the running shell knows, where the line starts.
+  const cwds = [...segments.map((_, i) => (i < words.segments.length ? scripts.places[i] ?? null : null)), ...scripts.collectedPlaces];
   segments.push(...scripts.segments);
   const answer = callGuardianVerdict(
     cli,
