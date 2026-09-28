@@ -377,6 +377,8 @@ function skipLeadingPositionals(words, index, name, moves) {
 
 // Skips a wrapper's options and leading positionals; the directory and root
 // they move to become where later operands are resolved.
+const COMMAND_LOOKUP_FLAGS = new Set(['-v', '-V']);
+
 function skipWrapperOptions(words, start, name, state) {
   const moves = { root: undefined, dir: undefined, unsure: false, skipChdir: false, login: false };
   if (name === 'bwrap') state.unresolved = BWRAP_VIEW;
@@ -393,6 +395,9 @@ function skipWrapperOptions(words, start, name, state) {
       break;
     }
     const option = readWrapperOption(name, word, words[index + 1]?.value) ?? NO_OPTION;
+    // command -v and -V only say what each name would run: the words after
+    // them are names, and nothing runs.
+    if (name === 'command' && option.names?.some(flag => COMMAND_LOOKUP_FLAGS.has(flag))) return words.length;
     moves.skipChdir = moves.skipChdir || Boolean(option.names?.includes('--skip-chdir'));
     moves.login = moves.login || Boolean(option.names?.some(flag => SUDO_LOGIN_FLAGS.has(flag)));
     noteWrapperMove(name, optionMove(option, word), option.width === 2 ? words[index + 1] : words[index], moves, state);
