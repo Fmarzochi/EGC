@@ -112,6 +112,13 @@ function runTests() {
       const script = runHook('/tmp/egc-script.sh', { EGC_GUARDIAN_CLI: listCli }, { file_path: '/tmp/egc-script.sh', content: '#!/bin/bash\necho a\n' });
       assert.strictEqual(script.code, 2, script.stderr);
       assert.match(script.stderr, /not one verdict per command/);
+      for (const entry of ['{}', 'null', '{"allowed":"yes"}', '"allowed"', '[]']) {
+        const shapeCli = path.join(dir, `cli-shape-${entry.length}-${entry.charCodeAt(1)}.js`);
+        fs.writeFileSync(shapeCli, `const a = process.argv[2]; process.stdout.write(a === "write" ? JSON.stringify({ allowed: true }) : ${JSON.stringify(`[${entry}]`)});\n`);
+        const shaped = runHook('/tmp/egc-script.sh', { EGC_GUARDIAN_CLI: shapeCli }, { file_path: '/tmp/egc-script.sh', content: '#!/bin/bash\necho a\n' });
+        assert.strictEqual(shaped.code, 2, `[${entry}]: ${shaped.stderr}`);
+        assert.match(shaped.stderr, /could not validate this write/, `[${entry}]`);
+      }
       const batchCrashCli = path.join(dir, 'cli-batch-crash.js');
       fs.writeFileSync(batchCrashCli, 'if (process.argv[2] === "write") process.stdout.write(JSON.stringify({ allowed: true })); else process.exit(3);\n');
       const crashed = runHook('/tmp/egc-script.sh', { EGC_GUARDIAN_CLI: batchCrashCli }, { file_path: '/tmp/egc-script.sh', content: '#!/bin/bash\necho a\n' });

@@ -23,10 +23,9 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { resolveGuardianCli, callGuardianVerdict, guardianFailureReason } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardianVerdict, guardianFailureReason, readHookInput } = require('../lib/guardian-bin');
 
-const MAX_STDIN = 1024 * 1024;
-// An input cut at MAX_STDIN is not the write that happens: the path or the
+// An input cut at the size the hook reads is not the write that happens: the path or the
 // content it names could lie in what was cut, so it is refused.
 const OVER_LIMIT = 'EGC Guardian BLOCKED this write: the hook input is larger than the 1 MiB this validator reads, so the write was not validated. Write the file in smaller parts.';
 const VALIDATE_TIMEOUT_MS = 4000;
@@ -213,16 +212,8 @@ function run(inputOrRaw, options = {}) {
 module.exports = { run };
 
 if (require.main === module) {
-  const chunks = [];
-  let received = 0;
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (received < MAX_STDIN) chunks.push(chunk.substring(0, MAX_STDIN - received));
-    received += chunk.length;
-  });
-  process.stdin.on('end', () => {
-    const raw = chunks.join('');
-    const result = run(raw, { truncated: received > MAX_STDIN });
+  readHookInput(({ raw, truncated }) => {
+    const result = run(raw, { truncated });
     if (result.stderr) process.stderr.write(`${result.stderr}\n`);
     process.stdout.write(raw);
     process.exitCode = result.exitCode === 2 ? 2 : 0;

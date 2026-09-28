@@ -387,6 +387,40 @@ function guardianFailureReason(failure, timeoutMs) {
   }
 }
 
+// The most of its input a hook that gates a command or a write reads.
+const MAX_HOOK_INPUT_BYTES = 1024 * 1024;
+
+// A hook's input: at most MAX_HOOK_INPUT_BYTES of it, decoded once, and
+// whether any was cut. Bytes are counted, not UTF-16 units, so a multibyte
+// input past the size is cut as an ASCII one is; a stream that fails before
+// its end counts as cut, since what was read is not the whole input.
+function readHookInput(onRead, stream = process.stdin) {
+  const chunks = [];
+  let kept = 0;
+  let truncated = false;
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    onRead({ raw: Buffer.concat(chunks).toString('utf8'), truncated });
+  };
+  stream.on('data', chunk => {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    const room = MAX_HOOK_INPUT_BYTES - kept;
+    if (bytes.length > room) truncated = true;
+    if (room > 0) {
+      const part = bytes.subarray(0, room);
+      chunks.push(part);
+      kept += part.length;
+    }
+  });
+  stream.on('end', finish);
+  stream.on('error', () => {
+    truncated = true;
+    finish();
+  });
+}
+
 // The parsed JSON, or null on any failure, for the callers that still fail
 // open: the prompt router and the intuition hook, the memory miner and
 // auto-learn.
@@ -400,6 +434,8 @@ module.exports = {
   callGuardian,
   callGuardianVerdict,
   guardianFailureReason,
+  MAX_HOOK_INPUT_BYTES,
+  readHookInput,
   fromEnv,
   fromPackageLayout,
   fromMcpConfigs,

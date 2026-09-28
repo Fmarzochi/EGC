@@ -30,14 +30,13 @@ const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const path = require('node:path');
-const { resolveGuardianCli, callGuardianVerdict, guardianFailureReason } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardianVerdict, guardianFailureReason, readHookInput } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies, constructEnd } = require('../lib/shell-split');
 const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption } = require('../lib/wrapper-options');
 const { collectBindings, mergeBindings, valuesOf, commandWordChoices, quoteField, singleQuoted } = require('../lib/shell-bindings');
 const { startCwd, afterMove, CWD_CHANGERS } = require('../lib/shell-cwd');
 
-const MAX_STDIN = 1024 * 1024;
-// An input cut at MAX_STDIN is not the command that runs: what was cut could
+// An input cut at the size the hook reads is not the command that runs: what was cut could
 // hold the rest of it, so it is refused rather than judged by its start.
 const OVER_LIMIT = 'EGC Guardian BLOCKED this command: the hook input is larger than the 1 MiB this validator reads, so the command was not validated. Split it into smaller commands.';
 const DEFAULT_VALIDATE_TIMEOUT_MS = 4000;
@@ -1585,16 +1584,7 @@ function run(inputOrRaw, options = {}) {
 module.exports = { run, extractSegments, isAdvisory, bindingsOfSegments };
 
 if (require.main === module) {
-  let raw = '';
-  let truncated = false;
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    truncated = truncated || raw.length + chunk.length > MAX_STDIN;
-    if (raw.length < MAX_STDIN) {
-      raw += chunk.substring(0, MAX_STDIN - raw.length);
-    }
-  });
-  process.stdin.on('end', () => {
+  readHookInput(({ raw, truncated }) => {
     const result = run(raw, { truncated });
     if (result.stderr) process.stderr.write(result.stderr + '\n');
     if (result.exitCode === 2) process.exit(2);

@@ -3,6 +3,7 @@
 
 const { isHookEnabled } = require('../lib/hook-flags');
 const { trace } = require('../lib/utils');
+const { readHookInput } = require('../lib/guardian-bin');
 const { toPreToolUseOutput } = require('./pretooluse-output');
 
 const { run: runGuardianValidate } = require('./pre-bash-guardian-validate');
@@ -18,8 +19,6 @@ const { run: runBudgetCheck } = require('./pre-budget-check');
 const { run: runCommandLog } = require('./post-bash-command-log');
 const { run: runPrCreated } = require('./post-bash-pr-created');
 const { run: runBuildComplete } = require('./post-bash-build-complete');
-
-const MAX_STDIN = 1024 * 1024;
 
 const PRE_BASH_HOOKS = [
   {
@@ -94,25 +93,12 @@ const POST_BASH_HOOKS = [
   },
 ];
 
-// The hook input, at most MAX_STDIN characters, and whether any was cut.
+// The hook input, at most the size the guards read, and whether any was cut.
 function readStdinRaw() {
-  return new Promise(resolve => {
-    let raw = '';
-    let truncated = false;
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', chunk => {
-      truncated = truncated || raw.length + chunk.length > MAX_STDIN;
-      if (raw.length < MAX_STDIN) {
-        const remaining = MAX_STDIN - raw.length;
-        raw += chunk.substring(0, remaining);
-      }
-    });
-    process.stdin.on('end', () => resolve({ raw, truncated }));
-    process.stdin.on('error', () => resolve({ raw, truncated }));
-  });
+  return new Promise(resolve => readHookInput(resolve));
 }
 
-// The pre-mode answer to an input cut at MAX_STDIN: it is not the command
+// The pre-mode answer to an input cut at the size the guards read: it is not the command
 // that runs, since what was cut could hold the rest of it, so the guards
 // are not run on its start.
 function overLimitOutput() {
