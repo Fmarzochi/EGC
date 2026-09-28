@@ -64,6 +64,10 @@ function verdictForCommand(segment) {
   return { allowed: true, trust_level: 'SAFE_READONLY' };
 }
 
+// A target from the root, the home directory or a Windows drive, which the
+// real validator reads as an absolute path wherever it runs.
+const BROAD_START_RE = /^(?:[/~]|[A-Za-z]:[\\/])/;
+
 // The real validator holds a command read out of a committed, unchanged
 // script only to the grave denials; the fixture mirrors that for the one
 // the hook tests assert: a delete is flagged there only when its target is
@@ -79,9 +83,9 @@ function committedVerdict(segment, bound) {
     if (variable) {
       const rest = target.slice(variable[0].length);
       if ((rest !== '' && !/^[\\/]/.test(rest)) || /[$`*?[]/.test(rest) || rest.split(/[\\/]/).includes('..')) return true;
-      return !Object.hasOwn(bound, variable[1]) || bound[variable[1]].some(value => /^[/~]/.test(value) || /[*?[]/.test(value) || value.includes('..'));
+      return !Object.hasOwn(bound, variable[1]) || bound[variable[1]].some(value => BROAD_START_RE.test(value) || /[*?[]/.test(value) || value.includes('..'));
     }
-    return target.includes('$') || /^[/~]/.test(target) || target === '.' || target === '..' || target === '*' || target.startsWith('../');
+    return target.includes('$') || BROAD_START_RE.test(target) || target === '.' || target === '..' || target === '*' || target.startsWith('../');
   });
   return grave ? verdict : { ...verdict, advisory: true };
 }

@@ -93,6 +93,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The command log and the Guardian audit log mask passwords named with pass or pwd and those the mysql, mariadb, sshpass and redis-cli clients take on their command line (#1566).
 - The Bash hook follows a cd whose target the line builds from its own variables, reads a leading `~` as the home directory before the rest of the word, and leaves any relative target to the shell under `CDPATH` (#1593).
 - `install.ps1` puts the git pre-commit hook in a clone through the same helper as `install.sh` (#1568).
+- A script run with words the Bash hook can read gets them as `$1` and on, `"$@"`, `"$*"` and `$#` when the hook reads it, so a wrapper that runs its words is judged by them (#1594).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
 - Routing on this machine, without an API key: the catalog index records the source of every component, the prompt router and `orchestrate_task` read the install state of the active tool and never offer what it has not installed (a named `Not installed for this tool` line and `not_installed` carry the command that adds them), the local scorers weigh tokens by rarity, name and activation text, stem plurals and ignore Portuguese and Spanish function words, and the decision stays with the tool's model, by intent (#1453).
