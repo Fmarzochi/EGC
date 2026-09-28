@@ -854,11 +854,62 @@ function readOperands(found, dirs, context) {
 const SHEBANG_SHELLS = new Set(['sh', 'bash', 'zsh', 'ksh', 'mksh', 'dash', 'ash', 'busybox']);
 const NOT_SHELL_EXTENSIONS_RE = /\.(?:cmd|bat|ps1|exe|com)$/i;
 
+// env's long options, and those of its options, short and long, that take
+// the next word as their value (-S takes one too and splits it into more
+// words).
+const ENV_LONG_OPTIONS = ['unset', 'chdir', 'argv0', 'split-string', 'ignore-environment', 'null', 'debug', 'block-signal', 'default-signal', 'ignore-signal', 'list-signal-handling', 'help', 'version'];
+const ENV_LONG_VALUE = new Set(['unset', 'chdir', 'argv0']);
+const ENV_SHORT_VALUE = new Set(['u', 'C', 'a']);
+const ENV_SHORT_FLAGS = new Set(['i', '0', 'v']);
+
+// The words env reads after one cluster of short options: `-iu NAME` takes
+// NAME, `-Ssh -e` splits `sh` into a word of its own. null for an option env
+// does not know.
+function afterEnvShort(word, rest) {
+  for (let k = 1; k < word.length; k += 1) {
+    const attached = word.slice(k + 1);
+    if (word[k] === 'S') return attached ? [attached, ...rest] : rest;
+    if (ENV_SHORT_VALUE.has(word[k])) return attached ? rest : rest.slice(1);
+    if (!ENV_SHORT_FLAGS.has(word[k])) return null;
+  }
+  return rest;
+}
+
+// The words env reads after one long option, abbreviated as getopt_long
+// allows; none after --help or --version, which run nothing. null for an
+// option env does not know.
+function afterEnvLong(word, rest) {
+  const eq = word.indexOf('=');
+  const name = eq < 0 ? word.slice(2) : word.slice(2, eq);
+  const matches = ENV_LONG_OPTIONS.filter(option => option.startsWith(name));
+  const option = matches.includes(name) ? name : matches.length === 1 && matches[0];
+  if (!option) return null;
+  if (option === 'help' || option === 'version') return [];
+  if (option === 'split-string') return eq < 0 ? rest : [word.slice(eq + 1), ...rest];
+  return ENV_LONG_VALUE.has(option) && eq < 0 ? rest.slice(1) : rest;
+}
+
+// The program env runs, read past its options and assignments; undefined
+// when it runs none, null when an option cannot be read.
+function envProgram(words) {
+  let rest = words;
+  while (rest?.length > 0) {
+    const [word, ...after] = rest;
+    if (word === '--') return after.find(operand => !operand.includes('='));
+    if (word.startsWith('--')) rest = afterEnvLong(word, after);
+    else if (word.startsWith('-')) rest = afterEnvShort(word, after);
+    else if (word.includes('=')) rest = after;
+    else return word;
+  }
+  return rest === null ? null : undefined;
+}
+
 // Whether a file run by its path is a shell script: its #! line names a
 // shell, directly or through env, or it has none, and then the calling shell
 // runs it as a script of its own. A binary, a Windows command file and
-// another interpreter's script are not read as shell. A head that cannot be
-// read is left to the full read, which fails closed.
+// another interpreter's script are not read as shell; an env line whose
+// options cannot be read is. A head that cannot be read is left to the full
+// read, which fails closed.
 function runsAsShellScript(file) {
   if (NOT_SHELL_EXTENSIONS_RE.test(file)) return false;
   let head;
@@ -877,8 +928,8 @@ function runsAsShellScript(file) {
   if (!head.startsWith('#!')) return true;
   const words = head.slice(2).split('\n')[0].trim().split(/\s+/);
   const program = path.basename(words[0] ?? '');
-  const run = program === 'env' ? words.slice(1).find(word => !word.startsWith('-') && !word.includes('=')) : program;
-  return SHEBANG_SHELLS.has(path.basename(run ?? ''));
+  const run = program === 'env' ? envProgram(words.slice(1)) : program;
+  return run === null || SHEBANG_SHELLS.has(path.basename(run ?? ''));
 }
 
 // One operand of an interpreter: the script file it names, the reason it
