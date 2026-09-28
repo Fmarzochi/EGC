@@ -275,8 +275,83 @@ function readWrapperOption(name, word, next) {
   return readGetoptOption(word, spec, next);
 }
 
+// Package and environment runners that run the command after their options
+// (runner-wrappers.ts): a runner with `subcommands` runs one only after one
+// of them and reads its options again after it; a subcommand in
+// `keepsSubcommand` is the command itself; `shellFlags` hand it to a shell.
+const NPM_VALUES = ['-p', '--package', '-c', '--call', '-w', '--workspace', '--prefix', '--registry', '--cache', '--userconfig'];
+const PNPM_VALUES = ['-C', '--dir', '--filter', '-F', '--workspace-dir', '--package', '--reporter', '--resume-from', '--loglevel'];
+const UV_VALUES = [
+  '--from', '--with', '--with-editable', '--with-requirements', '-p', '--python', '--directory', '--project', '--package',
+  '--extra', '--group', '--only-group', '--no-group', '--env-file', '--index', '--index-url', '--default-index',
+  '--extra-index-url', '-f', '--find-links', '--config-file', '--cache-dir', '--python-preference', '--color',
+  '--index-strategy', '--keyring-provider', '--resolution', '--prerelease', '--exclude-newer', '--link-mode',
+  '-P', '--upgrade-package', '--reinstall-package', '-C', '--config-setting', '--allow-insecure-host', '--no-extra',
+  '--python-platform', '--refresh-package', '--no-binary-package', '--only-binary-package', '--no-build-package',
+];
+const CONDA_VALUES = ['-n', '--name', '-p', '--prefix', '--cwd'];
+
+const RUNNER_SPECS = {
+  npx: { valueFlags: set(NPM_VALUES), shellFlags: set(['-c', '--call']) },
+  npm: { valueFlags: set(NPM_VALUES), subcommands: [['exec'], ['x']], shellFlags: set(['-c', '--call']) },
+  pnpx: { valueFlags: set(PNPM_VALUES), exactLongFlags: set(['--shell-mode']), shellFlags: set(['-c', '--shell-mode']) },
+  pnpm: { valueFlags: set(PNPM_VALUES), exactLongFlags: set(['--shell-mode']), subcommands: [['exec'], ['dlx']], shellFlags: set(['-c', '--shell-mode']) },
+  yarn: {
+    valueFlags: set(['--cwd', '-p', '--package', '--cache-folder', '--modules-folder', '--mutex', '--registry']),
+    subcommands: [['exec'], ['dlx'], ['node']],
+    keepsSubcommand: ['node'],
+  },
+  bunx: { valueFlags: set(['-p', '--package']) },
+  bun: { valueFlags: set(['--cwd', '-c', '--config', '--env-file', '-p', '--package']), subcommands: [['x']] },
+  uvx: { valueFlags: set(UV_VALUES) },
+  uv: { valueFlags: set(UV_VALUES), subcommands: [['run'], ['tool', 'run']] },
+  poetry: { valueFlags: set(['-C', '--directory', '-P', '--project']), subcommands: [['run']] },
+  pipenv: { valueFlags: set(['--python', '--pypi-mirror']), subcommands: [['run']] },
+  pdm: { valueFlags: set(['-p', '--project', '-c', '--config', '--venv']), subcommands: [['run']] },
+  rye: { valueFlags: set(['--pyproject']), subcommands: [['run']] },
+  hatch: { valueFlags: set(['-e', '--env', '-p', '--project', '--data-dir', '--cache-dir', '--config']), subcommands: [['run']] },
+  conda: { valueFlags: set(CONDA_VALUES), subcommands: [['run']] },
+  mamba: { valueFlags: set(CONDA_VALUES), subcommands: [['run']] },
+  micromamba: { valueFlags: set(CONDA_VALUES), subcommands: [['run']] },
+  pipx: { valueFlags: set(['--spec', '--python', '--pip-args', '--index-url', '--backend']), subcommands: [['run']] },
+};
+
+function readRunnerOptions(values, from, spec) {
+  const names = [];
+  let i = from;
+  while (i < values.length && values[i].startsWith('-') && values[i] !== '-') {
+    if (values[i] === '--') return { names, end: i + 1 };
+    const option = readGetoptOption(values[i], spec, values[i + 1]);
+    names.push(...(option.names ?? []));
+    i += option.width;
+  }
+  return { names, end: i };
+}
+
+// Where the command a runner runs starts among `values` (the runner first),
+// and the option that hands it to a shell as one string instead; null when
+// the runner runs no command here (`uv pip install`, `pnpm install`).
+function runnerCommandStart(values) {
+  const spec = RUNNER_SPECS[String(values[0] ?? '').split(/[\\/]/).pop().replace(/\.(?:cmd|exe)$/i, '')];
+  if (!spec) return null;
+  const first = readRunnerOptions(values, 1, spec);
+  let names = first.names;
+  let start = first.end;
+  if (spec.subcommands) {
+    const match = spec.subcommands.find(words => words.every((word, k) => values[start + k] === word));
+    if (!match) return null;
+    const after = start + match.length;
+    if (spec.keepsSubcommand?.includes(match.at(-1))) return { start: after - 1, shellFlag: null };
+    const again = readRunnerOptions(values, after, spec);
+    names = [...names, ...again.names];
+    start = again.end;
+  }
+  const shellFlag = names.find(name => spec.shellFlags?.has(name)) ?? null;
+  return start < values.length || shellFlag !== null ? { start, shellFlag } : null;
+}
+
 // Shell keywords and grouping openers that stand in front of the command
 // actually run (validator.ts SHELL_KEYWORDS): `then bash x.sh`, `( bash x.sh )`.
 const SHELL_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
 
-module.exports = { WRAPPER_SPECS, PARALLEL_SPECS, SHELL_KEYWORDS, readWrapperOption, readParallelOption, readBwrapOption };
+module.exports = { WRAPPER_SPECS, RUNNER_SPECS, PARALLEL_SPECS, SHELL_KEYWORDS, readWrapperOption, readParallelOption, readBwrapOption, runnerCommandStart };

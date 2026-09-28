@@ -32,7 +32,7 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies, constructEnd } = require('../lib/shell-split');
-const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption } = require('../lib/wrapper-options');
+const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption, runnerCommandStart } = require('../lib/wrapper-options');
 const { collectBindings, mergeBindings, valuesOf, commandWordChoices, quoteField, singleQuoted } = require('../lib/shell-bindings');
 
 const MAX_STDIN = 1024 * 1024;
@@ -452,6 +452,11 @@ function skipEnvAndWrappers(words, state) {
     const name = word.split(/[\\/]/).pop();
     if (isWrapper(name)) {
       index = skipWrapperOptions(words, index + 1, name, wrapperState);
+      continue;
+    }
+    const runner = runnerCommandStart(words.slice(index).map(each => each.value));
+    if (runner !== null && runner.start > 0 && index + runner.start < words.length) {
+      index += runner.start;
       continue;
     }
     const next = skipCommandCarrier(words, index);
