@@ -156,5 +156,17 @@ notDenied('HOME=/tmp/x env node app.js');
 notDenied('HOME=/tmp/x nice npm install');
 notDenied('HOME=/tmp/x env');
 
+console.log('\n=== A path that climbs out of a system directory, and a quoted export ===\n');
+denied('EDITOR=/usr/bin/../../tmp/evil.sh git commit');
+denied('VISUAL=/usr/../tmp/evil.sh git commit');
+denied('PAGER=/bin/../tmp/evil.sh git log');
+denied('export "BASH_ENV=/tmp/evil.sh"');
+denied("export 'GIT_SSH_COMMAND=x'");
+denied('export "GIT_EXTERNAL_DIFF=./x.sh"');
+notDenied('EDITOR=/usr/bin/vim git commit');
+notDenied('EDITOR=/usr/bin/../lib/git-core/git-editor git commit');
+notDenied('export "FOO=bar"');
+notDenied('export "PATH=/usr/bin"');
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

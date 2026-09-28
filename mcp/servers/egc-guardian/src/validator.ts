@@ -534,10 +534,17 @@ const CONFIG_HOME_COMMANDS = new Set(['git', 'gpg', 'gpg2']);
 // less options that hand it an initial command or a key file.
 const LESS_COMMAND_RE = /\+|--lesskey|(?:^|\s)-?[A-Za-z]*k/;
 
+// A program in a system directory, its path resolved first so a `..` cannot
+// climb back out of one (`/usr/bin/../../tmp/evil.sh`).
+function inSystemDirectory(program: string): boolean {
+  const resolved = program.startsWith('/') ? path.posix.normalize(program) : program;
+  return SYSTEM_PROGRAM_DIRS.some(dir => resolved.startsWith(dir));
+}
+
 function programValueDenied(text: string, alone: boolean): boolean {
   const words = text.trim().split(/\s+/);
   const program = words[0] ?? '';
-  const byPath = program.includes('/') && !SYSTEM_PROGRAM_DIRS.some(dir => program.startsWith(dir));
+  const byPath = program.includes('/') && !inSystemDirectory(program);
   const args = words.slice(1);
   return isInlineProgram(text) || byPath || (alone ? args.length > 0 : args.some(arg => !PLAIN_FLAG_RE.test(arg)));
 }
@@ -664,10 +671,13 @@ function tryUnwrapExport(current: string[]): UnwrapStep | null {
     if (!flagToken.startsWith('-')) break;
     idx += 1;
   }
-  const exportMatch = idx < current.length ? ENV_ASSIGNMENT_RE.exec(current[idx]) : null;
+  // export removes the quotes around its argument before it reads the
+  // assignment, so `export "BASH_ENV=x"` sets BASH_ENV as the bare form does.
+  const assignment = idx < current.length ? stripQuotes(current[idx]) : '';
+  const exportMatch = ENV_ASSIGNMENT_RE.exec(assignment);
   if (!exportMatch) return null;
 
-  const blocked = envAssignmentBlock(exportMatch[1], current[idx].slice(exportMatch[0].length), 'exporting', undefined, true);
+  const blocked = envAssignmentBlock(exportMatch[1], assignment.slice(exportMatch[0].length), 'exporting', undefined, true);
   return blocked ? { blocked } : { remaining: current.slice(idx + 1) };
 }
 
