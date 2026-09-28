@@ -580,5 +580,69 @@ test('a heredoc with no terminator still extracts substitutions from its untermi
   );
 });
 
+console.log('\nWhat each step of the scanners reads:');
+test('a heredoc whose first body line is its terminator closes there', () => {
+  assert.deepStrictEqual(splitShellSegments('cat <<EOF\nEOF\nrm -rf /'), ['cat <<EOF\nEOF', 'rm -rf /']);
+  assert.deepStrictEqual(extractSubstitutionBodies("cat <<'EOF'\nEOF\necho $(rm -rf /)"), ['rm -rf /']);
+});
+test('a } with no ${ open does not close the next ${...}, so a # inside it stays literal', () => {
+  assert.deepStrictEqual(
+    splitShellSegments('echo }; echo ${x:-a # b}; rm -rf /', { stripComments: true }),
+    ['echo }', 'echo ${x:-a # b}', 'rm -rf /'],
+  );
+  assert.deepStrictEqual(extractSubstitutionBodies('echo }; echo ${x:-a # $(id)}; echo $(rm -rf /)'), ['id', 'rm -rf /']);
+});
+test('an unterminated quote takes the rest of the line, a trailing operator included', () => {
+  assert.deepStrictEqual(splitShellSegments("echo 'a;"), ["echo 'a;"]);
+  assert.deepStrictEqual(splitShellSegments('echo "a|', { splitOnPipe: true }), ['echo "a|']);
+});
+test('outside ${...} the splitter leaves a command substitution to extractSubstitutionBodies', () => {
+  assert.deepStrictEqual(splitShellSegments('echo $(a; b)'), ['echo $(a', 'b)']);
+  assert.deepStrictEqual(extractSubstitutionBodies('echo $(a; b)'), ['a; b']);
+});
+test('a & right after a leading > is a redirection, not a separator', () => {
+  assert.deepStrictEqual(splitShellSegments('>&2 echo hi'), ['>&2 echo hi']);
+});
+test('a << inside an expandable heredoc body is body text, not a second heredoc', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies("cat <<EOF\n<<'A'\nEOF\necho $(rm -rf /)"), ['rm -rf /']);
+});
+test('a quoted heredoc delimiter is read whole, never as a substitution', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('cat <<"$(rm -rf /)"\nbody\n$(rm -rf /)\n'), []);
+});
+test('an unquoted heredoc delimiter ending in a backquote closes on its own line', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('cat <<E`\nE`\necho `rm -rf /`'), ['rm -rf /']);
+});
+test('the terminator line of a quoted heredoc is skipped whole', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('cat <<"E\'"\nbody\nE\'\necho $(rm -rf /)'), ['rm -rf /']);
+});
+test('a literal heredoc body hides its substitutions and the line after its terminator is scanned', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies("cat <<'EOF'\n$(rm -rf /)\nEOF\necho $(id)"), ['id']);
+});
+test('a single-quoted string hides its substitutions up to its closing quote only', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies("echo 'a $(x)' $(rm -rf /) '$(y)'"), ['rm -rf /']);
+});
+test('a backslash escapes exactly the next character, inside double quotes too', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('echo \\$(x) \\a$(rm -rf /) "\\$(y)"'), ['rm -rf /']);
+});
+test('a double-quoted string keeps a single quote literal and ends at its own closing quote', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('echo "it\'s $(a)" \'$(b)\' "x" # $(c)'), ['a']);
+});
+test("$'...' is read past an escaped quote and holds no substitution", () => {
+  assert.deepStrictEqual(
+    extractSubstitutionBodies("echo $'a\\'b $(x)' $(rm -rf /)$'c'$(id)"),
+    ['rm -rf /', 'id'],
+  );
+  assert.deepStrictEqual(extractSubstitutionBodies("echo $(id) $'abc"), ['id']);
+  assert.deepStrictEqual(extractSubstitutionBodies("echo $'a'{ # $(rm -rf /)"), []);
+  assert.deepStrictEqual(extractSubstitutionBodies('echo $"x" $(rm -rf /)'), ['rm -rf /']);
+});
+test('a substitution right after another one is extracted too', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies('echo $(a)$(rm -rf /)'), ['a', 'rm -rf /']);
+});
+test('the newline after a heredoc terminator is read, so a queued empty delimiter closes there and the next line is scanned', () => {
+  assert.deepStrictEqual(extractSubstitutionBodies("cat <<A <<''\nA\n$(rm -rf /)\n"), ['rm -rf /']);
+  assert.deepStrictEqual(splitShellSegments("cat <<A <<''\nA\n$(rm -rf /)\n"), ["cat <<A <<''\nA", '$(rm -rf /)']);
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

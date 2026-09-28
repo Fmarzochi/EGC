@@ -392,6 +392,157 @@ function bodyEnd(command, start, close, inCommand) {
   return -1;
 }
 
+// Reads the heredoc body at command[i] (hd.state is 'in-body'): the raw
+// terminator line when one starts here (see matchHeredocTerminator), else
+// null, after marking that a newline starts the next body line.
+function readHeredocBodyAt(command, i, hd) {
+  if (hd.atLineStart) {
+    const term = matchHeredocTerminator(command, i, hd);
+    if (term.matched) return term.rawLine;
+  }
+  if (command[i] === '\n') hd.atLineStart = true;
+  return null;
+}
+
+// The newline after a heredoc operator starts its body, not the operator
+// itself.
+function beginHeredocBody(hd, ch) {
+  if (hd.state !== 'awaiting-body' || ch !== '\n') return false;
+  hd.state = 'in-body';
+  hd.atLineStart = true;
+  return true;
+}
+
+// The heredoc operator (`<<`, not `<<<`) at command[i], already applied to hd;
+// null when none starts there.
+function heredocOperatorAt(command, i, hd) {
+  if (hd.state === 'in-body' || command[i] !== '<' || command[i + 1] !== '<' || command[i + 2] === '<') return null;
+  const op = parseHeredocOperator(command, i);
+  if (op) applyHeredocOperator(hd, op);
+  return op;
+}
+
+// Opens or closes a ${...} parameter expansion at command[i] and returns the
+// text read ('${' or '}'); null when neither is there.
+function stepParamBrace(st, ch) {
+  if (ch === '$' && st.command[st.i + 1] === '{') {
+    st.paramDepth += 1;
+    st.i += 1;
+    return '${';
+  }
+  if (ch === '}' && st.paramDepth > 0) {
+    st.paramDepth -= 1;
+    return '}';
+  }
+  return null;
+}
+
+function quotedOrNestedEnd(st) {
+  const { command, i } = st;
+  // A quoted string is text whole, read as bash reads it (quotedEnd): no
+  // operator, comment or line break inside it splits the segment.
+  const quoted = quotedEnd(command, i);
+  if (quoted !== null) return quoted === -1 ? command.length - 1 : quoted;
+  // Inside ${...}, a command substitution or a backquoted command is read
+  // whole: a `}` of its own does not close the expansion.
+  const nested = st.paramDepth > 0 ? nestedSubstitutionEnd(command, i) : -1;
+  return nested === -1 ? null : nested;
+}
+
+function appendWholeText(st, ch) {
+  const esc = handleEscape(ch, st.i, st.command);
+  if (esc.handled) {
+    st.current += esc.chars;
+    st.i += esc.advance;
+    return true;
+  }
+  const end = quotedOrNestedEnd(st);
+  if (end === null) return false;
+  st.current += st.command.slice(st.i, end + 1);
+  st.i = end;
+  return true;
+}
+
+function appendHeredocBody(st, ch) {
+  const terminator = readHeredocBodyAt(st.command, st.i, st.hd);
+  if (terminator === null) {
+    st.current += ch;
+    return;
+  }
+  st.current += terminator;
+  st.i += terminator.length - 1;
+}
+
+function appendComment(st, ch) {
+  if (!st.stripComments) st.current += ch;
+}
+
+function endSegment(st) {
+  pushSegment(st.current, st.segments);
+  st.current = '';
+  return true;
+}
+
+function splitAtSeparator(st, ch) {
+  if (ch === '\n' || ch === '\r') return endSegment(st);
+  const { command, i } = st;
+  const next = command[i + 1] || '';
+  const prev = i > 0 ? command[i - 1] : '';
+  const dbl = handleDoubleOperator(ch, next, st.current, st.segments);
+  if (dbl.handled) {
+    st.current = dbl.current;
+    st.i += dbl.advance;
+    return true;
+  }
+  if (ch === ';' || (st.splitOnPipe && ch === '|')) return endSegment(st);
+  const amp = handleSingleAmpersand(ch, next, prev, st.current, st.segments);
+  if (!amp.handled) return false;
+  st.current = amp.current;
+  return true;
+}
+
+function splitStep(st) {
+  const { command, hd } = st;
+  const ch = command[st.i];
+
+  // A comment runs to the end of its line as inert text: a quote or a
+  // backslash inside it opens nothing, as bash reads it, so the next line
+  // is split and judged like any other.
+  if (st.inComment && ch !== '\n') {
+    appendComment(st, ch);
+    return;
+  }
+  st.inComment = false;
+
+  if (hd.state === 'in-body') {
+    appendHeredocBody(st, ch);
+    return;
+  }
+  if (appendWholeText(st, ch)) return;
+
+  const brace = stepParamBrace(st, ch);
+  if (brace !== null) {
+    st.current += brace;
+    return;
+  }
+  if (isCommentStart(command, st.i, null, hd.state, st.paramDepth)) {
+    st.inComment = true;
+    appendComment(st, ch);
+    return;
+  }
+  if (beginHeredocBody(hd, ch)) {
+    st.current += ch;
+    return;
+  }
+  const op = heredocOperatorAt(command, st.i, hd);
+  if (op) {
+    st.current += command.slice(st.i, st.i + op.length);
+    st.i += op.length - 1;
+    return;
+  }
+  if (!splitAtSeparator(st, ch)) st.current += ch;
+}
+
 /**
  * Split a shell command into segments by operators (&&, ||, ;, &)
  * while respecting quoting (single/double) and escaped characters.
@@ -424,166 +575,45 @@ function bodyEnd(command, start, close, inCommand) {
  * was never live shell syntax — a parsing divergence from
  * extractSubstitutionBodies below, which already handled comments.)
  */
-function splitShellSegments(command, options = {}) { // NOSONAR: shell segment parser state machine kept inline for auditability
-  const splitOnPipe = Boolean(options.splitOnPipe);
-  // When set, the inert text of a `# comment` is left out of the segment
-  // instead of folded into it, so a caller that judges the segment (the
-  // Guardian) never reads a path or an operator that only sits in a comment.
-  // Off by default, so callers that want the verbatim line are unaffected.
-  const stripComments = Boolean(options.stripComments);
-  const segments = [];
-  let current = '';
-  // Heredoc state machine: null (no heredoc pending) -> 'awaiting-body' (the
-  // <<DELIM operator was just parsed; the body starts at the NEXT newline,
-  // not immediately) -> 'in-body' (scanning body lines for the terminator)
-  // -> null again. Keeping this as one variable (rather than a heredocState
-  // flag plus a separate "seen delimiter" flag) is deliberate: two
-  // independently-updated flags previously went out of sync exactly at this
-  // transition, causing the terminator's own trailing newline to be
-  // swallowed into the body instead of ending the segment. See
-  // createHeredocState()'s doc comment for why this tracking is shared with
-  // extractSubstitutionBodies below.
-  const hd = createHeredocState();
-  // True from an unquoted, word-starting `#` until (not including) the next
-  // newline -- reset unconditionally on every newline below, same as
-  // extractSubstitutionBodies's inComment tracking.
-  let inComment = false;
-  // Open ${...} parameter expansions. Inside one, a `#` is a literal part of
-  // the expansion (`${x:-a # b}`), not a comment, so the segment after it
-  // (e.g. `; rm -rf /`) is still live and must be split and judged. Tracked
-  // only outside quotes; a quote already keeps `#` from starting a comment.
-  let paramDepth = 0;
-
-  for (let i = 0; i < command.length; i++) {
-    const ch = command[i];
-
-    // A comment runs to the end of its line as inert text: a quote or a
-    // backslash inside it opens nothing, as bash reads it, so the next line
-    // is split and judged like any other.
-    if (inComment) {
-      if (ch !== '\n') {
-        if (!stripComments) current += ch;
-        continue;
-      }
-      inComment = false;
-    }
-
-    if (hd.state === 'in-body') {
-      if (hd.atLineStart) {
-        const term = matchHeredocTerminator(command, i, hd);
-        if (term.matched) {
-          current += term.rawLine;
-          i += term.rawLine.length - 1;
-          continue;
-        }
-      }
-      if (ch === '\n') hd.atLineStart = true;
-      current += ch;
-      continue;
-    }
-
-    const esc = handleEscape(ch, i, command);
-    if (esc.handled) {
-      current += esc.chars;
-      i += esc.advance;
-      continue;
-    }
-
-    // A quoted string is text whole, read as bash reads it (quotedEnd): no
-    // operator, comment or line break inside it splits the segment.
-    const quoted = quotedEnd(command, i);
-    if (quoted !== null) {
-      const text = command.slice(i, quoted === -1 ? command.length : quoted + 1);
-      current += text;
-      i += text.length - 1;
-      continue;
-    }
-
-    // Inside ${...}, a command substitution or a backquoted command is read
-    // whole: a `}` of its own does not close the expansion.
-    const nested = paramDepth > 0 ? nestedSubstitutionEnd(command, i) : -1;
-    if (nested !== -1) {
-      const text = command.slice(i, nested + 1);
-      current += text;
-      i += text.length - 1;
-      continue;
-    }
-
-    if (ch === '$' && command[i + 1] === '{') {
-      paramDepth += 1;
-      current += '${';
-      i += 1;
-      continue;
-    }
-
-    if (ch === '}' && paramDepth > 0) {
-      paramDepth -= 1;
-      current += ch;
-      continue;
-    }
-
-    if (isCommentStart(command, i, null, hd.state, paramDepth)) {
-      inComment = true;
-      if (!stripComments) current += ch;
-      continue;
-    }
-
-    if (hd.state === 'awaiting-body' && ch === '\n') {
-      current += ch;
-      hd.state = 'in-body';
-      hd.atLineStart = true;
-      continue;
-    }
-
-    if (hd.state !== 'in-body' && ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
-      const op = parseHeredocOperator(command, i);
-      if (op) {
-        applyHeredocOperator(hd, op);
-        current += command.slice(i, i + op.length);
-        i += op.length - 1;
-        continue;
-      }
-    }
-
-    if (ch === '\n' || ch === '\r') {
-      pushSegment(current, segments);
-      current = '';
-      continue;
-    }
-
-    const next = command[i + 1] || '';
-    const prev = i > 0 ? command[i - 1] : '';
-
-    const dbl = handleDoubleOperator(ch, next, current, segments);
-    if (dbl.handled) {
-      current = dbl.current;
-      i += dbl.advance;
-      continue;
-    }
-
-    if (ch === ';') {
-      pushSegment(current, segments);
-      current = '';
-      continue;
-    }
-
-    if (splitOnPipe && ch === '|') {
-      pushSegment(current, segments);
-      current = '';
-      continue;
-    }
-
-    const amp = handleSingleAmpersand(ch, next, prev, current, segments);
-    if (amp.handled) {
-      current = amp.current;
-      continue;
-    }
-
-    current += ch;
+function splitShellSegments(command, options = {}) {
+  const st = {
+    command,
+    splitOnPipe: Boolean(options.splitOnPipe),
+    // When set, the inert text of a `# comment` is left out of the segment
+    // instead of folded into it, so a caller that judges the segment (the
+    // Guardian) never reads a path or an operator that only sits in a comment.
+    // Off by default, so callers that want the verbatim line are unaffected.
+    stripComments: Boolean(options.stripComments),
+    segments: [],
+    current: '',
+    // Heredoc state machine: null (no heredoc pending) -> 'awaiting-body' (the
+    // <<DELIM operator was just parsed; the body starts at the NEXT newline,
+    // not immediately) -> 'in-body' (scanning body lines for the terminator)
+    // -> null again. Keeping this as one variable (rather than a heredocState
+    // flag plus a separate "seen delimiter" flag) is deliberate: two
+    // independently-updated flags previously went out of sync exactly at this
+    // transition, causing the terminator's own trailing newline to be
+    // swallowed into the body instead of ending the segment. See
+    // createHeredocState()'s doc comment for why this tracking is shared with
+    // extractSubstitutionBodies below.
+    hd: createHeredocState(),
+    // True from an unquoted, word-starting `#` until (not including) the next
+    // newline -- reset unconditionally on every newline, same as
+    // extractSubstitutionBodies's inComment tracking.
+    inComment: false,
+    // Open ${...} parameter expansions. Inside one, a `#` is a literal part of
+    // the expansion (`${x:-a # b}`), not a comment, so the segment after it
+    // (e.g. `; rm -rf /`) is still live and must be split and judged. Tracked
+    // only outside quotes; a quote already keeps `#` from starting a comment.
+    paramDepth: 0,
+    i: 0,
+  };
+  while (st.i < command.length) {
+    splitStep(st);
+    st.i += 1;
   }
-
-  pushSegment(current, segments);
-  return segments;
+  pushSegment(st.current, st.segments);
+  return st.segments;
 }
 
 // Finds the index of the `)` that matches the `(` implicitly opened at
@@ -639,6 +669,77 @@ function pushSubstitutionAt(command, i, bodies) {
   return -1;
 }
 
+// Outside a heredoc body, what a quote holds is skipped: a single-quoted
+// string whole, an escape, the quotes that open and close a string, and
+// `$'...'`, which holds no substitution and which an escaped quote does not
+// close. true when command[i] was consumed here.
+function skipQuoting(st, ch) {
+  const { command } = st;
+  if (st.quote === "'") {
+    if (ch === "'") st.quote = null;
+    return true;
+  }
+  if (ch === '\\' && st.i + 1 < command.length) {
+    st.i += 1;
+    return true;
+  }
+  if (st.quote === '"') {
+    if (ch !== '"') return false;
+    st.quote = null;
+    return true;
+  }
+  if (ch === '$' && command[st.i + 1] === "'") {
+    const end = ansiQuoteEnd(command, st.i + 2);
+    st.i = end === -1 ? command.length : end;
+    return true;
+  }
+  if (ch !== '"' && ch !== "'") return false;
+  st.quote = ch;
+  return true;
+}
+
+function extractStep(st) {
+  const { command, hd } = st;
+  const ch = command[st.i];
+
+  // See splitStep: a comment is inert up to its newline, whatever quote or
+  // backslash it holds.
+  if (st.inComment && ch !== '\n') return;
+  st.inComment = false;
+
+  if (hd.state === 'in-body') {
+    const terminator = readHeredocBodyAt(command, st.i, hd);
+    if (terminator !== null) {
+      st.i += terminator.length - 1;
+      return;
+    }
+    // Bare/unquoted-delimiter heredoc body: falls through to the normal
+    // scan below, since bash still expands $(...) here.
+    if (hd.literal) return;
+  } else if (skipQuoting(st, ch)) {
+    return;
+  }
+
+  if (stepParamBrace(st, ch) !== null) return;
+  if (isCommentStart(command, st.i, st.quote, hd.state, st.paramDepth)) {
+    st.inComment = true;
+    return;
+  }
+  if (beginHeredocBody(hd, ch)) return;
+  const op = st.quote ? null : heredocOperatorAt(command, st.i, hd);
+  if (op) {
+    st.i += op.length - 1;
+    return;
+  }
+
+  // Reached only in an unquoted or double-quoted context, outside a
+  // comment and outside a literal heredoc body (single-quoted spans and
+  // literal heredoc bodies already returned above): the contexts where a
+  // real shell still expands $(...)/`...` (see the doc comment below).
+  const end = pushSubstitutionAt(command, st.i, st.bodies);
+  if (end !== -1) st.i = end;
+}
+
 /**
  * Extracts the inner text of every top-level command substitution
  * (`$(...)`), process substitution (`<(...)`, `>(...)`), and legacy
@@ -670,113 +771,24 @@ function pushSubstitutionAt(command, i, bodies) {
  * site (with its own depth guard) keeps this function simple and testable
  * in isolation.
  */
-function extractSubstitutionBodies(command) { // NOSONAR: shell scanner state machine kept inline for auditability
-  const bodies = [];
-  let quote = null;
-  // See createHeredocState()'s doc comment: this tracking is shared with
-  // splitShellSegments above.
-  const hd = createHeredocState();
-  let inComment = false;
-  // See splitShellSegments: inside ${...} a `#` is literal, not a comment.
-  let paramDepth = 0;
-
-  for (let i = 0; i < command.length; i++) {
-    const ch = command[i];
-
-    // See splitShellSegments: a comment is inert up to its newline, whatever
-    // quote or backslash it holds.
-    if (inComment) {
-      if (ch !== '\n') continue;
-      inComment = false;
-    }
-
-    if (hd.state === 'in-body') {
-      if (hd.atLineStart) {
-        const term = matchHeredocTerminator(command, i, hd);
-        if (term.matched) {
-          i += term.rawLine.length - 1;
-          continue;
-        }
-      }
-      if (ch === '\n') hd.atLineStart = true;
-      if (hd.literal) continue;
-      // Bare/unquoted-delimiter heredoc body: falls through to the normal
-      // scan below, since bash still expands $(...) here.
-    }
-
-    if (hd.state !== 'in-body' && quote === "'") {
-      if (ch === quote) quote = null;
-      continue;
-    }
-
-    if (hd.state !== 'in-body' && quote === '"' && ch === '\\' && i + 1 < command.length) {
-      i += 1;
-      continue;
-    }
-
-    if (hd.state !== 'in-body' && quote === '"' && ch === quote) {
-      quote = null;
-      continue;
-    }
-
-    if (hd.state !== 'in-body' && !quote && ch === '\\' && i + 1 < command.length) {
-      i += 1;
-      continue;
-    }
-
-    // `$'...'` holds no substitution, and an escaped quote does not close it.
-    if (hd.state !== 'in-body' && !quote && ch === '$' && command[i + 1] === "'") {
-      const end = ansiQuoteEnd(command, i + 2);
-      i += (end === -1 ? command.length : end) - i;
-      continue;
-    }
-
-    if (hd.state !== 'in-body' && !quote && (ch === '"' || ch === "'")) {
-      quote = ch;
-      continue;
-    }
-
-    if (ch === '$' && command[i + 1] === '{') {
-      paramDepth += 1;
-      i += 1;
-      continue;
-    }
-
-    if (ch === '}' && paramDepth > 0) {
-      paramDepth -= 1;
-      continue;
-    }
-
-    if (isCommentStart(command, i, quote, hd.state, paramDepth)) {
-      inComment = true;
-      continue;
-    }
-
-    if (hd.state === 'awaiting-body' && ch === '\n') {
-      hd.state = 'in-body';
-      hd.atLineStart = true;
-      continue;
-    }
-
-    if (hd.state !== 'in-body' && !quote && ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
-      const op = parseHeredocOperator(command, i);
-      if (op) {
-        applyHeredocOperator(hd, op);
-        i += op.length - 1;
-        continue;
-      }
-    }
-
-    // Reached only in an unquoted or double-quoted context, outside a
-    // comment and outside a literal heredoc body (single-quoted spans and
-    // literal heredoc bodies already `continue`d above) — the contexts
-    // where a real shell still expands $(...)/`...` (see the doc comment
-    // above).
-    const end = pushSubstitutionAt(command, i, bodies);
-    if (end !== -1) i += (end - i);
+function extractSubstitutionBodies(command) {
+  const st = {
+    command,
+    bodies: [],
+    quote: null,
+    // See createHeredocState()'s doc comment: this tracking is shared with
+    // splitShellSegments above.
+    hd: createHeredocState(),
+    inComment: false,
+    // See splitShellSegments: inside ${...} a `#` is literal, not a comment.
+    paramDepth: 0,
+    i: 0,
+  };
+  while (st.i < command.length) {
+    extractStep(st);
+    st.i += 1;
   }
-
-  return bodies;
+  return st.bodies;
 }
 
 module.exports = { splitShellSegments, extractSubstitutionBodies, constructEnd };
