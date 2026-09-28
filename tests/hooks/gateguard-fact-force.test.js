@@ -295,6 +295,19 @@ function runTests() {
     ['timeout --help rm -rf /tmp/x', 'a wrapper asked for its help'],
     ['parallel -h rm -rf /tmp/x', 'parallel asked for its help'],
     ['setsid -h rm -rf /tmp/x', 'setsid asked for its help'],
+    // taskset -p and chrt -p work on a running process: the words after them
+    // are its mask or priority and its pid, never a command to run.
+    ['taskset -p 1234 git reset --hard', 'taskset reading a running process'],
+    ['taskset -pc 1234 git reset --hard', 'taskset reading a running process in a group of flags'],
+    ['taskset --pid 1234 git reset --hard', 'taskset with the long pid option'],
+    ['taskset --pi 1234 git reset --hard', 'taskset with the pid option abbreviated'],
+    ['chrt -p 1234 git reset --hard', 'chrt reading a running process'],
+    ['chrt -f -p 5 git reset --hard', 'chrt setting a running process'],
+    ['chrt --pid 1234 git reset --hard', 'chrt with the long pid option'],
+    ['taskset --pid=1234 git reset --hard', 'taskset with the long pid option and an attached value'],
+    ['chrt --pid=5 1234 git reset --hard', 'chrt with the long pid option and an attached value'],
+    ['taskset --p 1234 git reset --hard', 'taskset with the shortest abbreviation of the pid option'],
+    ['chrt --p 1234 git reset --hard', 'chrt with the shortest abbreviation of the pid option'],
   ];
   for (const [command, what] of NOT_A_COMMAND) {
     if (test(`the destructive gate ignores ${what}`, () => {
@@ -320,6 +333,7 @@ function runTests() {
     ['taskset -c 0 rm -rf /tmp/x', 'taskset with its mask'],
     ['chrt -o git reset --hard', 'chrt without a priority'],
     ['chrt 5 git reset --hard', 'chrt with a priority'],
+    ['sudo -p pw: rm -rf /tmp/x', "sudo's -p, which sets its prompt and still runs the command"],
     ['flock /tmp/egc.lock rm -rf /tmp/x', 'flock with its lock file'],
     ['unshare -r git clean -fd', 'unshare'],
     ['bwrap --bind / / rm -rf /tmp/x', 'bwrap with its mounts'],
