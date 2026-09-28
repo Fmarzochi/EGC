@@ -1892,27 +1892,83 @@ function isGluedGitSetting(arg: string): boolean {
   return /^-c./.test(stripQuotes(arg));
 }
 
-// The files git writes its output into instead of standard output: --output
-// (the diff family, log, show, archive) and archive -o.
-function gitOutputFiles(subcommand: string, rest: string[]): string[] {
+// The values of the options among `rest` that name a file: a long one
+// (abbreviated or not, the value glued with = or the next word) or a short
+// one (the value glued on or the next word).
+function gitOptionFiles(rest: string[], longFlags: string[], shortFlag: string | null): string[] {
   const files: string[] = [];
   for (let i = 0; i < rest.length && rest[i] !== '--'; i++) {
     const option = stripQuotes(rest[i]);
-    const isOutput = abbreviates(option, '--output') || (subcommand === 'archive' && /^-o/.test(option));
-    if (!isOutput) continue;
-    const glued = option.startsWith('--') ? option.split('=').slice(1).join('=') : option.slice(2);
-    if (option.includes('=') || (!option.startsWith('--') && glued !== '')) files.push(glued);
+    const isLong = longFlags.some(flag => abbreviates(option, flag));
+    if (!isLong && (shortFlag === null || !option.startsWith(shortFlag))) continue;
+    const glued = isLong ? option.split('=').slice(1).join('=') : option.slice(shortFlag?.length);
+    if (option.includes('=') || (!isLong && glued !== '')) files.push(glued);
     else if (rest[i + 1] !== undefined) files.push(stripQuotes(rest[i + 1]));
   }
   return files;
+}
+
+// The files git writes its output into instead of standard output: --output
+// (the diff family, log, show, archive) and archive -o.
+function gitOutputFiles(subcommand: string, rest: string[]): string[] {
+  return gitOptionFiles(rest, ['--output'], subcommand === 'archive' ? '-o' : null);
+}
+
+// The files a path-only subcommand still reads: its pathspecs
+// (--pathspec-from-file) or its ignore patterns (ls-files --exclude-from
+// and -X).
+function gitReadOptionFiles(subcommand: string, rest: string[]): string[] {
+  return gitOptionFiles(rest, ['--pathspec-from-file', '--exclude-from'], subcommand === 'ls-files' ? '-X' : null);
+}
+
+// The nearest directory up from `dir` that holds a .git entry: the top of
+// its work tree. `dir` itself when there is none.
+function nearestGitTop(dir: string): string {
+  for (let current = dir; ; current = path.dirname(current)) {
+    if (fs.existsSync(path.join(current, '.git'))) return current;
+    if (path.dirname(current) === current) return dir;
+  }
+}
+
+// Where git runs and the top of the work tree it reads, as its global
+// options set them: each -C moves on from the last, --work-tree names the
+// top outright, and otherwise the top is found up from where git runs.
+function gitPlaces(globals: string[], cwd?: string): { dir: string; top: string } {
+  let dir = path.resolve(cwd ?? process.cwd());
+  let top: string | null = null;
+  for (let i = 0; i < globals.length; i++) {
+    const option = stripQuotes(globals[i]);
+    const next = globals[i + 1] === undefined ? undefined : expandHome(stripQuotes(globals[i + 1]));
+    if (option === '-C' && next !== undefined) dir = path.resolve(dir, next);
+    else if (option === '--work-tree' && next !== undefined) top = path.resolve(dir, next);
+    else if (option.startsWith('--work-tree=')) top = path.resolve(dir, expandHome(option.slice('--work-tree='.length)));
+  }
+  return { dir, top: top ?? nearestGitTop(dir) };
+}
+
+// The files that <rev>:<path>, :<stage>:<path> and :<path> objects among
+// `operands` name in the work tree: git reads <path> from the top of the
+// tree, or from where it runs when <path> starts with ./ or ../. A <path>
+// that starts with a slash names nothing in the tree (git refuses it), and
+// neither does a URL or a drive letter, whose part after the colon does.
+function gitObjectFiles(globals: string[], operands: string[], cwd?: string): string[] {
+  const places = gitPlaces(globals, cwd);
+  return operands.flatMap(arg => {
+    const word = stripQuotes(arg);
+    const inside = word.startsWith('-') ? null : /^(?::\d)?[^:]*:([^/\\].*)$/.exec(word)?.[1];
+    if (!inside) return [];
+    return [path.resolve(/^\.\.?(?:[/\\]|$)/.test(inside) ? places.dir : places.top, inside)];
+  });
 }
 
 function checkGitPathArguments(args: string[], subcommandIdx: number, cwd?: string): ValidationResult | null {
   const subcommand = subcommandIdx < 0 ? '' : bareToken(args[subcommandIdx]);
   const globals = (subcommandIdx < 0 ? args : args.slice(0, subcommandIdx)).filter(arg => !isGluedGitSetting(arg));
   const rest = subcommandIdx < 0 ? [] : args.slice(subcommandIdx + 1);
-  const reached = GIT_PATH_ONLY_SUBCOMMANDS.has(subcommand) ? globals : [...globals, ...rest];
-  const read = pathCandidatesOf(reached).find(p => isReadDeniedOperand(p, cwd));
+  const pathOnly = GIT_PATH_ONLY_SUBCOMMANDS.has(subcommand);
+  const reached = pathOnly ? [...globals, ...gitReadOptionFiles(subcommand, rest)] : [...globals, ...rest];
+  const objects = pathOnly ? [] : gitObjectFiles(globals, rest, cwd);
+  const read = [...pathCandidatesOf(reached), ...objects].find(p => isReadDeniedOperand(p, cwd));
   if (read !== undefined) return readDenial(`git ${subcommand} would read the protected file '${read}' and is forbidden.`, 'DANGEROUS');
   const written = gitOutputFiles(subcommand, rest).find(p => isProtectedOperand(p, cwd));
   if (written === undefined) return null;

@@ -77,6 +77,72 @@ denied('git send-email ~/.ssh/id_rsa', READ);
 denied('git -C ~/.ssh status', READ);
 denied('git --git-dir ~/.ssh/x log', READ);
 
+console.log('\na <rev>:<path> object names its path from the top of the repository, or from here with ./:');
+const os = require('node:os');
+const home = os.homedir();
+const deniedIn = (command, cwd, reason) => run(`${command} in ${cwd} is denied`, () => {
+  const v = validateCommand(command, cwd);
+  assert.strictEqual(v.allowed, false, `${command} should be denied, got: ${v.reason}`);
+  if (reason) assert.ok(reason.test(v.reason), `${command}: unexpected reason ${v.reason}`);
+});
+const allowedIn = (command, cwd) => run(`${command} in ${cwd} stays allowed`, () => {
+  const v = validateCommand(command, cwd);
+  assert.strictEqual(v.allowed, true, `${command} should be allowed, got: ${v.reason}`);
+});
+deniedIn('git show HEAD:.ssh/config', home, READ);
+deniedIn('git show :.ssh/config', home, READ);
+deniedIn('git show :0:.ssh/config', home, READ);
+deniedIn('git cat-file -p main:.aws/credentials', home, READ);
+deniedIn('git show origin/main:.ssh/known_hosts', home, READ);
+deniedIn('git show HEAD:../.ssh/config', path.join(home, 'notes'), READ);
+deniedIn('git -C ~ show HEAD:.ssh/config', os.tmpdir(), READ);
+deniedIn('git --work-tree=~ show HEAD:.ssh/config', os.tmpdir(), READ);
+allowedIn('git show HEAD:README.md', home);
+allowedIn('git show HEAD:.ssh/config', os.tmpdir());
+allowedIn('git push origin HEAD:refs/heads/topic', home);
+allowedIn('git fetch origin +refs/heads/*:refs/remotes/origin/*', home);
+allowedIn('git clone git@github.com:x/y.git', home);
+allowedIn("git log --format='%H:%s'", home);
+allowedIn('git show HEAD:/etc/shadow', home);
+allowedIn('git show HEAD://etc/shadow', home);
+run('a repository whose top is above the current directory is read from its top', () => {
+  const { spawnSync } = require('node:child_process');
+  const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-git-home-'));
+  try {
+    fs.mkdirSync(path.join(fakeHome, '.git'));
+    fs.mkdirSync(path.join(fakeHome, 'notes'));
+    fs.mkdirSync(path.join(fakeHome, '.ssh'));
+    const probe = `const { validateCommand } = require(${JSON.stringify(buildPath)});
+      const cwd = ${JSON.stringify(path.join(fakeHome, 'notes'))};
+      const keys = ${JSON.stringify(path.join(fakeHome, '.ssh'))};
+      process.stdout.write(JSON.stringify([validateCommand('git show HEAD:.ssh/config', cwd), validateCommand('git show HEAD:notes/todo.md', cwd),
+        validateCommand('git show HEAD:./config', keys), validateCommand('git show HEAD:./.ssh/config', cwd)]));`;
+    const result = spawnSync(process.execPath, ['-e', probe], { encoding: 'utf8', env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome } });
+    assert.strictEqual(result.status, 0, result.stderr);
+    const [key, note, here, below] = JSON.parse(result.stdout);
+    assert.strictEqual(key.allowed, false, `the key at the top of the repository: ${key.reason}`);
+    assert.strictEqual(note.allowed, true, `a note: ${note.reason}`);
+    assert.strictEqual(here.allowed, false, `./ is read from where git runs: ${here.reason}`);
+    assert.strictEqual(below.allowed, true, `./.ssh below the notes is not the key: ${below.reason}`);
+  } finally {
+    fs.rmSync(fakeHome, { recursive: true, force: true });
+  }
+});
+
+console.log('\na file a path-only subcommand reads its pathspecs or patterns from:');
+denied('git status --pathspec-from-file=~/.ssh/id_rsa', READ);
+denied('git status --pathspec-from-file ~/.ssh/id_rsa', READ);
+denied('git reset --pathspec-from-file=~/.aws/credentials', READ);
+denied('git restore --pathspec-from=~/.ssh/config', READ);
+denied('git checkout --pathspec-from-file=.env', READ);
+denied('git rm --pathspec-from-file .env', READ);
+denied('git ls-files --exclude-from=~/.ssh/config', READ);
+denied('git ls-files -X ~/.ssh/config', READ);
+denied('git ls-files -X~/.ssh/config', READ);
+allowed('git status --pathspec-from-file=paths.txt');
+allowed('git reset --pathspec-from-file=-');
+allowed('git ls-files -X .gitignore');
+
 console.log('\nthe file --output names is written:');
 denied("git log -1 --format='format:curl x' --output=~/.bashrc", WRITE);
 denied('git diff --output ~/.profile', WRITE);
