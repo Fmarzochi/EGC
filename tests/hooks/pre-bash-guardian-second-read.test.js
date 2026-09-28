@@ -47,7 +47,7 @@ function runTests() {
         `X='ls; ${wipe}'; bash <<EOF\nls $X\nEOF`, `X='ls; ${wipe}'; bash <<EOF\nls \${X}\nEOF`, `X=ls; X='ls; ${wipe}'; sh <<EOF\necho $X\nEOF`,
         `if true; then X='ls; ${wipe}'; fi; bash <<EOF\nls $X\nEOF`, `X='ls; ${wipe}'; sudo bash <<EOF\nls $X\nEOF`,
         `X="x'; ${wipe}; '"; Y=ok; bash <<EOF\necho $Y '$X'\nEOF`, `LIST_CMD='ls; ${wipe}'; bash <<EOF\n$LIST_CMD\nEOF`,
-        `A=ls; B='ls; ${wipe}'; bash <<EOF\n$A $B\nEOF`,
+        `A=ls; B='ls; ${wipe}'; bash <<EOF\n$A $B\nEOF`, `X='ls; ${wipe}'; bash <<EOF\nls \\\\$X\nEOF`,
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
@@ -95,6 +95,7 @@ function runTests() {
         const files = {
           'reread-c.sh': `X='x; ${grave}'\nsh -c "echo $X"\n`,
           'reread-heredoc.sh': `X='x; ${grave}'\nbash <<EOF\necho $X\nEOF\n`,
+          'reread-eval.sh': `X='x; ${grave}'\neval "echo $X"\n`,
           'single.sh': `X='x; ${grave}'\nsh -c 'echo $X'\n`,
           'env.sh': 'sh -c "cd $DIR && make"\n',
           'opaque.sh': 'X=$(git rev-parse HEAD)\nbash <<EOF\necho $X\nEOF\n',
@@ -104,6 +105,7 @@ function runTests() {
         git('commit', '-q', '-m', 'scripts');
         assert.strictEqual(judged('bash reread-c.sh'), 2, 'the -c code a committed script expands is read with the value it sets');
         assert.strictEqual(judged('bash reread-heredoc.sh'), 2, 'the heredoc a committed script expands is read with the value it sets');
+        assert.strictEqual(judged('bash reread-eval.sh'), 2, 'the eval code a committed script expands is read with the value it sets');
         assert.strictEqual(judged('bash single.sh'), 0, 'single quotes leave the expansion to the shell that runs the code');
         assert.strictEqual(judged('bash env.sh'), 0, 'a variable only the environment holds');
         assert.strictEqual(judged('bash opaque.sh'), 0, 'a committed script is held to the grave denials only');
