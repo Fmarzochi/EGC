@@ -80,7 +80,7 @@ notDenied("PAGER='less -R' git log");
 notDenied('PAGER=/usr/bin/less git log');
 notDenied('EDITOR=vim git commit');
 notDenied('EDITOR=true git commit');
-notDenied("EDITOR='code --wait' git commit");
+denied("EDITOR='code --wait' git commit");
 notDenied('export EDITOR=nano');
 notDenied('OUT=./build/out.txt npm run build');
 
@@ -98,13 +98,23 @@ denied('HOME=/tmp/evil git status');
 denied('XDG_CONFIG_HOME=/tmp/evil git log');
 denied('env HOME=/tmp/evil git status');
 notDenied("PAGER='bat --paging=always' git log");
-notDenied("EDITOR='nano -w' git commit");
+denied("EDITOR='nano -w' git commit");
 notDenied('LESS=FRX git log');
 notDenied('LESS=-R git log');
 notDenied('GIT_INDEX_FILE=/tmp/idx git add .');
 notDenied('GIT_DIR=.git git status');
 notDenied('HOME=/tmp/x npm install');
 notDenied('MAKEFLAGS=-k make');
+
+console.log('\n=== An editor is named alone, and a repository is a .git directory ===\n');
+denied("EDITOR='sed -fevil' git commit");
+denied("VISUAL='vim -u x' git commit");
+denied("VISUAL='code --wait' git commit");
+denied('GIT_DIR=/tmp/evil git status');
+denied('GIT_COMMON_DIR=/tmp/evil git fetch');
+notDenied('GIT_DIR=../other/.git git log');
+notDenied('GIT_DIR=/srv/app/.git/ git log');
+notDenied("PAGER='less -R' git log");
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

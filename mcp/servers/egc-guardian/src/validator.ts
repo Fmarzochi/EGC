@@ -513,24 +513,31 @@ function isDangerousEnvVarName(varName: string): boolean {
 }
 
 // A pager or an editor may be named by itself or from the system's program
-// directories, with plain flags only; one named by another path is a script
-// the hook never sees run, and an argument can hand it a command (vim -c,
-// less +) or a script (awk -f).
+// directories; one named by another path is a script the hook never sees
+// run. A pager, which git starts only on a terminal, may take plain flags;
+// an editor, which git runs with none, is named alone, since any argument
+// can hand it a command (vim -c) or a script (sed -f).
 const PROGRAM_ENV_VARS = new Set(['PAGER', 'MANPAGER', 'EDITOR', 'VISUAL']);
+const EDITOR_ENV_VARS = new Set(['EDITOR', 'VISUAL']);
 const SYSTEM_PROGRAM_DIRS = ['/usr/', '/bin/', '/sbin/', '/opt/'];
 const PLAIN_FLAG_RE = /^--?[A-Za-z][\w-]*(?:=[\w.,:-]*)?$/;
-// A file or a directory git writes to: its trace, its index, the repository.
-const GIT_PATH_ENV_VAR_RE = /^GIT_(?:TRACE\w*|INDEX_FILE|DIR|WORK_TREE|OBJECT_DIRECTORY|COMMON_DIR)$/;
+// A file or a directory git writes to: its trace, its index, its objects.
+const GIT_PATH_ENV_VAR_RE = /^GIT_(?:TRACE\w*|INDEX_FILE|WORK_TREE|OBJECT_DIRECTORY)$/;
+// The repository git reads its config and hooks from: a .git directory,
+// whose config is protected, and no other.
+const REPOSITORY_ENV_VARS = new Set(['GIT_DIR', 'GIT_COMMON_DIR']);
+const GIT_DIRECTORY_RE = /(?:^|[\\/])\.git[\\/]?$/;
 // Where git finds its global config, which can name commands it runs.
 const CONFIG_HOME_ENV_VARS = new Set(['HOME', 'XDG_CONFIG_HOME']);
 // less options that hand it an initial command or a key file.
 const LESS_COMMAND_RE = /\+|--lesskey|(?:^|\s)-?[A-Za-z]*k/;
 
-function programValueDenied(text: string): boolean {
+function programValueDenied(text: string, alone: boolean): boolean {
   const words = text.trim().split(/\s+/);
   const program = words[0] ?? '';
   const byPath = program.includes('/') && !SYSTEM_PROGRAM_DIRS.some(dir => program.startsWith(dir));
-  return isInlineProgram(text) || byPath || words.slice(1).some(arg => !PLAIN_FLAG_RE.test(arg));
+  const args = words.slice(1);
+  return isInlineProgram(text) || byPath || (alone ? args.length > 0 : args.some(arg => !PLAIN_FLAG_RE.test(arg)));
 }
 
 // Why the value a line gives a variable is refused: a path git writes that
@@ -543,13 +550,16 @@ function envValueDenial(name: string, value: string, command?: string): string |
   if (GIT_PATH_ENV_VAR_RE.test(upper) && isProtectedPath(text)) {
     return `'${name}' makes git write to the protected path ${text}, which is forbidden`;
   }
+  if (REPOSITORY_ENV_VARS.has(upper) && !GIT_DIRECTORY_RE.test(text)) {
+    return `'${name}' points git at ${text}, a repository whose config this line can choose, which is forbidden: name a .git directory`;
+  }
   if (CONFIG_HOME_ENV_VARS.has(upper) && command === 'git') {
     return `'${name}' points git at a config this line chooses, which can name commands git runs, and is forbidden`;
   }
   if (upper === 'LESS' && LESS_COMMAND_RE.test(text)) {
     return `'LESS' hands less an initial command or a key file, which is forbidden`;
   }
-  if (PROGRAM_ENV_VARS.has(upper) && programValueDenied(text)) {
+  if (PROGRAM_ENV_VARS.has(upper) && programValueDenied(text, EDITOR_ENV_VARS.has(upper))) {
     return `'${name}' is run as a pager or an editor, and '${text}' is inline code, a script named by its path or a program handed an argument, which is forbidden: name the program itself`;
   }
   return null;
