@@ -625,9 +625,9 @@ function hostRoutes() {
   const { listOpsOperations } = require('../dashboard/ops');
   // [method, path, status a loopback Host gets without a token or a session]
   return [
-    ['GET', '/', 200], ['GET', '/index.html', 200], ['GET', '/ping', 200], ['GET', '/capabilities', 200],
-    ['GET', '/telemetry', 200], ['GET', '/replay/sessions', 200], ['GET', '/replay/events?session=x', 400],
-    ['GET', '/session-history', 200], ['GET', '/prices', 200], ['GET', '/cost-summary', 200], ['GET', '/stats', 200],
+    ['GET', '/', 200], ['GET', '/index.html', 200], ['GET', '/ping', 200], ['GET', '/capabilities', 401],
+    ['GET', '/telemetry', 401], ['GET', '/replay/sessions', 401], ['GET', '/replay/events?session=x', 401],
+    ['GET', '/session-history', 401], ['GET', '/prices', 401], ['GET', '/cost-summary', 401], ['GET', '/stats', 401],
     ['GET', '/egc-logo.png', 200], ['GET', '/config.json', 200], ['OPTIONS', '/ping', 204],
     ['POST', '/event', 401], ['POST', `/ops/${listOpsOperations()[0]}`, 401],
   ];
@@ -678,6 +678,52 @@ test('every route keeps answering the loopback names', () => withDashboardServer
     for (const [method, reqPath, status] of hostRoutes()) {
       const res = await requestWithHost(port, { method, path: reqPath, host });
       assert.equal(res.status, status, `${method} ${reqPath} must answer Host ${host} as it always has`);
+    }
+  }
+}));
+
+const DATA_ROUTES = [
+  ['/capabilities', 200], ['/telemetry', 200], ['/replay/sessions', 200], ['/replay/events?session=x', 400],
+  ['/session-history', 200], ['/prices', 200], ['/cost-summary', 200], ['/cost-summary?range=7d', 200], ['/stats', 200],
+];
+
+function getWithToken(port, reqPath, token) {
+  return new Promise((resolve, reject) => {
+    const headers = token === undefined ? {} : { [TOKEN_HEADER]: token };
+    const req = http.request({ hostname: '127.0.0.1', port, path: reqPath, method: 'GET', headers }, res => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('the data routes answer only a request that carries the dashboard token', () => withDashboardServer(async port => {
+  for (const [reqPath, status] of DATA_ROUTES) {
+    const missing = await getWithToken(port, reqPath);
+    assert.equal(missing.status, 401, `${reqPath} without the token`);
+    assert.match(missing.body, /token/i, `${reqPath} says why`);
+    const wrong = await getWithToken(port, reqPath, 'not-the-token');
+    assert.equal(wrong.status, 401, `${reqPath} with a wrong token`);
+    const right = await getWithToken(port, reqPath, dashboardToken());
+    assert.equal(right.status, status, `${reqPath} with the token`);
+  }
+}));
+
+test('every page the server serves carries the token, and reads the data routes with it', () => withDashboardServer(async port => {
+  const publicDir = path.join(__dirname, '..', 'dashboard', 'public');
+  for (const page of fs.readdirSync(publicDir).filter(name => name.endsWith('.html'))) {
+    const served = await getWithToken(port, `/${page}`);
+    assert.equal(served.status, 200, page);
+    assert.ok(served.body.includes(`window.__EGC_OPS_TOKEN=${JSON.stringify(dashboardToken())}`), `${page} carries the token`);
+    const source = fs.readFileSync(path.join(publicDir, page), 'utf8');
+    const bare = source.match(/\bfetch\(\s*[`'"]\/(?:capabilities|telemetry|replay|session-history|prices|cost-summary|stats)\b/g) || [];
+    assert.deepStrictEqual(bare, [], `${page} reads a data route without the token`);
+    if (source.includes('dataFetch(')) {
+      assert.match(source, /const dataFetch = url => fetch\(url, \{ headers: \{ 'X-EGC-Token': /, `${page} sends the token with dataFetch`);
     }
   }
 }));

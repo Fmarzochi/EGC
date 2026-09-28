@@ -49,6 +49,19 @@ function rejectEventRequest(req, res, reqOrigin) {
   }
   return false;
 }
+// The routes that answer with what the dashboard has recorded (sessions,
+// costs, telemetry, the replay): only a page this server served, which
+// carries the token, reads them.
+const DATA_ROUTES = new Set(['/capabilities', '/telemetry', '/replay/sessions', '/replay/events', '/session-history', '/prices', '/cost-summary', '/stats']);
+
+function rejectDataRequest(req, res) {
+  if (req.method !== 'GET' || !DATA_ROUTES.has(req.url.split('?')[0])) return false;
+  const presented = req.headers[TOKEN_HEADER];
+  if (tokensMatch(typeof presented === 'string' ? presented : '', OPS_TOKEN)) return false;
+  sendJson(res, 401, { error: 'Missing or invalid dashboard token' });
+  return true;
+}
+
 const handleOps = createOpsHandler({ token: OPS_TOKEN, port: PORT });
 
 const MIME = {
@@ -206,8 +219,9 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin',
     isPanelOrigin(reqOrigin, PORT) ? reqOrigin : `http://localhost:${PORT}`);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', `Content-Type, ${TOKEN_HEADER}`);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+  if (rejectDataRequest(req, res)) return;
 
   // ── POST /event ─────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/event') {
@@ -495,8 +509,9 @@ const grandTotal = Object.values(byIde).reduce(
   }
   if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath);
-    if (segment === '/index.html') {
-      // This is the one response that carries the ops token, so it does not
+    const isPage = ext === '.html';
+    if (isPage) {
+      // A page is the one response that carries the ops token, so it does not
       // get the permissive any-loopback-port header the rest of the routes
       // share: another local web origin must not be able to read the token
       // out of it. /ops would refuse that origin anyway, but the token has no
@@ -504,11 +519,11 @@ const grandTotal = Object.values(byIde).reduce(
       res.setHeader('Access-Control-Allow-Origin', `http://localhost:${PORT}`);
     }
     res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
-    if (segment === '/index.html') {
+    if (isPage) {
       // Inject the configured port so the frontend WebSocket connects to the
       // correct address regardless of what EGC_PORT is set to, and the local
-      // ops token so the panel this server just served is the only client that
-      // can drive POST /ops.
+      // token so the pages this server just served are the only clients that
+      // can drive POST /ops and read the data routes.
       const html = fs.readFileSync(filePath, 'utf8')
         .replace('</head>',
           `<script>window.__EGC_PORT=${PORT};window.__EGC_OPS_TOKEN=${JSON.stringify(OPS_TOKEN)};</script></head>`);

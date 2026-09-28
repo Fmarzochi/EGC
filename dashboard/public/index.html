@@ -862,6 +862,8 @@ swTab('brain');
    work. The token was injected into this page by the server that served it;
    without it /ops answers 401. */
 const OPS_TOKEN = window.__EGC_OPS_TOKEN || '';
+/* The data routes answer only a request that carries the token. */
+const dataFetch = url => fetch(url, { headers: { 'X-EGC-Token': OPS_TOKEN } });
 let docBusy = false;
 
 async function callOp(operation, body){
@@ -1544,7 +1546,7 @@ function buildHeatmap(sessions) {
 }
 async function loadSessionHistory() {
   try {
-   const response = await fetch("/session-history");
+   const response = await dataFetch("/session-history");
 
 if (!response.ok) {
     throw new Error("Failed to fetch session history");
@@ -1655,7 +1657,7 @@ function reportPollResult(type, ok){
 function pollTelemetry(){
   S.telemetryReqId++;
   const reqId = S.telemetryReqId;
-  fetch('/telemetry').then(r=>{
+  dataFetch('/telemetry').then(r=>{
     if(!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.json();
   }).then(t=>{
@@ -1834,7 +1836,7 @@ function pipelineActivate(id){
 pipelineActivate('hooks');
 
 /* ── STATS — real data only ─────────────────────────────── */
-fetch('/stats').then(r=>r.json()).then(st=>{
+dataFetch('/stats').then(r=>r.json()).then(st=>{
   const proj=st.project||'--';
   document.getElementById('projName').textContent=proj;
   document.getElementById('mc-proj').textContent=proj;
@@ -1923,7 +1925,7 @@ function setCostRange(range) {
 
 async function loadCostSummary() {
   try {
-    const r = await fetch(`/cost-summary?range=${currentCostRange}`);
+    const r = await dataFetch(`/cost-summary?range=${currentCostRange}`);
     if (!r.ok) return;
     const data = await r.json();
 
@@ -2060,7 +2062,7 @@ async function exportSessionsAs(format) {
   const original = btn.textContent;
 
   try {
-    const res = await fetch('/session-history');
+    const res = await dataFetch('/session-history');
     if (!res.ok) throw new Error(`Server returned ${res.status}`);
     const sessions = await res.json();
 
