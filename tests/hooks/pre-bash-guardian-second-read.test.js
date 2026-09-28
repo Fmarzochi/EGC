@@ -69,7 +69,7 @@ function runTests() {
     record(test('a variable the line fixes from a source the hook cannot read, or through an expansion it does not follow, fails closed there', () => {
       for (const command of [
         'X=$(cat f); bash <<EOF\nls $X\nEOF', 'read X; bash <<EOF\nls $X\nEOF', 'source env.sh; bash <<EOF\nls $X\nEOF',
-        'X=a; bash <<EOF\nls ${X#a}\nEOF',
+        'X=a; bash <<EOF\nls ${X#a}\nEOF', 'X=; Y=a; bash <<EOF\nls ${X:-$Y}\nEOF',
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
