@@ -74,7 +74,11 @@ function committedVerdict(segment, bound) {
     .map(target => target.replaceAll(/["']/g, ''));
   const grave = targets.some(target => {
     const variable = /^\$\{?([A-Za-z_]\w*)\}?/.exec(target);
-    if (variable) return !Object.hasOwn(bound, variable[1]);
+    if (variable) {
+      const rest = target.slice(variable[0].length);
+      if ((rest !== '' && !/^[\\/]/.test(rest)) || /[$`*?[]/.test(rest) || rest.split(/[\\/]/).includes('..')) return true;
+      return !Object.hasOwn(bound, variable[1]) || bound[variable[1]].some(value => /^[/~]/.test(value) || /[*?[]/.test(value) || value.includes('..'));
+    }
     return target.includes('$') || /^[/~]/.test(target) || target === '.' || target === '..' || target === '*' || target.startsWith('../');
   });
   return grave ? verdict : { ...verdict, advisory: true };
