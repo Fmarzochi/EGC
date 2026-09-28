@@ -89,7 +89,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - Six maintainability findings on the latest changes are resolved, the Claude Code registration among them, with no change in behavior (#1591).
 - The command log and the Guardian audit log mask passwords named with pass or pwd and those the mysql, mariadb, sshpass and redis-cli clients take on their command line (#1566).
 - `install.ps1` puts the git pre-commit hook in a clone through the same helper as `install.sh` (#1568).
-- A script run with words the Bash hook can read gets them as `$1` and on, `"$@"`, `"$*"` and `$#` when the hook reads it, so a wrapper that runs its words is judged by them (#1595).
+- A script run with words the Bash hook can read gets them as `$1` and on, `"$@"`, `"$*"` and `$#` when the hook reads it, so a wrapper that runs its words is judged by them (#1594).
 - The Guardian reads `git config` and `git grep` the way git reads them, subcommands, option clusters and the file `--file` names included (#1569).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
