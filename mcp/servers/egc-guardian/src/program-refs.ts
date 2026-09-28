@@ -125,16 +125,17 @@ function readSedSubstitute(script: string, at: number, refs: ProgramRefs): numbe
 // regular expression depending on its grammar, so a reader of its text can
 // be led to take code for a string. What gawk --sandbox turns off is looked
 // for in the raw text instead: system(), getline, extensions and includes,
-// and a > or | after a print or a printf (an output redirection or a pipe).
-// A program that has one is inline code with effects the Guardian cannot
-// follow, as perl -e is; the plain text processing awk is used for passes.
-const AWK_EFFECT_WORDS = /\b(?:system|getline)\b|@(?:load|include)\b/;
+// ARGV (a file put there is read as input), and a > or | after a print or a
+// printf (an output redirection or a pipe). A program that has one is inline
+// code with effects the Guardian cannot follow, as perl -e is; the plain
+// text processing awk is used for passes.
+const AWK_EFFECT_WORDS = /\b(?:system|getline|ARGV)\b|@(?:load|include)\b/;
 
 function awkRefs(program: string): ProgramRefs {
   const print = /\bprintf?\b/.exec(program);
   const redirected = print !== null && /[>|]/.test(program.slice(print.index));
   if (!AWK_EFFECT_WORDS.test(program) && !redirected) return noRefs();
-  return { files: [], commands: [], opaque: 'runs a command, reads a file or writes one from its program (system(), getline, or a print sent to a file or a pipe)' };
+  return { files: [], commands: [], opaque: 'runs a command, reads a file or writes one from its program (system(), getline, ARGV, or a print sent to a file or a pipe)' };
 }
 
 // The string literals right after a pattern in a jq or yq program, and

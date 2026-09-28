@@ -3456,23 +3456,38 @@ function withoutInputRedirections(args: string[], raw: string[]): string[] {
 // script, naming a protected file with them is flagged, not grave.
 const COMMITTED_READ_BUILTINS = new Set(['[', '[[', 'test', '.', 'source']);
 
-// What the programs of a sed, awk, jq or yq command name in their text: the
-// files, judged with the command's words; a command one runs, judged as the
-// command it is; one it builds from the data it reads, which is refused.
+// A command another tool runs (a sed e, an ag --pager, an rg --pre): with
+// shell syntax in it, it is inline code a shell runs, refused as sh -c is;
+// a plain one is judged as the command it is.
+const SHELL_SYNTAX_RE = /[|&;<>`$()\n]/;
+
+function embeddedCommandDenial(baseCommand: string, inner: string): ValidationResult | null {
+  if (SHELL_SYNTAX_RE.test(inner)) {
+    return { allowed: false, reason: `'${baseCommand}' hands '${inner}' to a shell, which is inline code; write it to a file and run it instead`, trust_level: 'DANGEROUS' };
+  }
+  const verdict = validateCommand(inner);
+  if (verdict.allowed !== false || verdict.advisory) return null;
+  return { allowed: false, reason: `'${baseCommand}' runs '${inner}': ${verdict.reason}`, trust_level: 'DANGEROUS' };
+}
+
+// What a sed, awk, jq, yq, rg or ag command names beyond its words: the files
+// its program text names, judged with those words; the commands its program
+// or its options run, judged as commands; what the program builds from the
+// data it reads, which is refused.
 function programTextVerdict(baseCommand: string, read: ProgramRead): { files: string[]; denial: ValidationResult | null } {
   const files: string[] = [];
+  const commands = [...read.commands];
   for (const text of read.programs) {
     const refs = programRefs(read.language, text);
     if (refs.opaque) {
       return { files, denial: { allowed: false, reason: `'${baseCommand}' ${refs.opaque}, which cannot be judged before it runs; write that part in the shell instead, where it is judged`, trust_level: 'DANGEROUS' } };
     }
-    for (const inner of refs.commands) {
-      const verdict = validateCommand(inner);
-      if (verdict.allowed === false && !verdict.advisory) {
-        return { files, denial: { allowed: false, reason: `'${baseCommand}' runs '${inner}': ${verdict.reason}`, trust_level: 'DANGEROUS' } };
-      }
-    }
+    commands.push(...refs.commands);
     files.push(...refs.files);
+  }
+  for (const inner of commands) {
+    const denial = embeddedCommandDenial(baseCommand, inner);
+    if (denial) return { files, denial };
   }
   return { files, denial: null };
 }

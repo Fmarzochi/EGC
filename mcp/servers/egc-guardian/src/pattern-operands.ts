@@ -24,6 +24,8 @@ interface ProgramSpec {
   programValues?: Set<string>;
   // Options whose value is NAME=value (awk -v): the value may name a file.
   assignOptions?: Set<string>;
+  // Options whose value is a command the tool runs (ag --pager, rg --pre).
+  commandOptions?: Set<string>;
   // jq --arg NAME VALUE: two words, the second a file when true.
   pairs?: Map<string, boolean>;
   // yq: a first word that names the mode, not the filter.
@@ -86,13 +88,15 @@ const PROGRAM_SPECS: Record<string, ProgramSpec> = {
     values: set('-e --regexp -f --file -g --glob --iglob -t --type -T --type-not --type-add --type-clear -A --after-context -B --before-context -C --context -m --max-count -d --max-depth --max-filesize -j --threads -M --max-columns -r --replace -E --encoding --ignore-file --pre --pre-glob --sort --sortr --colors --color --path-separator --context-separator --field-match-separator --field-context-separator --engine --dfa-size-limit --regex-size-limit'),
     flags: set('-i --ignore-case -s --case-sensitive -S --smart-case -w --word-regexp -x --line-regexp -v --invert-match -n --line-number -N --no-line-number -l --files-with-matches --files-without-match -c --count --count-matches -o --only-matching -F --fixed-strings -P --pcre2 -U --multiline --multiline-dotall -u --unrestricted -. --hidden -L --follow -z --search-zip -a --text --no-ignore --no-ignore-vcs --no-ignore-dot --no-ignore-global --no-ignore-parent --no-ignore-exclude --no-ignore-files --json -q --quiet --files -0 --null --vimgrep --heading --no-heading -b --byte-offset --column --no-column --trim --stats -H --with-filename -I --no-filename -p --pretty --no-messages --binary --crlf --passthru --no-config --one-file-system --line-buffered --block-buffered --sort-files --null-data -h --help -V --version'),
     program: set('-e --regexp -f --file'),
-    files: set('-f --file --ignore-file --pre'),
+    files: set('-f --file --ignore-file'),
+    commandOptions: set('--pre'),
   },
   ag: {
     values: set('-A --after -B --before -C --context -G --file-search-regex -g --ignore --ignore-dir -m --max-count --depth -W --width --pager -p --path-to-ignore'),
     flags: set('-a --all-types -c --count -D --debug -f --follow -F --fixed-strings -H --heading --noheading -i --ignore-case -l --files-with-matches -L --files-without-matches -n --norecurse -Q --literal -s --case-sensitive -S --smart-case -t --all-text -u --unrestricted -U --skip-vcs-ignores -v --invert-match -w --word-regexp -z --search-zip -0 --null --print0 --column --nocolor --color --hidden --silent --stats --vimgrep -o --only-matching --nofilename --filename -h --help --version'),
     program: set('-g'),
-    files: set('-p --path-to-ignore --pager'),
+    files: set('-p --path-to-ignore'),
+    commandOptions: set('--pager'),
   },
   tr: {
     values: new Set(),
@@ -111,6 +115,7 @@ interface OptionRead {
   program?: boolean;
   file?: string;
   text?: string;
+  command?: string;
   argsAfter?: boolean;
 }
 
@@ -132,6 +137,7 @@ function optionValue(spec: ProgramSpec, name: string, glued: string | null, next
     program: spec.program.has(name),
     file: optionFile(spec, name, value),
     text: spec.programValues?.has(name) ? value : undefined,
+    command: spec.commandOptions?.has(name) ? value : undefined,
   };
 }
 
@@ -180,10 +186,11 @@ interface OperandState {
   firstOperand: boolean;
 }
 
-/** What a command whose first operand is a program names: the files among its words, the program texts it runs and their language. */
+/** What a command whose first operand is a program names: the files among its words, the program texts it runs and their language, and the commands its options run. */
 export interface ProgramRead {
   files: string[];
   programs: string[];
+  commands: string[];
   language: string | null;
 }
 
@@ -218,7 +225,7 @@ function readOperand(spec: ProgramSpec, state: OperandState, raw: string, out: P
 export function programCommandOf(command: string, args: string[]): ProgramRead | null {
   const spec = PROGRAM_SPECS[command];
   if (!spec) return null;
-  const out: ProgramRead = { files: [], programs: [], language: spec.language ?? null };
+  const out: ProgramRead = { files: [], programs: [], commands: [], language: spec.language ?? null };
   const state: OperandState = { programGiven: false, programSeen: false, argsOnly: false, firstOperand: true };
   let options = true;
   for (let at = 0; at < args.length; at++) {
@@ -248,6 +255,7 @@ function noteOption(state: OperandState, out: ProgramRead, read: OptionRead): nu
   state.argsOnly ||= read.argsAfter === true;
   if (read.file !== undefined) out.files.push(read.file);
   if (read.text !== undefined) out.programs.push(read.text);
+  if (read.command !== undefined) out.commands.push(read.command);
   return read.consumed;
 }
 
