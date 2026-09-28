@@ -941,20 +941,27 @@ function runTests() {
       // env -S reads quotes in its string as a shell does: "bash" is bash.
       makeExecutable('quoted-env-bang', `#!/usr/bin/env -S "bash" -e\n${wipe} /tmp/egc-victim\n`);
       makeExecutable('single-quoted-env-bang', `#!/usr/bin/env -S 'sh'\n${wipe} /tmp/egc-victim\n`);
-      // The kernel ignores an extension: a shell script named like a Windows
-      // program runs as the script it is everywhere but on Windows.
+      // The extension decides nothing: a shell script named like a Windows
+      // program runs as the script it is (Git Bash runs a .exe or .ps1 that
+      // is not an image as one), and the commands of a .cmd run too.
       makeExecutable('disguised.exe', `#!/bin/bash\n${wipe} /tmp/egc-victim\n`);
+      makeExecutable('fake.ps1', `${wipe} /tmp/egc-victim\n`);
       makeExecutable('blank-bang', `#!  \t\n${wipe} /tmp/egc-victim\n`);
       makeExecutable('py-tool', `#!/usr/bin/env python3\nprint("${wipe} /tmp/egc-victim")\n`);
       makeExecutable('binary', `\u007fELF\u0002\u0001\u0001\u0000\u0000\u0000${wipe} /tmp/egc-victim\n`);
       makeExecutable('tool.cmd', `@echo off\r\n${wipe} /tmp/egc-victim\r\n`);
+      // bash runs a file the kernel refuses as a script unless a NUL comes
+      // before the first newline within its first 128 bytes.
+      makeExecutable('nul-after-line', `${wipe} /tmp/egc-victim\n\u0000\n`);
+      makeExecutable('nul-past-sample', `${'0'.repeat(128)}\u0000\n${wipe} /tmp/egc-victim\n`);
+      makeExecutable('nul-in-sample', `${'0'.repeat(127)}\u0000\n${wipe} /tmp/egc-victim\n`);
       fs.mkdirSync(path.join(dir, 'bin'), { recursive: true });
       makeExecutable('bin/deep.sh', `#!/bin/sh\n${wipe} /tmp/egc-victim\n`);
       const judge = command => run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
       for (const command of [
         './run-me.sh', JSON.stringify(path.join(dir, 'run-me.sh')), 'sudo ./run-me.sh', 'sudo -s ./run-me.sh', './no-bang',
         './env-bang', './empty-bang', './blank-bang', './quoted-env-bang', './single-quoted-env-bang', 'bin/deep.sh', 'nohup ./run-me.sh',
-        ...(process.platform === 'win32' ? [] : ['./disguised.exe', './tool.cmd']), 'env A=1 ./run-me.sh', "echo 'x' > made.sh && ./made.sh",
+        './disguised.exe', './tool.cmd', './fake.ps1', './nul-after-line', './nul-past-sample', 'env A=1 ./run-me.sh', "echo 'x' > made.sh && ./made.sh",
         './build.sh && ./run-me.sh', '/bin/bash notes.txt', '/usr/bin/env bash notes.txt',
         ...envBangs.map((bang, i) => `./env-opt-${i}`),
       ]) {
@@ -978,9 +985,30 @@ function runTests() {
         }
       }
       const unreadable = [];
-      for (const command of ['./build.sh', './py-tool', './binary', ...(process.platform === 'win32' ? ['./tool.cmd'] : []), './not-built-yet', 'make && ./a.out', 'ls ./run-me.sh', ...unreadable, ...envNotShell.map((bang, i) => `./env-other-${i}`)]) {
+      for (const command of ['./build.sh', './py-tool', './binary', './nul-in-sample', './not-built-yet', 'make && ./a.out', 'ls ./run-me.sh', ...unreadable, ...envNotShell.map((bang, i) => `./env-other-${i}`)]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 0, `${command}: ${JSON.stringify(result)}`);
+      }
+    }));
+
+    record(test('a binary or another interpreter\'s script run by its path is left to the program it is whatever its size, and a shell script past the limit is still refused', () => {
+      const writeLarge = (name, head) => {
+        const file = path.join(dir, name);
+        fs.writeFileSync(file, Buffer.concat([Buffer.from(head, 'latin1'), Buffer.alloc(600 * 1024, 0x41)]));
+        fs.chmodSync(file, 0o755);
+      };
+      writeLarge('large-binary', '\u007fELF\u0002\u0001\u0001\u0000');
+      writeLarge('large-tool.py', '#!/usr/bin/env python3\n');
+      writeLarge('large-script.sh', '#!/bin/sh\n');
+      const judge = command => run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+      for (const command of ['./large-binary', 'sudo ./large-binary', JSON.stringify(path.join(dir, 'large-binary')), './large-tool.py']) {
+        const result = judge(command);
+        assert.strictEqual(result.exitCode, 0, `${command}: ${JSON.stringify(result)}`);
+      }
+      for (const command of ['./large-script.sh', 'sudo ./large-script.sh', 'bash ./large-binary']) {
+        const result = judge(command);
+        assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+        assert.ok(result.stderr.includes('too large'), `${command}: ${result.stderr}`);
       }
     }));
 

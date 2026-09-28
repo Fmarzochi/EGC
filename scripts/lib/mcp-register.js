@@ -726,6 +726,23 @@ function claudeRunner(cli) {
   return { viaCmd: true, run: args => spawnSync(quoteForCmdShell(cli), args.map(quoteForCmdShell), { encoding: 'utf8', shell: true }) }; // NOSONAR javascript:S4036 -- cli was resolved from the user's own PATH on purpose; fixed argv
 }
 
+// One server through the CLI: 'present' when it is registered already,
+// 'refused' when cmd.exe would expand its path, 'added' once the add ran.
+function addClaudeServer(runCli, viaCmd, name, bin) {
+  const existing = runCli(['mcp', 'get', name]);
+  // A CLI that cannot even run is not "server missing" - surface it
+  // instead of piling a doomed `add` on top.
+  if (existing.error) throw existing.error;
+  if (existing.status === 0) return 'present';
+  if (viaCmd && CMD_EXPANDS.test(bin)) return 'refused';
+  const added = runCli(['mcp', 'add', '-s', 'user', name, '--', 'node', bin]);
+  if (added.error) throw added.error;
+  if (added.status !== 0) {
+    throw new Error(`claude mcp add ${name} failed: ${(added.stderr || added.stdout || '').trim()}`);
+  }
+  return 'added';
+}
+
 function registerClaudeCli(_targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
   const cli = resolveClaudeCli();
@@ -740,27 +757,10 @@ function registerClaudeCli(_targetPath, bins) {
   // server path it would expand is left for the way by hand, every such
   // server named, after the others are registered.
   if (viaCmd && CMD_EXPANDS.test(cli)) throw byHand(cli, cli, servers);
-  const refused = [];
-  let changed = false;
-  for (const [name, bin] of servers) {
-    const existing = runCli(['mcp', 'get', name]);
-    // A CLI that cannot even run is not "server missing" - surface it
-    // instead of piling a doomed `add` on top.
-    if (existing.error) throw existing.error;
-    if (existing.status === 0) continue;
-    if (viaCmd && CMD_EXPANDS.test(bin)) {
-      refused.push([name, bin]);
-      continue;
-    }
-    const added = runCli(['mcp', 'add', '-s', 'user', name, '--', 'node', bin]);
-    if (added.error) throw added.error;
-    if (added.status !== 0) {
-      throw new Error(`claude mcp add ${name} failed: ${(added.stderr || added.stdout || '').trim()}`);
-    }
-    changed = true;
-  }
+  const outcomes = servers.map(([name, bin]) => addClaudeServer(runCli, viaCmd, name, bin));
+  const refused = servers.filter((_, at) => outcomes[at] === 'refused');
   if (refused.length > 0) throw byHand(cli, refused[0][1], refused);
-  return changed;
+  return outcomes.includes('added');
 }
 
 const EGC_SERVER_NAMES = ['egc-guardian', 'egc-memory'];
