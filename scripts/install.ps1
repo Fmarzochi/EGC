@@ -420,7 +420,7 @@ if (-not $DryRun) {
 
     # Install git pre-commit hook in a clone (strips egc:state blocks before
     # commits), through the helper install.sh runs as well.
-    node (Join-Path $RootDir (Join-Path "scripts" (Join-Path "lib" "git-pre-commit-install.js"))) $RootDir
+    node (Join-Path $RootDir (Join-Path "scripts" (Join-Path "lib" "git-pre-commit-install.js")))
 
     # Token Crusher PATH-level binary shim (git, npm, gh, ...). Best-effort:
     # a failure here (permission, unsupported shell profile, ...) must never

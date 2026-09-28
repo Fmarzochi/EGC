@@ -10,7 +10,8 @@
 // mark.
 //
 // Usage:
-//   node scripts/lib/git-pre-commit-install.js <package root>
+//   node scripts/lib/git-pre-commit-install.js
+// It acts on the package it ships in, found from its own location.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -46,7 +47,7 @@ function installPreCommitHook(rootDir) {
 }
 
 if (require.main === module) {
-  const outcome = installPreCommitHook(path.resolve(process.argv[2] || process.cwd()));
+  const outcome = installPreCommitHook(path.resolve(__dirname, '..', '..'));
   if (outcome !== 'skipped') console.log(`  ✓ ${MESSAGES[outcome]}`);
 }
 

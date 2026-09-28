@@ -10,6 +10,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { installPreCommitHook } = require('../../scripts/lib/git-pre-commit-install');
 
 function test(name, fn) {
@@ -87,14 +88,30 @@ function runTests() {
     });
   }));
 
+  record(test('run as a command, it acts on the package it ships in, never on a path it is handed', () => {
+    withRepo((root, hook) => {
+      const helper = path.join(root, 'scripts', 'lib', 'git-pre-commit-install.js');
+      fs.mkdirSync(path.dirname(helper), { recursive: true });
+      fs.copyFileSync(require.resolve('../../scripts/lib/git-pre-commit-install'), helper);
+      withRepo((elsewhere, elsewhereHook) => {
+        const result = spawnSync(process.execPath, [helper, elsewhere], { encoding: 'utf8' });
+        assert.strictEqual(result.status, 0, result.stderr);
+        assert.ok(fs.existsSync(hook), 'the hook of the package the helper ships in');
+        assert.ok(!fs.existsSync(elsewhereHook), 'nothing in the path handed to it');
+      });
+    });
+  }));
+
+  // Git for Windows checks the scripts out with CRLF line endings.
   const scripts = path.join(__dirname, '..', '..', 'scripts');
-  const ps1 = fs.readFileSync(path.join(scripts, 'install.ps1'), 'utf8');
-  const sh = fs.readFileSync(path.join(scripts, 'install.sh'), 'utf8');
+  const ps1 = fs.readFileSync(path.join(scripts, 'install.ps1'), 'utf8').replaceAll('\r\n', '\n');
+  const sh = fs.readFileSync(path.join(scripts, 'install.sh'), 'utf8').replaceAll('\r\n', '\n');
 
   record(test('both installers put the hook in a clone through this helper, outside a dry run', () => {
-    const ps1Call = ps1.indexOf('"git-pre-commit-install.js"))) $RootDir');
-    assert.ok(ps1Call > ps1.indexOf('if (-not $DryRun) {\n    # MCP auto-registration'), 'install.ps1 must install the hook inside the non-dry-run block');
-    assert.ok(/if \[\[ "\$DRY_RUN" = false \]\]; then\n\s*node "\$ROOT_DIR\/scripts\/lib\/git-pre-commit-install\.js" "\$ROOT_DIR"/.test(sh),
+    const block = ps1.indexOf('if (-not $DryRun) {\n    # MCP auto-registration');
+    const ps1Call = ps1.indexOf('(Join-Path "lib" "git-pre-commit-install.js")))\n');
+    assert.ok(block >= 0 && ps1Call > block, 'install.ps1 must install the hook inside the non-dry-run block');
+    assert.ok(/if \[\[ "\$DRY_RUN" = false \]\]; then\n\s*node "\$ROOT_DIR\/scripts\/lib\/git-pre-commit-install\.js"\n/.test(sh),
       'install.sh must install the hook through the same helper, outside a dry run');
   }));
 

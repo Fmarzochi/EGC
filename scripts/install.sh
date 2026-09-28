@@ -346,7 +346,7 @@ set -e
 # Install git pre-commit hook in a clone (strips egc:state blocks before
 # commits), through the helper install.ps1 runs as well.
 if [[ "$DRY_RUN" = false ]]; then
-  node "$ROOT_DIR/scripts/lib/git-pre-commit-install.js" "$ROOT_DIR"
+  node "$ROOT_DIR/scripts/lib/git-pre-commit-install.js"
 fi
 
 # Token Crusher PATH-level binary shim (git, npm, gh, ...). Best-effort: a
