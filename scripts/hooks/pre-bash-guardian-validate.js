@@ -30,12 +30,15 @@ const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const crypto = require('node:crypto');
 const path = require('node:path');
-const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardianVerdict, guardianFailureReason } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies, constructEnd } = require('../lib/shell-split');
 const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption } = require('../lib/wrapper-options');
 const { collectBindings, mergeBindings, valuesOf, commandWordChoices, quoteField, singleQuoted } = require('../lib/shell-bindings');
 
 const MAX_STDIN = 1024 * 1024;
+// An input cut at MAX_STDIN is not the command that runs: what was cut could
+// hold the rest of it, so it is refused rather than judged by its start.
+const OVER_LIMIT = 'EGC Guardian BLOCKED this command: the hook input is larger than the 1 MiB this validator reads, so the command was not validated. Split it into smaller commands.';
 const DEFAULT_VALIDATE_TIMEOUT_MS = 4000;
 
 // The budget the validator gets, in milliseconds: EGC_GUARDIAN_TIMEOUT_MS
@@ -1417,29 +1420,17 @@ function isVerdict(entry) {
   return entry !== null && typeof entry === 'object' && typeof entry.allowed === 'boolean';
 }
 
-function reasonWithoutVerdict(failure) {
-  switch (failure.kind) {
-    case 'timeout':
-      return `the validator did not answer within ${VALIDATE_TIMEOUT_MS / 1000} seconds`;
-    case 'unstartable':
-      return `the validator could not be started (${failure.detail})`;
-    case 'crash':
-      return `the validator stopped with ${failure.detail}`;
-    case 'unreadable':
-      return `the validator answered ${failure.detail}, which this hook could not read`;
-    default:
-      return 'the validator gave no verdict';
-  }
-}
-
 function withoutVerdict(failure) {
   return {
     exitCode: 2,
-    stderr: `EGC Guardian could not validate this command, so it did not run: ${reasonWithoutVerdict(failure)}. Nothing was executed. Run the command again; on a slow machine, set EGC_GUARDIAN_TIMEOUT_MS to a larger budget in milliseconds (${VALIDATE_TIMEOUT_MS} now). If this keeps happening, run 'egc doctor' to check the Guardian build, and set EGC_DISABLED_HOOKS=pre:bash:guardian-validate to lift this gate while you repair it.`,
+    stderr: `EGC Guardian could not validate this command, so it did not run: ${guardianFailureReason(failure, VALIDATE_TIMEOUT_MS)}. Nothing was executed. Run the command again; on a slow machine, set EGC_GUARDIAN_TIMEOUT_MS to a larger budget in milliseconds (${VALIDATE_TIMEOUT_MS} now). If this keeps happening, run 'egc doctor' to check the Guardian build, and set EGC_DISABLED_HOOKS=pre:bash:guardian-validate to lift this gate while you repair it.`,
   };
 }
 
-function run(inputOrRaw) {
+// `options.truncated`: the input was cut at the size the caller reads, as
+// run-with-flags reports it.
+function run(inputOrRaw, options = {}) {
+  if (options.truncated) return { exitCode: 2, stderr: OVER_LIMIT };
   const input = parseInput(inputOrRaw);
   const command = input?.tool_input?.command;
   if (!command || typeof command !== 'string') return { exitCode: 0 };
@@ -1516,14 +1507,16 @@ module.exports = { run, extractSegments, isAdvisory, bindingsOfSegments };
 
 if (require.main === module) {
   let raw = '';
+  let truncated = false;
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => {
+    truncated = truncated || raw.length + chunk.length > MAX_STDIN;
     if (raw.length < MAX_STDIN) {
       raw += chunk.substring(0, MAX_STDIN - raw.length);
     }
   });
   process.stdin.on('end', () => {
-    const result = run(raw);
+    const result = run(raw, { truncated });
     if (result.stderr) process.stderr.write(result.stderr + '\n');
     if (result.exitCode === 2) process.exit(2);
     process.stdout.write(raw);

@@ -94,19 +94,29 @@ const POST_BASH_HOOKS = [
   },
 ];
 
+// The hook input, at most MAX_STDIN characters, and whether any was cut.
 function readStdinRaw() {
   return new Promise(resolve => {
     let raw = '';
+    let truncated = false;
     process.stdin.setEncoding('utf8');
     process.stdin.on('data', chunk => {
+      truncated = truncated || raw.length + chunk.length > MAX_STDIN;
       if (raw.length < MAX_STDIN) {
         const remaining = MAX_STDIN - raw.length;
         raw += chunk.substring(0, remaining);
       }
     });
-    process.stdin.on('end', () => resolve(raw));
-    process.stdin.on('error', () => resolve(raw));
+    process.stdin.on('end', () => resolve({ raw, truncated }));
+    process.stdin.on('error', () => resolve({ raw, truncated }));
   });
+}
+
+// The pre-mode answer to an input cut at MAX_STDIN: it is not the command
+// that runs, since what was cut could hold the rest of it, so the guards
+// are not run on its start.
+function overLimitOutput() {
+  return denyEnvelope('the hook input is larger than the 1 MiB the guards read, so the command was not validated; split it into smaller commands');
 }
 
 function normalizeHookResult(previousRaw, output) {
@@ -229,7 +239,11 @@ function failClosedOutput(mode) {
 
 async function main() {
   const mode = process.argv[2];
-  const raw = await readStdinRaw();
+  const { raw, truncated } = await readStdinRaw();
+  if (truncated && mode !== 'post') {
+    process.stdout.write(overLimitOutput());
+    process.exit(0);
+  }
 
   const result = mode === 'post'
     ? runPostBash(raw)
@@ -266,4 +280,5 @@ module.exports = {
   denyEnvelope,
   resolvePreOutput,
   failClosedOutput,
+  overLimitOutput,
 };

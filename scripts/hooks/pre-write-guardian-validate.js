@@ -8,8 +8,10 @@
  * content the file will hold afterwards, judged segment by segment with
  * the same validator and the same segmentation the Bash hook uses.
  *
- * Fails open silently: if the guardian CLI is missing or errors, the
- * write is allowed. Run egc doctor to diagnose a missing validator.
+ * A missing guardian CLI allows the write, as the Bash hook allows a
+ * command then; run egc doctor to diagnose it. A validator that is there
+ * but gives no verdict (it stops, times out or answers something
+ * unreadable) blocks the write, as it blocks the command there.
  *
  * Exit codes:
  *   0 = allow
@@ -21,9 +23,12 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { resolveGuardianCli, callGuardian } = require('../lib/guardian-bin');
+const { resolveGuardianCli, callGuardianVerdict, guardianFailureReason } = require('../lib/guardian-bin');
 
 const MAX_STDIN = 1024 * 1024;
+// An input cut at MAX_STDIN is not the write that happens: the path or the
+// content it names could lie in what was cut, so it is refused.
+const OVER_LIMIT = 'EGC Guardian BLOCKED this write: the hook input is larger than the 1 MiB this validator reads, so the write was not validated. Write the file in smaller parts.';
 const VALIDATE_TIMEOUT_MS = 4000;
 const MAX_SCRIPT_BYTES = 512 * 1024;
 
@@ -118,9 +123,23 @@ function blocked(reason) {
   return { exitCode: 2, stderr: `EGC Guardian BLOCKED this write: ${reason}` };
 }
 
+function withoutVerdict(failure) {
+  return {
+    exitCode: 2,
+    stderr: `EGC Guardian could not validate this write, so it was not made: ${guardianFailureReason(failure, VALIDATE_TIMEOUT_MS)}. Try the write again; if this keeps happening, run 'egc doctor' to check the Guardian build.`,
+  };
+}
+
+function isVerdict(entry) {
+  return entry !== null && typeof entry === 'object' && typeof entry.allowed === 'boolean';
+}
+
 function blockedPath(cli, filePath) {
-  const verdict = callGuardian(cli, ['write'], filePath, VALIDATE_TIMEOUT_MS);
-  if (verdict?.allowed !== false) return null;
+  const answer = callGuardianVerdict(cli, ['write'], filePath, VALIDATE_TIMEOUT_MS);
+  if (!answer.ok) return withoutVerdict(answer);
+  const verdict = answer.value;
+  if (!isVerdict(verdict)) return withoutVerdict({ kind: 'unreadable', detail: 'something that is not a verdict' });
+  if (verdict.allowed) return null;
   return blocked(`${verdict.reason || 'denied by policy'}. Writes to protected paths are not permitted.`);
 }
 
@@ -153,8 +172,12 @@ function blockedScript(cli, input, filePath) {
   if (error) return blocked(error);
   if (segments.length === 0) return null;
   const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
-  const verdicts = callGuardian(cli, ['command-batch'], JSON.stringify({ commands: segments, cwd }), VALIDATE_TIMEOUT_MS);
-  if (!Array.isArray(verdicts)) return null;
+  const answer = callGuardianVerdict(cli, ['command-batch'], JSON.stringify({ commands: segments, cwd }), VALIDATE_TIMEOUT_MS);
+  if (!answer.ok) return withoutVerdict(answer);
+  const verdicts = answer.value;
+  if (!Array.isArray(verdicts) || verdicts.length !== segments.length || !verdicts.every(isVerdict)) {
+    return withoutVerdict({ kind: 'unreadable', detail: 'something that is not one verdict per command' });
+  }
   const index = verdicts.findIndex(verdict => verdict?.allowed === false && !bashGuardian.isAdvisory(verdict));
   if (index < 0) return null;
   return blocked(
@@ -171,7 +194,10 @@ function firstBlocked(cli, input, targets) {
   return null;
 }
 
-function run(inputOrRaw) {
+// `options.truncated`: the input was cut at the size the caller reads, as
+// run-with-flags reports it.
+function run(inputOrRaw, options = {}) {
+  if (options.truncated) return { exitCode: 2, stderr: OVER_LIMIT };
   const input = parseInput(inputOrRaw);
   const targets = writeTargetsOf(input?.tool_input);
   if (targets.length === 0) return { exitCode: 0 };
@@ -191,13 +217,12 @@ if (require.main === module) {
   let received = 0;
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => {
-    if (received >= MAX_STDIN) return;
-    chunks.push(chunk.substring(0, MAX_STDIN - received));
+    if (received < MAX_STDIN) chunks.push(chunk.substring(0, MAX_STDIN - received));
     received += chunk.length;
   });
   process.stdin.on('end', () => {
     const raw = chunks.join('');
-    const result = run(raw);
+    const result = run(raw, { truncated: received > MAX_STDIN });
     if (result.stderr) process.stderr.write(`${result.stderr}\n`);
     process.stdout.write(raw);
     process.exitCode = result.exitCode === 2 ? 2 : 0;

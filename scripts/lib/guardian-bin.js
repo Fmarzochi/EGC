@@ -370,9 +370,26 @@ function classifyGuardianResult(result) {
   }
 }
 
+// Why a call gave no verdict, in words a user reads: `failure` is what
+// callGuardianVerdict returned when it was not ok.
+function guardianFailureReason(failure, timeoutMs) {
+  switch (failure.kind) {
+    case 'timeout':
+      return `the validator did not answer within ${timeoutMs / 1000} seconds`;
+    case 'unstartable':
+      return `the validator could not be started (${failure.detail})`;
+    case 'crash':
+      return `the validator stopped with ${failure.detail}`;
+    case 'unreadable':
+      return `the validator answered ${failure.detail}, which this hook could not read`;
+    default:
+      return 'the validator gave no verdict';
+  }
+}
+
 // The parsed JSON, or null on any failure, for the callers that still fail
-// open: the prompt router and the intuition hook, the memory miner,
-// auto-learn and the write hook.
+// open: the prompt router and the intuition hook, the memory miner and
+// auto-learn.
 function callGuardian(cli, args, input, timeoutMs) {
   const answer = callGuardianVerdict(cli, args, input, timeoutMs);
   return answer.ok ? answer.value : null;
@@ -382,6 +399,7 @@ module.exports = {
   resolveGuardianCli,
   callGuardian,
   callGuardianVerdict,
+  guardianFailureReason,
   fromEnv,
   fromPackageLayout,
   fromMcpConfigs,
