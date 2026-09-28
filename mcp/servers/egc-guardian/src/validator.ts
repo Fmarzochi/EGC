@@ -500,7 +500,7 @@ const DANGEROUS_ENV_VAR_EXACT = new Set([
   // prompt, a proxy), a config file it loads whole, a template it copies
   // hooks from, and the input filters of less, git's pager.
   'GIT_EXTERNAL_DIFF', 'GIT_SEQUENCE_EDITOR', 'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_PROXY_COMMAND',
-  'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_TEMPLATE_DIR',
+  'GIT_CONFIG', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_TEMPLATE_DIR',
   'LESSOPEN', 'LESSCLOSE', 'LESSKEY', 'LESSKEYIN', 'LESSKEY_SRC', 'LESSKEY_CONTENT',
 ]);
 const DANGEROUS_ENV_VAR_PATTERN = /^GIT_CONFIG_(KEY|VALUE)_\d+$/;
@@ -554,8 +554,9 @@ function envValueDenial(name: string, value: string, command?: string): string |
     return `'${name}' points git at ${text}, a repository whose config this line can choose, which is forbidden: name a .git directory`;
   }
   // Without a command (export, a bare assignment) it holds for the git
-  // commands later on the line.
-  if (CONFIG_HOME_ENV_VARS.has(upper) && (command === 'git' || command === undefined)) {
+  // commands later on the line; git's own programs (git-upload-pack) read
+  // the same config.
+  if (CONFIG_HOME_ENV_VARS.has(upper) && (command === undefined || command === 'git' || command.startsWith('git-'))) {
     return `'${name}' points git at a config this line chooses, which can name commands git runs, and is forbidden`;
   }
   if (upper === 'LESS' && LESS_COMMAND_RE.test(text)) {

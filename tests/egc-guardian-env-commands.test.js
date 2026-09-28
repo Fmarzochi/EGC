@@ -126,6 +126,10 @@ denied('export HOME=/tmp/evil');
 denied('export XDG_CONFIG_HOME=/tmp/evil');
 denied('HOME=/tmp/evil');
 notDenied('LD_LIBRARY_PATH=./build/lib ls');
+denied("GIT_CONFIG=~/.bashrc git config alias.x '!id'");
+denied('GIT_CONFIG=~/.bashrc git config user.name x');
+denied('HOME=/tmp/evil git-upload-pack .');
+denied('XDG_CONFIG_HOME=/tmp/evil git-receive-pack .');
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
