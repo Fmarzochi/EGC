@@ -1786,6 +1786,12 @@ interface GitConfigCall {
   unsure: boolean;
 }
 
+// The file the -f of an option cluster names: glued after it, read as the
+// shell hands it, or the next word.
+function clusterFile(rest: string[], i: number, cluster: string, at: number): string | undefined {
+  return at < cluster.length ? pathValue(rest[i], cluster, at) : rest[i + 1];
+}
+
 // The index of the last word an option cluster uses.
 function readGitConfigCluster(rest: string[], i: number, call: GitConfigCall): number {
   const cluster = stripQuotes(rest[i]);
@@ -1800,10 +1806,9 @@ function readGitConfigCluster(rest: string[], i: number, call: GitConfigCall): n
       call.actions.push(kind);
       continue;
     }
-    const glued = cluster.slice(j + 1);
-    const value = glued === '' ? rest[i + 1] : rest[i];
-    if (kind === 'file' && value !== undefined) call.files.push(glued === '' ? value : pathValue(value, cluster, j + 1));
-    return glued === '' ? i + 1 : i;
+    const file = kind === 'file' ? clusterFile(rest, i, cluster, j + 1) : undefined;
+    if (file !== undefined) call.files.push(file);
+    return j + 1 < cluster.length ? i : i + 1;
   }
   return i;
 }
