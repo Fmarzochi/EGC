@@ -904,14 +904,30 @@ function envProgram(words) {
   return rest === null ? null : undefined;
 }
 
+// A word of an env -S string, read with its quotes as env reads them.
+const unquoteEnvWord = word => word.replace(/^(['"])(.*)\1$/, '$2');
+
+// A file this user cannot read and does not own was not written by it: run
+// by its path (through sudo, as root) it is left to the program it is. One
+// it owns could have been made unreadable to hide it, and is read, which
+// fails closed; so is one whose owner cannot be told.
+function unreadableRunsAsShell(file) {
+  try {
+    return typeof process.getuid !== 'function' || fs.statSync(file).uid === process.getuid();
+  } catch {
+    return true;
+  }
+}
+
 // Whether a file run by its path is a shell script: its #! line names a
-// shell, directly or through env, or it has none or names no interpreter,
-// and then the calling shell runs it as a script of its own. A binary, a Windows command file and
-// another interpreter's script are not read as shell; an env line whose
-// options cannot be read is. A head that cannot be read is left to the full
-// read, which fails closed.
+// shell, directly or through env (its -S string read with its quotes), or it
+// has none or names no interpreter, and then the calling shell runs it as a
+// script of its own. A binary and another interpreter's script are not read
+// as shell, nor on Windows a file its extension hands to another program;
+// elsewhere the kernel ignores the extension. An env line whose options
+// cannot be read is read as shell.
 function runsAsShellScript(file) {
-  if (NOT_SHELL_EXTENSIONS_RE.test(file)) return false;
+  if (process.platform === 'win32' && NOT_SHELL_EXTENSIONS_RE.test(file)) return false;
   let head;
   try {
     const fd = fs.openSync(file, 'r');
@@ -922,7 +938,7 @@ function runsAsShellScript(file) {
       fs.closeSync(fd);
     }
   } catch {
-    return true;
+    return unreadableRunsAsShell(file);
   }
   if (head.includes('\0')) return false;
   if (!head.startsWith('#!')) return true;
@@ -930,7 +946,7 @@ function runsAsShellScript(file) {
   if (!line) return true;
   const words = line.split(/\s+/);
   const program = path.basename(words[0]);
-  const run = program === 'env' ? envProgram(words.slice(1)) : program;
+  const run = program === 'env' ? envProgram(words.slice(1).map(unquoteEnvWord)) : program;
   return run === null || SHEBANG_SHELLS.has(path.basename(run ?? ''));
 }
 
