@@ -60,6 +60,8 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A command word that comes from an expansion is judged by every value it can take, in the command and in the scripts it runs; a value the hook cannot read fails closed (#1560).
 - A `${...}` expansion closes where bash closes it, past nested expansions and substitutions, and a comment ends at its newline whatever quote or backslash it holds (#1561).
 - The fact-forcing gate reads `taskset -p` and `chrt -p` as acting on a running process, so the words after them are never taken for a command (#1563).
+- Encrypted state and compressed observations are written through a temp file that is exclusive and 0600 from its creation (#1564).
+- A memory write that meets another process's lock waits its backoff without holding up the writes behind it (#1567).
 - The Bash hook reads a script run by its path (./x.sh, sudo ./x.sh) like one handed to bash (#1573).
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
 ## v1.1.22: The Field Round (Released 2026-09-16)
