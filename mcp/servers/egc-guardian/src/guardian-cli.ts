@@ -22,15 +22,17 @@ interface BatchEntry {
   committed: { bound: Record<string, string[]> } | null;
 }
 
+// A marker of any other shape is not one: the entry is judged as typed,
+// under every rule.
 function committedMark(flag: unknown): BatchEntry['committed'] {
   if (flag === true) return { bound: {} };
   if (flag === null || typeof flag !== 'object' || Array.isArray(flag)) return null;
   const given = (flag as { bound?: unknown }).bound;
+  if (given === null || typeof given !== 'object' || Array.isArray(given)) return null;
   const bound: Record<string, string[]> = {};
-  if (given !== null && typeof given === 'object' && !Array.isArray(given)) {
-    for (const [name, values] of Object.entries(given)) {
-      if (Array.isArray(values)) bound[name] = values.filter((value): value is string => typeof value === 'string');
-    }
+  for (const [name, values] of Object.entries(given)) {
+    if (!Array.isArray(values) || !values.every((value): value is string => typeof value === 'string')) return null;
+    bound[name] = values;
   }
   return { bound };
 }
