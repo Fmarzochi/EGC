@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from llm.core.retry import call_with_retries
 from llm.core.interface import (
     AuthenticationError,
     ContextLengthError,
@@ -125,8 +126,11 @@ class OllamaProvider(LLMProvider):
                 url, data=data, headers={"Content-Type": "application/json"}
             )
 
-            with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT) as response:
-                result = json.loads(response.read().decode("utf-8"))
+            def post_chat() -> dict:
+                with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT) as response:
+                    return json.loads(response.read().decode("utf-8"))
+
+            result = call_with_retries(post_chat)
 
             message = result.get("message") or {}
             prompt_tokens = result.get("prompt_eval_count", 0)
