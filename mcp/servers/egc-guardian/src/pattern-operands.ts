@@ -1,13 +1,16 @@
 // A program, a pattern or a filter a command is handed is text it reads,
 // not a file it opens: sed's script, awk's program, jq's and yq's filter,
 // the pattern of rg and ag, tr's sets. A protected name inside one
-// (`jq '.env'`, `sed 's/process.env.X/y/'`) is not the file it looks like.
-// Each table lists the options of the command's manual: those that take a
-// value (the next word, or glued on), those that take none, those whose
-// value may only be glued on, those that hand the program in (then every
-// operand is a file) and those whose value is a file the command reads. An
-// option a table does not know leaves the command judged as before, every
-// word a path, so a missing entry never lets a file through.
+// (`jq '.env'`, `sed 's/process.env.X/y/'`) is not the file it looks like;
+// the files and the commands the program's own text names are read in its
+// language (program-refs.ts) and judged. Each table lists the options of the
+// command's manual: those that take a value (the next word, or glued on),
+// those that take none, those whose value may only be glued on (a file when
+// given), those that hand the program in (then every operand is a file),
+// those whose value is a file the command reads or writes, and those whose
+// value is program text. An option a table does not know leaves the command
+// judged as before, every word a path, so a missing entry never lets a file
+// through.
 
 interface ProgramSpec {
   values: Set<string>;
@@ -15,11 +18,17 @@ interface ProgramSpec {
   optional?: Set<string>;
   program: Set<string>;
   files: Set<string>;
+  // The language of the program text: sed, awk, jq or yq.
+  language?: string;
+  // Options whose value is program text (sed -e, gawk --source).
+  programValues?: Set<string>;
+  // Options whose value is NAME=value (awk -v): the value may name a file.
+  assignOptions?: Set<string>;
   // jq --arg NAME VALUE: two words, the second a file when true.
   pairs?: Map<string, boolean>;
   // yq: a first word that names the mode, not the filter.
   modes?: Set<string>;
-  // awk: a NAME=value operand sets a variable.
+  // awk: a NAME=value operand sets a variable, whose value may name a file.
   assignments?: boolean;
   // tr: every operand is a set of characters.
   textOperands?: boolean;
@@ -34,7 +43,10 @@ const AWK: ProgramSpec = {
   flags: set('-b --characters-as-bytes -c --traditional -C --copyright -g --gen-pot -h --help -M --bignum -n --non-decimal-data -N --use-lc-numeric -O --optimize -P --posix -r --re-interval -s --no-optimize -S --sandbox -t --lint-old -V --version'),
   optional: set('-d --dump-variables -D --debug -L --lint -o --pretty-print -p --profile'),
   program: set('-f --file -e --source -E --exec'),
-  files: set('-f --file -i --include -E --exec'),
+  files: set('-f --file -i --include -l --load -E --exec'),
+  language: 'awk',
+  programValues: set('-e --source'),
+  assignOptions: set('-v --assign'),
   assignments: true,
 };
 
@@ -45,6 +57,8 @@ const PROGRAM_SPECS: Record<string, ProgramSpec> = {
     optional: set('-i --in-place'),
     program: set('-e --expression -f --file'),
     files: set('-f --file'),
+    language: 'sed',
+    programValues: set('-e --expression'),
   },
   awk: AWK,
   gawk: AWK,
@@ -55,6 +69,7 @@ const PROGRAM_SPECS: Record<string, ProgramSpec> = {
     flags: set('-n --null-input -r --raw-output -j --join-output -a --ascii-output -c --compact-output -s --slurp -e --exit-status -S --sort-keys -C --color-output -M --monochrome-output --tab --stream --stream-errors --seq -R --raw-input --raw-output0 --unbuffered -h --help -V --version --build-configuration --args --jsonargs'),
     program: set('-f --from-file'),
     files: set('-f --from-file -L'),
+    language: 'jq',
     pairs: new Map([['--arg', false], ['--argjson', false], ['--slurpfile', true], ['--rawfile', true]]),
     argsAfter: set('--args --jsonargs'),
   },
@@ -63,6 +78,8 @@ const PROGRAM_SPECS: Record<string, ProgramSpec> = {
     flags: set('-i --inplace -P --prettyPrint -C --colors -M --no-colors -N --no-doc -e --exit-status -n --null-input -r --unwrapScalar -v --verbose -V --version -h --help -0 --nul-output'),
     program: set('--from-file --expression'),
     files: set('--from-file'),
+    language: 'yq',
+    programValues: set('--expression'),
     modes: set('eval e eval-all ea'),
   },
   rg: {
@@ -75,7 +92,7 @@ const PROGRAM_SPECS: Record<string, ProgramSpec> = {
     values: set('-A --after -B --before -C --context -G --file-search-regex -g --ignore --ignore-dir -m --max-count --depth -W --width --pager -p --path-to-ignore'),
     flags: set('-a --all-types -c --count -D --debug -f --follow -F --fixed-strings -H --heading --noheading -i --ignore-case -l --files-with-matches -L --files-without-matches -n --norecurse -Q --literal -s --case-sensitive -S --smart-case -t --all-text -u --unrestricted -U --skip-vcs-ignores -v --invert-match -w --word-regexp -z --search-zip -0 --null --print0 --column --nocolor --color --hidden --silent --stats --vimgrep -o --only-matching --nofilename --filename -h --help --version'),
     program: set('-g'),
-    files: set('-p --path-to-ignore'),
+    files: set('-p --path-to-ignore --pager'),
   },
   tr: {
     values: new Set(),
@@ -93,14 +110,34 @@ interface OptionRead {
   consumed: number;
   program?: boolean;
   file?: string;
+  text?: string;
   argsAfter?: boolean;
+}
+
+// The value of NAME=value, which an awk program may use as a file name.
+const assignedValue = (word: string | undefined): string | undefined => /^[A-Za-z_]\w*=([^]*)$/.exec(word ?? '')?.[1];
+
+// The file an option's value names: its value for a file option, the value
+// it assigns for an assignment option.
+function optionFile(spec: ProgramSpec, name: string, value: string | undefined): string | undefined {
+  if (spec.files.has(name)) return value;
+  return spec.assignOptions?.has(name) ? assignedValue(value) : undefined;
 }
 
 // An option that takes a value: glued on (`--file=x`, `-fx`) or the next word.
 function optionValue(spec: ProgramSpec, name: string, glued: string | null, next: string | undefined): OptionRead {
   const value = glued ?? next;
-  return { consumed: glued === null ? 1 : 0, program: spec.program.has(name), file: spec.files.has(name) ? value : undefined };
+  return {
+    consumed: glued === null ? 1 : 0,
+    program: spec.program.has(name),
+    file: optionFile(spec, name, value),
+    text: spec.programValues?.has(name) ? value : undefined,
+  };
 }
+
+// An option whose value may only be glued on names a file when it has one
+// (sed -i.bak writes a backup, gawk -d.env dumps its variables there).
+const optionalRead = (glued: string | null): OptionRead => ({ consumed: 0, file: glued || undefined });
 
 // jq's two-word options: the second word is a file only for --slurpfile and
 // --rawfile.
@@ -114,7 +151,7 @@ function readLongOption(spec: ProgramSpec, word: string, args: string[], at: num
   const pair = spec.pairs?.get(name);
   if (pair !== undefined) return glued === null ? pairRead(pair, args, at) : null;
   if (spec.values.has(name)) return optionValue(spec, name, glued, args[at + 1]);
-  if (spec.optional?.has(name)) return { consumed: 0 };
+  if (spec.optional?.has(name)) return optionalRead(glued);
   if (glued === null && spec.flags.has(name)) return { consumed: 0, argsAfter: spec.argsAfter?.has(name) };
   return null;
 }
@@ -124,7 +161,7 @@ function readShortOptions(spec: ProgramSpec, word: string, args: string[], at: n
     const name = `-${word[letter]}`;
     const rest = word.slice(letter + 1);
     if (spec.values.has(name)) return optionValue(spec, name, rest === '' ? null : rest, args[at + 1]);
-    if (spec.optional?.has(name)) return { consumed: 0 };
+    if (spec.optional?.has(name)) return optionalRead(rest);
     if (!spec.flags.has(name)) return null;
   }
   return { consumed: 0 };
@@ -143,29 +180,45 @@ interface OperandState {
   firstOperand: boolean;
 }
 
-// Whether an operand names a file, once the options before it are read: not
-// the mode word, the program, a value after --args or an assignment.
-function operandNamesFile(spec: ProgramSpec, state: OperandState, word: string): boolean {
+/** What a command whose first operand is a program names: the files among its words, the program texts it runs and their language. */
+export interface ProgramRead {
+  files: string[];
+  programs: string[];
+  language: string | null;
+}
+
+// A program as the tool gets it: on Windows a word can still carry the
+// quotes around it, which the tool never sees.
+const programText = (raw: string): string =>
+  process.platform === 'win32' && /^(["']).*\1$/s.test(raw) ? raw.slice(1, -1) : raw;
+
+// An operand once the options before it are read: the mode word, a value
+// after --args and a character set name nothing; the first one is the
+// program; an assignment names the file its value may be; the rest are files.
+function readOperand(spec: ProgramSpec, state: OperandState, raw: string, out: ProgramRead): void {
+  const word = bare(raw);
   const isMode = state.firstOperand && spec.modes?.has(word) === true;
   state.firstOperand = false;
-  if (isMode || state.argsOnly || spec.textOperands) return false;
+  if (isMode || state.argsOnly || spec.textOperands) return;
   if (!state.programGiven && !state.programSeen) {
     state.programSeen = true;
-    return false;
+    out.programs.push(programText(raw));
+    return;
   }
-  return !(spec.assignments && /^[A-Za-z_]\w*=/.test(word));
+  const assigned = spec.assignments ? assignedValue(word) : undefined;
+  out.files.push(assigned ?? raw);
 }
 
 /**
- * The words among `args` that name a file for a command whose first operand
- * is a program, a pattern or a filter: its operands after that one and the
- * values of its file options. null when the command is not one of these, or
+ * What a command whose first operand is a program, a pattern or a filter
+ * names: its operands after that one, the values of its file options and
+ * the program texts it runs. null when the command is not one of these, or
  * uses an option its table does not know; then every word is judged.
  */
-export function fileWordsOf(command: string, args: string[]): string[] | null {
+export function programCommandOf(command: string, args: string[]): ProgramRead | null {
   const spec = PROGRAM_SPECS[command];
   if (!spec) return null;
-  const files: string[] = [];
+  const out: ProgramRead = { files: [], programs: [], language: spec.language ?? null };
   const state: OperandState = { programGiven: false, programSeen: false, argsOnly: false, firstOperand: true };
   let options = true;
   for (let at = 0; at < args.length; at++) {
@@ -177,22 +230,24 @@ export function fileWordsOf(command: string, args: string[]): string[] | null {
     if (options && isOption(word)) {
       const read = readOption(spec, args, at);
       if (read === null) return null;
-      at += noteOption(state, files, read);
+      at += noteOption(state, out, read);
       continue;
     }
-    if (operandNamesFile(spec, state, word)) files.push(args[at]);
+    readOperand(spec, state, args[at], out);
   }
-  return files;
+  return out;
 }
 
 const isOption = (word: string): boolean => word.length > 1 && word.startsWith('-');
 
 // What an option read tells: whether it handed the program in, whether the
-// operands after it are values, its file; how many words after it it took.
-function noteOption(state: OperandState, files: string[], read: OptionRead): number {
+// operands after it are values, its file, its program text; how many words
+// after it it took.
+function noteOption(state: OperandState, out: ProgramRead, read: OptionRead): number {
   state.programGiven ||= read.program === true;
   state.argsOnly ||= read.argsAfter === true;
-  if (read.file !== undefined) files.push(read.file);
+  if (read.file !== undefined) out.files.push(read.file);
+  if (read.text !== undefined) out.programs.push(read.text);
   return read.consumed;
 }
 

@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import { readParallelOption } from './parallel-options.js';
 import { LOCAL_WRAPPER_SPECS } from './local-wrappers.js';
 import { RUNNER_SPECS, type RunnerSpec } from './runner-wrappers.js';
-import { fileWordsOf, gitWordsNamingFiles } from './pattern-operands.js';
+import { programCommandOf, gitWordsNamingFiles, type ProgramRead } from './pattern-operands.js';
+import { programRefs } from './program-refs.js';
 
 export { RUNNER_SPECS } from './runner-wrappers.js';
 
@@ -3455,14 +3456,40 @@ function withoutInputRedirections(args: string[], raw: string[]): string[] {
 // script, naming a protected file with them is flagged, not grave.
 const COMMITTED_READ_BUILTINS = new Set(['[', '[[', 'test', '.', 'source']);
 
+// What the programs of a sed, awk, jq or yq command name in their text: the
+// files, judged with the command's words; a command one runs, judged as the
+// command it is; one it builds from the data it reads, which is refused.
+function programTextVerdict(baseCommand: string, read: ProgramRead): { files: string[]; denial: ValidationResult | null } {
+  const files: string[] = [];
+  for (const text of read.programs) {
+    const refs = programRefs(read.language, text);
+    if (refs.opaque) {
+      return { files, denial: { allowed: false, reason: `'${baseCommand}' ${refs.opaque}, which cannot be judged before it runs; write the command out`, trust_level: 'DANGEROUS' } };
+    }
+    for (const inner of refs.commands) {
+      const verdict = validateCommand(inner);
+      if (verdict.allowed === false && !verdict.advisory) {
+        return { files, denial: { allowed: false, reason: `'${baseCommand}' runs '${inner}': ${verdict.reason}`, trust_level: 'DANGEROUS' } };
+      }
+    }
+    files.push(...refs.files);
+  }
+  return { files, denial: null };
+}
+
 function validateAgainstAllowlist(baseCommand: string, args: string[], cwd?: string, rawArgs: string[] = args): ValidationResult {
   if (SAFE_READONLY.includes(baseCommand) || SAFE_DEV.includes(baseCommand)) {
     return validateCommandArgs(baseCommand, args, cwd);
   }
   // A committed script reads files through `<` as the reads they are.
   const candidates = committedScript ? withoutInputRedirections(args, rawArgs) : args;
-  // The program, pattern or filter of sed, awk, jq and the like is text.
-  const protectedTarget = pathCandidatesOf(fileWordsOf(baseCommand, candidates) ?? candidates).find(arg => isProtectedPath(arg, cwd));
+  // The program, pattern or filter of sed, awk, jq and the like is text; the
+  // files and the commands its own text names are judged.
+  const read = programCommandOf(baseCommand, candidates);
+  const program = read ? programTextVerdict(baseCommand, read) : { files: [], denial: null };
+  if (program.denial) return program.denial;
+  const named = read ? [...read.files, ...program.files] : candidates;
+  const protectedTarget = pathCandidatesOf(named).find(arg => isProtectedPath(arg, cwd));
   if (protectedTarget) {
     const denial: ValidationResult = {
       allowed: false,
