@@ -35,12 +35,19 @@ const writeInput = size => JSON.stringify({
 // reader that counted units would take it for smaller than it is.
 const multibyteInput = bytes => JSON.stringify({ tool_name: 'Bash', tool_input: { command: `${wipe} # ${'é'.repeat(Math.ceil(bytes / 2))}` } });
 const DENY = /"permissionDecision":\s*"deny"/;
-const run = (script, args, input) => spawnSync(process.execPath, [path.join(hooks, script), ...args], {
+const run = (script, args, input, disabled = '') => spawnSync(process.execPath, [path.join(hooks, script), ...args], {
   input,
   encoding: 'utf8',
   maxBuffer: 16 * 1024 * 1024,
-  env: { ...process.env, EGC_HOOK_PROFILE: 'standard', EGC_DISABLED_HOOKS: '' },
+  env: { ...process.env, EGC_HOOK_PROFILE: 'standard', EGC_DISABLED_HOOKS: disabled },
 });
+// Every pre-Bash guard but the Guardian, so a dispatcher's answer to an
+// uncut input is the Guardian's own (the fact-forcing gate, for one, denies
+// the first command of a fresh session).
+const OTHER_PRE_BASH_GUARDS = require('../../scripts/hooks/bash-hook-dispatcher').PRE_BASH_HOOKS
+  .map(hook => hook.id)
+  .filter(id => id !== 'pre:bash:guardian-validate')
+  .join(',');
 
 function runTests() {
   console.log('\n=== Testing hook input over the size the hooks read ===\n');
@@ -110,9 +117,9 @@ function runTests() {
       assert.strictEqual(hook.status, 0, hook.stderr);
       assert.doesNotMatch(hook.stderr, /larger than/);
       for (const [script, args] of [['bash-hook-dispatcher.js', ['pre']], ['pre-bash-dispatcher.js', []]]) {
-        const dispatched = run(script, args, input);
+        const dispatched = run(script, args, input, OTHER_PRE_BASH_GUARDS);
         assert.strictEqual(dispatched.status, 0, `${script}: ${dispatched.stderr}`);
-        assert.doesNotMatch(dispatched.stdout, DENY, script);
+        assert.doesNotMatch(dispatched.stdout, DENY, `${script}: ${dispatched.stdout.slice(0, 300)}`);
       }
     }
     const written = run('pre-write-guardian-validate.js', [], write);
