@@ -52,6 +52,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The fact-forcing gate reads the wrappers in front of a destructive command through the Guardian's own tables, and every target is checked to copy both hooks with their helpers (#1552).
 - The PreCompact memory save is installed with every helper it loads on any Claude profile, and the package-only auto-update script is no longer copied into targets (#1553).
 - A file an earlier install wrote and today's plan no longer writes is retired on every target, OpenCode, Cursor, Codex and egc included, when EGC recorded writing it and it still holds the bytes EGC copied; a file the person changed, or a directory that cannot be listed, stays (#1554).
+- The hooks schema reads the four shapes the validator reads, the cost trackers share one cost source, and the lifecycle commands share their skeleton (#1584).
 - Host plugins (Amp, Cline, OpenCode) are installed only where their host loads them, and the unloadable copies earlier installs left under scripts/hooks are retired (#1555).
 - The Bash hook follows sudo -R and sudo -i to where sudo runs a script, and fails closed on a script it cannot read (#1556).
 - The Bash hook reads the command line as the shell does to find the script it runs, and holds scripts committed in git and unchanged to the grave denials only (#1557).
