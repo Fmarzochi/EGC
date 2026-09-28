@@ -156,26 +156,31 @@ function withSingleBlock(raw) {
   });
 }
 
+// What an upgrade of a file that already carried the block reports.
+function upgradeNote(installedVersion, stale) {
+  const change = `v${installedVersion} -> v${PROTOCOL_VERSION}`;
+  return stale > 0 ? `${keptOnce(stale)} (${change})` : `upgraded ${change}`;
+}
+
+// A file that already carries the block: left alone when it holds one current
+// block, otherwise rewritten with a single current block after a backup.
+function reconcileBlocks(filepath, label, raw, blocks) {
+  const installedVersion = blocks[0][1] ? Number(blocks[0][1]) : 1;
+  if (blocks.length === 1 && installedVersion >= PROTOCOL_VERSION) {
+    console.log(`  [cognitive] ${label}: already configured (v${installedVersion})`);
+    return;
+  }
+  fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
+  fs.writeFileSync(filepath, withSingleBlock(raw), 'utf8');
+  console.log(`  [cognitive] ${label}: memory protocol ${upgradeNote(installedVersion, blocks.length - 1)} (${filepath.replace(HOME, '~')})`);
+}
+
 function injectProtocol(filepath, label) {
-  const exists = fs.existsSync(filepath);
-  if (exists) {
+  if (fs.existsSync(filepath)) {
     const raw = fs.readFileSync(filepath, 'utf8');
     const blocks = [...raw.matchAll(MARKER_BLOCKS_RE)];
     if (blocks.length > 0) {
-      const installedVersion = blocks[0][1] ? Number(blocks[0][1]) : 1;
-      if (blocks.length === 1 && installedVersion >= PROTOCOL_VERSION) {
-        console.log(`  [cognitive] ${label}: already configured (v${installedVersion})`);
-        return;
-      }
-      fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
-      fs.writeFileSync(filepath, withSingleBlock(raw), 'utf8');
-      const where = filepath.replace(HOME, '~');
-      const stale = blocks.length - 1;
-      if (stale > 0) {
-        console.log(`  [cognitive] ${label}: memory protocol ${keptOnce(stale)} (v${installedVersion} -> v${PROTOCOL_VERSION}) (${where})`);
-      } else {
-        console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION} (${where})`);
-      }
+      reconcileBlocks(filepath, label, raw, blocks);
       return;
     }
     fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
