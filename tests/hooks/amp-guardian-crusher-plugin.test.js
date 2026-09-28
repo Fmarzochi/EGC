@@ -68,6 +68,7 @@ function buildInstalledLayout() {
     'scripts/lib/shell-split.js',
     'scripts/lib/wrapper-options.js',
     'scripts/lib/shell-bindings.js',
+    'scripts/lib/shell-cwd.js',
     'scripts/lib/stdin-programs.js',
     'scripts/hooks/pre-bash-crusher-rewrite.js',
     'scripts/lib/crusher/engine.js',
