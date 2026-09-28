@@ -1052,7 +1052,18 @@ function readOperands(found, dirs, context) {
 
 // Shells a #! line can name, directly or through env.
 const SHEBANG_SHELLS = new Set(['sh', 'bash', 'zsh', 'ksh', 'mksh', 'dash', 'ash', 'busybox']);
-const NOT_SHELL_EXTENSIONS_RE = /\.(?:cmd|bat|ps1|exe|com)$/i;
+
+// A file the kernel will not run is run by bash as a script of its own
+// unless a NUL comes before the first newline within its first 128 bytes
+// (measured on bash 5.2); zsh refuses a NUL anywhere in them, so what bash
+// refuses zsh refuses too. An ELF, Mach-O or PE image has one in its header.
+const BINARY_SAMPLE_BYTES = 128;
+
+function readsAsBinary(head) {
+  const sample = head.slice(0, BINARY_SAMPLE_BYTES);
+  const newline = sample.indexOf('\n');
+  return (newline < 0 ? sample : sample.slice(0, newline)).includes('\0');
+}
 
 // env's long options, and those of its options, short and long, that take
 // the next word as their value (-S takes one too and splits it into more
@@ -1123,11 +1134,11 @@ function unreadableRunsAsShell(file) {
 // shell, directly or through env (its -S string read with its quotes), or it
 // has none or names no interpreter, and then the calling shell runs it as a
 // script of its own. A binary and another interpreter's script are not read
-// as shell, nor on Windows a file its extension hands to another program;
-// elsewhere the kernel ignores the extension. An env line whose options
-// cannot be read is read as shell.
+// as shell. The extension decides nothing: Git Bash runs a .exe or .ps1 that
+// is not an image as a script, and the commands of a .cmd run too, cmd
+// finding rm and its kin on the Git for Windows PATH. An env line whose
+// options cannot be read is read as shell.
 function runsAsShellScript(file) {
-  if (process.platform === 'win32' && NOT_SHELL_EXTENSIONS_RE.test(file)) return false;
   let head;
   try {
     const fd = fs.openSync(file, 'r');
@@ -1140,7 +1151,7 @@ function runsAsShellScript(file) {
   } catch {
     return unreadableRunsAsShell(file);
   }
-  if (head.includes('\0')) return false;
+  if (readsAsBinary(head)) return false;
   if (!head.startsWith('#!')) return true;
   const line = head.slice(2).split('\n')[0].trim();
   if (!line) return true;
