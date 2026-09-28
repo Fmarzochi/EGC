@@ -98,13 +98,16 @@ record(test('the config, hooks and links of any .git or <name>.git directory are
     '/tmp/evil.git/config', '/tmp/evil.git/hooks/post-checkout', '/tmp/evil.git/hooks', '/p/.git/config', '/p/.git/hooks/pre-commit',
     '/p/.git/config.worktree', '/p/.git/commondir', '/p/.git/modules/sub/config', '/p/.git/modules/a/b/hooks/post-checkout',
     '/p/.git/worktrees/wt/config.worktree', '/p/.git/worktrees/wt/commondir', '/srv/repo.git/modules/s/config',
+    // The directory itself and the ones it keeps for work trees and
+    // submodules, where a directory copied or linked in brings its config.
+    '/p/.git', '/tmp/evil.git', '/p/.git/worktrees/wt', '/p/.git/modules/sub', '/p/.git/worktrees',
   ]) {
     assert.strictEqual(isProtectedPath(file), true, `${file} is not protected`);
     assert.strictEqual(isReadDeniedPath(file), false, `${file} cannot be read`);
   }
   for (const file of [
     '/p/src/config', '/p/.git/refs/heads/config', '/p/.gitignore', '/p/.git/info/exclude', '/p/.github/config', '/p/config',
-    '/p/.git/modules/config', '/p/.git/worktrees/config', '/p/.git/modules/a/config/HEAD',
+    '/p/.git/objects/ab/config', '/p/.git/HEAD',
   ]) {
     assert.strictEqual(isProtectedPath(file), false, `${file} is protected`);
   }
@@ -149,6 +152,25 @@ record(test('a bare repository outside the convention is refused where git runs,
     ['git status', at('norefs')], ['git status', at('headdir')],
   ]) {
     passes(command, cwd);
+  }
+}));
+
+record(test('a directory is not copied, synced or linked into a git directory, and a link is trusted for where it leads', () => {
+  for (const command of [
+    `cp -r ${at('evil')} ${at('c.git')}`, `cp ${at('evil', 'config')} ${at('repo.git')}/`, `cp -r ${at('evil')} ${at('work', '.git', 'worktrees', 'x')}`,
+    `rsync -a ${at('evil')}/ ${at('s.git')}/`, `ln -s ${at('evil')} ${at('l.git')}`,
+  ]) {
+    denied(command, at('plain'));
+  }
+  // A link named like a git directory leads git to the directory it points
+  // at; on Windows a junction stands in for the link.
+  fs.symlinkSync(at('evil'), at('link.git'), process.platform === 'win32' ? 'junction' : 'dir');
+  // A name outside the convention is refused even when it leads to one.
+  fs.symlinkSync(at('repo.git'), at('alias'), process.platform === 'win32' ? 'junction' : 'dir');
+  for (const [command, cwd] of [
+    [`git --git-dir=${at('link.git')} status`, at('plain')], ['git status', at('link.git')], [`git --git-dir=${at('alias')} status`, at('plain')],
+  ]) {
+    assert.match(denied(command, cwd).reason, /git directory/, `${command} in ${cwd}`);
   }
 }));
 

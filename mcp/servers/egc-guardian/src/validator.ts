@@ -1451,21 +1451,21 @@ function expandHome(p: string): string {
   return parameter ? path.join(os.homedir(), p.slice(parameter[0].length)) : p;
 }
 
-// The files of a git directory that git reads as its settings or runs:
-// config (the repo-local counterpart of ~/.gitconfig, which can carry every
-// key checkGitConfigWrite denies through the CLI), config.worktree,
-// commondir (which names the directory whose config git loads) and any
-// hook, which fires on the next matching git operation without a config
-// change at all. They are kept in the directory itself and in the ones it
-// holds for a linked work tree (worktrees/<name>) or a submodule
-// (modules/<name>, which may nest).
+// The paths of a git directory that decide what git runs: its config (the
+// repo-local counterpart of ~/.gitconfig, which can carry every key
+// checkGitConfigWrite denies through the CLI), config.worktree, commondir
+// (which names the directory whose config git loads) and any hook, which
+// fires on the next matching git operation without a config change at
+// all. The directory itself, and the ones it keeps for linked work trees
+// (worktrees/) and submodules (modules/, which may nest), are protected
+// whole: a directory copied, synced or linked there brings a config of its
+// own.
 const GIT_CONTROL_FILES = new Set(['config', 'config.worktree', 'commondir']);
+const GIT_CONTROL_DIRS = new Set(['hooks', 'worktrees', 'modules']);
 
 function isGitControlPath(rest: string[]): boolean {
-  if (rest[0] === 'hooks') return true;
-  if (rest.length === 1) return GIT_CONTROL_FILES.has(rest[0]);
-  if (rest[0] !== 'worktrees' && rest[0] !== 'modules') return false;
-  return rest.slice(2).some((part, i, below) => part === 'hooks' || (i === below.length - 1 && GIT_CONTROL_FILES.has(part)));
+  if (rest.length === 0 || GIT_CONTROL_DIRS.has(rest[0])) return true;
+  return rest.length === 1 && GIT_CONTROL_FILES.has(rest[0]);
 }
 
 // A git directory is one named `.git` or `<name>.git`: only there are its
@@ -1477,9 +1477,11 @@ function isGitControlFile(candidate: string): boolean {
 
 // Whether git may use `dir` as its git directory: its config is protected
 // from a write, and wherever it is, so are its hooks, so nothing planted
-// there runs.
+// there runs. Where it really is counts as well as how it is named: a link
+// named x.git to another directory leads git to that directory's config.
 function isTrustedGitDirectory(dir: string): boolean {
-  return isGitControlFile(path.join(foldCase(dir), 'config'));
+  const protectedConfig = (place: string) => isGitControlFile(path.join(foldCase(place), 'config'));
+  return protectedConfig(dir) && protectedConfig(resolveRealOrLexical(path.resolve(dir)));
 }
 
 export function isProtectedPath(p: string, baseDir: string = process.cwd()): boolean {
