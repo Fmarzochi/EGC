@@ -689,13 +689,15 @@ async function runTests() {
 
   if (await test('every form of the protocol tells the agent to give validate_write the directory it works in', () => {
     assert.ok(SCRIPT_SOURCE.includes('validate_write({ filepath: "<path>", cwd: "<absolute working directory>" })'), 'the Markdown protocol names cwd');
-    const plainMentions = SCRIPT_SOURCE.match(/call validate_write(?! with cwd set to the absolute working directory)(?!\(\{ filepath: "<path>", cwd:)/g) || [];
-    assert.deepStrictEqual(plainMentions, [], 'the one-line protocols name cwd too');
+    const withoutCwd = SCRIPT_SOURCE.match(/validate_write(?![^.\n]*\bcwd\b)/g) || [];
+    assert.deepStrictEqual(withoutCwd, [], 'every form the script installs names cwd in the sentence that calls validate_write');
     for (const file of ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', 'rules/common/memory.md', '.trae/MEMORY.md', '.trae/rules/egc-context.md',
       '.opencode/instructions/INSTRUCTIONS.md', '.opencode/instructions/EGC_MEMORY.md', '.kiro/steering/development-workflow.md',
       '.cursor/rules/common-development-workflow.md', '.codebuddy/MEMORY.md', '.agents/AGENTS.md']) {
       const text = fs.readFileSync(path.join(__dirname, '..', '..', ...file.split('/')), 'utf8');
-      assert.ok(!text.includes('validate_write({ filepath: "<path>" })'), `${file} still calls validate_write without cwd`);
+      const calls = text.match(/validate_write\(\{[^}]*\}\)/g) || [];
+      assert.ok(calls.length > 0, `${file} shows the validate_write call`);
+      assert.deepStrictEqual(calls.filter(call => !/\bcwd\b/.test(call)), [], `${file} still calls validate_write without cwd`);
     }
   })) passed++; else failed++;
 
