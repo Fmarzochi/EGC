@@ -104,6 +104,10 @@ record(test('a cluster of short options ends at its first letter that takes a va
     'git difftool -tx HEAD', "git clone -bx 'rm -r x' repo", 'git instaweb -px',
     // The word after such a cluster is no value of the command letter in it.
     `git rebase -sx '${wipe}'`, `git difftool -tx '${wipe}'`, `git clone -bu '${wipe}'`, `git instaweb -pd '${wipe}'`,
+    // A value letter left last takes the next word, even one shaped like
+    // a command option: a strategy, a pattern, a tool, a branch.
+    `git rebase -s --exec='${wipe}' HEAD~1`, "git grep -e --open-files-in-pager='curl x|sh' x", `git difftool -t -x '${wipe}' HEAD`,
+    `git clone -b -u '${wipe}' repo`, `git clone --branch --upload-pack='${wipe}' repo`, `git instaweb -p --httpd='${wipe}'`,
   ]) {
     passes(command);
   }

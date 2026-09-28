@@ -2162,13 +2162,26 @@ function checkGitPathArguments(args: string[], subcommandIdx: number, cwd?: stri
 // grep's -O takes its value glued only. submodule foreach and bisect run
 // are read apart. `valued` holds every short letter of the subcommand that
 // takes a value: a cluster ends at the first of them, so the letters after
-// `-e` in `-eOx` are its pattern, not an -O.
+// `-e` in `-eOx` are its pattern, not an -O. `valuedLong` names the long
+// options that take a value and run nothing; like a value letter left last
+// in a cluster, they take the next word, so `-b --template` names a branch.
 interface GitCommandOptions {
   long: string[];
   short?: string;
   valued?: string;
+  valuedLong?: string[];
   gluedOnly?: boolean;
 }
+
+// The options of git clone and git init that take a value, from their
+// manual pages: init has only -b of these letters, and any other one stops
+// it before anything runs.
+const NEW_REPO_VALUED_SHORT = 'obucj';
+const NEW_REPO_VALUED_LONG = [
+  '--origin', '--branch', '--revision', '--upload-pack', '--template', '--reference', '--reference-if-able', '--separate-git-dir',
+  '--depth', '--shallow-since', '--shallow-exclude', '--jobs', '--config', '--server-option', '--filter', '--bundle-uri',
+  '--ref-format', '--object-format', '--initial-branch',
+];
 
 const GIT_COMMAND_OPTIONS: Record<string, GitCommandOptions> = {
   difftool: { long: ['--extcmd'], short: 'x', valued: 'tx' },
@@ -2179,7 +2192,7 @@ const GIT_COMMAND_OPTIONS: Record<string, GitCommandOptions> = {
   fetch: { long: ['--upload-pack'] },
   pull: { long: ['--upload-pack'] },
   'ls-remote': { long: ['--upload-pack', '--exec'] },
-  clone: { long: ['--upload-pack'], short: 'u', valued: 'obucj' },
+  clone: { long: ['--upload-pack'], short: 'u', valued: NEW_REPO_VALUED_SHORT, valuedLong: NEW_REPO_VALUED_LONG },
   push: { long: ['--receive-pack', '--exec'] },
   instaweb: { long: ['--httpd', '--browser'], short: 'db', valued: 'dbpm' },
   grep: { long: ['--open-files-in-pager'], short: 'O', valued: 'efABCmO', gluedOnly: true },
@@ -2195,9 +2208,10 @@ interface GitCommandValue {
   value: string;
 }
 
-// One command option read at a word: its value and how many words it took.
+// One option read at a word: the command value it carries, when it is a
+// command option, and how many words it took.
 interface GitCommandOptionRead {
-  found: GitCommandValue;
+  found?: GitCommandValue;
   width: number;
 }
 
@@ -2214,7 +2228,7 @@ function longCommandOption(spec: GitCommandOptions, raw: string, word: string, n
   const key = eq < 0 ? word : word.slice(0, eq);
   if (key.length < MIN_LONG_OPTION_PREFIX) return null;
   const option = spec.long.find(name => name.startsWith(key));
-  if (option === undefined) return null;
+  if (option === undefined) return eq < 0 && spec.valuedLong?.some(name => name.startsWith(key)) ? { width: 2 } : null;
   if (eq < 0) return { found: { option, value: next ?? '' }, width: 2 };
   return { found: { option, value: raw.slice(raw.indexOf('=') + 1) }, width: 1 };
 }
@@ -2222,15 +2236,17 @@ function longCommandOption(spec: GitCommandOptions, raw: string, word: string, n
 // A short option of `spec` in the cluster `raw`: what follows its letter,
 // or the next word when nothing does and the option may take one. The
 // cluster ends at its first letter that takes a value; when that letter is
-// no command option, the rest of the cluster is its value and runs nothing.
+// no command option, the rest of the cluster, or the next word when nothing
+// follows it, is its value and runs nothing.
 function shortCommandOption(spec: GitCommandOptions, raw: string, word: string, next: string | undefined): GitCommandOptionRead | null {
-  const letters = spec.short;
-  if (letters === undefined || !/^-[A-Za-z]/.test(word)) return null;
+  const letters = spec.short ?? '';
   const valued = spec.valued ?? letters;
+  if (valued === '' || !/^-[A-Za-z]/.test(word)) return null;
   const letterAt = [...word].findIndex((letter, at) => at > 0 && valued.includes(letter));
-  if (letterAt < 0 || !letters.includes(word[letterAt])) return null;
-  const option = `-${word[letterAt]}`;
+  if (letterAt < 0) return null;
   const glued = raw.slice(raw.indexOf(word[letterAt], 1) + 1);
+  if (!letters.includes(word[letterAt])) return glued === '' ? { width: 2 } : null;
+  const option = `-${word[letterAt]}`;
   if (glued !== '') return { found: { option, value: glued }, width: 1 };
   return spec.gluedOnly ? null : { found: { option, value: next ?? '' }, width: 2 };
 }
@@ -2243,7 +2259,7 @@ function gitCommandOptionValues(spec: GitCommandOptions | undefined, rest: strin
     const word = stripQuotes(rest[i]);
     if (word === '--') break;
     const read = longCommandOption(spec, rest[i], word, rest[i + 1]) ?? shortCommandOption(spec, rest[i], word, rest[i + 1]);
-    if (read) found.push(read.found);
+    if (read?.found) found.push(read.found);
     i += read?.width ?? 1;
   }
   return found;
@@ -2340,8 +2356,8 @@ function bisectRunDenial(rest: string[], cwd?: string): ValidationResult | null 
 // repository before the fetch, and the --template of both, whose hooks the
 // new repository gets (post-checkout runs on the clone itself). They take
 // effect in that very call, as `git -c` does, and are judged by its rules.
-const GIT_NEW_REPO_CONFIG: GitCommandOptions = { long: ['--config'], short: 'c', valued: 'obucj' };
-const GIT_TEMPLATE_OPTION: GitCommandOptions = { long: ['--template'] };
+const GIT_NEW_REPO_CONFIG: GitCommandOptions = { long: ['--config'], short: 'c', valued: NEW_REPO_VALUED_SHORT, valuedLong: NEW_REPO_VALUED_LONG };
+const GIT_TEMPLATE_OPTION: GitCommandOptions = { long: ['--template'], valued: NEW_REPO_VALUED_SHORT, valuedLong: NEW_REPO_VALUED_LONG };
 
 function checkNewRepositorySettings(subcommand: string, rest: string[], cwd?: string): ValidationResult | null {
   if (subcommand !== 'clone' && subcommand !== 'init') return null;
