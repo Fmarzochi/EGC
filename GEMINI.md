@@ -72,7 +72,7 @@ validate_command({ command: "<command>" })
 
 **Before every new file Write or Edit on a file not yet read:**
 ```
-validate_write({ filepath: "<path>" })
+validate_write({ filepath: "<path>", cwd: "<absolute working directory>" })
 ```
 
 Skipping any of these breaks the EGC contract. There are no exceptions for "simple" tasks.

@@ -426,7 +426,7 @@ const ENV_ASSIGNMENT_RE = /^([A-Za-z_]\w*)=/;
 
 // Environment variables that let a command persist or override git's hook
 // and execution config the same way `-c core.hooksPath=`/`git config` does
-// (see DANGEROUS_GIT_CONFIG_KEYS below), but via `VAR=value git ...` on the
+// (see DANGEROUS_GIT_CONFIG_RULES below), but via `VAR=value git ...` on the
 // command line instead — a form the old strip-and-ignore VAR= handling let
 // through untouched. GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n are numbered
 // (GIT_CONFIG_COUNT-driven), hence the pattern rather than a fixed name.
@@ -989,6 +989,9 @@ const INLINE_EVAL_COMMANDS: Record<string, string[]> = {
 // the directory. Deny the credential file by pattern instead. Sources: each
 // tool's official docs, verified 2026-07-11 (see docs/architecture or the
 // PR that introduced this comment for the full per-tool research).
+// The disk and memory devices under /dev, listed at the end.
+const DEVICE_DIR = String.raw`^(?:[a-z]:)?[\\/]dev[\\/]`;
+const NUMBERED_DEVICES = ['nvme', 'mmcblk', 'dm-', 'md', 'loop', 'sr', 'nbd', 'zram', 'fd', 'ram', 'rbd', 'pmem', 'mtdblock', 'mtd', 'sg', 'disk', 'rdisk'];
 export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // EGC install-state: egc repair and uninstall replay what it records, so a
   // planted entry would turn either into a write or delete of its choosing.
@@ -1082,6 +1085,42 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // through the `git config` CLI, so a raw file write must be denied too.
   /(^|[\\/])\.git[\\/]hooks([\\/]|$)/,
   /(^|[\\/])\.git[\\/]config$/,
+  // A disk or memory device holds every file on the disk, secrets included:
+  // reading one reads them all and writing one overwrites them. The
+  // character devices commands use every day (null, zero, random, urandom,
+  // tty, stdin, the fd links) are not matched. macOS names its disks disk0
+  // and rdisk0. Under Git for Windows /dev/sda is the first physical drive,
+  // and it resolves below the current drive; there, and on macOS, the path
+  // is already folded to lower case when it is matched.
+  new RegExp(String.raw`${DEVICE_DIR}(?:sd|hd|vd|xvd)[a-z]`),
+  new RegExp(String.raw`${DEVICE_DIR}(?:${NUMBERED_DEVICES.join('|')})\d`),
+  new RegExp(String.raw`${DEVICE_DIR}(?:k?mem|port)$`),
+  new RegExp(String.raw`${DEVICE_DIR}(?:disk[\\/][^\\/]+|mapper|block)[\\/].`),
+  /^[\\/]proc[\\/]kcore$/,
+  /^[\\/]proc[\\/](?:\d+|self|thread-self)[\\/](?:task[\\/]\d+[\\/])?mem$/,
+  /^\\\\[.?]\\(?:physicaldrive\d|[a-z]:|globalroot\\|harddisk|cdrom\d|tape\d)/,
+];
+
+// Where common command-line tools keep a token, a password or a private key,
+// at each tool's documented location relative to the home directory: a
+// directory when the whole of it is secret, a single file when its
+// neighbors are settings, caches or packages an agent may need to read.
+const CREDENTIAL_STORES = [
+  '.netrc', '_netrc', '.git-credentials', '.config/git/credentials', '.config/gh/hosts.yml', '.config/hub',
+  '.docker/config.json', '.kube/config', '.pgpass', '.my.cnf', '.mylogin.cnf', '.yarnrc.yml',
+  '.config/gcloud', '.azure', '.terraform.d/credentials.tfrc.json', '.vault-token', '.gem/credentials',
+  '.cargo/credentials.toml', '.cargo/credentials', '.m2/settings.xml', '.m2/settings-security.xml',
+  '.gradle/gradle.properties', '.s3cfg', '.boto', '.databrickscfg', '.config/rclone/rclone.conf',
+  '.password-store', '.local/share/keyrings', '.config/op', '.config/doctl', '.fly/config.yml', '.config/netlify',
+  '.local/share/com.vercel.cli', '.config/configstore/firebase-tools.json', '.cache/huggingface/token',
+  '.huggingface/token', '.config/composer/auth.json', '.composer/auth.json', '.kaggle', '.oci',
+  '.pulumi/credentials.json', '.config/ngrok', '.config/stripe', '.config/sops/age', '.supabase/access-token', '.railway',
+  // Browser profiles: saved passwords and session cookies.
+  '.mozilla/firefox', '.config/google-chrome', '.config/chromium', '.config/BraveSoftware', '.config/microsoft-edge',
+  // macOS: the keychains, and the same tools and browsers under Application Support.
+  'Library/Keychains', 'Library/Application Support/Google/Chrome', 'Library/Application Support/Firefox',
+  'Library/Application Support/BraveSoftware', 'Library/Application Support/Microsoft Edge',
+  'Library/Application Support/com.vercel.cli', 'Library/Application Support/doctl',
 ];
 
 export function buildDeniedPaths(): string[] {
@@ -1093,6 +1132,7 @@ export function buildDeniedPaths(): string[] {
     path.join(home, '.ssh'),
     path.join(home, '.aws'),
     path.join(home, '.gnupg'),
+    ...CREDENTIAL_STORES.map(store => path.join(home, ...store.split('/'))),
     path.join(home, '.egc'),
     // A binary planted here (named e.g. 'git' or 'node') sits ahead of
     // /usr/bin on most PATH configurations, silently hijacking every
@@ -1112,12 +1152,19 @@ export function buildDeniedPaths(): string[] {
   ];
 
   if (isWindows) {
-    const appData = process.env.APPDATA || '';
     const userProfile = process.env.USERPROFILE || home;
+    // Where Windows puts them when the variables are unset: a process started
+    // with a stripped environment still reads and writes the same folders.
+    const appData = process.env.APPDATA || path.join(userProfile, 'AppData', 'Roaming');
+    const localAppData = process.env.LOCALAPPDATA || path.join(userProfile, 'AppData', 'Local');
+    // The browser profiles Windows keeps under LocalAppData.
+    const browsers = ['Google/Chrome/User Data', 'Microsoft/Edge/User Data', 'BraveSoftware/Brave-Browser/User Data']
+      .map(profile => path.join(localAppData, ...profile.split('/')));
     paths.push(
       path.join(userProfile, '.ssh'),
       path.join(userProfile, '.aws'),
       appData,
+      ...browsers,
     );
   }
 
@@ -1316,37 +1363,63 @@ export interface ValidationResult {
  * Validate arguments for a specific allowed command.
  * Returns { allowed: false, reason } if the args are unsafe.
  */
-// Config keys that persist a hook-bypass or arbitrary-execution mechanism:
-// once set, they take effect on every future git invocation in this repo/
-// environment, not just the one that set them (unlike the inline `-c
-// core.hooksPath=` form, already blocked separately in
-// scripts/hooks/block-no-verify.js). core.hooksPath repoints where git looks
-// for hooks (including the DCO/commit hooks this project relies on);
-// core.pager/core.editor/diff.external run an arbitrary command on ordinary
-// read operations; credential.helper receives every credential request;
-// include.path loads another config file wholesale.
-const DANGEROUS_GIT_CONFIG_KEYS = new Set([
-  'core.hookspath',
-  'core.pager',
-  'core.editor',
-  'core.sshcommand',
-  'core.fsmonitor',
-  'credential.helper',
-  'diff.external',
-  'include.path',
-]);
-// A merge driver runs an arbitrary command on every merge that touches a
-// matching path, by design of the merge.<name>.driver mechanism itself —
-// any write to one is dangerous regardless of the command it names. filter
-// clean/smudge/process drivers and a named diff driver's own command run the
-// same way, on every checkout/diff of a matching path.
-const GIT_CONFIG_MERGE_DRIVER_KEY_RE = /^merge\..+\.driver$/;
-const GIT_CONFIG_FILTER_KEY_RE = /^filter\..+\.(clean|smudge|process)$/;
-const GIT_CONFIG_DIFF_COMMAND_KEY_RE = /^diff\..+\.command$/;
-// includeIf.<condition>.path loads another config file wholesale, exactly
-// like include.path above -- git's conditional-include syntax, not covered
-// by the exact-match DANGEROUS_GIT_CONFIG_KEYS set (audit EGC-533).
-const GIT_CONFIG_INCLUDEIF_KEY_RE = /^includeif\..+\.path$/i;
+// Config keys whose value git runs as a command or program, or that make it
+// run one (hooks, templates, included files, transport helpers), enumerated
+// from the git-config manual of git 2.51. Set with git config they take
+// effect on every later git invocation, not just the one that set them; set
+// inline with -c they run in that very call. core.hooksPath repoints where
+// git looks for hooks (including the DCO/commit hooks this project relies
+// on); a pager, editor, textconv or driver runs on ordinary reads, checkouts,
+// diffs and merges; a credential helper receives every credential request;
+// include.path and includeIf load another config file wholesale;
+// init.templateDir seeds the hooks of every repository git creates. A key
+// set from the environment (--config-env) is judged without its value, which
+// the command line does not show.
+interface GitConfigKeyRule {
+  // The section, which a rename would carry keys into.
+  section: string;
+  key: RegExp;
+  // When given, only a value it accepts runs something.
+  runs?: (value: string, cwd?: string) => boolean;
+}
+
+// git reads a pager.<cmd> value that parses as a boolean as on or off, and
+// anything else as the pager command.
+const GIT_BOOLEAN_VALUE = /^(?:true|false|yes|no|on|off|\d+)?$/i;
+
+const DANGEROUS_GIT_CONFIG_RULES: GitConfigKeyRule[] = [
+  { section: 'core', key: /^core\.(?:hookspath|pager|editor|sshcommand|fsmonitor|gitproxy|askpass|alternaterefscommand)$/ },
+  { section: 'credential', key: /^credential\.(?:.+\.)?helper$/ },
+  { section: 'diff', key: /^diff\.(?:external|.+\.(?:command|textconv))$/ },
+  { section: 'include', key: /^include\.path$/ },
+  { section: 'includeif', key: /^includeif\..+\.path$/ },
+  { section: 'merge', key: /^merge\..+\.driver$/ },
+  { section: 'filter', key: /^filter\..+\.(?:clean|smudge|process)$/ },
+  { section: 'difftool', key: /^difftool\..+\.(?:cmd|path)$/ },
+  { section: 'mergetool', key: /^mergetool\..+\.(?:cmd|path)$/ },
+  { section: 'man', key: /^man\..+\.(?:cmd|path)$/ },
+  { section: 'browser', key: /^browser\..+\.(?:cmd|path)$/ },
+  { section: 'guitool', key: /^guitool\..+\.cmd$/ },
+  { section: 'gpg', key: /^gpg\.(?:program|.+\.program|ssh\.defaultkeycommand)$/ },
+  { section: 'remote', key: /^remote\..+\.(?:uploadpack|receivepack|vcs)$/ },
+  { section: 'tar', key: /^tar\..+\.command$/ },
+  { section: 'trailer', key: /^trailer\..+\.(?:command|cmd)$/ },
+  { section: 'sendemail', key: /^sendemail\.(?:.+\.)?(?:tocmd|cccmd|headercmd|sendmailcmd)$/ },
+  // A full path is a sendmail-like program; a host name is just a server.
+  { section: 'sendemail', key: /^sendemail\.(?:.+\.)?smtpserver$/, runs: value => /[\\/]/.test(value) },
+  { section: 'sequence', key: /^sequence\.editor$/ },
+  { section: 'gc', key: /^gc\.recentobjectshook$/ },
+  { section: 'imap', key: /^imap\.tunnel$/ },
+  { section: 'instaweb', key: /^instaweb\.httpd$/ },
+  { section: 'interactive', key: /^interactive\.difffilter$/ },
+  { section: 'uploadpack', key: /^uploadpack\.packobjectshook$/ },
+  { section: 'init', key: /^init\.templatedir$/ },
+  { section: 'pager', key: /^pager\..+$/, runs: value => !GIT_BOOLEAN_VALUE.test(stripQuotes(value).trim()) },
+  { section: 'submodule', key: /^submodule\..+\.update$/, runs: value => stripQuotes(value).trim().startsWith('!') },
+  // The ext:: transport runs the command its URL names once it is allowed.
+  { section: 'protocol', key: /^protocol\.(?:ext\.)?allow$/, runs: value => /^(?:always|user)$/i.test(stripQuotes(value).trim()) },
+  { section: 'alias', key: /^alias\..+$/, runs: (value, cwd) => isDangerousAliasValue(value, cwd) },
+];
 // An alias is a shell-escape risk when its value starts with '!' (git's
 // own syntax for "run this as a shell command" instead of a git subcommand),
 // or when its value's first token is -c, --config-env, or 'config' (which allows proxying
@@ -1357,8 +1430,6 @@ const GIT_CONFIG_INCLUDEIF_KEY_RE = /^includeif\..+\.path$/i;
 // shifts the subcommand out of args[0] and the dangerous-key check below is
 // never reached at all.
 const GIT_GLOBAL_FLAGS_WITH_ARG = new Set(['-c', '-C', '--work-tree', '--git-dir', '--namespace', '--super-prefix', '--config-env']);
-
-const GIT_CONFIG_ALIAS_KEY_RE = /^alias\..+$/;
 
 function isDangerousAliasValue(value: string, cwd?: string): boolean {
   const trimmed = stripEnclosingQuotes(value);
@@ -1397,129 +1468,177 @@ function isDangerousAliasValue(value: string, cwd?: string): boolean {
   return false;
 }
 
-// Flags that make `git config` strictly a read or a removal - never a write
-// - and so must never trip the dangerous-key check below. Output-annotation
-// flags (--show-scope, --show-origin, --name-only) are deliberately NOT
-// here: nothing stops one of them from appearing in argv alongside a real
-// key+value SET, so treating their mere presence as proof of "this is a
-// read" would let a set slip through unchecked (e.g. `git config
-// --show-scope core.hooksPath /tmp/evil`). --edit/-e is excluded for the
-// opposite reason - it IS a write (opens an editor over the config file)
-// and gets its own unconditional deny below instead of an exemption.
-const GIT_CONFIG_READONLY_FLAGS = new Set([
-  '--get', '--get-all', '--get-regexp', '--get-urlmatch', '--list', '-l',
-  '--unset', '--unset-all',
+// How git config reads its arguments, measured on git 2.51. A subcommand
+// (set, get, ...) counts only as the very first word; otherwise the action
+// comes from an option, and with none it reads one key or sets a key to a
+// value. Options end at the first operand in every form, so a word after
+// the key is an operand even when it looks like an option: `git config
+// core.hooksPath /tmp/x --get` sets the key, with --get as a value pattern.
+type GitConfigAction = 'read' | 'remove' | 'set' | 'rename' | 'edit';
+
+const GIT_CONFIG_SUBCOMMANDS = new Map<string, GitConfigAction>([
+  ['list', 'read'], ['get', 'read'], ['set', 'set'], ['unset', 'remove'],
+  ['remove-section', 'remove'], ['rename-section', 'rename'], ['edit', 'edit'],
 ]);
-const GIT_CONFIG_VALUE_FLAGS = new Set(['-f', '--file', '--blob', '--type', '--default']);
+const GIT_CONFIG_ACTION_OPTIONS = new Map<string, GitConfigAction>([
+  ['--get', 'read'], ['--get-all', 'read'], ['--get-regexp', 'read'], ['--get-urlmatch', 'read'],
+  ['--get-color', 'read'], ['--get-colorbool', 'read'], ['--list', 'read'],
+  ['--unset', 'remove'], ['--unset-all', 'remove'], ['--remove-section', 'remove'],
+  ['--rename-section', 'rename'], ['--add', 'set'], ['--replace-all', 'set'], ['--edit', 'edit'],
+]);
+// Long options that take the next word as their value unless it is glued on
+// with =, abbreviated or not: `--comment --get` is a comment, not a read.
+const GIT_CONFIG_VALUE_OPTIONS = ['--file', '--blob', '--type', '--default', '--comment', '--value', '--url'];
+// Options that change neither the action nor the operands.
+const GIT_CONFIG_SWITCHES = new Set([
+  '--global', '--system', '--local', '--worktree', '--includes', '--no-includes',
+  '--null', '--name-only', '--show-origin', '--show-scope', '--show-names',
+  '--fixed-value', '--all', '--regexp', '--append',
+  '--bool', '--int', '--bool-or-int', '--bool-or-str', '--path', '--expiry-date', '--no-type',
+]);
+// Short options, read letter by letter in a cluster such as -zl or -zf FILE:
+// f and t take the rest of the cluster, or the next word when none is left.
+const GIT_CONFIG_SHORT_OPTIONS = new Map<string, GitConfigAction | 'switch' | 'file' | 'value'>([
+  ['l', 'read'], ['e', 'edit'], ['z', 'switch'], ['f', 'file'], ['t', 'value'],
+]);
 
-function isGitConfigFlagToken(token: string): boolean {
-  return token.startsWith('-') && !/\s/.test(token);
+interface GitConfigCall {
+  actions: GitConfigAction[];
+  // The files -f/--file (and --blob) name.
+  files: string[];
+  operands: string[];
+  // An option this does not know may take a value and shift every word
+  // after it, so the call is then judged as the write it may be.
+  unsure: boolean;
 }
 
-function pushConfigPositionalsAfterDoubleDash(positionals: string[], tokens: string[]): void {
-  for (const t of tokens) {
-    if (positionals.length === 1) {
-      positionals.push(stripEnclosingQuotes(t));
-    } else {
-      positionals.push(stripQuotes(t));
+// The index of the last word an option cluster uses.
+function readGitConfigCluster(rest: string[], i: number, call: GitConfigCall): number {
+  const cluster = stripQuotes(rest[i]);
+  for (let j = 1; j < cluster.length; j++) {
+    const kind = GIT_CONFIG_SHORT_OPTIONS.get(cluster[j]);
+    if (kind === undefined) {
+      call.unsure = true;
+      return i;
     }
+    if (kind === 'switch') continue;
+    if (kind !== 'file' && kind !== 'value') {
+      call.actions.push(kind);
+      continue;
+    }
+    const glued = cluster.slice(j + 1);
+    const value = glued === '' ? rest[i + 1] : glued;
+    if (kind === 'file' && value !== undefined) call.files.push(stripQuotes(value));
+    return glued === '' ? i + 1 : i;
   }
+  return i;
 }
 
-interface GitConfigFlagResult {
-  readOnly: boolean;
-  skipNext: boolean;
-  editDenial: boolean;
+const GIT_CONFIG_LONG_OPTIONS = [...GIT_CONFIG_ACTION_OPTIONS.keys(), ...GIT_CONFIG_SWITCHES, ...GIT_CONFIG_VALUE_OPTIONS];
+
+// The long option a word names, read as git reads it: its exact name, or
+// else the one option its name is a prefix of (`--ren` is
+// --rename-section). null when it names none or several, which git refuses;
+// a value glued on with = counts only for an option that takes one.
+function resolveGitConfigLong(option: string): string | null {
+  const eq = option.indexOf('=');
+  const name = eq < 0 ? option : option.slice(0, eq);
+  const matches = GIT_CONFIG_LONG_OPTIONS.filter(flag => flag.startsWith(name));
+  let full: string | null = null;
+  if (matches.includes(name)) full = name;
+  else if (matches.length === 1) full = matches[0];
+  return full !== null && (eq < 0 || GIT_CONFIG_VALUE_OPTIONS.includes(full)) ? full : null;
 }
 
-function processGitConfigFlag(flag: string): GitConfigFlagResult {
-  if (flag === '--edit' || flag === '-e') {
-    return { readOnly: false, skipNext: false, editDenial: true };
+// The index of the last word the option at i uses.
+function readGitConfigOption(rest: string[], i: number, call: GitConfigCall): number {
+  const option = stripQuotes(rest[i]);
+  if (!option.startsWith('--')) return readGitConfigCluster(rest, i, call);
+  const valued = resolveGitConfigLong(option);
+  if (valued === null) {
+    call.unsure = true;
+    return i;
   }
-  const eq = flag.indexOf('=');
-  const flagName = eq > 0 ? flag.slice(0, eq) : flag;
-  const readOnly = GIT_CONFIG_READONLY_FLAGS.has(flagName);
-  const skipNext = eq < 0 && GIT_CONFIG_VALUE_FLAGS.has(flagName);
-  return { readOnly, skipNext, editDenial: false };
+  const action = GIT_CONFIG_ACTION_OPTIONS.get(valued);
+  if (action !== undefined) {
+    call.actions.push(action);
+    return i;
+  }
+  if (GIT_CONFIG_SWITCHES.has(valued)) return i;
+  const glued = option.includes('=');
+  const value = glued ? option.slice(option.indexOf('=') + 1) : rest[i + 1];
+  if ((valued === '--file' || valued === '--blob') && value !== undefined) call.files.push(stripQuotes(value));
+  return glued ? i : i + 1;
 }
 
-// Called only once the 'config' subcommand itself has been identified;
-// `args` is everything after 'git' (so args[0] === 'config'). Detects a
-// SET (a key positional followed by a value positional, or --add/
-// --replace-all) of one of the dangerous keys above and hard-blocks it -
-// reading or unsetting the same key is left untouched. Also hard-denies
-// --edit/-e outright, since an editor session's eventual changes cannot be
-// inspected the way a plain key/value pair can.
-interface GitConfigArgScan {
-  readOnly: boolean;
-  positionals: string[];
-  editDenial: ValidationResult | null;
-}
-
-// Walks the arguments after 'config': collects the positionals (key, value),
-// notes read-only flags, skips the value of value-taking flags, and denies
-// --edit/-e outright.
-function scanGitConfigArgs(rest: string[]): GitConfigArgScan {
-  let readOnly = false;
-  const positionals: string[] = [];
-
-  for (let i = 0; i < rest.length; i++) {
-    const raw = rest[i];
-    const flag = bareToken(raw);
-    if (flag === '--') {
-      pushConfigPositionalsAfterDoubleDash(positionals, rest.slice(i + 1));
+// `rest` is everything after 'config'.
+function parseGitConfigCall(rest: string[]): GitConfigCall {
+  const call: GitConfigCall = { actions: [], files: [], operands: [], unsure: false };
+  const subcommand = GIT_CONFIG_SUBCOMMANDS.get(stripQuotes(rest[0] ?? ''));
+  if (subcommand !== undefined) call.actions.push(subcommand);
+  let i = subcommand === undefined ? 0 : 1;
+  while (i < rest.length) {
+    const word = stripQuotes(rest[i]);
+    if (word === '--') {
+      i += 1;
       break;
     }
-
-    // Once the key positional has been seen (positionals.length === 1), the
-    // following token is taken as the value positional regardless of whether
-    // it starts with '-' (e.g. `git config core.hooksPath -/tmp/evil`).
-    if (positionals.length === 1) {
-      positionals.push(stripEnclosingQuotes(raw));
-      continue;
-    }
-
-    if (!isGitConfigFlagToken(flag)) {
-      positionals.push(stripQuotes(raw));
-      continue;
-    }
-
-    const flagResult = processGitConfigFlag(flag);
-    if (flagResult.editDenial) {
-      const editDenial: ValidationResult = {
-        allowed: false,
-        reason: `git config --edit opens an editable session over the config file and is forbidden`,
-        trust_level: 'DANGEROUS',
-      };
-      return { readOnly, positionals, editDenial };
-    }
-    if (flagResult.readOnly) readOnly = true;
-    if (flagResult.skipNext) i += 1;
+    if (word.length < 2 || !word.startsWith('-')) break;
+    i = readGitConfigOption(rest, i, call) + 1;
   }
-
-  return { readOnly, positionals, editDenial: null };
+  call.operands = rest.slice(i);
+  if (call.actions.length === 0) call.actions.push(call.operands.length >= 2 ? 'set' : 'read');
+  return call;
 }
 
-function isDangerousGitConfigWrite(key: string, value: string, cwd?: string): boolean {
+// `value` is undefined when the command line does not show it.
+function isDangerousGitConfigWrite(key: string, value: string | undefined, cwd?: string): boolean {
   const lowerKey = key.toLowerCase();
-  return DANGEROUS_GIT_CONFIG_KEYS.has(lowerKey)
-    || GIT_CONFIG_MERGE_DRIVER_KEY_RE.test(lowerKey)
-    || GIT_CONFIG_FILTER_KEY_RE.test(lowerKey)
-    || GIT_CONFIG_DIFF_COMMAND_KEY_RE.test(lowerKey)
-    || GIT_CONFIG_INCLUDEIF_KEY_RE.test(lowerKey)
-    || (GIT_CONFIG_ALIAS_KEY_RE.test(lowerKey) && isDangerousAliasValue(value, cwd));
+  return DANGEROUS_GIT_CONFIG_RULES.some(rule => rule.key.test(lowerKey)
+    && (rule.runs === undefined || value === undefined || rule.runs(value, cwd)));
 }
 
-function checkGitConfigWrite(args: string[], cwd?: string): ValidationResult | null {
-  const scan = scanGitConfigArgs(args.slice(1));
-  if (scan.editDenial) return scan.editDenial;
-  if (scan.readOnly || scan.positionals.length < 2) return null;
+// A section renamed into one that holds the keys above turns the keys it
+// carries into those keys.
+function isDangerousGitConfigSection(section: string): boolean {
+  const name = section.toLowerCase().split('.')[0];
+  return DANGEROUS_GIT_CONFIG_RULES.some(rule => rule.section === name);
+}
 
-  const [key, value] = scan.positionals;
-  if (!isDangerousGitConfigWrite(key, value, cwd)) return null;
+const GIT_CONFIG_EDIT_DENIAL: ValidationResult = {
+  allowed: false,
+  reason: `git config --edit opens an editable session over the config file and is forbidden`,
+  trust_level: 'DANGEROUS',
+};
+
+// Called only once the 'config' subcommand itself has been identified;
+// `args` is everything after 'git' (so args[0] === 'config'). A set of one
+// of the dangerous keys above is denied, and so is renaming a section into
+// one that holds them, or an editor session, whose changes cannot be read
+// the way a key and a value can. Reading or unsetting a key is left alone.
+// Every key and value pair among the operands is judged, so a value an
+// unknown option took cannot hide the key behind it.
+function checkGitConfigWrite(args: string[], cwd?: string): ValidationResult | null {
+  const call = parseGitConfigCall(args.slice(1));
+  if (call.actions.includes('edit')) return GIT_CONFIG_EDIT_DENIAL;
+  const operands = call.operands;
+  const maySet = call.unsure || call.actions.includes('set');
+  for (let k = 0; maySet && k + 1 < operands.length; k++) {
+    const key = stripQuotes(operands[k]);
+    if (!isDangerousGitConfigWrite(key, stripEnclosingQuotes(operands[k + 1]), cwd)) continue;
+    return {
+      allowed: false,
+      reason: `git config write to '${key}' persists a hook/execution-bypass override and is forbidden`,
+      trust_level: 'DANGEROUS',
+    };
+  }
+  const section = call.actions.includes('rename')
+    ? operands.slice(1).map(stripQuotes).find(name => isDangerousGitConfigSection(name))
+    : undefined;
+  if (section === undefined) return null;
   return {
     allowed: false,
-    reason: `git config write to '${key}' persists a hook/execution-bypass override and is forbidden`,
+    reason: `git config rename of a section to '${section}' would carry its keys into a hook/execution-bypass override and is forbidden`,
     trust_level: 'DANGEROUS',
   };
 }
@@ -1541,7 +1660,9 @@ function findGitSubcommandIndex(args: string[]): number {
   return -1;
 }
 
-function parseInlineConfigToken(token: string, nextToken: string | undefined): { key: string; value: string; consumedNext: boolean } | null {
+// The key and value an inline override sets. --config-env names the
+// environment variable that holds the value, so the value is unknown.
+function parseInlineConfigToken(token: string, nextToken: string | undefined): { key: string; value: string | undefined; consumedNext: boolean } | null {
   const stripped = stripQuotes(token);
   const bare = bareToken(token);
   let rawPair: string | null = null;
@@ -1564,6 +1685,7 @@ function parseInlineConfigToken(token: string, nextToken: string | undefined): {
 
   const eq = rawPair.indexOf('=');
   const key = (eq > 0 ? rawPair.slice(0, eq) : rawPair).toLowerCase();
+  if (bare.startsWith('--config-env')) return { key, value: undefined, consumedNext };
   const value = eq > 0 ? rawPair.slice(eq + 1) : '';
   return { key, value, consumedNext };
 }
@@ -1737,41 +1859,69 @@ function checkGitForceFlag(args: string[], subcommandIdx: number, cwd?: string):
   };
 }
 
-// Subcommands whose short f names a file git will read: config (-f, --file,
-// --blob) and grep (-f, the pattern file). Reading one of them is reading
-// that file.
-const GIT_FILE_OPERAND_FLAGS = new Map<string, { short: string; long: string[] }>([
-  ['config', { short: '-f', long: ['--file', '--blob'] }],
-  ['grep', { short: '-f', long: [] }],
-]);
+// The index of the last word a git grep option cluster uses, noting the
+// pattern file its f names: the rest of the cluster, or the next word when
+// none is left (-if FILE). A letter before f that takes a value would make
+// the f part of that value; reading it as the file anyway can only refuse
+// more, never less.
+function readGitGrepCluster(rest: string[], i: number, files: string[]): number {
+  const cluster = rest[i];
+  const f = cluster.indexOf('f', 1);
+  if (f === -1) return i;
+  const glued = cluster.slice(f + 1);
+  const value = glued === '' ? rest[i + 1] : glued;
+  if (value !== undefined) files.push(value);
+  return glued === '' ? i + 1 : i;
+}
 
-// The file operands of a short flag and its long forms, in every spelling
-// git accepts: separate (-f x, --file x), attached (-fx), with a value
-// (--file=x) and abbreviated (--fil=x). Nothing after -- is an option.
-function fileOperandsOf(rest: string[], shortFlag: string, longFlags: string[]): string[] {
+// The pattern files of git grep (-f, --file), in every spelling git
+// accepts: separate, glued (-fx, --file=x), abbreviated and inside a
+// cluster. Nothing after -- is an option.
+function gitGrepPatternFiles(rest: string[]): string[] {
   const files: string[] = [];
-  for (let i = 0; i < rest.length; i++) {
+  let i = 0;
+  while (i < rest.length && rest[i] !== '--') {
     const token = rest[i];
-    if (token === '--') break;
-    const isLong = longFlags.some(flag => abbreviates(token, flag));
-    if (token === shortFlag || (isLong && !token.includes('='))) {
-      if (rest[i + 1] !== undefined) files.push(rest[i + 1]);
-      i += 1;
-    } else if (isLong) {
-      files.push(token.slice(token.indexOf('=') + 1));
-    } else if (token.startsWith(shortFlag) && token.length > shortFlag.length && !token.startsWith('--')) {
-      files.push(token.slice(shortFlag.length));
-    }
+    if (token.startsWith('--')) i = readGitGrepLongOption(rest, i, files) + 1;
+    else if (token.length > 1 && token.startsWith('-')) i = readGitGrepCluster(rest, i, files) + 1;
+    else i += 1;
   }
   return files;
 }
 
+// The index of the last word a git grep long option uses, noting the file
+// --file names.
+function readGitGrepLongOption(rest: string[], i: number, files: string[]): number {
+  const token = rest[i];
+  if (!abbreviates(token, '--file')) return i;
+  const glued = token.includes('=');
+  const value = glued ? token.slice(token.indexOf('=') + 1) : rest[i + 1];
+  if (value !== undefined) files.push(value);
+  return glued ? i : i + 1;
+}
+
+// The file git config -f/--file names is read by every call and written by
+// every call that is not a read: a set, an unset, a rename.
+function checkGitConfigFiles(rest: string[], cwd?: string): ValidationResult | null {
+  const call = parseGitConfigCall(rest);
+  const read = call.files.find(p => isReadDeniedOperand(p, cwd));
+  if (read !== undefined) return readDenial(`git config would read the protected file '${read}' and is forbidden.`, 'DANGEROUS');
+  if (!call.unsure && call.actions.every(action => action === 'read')) return null;
+  const written = call.files.find(p => isProtectedOperand(p, cwd));
+  if (written === undefined) return null;
+  return {
+    allowed: false,
+    reason: `git config would write the protected file '${written}' and is forbidden.`,
+    trust_level: 'DANGEROUS',
+  };
+}
+
 function checkGitFileOperands(subcommand: string, rest: string[], cwd?: string): ValidationResult | null {
-  const spelling = GIT_FILE_OPERAND_FLAGS.get(subcommand);
-  if (spelling === undefined) return null;
-  const protectedFile = fileOperandsOf(rest, spelling.short, spelling.long).find(p => isReadDeniedOperand(p, cwd));
+  if (subcommand === 'config') return checkGitConfigFiles(rest, cwd);
+  if (subcommand !== 'grep') return null;
+  const protectedFile = gitGrepPatternFiles(rest).find(p => isReadDeniedOperand(p, cwd));
   if (protectedFile === undefined) return null;
-  return readDenial(`git ${subcommand} would read the protected file '${protectedFile}' and is forbidden.`, 'DANGEROUS');
+  return readDenial(`git grep would read the protected file '${protectedFile}' and is forbidden.`, 'DANGEROUS');
 }
 
 function validateGitArgs(args: string[], cwd?: string): ValidationResult {
