@@ -507,10 +507,7 @@ function runTests() {
       });
     })));
 
-<<<<<<< HEAD
-    (tally(test('registerClaudeCli throws when the CLI refuses an add, so init warns instead of reporting success', () => {
-=======
-    (test('behind a .cmd shim the package script runs with node, so cmd.exe never expands a % in a path', () => {
+    (tally(test('behind a .cmd shim the package script runs with node, so cmd.exe never expands a % in a path', () => {
       withFakeClaude('1', (logPath) => {
         const dispatch = require('../../scripts/lib/crusher/shim-dispatch');
         const originalNeedsShell = dispatch.needsShellOnWindows;
@@ -534,9 +531,9 @@ function runTests() {
           dispatch.needsShellOnWindows = originalNeedsShell;
         }
       });
-    }) ? passed++ : failed++);
+    })));
 
-    (test('without a script to run directly, a % or ! that cmd.exe would expand stops the add and says how to add it by hand', () => {
+    (tally(test('without a script to run directly, a % or ! that cmd.exe would expand stops the add and says how to add it by hand', () => {
       withFakeClaude('1', (logPath) => {
         const dispatch = require('../../scripts/lib/crusher/shim-dispatch');
         const originalNeedsShell = dispatch.needsShellOnWindows;
@@ -560,9 +557,9 @@ function runTests() {
           dispatch.needsShellOnWindows = originalNeedsShell;
         }
       });
-    }) ? passed++ : failed++);
+    })));
 
-    (test('without a script to run directly, the server cmd.exe would not change is still added and only the other is left by hand', () => {
+    (tally(test('without a script to run directly, the server cmd.exe would not change is still added and only the other is left by hand', () => {
       withFakeClaude('1', (logPath) => {
         const dispatch = require('../../scripts/lib/crusher/shim-dispatch');
         const originalNeedsShell = dispatch.needsShellOnWindows;
@@ -580,9 +577,9 @@ function runTests() {
           dispatch.needsShellOnWindows = originalNeedsShell;
         }
       });
-    }) ? passed++ : failed++);
+    })));
 
-    (test('without a script to run directly, a Claude CLI path that cmd.exe would expand is never run', () => {
+    (tally(test('without a script to run directly, a Claude CLI path that cmd.exe would expand is never run', () => {
       const binDir = path.join(makeTempDir(), '100%USERNAME%dir');
       fs.mkdirSync(binDir);
       const logPath = makeFakeClaude(binDir);
@@ -609,10 +606,9 @@ function runTests() {
         }
         fs.rmSync(path.dirname(binDir), { recursive: true, force: true });
       }
-    }) ? passed++ : failed++);
+    })));
 
-    (test('registerClaudeCli throws when the CLI refuses an add, so init warns instead of reporting success', () => {
->>>>>>> origin/main
+    (tally(test('registerClaudeCli throws when the CLI refuses an add, so init warns instead of reporting success', () => {
       withFakeClaude('1', () => {
         const savedAdd = process.env.FAKE_ADD_STATUS;
         process.env.FAKE_ADD_STATUS = '2';
