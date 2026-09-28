@@ -144,19 +144,16 @@ function safeParse(raw) {
   }
 }
 
+// The first of the values that is set, or null.
+function firstSet(...values) {
+  return values.find(Boolean) || null;
+}
+
 function extractMcpTarget(input) {
   const toolName = String(input.tool_name || input.name || '');
-  const explicitServer = input.server
-    || input.mcp_server
-    || input.tool_input?.server
-    || input.tool_input?.mcp_server
-    || input.tool_input?.connector
-    || null;
-  const explicitTool = input.tool
-    || input.mcp_tool
-    || input.tool_input?.tool
-    || input.tool_input?.mcp_tool
-    || null;
+  const toolInput = input.tool_input || {};
+  const explicitServer = firstSet(input.server, input.mcp_server, toolInput.server, toolInput.mcp_server, toolInput.connector);
+  const explicitTool = firstSet(input.tool, input.mcp_tool, toolInput.tool, toolInput.mcp_tool);
 
   if (explicitServer) {
     return {

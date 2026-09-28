@@ -1876,123 +1876,132 @@ async function handleCompressObservations(db: Database, toolArgs: unknown) {
   };
 }
 
+async function handleStoreDecision(db: Database, toolArgs: unknown) {
+  const { context, decision } = StoreDecisionSchema.parse(toolArgs);
+  const cleaned = sanitizeStrings({ context, decision });
+  if (cleaned.flagged) {
+    log('WARN', 'store_decision: suspicious content blocked', { reasons: cleaned.reasons });
+    return { content: [{ type: "text", text: `Blocked: ${cleaned.reasons.join('; ')}` }] };
+  }
+
+  const decisionProjPath = resolveProjectPath();
+  await writeArbitrator.enqueue(async () => {
+    await db.run('INSERT INTO decisions (context, decision, project_path) VALUES (?, ?, ?)', [cleaned.sanitized.context, cleaned.sanitized.decision, decisionProjPath]);
+  });
+
+  log('INFO', 'Decision stored securely via Queue Arbitration');
+  return { content: [{ type: "text", text: "Decision stored securely." }] };
+}
+
+async function handleQueryHistory(db: Database, toolArgs: unknown) {
+  const { limit, offset } = QueryHistorySchema.parse(toolArgs || {});
+  const rows = await db.all('SELECT * FROM decisions ORDER BY timestamp DESC LIMIT ? OFFSET ?', [limit, offset]);
+  return { content: [{ type: "text", text: JSON.stringify({ data: rows, meta: { limit, offset } }, null, 2) }] };
+}
+
+async function handleSearchHistoryTool(db: Database, toolArgs: unknown) {
+  const { query, limit, min_score } = SearchHistorySchema.parse(toolArgs);
+  return handleSearchHistory(db, query, limit, min_score);
+}
+
+async function handleGetProjectState() {
+  return { content: [{ type: "text", text: JSON.stringify({ status: "active", engine: selectedEngine() === 'wasm' ? 'sqlite-wasm' : 'sqlite-wal', arbitration: "MessageQueue" }) }] };
+}
+
+async function handleWorkingMemorySet(db: Database, toolArgs: unknown) {
+  const args = WorkingMemorySetSchema.parse(toolArgs || {});
+  const valueCheck = sanitize(args.value);
+  if (valueCheck.flagged) {
+    log('WARN', 'working_memory_set: suspicious content blocked', { key: args.key, reason: valueCheck.reason });
+    return { content: [{ type: "text", text: `Blocked: ${valueCheck.reason}` }] };
+  }
+  const projPath = resolveProjectPath(args.project_path);
+  await writeArbitrator.enqueue(async () => {
+    await setWorkingMemory(db, projPath, args.key, args.value, args.ttl_seconds);
+  });
+  const ttl = args.ttl_seconds ?? 86400;
+  log('INFO', 'Working memory entry stored', { project: projPath, key: args.key, ttl });
+  return { content: [{ type: "text", text: `Working memory entry stored: key="${args.key}", ttl=${ttl}s` }] };
+}
+
+async function handleWorkingMemoryGet(db: Database, toolArgs: unknown) {
+  const args = WorkingMemoryGetSchema.parse(toolArgs || {});
+  const projPath = resolveProjectPath(args.project_path);
+  const entry = await getWorkingMemory(db, projPath, args.key);
+  if (!entry) {
+    return { content: [{ type: "text", text: `null` }] };
+  }
+  return { content: [{ type: "text", text: JSON.stringify({ key: entry.key, value: entry.value, expires_at: entry.expires_at }, null, 2) }] };
+}
+
+async function handleWorkingMemoryList(db: Database, toolArgs: unknown) {
+  const args = WorkingMemoryListSchema.parse(toolArgs || {});
+  const projPath = resolveProjectPath(args.project_path);
+  const entries = await listWorkingMemory(db, projPath);
+  return { content: [{ type: "text", text: JSON.stringify(entries.map(e => ({ key: e.key, value: e.value, expires_at: e.expires_at })), null, 2) }] };
+}
+
+async function handleTeamInit(_db: Database, toolArgs: unknown) {
+  const { backend, remote, branch, team_key } = TeamInitSchema.parse(toolArgs || {});
+  const config = await teamInit(backend, remote, branch, team_key);
+  log('INFO', 'Team sync initialized', { backend, remote, branch, joined: team_key !== undefined });
+  const { teamKey, ...shown } = config;
+  return { content: [{ type: "text", text: JSON.stringify({ success: true, config: shown, teamKey, note: 'State travels sealed with this team key (AES-256-GCM plus HMAC). Share it out of band; teammates join with team_init and the same team_key.' }, null, 2) }] };
+}
+
+async function handleTeamSync() {
+  const result = await teamSync();
+  const count = result.errors.length;
+  log('INFO', 'Team sync completed', { pulled: result.pulledCount, pushed: result.pushedCount, conflicts: result.conflictCount, errors: count });
+  return { content: [{ type: "text", text: JSON.stringify({ success: count === 0, result }, null, 2) }] };
+}
+
+async function handleTeamStatus() {
+  const status = await teamStatus();
+  return { content: [{ type: "text", text: JSON.stringify({ success: true, status }, null, 2) }] };
+}
+
+// Each tool this server answers, by name.
+const TOOL_HANDLERS = {
+  store_decision: handleStoreDecision,
+  query_history: handleQueryHistory,
+  search_history: handleSearchHistoryTool,
+  get_project_state: handleGetProjectState,
+  get_state: handleGetState,
+  update_state: handleUpdateState,
+  session_announce: handleSessionAnnounce,
+  claim_path: handleClaimPath,
+  release_path: handleReleasePath,
+  session_peers: handleSessionPeers,
+  session_send: handleSessionSend,
+  session_events: handleSessionEvents,
+  session_wait: handleSessionWait,
+  working_memory_set: handleWorkingMemorySet,
+  working_memory_get: handleWorkingMemoryGet,
+  working_memory_list: handleWorkingMemoryList,
+  lesson_save: handleLessonSave,
+  lesson_recall: handleLessonRecall,
+  lesson_reinforce: handleLessonReinforce,
+  detect_patterns: handleDetectPatterns,
+  compress_observations: handleCompressObservations,
+  team_init: handleTeamInit,
+  team_sync: handleTeamSync,
+  team_status: handleTeamStatus,
+} satisfies Record<string, (db: Database, toolArgs: unknown) => Promise<unknown>>;
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const db = await getDb();
+  const name = request.params.name;
   try {
-    switch (request.params.name) {
-      case "store_decision": {
-        const { context, decision } = StoreDecisionSchema.parse(request.params.arguments);
-        const cleaned = sanitizeStrings({ context, decision });
-        if (cleaned.flagged) {
-          log('WARN', 'store_decision: suspicious content blocked', { reasons: cleaned.reasons });
-          return { content: [{ type: "text", text: `Blocked: ${cleaned.reasons.join('; ')}` }] };
-        }
-
-        const decisionProjPath = resolveProjectPath();
-        await writeArbitrator.enqueue(async () => {
-          await db.run('INSERT INTO decisions (context, decision, project_path) VALUES (?, ?, ?)', [cleaned.sanitized.context, cleaned.sanitized.decision, decisionProjPath]);
-        });
-
-        log('INFO', 'Decision stored securely via Queue Arbitration');
-        return { content: [{ type: "text", text: "Decision stored securely." }] };
-      }
-      case "query_history": {
-        const { limit, offset } = QueryHistorySchema.parse(request.params.arguments || {});
-        const rows = await db.all('SELECT * FROM decisions ORDER BY timestamp DESC LIMIT ? OFFSET ?', [limit, offset]);
-        return { content: [{ type: "text", text: JSON.stringify({ data: rows, meta: { limit, offset } }, null, 2) }] };
-      }
-      case "search_history": {
-        const { query, limit, min_score } = SearchHistorySchema.parse(request.params.arguments);
-        return await handleSearchHistory(db, query, limit, min_score);
-      }
-      case "get_project_state": {
-        return { content: [{ type: "text", text: JSON.stringify({ status: "active", engine: selectedEngine() === 'wasm' ? 'sqlite-wasm' : 'sqlite-wal', arbitration: "MessageQueue" }) }] };
-      }
-      case "get_state": return await handleGetState(db, request.params.arguments);
-
-      case "update_state": return await handleUpdateState(db, request.params.arguments);
-      case "session_announce": return await handleSessionAnnounce(db, request.params.arguments);
-      case "claim_path": return await handleClaimPath(db, request.params.arguments);
-      case "release_path": return await handleReleasePath(db, request.params.arguments);
-      case "session_peers": return await handleSessionPeers(db, request.params.arguments);
-      case "session_send": return await handleSessionSend(db, request.params.arguments);
-      case "session_events": return await handleSessionEvents(db, request.params.arguments);
-      case "session_wait": return await handleSessionWait(db, request.params.arguments);
-
-      case "working_memory_set": {
-        const args = WorkingMemorySetSchema.parse(request.params.arguments || {});
-        const valueCheck = sanitize(args.value);
-        if (valueCheck.flagged) {
-          log('WARN', 'working_memory_set: suspicious content blocked', { key: args.key, reason: valueCheck.reason });
-          return { content: [{ type: "text", text: `Blocked: ${valueCheck.reason}` }] };
-        }
-        const projPath = resolveProjectPath(args.project_path);
-        await writeArbitrator.enqueue(async () => {
-          await setWorkingMemory(db, projPath, args.key, args.value, args.ttl_seconds);
-        });
-        const ttl = args.ttl_seconds ?? 86400;
-        log('INFO', 'Working memory entry stored', { project: projPath, key: args.key, ttl });
-        return { content: [{ type: "text", text: `Working memory entry stored: key="${args.key}", ttl=${ttl}s` }] };
-      }
-
-      case "working_memory_get": {
-        const args = WorkingMemoryGetSchema.parse(request.params.arguments || {});
-        const projPath = resolveProjectPath(args.project_path);
-        const entry = await getWorkingMemory(db, projPath, args.key);
-        if (!entry) {
-          return { content: [{ type: "text", text: `null` }] };
-        }
-        return { content: [{ type: "text", text: JSON.stringify({ key: entry.key, value: entry.value, expires_at: entry.expires_at }, null, 2) }] };
-      }
-
-      case "working_memory_list": {
-        const args = WorkingMemoryListSchema.parse(request.params.arguments || {});
-        const projPath = resolveProjectPath(args.project_path);
-        const entries = await listWorkingMemory(db, projPath);
-        return { content: [{ type: "text", text: JSON.stringify(entries.map(e => ({ key: e.key, value: e.value, expires_at: e.expires_at })), null, 2) }] };
-      }
-
-      case "lesson_save":
-        return await handleLessonSave(db, request.params.arguments);
-
-      case "lesson_recall":
-        return await handleLessonRecall(db, request.params.arguments);
-
-      case "lesson_reinforce":
-        return await handleLessonReinforce(db, request.params.arguments);
-
-      case "detect_patterns": return await handleDetectPatterns(db, request.params.arguments);
-
-      case "compress_observations": return await handleCompressObservations(db, request.params.arguments);
-
-      case "team_init": {
-        const { backend, remote, branch, team_key } = TeamInitSchema.parse(request.params.arguments || {});
-        const config = await teamInit(backend, remote, branch, team_key);
-        log('INFO', 'Team sync initialized', { backend, remote, branch, joined: team_key !== undefined });
-        const { teamKey, ...shown } = config;
-        return { content: [{ type: "text", text: JSON.stringify({ success: true, config: shown, teamKey, note: 'State travels sealed with this team key (AES-256-GCM plus HMAC). Share it out of band; teammates join with team_init and the same team_key.' }, null, 2) }] };
-      }
-
-      case "team_sync": {
-        const result = await teamSync();
-        const count = result.errors.length;
-        log('INFO', 'Team sync completed', { pulled: result.pulledCount, pushed: result.pushedCount, conflicts: result.conflictCount, errors: count });
-        return { content: [{ type: "text", text: JSON.stringify({ success: count === 0, result }, null, 2) }] };
-      }
-
-      case "team_status": {
-        const status = await teamStatus();
-        return { content: [{ type: "text", text: JSON.stringify({ success: true, status }, null, 2) }] };
-      }
-
-      default:
-        throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${request.params.name}`);
+    if (!Object.hasOwn(TOOL_HANDLERS, name)) {
+      throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
     }
+    return await TOOL_HANDLERS[name as keyof typeof TOOL_HANDLERS](db, request.params.arguments);
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new McpError(ErrorCode.InvalidParams, `Invalid arguments: ${error.message}`);
     }
-    log('ERROR', 'Tool execution failed', { tool: request.params.name, error: String(error) });
+    log('ERROR', 'Tool execution failed', { tool: name, error: String(error) });
     if (error instanceof Error && error.message.includes('SQLITE_FULL')) {
       throw new McpError(ErrorCode.InternalError, `Database disk image is full: ${error.message}`);
     }
