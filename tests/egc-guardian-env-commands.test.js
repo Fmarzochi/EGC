@@ -167,6 +167,14 @@ notDenied('EDITOR=/usr/bin/vim git commit');
 notDenied('EDITOR=/usr/bin/../lib/git-core/git-editor git commit');
 notDenied('export "FOO=bar"');
 notDenied('export "PATH=/usr/bin"');
+denied('MANOPT="-Hevil.sh" git help log');
+denied('MANOPT=-Hevil.sh man ls');
+denied("MANOPT='--html=evil.sh' git help log");
+notDenied('MANOPT="-L C" man ls');
+notDenied("MANOPT='-7' man ls");
+denied('MANOPT="-lHevil.sh" man ls');
+notDenied('BUILDOPTS="-H" make');
+notDenied('export GIT_HOOKS_PATH=/tmp/x');
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

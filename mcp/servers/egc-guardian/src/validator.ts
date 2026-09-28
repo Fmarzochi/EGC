@@ -533,6 +533,9 @@ const CONFIG_HOME_ENV_VARS = new Set(['HOME', 'XDG_CONFIG_HOME', 'GNUPGHOME']);
 const CONFIG_HOME_COMMANDS = new Set(['git', 'gpg', 'gpg2']);
 // less options that hand it an initial command or a key file.
 const LESS_COMMAND_RE = /\+|--lesskey|(?:^|\s)-?[A-Za-z]*k/;
+// The man option (git help runs man) that renders HTML and launches a
+// browser this line names: -H, -Hbrowser or --html[=browser].
+const MANOPT_COMMAND_RE = /(?:^|\s)-[A-Za-z]*H|--html/;
 
 // A program in a system directory, its path resolved first so a `..` cannot
 // climb back out of one (`/usr/bin/../../tmp/evil.sh`).
@@ -570,6 +573,9 @@ function envValueDenial(name: string, value: string, command: string | undefined
   }
   if (upper === 'LESS' && LESS_COMMAND_RE.test(text)) {
     return `'LESS' hands less an initial command or a key file, which is forbidden`;
+  }
+  if (upper === 'MANOPT' && MANOPT_COMMAND_RE.test(text)) {
+    return `'MANOPT' makes man render HTML and launch a browser this line names, which is forbidden`;
   }
   if (PROGRAM_ENV_VARS.has(upper) && programValueDenied(text, EDITOR_ENV_VARS.has(upper))) {
     return `'${name}' is run as a pager or an editor, and '${text}' is inline code, a script named by its path or a program handed an argument, which is forbidden: name the program itself`;
