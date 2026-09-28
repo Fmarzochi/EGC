@@ -84,7 +84,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - Encrypted state and compressed observations are written through a temp file that is exclusive and 0600 from its creation (#1564).
 - install.ps1 reads the last line of node --version, and three tests check what they claim (#1589).
 - A memory write that meets another process's lock waits its backoff without holding up the writes behind it (#1567).
-- The Guardian reads the program of sed, awk, jq and yq in its own language, judging the files and commands it names and refusing the ones it builds from its input, and reads a pattern, a filter or a git message as text, not as the file it seems to name (#1596).
+- The Guardian reads the program of sed, awk, jq and yq in its own language, judging the files and commands it names and refusing the ones it builds from its input, and reads a pattern, a filter or a git message as text, not as the file it seems to name (#1598).
 - A committed script's delete target is narrow only when every variable on the way to it is, a start known only at run time cannot make a protected end narrow, and a malformed committed marker is judged as typed (#1562).
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
 - A file run by its path is a binary only where bash reads it as one, whatever its extension, and a binary or another interpreter's script is left to the program it is whatever its size; only a shell script past the limit is refused (#1592).

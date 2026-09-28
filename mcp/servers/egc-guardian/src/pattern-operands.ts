@@ -180,10 +180,17 @@ function readOption(spec: ProgramSpec, args: string[], at: number): OptionRead |
 }
 
 interface OperandState {
-  programGiven: boolean;
-  programSeen: boolean;
+  // An option handed the program in before the first operand, or anywhere.
+  programBefore: boolean;
+  programAnywhere: boolean;
   argsOnly: boolean;
-  firstOperand: boolean;
+}
+
+interface Operand {
+  raw: string;
+  word: string;
+  // After jq --args or --jsonargs: a value, not a file.
+  value: boolean;
 }
 
 /** What a command whose first operand is a program names: the files among its words, the program texts it runs and their language, and the commands its options run. */
@@ -199,21 +206,28 @@ export interface ProgramRead {
 const programText = (raw: string): string =>
   process.platform === 'win32' && /^(["']).*\1$/s.test(raw) ? raw.slice(1, -1) : raw;
 
-// An operand once the options before it are read: the mode word, a value
-// after --args and a character set name nothing; the first one is the
-// program; an assignment names the file its value may be; the rest are files.
-function readOperand(spec: ProgramSpec, state: OperandState, raw: string, out: ProgramRead): void {
-  const word = bare(raw);
-  const isMode = state.firstOperand && spec.modes?.has(word) === true;
-  state.firstOperand = false;
-  if (isMode || state.argsOnly || spec.textOperands) return;
-  if (!state.programGiven && !state.programSeen) {
-    state.programSeen = true;
-    out.programs.push(programText(raw));
-    return;
-  }
-  const assigned = spec.assignments ? assignedValue(word) : undefined;
-  out.files.push(assigned ?? raw);
+// The file an operand names: the value an assignment gives, or the word.
+const operandFile = (spec: ProgramSpec, operand: Operand): string =>
+  (spec.assignments ? assignedValue(operand.word) : undefined) ?? operand.raw;
+
+// The operands once every option is read: the mode word, a value after
+// --args and a character set name nothing, the rest are files, and the
+// first one left is the program. A tool that stops reading options at its
+// first operand (awk, a BSD sed) runs it as the program unless an option
+// before it handed one in; a tool that reads options wherever they stand
+// (GNU getopt, clap) reads it as a file when an option anywhere did. Where
+// the two differ it is judged as both.
+function readOperands(spec: ProgramSpec, state: OperandState, operands: Operand[], out: ProgramRead): void {
+  const programAt = operands.length > 0 && spec.modes?.has(operands[0].word) ? 1 : 0;
+  operands.forEach((operand, at) => {
+    if (at < programAt || operand.value || spec.textOperands) return;
+    if (at > programAt) {
+      out.files.push(operandFile(spec, operand));
+      return;
+    }
+    if (!state.programBefore) out.programs.push(programText(operand.raw));
+    if (state.programAnywhere) out.files.push(operandFile(spec, operand));
+  });
 }
 
 /**
@@ -226,7 +240,8 @@ export function programCommandOf(command: string, args: string[]): ProgramRead |
   const spec = PROGRAM_SPECS[command];
   if (!spec) return null;
   const out: ProgramRead = { files: [], programs: [], commands: [], language: spec.language ?? null };
-  const state: OperandState = { programGiven: false, programSeen: false, argsOnly: false, firstOperand: true };
+  const state: OperandState = { programBefore: false, programAnywhere: false, argsOnly: false };
+  const operands: Operand[] = [];
   let options = true;
   for (let at = 0; at < args.length; at++) {
     const word = bare(args[at]);
@@ -237,11 +252,12 @@ export function programCommandOf(command: string, args: string[]): ProgramRead |
     if (options && isOption(word)) {
       const read = readOption(spec, args, at);
       if (read === null) return null;
-      at += noteOption(state, out, read);
+      at += noteOption(state, out, read, operands.length === 0);
       continue;
     }
-    readOperand(spec, state, args[at], out);
+    operands.push({ raw: args[at], word, value: state.argsOnly });
   }
+  readOperands(spec, state, operands, out);
   return out;
 }
 
@@ -250,8 +266,9 @@ const isOption = (word: string): boolean => word.length > 1 && word.startsWith('
 // What an option read tells: whether it handed the program in, whether the
 // operands after it are values, its file, its program text; how many words
 // after it it took.
-function noteOption(state: OperandState, out: ProgramRead, read: OptionRead): number {
-  state.programGiven ||= read.program === true;
+function noteOption(state: OperandState, out: ProgramRead, read: OptionRead, beforeOperands: boolean): number {
+  state.programAnywhere ||= read.program === true;
+  state.programBefore ||= read.program === true && beforeOperands;
   state.argsOnly ||= read.argsAfter === true;
   if (read.file !== undefined) out.files.push(read.file);
   if (read.text !== undefined) out.programs.push(read.text);
