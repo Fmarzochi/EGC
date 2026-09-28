@@ -40,7 +40,7 @@ function labelEnd(text: string, from: number): number {
 
 function nextVisible(text: string, from: number): number {
   let at = from;
-  while (at < text.length && (text[at] === ' ' || text[at] === '\t')) at++;
+  while (at < text.length && /\s/.test(text[at])) at++;
   return at;
 }
 
@@ -125,11 +125,12 @@ function readSedSubstitute(script: string, at: number, refs: ProgramRefs): numbe
 // regular expression depending on its grammar, so a reader of its text can
 // be led to take code for a string. What gawk --sandbox turns off is looked
 // for in the raw text instead: system(), getline, extensions and includes,
-// ARGV (a file put there is read as input), and a > or | after a print or a
-// printf (an output redirection or a pipe). A program that has one is inline
-// code with effects the Guardian cannot follow, as perl -e is; the plain
-// text processing awk is used for passes.
-const AWK_EFFECT_WORDS = /\b(?:system|getline|ARGV)\b|@(?:load|include)\b/;
+// ARGV (a file put there is read as input), gawk's indirect calls (`@f()`
+// calls whatever function f names, system included), and a > or | after a
+// print or a printf (an output redirection or a pipe). A program that has
+// one is inline code with effects the Guardian cannot follow, as perl -e is;
+// the plain text processing awk is used for passes.
+const AWK_EFFECT_WORDS = /\b(?:system|getline|ARGV)\b|@(?:load|include)\b|@\s*[A-Za-z_]\w*\s*\(/;
 
 function awkRefs(program: string): ProgramRefs {
   const print = /\bprintf?\b/.exec(program);
@@ -156,11 +157,18 @@ function yqRefs(expression: string): ProgramRefs {
   return { files: loads.values, commands: [], opaque: loads.computed ? 'loads a file whose path the expression computes (yq load)' : null };
 }
 
+// jq's import and include take a string literal; one this reader cannot see
+// right after the word (a comment in between) is not guessed at.
+function jqRefs(program: string): ProgramRefs {
+  const modules = quotedAfter(program, /(?<![.$\w])(?:import|include)\b/g);
+  return { files: modules.values, commands: [], opaque: modules.computed ? 'imports a module whose path this reader cannot see (jq import or include)' : null };
+}
+
 /** The files and the commands a sed, awk, jq or yq program names in its text. */
 export function programRefs(language: string | null, text: string): ProgramRefs {
   if (language === 'sed') return sedRefs(text);
   if (language === 'awk') return awkRefs(text);
-  if (language === 'jq') return { files: quotedAfter(text, /\b(?:import|include)\b/g).values, commands: [], opaque: null };
+  if (language === 'jq') return jqRefs(text);
   if (language === 'yq') return yqRefs(text);
   return noRefs();
 }

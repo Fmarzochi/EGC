@@ -330,14 +330,42 @@ const GIT_GREP_VALUED = set('-A -B -C -m --max-count --max-depth --threads --con
 
 // A short bundle of git grep: whether it hands the pattern in (-e, which is
 // text, or -f, whose file stays judged) and whether its value is the next
-// word.
+// word. -O takes the rest of the bundle as the pager it runs, so the letters
+// after it are not options.
 function gitGrepBundle(word: string): { pattern: boolean; text: boolean; next: boolean } {
   for (let letter = 1; letter < word.length; letter++) {
     const last = letter === word.length - 1;
+    if (word[letter] === 'O') break;
     if (word[letter] === 'e') return { pattern: true, text: true, next: last };
     if ('fABCm'.includes(word[letter])) return { pattern: word[letter] === 'f', text: false, next: last };
   }
   return { pattern: false, text: false, next: false };
+}
+
+// The pager git grep -O<pager> or --open-files-in-pager=<pager> hands the
+// matching files to, which git runs as a command (spelled out or abbreviated
+// down to --op, the shortest prefix no other option shares). Alone, -O runs
+// the configured pager.
+function grepPagerOf(word: string): string | null {
+  const eq = word.indexOf('=');
+  if (word.startsWith('--')) return eq >= 4 && '--open-files-in-pager'.startsWith(word.slice(0, eq)) ? word.slice(eq + 1) : null;
+  for (let letter = 1; letter < word.length; letter++) {
+    if (word[letter] === 'O') return word.slice(letter + 1) || null;
+    if ('efABCm'.includes(word[letter])) return null;
+  }
+  return null;
+}
+
+/** The pagers a git grep command runs, from its options before any `--`. */
+export function gitGrepPagers(rest: string[]): string[] {
+  const pagers: string[] = [];
+  for (const raw of rest) {
+    const word = bare(raw);
+    if (word === '--') break;
+    const pager = word.startsWith('-') ? grepPagerOf(word) : null;
+    if (pager) pagers.push(pager);
+  }
+  return pagers;
 }
 
 // git grep [options] <pattern> [<rev>...] [--] [<pathspec>...]: the pattern
