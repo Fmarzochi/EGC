@@ -70,6 +70,26 @@ allowed('git config unset core.hooksPath');
 allowed('git config rename-section old new');
 allowed('git config --rename-section old new');
 
+console.log('\na long option abbreviated as git accepts it (a unique prefix) is that option:');
+denied('git config --ren x core', /rename/);
+denied('git config --rena x alias', /rename/);
+denied('git config --edi', /editable session/);
+denied('git config --ed', /editable session/);
+denied('git config --rep core.hooksPath /opt/evil', KEY);
+denied('git config --ad core.hooksPath /opt/evil', KEY);
+denied('git config --fil ~/.gitconfig user.name x', WRITE);
+denied('git config --get= core.hooksPath /opt/evil', KEY);
+denied('git config --unse core.hooksPath /opt/evil', KEY);
+allowed('git config --ren old new');
+allowed('git config --li');
+allowed('git config --get-a core.hooksPath');
+allowed('git config --no-inc --get-r core');
+allowed('git config --no-t --get core.hooksPath');
+allowed('git config --glo --get core.hooksPath');
+allowed('git config --unset core.hooksPath');
+allowed('git config --unset-a core.hooksPath');
+allowed('git config --get core.hooksPath /opt/evil');
+
 console.log('\nan option value is not an action, and options end at the first operand:');
 denied('git config --comment --get core.hooksPath /opt/evil', KEY);
 denied('git config --comm --get core.hooksPath /opt/evil', KEY);
