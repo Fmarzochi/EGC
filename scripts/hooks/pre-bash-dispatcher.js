@@ -1,20 +1,15 @@
 #!/usr/bin/env node
 'use strict';
 
-const { runPreBash, resolvePreOutput, failClosedOutput } = require('./bash-hook-dispatcher');
+const { runPreBash, resolvePreOutput, failClosedOutput, overLimitOutput } = require('./bash-hook-dispatcher');
+const { readHookInput } = require('../lib/guardian-bin');
 
-let raw = '';
-const MAX_STDIN = 1024 * 1024;
-
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => {
-  if (raw.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - raw.length;
-    raw += chunk.substring(0, remaining);
+readHookInput(({ raw, truncated }) => {
+  if (truncated) {
+    process.stdout.write(overLimitOutput());
+    process.exitCode = 0;
+    return;
   }
-});
-
-process.stdin.on('end', () => {
   try {
     const result = runPreBash(raw);
     if (result.stderr) {

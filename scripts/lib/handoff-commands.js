@@ -356,7 +356,7 @@ const HANDOFF_READERS = { tmux: tmuxRuns, screen: screenRuns, ssh: sshRuns };
 // The command lines the command in `values` (its name first, the words the
 // shell hands it after) hands to another process.
 function handoffCommandsOf(values) {
-  const name = String(values[0] ?? '').split(/[\\/]/).pop().replace(/\.exe$/i, '');
+  const name = String(values[0] ?? '').split(/[\\/]/).pop().toLowerCase().replace(/\.(?:exe|cmd|bat|com)$/, '');
   if (HANDOFF_READERS[name]) return HANDOFF_READERS[name](values);
   return CONTAINER_TOOLS.has(name) ? containerRuns(name, values) : [];
 }

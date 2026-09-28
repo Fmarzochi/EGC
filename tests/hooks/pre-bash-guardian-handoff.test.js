@@ -140,6 +140,8 @@ function runTests() {
     assert.deepStrictEqual(handoffCommandsOf(['screen', '-d', '-m', 'ls']), ["'ls'"]);
     assert.deepStrictEqual(handoffCommandsOf(['ssh', '--', 'host', 'ls']), ['ls']);
     assert.deepStrictEqual(handoffCommandsOf(['docker', 'exec', '--', 'web', 'rm', '-rf', '/']), ["'rm' '-rf' '/'"]);
+    assert.deepStrictEqual(handoffCommandsOf(['SSH.EXE', 'host', 'ls']), ['ls'], 'a tool named in capitals or with its Windows extension');
+    assert.deepStrictEqual(handoffCommandsOf(['/usr/bin/Docker', 'exec', 'web', 'ls']), ["'ls'"]);
     for (const [value, linux, windows] of [[';', '', ''], ['neww;', 'neww', 'neww'], ['\\;', null, ''], ['a\\;', null, 'a'], ['a\\\\;', null, null], ['plain', null, null]]) {
       assert.strictEqual(tmuxCommandEnd(value, 'linux'), linux, `linux ${value}`);
       assert.strictEqual(tmuxCommandEnd(value, 'win32'), windows, `win32 ${value}`);

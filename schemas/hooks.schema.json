@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Gemini Code Hooks Configuration",
-  "description": "Configuration for Gemini Code hooks. Supports current Gemini Code hook events and hook action types.",
+  "description": "Configuration for Gemini Code hooks. Supports current Gemini Code hook events and hook action types. Four shapes are read, as scripts/ci/validate-hooks.js reads them: an event map or a matcher list, each under a hooks key or bare.",
   "$defs": {
     "stringArray": {
       "type": "array",
@@ -86,7 +86,10 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["prompt", "agent"]
+          "enum": [
+            "prompt",
+            "agent"
+          ]
         },
         "prompt": {
           "type": "string",
@@ -142,6 +145,43 @@
           "type": "string"
         }
       }
+    },
+    "eventMap": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "SessionStart",
+          "UserPromptSubmit",
+          "PreToolUse",
+          "PermissionRequest",
+          "PostToolUse",
+          "PostToolUseFailure",
+          "Notification",
+          "SubagentStart",
+          "Stop",
+          "SubagentStop",
+          "PreCompact",
+          "InstructionsLoaded",
+          "TeammateIdle",
+          "TaskCompleted",
+          "ConfigChange",
+          "WorktreeCreate",
+          "WorktreeRemove",
+          "SessionEnd"
+        ]
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/matcherEntry"
+        }
+      }
+    },
+    "matcherList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/matcherEntry"
+      }
     }
   },
   "oneOf": [
@@ -152,35 +192,7 @@
           "type": "string"
         },
         "hooks": {
-          "type": "object",
-          "propertyNames": {
-            "enum": [
-              "SessionStart",
-              "UserPromptSubmit",
-              "PreToolUse",
-              "PermissionRequest",
-              "PostToolUse",
-              "PostToolUseFailure",
-              "Notification",
-              "SubagentStart",
-              "Stop",
-              "SubagentStop",
-              "PreCompact",
-              "InstructionsLoaded",
-              "TeammateIdle",
-              "TaskCompleted",
-              "ConfigChange",
-              "WorktreeCreate",
-              "WorktreeRemove",
-              "SessionEnd"
-            ]
-          },
-          "additionalProperties": {
-            "type": "array",
-            "items": {
-              "$ref": "#/$defs/matcherEntry"
-            }
-          }
+          "$ref": "#/$defs/eventMap"
         }
       },
       "required": [
@@ -188,10 +200,36 @@
       ]
     },
     {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/matcherEntry"
-      }
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "hooks": {
+          "$ref": "#/$defs/matcherList"
+        }
+      },
+      "required": [
+        "hooks"
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/eventMap"
+        },
+        {
+          "not": {
+            "type": "object",
+            "required": [
+              "hooks"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "$ref": "#/$defs/matcherList"
     }
   ]
 }

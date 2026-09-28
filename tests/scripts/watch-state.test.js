@@ -7,6 +7,10 @@ const path = require('path');
 
 const { extractEgcBlock, parseBlockToStateContent, StateWatcher, mergeBlockIntoStateFile, resolveStateFilePath } = require('../../scripts/lib/watch-state');
 
+// How long a file event may take to reach the watcher: fs.watch on Windows
+// runners delivers it later than on Linux or macOS.
+const EVENT_BUDGET_MS = process.platform === 'win32' ? 8000 : 2000;
+
 function mktemp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-watch-state-'));
 }
@@ -118,6 +122,7 @@ async function runTests() {
     return new Promise((resolve, reject) => {
       const dir = mktemp();
       let watcher;
+      let guard;
 
       try {
         fs.writeFileSync(path.join(dir, 'GEMINI.md'), `# Gemini\n\n${SAMPLE_MDC}`);
@@ -128,6 +133,7 @@ async function runTests() {
             try {
               assert.strictEqual(sourceTool, 'gemini', 'source tool should be gemini');
               assert.ok(syncedTools.includes('aider'), 'should sync to aider (CONVENTIONS.md)');
+              clearTimeout(guard);
               watcher.stop();
               cleanup(dir);
               resolve();
@@ -145,12 +151,12 @@ async function runTests() {
           fs.writeFileSync(path.join(dir, 'GEMINI.md'), updated);
         }, 50);
 
-        // Timeout guard in case the event never fires
-        setTimeout(() => {
+        // Timeout guard in case the event never fires; cleared once it does.
+        guard = setTimeout(() => {
           watcher.stop();
           cleanup(dir);
-          reject(new Error('onSync did not fire within 2s after file change'));
-        }, 2000);
+          reject(new Error(`onSync did not fire within ${EVENT_BUDGET_MS} ms after file change`));
+        }, EVENT_BUDGET_MS);
       } catch (err) {
         if (watcher) watcher.stop();
         cleanup(dir);
@@ -175,6 +181,7 @@ async function runTests() {
     return new Promise((resolve, reject) => {
       const dir = mktemp();
       let watcher;
+      let guard;
 
       try {
         const targetPath = path.join(dir, 'GEMINI.md');
@@ -184,6 +191,7 @@ async function runTests() {
           onSync({ sourceTool }) {
             try {
               assert.strictEqual(sourceTool, 'gemini');
+              clearTimeout(guard);
               watcher.stop();
               cleanup(dir);
               resolve();
@@ -203,11 +211,11 @@ async function runTests() {
           fs.renameSync(tmpPath, targetPath);
         }, 50);
 
-        setTimeout(() => {
+        guard = setTimeout(() => {
           watcher.stop();
           cleanup(dir);
-          reject(new Error('onSync did not fire within 2s after atomic rename'));
-        }, 2000);
+          reject(new Error(`onSync did not fire within ${EVENT_BUDGET_MS} ms after atomic rename`));
+        }, EVENT_BUDGET_MS);
       } catch (err) {
         if (watcher) watcher.stop();
         cleanup(dir);
