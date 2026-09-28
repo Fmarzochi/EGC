@@ -226,9 +226,12 @@ function failClosedOutput(mode) {
 async function main() {
   const mode = process.argv[2];
   const { raw, truncated } = await readStdinRaw();
+  // The exit code is set, not forced, so what was written reaches the host
+  // before the process ends, whatever the pipe.
   if (truncated && mode !== 'post') {
     process.stdout.write(overLimitOutput());
-    process.exit(0);
+    process.exitCode = 0;
+    return;
   }
 
   const result = mode === 'post'
@@ -240,7 +243,7 @@ async function main() {
   }
   const output = mode === 'post' ? result.output : resolvePreOutput(raw, result);
   process.stdout.write(output);
-  process.exit(result.exitCode);
+  process.exitCode = result.exitCode;
 }
 
 if (require.main === module) {
@@ -253,7 +256,7 @@ if (require.main === module) {
     if (out) {
       process.stdout.write(out);
     }
-    process.exit(0);
+    process.exitCode = 0;
   });
 }
 
