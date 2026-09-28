@@ -2147,6 +2147,128 @@ function checkGitPathArguments(args: string[], subcommandIdx: number, cwd?: stri
   };
 }
 
+// Options whose value git runs as a command, by subcommand, from the manual
+// pages of git 2.51: long names (`--exec=cmd`, `--exec cmd`) and short
+// letters (`-xcmd`, `-x cmd`, or the last letter of a cluster such as -ix);
+// grep's -O takes its value glued only. submodule foreach and bisect run
+// are read apart.
+interface GitCommandOptions {
+  long: string[];
+  short?: string;
+  gluedOnly?: boolean;
+}
+
+const GIT_COMMAND_OPTIONS: Record<string, GitCommandOptions> = {
+  difftool: { long: ['--extcmd'], short: 'x' },
+  rebase: { long: ['--exec'], short: 'x' },
+  'filter-branch': { long: ['--env-filter', '--tree-filter', '--index-filter', '--parent-filter', '--msg-filter', '--commit-filter', '--tag-name-filter'] },
+  'send-email': { long: ['--sendmail-cmd', '--to-cmd', '--cc-cmd', '--header-cmd'] },
+  archive: { long: ['--exec'] },
+  fetch: { long: ['--upload-pack'] },
+  pull: { long: ['--upload-pack'] },
+  'ls-remote': { long: ['--upload-pack', '--exec'] },
+  clone: { long: ['--upload-pack'], short: 'u' },
+  push: { long: ['--receive-pack', '--exec'] },
+  instaweb: { long: ['--httpd', '--browser'], short: 'db' },
+  grep: { long: ['--open-files-in-pager'], short: 'O', gluedOnly: true },
+};
+
+// Shells that read the rest of their input as a script: named alone as the
+// command git runs, they run whatever the stream or the path it is given holds.
+const GIT_VALUE_SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'ash', 'mksh', 'busybox', 'pwsh', 'powershell']);
+const SHELL_SYNTAX_RE = /[|&;<>`$()\n]/;
+
+interface GitCommandValue {
+  option: string;
+  value: string;
+}
+
+// One command option read at a word: its value and how many words it took.
+interface GitCommandOptionRead {
+  found: GitCommandValue;
+  width: number;
+}
+
+// A long option of `spec` in the word `raw` (`word` without quotes), its
+// value glued after `=` or the next word.
+function longCommandOption(spec: GitCommandOptions, raw: string, word: string, next: string | undefined): GitCommandOptionRead | null {
+  if (!word.startsWith('--')) return null;
+  const option = spec.long.find(name => word === name || word.startsWith(`${name}=`));
+  if (option === undefined) return null;
+  if (word === option) return { found: { option, value: next ?? '' }, width: 2 };
+  return { found: { option, value: raw.slice(raw.indexOf('=') + 1) }, width: 1 };
+}
+
+// A short option of `spec` in the cluster `raw`: what follows its letter,
+// or the next word when nothing does and the option may take one.
+function shortCommandOption(spec: GitCommandOptions, raw: string, word: string, next: string | undefined): GitCommandOptionRead | null {
+  const letters = spec.short;
+  if (letters === undefined || !/^-[A-Za-z]/.test(word)) return null;
+  const letterAt = [...word].findIndex((letter, at) => at > 0 && letters.includes(letter));
+  if (letterAt < 0) return null;
+  const option = `-${word[letterAt]}`;
+  const glued = raw.slice(raw.indexOf(word[letterAt], 1) + 1);
+  if (glued !== '') return { found: { option, value: glued }, width: 1 };
+  return spec.gluedOnly ? null : { found: { option, value: next ?? '' }, width: 2 };
+}
+
+// The command values the options of `spec` carry among `rest`.
+function gitCommandOptionValues(spec: GitCommandOptions | undefined, rest: string[]): GitCommandValue[] {
+  const found: GitCommandValue[] = [];
+  let i = 0;
+  while (spec && i < rest.length) {
+    const word = stripQuotes(rest[i]);
+    if (word === '--') break;
+    const read = longCommandOption(spec, rest[i], word, rest[i + 1]) ?? shortCommandOption(spec, rest[i], word, rest[i + 1]);
+    if (read) found.push(read.found);
+    i += read?.width ?? 1;
+  }
+  return found;
+}
+
+// `git submodule [options] foreach [--recursive] [--] <command>`: the words
+// after foreach are the command, which git evaluates in a shell.
+function submoduleForeachCommand(rest: string[]): GitCommandValue[] {
+  let i = 0;
+  while (i < rest.length && stripQuotes(rest[i]).startsWith('-')) i += 1;
+  if (stripQuotes(rest[i] ?? '') !== 'foreach') return [];
+  i += 1;
+  while (i < rest.length && ['--recursive', '-q', '--quiet'].includes(stripQuotes(rest[i]))) i += 1;
+  if (stripQuotes(rest[i] ?? '') === '--') i += 1;
+  const words = rest.slice(i);
+  return words.length === 0 ? [] : [{ option: 'foreach', value: words.map(stripEnclosingQuotes).join(' ') }];
+}
+
+// A value git runs as a command: shell code in it, or a shell that reads a
+// script, is inline code and is denied as `sh -c` is; a plain command is
+// judged like a typed one and keeps its hard denials.
+function gitCommandValueDenial(subcommand: string, option: string, value: string, cwd?: string): ValidationResult | null {
+  const text = stripEnclosingQuotes(value);
+  const program = commandName(text.trim().split(/\s+/)[0] ?? '');
+  if (SHELL_SYNTAX_RE.test(text) || GIT_VALUE_SHELLS.has(program)) {
+    return {
+      allowed: false,
+      reason: `git ${subcommand} runs the value of ${option} as a command through a shell, and shell code or a shell there is inline code, which is forbidden: write it to a script and name the script`,
+      trust_level: 'DANGEROUS',
+    };
+  }
+  const verdict = validateCommandVerdict(text, cwd);
+  return verdict.allowed || verdict.advisory ? null : verdict;
+}
+
+function checkGitCommandOptions(subcommand: string, rest: string[], cwd?: string): ValidationResult | null {
+  if (subcommand === 'bisect' && stripQuotes(rest[0] ?? '') === 'run') {
+    const verdict = validateCommandVerdict(rest.slice(1).join(' '), cwd);
+    return verdict.allowed || verdict.advisory ? null : verdict;
+  }
+  const values = subcommand === 'submodule' ? submoduleForeachCommand(rest) : gitCommandOptionValues(GIT_COMMAND_OPTIONS[subcommand], rest);
+  for (const { option, value } of values) {
+    const denial = gitCommandValueDenial(subcommand, option, value, cwd);
+    if (denial) return denial;
+  }
+  return null;
+}
+
 function validateGitArgs(args: string[], cwd?: string): ValidationResult {
   const subcommandIdx = findGitSubcommandIndex(args);
   const forceDenial = checkGitForceFlag(args, subcommandIdx, cwd);
@@ -2163,6 +2285,8 @@ function validateGitArgs(args: string[], cwd?: string): ValidationResult {
   const rest = args.slice(subcommandIdx + 1);
   const fileDenial = checkGitFileOperands(subcommand, rest, cwd);
   if (fileDenial) return fileDenial;
+  const commandDenial = checkGitCommandOptions(subcommand, rest, cwd);
+  if (commandDenial) return commandDenial;
   if (subcommand === 'config') {
     const configDenial = checkGitConfigWrite(args.slice(subcommandIdx), cwd);
     if (configDenial) return configDenial;
