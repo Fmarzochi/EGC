@@ -42,6 +42,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A tool config is replaced in one step: `egc init` and the installers write it to a temporary file beside it and rename it over the previous one, so a write cut short leaves the config whole; a dotfiles link, the config's mode and, under root, its owner are kept, and where the folder or a mount refuses the replacement the config is written in place as before (#1540).
 - A TOML config keeps any install path as one string: the registrar escapes every control character in the paths it writes for Codex and Mistral Vibe, and the reader that finds egc-guardian through the Codex config reads each escape back (#1541).
 - A wrapper's options are read the way the wrapper reads them: the Guardian reads grouped short flags, attached and optional values and every value option of sudo, doas, env, exec, xargs, strace, systemd-run and the other wrappers the way getopt does, and refuses `env -S` in any spelling and `flock FILE -c` alike (#1542).
+- On Windows the Claude Code registration runs the CLI's own script with node, so cmd.exe never expands a % or ! in an install path (#1579).
 - validate_write judges a relative path where the agent works: it takes the agent's absolute `cwd`, resolves a relative path against it before checking the protected paths, and the audit trail records the path judged (#1544).
 - The dashboard answers only to its loopback names: a request or WebSocket upgrade whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` is refused before any route (#1545).
 - The Economy tab shows a provider name as text: a provider the panel does not know is labeled with its escaped id (#1546).
@@ -65,7 +66,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A committed script's delete target is narrow only when every variable on the way to it is, a start known only at run time cannot make a protected end narrow, and a malformed committed marker is judged as typed (#1562).
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
 - The command log and the Guardian audit log mask passwords named with pass or pwd and those the mysql, mariadb, sshpass and redis-cli clients take on their command line (#1566).
-- On Windows the Claude Code registration runs the CLI's own script with node, so cmd.exe never expands a % or ! in an install path (#1579).
+- `install.ps1` puts the git pre-commit hook in a clone through the same helper as `install.sh` (#1568).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
 - Routing on this machine, without an API key: the catalog index records the source of every component, the prompt router and `orchestrate_task` read the install state of the active tool and never offer what it has not installed (a named `Not installed for this tool` line and `not_installed` carry the command that adds them), the local scorers weigh tokens by rarity, name and activation text, stem plurals and ignore Portuguese and Spanish function words, and the decision stays with the tool's model, by intent (#1453).
