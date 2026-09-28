@@ -525,6 +525,7 @@ function runTests() {
           `X=${rm}; sudo $X -rf /tmp/x`,
           'bash cmdvar.sh',
           `export X=${rm}; bash callervar.sh`,
+          `bash passthru.sh ${rm} -rf /tmp/x`,
         ], 'destructive');
         expectBlocked([
           'read X; $X -rf /tmp/x',
@@ -541,7 +542,7 @@ function runTests() {
           `V=X; X=echo; read "$V" <<< ${rm}; $X -rf /tmp/x`,
           'IFS=/; X=a; $X -rf /tmp/x',
           '$1 -rf /tmp/x',
-          `bash passthru.sh ${rm} -rf /tmp/x`,
+          'bash passthru.sh "$1" -rf /tmp/x',
         ], 'cannot read');
         // The line fixing the name elsewhere, later or on a branch, does not
         // hide the value the environment gives it where it runs.

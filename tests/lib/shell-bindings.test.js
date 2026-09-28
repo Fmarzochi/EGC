@@ -49,6 +49,31 @@ function runTests() {
     assert.deepStrictEqual(commandWordChoices('${X:?}', lookupFrom({ X: ['ls', ''] })).choices, [['ls']]);
   }));
 
+  record(test('the words a script was given are its positional parameters, split as the shell splits them', () => {
+    const none = lookupFrom({});
+    const given = { zero: 'wrap.sh', words: ['a', 'b c'] };
+    const choices = raw => commandWordChoices(raw, none, false, given).choices;
+    assert.deepStrictEqual(choices('"$@"'), [['a', 'b c']], 'quoted, each word is a field of its own');
+    assert.deepStrictEqual(choices('$@'), [['a', 'b', 'c']], 'unquoted, each word is split again');
+    assert.deepStrictEqual(choices('$*'), [['a', 'b', 'c']]);
+    assert.deepStrictEqual(choices('"$*"'), [['a b c']], 'quoted $* joins them into one');
+    assert.deepStrictEqual(choices('x"$@"y'), [['xa', 'b cy']], 'text around "$@" joins its first and last words');
+    assert.deepStrictEqual(choices('$1'), [['a']]);
+    assert.deepStrictEqual(choices('${2}'), [['b', 'c']]);
+    assert.deepStrictEqual(choices('"$3"'), [['']], 'one past the last word is empty');
+    assert.deepStrictEqual(choices('$#'), [['2']]);
+    assert.deepStrictEqual(choices('${#}'), [['2']]);
+    assert.deepStrictEqual(choices('$0'), [['wrap.sh']]);
+    assert.deepStrictEqual(choices('$10'), [['a0']], '$10 is $1 and a 0');
+    assert.deepStrictEqual(commandWordChoices('"$@"', none, false, { zero: 's', words: [] }).choices, [[]], '"$@" with no words makes no word');
+    assert.deepStrictEqual(commandWordChoices('${1:-z}', none, false, { zero: 's', words: [] }).choices, [['z']]);
+    assert.ok(commandWordChoices('${@:-z}', none, false, given).unknown, 'an operator on the whole list is not followed');
+    assert.ok(commandWordChoices('$@', none, false, { zero: 's', words: ['r*'] }).unknown, 'a word the shell matches against file names');
+    assert.ok(commandWordChoices('"$*"', none, true, given).unknown, 'a changed IFS joins "$*" another way');
+    assert.deepStrictEqual(commandWordChoices('"$@"', none, true, given).choices, [['a', 'b c']], 'a changed IFS leaves "$@" alone');
+    for (const raw of ['"$@"', '$1', '$*', '$#', '${1}', '$0']) assert.ok(commandWordChoices(raw, none).unknown, `${raw} with no words known`);
+  }));
+
   record(test('a leading tilde is the home directory HOME holds, expanded before the rest of the word', () => {
     const lookup = lookupFrom({ HOME: ['/h', ''], D: ['x'] });
     assert.deepStrictEqual(commandWordChoices('~/$D/run', lookup).choices, [['/h/x/run']]);
