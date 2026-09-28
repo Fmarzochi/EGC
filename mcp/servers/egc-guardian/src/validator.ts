@@ -1390,11 +1390,17 @@ export function buildDeniedPaths(): string[] {
     // The browser profiles Windows keeps under LocalAppData.
     const browsers = ['Google/Chrome/User Data', 'Microsoft/Edge/User Data', 'BraveSoftware/Brave-Browser/User Data']
       .map(profile => path.join(localAppData, ...profile.split('/')));
+    // The shell Git for Windows ships reads /etc from its install, where its
+    // system gitconfig and profile live: the machine-wide one and the
+    // per-user one.
+    const programFiles = process.env.ProgramFiles || String.raw`C:\Program Files`;
     paths.push(
       path.join(userProfile, '.ssh'),
       path.join(userProfile, '.aws'),
       appData,
       ...browsers,
+      path.join(programFiles, 'Git', 'etc'),
+      path.join(localAppData, 'Programs', 'Git', 'etc'),
     );
   }
 

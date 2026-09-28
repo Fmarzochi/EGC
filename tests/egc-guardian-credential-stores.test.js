@@ -115,5 +115,26 @@ run('on Windows the browser profiles and the roaming settings are found under th
   }
 });
 
+run('on Windows the etc that Git for Windows reads as /etc is denied in both of its install places', () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const saved = { LOCALAPPDATA: process.env.LOCALAPPDATA, USERPROFILE: process.env.USERPROFILE, ProgramFiles: process.env.ProgramFiles };
+  const profile = path.join(os.tmpdir(), 'egc-profile');
+  try {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    delete process.env.LOCALAPPDATA;
+    process.env.USERPROFILE = profile;
+    process.env.ProgramFiles = path.join(profile, 'Program Files');
+    const denied = buildDeniedPaths();
+    assert.ok(denied.includes(path.join(profile, 'Program Files', 'Git', 'etc')), `the machine-wide install, got ${denied.join(', ')}`);
+    assert.ok(denied.includes(path.join(profile, 'AppData', 'Local', 'Programs', 'Git', 'etc')), `the per-user install, got ${denied.join(', ')}`);
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
