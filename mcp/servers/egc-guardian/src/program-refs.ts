@@ -108,7 +108,8 @@ function readSedCommand(script: string, at: number, refs: ProgramRefs): number {
   }
   if (command === 'e') {
     const textAt = textEnd(script, at);
-    const inner = script.slice(at + 1, textAt).trim();
+    // sed hands the shell each carried-on line as a line of its own.
+    const inner = script.slice(at + 1, textAt).replaceAll('\\\n', '\n').trim();
     if (inner) refs.commands.push(inner);
     else refs.opaque = 'runs its pattern space as a command (sed e)';
     return textAt;

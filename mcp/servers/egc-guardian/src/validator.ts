@@ -2284,6 +2284,16 @@ function isLiveShellChar(ch: string, quote: string | null): boolean {
   return quote === '"' ? ch === '$' || ch === '`' : SHELL_SYNTAX_RE.test(ch);
 }
 
+// A command another tool runs (a git option, a sed e, an ag --pager, an rg
+// --pre) is inline code when it has shell syntax, names a shell, or names an
+// interpreter alone, which then reads its program from what it is handed.
+function isInlineProgram(value: string): boolean {
+  const words = value.trim().split(/\s+/);
+  const program = commandName(words[0] ?? '');
+  if (hasShellSyntax(value) || GIT_VALUE_SHELLS.has(program)) return true;
+  return words.length === 1 && Object.hasOwn(INLINE_EVAL_COMMANDS, bareInterpreterName(program));
+}
+
 function gitInlineCommandDenial(subcommand: string, option: string): ValidationResult {
   return {
     allowed: false,
@@ -2299,8 +2309,7 @@ function gitInlineCommandDenial(subcommand: string, option: string): ValidationR
 // removed (shellWord); the quotes left in it are the ones the shell git
 // hands it to reads.
 function gitCommandValueDenial(subcommand: string, option: string, value: string, cwd?: string): ValidationResult | null {
-  const program = commandName(value.trim().split(/\s+/)[0] ?? '');
-  if (hasShellSyntax(value) || GIT_VALUE_SHELLS.has(program)) return gitInlineCommandDenial(subcommand, option);
+  if (isInlineProgram(value)) return gitInlineCommandDenial(subcommand, option);
   const verdict = validateCommandVerdict(value, cwd);
   return verdict.allowed || verdict.advisory ? null : verdict;
 }
@@ -3635,14 +3644,12 @@ function withoutInputRedirections(args: string[], raw: string[]): string[] {
 // script, naming a protected file with them is flagged, not grave.
 const COMMITTED_READ_BUILTINS = new Set(['[', '[[', 'test', '.', 'source']);
 
-// A command another tool runs (a sed e, an ag --pager, an rg --pre): with
-// shell syntax in it, it is inline code a shell runs, refused as sh -c is;
-// a plain one is judged as the command it is.
-const SHELL_SYNTAX_RE = /[|&;<>`$()\n]/;
-
+// A command a sed e, an ag --pager or an rg --pre runs: inline code (see
+// isInlineProgram) is refused as sh -c is; a plain one is judged as the
+// command it is.
 function embeddedCommandDenial(baseCommand: string, inner: string): ValidationResult | null {
-  if (SHELL_SYNTAX_RE.test(inner)) {
-    return { allowed: false, reason: `'${baseCommand}' hands '${inner}' to a shell, which is inline code; write it to a file and run it instead`, trust_level: 'DANGEROUS' };
+  if (isInlineProgram(inner)) {
+    return { allowed: false, reason: `'${baseCommand}' hands '${inner}' to a shell or an interpreter, which is inline code; write it to a script and name the script`, trust_level: 'DANGEROUS' };
   }
   const verdict = validateCommand(inner);
   if (verdict.allowed !== false || verdict.advisory) return null;
