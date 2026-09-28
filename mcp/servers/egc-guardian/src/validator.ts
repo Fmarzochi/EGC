@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { readParallelOption } from './parallel-options.js';
 import { LOCAL_WRAPPER_SPECS } from './local-wrappers.js';
 import { RUNNER_SPECS, type RunnerSpec } from './runner-wrappers.js';
+import { fileWordsOf, gitWordsNamingFiles } from './pattern-operands.js';
 
 export { RUNNER_SPECS } from './runner-wrappers.js';
 
@@ -2134,8 +2135,10 @@ function checkGitPathArguments(args: string[], subcommandIdx: number, cwd?: stri
   const globals = (subcommandIdx < 0 ? args : args.slice(0, subcommandIdx)).filter(arg => !isGluedGitSetting(arg));
   const rest = subcommandIdx < 0 ? [] : args.slice(subcommandIdx + 1);
   const pathOnly = GIT_PATH_ONLY_SUBCOMMANDS.has(subcommand);
-  const reached = pathOnly ? [...globals, ...gitReadOptionFiles(subcommand, rest)] : [...globals, ...rest];
-  const objects = pathOnly ? [] : gitObjectFiles(globals, rest, cwd);
+  // A message, a search or a grep pattern is text, not a file it names.
+  const named = pathOnly ? [] : gitWordsNamingFiles(subcommand, rest);
+  const reached = pathOnly ? [...globals, ...gitReadOptionFiles(subcommand, rest)] : [...globals, ...named];
+  const objects = pathOnly ? [] : gitObjectFiles(globals, named, cwd);
   const read = [...pathCandidatesOf(reached), ...objects].find(p => isReadDeniedOperand(p, cwd));
   if (read !== undefined) return readDenial(`git ${subcommand} would read the protected file '${read}' and is forbidden.`, 'DANGEROUS');
   const written = gitOutputFiles(subcommand, rest).find(p => isProtectedOperand(p, cwd));
@@ -3458,7 +3461,8 @@ function validateAgainstAllowlist(baseCommand: string, args: string[], cwd?: str
   }
   // A committed script reads files through `<` as the reads they are.
   const candidates = committedScript ? withoutInputRedirections(args, rawArgs) : args;
-  const protectedTarget = pathCandidatesOf(candidates).find(arg => isProtectedPath(arg, cwd));
+  // The program, pattern or filter of sed, awk, jq and the like is text.
+  const protectedTarget = pathCandidatesOf(fileWordsOf(baseCommand, candidates) ?? candidates).find(arg => isProtectedPath(arg, cwd));
   if (protectedTarget) {
     const denial: ValidationResult = {
       allowed: false,
