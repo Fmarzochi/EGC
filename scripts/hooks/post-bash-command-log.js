@@ -40,7 +40,7 @@ const SECRET_VALUE_PREFIXES = [
   /\b[\w-]*(?<!by|com|sur|tres|over|under|encom)pass(?:phrase)?\d*(?:[_-][\w-]*)?\s*=\s*/gi,
   // pwd after a name (MYSQL_PWD, DB_OLDPWD), never the shell's own PWD or
   // OLDPWD.
-  /\b(?!(?:old)?pwd\s*=)[\w-]*(?<=[\w-])pwd\d*(?:[_-][\w-]*)?\s*=\s*/gi,
+  /\b(?!(?:old)?pwd\s*=)[\w-]*pwd\d*(?:[_-][\w-]*)?\s*=\s*/gi,
 ];
 const SECRET_SHAPES = [
   /(:\/\/[^\s/:@]+:)[^\s@]+(?=@)/g,

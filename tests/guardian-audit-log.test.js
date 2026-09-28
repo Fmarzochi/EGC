@@ -116,6 +116,7 @@ if (test('redactSecretsInText reads a password flag as the shell passes it, a cl
     ['DB_OLDPWD=hunter2 ./run', 'DB_OLDPWD=[REDACTED] ./run'],
     ['DBPASS2=hunter2 MYSQL_PWD2=x ./run', 'DBPASS2=[REDACTED] MYSQL_PWD2=[REDACTED] ./run'],
     ['OLDPWD=/y PWD=/x ./run', 'OLDPWD=/y PWD=/x ./run'],
+    ['PWD2=hunter2 PWD_FOO=x ./run', 'PWD2=[REDACTED] PWD_FOO=[REDACTED] ./run'],
     ["mysql '-p' db", "mysql '-p' db"],
     ["curl '-uadmin:hunter2' http://x", 'curl -uadmin:[REDACTED] http://x'],
     ['curl \\-uadmin:hunter2 http://x', ESCAPES ? 'curl -uadmin:[REDACTED] http://x' : 'curl \\-uadmin:hunter2 http://x'],
