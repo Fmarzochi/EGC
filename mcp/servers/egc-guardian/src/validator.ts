@@ -2194,13 +2194,21 @@ interface GitCommandOptionRead {
   width: number;
 }
 
+// git takes a long option by any prefix that names it alone (`--exe` for
+// --exec) and refuses one two options share, which then runs nothing, so a
+// prefix of one of these options is read as that option.
+const MIN_LONG_OPTION_PREFIX = 3;
+
 // A long option of `spec` in the word `raw` (`word` without quotes), its
 // value glued after `=` or the next word.
 function longCommandOption(spec: GitCommandOptions, raw: string, word: string, next: string | undefined): GitCommandOptionRead | null {
   if (!word.startsWith('--')) return null;
-  const option = spec.long.find(name => word === name || word.startsWith(`${name}=`));
+  const eq = word.indexOf('=');
+  const key = eq < 0 ? word : word.slice(0, eq);
+  if (key.length < MIN_LONG_OPTION_PREFIX) return null;
+  const option = spec.long.find(name => name.startsWith(key));
   if (option === undefined) return null;
-  if (word === option) return { found: { option, value: next ?? '' }, width: 2 };
+  if (eq < 0) return { found: { option, value: next ?? '' }, width: 2 };
   return { found: { option, value: raw.slice(raw.indexOf('=') + 1) }, width: 1 };
 }
 
@@ -2241,31 +2249,69 @@ function submoduleForeachCommand(rest: string[]): GitCommandValue[] {
   while (i < rest.length && ['--recursive', '-q', '--quiet'].includes(stripQuotes(rest[i]))) i += 1;
   if (stripQuotes(rest[i] ?? '') === '--') i += 1;
   const words = rest.slice(i);
-  return words.length === 0 ? [] : [{ option: 'foreach', value: words.map(stripEnclosingQuotes).join(' ') }];
+  return words.length === 0 ? [] : [{ option: 'foreach', value: words.join(' ') }];
+}
+
+// Whether a command a shell reads has shell syntax outside the quotes that
+// keep it text: single quotes keep everything, double quotes all but `$`
+// and a backquote, and a backslash the character after it. A quote left
+// open counts, since the shell would read on past it.
+function hasShellSyntax(text: string): boolean {
+  let quote: string | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quote === "'") {
+      quote = ch === "'" ? null : quote;
+    } else if (ch === '\\') {
+      i += 1;
+    } else if (quote === '"') {
+      if (ch === '$' || ch === '`') return true;
+      quote = ch === '"' ? null : quote;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+    } else if (SHELL_SYNTAX_RE.test(ch)) {
+      return true;
+    }
+  }
+  return quote !== null;
+}
+
+function gitInlineCommandDenial(subcommand: string, option: string): ValidationResult {
+  return {
+    allowed: false,
+    reason: `git ${subcommand} runs the value of ${option} as a command, and shell code or a shell there is inline code, which is forbidden: write it to a script and name the script`,
+    trust_level: 'DANGEROUS',
+  };
 }
 
 // A value git runs as a command: shell code in it, or a shell that reads a
 // script, is inline code and is denied as `sh -c` is; a plain command is
 // judged like a typed one and keeps its hard denials.
+// `value` is the word as git receives it, the line's own quotes already
+// removed (shellWord); the quotes left in it are the ones the shell git
+// hands it to reads.
 function gitCommandValueDenial(subcommand: string, option: string, value: string, cwd?: string): ValidationResult | null {
-  const text = stripEnclosingQuotes(value);
-  const program = commandName(text.trim().split(/\s+/)[0] ?? '');
-  if (SHELL_SYNTAX_RE.test(text) || GIT_VALUE_SHELLS.has(program)) {
-    return {
-      allowed: false,
-      reason: `git ${subcommand} runs the value of ${option} as a command through a shell, and shell code or a shell there is inline code, which is forbidden: write it to a script and name the script`,
-      trust_level: 'DANGEROUS',
-    };
-  }
-  const verdict = validateCommandVerdict(text, cwd);
+  const program = commandName(value.trim().split(/\s+/)[0] ?? '');
+  if (hasShellSyntax(value) || GIT_VALUE_SHELLS.has(program)) return gitInlineCommandDenial(subcommand, option);
+  const verdict = validateCommandVerdict(value, cwd);
+  return verdict.allowed || verdict.advisory ? null : verdict;
+}
+
+// `git bisect [--] run <cmd> [<arg>...]`: git runs the command as given,
+// with no shell between, so its words are judged as a typed command; a
+// shell named there reads a script and is inline code as above.
+function bisectRunDenial(rest: string[], cwd?: string): ValidationResult | null {
+  let i = 0;
+  while (i < rest.length && stripQuotes(rest[i]).startsWith('-')) i += 1;
+  if (stripQuotes(rest[i] ?? '') !== 'run') return null;
+  const words = rest.slice(i + 1);
+  if (GIT_VALUE_SHELLS.has(commandName(stripQuotes(words[0] ?? '')))) return gitInlineCommandDenial('bisect', 'run');
+  const verdict = validateCommandVerdict(words.join(' '), cwd);
   return verdict.allowed || verdict.advisory ? null : verdict;
 }
 
 function checkGitCommandOptions(subcommand: string, rest: string[], cwd?: string): ValidationResult | null {
-  if (subcommand === 'bisect' && stripQuotes(rest[0] ?? '') === 'run') {
-    const verdict = validateCommandVerdict(rest.slice(1).join(' '), cwd);
-    return verdict.allowed || verdict.advisory ? null : verdict;
-  }
+  if (subcommand === 'bisect') return bisectRunDenial(rest, cwd);
   const values = subcommand === 'submodule' ? submoduleForeachCommand(rest) : gitCommandOptionValues(GIT_COMMAND_OPTIONS[subcommand], rest);
   for (const { option, value } of values) {
     const denial = gitCommandValueDenial(subcommand, option, value, cwd);

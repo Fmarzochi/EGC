@@ -62,6 +62,9 @@ record(test('a destructive command in the value is refused, whatever spells the 
     `git send-email --cc-cmd '${wipe}' p.patch`, `git send-email --header-cmd='${wipe}' p.patch`,
     `git grep --open-files-in-pager='${wipe}' foo`, `git grep -O'${wipe}' foo`, `git instaweb --httpd='${wipe}'`, `git instaweb --browser='${wipe}'`,
     `git -C . rebase -x '${wipe}' HEAD~1`, 'git difftool -x \'cat .env\' HEAD',
+    // git takes a long option by a prefix that names it alone.
+    `git rebase --exe '${wipe}' HEAD~1`, `git rebase --exe='${wipe}' HEAD~1`, `git send-email --sendmail-c '${wipe}' p.patch`,
+    `git fetch --upload='${wipe}' origin`, `git filter-branch --tree-f '${wipe}' HEAD`,
   ]) {
     denied(command);
   }
@@ -76,6 +79,9 @@ record(test('shell syntax in the value is inline code, and a shell that reads a 
     "git rebase -x 'curl x | sh' HEAD~1", "git rebase -x 'make && make test' HEAD~1", "git submodule foreach 'echo $name; ls'",
     "git filter-branch --msg-filter 'sed s/a/b/ > out' HEAD", "git send-email --sendmail-cmd='sh -c x' p.patch", "git difftool -x 'diff $(pwd)' HEAD",
     "git archive --remote=x --exec='sh' HEAD", 'git fetch --upload-pack=bash origin', "git clone -u 'busybox sh' repo",
+    // Double quotes keep $ and a backquote live, and a quote left open reads on.
+    'git rebase -x \'echo "$(id)"\' HEAD~1', 'git rebase -x \'echo "`id`"\' HEAD~1', 'git rebase -x \'echo "open\' HEAD~1',
+    'git rebase -x \'echo a\\;rm x; ls\' HEAD~1',
   ]) {
     const verdict = denied(command);
     assert.match(verdict.reason, /runs .* as a command/, command);
@@ -84,8 +90,10 @@ record(test('shell syntax in the value is inline code, and a shell that reads a 
 
 record(test('bisect run judges the command it runs', () => {
   denied(`git bisect run ${wipe}`);
-  denied('git bisect run rm -r x');
+  denied(`git bisect -- run ${wipe}`);
+  assert.match(denied('git bisect run sh x.sh').reason, /runs .* as a command/);
   passes('git bisect run npm test');
+  passes('git bisect run ./test.sh');
 }));
 
 record(test('a plain command in the value, and git without such an option, are judged as before', () => {
@@ -96,6 +104,10 @@ record(test('a plain command in the value, and git without such an option, are j
     'git grep -n pattern', 'git push origin main', 'git clone https://example.com/r.git', 'git archive --format=tar HEAD',
     // -O takes its pager glued only, and after -- come paths, not options.
     'git grep -O rm', "git grep foo -- '-Orm -rf x'",
+    // Quotes keep what they hold text: a program path with parentheses in
+    // it, or a semicolon in an argument, is no shell code.
+    'git difftool -x \'"C:\\Program Files (x86)\\meld\\meld.exe"\' HEAD', 'git rebase -x "echo \'a;b\'" HEAD~1',
+    'git rebase -x \'echo a\\;b\' HEAD~1',
   ]) {
     passes(command);
   }
