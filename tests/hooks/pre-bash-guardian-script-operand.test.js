@@ -224,7 +224,6 @@ function runTests() {
         'if false; then :; elif true; then bash notes.txt; else :; fi',
         'for i in 1; do bash notes.txt; done',
         'until true; do bash notes.txt; done',
-        'while false; do :; done',
         'case x in *) bash notes.txt;; esac',
         'case x in (x|y) bash notes.txt ;; esac',
         'case x in x ) bash notes.txt ;; esac',
@@ -245,7 +244,7 @@ function runTests() {
         'if true; then sudo -u root bash notes.txt; fi',
         'if true; then FOO=1 bash notes.txt; fi',
         heredoc,
-      ].filter(command => command !== 'while false; do :; done');
+      ];
       for (const command of commands) {
         const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
@@ -277,6 +276,8 @@ function runTests() {
       fs.writeFileSync(path.join(home, 'fine.sh'), 'echo fine\n');
       fs.writeFileSync(path.join(dir, 'plain2.sh'), 'echo plain\n');
       fs.writeFileSync(path.join(dir, 'sethome.sh'), 'HOME=/tmp/egc-elsewhere\n');
+      fs.writeFileSync(path.join(dir, 'runs-sethome.sh'), 'bash sethome.sh\n');
+      fs.writeFileSync(path.join(dir, 'sources-sethome.sh'), 'source ./sethome.sh\n');
       // Inside a script a missing file is passed over, so these can only
       // fail closed for the value the shell expands.
       const inScripts = { 'n-var.sh': 'bash $S\n', 'n-user.sh': 'bash ~nobody/evil.sh\n', 'n-option.sh': 'bash -o pipefail "$S"\n', 'n-subst.sh': 'bash <(cat build.sh)\n' };
@@ -311,6 +312,8 @@ function runTests() {
           'declare -n h=HOME; h=/tmp/x; bash ~/fine.sh',
           'source ./nothing.sh; bash ~/fine.sh',
           'source ./sethome.sh; bash ~/fine.sh',
+          // A script it sources in turn runs in the caller too.
+          'source ./sources-sethome.sh; bash ~/fine.sh',
           'bash n-var.sh',
           'bash n-user.sh',
           'bash n-option.sh',
@@ -333,6 +336,8 @@ function runTests() {
           '$PYTHON "$f"',
           'source ~/fine.sh',
           'source ./plain2.sh; bash ~/fine.sh',
+          // A script run with its own shell sets HOME only there.
+          'source ./runs-sethome.sh; bash ~/fine.sh',
           '"$(git rev-parse --show-toplevel)/scripts/check.sh" "$FILE"',
         ];
         for (const command of passing) {
@@ -396,6 +401,14 @@ function runTests() {
           'launcher.sh': 'JAVACMD=$JAVA_HOME/bin/java\nexec "$JAVACMD" "$@"\n',
           'cmdvar-narrow.sh': `X=${wipe.split(' ')[0]}\n$X -rf build\n`,
           'cmdvar-grave.sh': `X=${wipe.split(' ')[0]}\n$X -rf ~\n`,
+          'var-c.sh': `SH=sh\n$SH -c "${wipe} ~"\n`,
+          'var-eval.sh': `E=eval\n$E "${wipe} ~"\n`,
+          'noexec-c.sh': `bash -n -c "${wipe} ~"\nbash -o noexec -c "${wipe} ~"\n`,
+          'deep/grave.sh': `${wipe} ~\n`,
+          'cd-grave.sh': 'cd deep && bash grave.sh\n',
+          'cd-own-dir.sh': 'cd "$(dirname "$0")/deep" && bash grave.sh\n',
+          'deep/fine.sh': 'echo fine\n',
+          'cd-own-dir-fine.sh': 'cd "$(dirname "$0")/deep" && bash fine.sh\n',
           'root-var.sh': `ROOT=/\n${wipe} "$ROOT"\n`,
           'up-var.sh': `DIR=build\n${wipe} "$DIR/../../etc"\n`,
           'glob-var.sh': `TMP=$(mktemp -d)\n${wipe} "$TMP/*"\n`,
@@ -403,6 +416,7 @@ function runTests() {
         };
         fs.mkdirSync(path.join(repo, 'sub'), { recursive: true });
         fs.mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+        fs.mkdirSync(path.join(repo, 'deep'), { recursive: true });
         for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(repo, name), body);
         git('add', '.');
         git('commit', '-q', '-m', 'scripts');
@@ -427,6 +441,12 @@ function runTests() {
         assert.strictEqual(judged('bash launcher.sh'), 0, 'a committed launcher that runs the program a variable it sets from the environment names');
         assert.strictEqual(judged('bash cmdvar-narrow.sh'), 0, 'a narrow delete behind a variable command name in a committed script');
         assert.strictEqual(judged('bash cmdvar-grave.sh'), 2, 'a grave delete behind a variable command name in a committed script');
+        assert.strictEqual(judged('bash var-c.sh'), 2, 'what a shell named by a variable runs through -c meets the grave denials');
+        assert.strictEqual(judged('bash var-eval.sh'), 2, 'what an eval named by a variable runs meets the grave denials');
+        assert.strictEqual(judged('bash noexec-c.sh'), 0, 'a -c string a shell only parses under -n or -o noexec runs nothing');
+        assert.strictEqual(judged('bash cd-grave.sh'), 2, 'a script a committed script runs after a cd is found where the cd leads');
+        assert.strictEqual(judged('bash cd-own-dir.sh'), 2, "a cd to the script's own directory is followed");
+        assert.strictEqual(judged('bash cd-own-dir-fine.sh'), 0, "a benign script after a cd to the script's own directory runs");
         assert.strictEqual(judged('bash root-var.sh'), 2, 'a delete of a variable the committed script sets to the root');
         assert.strictEqual(judged('bash up-var.sh'), 2, 'a delete that climbs out of a variable the committed script sets narrowly');
         assert.strictEqual(judged('bash glob-var.sh'), 2, 'a delete of a glob below a variable the committed script sets narrowly');
@@ -700,6 +720,83 @@ function runTests() {
       for (const command of blocked) {
         const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+      }
+    }));
+
+    record(test('a script after cd, pushd or popd is found where the move leads, and one after a move the hook cannot follow fails closed', () => {
+      fs.mkdirSync(path.join(dir, 'moved', 'deeper'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'moved', 'danger.sh'), `${wipe} /tmp/egc-victim\n`);
+      fs.writeFileSync(path.join(dir, 'moved', 'fine.sh'), 'echo fine\n');
+      fs.writeFileSync(path.join(dir, 'moved', 'deeper', 'danger.sh'), `${wipe} /tmp/egc-victim\n`);
+      fs.writeFileSync(path.join(dir, 'mover.sh'), 'cd moved\n');
+      fs.writeFileSync(path.join(dir, 'runs-mover.sh'), 'bash mover.sh\n');
+      fs.writeFileSync(path.join(dir, 'sources-mover.sh'), 'source ./mover.sh\n');
+      fs.writeFileSync(path.join(dir, 'dots-mover.sh'), '. ./mover.sh\n');
+      const judge = command => run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+      for (const command of [
+        'cd moved && bash danger.sh',
+        'cd -P -- moved && bash danger.sh',
+        'cd moved; bash danger.sh',
+        `cd ${JSON.stringify(path.join(dir, 'moved'))} && bash danger.sh`,
+        'pushd moved && bash danger.sh && popd',
+        'pushd moved && pushd deeper && popd && bash danger.sh',
+        'cd moved && cd deeper && bash danger.sh',
+        'cd moved && cd .. && cd - && bash danger.sh',
+        'D=moved; cd "$D" && bash danger.sh',
+        'builtin cd moved && bash danger.sh',
+      ]) {
+        const result = judge(command);
+        assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+        assert.ok(!result.stderr.includes('only known'), `${command} is followed, not refused: ${result.stderr}`);
+      }
+      for (const command of [
+        'cd "$(echo moved)" && bash danger.sh',
+        'cd "$UNSET_EGC_DIR" && bash fine.sh',
+        'cd moved/* && bash fine.sh',
+        'CDPATH=/tmp cd moved && bash fine.sh',
+        'popd && bash fine.sh',
+        'pushd && bash fine.sh',
+        'pushd +1 && bash fine.sh',
+        'cd - && bash fine.sh',
+        'cd "$(echo moved)"; cd moved; bash fine.sh',
+        'source ./mover.sh && bash fine.sh',
+        'source ./sources-mover.sh && bash fine.sh',
+        '. ./dots-mover.sh && bash fine.sh',
+        'X=-; cd "$X" && bash fine.sh',
+        'X=-P; cd "$X" && bash fine.sh',
+        `ln -sfn ${JSON.stringify(path.join(dir, 'moved', 'deeper'))} link && cd -P link/.. && bash fine.sh`,
+      ]) {
+        const result = judge(command);
+        assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
+        assert.ok(/moves to a directory only known|directory stack|rotates a stack|returns to a directory only|sources moves the directory|expands to an option|earlier command on this line may change/.test(result.stderr), `${command}: ${result.stderr}`);
+      }
+      for (const command of [
+        'cd moved && bash fine.sh',
+        'cd; bash build.sh',
+        'cd ~ && bash build.sh',
+        `cd "$(echo moved)" && bash ${JSON.stringify(path.join(dir, 'moved', 'fine.sh'))}`,
+        'cd moved && ls; bash build.sh',
+        'cd moved deeper && bash build.sh',
+        'cd moved -P && bash build.sh',
+        'cd "$(echo moved)" && ls',
+        'source ./runs-mover.sh && bash build.sh',
+      ]) {
+        const result = judge(command);
+        assert.strictEqual(result.exitCode, 0, `${command}: ${JSON.stringify(result)}`);
+      }
+    }));
+
+    record(test("a shell's -c string is code, not a script file, and under -n or -o noexec it runs nothing", () => {
+      const { extractSegments } = require('../../scripts/hooks/pre-bash-guardian-validate');
+      for (const command of ["bash -c 'ls'", "S=bash; $S -c 'ls'", "sh -ec 'echo hi' name arg"]) {
+        const result = run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
+        assert.ok(!String(result.stderr).includes('is not there'), `${command}: ${result.stderr}`);
+      }
+      for (const command of [`bash -n -c '${wipe} /tmp/x'`, `bash -o noexec -c '${wipe} /tmp/x'`, `bash -c -n '${wipe} /tmp/x'`, `sh -nc '${wipe} /tmp/x'`]) {
+        assert.ok(!extractSegments(command).includes(`${wipe} /tmp/x`), `${command} only parses its string`);
+      }
+      for (const command of [`bash -c '${wipe} /tmp/x'`, `bash -o errexit -c '${wipe} /tmp/x'`, `sh -ec '${wipe} /tmp/x'`]) {
+        assert.ok(extractSegments(command).includes(`${wipe} /tmp/x`), `${command} runs its string`);
       }
     }));
 
