@@ -14,7 +14,7 @@ const path = require('path');
 // so these cases do not depend on the egc-guardian build being there.
 process.env.EGC_GUARDIAN_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 const { run } = require('../../scripts/hooks/pre-bash-guardian-validate');
-const { handoffCommandsOf } = require('../../scripts/lib/handoff-commands');
+const { handoffCommandsOf, tmuxCommandEnd } = require('../../scripts/lib/handoff-commands');
 
 function test(name, fn) {
   try {
@@ -140,6 +140,10 @@ function runTests() {
     assert.deepStrictEqual(handoffCommandsOf(['screen', '-d', '-m', 'ls']), ["'ls'"]);
     assert.deepStrictEqual(handoffCommandsOf(['ssh', '--', 'host', 'ls']), ['ls']);
     assert.deepStrictEqual(handoffCommandsOf(['docker', 'exec', '--', 'web', 'rm', '-rf', '/']), ["'rm' '-rf' '/'"]);
+    for (const [value, linux, windows] of [[';', '', ''], ['neww;', 'neww', 'neww'], ['\\;', null, ''], ['a\\;', null, 'a'], ['a\\\\;', null, null], ['plain', null, null]]) {
+      assert.strictEqual(tmuxCommandEnd(value, 'linux'), linux, `linux ${value}`);
+      assert.strictEqual(tmuxCommandEnd(value, 'win32'), windows, `win32 ${value}`);
+    }
     assert.deepStrictEqual(handoffCommandsOf(['kubectl', 'exec', 'pod', '-c', 'app', 'rm', '/data']), ["'rm' '/data'"]);
     assert.deepStrictEqual(handoffCommandsOf(['kubectl', '-n', 'x', 'exec', 'pod', '--container', 'app', '-i', 'ls']), ["'ls'"]);
     assert.deepStrictEqual(handoffCommandsOf(['docker', 'exec', 'web', '-c', 'x']), ["'-c' 'x'"], 'docker options end at the container');

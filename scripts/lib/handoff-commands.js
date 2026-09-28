@@ -92,14 +92,25 @@ function tmuxCommandName(word) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-// tmux reads `;` as the end of a command, alone or at the end of a word.
+// tmux reads `;` as the end of a command, alone or at the end of a word;
+// `\;` reaching it is a literal semicolon. The Bash hook keeps backslashes
+// on Windows, where Git Bash still hands tmux `x;` for a typed `x\;`: there
+// the word's own `\;` ends the command too. The word before the end, or null.
+function tmuxCommandEnd(value, platform = process.platform) {
+  if (platform === 'win32') {
+    if (!/(^|[^\\])\\?;$/.test(value)) return null;
+    return value.slice(0, value.length - (value.endsWith('\\;') ? 2 : 1));
+  }
+  return value.endsWith(';') && !value.endsWith('\\;') ? value.slice(0, -1) : null;
+}
+
 function tmuxCommands(values) {
   const commands = [[]];
   for (const value of values) {
-    const ends = value.endsWith(';') && !value.endsWith('\\;');
-    const word = ends ? value.slice(0, -1) : value;
+    const head = tmuxCommandEnd(value);
+    const word = head ?? value;
     if (word) commands.at(-1).push(word);
-    if (ends) commands.push([]);
+    if (head !== null) commands.push([]);
   }
   return commands.filter(command => command.length > 0);
 }
@@ -350,4 +361,4 @@ function handoffCommandsOf(values) {
   return CONTAINER_TOOLS.has(name) ? containerRuns(name, values) : [];
 }
 
-module.exports = { handoffCommandsOf };
+module.exports = { tmuxCommandEnd, handoffCommandsOf };
