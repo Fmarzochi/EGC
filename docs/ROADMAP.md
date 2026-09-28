@@ -75,6 +75,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The fact-forcing gate reads the wrappers in front of a destructive command through the Guardian's own tables, and every target is checked to copy both hooks with their helpers (#1552).
 - The OpenCode prompt-timeout test gets its own budget, and the gain, watch-state and CI steps stop leaking temporary directories or waiting for nothing (#1583, closes #1448).
 - A path an option or a variable hands git is judged in every spelling a shell may hand it, a Windows path included (#1610).
+- The Guardian suites run on Windows and macOS as well as Linux, and a POSIX system path is judged under any drive on Windows (#1609).
 - The PreCompact memory save is installed with every helper it loads on any Claude profile, and the package-only auto-update script is no longer copied into targets (#1553).
 - A file an earlier install wrote and today's plan no longer writes is retired on every target, OpenCode, Cursor, Codex and egc included, when EGC recorded writing it and it still holds the bytes EGC copied; a file the person changed, or a directory that cannot be listed, stays (#1554).
 - The memory protocol installer reconciles a file's blocks through named steps and fits the complexity limit, with no change in what it prints (#1607).
