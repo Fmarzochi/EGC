@@ -158,6 +158,44 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('history_query answers from the decisions and the do-not-repeat list', () => {
+    const home = makeHome();
+    try {
+      runHook(
+        { prompt: 'remember: ship the retry fix before the schema one', cwd: home },
+        { FAKE_GUARDIAN_INTENT: 'remember', HOME: home, PWD: home }
+      );
+      const result = runHook(
+        { user_prompt: 'what did we decide about the fixes?', cwd: home },
+        { FAKE_GUARDIAN_INTENT: 'history_query', HOME: home, PWD: home }
+      );
+      assert.strictEqual(result.code, 0);
+      assert.ok(result.stdout.includes('=== EGC History ==='), `Expected history block, got: ${result.stdout}`);
+      assert.ok(result.stdout.includes('ship the retry fix'), `Expected stored decision, got: ${result.stdout}`);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('stays silent on a prompt too short to read and on an intent it has no handler for', () => {
+    const home = makeHome();
+    try {
+      for (const [input, intent] of [
+        [{ prompt: 'x', cwd: home }, 'remember'],
+        [{ prompt: 42, cwd: home }, 'remember'],
+        [{ prompt: 'remember: nothing here', cwd: home }, 'constructor'],
+        [{ prompt: 'remember: nothing here', cwd: home }, 'unknown_intent'],
+      ]) {
+        const result = runHook(input, { FAKE_GUARDIAN_INTENT: intent, HOME: home, PWD: home });
+        assert.strictEqual(result.code, 0);
+        assert.strictEqual(result.stdout, '', `${JSON.stringify(input)} ${intent}`);
+      }
+      assert.strictEqual(stateFileIn(home), null, 'nothing was recorded');
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (test('never leaks the raw input JSON into context', () => {
     const result = runHook({ prompt: 'short greeting here' }, { FAKE_GUARDIAN_INTENT: 'none' });
     assert.ok(!result.stdout.includes('"prompt"'), `Raw input leaked: ${result.stdout}`);

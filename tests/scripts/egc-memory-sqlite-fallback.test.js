@@ -11,7 +11,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { startMemoryServer, initialize, callTool } = require('../fixtures/memory-server-client');
 
 const SERVER_ROOT = path.join(__dirname, '../../mcp/servers/egc-memory');
 const SERVER = path.join(SERVER_ROOT, 'build', 'index.js');
@@ -22,61 +22,8 @@ if (!fs.existsSync(SERVER) || !fs.existsSync(COMPAT)) {
   process.exit(0);
 }
 
-function startServer(home, projectDir, engine) {
-  const child = spawn(process.execPath, [SERVER], {
-    cwd: projectDir,
-    env: { ...process.env, HOME: home, USERPROFILE: home, EGC_SQLITE_ENGINE: engine, EGC_PROJECT: projectDir },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-  let buffer = '';
-  let stderr = '';
-  const pending = new Map();
-  child.stdout.on('data', chunk => {
-    buffer += chunk;
-    let index;
-    while ((index = buffer.indexOf('\n')) >= 0) {
-      const line = buffer.slice(0, index).trim();
-      buffer = buffer.slice(index + 1);
-      if (!line) continue;
-      let message;
-      try { message = JSON.parse(line); } catch { continue; }
-      if (message.id !== undefined && pending.has(message.id)) {
-        pending.get(message.id)(message);
-        pending.delete(message.id);
-      }
-    }
-  });
-  child.stderr.on('data', chunk => { stderr += chunk; });
-  let exited = false;
-  child.once('exit', () => { exited = true; });
-  let nextId = 1;
-  const request = (method, params) => new Promise((resolve, reject) => {
-    const id = nextId++;
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`timeout waiting for ${method}\n${stderr.slice(-800)}`)); }, 20000);
-    pending.set(id, message => { clearTimeout(timer); resolve(message); });
-    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
-  });
-  const notify = (method, params) => child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
-  const stop = () => new Promise(resolve => {
-    if (exited) { resolve(); return; }
-    child.once('exit', () => resolve());
-    child.stdin.end();
-    child.kill();
-  });
-  return { request, notify, stop, stderr: () => stderr };
-}
-
-async function initialize(server) {
-  const init = await server.request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'fallback-test', version: '0' } });
-  assert.ok(init.result, `initialize failed: ${JSON.stringify(init.error)}`);
-  server.notify('notifications/initialized', {});
-}
-
-async function callTool(server, name, args) {
-  const response = await server.request('tools/call', { name, arguments: args });
-  assert.ok(response.result, `${name} failed: ${JSON.stringify(response.error)}`);
-  return (response.result.content || []).map(c => c.text || '').join('\n');
-}
+const startServer = (home, projectDir, engine) =>
+  startMemoryServer({ home, projectDir, env: { EGC_SQLITE_ENGINE: engine, EGC_PROJECT: projectDir } });
 
 async function test(name, fn) {
   try {
@@ -103,7 +50,7 @@ async function runTests() {
     if (await test('the server starts on the portable engine and lists its tools', async () => {
       const server = startServer(home, projectDir, 'wasm');
       try {
-        await initialize(server);
+        await initialize(server, 'fallback-test');
         const tools = await server.request('tools/list', {});
         const names = tools.result.tools.map(t => t.name);
         assert.ok(names.includes('update_state') && names.includes('get_state'), names.join(','));
@@ -116,7 +63,7 @@ async function runTests() {
     if (await test('store_decision says its decisions come back through the history tools, not get_state, in the server and in glama.json (#1524)', async () => {
       const server = startServer(home, projectDir, 'wasm');
       try {
-        await initialize(server);
+        await initialize(server, 'fallback-test');
         const tools = await server.request('tools/list', {});
         const served = tools.result.tools.find(t => t.name === 'store_decision').description;
         const listed = JSON.parse(fs.readFileSync(path.join(__dirname, '../../glama.json'), 'utf8'))
@@ -134,14 +81,14 @@ async function runTests() {
     if (await test('state written on the portable engine survives a restart', async () => {
       const first = startServer(home, projectDir, 'wasm');
       try {
-        await initialize(first);
+        await initialize(first, 'fallback-test');
         await callTool(first, 'update_state', { project_path: projectDir, context: 'fallback engine roundtrip', decisions: [{ what: 'use the portable engine', why: 'native binary cannot load here' }] });
       } finally {
         await first.stop();
       }
       const second = startServer(home, projectDir, 'wasm');
       try {
-        await initialize(second);
+        await initialize(second, 'fallback-test');
         const text = await callTool(second, 'get_state', { project_path: projectDir });
         assert.ok(text.includes('fallback engine roundtrip'), text.slice(0, 400));
         assert.ok(text.includes('use the portable engine'), text.slice(0, 400));
@@ -155,7 +102,7 @@ async function runTests() {
       try { require('sqlite3'); } catch { native = false; }
       const server = startServer(home, projectDir, '');
       try {
-        await initialize(server);
+        await initialize(server, 'fallback-test');
         const fellBack = server.stderr().includes('using the portable sql.js engine');
         assert.strictEqual(fellBack, !native, server.stderr().slice(-400));
         const state = await server.request('tools/call', { name: 'get_project_state', arguments: {} });
@@ -173,7 +120,7 @@ async function runTests() {
     if (await test('a file written by the native engine still accepts decisions on the portable engine, and search_history answers by substring', async () => {
       const server = startServer(home, projectDir, 'wasm');
       try {
-        await initialize(server);
+        await initialize(server, 'fallback-test');
         await callTool(server, 'store_decision', { project_path: projectDir, context: 'database engine', decision: 'portable engine keeps search alive' });
         const text = await callTool(server, 'search_history', { query: 'portable search' });
         assert.ok(text.includes('portable engine keeps search alive'), text.slice(0, 400));
@@ -186,7 +133,7 @@ async function runTests() {
     if (await test('the substring search treats wildcards as text, keeps the FTS row shape and honours min_score', async () => {
       const server = startServer(home, projectDir, 'wasm');
       try {
-        await initialize(server);
+        await initialize(server, 'fallback-test');
         await callTool(server, 'store_decision', { project_path: projectDir, context: 'metrics', decision: 'coverage stays at 100% or the gate fails' });
         const hit = JSON.parse(await callTool(server, 'search_history', { query: '100%' }));
         assert.strictEqual(hit.results.length, 1, JSON.stringify(hit).slice(0, 300));
@@ -211,7 +158,7 @@ async function runTests() {
       }
       const server = startServer(home, projectDir, '');
       try {
-        await initialize(server);
+        await initialize(server, 'fallback-test');
         const text = await callTool(server, 'search_history', { query: 'portable' });
         assert.ok(text.includes('portable engine keeps search alive'), text.slice(0, 400));
         assert.ok(!text.includes('"mode": "substring"'), 'the FTS5 path must answer, not the substring fallback');

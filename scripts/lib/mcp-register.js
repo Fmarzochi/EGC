@@ -15,6 +15,7 @@
  */
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { isDeepStrictEqual } = require('node:util');
@@ -692,23 +693,54 @@ function quoteForCmdShell(arg) {
   return '"' + arg.replaceAll('"', '""') + '"';
 }
 
+// npm puts a global package's command on Windows as a .cmd shim beside its
+// node_modules, and that shim only runs the package's own script with node:
+// running the script directly needs no shell at all.
+function claudeScriptBehindShim(cli) {
+  const script = path.join(path.dirname(cli), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
+  return fs.existsSync(script) ? script : null;
+}
+
+// How to run the claude CLI with an argv: the executable itself, the script
+// behind its .cmd shim with node, or, with neither, through cmd.exe, which
+// expands %var% and !var! whatever the quoting; a path holding either, the
+// CLI's own included, is refused there rather than handed over changed. The
+// way by hand is the entry for ~/.claude.json, since typing the add again
+// would go through the same cmd.exe.
+function manualClaudeEntry([name, bin]) {
+  return `${JSON.stringify(name)}: ${JSON.stringify({ type: 'stdio', command: 'node', args: [bin] })}`;
+}
+
+const CMD_EXPANDS = /[%!]/;
+
+function byHand(cli, expanded, pending) {
+  return new Error(`cmd.exe would expand the % or ! in '${expanded}', so ${pending.map(([name]) => name).join(' and ')} cannot be registered through ${path.basename(cli)}; with Claude Code closed, add by hand under "mcpServers" in ${path.join(os.homedir(), '.claude.json')}: ${pending.map(manualClaudeEntry).join(', ')}`);
+}
+
+function claudeRunner(cli) {
+  // Same Windows rule as the crusher shim: .cmd/.bat need a shell.
+  const { needsShellOnWindows } = require('./crusher/shim-dispatch');
+  if (!needsShellOnWindows(cli)) return { viaCmd: false, run: args => spawnSync(cli, args, { encoding: 'utf8' }) }; // NOSONAR javascript:S4036 -- cli was resolved from the user's own PATH on purpose; fixed argv
+  const script = claudeScriptBehindShim(cli);
+  if (script) return { viaCmd: false, run: args => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' }) };
+  return { viaCmd: true, run: args => spawnSync(quoteForCmdShell(cli), args.map(quoteForCmdShell), { encoding: 'utf8', shell: true }) }; // NOSONAR javascript:S4036 -- cli was resolved from the user's own PATH on purpose; fixed argv
+}
+
 function registerClaudeCli(_targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
   const cli = resolveClaudeCli();
   if (!cli) throw new Error('claude CLI not found on PATH');
-  // Same Windows rule as the crusher shim: .cmd/.bat need a shell.
-  const { needsShellOnWindows } = require('./crusher/shim-dispatch');
-  const useShell = needsShellOnWindows(cli);
-  const runCli = (args) => spawnSync(
-    useShell ? quoteForCmdShell(cli) : cli,
-    useShell ? args.map(quoteForCmdShell) : args,
-    { encoding: 'utf8', shell: useShell }
-  ); // NOSONAR javascript:S4036 -- cli was resolved above from the user's own PATH on purpose; fixed argv
 
   const servers = [
     ['egc-guardian', guardianBin],
     ['egc-memory', memoryBin],
   ];
+  const { run: runCli, viaCmd } = claudeRunner(cli);
+  // Through cmd.exe, a CLI path it would expand cannot run at all, and a
+  // server path it would expand is left for the way by hand, every such
+  // server named, after the others are registered.
+  if (viaCmd && CMD_EXPANDS.test(cli)) throw byHand(cli, cli, servers);
+  const refused = [];
   let changed = false;
   for (const [name, bin] of servers) {
     const existing = runCli(['mcp', 'get', name]);
@@ -716,6 +748,10 @@ function registerClaudeCli(_targetPath, bins) {
     // instead of piling a doomed `add` on top.
     if (existing.error) throw existing.error;
     if (existing.status === 0) continue;
+    if (viaCmd && CMD_EXPANDS.test(bin)) {
+      refused.push([name, bin]);
+      continue;
+    }
     const added = runCli(['mcp', 'add', '-s', 'user', name, '--', 'node', bin]);
     if (added.error) throw added.error;
     if (added.status !== 0) {
@@ -723,6 +759,7 @@ function registerClaudeCli(_targetPath, bins) {
     }
     changed = true;
   }
+  if (refused.length > 0) throw byHand(cli, refused[0][1], refused);
   return changed;
 }
 

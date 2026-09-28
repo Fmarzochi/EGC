@@ -61,22 +61,23 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // --- Unit tests: adapter.js translation helpers ---
 
-  if (test('normalizeCursorToolName maps Shell to Bash', () => {
+  tally(test('normalizeCursorToolName maps Shell to Bash', () => {
     assert.strictEqual(adapter.normalizeCursorToolName('Shell'), 'Bash');
     assert.strictEqual(adapter.normalizeCursorToolName('shell'), 'Bash');
-  })) passed++; else failed++;
+  }));
 
-  if (test('normalizeCursorToolName leaves other tool names unchanged', () => {
+  tally(test('normalizeCursorToolName leaves other tool names unchanged', () => {
     assert.strictEqual(adapter.normalizeCursorToolName('Write'), 'Write');
     assert.strictEqual(adapter.normalizeCursorToolName('Read'), 'Read');
     assert.strictEqual(adapter.normalizeCursorToolName(''), '');
     assert.strictEqual(adapter.normalizeCursorToolName(undefined), '');
-  })) passed++; else failed++;
+  }));
 
-  if (test('buildGateGuardInput maps tool_name, file_path, command, session and transcript', () => {
+  tally(test('buildGateGuardInput maps tool_name, file_path, command, session and transcript', () => {
     const cursorInput = {
       tool_name: 'Shell',
       tool_input: { command: 'npm test', working_directory: '/project' },
@@ -88,9 +89,9 @@ function runTests() {
     assert.strictEqual(built.tool_input.command, 'npm test');
     assert.strictEqual(built.session_id, 'conv-123');
     assert.strictEqual(built.transcript_path, '/tmp/transcript.jsonl');
-  })) passed++; else failed++;
+  }));
 
-  if (test('buildGateGuardInput falls back across path/filePath for file_path', () => {
+  tally(test('buildGateGuardInput falls back across path/filePath for file_path', () => {
     const viaPath = adapter.buildGateGuardInput({ tool_name: 'Write', tool_input: { path: '/src/a.js' } });
     assert.strictEqual(viaPath.tool_input.file_path, '/src/a.js');
 
@@ -99,20 +100,20 @@ function runTests() {
 
     const viaSnakeCase = adapter.buildGateGuardInput({ tool_name: 'Write', tool_input: { file_path: '/src/c.js' } });
     assert.strictEqual(viaSnakeCase.tool_input.file_path, '/src/c.js');
-  })) passed++; else failed++;
+  }));
 
-  if (test('buildGateGuardInput handles missing tool_input without throwing', () => {
+  tally(test('buildGateGuardInput handles missing tool_input without throwing', () => {
     const built = adapter.buildGateGuardInput({ tool_name: 'Write' });
     assert.strictEqual(built.tool_input.file_path, '');
     assert.strictEqual(built.tool_input.command, '');
-  })) passed++; else failed++;
+  }));
 
-  if (test('translateGateGuardResult passes through an allow (pass-through) result', () => {
+  tally(test('translateGateGuardResult passes through an allow (pass-through) result', () => {
     const passthroughInput = { tool_name: 'Read', tool_input: {} };
     assert.deepStrictEqual(adapter.translateGateGuardResult(passthroughInput), { permission: 'allow' });
-  })) passed++; else failed++;
+  }));
 
-  if (test('translateGateGuardResult converts a Claude-shaped deny into Cursor permission:deny', () => {
+  tally(test('translateGateGuardResult converts a Claude-shaped deny into Cursor permission:deny', () => {
     const denyResult = {
       stdout: JSON.stringify({
         hookSpecificOutput: {
@@ -127,22 +128,22 @@ function runTests() {
     assert.strictEqual(translated.permission, 'deny');
     assert.strictEqual(translated.user_message, '[Fact-Forcing Gate]\n\nsome reason');
     assert.strictEqual(translated.agent_message, '[Fact-Forcing Gate]\n\nsome reason');
-  })) passed++; else failed++;
+  }));
 
-  if (test('translateGateGuardResult fails open on malformed deny-shaped stdout', () => {
+  tally(test('translateGateGuardResult fails open on malformed deny-shaped stdout', () => {
     const malformed = { stdout: '{ not valid json', exitCode: 0 };
     assert.deepStrictEqual(adapter.translateGateGuardResult(malformed), { permission: 'allow' });
-  })) passed++; else failed++;
+  }));
 
-  if (test('translateGateGuardResult fails open on a state-persistence warning (stderr-only result)', () => {
+  tally(test('translateGateGuardResult fails open on a state-persistence warning (stderr-only result)', () => {
     const stateError = { stderr: '[Fact-Forcing Gate] GateGuard state could not be persisted', exitCode: 0 };
     assert.deepStrictEqual(adapter.translateGateGuardResult(stateError), { permission: 'allow' });
-  })) passed++; else failed++;
+  }));
 
   // --- Integration tests: full before-tool-use.js process ---
 
   let stateDir = makeStateDir();
-  if (test('direct invocation denies the first Write and produces Cursor deny JSON', () => {
+  tally(test('direct invocation denies the first Write and produces Cursor deny JSON', () => {
     const input = {
       tool_name: 'Write',
       tool_input: { file_path: '/src/cursor-write-a.js' },
@@ -156,9 +157,9 @@ function runTests() {
     assert.ok(output.user_message.includes('Fact-Forcing Gate'));
     assert.ok(output.user_message.includes('/src/cursor-write-a.js'));
     assert.ok(output.agent_message.includes('Fact-Forcing Gate'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('direct invocation allows the retried Write on the same file', () => {
+  tally(test('direct invocation allows the retried Write on the same file', () => {
     const input = {
       tool_name: 'Write',
       tool_input: { file_path: '/src/cursor-write-a.js' },
@@ -168,10 +169,10 @@ function runTests() {
     assert.strictEqual(result.code, 0);
     const output = parseOutput(result.stdout);
     assert.deepStrictEqual(output, { permission: 'allow' });
-  })) passed++; else failed++;
+  }));
 
   stateDir = makeStateDir();
-  if (test('direct invocation maps Shell tool_name to the Bash gate and denies the first routine command', () => {
+  tally(test('direct invocation maps Shell tool_name to the Bash gate and denies the first routine command', () => {
     const input = {
       tool_name: 'Shell',
       tool_input: { command: 'npm test', working_directory: '/project' },
@@ -182,9 +183,9 @@ function runTests() {
     const output = parseOutput(result.stdout);
     assert.strictEqual(output.permission, 'deny');
     assert.ok(output.user_message.includes('current user request'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('direct invocation allows a retried Shell command in the same session', () => {
+  tally(test('direct invocation allows a retried Shell command in the same session', () => {
     const input = {
       tool_name: 'Shell',
       tool_input: { command: 'npm test', working_directory: '/project' },
@@ -192,10 +193,10 @@ function runTests() {
     };
     const result = runHook(input, { GATEGUARD_STATE_DIR: stateDir, EGC_SESSION_ID: 'session-b' });
     assert.deepStrictEqual(parseOutput(result.stdout), { permission: 'allow' });
-  })) passed++; else failed++;
+  }));
 
   stateDir = makeStateDir();
-  if (test('direct invocation denies a destructive Shell command with the destructive gate message', () => {
+  tally(test('direct invocation denies a destructive Shell command with the destructive gate message', () => {
     const input = {
       tool_name: 'Shell',
       tool_input: { command: 'rm -rf /tmp/cursor-demo' },
@@ -206,25 +207,25 @@ function runTests() {
     assert.strictEqual(output.permission, 'deny');
     assert.ok(output.user_message.includes('Destructive command detected'));
     assert.ok(output.user_message.includes('rollback'));
-  })) passed++; else failed++;
+  }));
 
   stateDir = makeStateDir();
-  if (test('direct invocation passes through tool names GateGuard does not gate (e.g. Read)', () => {
+  tally(test('direct invocation passes through tool names GateGuard does not gate (e.g. Read)', () => {
     const input = { tool_name: 'Read', tool_input: { file_path: '/src/cursor-write-a.js' }, conversation_id: 'session-d' };
     const result = runHook(input, { GATEGUARD_STATE_DIR: stateDir, EGC_SESSION_ID: 'session-d' });
     assert.strictEqual(result.code, 0);
     assert.deepStrictEqual(parseOutput(result.stdout), { permission: 'allow' });
-  })) passed++; else failed++;
+  }));
 
   stateDir = makeStateDir();
-  if (test('direct invocation allows malformed stdin JSON instead of crashing', () => {
+  tally(test('direct invocation allows malformed stdin JSON instead of crashing', () => {
     const result = runHook('{ not valid json', { GATEGUARD_STATE_DIR: stateDir, EGC_SESSION_ID: 'session-e' });
     assert.strictEqual(result.code, 0);
     assert.deepStrictEqual(parseOutput(result.stdout), { permission: 'allow' });
-  })) passed++; else failed++;
+  }));
 
   stateDir = makeStateDir();
-  if (test('direct invocation respects EGC_DISABLED_HOOKS for the edit/write gate id', () => {
+  tally(test('direct invocation respects EGC_DISABLED_HOOKS for the edit/write gate id', () => {
     const input = { tool_name: 'Write', tool_input: { file_path: '/src/cursor-disabled.js' }, conversation_id: 'session-f' };
     const result = runHook(input, {
       GATEGUARD_STATE_DIR: stateDir,
@@ -233,10 +234,10 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0);
     assert.deepStrictEqual(parseOutput(result.stdout), { permission: 'allow' });
-  })) passed++; else failed++;
+  }));
 
   stateDir = makeStateDir();
-  if (test('direct invocation respects EGC_HOOK_PROFILE=minimal (gate not in minimal profile)', () => {
+  tally(test('direct invocation respects EGC_HOOK_PROFILE=minimal (gate not in minimal profile)', () => {
     const input = { tool_name: 'Write', tool_input: { file_path: '/src/cursor-minimal.js' }, conversation_id: 'session-g' };
     const result = runHook(input, {
       GATEGUARD_STATE_DIR: stateDir,
@@ -245,10 +246,10 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0);
     assert.deepStrictEqual(parseOutput(result.stdout), { permission: 'allow' });
-  })) passed++; else failed++;
+  }));
 
   stateDir = makeStateDir();
-  if (test('direct invocation respects EGC_GATEGUARD=off end to end', () => {
+  tally(test('direct invocation respects EGC_GATEGUARD=off end to end', () => {
     const input = { tool_name: 'Write', tool_input: { file_path: '/src/cursor-off.js' }, conversation_id: 'session-h' };
     const result = runHook(input, {
       GATEGUARD_STATE_DIR: stateDir,
@@ -257,7 +258,7 @@ function runTests() {
     });
     assert.strictEqual(result.code, 0);
     assert.deepStrictEqual(parseOutput(result.stdout), { permission: 'allow' });
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

@@ -163,10 +163,11 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // --- Test 1: denies first Edit per file ---
   clearState();
-  if (test('denies first Edit per file with fact-forcing message', () => {
+  tally(test('denies first Edit per file with fact-forcing message', () => {
     const input = {
       tool_name: 'Edit',
       tool_input: { file_path: '/src/app.js', old_string: 'foo', new_string: 'bar' }
@@ -179,10 +180,10 @@ function runTests() {
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('Fact-Forcing Gate'));
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('import/require'));
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('/src/app.js'));
-  })) passed++; else failed++;
+  }));
 
   // --- Test 2: allows second Edit on same file ---
-  if (test('allows second Edit on same file (gate already passed)', () => {
+  tally(test('allows second Edit on same file (gate already passed)', () => {
     const input = {
       tool_name: 'Edit',
       tool_input: { file_path: '/src/app.js', old_string: 'foo', new_string: 'bar' }
@@ -199,11 +200,11 @@ function runTests() {
       // Pass-through: output matches original input (allow)
       assert.strictEqual(output.tool_name, 'Edit', 'pass-through should preserve input');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 3: denies first Write per file ---
   clearState();
-  if (test('denies first Write per file with fact-forcing message', () => {
+  tally(test('denies first Write per file with fact-forcing message', () => {
     const input = {
       tool_name: 'Write',
       tool_input: { file_path: '/src/new-file.js', content: 'console.log("hello")' }
@@ -215,11 +216,11 @@ function runTests() {
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('creating'));
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('call this new file'));
-  })) passed++; else failed++;
+  }));
 
   // --- Test 3b: fails open when retry state cannot be persisted ---
   clearState();
-  if (test('fails open with warning when state path cannot be persisted', () => {
+  tally(test('fails open with warning when state path cannot be persisted', () => {
     const invalidStateDir = path.join(stateDir, 'not-a-directory');
     fs.writeFileSync(invalidStateDir, 'not a directory', 'utf8');
 
@@ -239,11 +240,11 @@ function runTests() {
     }
     assert.ok(result.stderr.includes('GateGuard state could not be persisted'),
       'should warn that state persistence failed');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 4: denies destructive Bash, allows retry ---
   clearState();
-  if (test('denies destructive Bash commands, allows retry after facts presented', () => {
+  tally(test('denies destructive Bash commands, allows retry after facts presented', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'rm -rf /important/data' }
@@ -269,7 +270,7 @@ function runTests() {
     } else {
       assert.strictEqual(output2.tool_name, 'Bash', 'pass-through should preserve input');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- A destructive command is one being run, not one being quoted ---
   // The classifier used to test its patterns against the raw command text, so
@@ -310,13 +311,13 @@ function runTests() {
     ['chrt --p 1234 git reset --hard', 'chrt with the shortest abbreviation of the pid option'],
   ];
   for (const [command, what] of NOT_A_COMMAND) {
-    if (test(`the destructive gate ignores ${what}`, () => {
+    tally(test(`the destructive gate ignores ${what}`, () => {
       const reason = destructiveReasonFor(command);
       assert.ok(
         !reason.includes('Destructive command detected'),
         `expected no destructive gate for: ${command}\n  got: ${reason.slice(0, 120)}`
       );
-    })) passed++; else failed++;
+    }));
   }
 
   const IS_A_COMMAND = [
@@ -355,18 +356,18 @@ function runTests() {
     ["psql <<'EOF'\nDROP TABLE users;\nEOF", 'SQL inside a heredoc body'],
   ];
   for (const [command, what] of IS_A_COMMAND) {
-    if (test(`the destructive gate still catches it behind ${what}`, () => {
+    tally(test(`the destructive gate still catches it behind ${what}`, () => {
       const reason = destructiveReasonFor(command);
       assert.ok(
         reason.includes('Destructive command detected'),
         `expected the destructive gate for: ${command}\n  got: ${reason.slice(0, 120)}`
       );
-    })) passed++; else failed++;
+    }));
   }
 
   // --- A document is asked about its readers, not its importers ---
   clearState();
-  if (test('the gate asks a document what it is for, not which files import it', () => {
+  tally(test('the gate asks a document what it is for, not which files import it', () => {
     const doc = path.join(stateDir, 'notes', 'decision.md');
     const created = runHook({ tool_name: 'Write', tool_input: { file_path: doc, content: 'x' } });
     const createReason = parseOutput(created.stdout).hookSpecificOutput.permissionDecisionReason;
@@ -378,19 +379,19 @@ function runTests() {
     const editReason = parseOutput(edited.stdout).hookSpecificOutput.permissionDecisionReason;
     assert.ok(!editReason.includes('import/require'), editReason);
     assert.ok(editReason.includes('who reads it'), editReason);
-  })) passed++; else failed++;
+  }));
 
   clearState();
-  if (test('the gate still asks a source file which files import it', () => {
+  tally(test('the gate still asks a source file which files import it', () => {
     const source = path.join(stateDir, 'src', 'billing.js');
     const edited = runHook({ tool_name: 'Edit', tool_input: { file_path: source, old_string: 'a', new_string: 'b' } });
     const reason = parseOutput(edited.stdout).hookSpecificOutput.permissionDecisionReason;
     assert.ok(reason.includes('import/require'), reason);
-  })) passed++; else failed++;
+  }));
 
   // --- A gate that cannot read the facts gives up instead of blocking ---
   clearState();
-  if (test('an operation refused three times for facts the transcript never carries is allowed with a warning', () => {
+  tally(test('an operation refused three times for facts the transcript never carries is allowed with a warning', () => {
     const transcript = path.join(stateDir, 'unreachable-transcript.jsonl');
     const session = 'facts-unreachable-' + Date.now();
     const target = path.join(stateDir, 'src', 'stuck.js');
@@ -421,11 +422,11 @@ function runTests() {
     assert.ok(!last.stdout.includes('"deny"'), last.stdout);
     assert.ok(last.stderr.includes('cannot block forever'), last.stderr);
     assert.ok(last.stderr.includes('subagent'), last.stderr);
-  })) passed++; else failed++;
+  }));
 
   // --- Test 5: denies first routine Bash, allows second ---
   clearState();
-  if (test('allows safe git push --force-with-lease without destructive gate', () => {
+  tally(test('allows safe git push --force-with-lease without destructive gate', () => {
     writeState({
       checked: ['__bash_session__'],
       last_active: Date.now()
@@ -445,11 +446,11 @@ function runTests() {
     } else {
       assert.strictEqual(output.tool_name, 'Bash', 'pass-through should preserve input');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 6: gates amend as destructive Bash ---
   clearState();
-  if (test('denies git commit --amend as destructive Bash', () => {
+  tally(test('denies git commit --amend as destructive Bash', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'git commit --amend --no-edit' }
@@ -461,11 +462,11 @@ function runTests() {
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('Destructive'));
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('rollback'));
-  })) passed++; else failed++;
+  }));
 
   // --- Test 7: still gates plain force push as destructive Bash ---
   clearState();
-  if (test('denies plain git push --force as destructive Bash', () => {
+  tally(test('denies plain git push --force as destructive Bash', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'git push --force origin feature-branch' }
@@ -477,11 +478,11 @@ function runTests() {
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('Destructive'));
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('rollback'));
-  })) passed++; else failed++;
+  }));
 
   // --- Test 8: denies first routine Bash, allows second ---
   clearState();
-  if (test('denies first routine Bash, allows second', () => {
+  tally(test('denies first routine Bash, allows second', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'ls -la' }
@@ -505,10 +506,10 @@ function runTests() {
     } else {
       assert.strictEqual(output2.tool_name, 'Bash', 'pass-through should preserve input');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 6: session state resets after timeout ---
-  if (test('session state resets after 30-minute timeout', () => {
+  tally(test('session state resets after 30-minute timeout', () => {
     writeExpiredState();
     const input = {
       tool_name: 'Edit',
@@ -520,11 +521,11 @@ function runTests() {
     assert.ok(output, 'should produce JSON output after expired state');
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny',
       'should deny again after session timeout (state was reset)');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 7: allows unknown tool names ---
   clearState();
-  if (test('allows unknown tool names through', () => {
+  tally(test('allows unknown tool names through', () => {
     const input = {
       tool_name: 'Read',
       tool_input: { file_path: '/src/app.js' }
@@ -539,11 +540,11 @@ function runTests() {
     } else {
       assert.strictEqual(output.tool_name, 'Read', 'pass-through should preserve input');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 8: sanitizes file paths with newlines ---
   clearState();
-  if (test('sanitizes file paths containing newlines', () => {
+  tally(test('sanitizes file paths containing newlines', () => {
     const input = {
       tool_name: 'Edit',
       tool_input: { file_path: '/src/app.js\ninjected content', old_string: 'a', new_string: 'b' }
@@ -561,11 +562,11 @@ function runTests() {
     assert.ok(!pathLine.includes('\n'), 'file path line must not contain raw newlines');
     assert.ok(!reason.includes('/src/app.js\n'), 'newline after file path should be sanitized');
     assert.ok(!reason.includes('\ninjected'), 'injected content must not appear on its own line');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 9: respects EGC_DISABLED_HOOKS ---
   clearState();
-  if (test('respects EGC_DISABLED_HOOKS (skips when disabled)', () => {
+  tally(test('respects EGC_DISABLED_HOOKS (skips when disabled)', () => {
     const input = {
       tool_name: 'Edit',
       tool_input: { file_path: '/src/disabled.js', old_string: 'a', new_string: 'b' }
@@ -583,11 +584,11 @@ function runTests() {
     } else {
       assert.strictEqual(output.tool_name, 'Edit', 'pass-through should preserve input');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 10: respects direct GateGuard env disable for recovery sessions ---
   clearState();
-  if (test('respects ECC_GATEGUARD=off without writing gate state', () => {
+  tally(test('respects ECC_GATEGUARD=off without writing gate state', () => {
     const input = {
       tool_name: 'Write',
       tool_input: { file_path: '/src/env-disabled.js', content: 'export const ok = true;' }
@@ -599,11 +600,11 @@ function runTests() {
     assert.strictEqual(output.tool_name, 'Write', 'disabled gate should pass through raw input');
     assert.ok(!output.hookSpecificOutput, 'disabled gate should not deny the operation');
     assert.ok(!fs.existsSync(stateFile), 'disabled gate should not create or mutate gate state');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 11: respects legacy GATEGUARD_DISABLED env disable ---
   clearState();
-  if (test('respects GATEGUARD_DISABLED=1 for Bash recovery', () => {
+  tally(test('respects GATEGUARD_DISABLED=1 for Bash recovery', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'npm test' }
@@ -615,11 +616,11 @@ function runTests() {
     assert.strictEqual(output.tool_name, 'Bash', 'disabled gate should pass Bash through raw input');
     assert.ok(!output.hookSpecificOutput, 'disabled gate should not deny Bash');
     assert.ok(!fs.existsSync(stateFile), 'disabled gate should not create or mutate gate state');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 12: legacy GATEGUARD_DISABLED compatibility is scoped to =1 ---
   clearState();
-  if (test('does not treat GATEGUARD_DISABLED=true as a disable flag', () => {
+  tally(test('does not treat GATEGUARD_DISABLED=true as a disable flag', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'npm test' }
@@ -629,11 +630,11 @@ function runTests() {
 
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('current user request'));
-  })) passed++; else failed++;
+  }));
 
   // --- Test 13: denial messages show an escape hatch ---
   clearState();
-  if (test('denial messages include direct recovery escape hatch', () => {
+  tally(test('denial messages include direct recovery escape hatch', () => {
     const input = {
       tool_name: 'Write',
       tool_input: { file_path: '/src/recovery-hint.js', content: 'export const ok = true;' }
@@ -646,11 +647,11 @@ function runTests() {
       'denial reason should no longer advertise the GATEGUARD=off recovery toggle');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('EGC_DISABLED_HOOKS'),
       'denial reason should mention the canonical hook-id disable control');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 14: routine Bash denial messages show the Bash hook escape hatch ---
   clearState();
-  if (test('a destructive retry is accepted only when the facts message names a rollback and the command', () => {
+  tally(test('a destructive retry is accepted only when the facts message names a rollback and the command', () => {
     const transcript = path.join(stateDir, 'destructive-transcript.jsonl');
     const session = 'facts-destructive-' + Date.now();
     const call = { tool_name: 'Bash', tool_input: { command: 'rm -rf /tmp/egc-facts-target' }, transcript_path: transcript };
@@ -672,9 +673,9 @@ function runTests() {
     const withFacts = runBashHook(call, { EGC_SESSION_ID: session });
     assert.strictEqual(withFacts.code, 0, withFacts.stderr);
     assert.ok(!withFacts.stdout.includes('"deny"'), withFacts.stdout);
-  })) passed++; else failed++;
+  }));
 
-  if (test('an edit retry is accepted only when the facts message names the file, and later edits stay free', () => {
+  tally(test('an edit retry is accepted only when the facts message names the file, and later edits stay free', () => {
     const transcript = path.join(stateDir, 'edit-transcript.jsonl');
     const session = 'facts-edit-' + Date.now();
     const target = path.join(stateDir, 'src', 'billing.js');
@@ -701,9 +702,9 @@ function runTests() {
     const later = runHook(call, { EGC_SESSION_ID: session });
     assert.strictEqual(later.code, 0, later.stderr);
     assert.ok(!later.stdout.includes('"deny"'), later.stdout);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a retry whose message the harness has not written yet is not refused on an older denial (Claude Code shape)', () => {
+  tally(test('a retry whose message the harness has not written yet is not refused on an older denial (Claude Code shape)', () => {
     const transcript = path.join(stateDir, 'cc-unwritten-transcript.jsonl');
     const session = 'facts-cc-unwritten-' + Date.now();
     const target = path.join(stateDir, 'src', 'ledger.js');
@@ -727,9 +728,9 @@ function runTests() {
     const retry = runHook(call, { EGC_SESSION_ID: session });
     assert.strictEqual(retry.code, 0, retry.stderr);
     assert.ok(!retry.stdout.includes('"deny"'), `nothing of the assistant follows the denial, so the retry cannot be judged and passes: ${retry.stdout}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a denial for another file with the same name is not the anchor (Claude Code shape)', () => {
+  tally(test('a denial for another file with the same name is not the anchor (Claude Code shape)', () => {
     const transcript = path.join(stateDir, 'cc-samename-transcript.jsonl');
     const session = 'facts-cc-samename-' + Date.now();
     const first = path.join(stateDir, 'a', 'ledger.js');
@@ -759,9 +760,9 @@ function runTests() {
     const secondOut = JSON.parse(retrySecond.stdout);
     assert.strictEqual(secondOut.hookSpecificOutput.permissionDecision, 'deny', `b/ledger.js has no facts after its own denial: ${retrySecond.stdout}`);
     assert.ok(secondOut.hookSpecificOutput.permissionDecisionReason.includes(second), 'the refusal names the file it is about');
-  })) passed++; else failed++;
+  }));
 
-  if (test('a retry is judged by the text written after the denial, not by text before it (Claude Code shape)', () => {
+  tally(test('a retry is judged by the text written after the denial, not by text before it (Claude Code shape)', () => {
     const transcript = path.join(stateDir, 'cc-anchored-transcript.jsonl');
     const session = 'facts-cc-anchored-' + Date.now();
     const target = path.join(stateDir, 'src', 'invoice.js');
@@ -794,9 +795,9 @@ function runTests() {
     const withFacts = runHook(call, { EGC_SESSION_ID: session });
     assert.strictEqual(withFacts.code, 0, withFacts.stderr);
     assert.ok(!withFacts.stdout.includes('"deny"'), `facts written after the denial are accepted even though a tool result followed them: ${withFacts.stdout}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a successful tool result that prints the gate marker is not a denial, and a longer path is not the anchor of a shorter one', () => {
+  tally(test('a successful tool result that prints the gate marker is not a denial, and a longer path is not the anchor of a shorter one', () => {
     const transcript = path.join(stateDir, 'cc-spoof-transcript.jsonl');
     const session = 'facts-cc-spoof-' + Date.now();
     const target = path.join(stateDir, 'src', 'ledger.js');
@@ -820,9 +821,9 @@ function runTests() {
     const out = JSON.parse(retry.stdout);
     assert.strictEqual(out.hookSpecificOutput.permissionDecision, 'deny', `the anchor is the real denial, whose following text presents nothing: ${retry.stdout}`);
     assert.ok(out.hookSpecificOutput.permissionDecisionReason.includes(target), retry.stdout);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a destructive retry is anchored on the destructive gate, not on a file denial that mentions a rollback', () => {
+  tally(test('a destructive retry is anchored on the destructive gate, not on a file denial that mentions a rollback', () => {
     const transcript = path.join(stateDir, 'cc-destructive-anchor.jsonl');
     const session = 'facts-cc-destructive-' + Date.now();
     const call = { tool_name: 'Bash', tool_input: { command: 'rm -rf /tmp/egc-facts-anchor-target' }, transcript_path: transcript };
@@ -843,9 +844,9 @@ function runTests() {
     const retry = runBashHook(call, { EGC_SESSION_ID: session });
     assert.strictEqual(retry.code, 0, retry.stderr);
     assert.ok(!retry.stdout.includes('"deny"'), `the facts after the destructive denial count even though a file denial mentioning rollback.js came later: ${retry.stdout}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a transcript link that points outside the allowed roots is not read', () => {
+  tally(test('a transcript link that points outside the allowed roots is not read', () => {
     let outside;
     try {
       outside = fs.mkdtempSync('/var/tmp/egc-gateguard-');
@@ -870,18 +871,18 @@ function runTests() {
     } finally {
       fs.rmSync(outside, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('a retry without a readable transcript keeps the identical-retry rule', () => {
+  tally(test('a retry without a readable transcript keeps the identical-retry rule', () => {
     const session = 'facts-none-' + Date.now();
     const call = { tool_name: 'Bash', tool_input: { command: 'rm -rf /tmp/egc-facts-none' }, transcript_path: path.join(stateDir, 'missing.jsonl') };
     runBashHook(call, { EGC_SESSION_ID: session });
     const retry = runBashHook(call, { EGC_SESSION_ID: session });
     assert.strictEqual(retry.code, 0, retry.stderr);
     assert.ok(!retry.stdout.includes('"deny"'), retry.stdout);
-  })) passed++; else failed++;
+  }));
 
-  if (test('routine Bash denials include Bash hook disable id', () => {
+  tally(test('routine Bash denials include Bash hook disable id', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'npm test' }
@@ -895,11 +896,11 @@ function runTests() {
       'routine Bash denial should show the Bash hook ID');
     assert.ok(!reason.includes('pre:edit-write:gateguard-fact-force'),
       'routine Bash denial should not show the Edit/Write hook ID as the targeted disable');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 15: destructive Bash denials do not advertise the recovery escape hatch ---
   clearState();
-  if (test('destructive Bash denials omit recovery escape hatch', () => {
+  tally(test('destructive Bash denials omit recovery escape hatch', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'rm -rf /tmp/demo' }
@@ -911,11 +912,11 @@ function runTests() {
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('Destructive command detected'));
     assert.ok(!output.hookSpecificOutput.permissionDecisionReason.includes('ECC_GATEGUARD=off'),
       'destructive gate should not advertise disabling GateGuard');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 16: MultiEdit gates first unchecked file ---
   clearState();
-  if (test('denies first MultiEdit with unchecked file', () => {
+  tally(test('denies first MultiEdit with unchecked file', () => {
     const input = {
       tool_name: 'MultiEdit',
       tool_input: {
@@ -932,10 +933,10 @@ function runTests() {
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('Fact-Forcing Gate'));
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('/src/multi-a.js'));
-  })) passed++; else failed++;
+  }));
 
   // --- Test 11: MultiEdit allows after all files gated ---
-  if (test('allows MultiEdit after all files gated', () => {
+  tally(test('allows MultiEdit after all files gated', () => {
     // multi-a.js was gated in test 10; gate multi-b.js
     const input2 = {
       tool_name: 'MultiEdit',
@@ -960,11 +961,11 @@ function runTests() {
       assert.notStrictEqual(output3.hookSpecificOutput.permissionDecision, 'deny',
         'should allow MultiEdit after all files gated');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 12: hot-path reads do not rewrite state within heartbeat ---
   clearState();
-  if (test('does not rewrite state on hot-path reads within heartbeat window', () => {
+  tally(test('does not rewrite state on hot-path reads within heartbeat window', () => {
     const recentlyActive = Date.now() - (READ_HEARTBEAT_MS - 10 * 1000);
     writeState({
       checked: ['/src/keep-alive.js'],
@@ -990,11 +991,11 @@ function runTests() {
     const after = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
     assert.strictEqual(after.last_active, recentlyActive, 'read should not touch last_active within heartbeat');
     assert.strictEqual(afterStat.mtimeMs, beforeStat.mtimeMs, 'read should not rewrite the state file within heartbeat');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 13: reads refresh stale active state after heartbeat ---
   clearState();
-  if (test('refreshes last_active after heartbeat elapses', () => {
+  tally(test('refreshes last_active after heartbeat elapses', () => {
     const staleButActive = Date.now() - (READ_HEARTBEAT_MS + 5 * 1000);
     writeState({
       checked: ['/src/keep-alive.js'],
@@ -1014,11 +1015,11 @@ function runTests() {
 
     const after = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
     assert.ok(after.last_active > staleButActive, 'read should refresh last_active after heartbeat');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 14: pruning preserves routine bash gate marker ---
   clearState();
-  if (test('preserves __bash_session__ when pruning oversized state', () => {
+  tally(test('preserves __bash_session__ when pruning oversized state', () => {
     const checked = ['__bash_session__'];
     for (let i = 0; i < 80; i++) checked.push(`__destructive__${i}`);
     for (let i = 0; i < 700; i++) checked.push(`/src/file-${i}.js`);
@@ -1043,11 +1044,11 @@ function runTests() {
     const persisted = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
     assert.ok(persisted.checked.includes('__bash_session__'), 'pruned state should retain __bash_session__');
     assert.ok(persisted.checked.length <= 500, 'pruned state should still honor the checked-entry cap');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 15: raw input session IDs provide stable retry state without env vars ---
   clearState();
-  if (test('uses raw input session_id when hook env vars are missing', () => {
+  tally(test('uses raw input session_id when hook env vars are missing', () => {
     const input = {
       session_id: 'raw-session-1234',
       tool_name: 'Bash',
@@ -1072,11 +1073,11 @@ function runTests() {
     } else {
       assert.strictEqual(secondOutput.tool_name, 'Bash');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 16: allows Gemini settings edits so the hook can be disabled safely ---
   clearState();
-  if (test('allows edits to .gemini/settings.json without gating', () => {
+  tally(test('allows edits to .gemini/settings.json without gating', () => {
     const input = {
       tool_name: 'Edit',
       tool_input: { file_path: '/workspace/app/.gemini/settings.json', old_string: '{}', new_string: '{"hooks":[]}' }
@@ -1090,11 +1091,11 @@ function runTests() {
     } else {
       assert.strictEqual(output.tool_name, 'Edit');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 16b: the Claude Code settings file is exempt the same way, the rest of .claude/ is not ---
   clearState();
-  if (test('allows edits to .claude/settings.local.json without gating, and still gates .claude/CLAUDE.md', () => {
+  tally(test('allows edits to .claude/settings.local.json without gating, and still gates .claude/CLAUDE.md', () => {
     const settings = runHook({
       tool_name: 'Edit',
       tool_input: { file_path: '/workspace/app/.claude/settings.local.json', old_string: '{}', new_string: '{"hooks":[]}' }
@@ -1111,11 +1112,11 @@ function runTests() {
     assert.ok(memoryOutput, 'should produce valid JSON output');
     const gated = memoryOutput.hookSpecificOutput?.permissionDecision === 'deny' || memoryOutput.decision === 'block';
     assert.ok(gated, `a first write under .claude/ is still gated: ${memory.stdout.slice(0, 200)}`);
-  })) passed++; else failed++;
+  }));
 
   // --- Test 17: allows read-only git introspection without first-bash gating ---
   clearState();
-  if (test('allows read-only git status without first-bash gating', () => {
+  tally(test('allows read-only git status without first-bash gating', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'git status --short' }
@@ -1129,11 +1130,11 @@ function runTests() {
     } else {
       assert.strictEqual(output.tool_name, 'Bash');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 18: rejects mutating git commands that only share a prefix ---
   clearState();
-  if (test('does not treat mutating git commands as read-only introspection', () => {
+  tally(test('does not treat mutating git commands as read-only introspection', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'git status && rm -rf /tmp/demo' }
@@ -1143,11 +1144,11 @@ function runTests() {
     assert.ok(output, 'should produce valid JSON output');
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('current instruction'));
-  })) passed++; else failed++;
+  }));
 
   // --- Test 19: long raw session IDs hash instead of collapsing to project fallback ---
   clearState();
-  if (test('uses a stable hash for long raw session ids', () => {
+  tally(test('uses a stable hash for long raw session ids', () => {
     const longSessionId = `session-${'x'.repeat(120)}`;
     const input = {
       session_id: longSessionId,
@@ -1177,21 +1178,21 @@ function runTests() {
     } else {
       assert.strictEqual(secondOutput.tool_name, 'Bash');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 20: malformed JSON passes through unchanged ---
   clearState();
-  if (test('passes malformed JSON input through unchanged', () => {
+  tally(test('passes malformed JSON input through unchanged', () => {
     const rawInput = '{ not valid json';
     const result = runHook(rawInput);
 
     assert.strictEqual(result.code, 0, 'exit code should be 0');
     assert.strictEqual(result.stdout, rawInput, 'malformed JSON should pass through unchanged');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 21: read-only git allowlist covers supported subcommands ---
   clearState();
-  if (test('allows read-only git introspection subcommands without first-bash gating', () => {
+  tally(test('allows read-only git introspection subcommands without first-bash gating', () => {
     const commands = [
       'git status --porcelain --branch',
       'git diff',
@@ -1216,11 +1217,11 @@ function runTests() {
         assert.strictEqual(output.tool_name, 'Bash', `${command} should pass through`);
       }
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 22: unsupported git commands still flow through routine Bash gate ---
   clearState();
-  if (test('gates non-allowlisted git commands as routine Bash', () => {
+  tally(test('gates non-allowlisted git commands as routine Bash', () => {
     const result = runBashHook({
       tool_name: 'Bash',
       tool_input: { command: 'git remote -v' }
@@ -1229,11 +1230,11 @@ function runTests() {
     assert.ok(output, 'should produce JSON output');
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('current user request'));
-  })) passed++; else failed++;
+  }));
 
   // --- Test 23: module-load pruning removes old state files only ---
   clearState();
-  if (test('prunes stale state files while keeping fresh state files', () => {
+  tally(test('prunes stale state files while keeping fresh state files', () => {
     const staleFile = path.join(stateDir, 'state-stale-session.json');
     const freshFile = path.join(stateDir, 'state-fresh-session.json');
     fs.writeFileSync(staleFile, JSON.stringify({ checked: [], last_active: Date.now() }), 'utf8');
@@ -1251,11 +1252,11 @@ function runTests() {
 
     assert.ok(!fs.existsSync(staleFile), 'stale state file should be pruned at module load');
     assert.ok(fs.existsSync(freshFile), 'fresh state file should not be pruned');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 24: transcript path fallback provides a stable session key ---
   clearState();
-  if (test('uses transcript_path fallback when session ids are absent', () => {
+  tally(test('uses transcript_path fallback when session ids are absent', () => {
     const input = {
       transcript_path: path.join(stateDir, 'session.jsonl'),
       tool_name: 'Bash',
@@ -1286,11 +1287,11 @@ function runTests() {
     } else {
       assert.strictEqual(secondOutput.tool_name, 'Bash');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 25: project directory fallback provides a stable session key ---
   clearState();
-  if (test('uses project directory fallback when no session or transcript id exists', () => {
+  tally(test('uses project directory fallback when no session or transcript id exists', () => {
     const input = {
       tool_name: 'Bash',
       tool_input: { command: 'pwd' }
@@ -1318,11 +1319,11 @@ function runTests() {
     } else {
       assert.strictEqual(secondOutput.tool_name, 'Bash');
     }
-  })) passed++; else failed++;
+  }));
 
   // --- Test 26: direct run() accepts object input and default fields ---
   clearState();
-  if (test('direct run handles object input and missing optional fields', () => {
+  tally(test('direct run handles object input and missing optional fields', () => {
     const hook = loadDirectHook();
 
     const readInput = { tool_name: 'Read', tool_input: { file_path: '/src/app.js' } };
@@ -1339,11 +1340,11 @@ function runTests() {
     const bashOutput = JSON.parse(bashResult.stdout);
     assert.strictEqual(bashOutput.hookSpecificOutput.permissionDecision, 'deny',
       'missing Bash command should still use routine Bash gate');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 27: bidi controls are stripped from file paths ---
   clearState();
-  if (test('sanitizes bidi override characters in gated file paths', () => {
+  tally(test('sanitizes bidi override characters in gated file paths', () => {
     const bidiOverride = String.fromCharCode(0x202e);
     const input = {
       tool_name: 'Edit',
@@ -1356,11 +1357,11 @@ function runTests() {
     const reason = output.hookSpecificOutput.permissionDecisionReason;
     assert.ok(!reason.includes(bidiOverride), 'bidi override must not appear in denial reason');
     assert.ok(reason.includes('evil.js'), 'sanitized path should retain visible filename text');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 28: saveState preserves concurrent disk updates ---
   clearState();
-  if (test('merges state written by another process during save', () => {
+  tally(test('merges state written by another process during save', () => {
     const hook = loadDirectHook();
     const originalMkdirSync = fs.mkdirSync;
     let injected = false;
@@ -1391,11 +1392,11 @@ function runTests() {
     const persisted = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
     assert.ok(persisted.checked.includes('/src/concurrent.js'), 'concurrent disk entry should be preserved');
     assert.ok(persisted.checked.includes('/src/new-edit.js'), 'new in-memory entry should be persisted');
-  })) passed++; else failed++;
+  }));
 
   // --- Test 29: stale temp files from interrupted writes are pruned ---
   clearState();
-  if (test('prunes stale state temp files at module load', () => {
+  tally(test('prunes stale state temp files at module load', () => {
     fs.mkdirSync(stateDir, { recursive: true });
     const staleTmp = path.join(stateDir, `${path.basename(stateFile)}.tmp.1234.abcd`);
     const freshState = path.join(stateDir, 'state-fresh-session.json');
@@ -1408,13 +1409,13 @@ function runTests() {
 
     assert.ok(!fs.existsSync(staleTmp), 'stale temp state file should be pruned');
     assert.ok(fs.existsSync(freshState), 'fresh state file should remain');
-  })) passed++; else failed++;
+  }));
 
   // --- Direct CLI entrypoint (Claude Code invokes the script directly,
   // not via run-with-flags.js) ---
 
   clearState();
-  if (test('direct invocation denies first Edit per file with fact-forcing message', () => {
+  tally(test('direct invocation denies first Edit per file with fact-forcing message', () => {
     const input = {
       tool_name: 'Edit',
       tool_input: { file_path: '/src/direct-invoke.js', old_string: 'foo', new_string: 'bar' }
@@ -1425,10 +1426,10 @@ function runTests() {
     assert.ok(output, 'should produce JSON output');
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('Fact-Forcing Gate'));
-  })) passed++; else failed++;
+  }));
 
   clearState();
-  if (test('direct invocation allows the second Edit on the same file after being checked', () => {
+  tally(test('direct invocation allows the second Edit on the same file after being checked', () => {
     const input = {
       tool_name: 'Edit',
       tool_input: { file_path: '/src/direct-invoke-2.js', old_string: 'foo', new_string: 'bar' }
@@ -1439,21 +1440,21 @@ function runTests() {
     const output = parseOutput(result.stdout);
     assert.ok(!output.hookSpecificOutput, 'second call should pass raw input through, not a deny decision');
     assert.deepStrictEqual(output, input, 'raw input should be echoed unchanged');
-  })) passed++; else failed++;
+  }));
 
   clearState();
-  if (test('direct invocation passes through non-gated tools unchanged', () => {
+  tally(test('direct invocation passes through non-gated tools unchanged', () => {
     const input = { tool_name: 'Read', tool_input: { file_path: '/src/direct-invoke.js' } };
     const result = runDirectHook(input);
     assert.strictEqual(result.code, 0);
     assert.deepStrictEqual(JSON.parse(result.stdout), input);
-  })) passed++; else failed++;
+  }));
 
   // --- Codex CLI apply_patch (freeform patch text, not a JSON object with
   // file_path like Claude's Edit/Write) ---
 
   clearState();
-  if (test('denies first apply_patch call and names the touched file', () => {
+  tally(test('denies first apply_patch call and names the touched file', () => {
     const patch = [
       '*** Begin Patch',
       '*** Update File: src/codex-patch-target.js',
@@ -1470,10 +1471,10 @@ function runTests() {
     assert.ok(output, 'should produce JSON output');
     assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
     assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('src/codex-patch-target.js'));
-  })) passed++; else failed++;
+  }));
 
   clearState();
-  if (test('allows a second apply_patch call touching an already-checked file', () => {
+  tally(test('allows a second apply_patch call touching an already-checked file', () => {
     const patch = [
       '*** Begin Patch',
       '*** Update File: src/codex-patch-target-2.js',
@@ -1489,10 +1490,10 @@ function runTests() {
     assert.strictEqual(result.code, 0);
     const output = parseOutput(result.stdout);
     assert.ok(!output.hookSpecificOutput, 'second call should pass raw input through, not a deny decision');
-  })) passed++; else failed++;
+  }));
 
   clearState();
-  if (test('denies each new file in a multi-file apply_patch call one at a time', () => {
+  tally(test('denies each new file in a multi-file apply_patch call one at a time', () => {
     const patch = [
       '*** Begin Patch',
       '*** Add File: src/codex-patch-new-a.js',
@@ -1521,18 +1522,18 @@ function runTests() {
     const fourthResult = runDirectHook(input);
     const fourth = parseOutput(fourthResult.stdout);
     assert.ok(!fourth || !fourth.hookSpecificOutput, 'all three files checked, call should pass through');
-  })) passed++; else failed++;
+  }));
 
   clearState();
-  if (test('allows apply_patch input that cannot be parsed as a patch (fails open)', () => {
+  tally(test('allows apply_patch input that cannot be parsed as a patch (fails open)', () => {
     const input = { session_id: TEST_SESSION_ID, tool_name: 'apply_patch', tool_input: 'not a real patch, no file markers' };
     const result = runDirectHook(input);
     assert.strictEqual(result.code, 0);
     assert.deepStrictEqual(JSON.parse(result.stdout), input);
-  })) passed++; else failed++;
+  }));
 
   clearState();
-  if (test('apply_patch on Claude settings path is never gated', () => {
+  tally(test('apply_patch on Claude settings path is never gated', () => {
     const patch = [
       '*** Begin Patch',
       '*** Update File: .gemini/settings.json',
@@ -1546,10 +1547,10 @@ function runTests() {
     const result = runDirectHook(input);
     assert.strictEqual(result.code, 0);
     assert.deepStrictEqual(JSON.parse(result.stdout), input);
-  })) passed++; else failed++;
+  }));
 
   clearState();
-  if (test('EGC-539: stale-file pruning is skipped when GateGuard is disabled (module-load-time scan)', () => {
+  tally(test('EGC-539: stale-file pruning is skipped when GateGuard is disabled (module-load-time scan)', () => {
     // Module-load-time pruneStaleFiles() used to run unconditionally,
     // regardless of isGateGuardDisabled() -- so a disabled GateGuard still
     // paid the sync readdir/stat/unlink cost, and the fix must not remove
@@ -1568,10 +1569,10 @@ function runTests() {
     );
 
     assert.ok(fs.existsSync(staleFile), 'a disabled GateGuard must not run the module-load-time pruning scan at all');
-  })) passed++; else failed++;
+  }));
 
   clearState();
-  if (test('EGC-539: stale-file pruning still runs normally when GateGuard is enabled', () => {
+  tally(test('EGC-539: stale-file pruning still runs normally when GateGuard is enabled', () => {
     const staleFile = path.join(stateDir, 'state-stale-enabled-test.json');
     fs.writeFileSync(staleFile, JSON.stringify({ checked: [], last_active: 0 }), 'utf8');
     const oldTime = (Date.now() - (SESSION_TIMEOUT_MS * 3)) / 1000;
@@ -1580,7 +1581,7 @@ function runTests() {
     runDirectHook({ tool_name: 'Edit', tool_input: { file_path: '/src/gateguard-enabled-scan.js', old_string: 'a', new_string: 'b' } });
 
     assert.ok(!fs.existsSync(staleFile), 'an enabled GateGuard must still prune files older than 2x SESSION_TIMEOUT_MS');
-  })) passed++; else failed++;
+  }));
 
   // Cleanup only the temp directory created by this test file.
   try {

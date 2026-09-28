@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from llm.core.retry import call_with_retries
 from llm.core.interface import (
     AuthenticationError,
     ContextLengthError,
@@ -112,6 +113,7 @@ class OllamaProvider(LLMProvider):
             # of silently downgrading to a blocking call, which would mislead
             # callers into thinking they are consuming a stream.
             raise NotImplementedError("streaming not supported")
+        import urllib.error
         import urllib.request
         import json
 
@@ -125,8 +127,17 @@ class OllamaProvider(LLMProvider):
                 url, data=data, headers={"Content-Type": "application/json"}
             )
 
-            with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT) as response:
-                result = json.loads(response.read().decode("utf-8"))
+            def post_chat() -> dict:
+                try:
+                    with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT) as response:
+                        return json.loads(response.read().decode("utf-8"))
+                except urllib.error.HTTPError as error:
+                    # The error holds the response open; it is closed before
+                    # a retry, keeping its code and headers.
+                    error.close()
+                    raise
+
+            result = call_with_retries(post_chat)
 
             message = result.get("message") or {}
             prompt_tokens = result.get("prompt_eval_count", 0)

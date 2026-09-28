@@ -69,28 +69,29 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('loads real project install manifests', () => {
+  tally(test('loads real project install manifests', () => {
     const manifests = loadInstallManifests();
     assert.ok(manifests.modules.length >= 1, 'Should load modules');
     assert.ok(Object.keys(manifests.profiles).length >= 1, 'Should load profiles');
     assert.ok(manifests.components.length >= 1, 'Should load components');
-  })) passed++; else failed++;
+  }));
 
-  if (test('lists install profiles from the real project', () => {
+  tally(test('lists install profiles from the real project', () => {
     const profiles = listInstallProfiles();
     assert.ok(profiles.some(profile => profile.id === 'minimal'), 'Should include minimal profile');
     assert.ok(profiles.some(profile => profile.id === 'core'), 'Should include core profile');
     assert.ok(profiles.some(profile => profile.id === 'full'), 'Should include full profile');
-  })) passed++; else failed++;
+  }));
 
-  if (test('lists install modules from the real project', () => {
+  tally(test('lists install modules from the real project', () => {
     const modules = listInstallModules();
     assert.ok(modules.some(module => module.id === 'rules-core'), 'Should include rules-core');
     assert.ok(modules.some(module => module.id === 'orchestration'), 'Should include orchestration');
-  })) passed++; else failed++;
+  }));
 
-  if (test('lists install components from the real project', () => {
+  tally(test('lists install components from the real project', () => {
     const components = listInstallComponents();
     assert.ok(components.some(component => component.id === 'lang:typescript'),
       'Should include lang:typescript');
@@ -98,9 +99,9 @@ function runTests() {
       'Should include lang:c');
     assert.ok(components.some(component => component.id === 'capability:security'),
       'Should include capability:security');
-  })) passed++; else failed++;
+  }));
 
-  if (test('gets install component details and validates component IDs', () => {
+  tally(test('gets install component details and validates component IDs', () => {
     const component = getInstallComponent(' lang:typescript ');
 
     assert.strictEqual(component.id, 'lang:typescript');
@@ -119,9 +120,9 @@ function runTests() {
       () => getInstallComponent('lang:missing'),
       /Unknown install component: lang:missing/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('validates install component filters', () => {
+  tally(test('validates install component filters', () => {
     const claudeComponents = listInstallComponents({ family: 'capability', target: 'egc' });
     assert.ok(claudeComponents.length > 0, 'Should list Gemini capability components');
     assert.ok(claudeComponents.every(component => component.family === 'capability'));
@@ -135,17 +136,17 @@ function runTests() {
       () => listInstallComponents({ target: 'unknown-target' }),
       /Unknown install target: unknown-target/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('labels continuous-learning as a legacy v1 install surface', () => {
+  tally(test('labels continuous-learning as a legacy v1 install surface', () => {
     const components = listInstallComponents({ family: 'skill' });
     const component = components.find(entry => entry.id === 'skill:continuous-learning');
     assert.ok(component, 'Should include skill:continuous-learning');
     assert.match(component.description, /legacy/i, 'Should label continuous-learning as legacy');
     assert.match(component.description, /continuous-learning-v2/, 'Should point new installs to continuous-learning-v2');
-  })) passed++; else failed++;
+  }));
 
-  if (test('lists supported legacy compatibility languages', () => {
+  tally(test('lists supported legacy compatibility languages', () => {
     const languages = listLegacyCompatibilityLanguages();
     assert.ok(languages.includes('typescript'));
     assert.ok(languages.includes('python'));
@@ -156,9 +157,9 @@ function runTests() {
     assert.ok(languages.includes('cpp'));
     assert.ok(languages.includes('c'));
     assert.ok(languages.includes('csharp'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves a real project profile with target-specific skips', () => {
+  tally(test('resolves a real project profile with target-specific skips', () => {
     const projectRoot = '/workspace/app';
     const plan = resolveInstallPlan({ profileId: 'developer', target: 'cursor', projectRoot });
     assert.ok(plan.selectedModuleIds.includes('rules-core'), 'Should keep rules-core');
@@ -199,9 +200,9 @@ function runTests() {
       )),
       'Should produce Cursor .mdc rules while preferring native Cursor platform copies over duplicate rules-core files'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves Cline core profile to the library modules a project can hold', () => {
+  tally(test('resolves Cline core profile to the library modules a project can hold', () => {
     const projectRoot = '/workspace/app';
     const plan = resolveInstallPlan({
       profileId: 'core',
@@ -231,9 +232,9 @@ function runTests() {
       )),
       'Should materialize Cline rules as flat namespaced files'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves antigravity profiles while skipping only unsupported modules', () => {
+  tally(test('resolves antigravity profiles while skipping only unsupported modules', () => {
     const projectRoot = '/workspace/app';
     const plan = resolveInstallPlan({ profileId: 'core', target: 'antigravity', projectRoot });
 
@@ -246,9 +247,9 @@ function runTests() {
     assert.ok(!plan.skippedModuleIds.includes('workflow-quality'));
     assert.strictEqual(plan.targetAdapterId, 'antigravity-project');
     assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.agents'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves minimal profile without the hook runtime', () => {
+  tally(test('resolves minimal profile without the hook runtime', () => {
     const plan = resolveInstallPlan({
       profileId: 'minimal',
       target: 'egc',
@@ -262,15 +263,15 @@ function runTests() {
     assert.ok(!plan.selectedModuleIds.includes('hooks-runtime'),
       'minimal profile should not install hooks-runtime');
     assert.ok(plan.operations.length > 0, 'Should include install operations');
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves explicit modules with dependency expansion, and skills modules stand on their own', () => {
+  tally(test('resolves explicit modules with dependency expansion, and skills modules stand on their own', () => {
     const plan = resolveInstallPlan({ moduleIds: ['security'] });
     assert.deepStrictEqual(plan.selectedModuleIds, ['workflow-quality', 'security'],
       'security pulls the workflow-quality skills it builds on and nothing else');
-  })) passed++; else failed++;
+  }));
 
-  if (test('validates explicit module IDs against the real manifest catalog', () => {
+  tally(test('validates explicit module IDs against the real manifest catalog', () => {
     const moduleIds = validateInstallModuleIds(['security', 'security', 'platform-configs']);
     assert.deepStrictEqual(moduleIds, ['security', 'platform-configs']);
     assert.throws(
@@ -281,9 +282,9 @@ function runTests() {
       () => validateInstallModuleIds(['ghost-one', 'ghost-two']),
       /Unknown install modules: ghost-one, ghost-two/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves legacy compatibility selections into manifest module IDs', () => {
+  tally(test('resolves legacy compatibility selections into manifest module IDs', () => {
     const selection = resolveLegacyCompatibilitySelection({
       target: 'cursor',
       legacyLanguages: ['typescript', 'go', 'golang'],
@@ -297,9 +298,9 @@ function runTests() {
     assert.ok(selection.moduleIds.includes('platform-configs'));
     assert.ok(selection.moduleIds.includes('workflow-quality'));
     assert.ok(selection.moduleIds.includes('framework-language'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves rust legacy compatibility into framework-language module', () => {
+  tally(test('resolves rust legacy compatibility into framework-language module', () => {
     const selection = resolveLegacyCompatibilitySelection({
       target: 'cursor',
       legacyLanguages: ['rust'],
@@ -308,9 +309,9 @@ function runTests() {
     assert.ok(selection.moduleIds.includes('rules-core'));
     assert.ok(selection.moduleIds.includes('framework-language'),
       'rust should resolve to framework-language module');
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves cpp legacy compatibility into framework-language module', () => {
+  tally(test('resolves cpp legacy compatibility into framework-language module', () => {
     const selection = resolveLegacyCompatibilitySelection({
       target: 'cursor',
       legacyLanguages: ['cpp'],
@@ -319,9 +320,9 @@ function runTests() {
     assert.ok(selection.moduleIds.includes('rules-core'));
     assert.ok(selection.moduleIds.includes('framework-language'),
       'cpp should resolve to framework-language module');
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves c legacy compatibility into framework-language module', () => {
+  tally(test('resolves c legacy compatibility into framework-language module', () => {
     const selection = resolveLegacyCompatibilitySelection({
       target: 'cursor',
       legacyLanguages: ['c'],
@@ -330,9 +331,9 @@ function runTests() {
     assert.ok(selection.moduleIds.includes('rules-core'));
     assert.ok(selection.moduleIds.includes('framework-language'),
       'c should resolve to framework-language module');
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves csharp legacy compatibility into framework-language module', () => {
+  tally(test('resolves csharp legacy compatibility into framework-language module', () => {
     const selection = resolveLegacyCompatibilitySelection({
       target: 'cursor',
       legacyLanguages: ['csharp'],
@@ -341,18 +342,18 @@ function runTests() {
     assert.ok(selection.moduleIds.includes('rules-core'));
     assert.ok(selection.moduleIds.includes('framework-language'),
       'csharp should resolve to framework-language module');
-  })) passed++; else failed++;
+  }));
 
-  if (test('keeps antigravity legacy compatibility selections target-safe', () => {
+  tally(test('keeps antigravity legacy compatibility selections target-safe', () => {
     const selection = resolveLegacyCompatibilitySelection({
       target: 'antigravity',
       legacyLanguages: ['typescript'],
     });
 
     assert.deepStrictEqual(selection.moduleIds, ['rules-core', 'agents-core', 'commands-core']);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects unknown legacy compatibility languages', () => {
+  tally(test('rejects unknown legacy compatibility languages', () => {
     assert.throws(
       () => resolveLegacyCompatibilitySelection({
         target: 'cursor',
@@ -379,9 +380,9 @@ function runTests() {
       }),
       /Unknown legacy languages: brainfuck, whitespace/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves included and excluded user-facing components', () => {
+  tally(test('resolves included and excluded user-facing components', () => {
     const plan = resolveInstallPlan({
       profileId: 'core',
       includeComponentIds: ['capability:security'],
@@ -395,9 +396,9 @@ function runTests() {
     assert.ok(!plan.selectedModuleIds.includes('orchestration'), 'Should exclude modules from excluded components');
     assert.ok(plan.excludedModuleIds.includes('orchestration'),
       'Should report modules removed by excluded components');
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when a selected component depends on an excluded component module', () => {
+  tally(test('fails when a selected component depends on an excluded component module', () => {
     assert.throws(
       () => resolveInstallPlan({
         includeComponentIds: ['capability:social'],
@@ -405,23 +406,23 @@ function runTests() {
       }),
       /depends on excluded module business-content/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('throws on unknown install profile', () => {
+  tally(test('throws on unknown install profile', () => {
     assert.throws(
       () => resolveInstallPlan({ profileId: 'ghost-profile' }),
       /Unknown install profile/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('throws on unknown install target', () => {
+  tally(test('throws on unknown install target', () => {
     assert.throws(
       () => resolveInstallPlan({ profileId: 'core', target: 'not-a-target' }),
       /Unknown install target/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects empty, unknown, and fully excluded install selections', () => {
+  tally(test('rejects empty, unknown, and fully excluded install selections', () => {
     const repoRoot = createTestRepo();
     try {
       writeManifestSet(repoRoot, {
@@ -474,9 +475,9 @@ function runTests() {
     } finally {
       cleanupTestRepo(repoRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('validates projectRoot and homeDir option types before adapter planning', () => {
+  tally(test('validates projectRoot and homeDir option types before adapter planning', () => {
     assert.throws(
       () => resolveInstallPlan({ profileId: 'core', target: 'cursor', projectRoot: 42 }),
       /projectRoot must be a non-empty string when provided/
@@ -485,9 +486,9 @@ function runTests() {
       () => resolveInstallPlan({ profileId: 'core', target: 'egc', homeDir: {} }),
       /homeDir must be a non-empty string when provided/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('skips a requested module when its dependency chain does not support the target', () => {
+  tally(test('skips a requested module when its dependency chain does not support the target', () => {
     const repoRoot = createTestRepo();
     try {
       writeJson(path.join(repoRoot, 'manifests', 'install-modules.json'), {
@@ -530,9 +531,9 @@ function runTests() {
     } finally {
       cleanupTestRepo(repoRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects missing, malformed, and unsupported manifest fixtures', () => {
+  tally(test('rejects missing, malformed, and unsupported manifest fixtures', () => {
     const repoRoot = createTestRepo();
     try {
       assert.throws(
@@ -616,9 +617,9 @@ function runTests() {
     } finally {
       cleanupTestRepo(repoRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails fast when install manifest module targets is not an array', () => {
+  tally(test('fails fast when install manifest module targets is not an array', () => {
     const repoRoot = createTestRepo();
     try {
       writeJson(path.join(repoRoot, 'manifests', 'install-modules.json'), {
@@ -651,9 +652,9 @@ function runTests() {
     } finally {
       cleanupTestRepo(repoRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('keeps antigravity modules selected while filtering unsupported source paths', () => {
+  tally(test('keeps antigravity modules selected while filtering unsupported source paths', () => {
     const repoRoot = createTestRepo();
     try {
       writeJson(path.join(repoRoot, 'manifests', 'install-modules.json'), {
@@ -698,9 +699,9 @@ function runTests() {
     } finally {
       cleanupTestRepo(repoRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects circular install dependencies', () => {
+  tally(test('detects circular install dependencies', () => {
     const repoRoot = createTestRepo();
     try {
       writeManifestSet(repoRoot, {
@@ -740,7 +741,7 @@ function runTests() {
     } finally {
       cleanupTestRepo(repoRoot);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

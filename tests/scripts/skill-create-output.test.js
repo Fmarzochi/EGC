@@ -50,43 +50,44 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // Constructor tests
   console.log('SkillCreateOutput constructor:');
 
-  if (test('creates instance with repo name', () => {
+  tally(test('creates instance with repo name', () => {
     const output = new SkillCreateOutput('test-repo');
     assert.strictEqual(output.repoName, 'test-repo');
     assert.strictEqual(output.width, 70); // default width
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts custom width option', () => {
+  tally(test('accepts custom width option', () => {
     const output = new SkillCreateOutput('repo', { width: 100 });
     assert.strictEqual(output.width, 100);
-  })) passed++; else failed++;
+  }));
 
   // header() tests
   console.log('\nheader():');
 
-  if (test('outputs header with repo name', () => {
+  tally(test('outputs header with repo name', () => {
     const output = new SkillCreateOutput('my-project');
     const logs = captureLog(() => output.header());
     const combined = logs.join('\n');
     assert.ok(combined.includes('Skill Creator'), 'Should include Skill Creator');
     assert.ok(combined.includes('my-project'), 'Should include repo name');
-  })) passed++; else failed++;
+  }));
 
-  if (test('header handles long repo names without crash', () => {
+  tally(test('header handles long repo names without crash', () => {
     const output = new SkillCreateOutput('a-very-long-repository-name-that-exceeds-normal-width-limits');
     // Should not throw RangeError
     const logs = captureLog(() => output.header());
     assert.ok(logs.length > 0, 'Should produce output');
-  })) passed++; else failed++;
+  }));
 
   // analysisResults() tests
   console.log('\nanalysisResults():');
 
-  if (test('displays analysis data', () => {
+  tally(test('displays analysis data', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.analysisResults({
       commits: 150,
@@ -98,12 +99,12 @@ function runTests() {
     assert.ok(combined.includes('150'), 'Should show commit count');
     assert.ok(combined.includes('Jan 2026'), 'Should show time range');
     assert.ok(combined.includes('200'), 'Should show file count');
-  })) passed++; else failed++;
+  }));
 
   // patterns() tests
   console.log('\npatterns():');
 
-  if (test('displays patterns with confidence bars', () => {
+  tally(test('displays patterns with confidence bars', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.patterns([
       { name: 'Test Pattern', trigger: 'when testing', confidence: 0.9, evidence: 'Tests exist' },
@@ -113,9 +114,9 @@ function runTests() {
     assert.ok(combined.includes('Test Pattern'), 'Should show pattern name');
     assert.ok(combined.includes('when testing'), 'Should show trigger');
     assert.ok(stripAnsi(combined).includes('90%'), 'Should show confidence as percentage');
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles patterns with missing confidence', () => {
+  tally(test('handles patterns with missing confidence', () => {
     const output = new SkillCreateOutput('repo');
     // Should default to 0.8 confidence
     const logs = captureLog(() => output.patterns([
@@ -123,12 +124,12 @@ function runTests() {
     ]));
     const combined = logs.join('\n');
     assert.ok(stripAnsi(combined).includes('80%'), 'Should default to 80% confidence');
-  })) passed++; else failed++;
+  }));
 
   // instincts() tests
   console.log('\ninstincts():');
 
-  if (test('displays instincts in a box', () => {
+  tally(test('displays instincts in a box', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.instincts([
       { name: 'instinct-1', confidence: 0.95 },
@@ -138,12 +139,12 @@ function runTests() {
     assert.ok(combined.includes('instinct-1'), 'Should show instinct name');
     assert.ok(combined.includes('95%'), 'Should show confidence percentage');
     assert.ok(combined.includes('70%'), 'Should show second confidence');
-  })) passed++; else failed++;
+  }));
 
   // output() tests
   console.log('\noutput():');
 
-  if (test('displays file paths', () => {
+  tally(test('displays file paths', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.output(
       '/path/to/SKILL.md',
@@ -153,34 +154,34 @@ function runTests() {
     assert.ok(combined.includes('SKILL.md'), 'Should show skill path');
     assert.ok(combined.includes('instincts.yaml'), 'Should show instincts path');
     assert.ok(combined.includes('Complete'), 'Should show completion message');
-  })) passed++; else failed++;
+  }));
 
   // nextSteps() tests
   console.log('\nnextSteps():');
 
-  if (test('displays next steps with commands', () => {
+  tally(test('displays next steps with commands', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.nextSteps());
     const combined = logs.join('\n');
     assert.ok(combined.includes('Next Steps'), 'Should show Next Steps title');
     assert.ok(combined.includes('/instinct-import'), 'Should show import command');
     assert.ok(combined.includes('/evolve'), 'Should show evolve command');
-  })) passed++; else failed++;
+  }));
 
   // footer() tests
   console.log('\nfooter():');
 
-  if (test('displays footer with attribution', () => {
+  tally(test('displays footer with attribution', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.footer());
     const combined = logs.join('\n');
     assert.ok(combined.includes('EGC'), 'Should include project name');
-  })) passed++; else failed++;
+  }));
 
   // progressBar edge cases (tests the clamp fix)
   console.log('\nprogressBar edge cases:');
 
-  if (test('does not crash with confidence > 1.0 (percent > 100)', () => {
+  tally(test('does not crash with confidence > 1.0 (percent > 100)', () => {
     const output = new SkillCreateOutput('repo');
     // confidence 1.5 => percent 150: previously crashed with RangeError
     const logs = captureLog(() => output.patterns([
@@ -188,47 +189,47 @@ function runTests() {
     ]));
     const combined = stripAnsi(logs.join('\n'));
     assert.ok(combined.includes('150%'), 'Should show 150%');
-  })) passed++; else failed++;
+  }));
 
-  if (test('renders 0% confidence bar without crash', () => {
+  tally(test('renders 0% confidence bar without crash', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.patterns([
       { name: 'Zero Confidence', trigger: 'never', confidence: 0.0, evidence: 'none' },
     ]));
     const combined = stripAnsi(logs.join('\n'));
     assert.ok(combined.includes('0%'), 'Should show 0%');
-  })) passed++; else failed++;
+  }));
 
-  if (test('renders 100% confidence bar without crash', () => {
+  tally(test('renders 100% confidence bar without crash', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.patterns([
       { name: 'Perfect', trigger: 'always', confidence: 1.0, evidence: 'certain' },
     ]));
     const combined = stripAnsi(logs.join('\n'));
     assert.ok(combined.includes('100%'), 'Should show 100%');
-  })) passed++; else failed++;
+  }));
 
   // Empty array edge cases
   console.log('\nempty array edge cases:');
 
-  if (test('patterns() with empty array produces header but no entries', () => {
+  tally(test('patterns() with empty array produces header but no entries', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.patterns([]));
     const combined = logs.join('\n');
     assert.ok(combined.includes('Patterns'), 'Should show header');
-  })) passed++; else failed++;
+  }));
 
-  if (test('instincts() with empty array produces box but no entries', () => {
+  tally(test('instincts() with empty array produces box but no entries', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.instincts([]));
     const combined = logs.join('\n');
     assert.ok(combined.includes('Instincts'), 'Should show box title');
-  })) passed++; else failed++;
+  }));
 
   // Box drawing crash fix (regression test)
   console.log('\nbox() crash prevention:');
 
-  if (test('box does not crash on title longer than width', () => {
+  tally(test('box does not crash on title longer than width', () => {
     const output = new SkillCreateOutput('repo', { width: 20 });
     // The instincts() method calls box() internally with a title
     // that could exceed the narrow width
@@ -236,21 +237,21 @@ function runTests() {
       { name: 'a-very-long-instinct-name', confidence: 0.9 },
     ]));
     assert.ok(logs.length > 0, 'Should produce output without crash');
-  })) passed++; else failed++;
+  }));
 
-  if (test('analysisResults does not crash with very narrow width', () => {
+  tally(test('analysisResults does not crash with very narrow width', () => {
     const output = new SkillCreateOutput('repo', { width: 10 });
     // box() is called with a title that exceeds width=10
     const logs = captureLog(() => output.analysisResults({
       commits: 1, timeRange: 'today', contributors: 1, files: 1,
     }));
     assert.ok(logs.length > 0, 'Should produce output without crash');
-  })) passed++; else failed++;
+  }));
 
   // box() alignment regression test
   console.log('\nbox() alignment:');
 
-  if (test('top, middle, and bottom lines have equal visual width', () => {
+  tally(test('top, middle, and bottom lines have equal visual width', () => {
     const output = new SkillCreateOutput('repo', { width: 40 });
     const logs = captureLog(() => output.instincts([
       { name: 'test', confidence: 0.9 },
@@ -269,12 +270,12 @@ function runTests() {
           `Line ${i} width ${w} should match first line width ${firstWidth}`);
       });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 27: box and progressBar edge cases ──
   console.log('\nbox() content overflow:');
 
-  if (test('box does not crash when content line exceeds width', () => {
+  tally(test('box does not crash when content line exceeds width', () => {
     const output = new SkillCreateOutput('repo', { width: 30 });
     // Force a very long instinct name that exceeds width
     const logs = captureLog(() => output.instincts([
@@ -282,9 +283,9 @@ function runTests() {
     ]));
     // Math.max(0, padding) should prevent RangeError
     assert.ok(logs.length > 0, 'Should produce output without RangeError');
-  })) passed++; else failed++;
+  }));
 
-  if (test('patterns renders negative confidence without crash', () => {
+  tally(test('patterns renders negative confidence without crash', () => {
     const output = new SkillCreateOutput('repo');
     // confidence -0.1 => percent -10: Math.max(0, ...) should clamp filled to 0
     const logs = captureLog(() => output.patterns([
@@ -292,34 +293,34 @@ function runTests() {
     ]));
     const combined = stripAnsi(logs.join('\n'));
     assert.ok(combined.includes('-10%'), 'Should show -10%');
-  })) passed++; else failed++;
+  }));
 
-  if (test('header does not crash with very long repo name', () => {
+  tally(test('header does not crash with very long repo name', () => {
     const longRepo = 'A'.repeat(100);
     const output = new SkillCreateOutput(longRepo);
     // Math.max(0, 55 - stripAnsi(subtitle).length) protects against negative repeat
     const logs = captureLog(() => output.header());
     assert.ok(logs.length > 0, 'Should produce output without crash');
-  })) passed++; else failed++;
+  }));
 
-  if (test('stripAnsi handles nested ANSI codes with multi-digit params', () => {
+  tally(test('stripAnsi handles nested ANSI codes with multi-digit params', () => {
     // Simulate bold + color + reset
     const ansiStr = '\x1b[1m\x1b[36mBold Cyan\x1b[0m\x1b[0m';
     const stripped = stripAnsi(ansiStr);
     assert.strictEqual(stripped, 'Bold Cyan', 'Should strip all nested ANSI sequences');
-  })) passed++; else failed++;
+  }));
 
-  if (test('footer produces output', () => {
+  tally(test('footer produces output', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.footer());
     const combined = stripAnsi(logs.join('\n'));
     assert.ok(combined.includes('Powered by'), 'Should include attribution text');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 34: header width alignment ──
   console.log('\nheader() width alignment (Round 34):');
 
-  if (test('header subtitle line matches border width', () => {
+  tally(test('header subtitle line matches border width', () => {
     const output = new SkillCreateOutput('test-repo');
     const logs = captureLog(() => output.header());
     const lines = logs.map(l => stripAnsi(l));
@@ -330,9 +331,9 @@ function runTests() {
     // Both lines should have the same visible width
     assert.strictEqual(subtitleLine.length, borderLine.length,
       `Subtitle width (${subtitleLine.length}) should match border width (${borderLine.length})`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('header all lines have consistent width for short repo name', () => {
+  tally(test('header all lines have consistent width for short repo name', () => {
     const output = new SkillCreateOutput('abc');
     const logs = captureLog(() => output.header());
     const lines = logs.map(l => stripAnsi(l)).filter(l => l.includes('║') || l.includes('╔') || l.includes('╚'));
@@ -343,9 +344,9 @@ function runTests() {
       assert.strictEqual(w, first,
         `Line ${i} width (${w}) should match first line (${first})`);
     });
-  })) passed++; else failed++;
+  }));
 
-  if (test('header subtitle has correct content area width of 64 chars', () => {
+  tally(test('header subtitle has correct content area width of 64 chars', () => {
     const output = new SkillCreateOutput('myrepo');
     const logs = captureLog(() => output.header());
     const lines = logs.map(l => stripAnsi(l));
@@ -354,9 +355,9 @@ function runTests() {
     // Content between ║ and ║ should be 64 chars (border is 66 total)
     assert.strictEqual(subtitleLine.length, 66,
       `Total subtitle line width should be 66, got ${subtitleLine.length}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('header subtitle line does not truncate with medium-length repo name', () => {
+  tally(test('header subtitle line does not truncate with medium-length repo name', () => {
     const output = new SkillCreateOutput('my-medium-repo-name');
     const logs = captureLog(() => output.header());
     const combined = logs.join('\n');
@@ -367,12 +368,12 @@ function runTests() {
     // Should still be 66 chars even with a longer name
     assert.strictEqual(subtitleLine.length, 66,
       `Subtitle line should be 66 chars, got ${subtitleLine.length}`);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 35: box() width accuracy ──
   console.log('\nbox() width accuracy (Round 35):');
 
-  if (test('box lines in instincts() match the default box width of 60', () => {
+  tally(test('box lines in instincts() match the default box width of 60', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.instincts([
       { name: 'test-instinct', confidence: 0.85 },
@@ -389,9 +390,9 @@ function runTests() {
       assert.strictEqual(w, 60,
         `Box line ${i} should be 60 chars wide, got ${w}`);
     });
-  })) passed++; else failed++;
+  }));
 
-  if (test('box lines with custom width match the requested width', () => {
+  tally(test('box lines with custom width match the requested width', () => {
     const output = new SkillCreateOutput('repo', { width: 40 });
     const logs = captureLog(() => output.instincts([
       { name: 'short', confidence: 0.9 },
@@ -410,9 +411,9 @@ function runTests() {
       assert.strictEqual(w, firstWidth,
         `Box line ${i} width ${w} should match first line ${firstWidth}`);
     });
-  })) passed++; else failed++;
+  }));
 
-  if (test('analysisResults box lines are all 60 chars wide', () => {
+  tally(test('analysisResults box lines are all 60 chars wide', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.analysisResults({
       commits: 50, timeRange: 'Jan 2026', contributors: 2, files: 100,
@@ -428,9 +429,9 @@ function runTests() {
       assert.strictEqual(w, 60,
         `Analysis box line ${i} should be 60 chars, got ${w}`);
     });
-  })) passed++; else failed++;
+  }));
 
-  if (test('nextSteps box lines are all 60 chars wide', () => {
+  tally(test('nextSteps box lines are all 60 chars wide', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.nextSteps());
     const combined = logs.join('\n');
@@ -444,12 +445,12 @@ function runTests() {
       assert.strictEqual(w, 60,
         `NextSteps box line ${i} should be 60 chars, got ${w}`);
     });
-  })) passed++; else failed++;
+  }));
 
   // ── Round 54: analysisResults with zero values ──
   console.log('\nanalysisResults zero values (Round 54):');
 
-  if (test('analysisResults handles zero values for all data fields', () => {
+  tally(test('analysisResults handles zero values for all data fields', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.analysisResults({
       commits: 0, timeRange: '', contributors: 0, files: 0,
@@ -463,23 +464,23 @@ function runTests() {
       return s.startsWith('\u256D') || s.startsWith('\u2502') || s.startsWith('\u2570');
     });
     assert.ok(boxLines.length >= 3, 'Should render a complete box');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 68: demo function export ──
   console.log('\ndemo export (Round 68):');
 
-  if (test('module exports demo function alongside SkillCreateOutput', () => {
+  tally(test('module exports demo function alongside SkillCreateOutput', () => {
     const mod = require('../../scripts/skill-create-output');
     assert.ok(mod.demo, 'Should export demo function');
     assert.strictEqual(typeof mod.demo, 'function', 'demo should be a function');
     assert.ok(mod.SkillCreateOutput, 'Should also export SkillCreateOutput');
     assert.strictEqual(typeof mod.SkillCreateOutput, 'function', 'SkillCreateOutput should be a constructor');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 85: patterns() confidence=0 uses ?? (not ||) ──
   console.log('\nRound 85: patterns() confidence=0 nullish coalescing:');
 
-  if (test('patterns() with confidence=0 shows 0%, not 80% (nullish coalescing fix)', () => {
+  tally(test('patterns() with confidence=0 shows 0%, not 80% (nullish coalescing fix)', () => {
     const output = new SkillCreateOutput('repo');
     const logs = captureLog(() => output.patterns([
       { name: 'Zero Confidence', trigger: 'never', confidence: 0, evidence: 'none' },
@@ -490,12 +491,12 @@ function runTests() {
     assert.ok(combined.includes('0%'), 'Should show 0% for zero confidence');
     assert.ok(!combined.includes('80%'),
       'Should NOT show 80%: confidence=0 is explicitly provided, not missing');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 87: analyzePhase() async method (untested) ──
   console.log('\nRound 87: analyzePhase() async method:');
 
-  if (test('analyzePhase completes without error and writes to stdout', () => {
+  tally(test('analyzePhase completes without error and writes to stdout', () => {
     const output = new SkillCreateOutput('test-repo');
     // analyzePhase is async and calls animateProgress which uses sleep() and
     // and cursorTo are undefined, but the code uses optional chaining (?.) to
@@ -515,7 +516,7 @@ function runTests() {
     }
     assert.ok(writes.length > 0, 'Should have written output via process.stdout.write');
     assert.ok(writes.some(w => w.includes('Analyzing')), 'Should include "Analyzing" label');
-  })) passed++; else failed++;
+  }));
 
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

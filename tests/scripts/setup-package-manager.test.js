@@ -50,131 +50,132 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // --help flag
   console.log('--help:');
 
-  if (test('shows help with --help flag', () => {
+  tally(test('shows help with --help flag', () => {
     const result = run(['--help']);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Package Manager Setup'));
     assert.ok(result.stdout.includes('--detect'));
     assert.ok(result.stdout.includes('--global'));
     assert.ok(result.stdout.includes('--project'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('shows help with -h flag', () => {
+  tally(test('shows help with -h flag', () => {
     const result = run(['-h']);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Package Manager Setup'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('shows help with no arguments', () => {
+  tally(test('shows help with no arguments', () => {
     const result = run([]);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Package Manager Setup'));
-  })) passed++; else failed++;
+  }));
 
   // --detect flag
   console.log('\n--detect:');
 
-  if (test('detects current package manager', () => {
+  tally(test('detects current package manager', () => {
     const result = run(['--detect']);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Package Manager Detection'));
     assert.ok(result.stdout.includes('Current selection'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('shows detection sources', () => {
+  tally(test('shows detection sources', () => {
     const result = run(['--detect']);
     assert.ok(result.stdout.includes('From package.json'));
     assert.ok(result.stdout.includes('From lock file'));
     assert.ok(result.stdout.includes('Environment var'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('shows available managers in detection output', () => {
+  tally(test('shows available managers in detection output', () => {
     const result = run(['--detect']);
     assert.ok(result.stdout.includes('npm'));
     assert.ok(result.stdout.includes('pnpm'));
     assert.ok(result.stdout.includes('yarn'));
     assert.ok(result.stdout.includes('bun'));
-  })) passed++; else failed++;
+  }));
 
   // --list flag
   console.log('\n--list:');
 
-  if (test('lists available package managers', () => {
+  tally(test('lists available package managers', () => {
     const result = run(['--list']);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Available Package Managers'));
     assert.ok(result.stdout.includes('npm'));
     assert.ok(result.stdout.includes('Lock file'));
     assert.ok(result.stdout.includes('Install'));
-  })) passed++; else failed++;
+  }));
 
   // --global flag
   console.log('\n--global:');
 
-  if (test('rejects --global without package manager name', () => {
+  tally(test('rejects --global without package manager name', () => {
     const result = run(['--global']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('requires a package manager name'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects --global with unknown package manager', () => {
+  tally(test('rejects --global with unknown package manager', () => {
     const result = run(['--global', 'unknown-pm']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('Unknown package manager'));
-  })) passed++; else failed++;
+  }));
 
   // --project flag
   console.log('\n--project:');
 
-  if (test('rejects --project without package manager name', () => {
+  tally(test('rejects --project without package manager name', () => {
     const result = run(['--project']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('requires a package manager name'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects --project with unknown package manager', () => {
+  tally(test('rejects --project with unknown package manager', () => {
     const result = run(['--project', 'unknown-pm']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('Unknown package manager'));
-  })) passed++; else failed++;
+  }));
 
   // Positional argument
   console.log('\npositional argument:');
 
-  if (test('rejects unknown positional argument', () => {
+  tally(test('rejects unknown positional argument', () => {
     const result = run(['not-a-pm']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('Unknown option or package manager'));
-  })) passed++; else failed++;
+  }));
 
   // Environment variable
   console.log('\nenvironment variable:');
 
-  if (test('detects env var override', () => {
+  tally(test('detects env var override', () => {
     const result = run(['--detect'], { GEMINI_PACKAGE_MANAGER: 'pnpm' });
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('pnpm'));
-  })) passed++; else failed++;
+  }));
 
   // --detect output completeness
   console.log('\n--detect output completeness:');
 
-  if (test('shows all three command types in detection output', () => {
+  tally(test('shows all three command types in detection output', () => {
     const result = run(['--detect']);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Install:'), 'Should show Install command');
     assert.ok(result.stdout.includes('Run script:'), 'Should show Run script command');
     assert.ok(result.stdout.includes('Execute binary:'), 'Should show Execute binary command');
-  })) passed++; else failed++;
+  }));
 
-  if (test('shows current marker for active package manager', () => {
+  tally(test('shows current marker for active package manager', () => {
     const result = run(['--detect']);
     assert.ok(result.stdout.includes('(current)'), 'Should mark current PM');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 31: flag-as-PM-name rejection ──
   // Note: --help, --detect, --list are checked BEFORE --global/--project in argv
@@ -183,56 +184,56 @@ function runTests() {
   // like --global --project or --project --unknown-flag.
   console.log('\n--global flag validation (Round 31):');
 
-  if (test('rejects --global --project (flag not caught by earlier checks)', () => {
+  tally(test('rejects --global --project (flag not caught by earlier checks)', () => {
     const result = run(['--global', '--project']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('requires a package manager name'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects --global --unknown-flag (arbitrary flag as PM name)', () => {
+  tally(test('rejects --global --unknown-flag (arbitrary flag as PM name)', () => {
     const result = run(['--global', '--foo-bar']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('requires a package manager name'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects --global -x (single-dash flag as PM name)', () => {
+  tally(test('rejects --global -x (single-dash flag as PM name)', () => {
     const result = run(['--global', '-x']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('requires a package manager name'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('--global --list is handled by --list check first (exit 0)', () => {
+  tally(test('--global --list is handled by --list check first (exit 0)', () => {
     // --list is checked before --global in the parsing order
     const result = run(['--global', '--list']);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Available Package Managers'));
-  })) passed++; else failed++;
+  }));
 
   console.log('\n--project flag validation (Round 31):');
 
-  if (test('rejects --project --global (cross-flag confusion)', () => {
+  tally(test('rejects --project --global (cross-flag confusion)', () => {
     // --global handler runs before --project, catches it first
     const result = run(['--project', '--global']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('requires a package manager name'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects --project --unknown-flag', () => {
+  tally(test('rejects --project --unknown-flag', () => {
     const result = run(['--project', '--bar']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('requires a package manager name'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects --project -z (single-dash flag)', () => {
+  tally(test('rejects --project -z (single-dash flag)', () => {
     const result = run(['--project', '-z']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('requires a package manager name'));
-  })) passed++; else failed++;
+  }));
 
   // ── Round 45: output completeness and marker uniqueness ──
   console.log('\n--detect marker uniqueness (Round 45):');
 
-  if (test('--detect output shows exactly one (current) marker', () => {
+  tally(test('--detect output shows exactly one (current) marker', () => {
     const result = run(['--detect']);
     assert.strictEqual(result.code, 0);
     const lines = result.stdout.split('\n');
@@ -240,11 +241,11 @@ function runTests() {
     assert.strictEqual(currentLines.length, 1, `Expected exactly 1 "(current)" marker, found ${currentLines.length}`);
     // The (current) marker should be on a line with a PM name
     assert.ok(/\b(npm|pnpm|yarn|bun)\b/.test(currentLines[0]), 'Current marker should be on a PM line');
-  })) passed++; else failed++;
+  }));
 
   console.log('\n--list output completeness (Round 45):');
 
-  if (test('--list shows all four supported package managers', () => {
+  tally(test('--list shows all four supported package managers', () => {
     const result = run(['--list']);
     assert.strictEqual(result.code, 0);
     for (const pm of ['npm', 'pnpm', 'yarn', 'bun']) {
@@ -255,12 +256,12 @@ function runTests() {
     assert.strictEqual(lockFileCount, 4, `Expected 4 "Lock file:" entries, found ${lockFileCount}`);
     const installCount = (result.stdout.match(/Install:/g) || []).length;
     assert.strictEqual(installCount, 4, `Expected 4 "Install:" entries, found ${installCount}`);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 62: --global success path and bare PM name ──
   console.log('\n--global success path (Round 62):');
 
-  if (test('--global npm writes config and succeeds', () => {
+  tally(test('--global npm writes config and succeeds', () => {
     const tmpDir = path.join(os.tmpdir(), `spm-test-global-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
     try {
@@ -275,11 +276,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   console.log('\nbare PM name success (Round 62):');
 
-  if (test('bare npm sets global preference and succeeds', () => {
+  tally(test('bare npm sets global preference and succeeds', () => {
     const tmpDir = path.join(os.tmpdir(), `spm-test-bare-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
     try {
@@ -293,20 +294,20 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   console.log('\n--detect source label (Round 62):');
 
-  if (test('--detect with env var shows source as environment', () => {
+  tally(test('--detect with env var shows source as environment', () => {
     const result = run(['--detect'], { GEMINI_PACKAGE_MANAGER: 'pnpm' });
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Source: environment'), 'Should show environment as source');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 68: --project success path and --list (current) marker ──
   console.log('\n--project success path (Round 68):');
 
-  if (test('--project npm writes project config and succeeds', () => {
+  tally(test('--project npm writes project config and succeeds', () => {
     const tmpDir = path.join(os.tmpdir(), `spm-test-project-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
     try {
@@ -327,23 +328,23 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   console.log('\n--list (current) marker (Round 68):');
 
-  if (test('--list output includes (current) marker for active PM', () => {
+  tally(test('--list output includes (current) marker for active PM', () => {
     const result = run(['--list']);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('(current)'), '--list should mark the active PM with (current)');
     // The (current) marker should appear exactly once
     const currentCount = (result.stdout.match(/\(current\)/g) || []).length;
     assert.strictEqual(currentCount, 1, `Expected exactly 1 "(current)" in --list, found ${currentCount}`);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 74: setGlobal catch: setPreferredPackageManager throws ──
   console.log('\nRound 74: setGlobal catch (save failure):');
 
-  if (test('--global npm fails when HOME is not a directory', () => {
+  tally(test('--global npm fails when HOME is not a directory', () => {
     if (process.platform === 'win32') {
       console.log('    (skipped: /dev/null not available on Windows)');
       return;
@@ -353,12 +354,12 @@ function runTests() {
     assert.strictEqual(result.code, 1, `Expected exit 1, got ${result.code}`);
     assert.ok(result.stderr.includes('Error:'),
       `stderr should contain Error:, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 74: setProject catch: setProjectPackageManager throws ──
   console.log('\nRound 74: setProject catch (save failure):');
 
-  if (test('--project npm fails when CWD is read-only', () => {
+  tally(test('--project npm fails when CWD is read-only', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
       console.log('    (skipped: chmod ineffective on Windows/root)');
       return;
@@ -383,7 +384,7 @@ function runTests() {
       try { fs.chmodSync(tmpDir, 0o755); } catch { /* best-effort */ }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

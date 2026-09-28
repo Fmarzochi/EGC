@@ -54,8 +54,9 @@ function runTests() {
   console.log('\n=== Testing scripts/lib/propagate-state.js ===\n');
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('propagates to cursor when .cursor/ exists', () => {
+  tally(test('propagates to cursor when .cursor/ exists', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor'));
@@ -74,9 +75,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not create cursor context when .cursor/ absent', () => {
+  tally(test('does not create cursor context when .cursor/ absent', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
@@ -84,9 +85,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('preserves real hand-written content added after the legacy cursor frontmatter', () => {
+  tally(test('preserves real hand-written content added after the legacy cursor frontmatter', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
@@ -108,9 +109,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('migrates a pre-fix unmarked cursor context without duplicating memory', () => {
+  tally(test('migrates a pre-fix unmarked cursor context without duplicating memory', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
@@ -129,9 +130,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not delete real content when the end marker is orphaned (missing)', () => {
+  tally(test('does not delete real content when the end marker is orphaned (missing)', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
@@ -150,9 +151,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('collapses duplicated marker pairs to one without losing real content', () => {
+  tally(test('collapses duplicated marker pairs to one without losing real content', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), 'REAL AGENTS CONTENT\n<!-- egc:start -->\nblock A\n<!-- egc:end -->\n<!-- egc:start -->\nblock B\n<!-- egc:end -->\n', 'utf-8');
@@ -163,9 +164,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not delete real content when markers are in inverted order', () => {
+  tally(test('does not delete real content when markers are in inverted order', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'GEMINI.md'), 'REAL GEMINI CONTENT\n<!-- egc:end -->\nstray\n<!-- egc:start -->\n', 'utf-8');
@@ -175,9 +176,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('migrates a legacy cursor file saved with CRLF line endings', () => {
+  tally(test('migrates a legacy cursor file saved with CRLF line endings', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
@@ -192,9 +193,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not create copilot-instructions.md when only .github/ exists', () => {
+  tally(test('does not create copilot-instructions.md when only .github/ exists', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.github'));
@@ -204,9 +205,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('updates copilot-instructions.md when it already exists', () => {
+  tally(test('updates copilot-instructions.md when it already exists', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.github'));
@@ -219,9 +220,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('propagates to GEMINI.md when it exists', () => {
+  tally(test('propagates to GEMINI.md when it exists', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'GEMINI.md'), '# Gemini config\n');
@@ -233,9 +234,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('propagates to .windsurf/rules/egc-context.md when .windsurf/ dir exists', () => {
+  tally(test('propagates to .windsurf/rules/egc-context.md when .windsurf/ dir exists', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.windsurf'));
@@ -248,9 +249,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not create windsurf context when .windsurf/ dir absent', () => {
+  tally(test('does not create windsurf context when .windsurf/ dir absent', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
@@ -258,9 +259,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('the generated and shipped mirrors route a decision to update_state and recall it from get_state first (#1524)', () => {
+  tally(test('the generated and shipped mirrors route a decision to update_state and recall it from get_state first (#1524)', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor'));
@@ -279,9 +280,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('propagates to .trae/rules/egc-context.md when .trae/ dir exists (Trae)', () => {
+  tally(test('propagates to .trae/rules/egc-context.md when .trae/ dir exists (Trae)', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.trae'));
@@ -293,9 +294,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not create trae context when .trae/ dir absent', () => {
+  tally(test('does not create trae context when .trae/ dir absent', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
@@ -303,9 +304,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('propagates to .rules when it exists (Zed)', () => {
+  tally(test('propagates to .rules when it exists (Zed)', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, '.rules'), '# Zed rules\n');
@@ -317,9 +318,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not create .rules when absent (Zed)', () => {
+  tally(test('does not create .rules when absent (Zed)', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
@@ -327,9 +328,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('propagates to .clinerules when it exists (Cline)', () => {
+  tally(test('propagates to .clinerules when it exists (Cline)', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, '.clinerules'), '# Cline rules\n');
@@ -341,9 +342,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not create .clinerules when absent', () => {
+  tally(test('does not create .clinerules when absent', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
@@ -351,9 +352,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('propagates to CONVENTIONS.md when it exists (Aider)', () => {
+  tally(test('propagates to CONVENTIONS.md when it exists (Aider)', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'CONVENTIONS.md'), '# Conventions\n');
@@ -365,9 +366,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not create CONVENTIONS.md when absent (Aider)', () => {
+  tally(test('does not create CONVENTIONS.md when absent (Aider)', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
@@ -375,9 +376,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('propagates to .cursorrules when it exists (legacy Cursor)', () => {
+  tally(test('propagates to .cursorrules when it exists (legacy Cursor)', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, '.cursorrules'), '# Legacy rules\n');
@@ -389,9 +390,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not create .cursorrules when absent', () => {
+  tally(test('does not create .cursorrules when absent', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
@@ -399,9 +400,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('propagates to AGENTS.md when it exists (Codex, OpenCode, Amp, Kiro)', () => {
+  tally(test('propagates to AGENTS.md when it exists (Codex, OpenCode, Amp, Kiro)', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n\nDo not run tests in watch mode.\n');
@@ -413,9 +414,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not create AGENTS.md when absent', () => {
+  tally(test('does not create AGENTS.md when absent', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
@@ -423,9 +424,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('propagates to llms.txt when it exists', () => {
+  tally(test('propagates to llms.txt when it exists', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'llms.txt'), '# Project context\n\nThis is a Node.js CLI tool.\n');
@@ -438,9 +439,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not create llms.txt when absent', () => {
+  tally(test('does not create llms.txt when absent', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
@@ -448,9 +449,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns all null when no tool configs exist', () => {
+  tally(test('returns all null when no tool configs exist', () => {
     const dir = mktemp();
     try {
       const result = propagateStateContent(dir, SAMPLE_STATE);
@@ -468,9 +469,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles empty state content gracefully', () => {
+  tally(test('handles empty state content gracefully', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor'));
@@ -481,7 +482,7 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   const freshness = runFreshnessGuardTests();
   passed += freshness.passed;
@@ -498,8 +499,9 @@ function runTests() {
 function runFreshnessGuardTests() {
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('stamps mirrors with the state updated timestamp', () => {
+  tally(test('stamps mirrors with the state updated timestamp', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
@@ -512,9 +514,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('older state does not overwrite a mirror stamped by a newer one', () => {
+  tally(test('older state does not overwrite a mirror stamped by a newer one', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
@@ -532,9 +534,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('unstamped state does not downgrade a stamped mirror', () => {
+  tally(test('unstamped state does not downgrade a stamped mirror', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
@@ -551,9 +553,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('newer state overwrites an older stamped mirror', () => {
+  tally(test('newer state overwrites an older stamped mirror', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
@@ -573,9 +575,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('an equally stamped mirror is rewritten when its generated block changed, and left alone when it did not', () => {
+  tally(test('an equally stamped mirror is rewritten when its generated block changed, and left alone when it did not', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor'));
@@ -596,9 +598,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('configures the commit-privacy git filter automatically, without a separate egc init step (audit EGC-547)', () => {
+  tally(test('configures the commit-privacy git filter automatically, without a separate egc init step (audit EGC-547)', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -614,9 +616,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not throw when projectPath is not a git repository', () => {
+  tally(test('does not throw when projectPath is not a git repository', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# Agents\n');
@@ -625,9 +627,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('sets filter.required=true so git refuses to stage through a broken filter (audit EGC-547, P0)', () => {
+  tally(test('sets filter.required=true so git refuses to stage through a broken filter (audit EGC-547, P0)', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -640,9 +642,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('protects a linked worktree by binding the common git dir, not the per-worktree one (audit EGC-547, worktree regression)', () => {
+  tally(test('protects a linked worktree by binding the common git dir, not the per-worktree one (audit EGC-547, worktree regression)', () => {
     const dir = mktemp();
     let worktreeDir;
     try {
@@ -664,9 +666,9 @@ function runFreshnessGuardTests() {
       cleanup(dir);
       if (worktreeDir) cleanup(worktreeDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('no longer binds the Roo Code and Continue.dev files, which nothing writes any more (retired in #1279)', () => {
+  tally(test('no longer binds the Roo Code and Continue.dev files, which nothing writes any more (retired in #1279)', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -679,13 +681,13 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // A mirror rewritten with another size reads as modified to git until the
   // index stat is refreshed, even when the clean side of the filter takes it
   // back to the committed blob; propagation refreshes the entries it wrote,
   // so a branch switch after a session start is never refused for them.
-  if (test('a mirror rewritten by propagation reads as unmodified to git', () => {
+  tally(test('a mirror rewritten by propagation reads as unmodified to git', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -703,11 +705,11 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // The refresh only re-reads the files: a change of the user's own in a
   // mirror stays an unstaged change, and the index never takes content.
-  if (test('a change of the user\'s own in a mirror stays unstaged after propagation', () => {
+  tally(test('a change of the user\'s own in a mirror stays unstaged after propagation', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -728,11 +730,11 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // An entry that carries a mark is left as it is: the round trip that
   // clears the stat would drop the mark.
-  if (test('a mirror marked skip-worktree keeps the mark after propagation', () => {
+  tally(test('a mirror marked skip-worktree keeps the mark after propagation', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -751,9 +753,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
+  tally(test('configures filter.smudge so required=true does not break checkout (audit EGC-547, smudge regression)', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -782,9 +784,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not skip a real binding fooled by a commented-out or non-exact attributes line (audit EGC-547, P1)', () => {
+  tally(test('does not skip a real binding fooled by a commented-out or non-exact attributes line (audit EGC-547, P1)', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -800,9 +802,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('actually strips populated memory when a bound propagation file is staged (audit EGC-547, end-to-end)', () => {
+  tally(test('actually strips populated memory when a bound propagation file is staged (audit EGC-547, end-to-end)', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -820,9 +822,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('keeps project memory out of the context files when git cannot open the repository', () => {
+  tally(test('keeps project memory out of the context files when git cannot open the repository', () => {
     const dir = mktemp();
     try {
       // A .git file whose gitdir does not exist: the directory sits inside a
@@ -856,9 +858,9 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('mirrors project memory once the commit-privacy filter is in place in the repository', () => {
+  tally(test('mirrors project memory once the commit-privacy filter is in place in the repository', () => {
     const dir = mktemp();
     try {
       execFileSync('git', ['init', '-q'], { cwd: dir });
@@ -871,11 +873,11 @@ function runFreshnessGuardTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // Symbolic links need a privilege Windows runners do not grant.
   if (process.platform !== 'win32') {
-    if (test('keeps project memory out of the context files when .git is a symlink that points nowhere', () => {
+    tally(test('keeps project memory out of the context files when .git is a symlink that points nowhere', () => {
       const dir = mktemp();
       try {
         // git accepts .git as a symlink; one that dangles is a checkout git
@@ -895,9 +897,9 @@ function runFreshnessGuardTests() {
       } finally {
         cleanup(dir);
       }
-    })) passed++; else failed++;
+    }));
 
-    if (test('keeps project memory out of the context files when the project path is a symlink into a checkout git cannot open', () => {
+    tally(test('keeps project memory out of the context files when the project path is a symlink into a checkout git cannot open', () => {
       const dir = mktemp();
       const linkParent = mktemp();
       try {
@@ -920,7 +922,7 @@ function runFreshnessGuardTests() {
         cleanup(linkParent);
         cleanup(dir);
       }
-    })) passed++; else failed++;
+    }));
   }
 
   return { passed, failed };
@@ -932,10 +934,11 @@ function runFreshnessGuardTests() {
 function runLinkTests() {
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // A link to a file needs a privilege Windows runners do not grant.
   if (process.platform !== 'win32') {
-    if (test('leaves a context file that is a link, and the file behind it, as they were', () => {
+    tally(test('leaves a context file that is a link, and the file behind it, as they were', () => {
       const dir = mktemp();
       const outside = mktemp();
       try {
@@ -954,12 +957,12 @@ function runLinkTests() {
         cleanup(dir);
         cleanup(outside);
       }
-    })) passed++; else failed++;
+    }));
   }
 
   // A junction needs no privilege on Windows and is an ordinary link
   // elsewhere, so the folder cases run on every runner.
-  if (test('writes nothing into a tool folder that is a link', () => {
+  tally(test('writes nothing into a tool folder that is a link', () => {
     const dir = mktemp();
     const outside = mktemp();
     try {
@@ -973,9 +976,9 @@ function runLinkTests() {
       cleanup(dir);
       cleanup(outside);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('leaves a context file alone when a folder on its way is a link', () => {
+  tally(test('leaves a context file alone when a folder on its way is a link', () => {
     const dir = mktemp();
     const outside = mktemp();
     try {
@@ -993,9 +996,9 @@ function runLinkTests() {
       cleanup(dir);
       cleanup(outside);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('writes into a project opened through a link', () => {
+  tally(test('writes into a project opened through a link', () => {
     const dir = mktemp();
     const linkParent = mktemp();
     try {
@@ -1012,7 +1015,7 @@ function runLinkTests() {
       cleanup(linkParent);
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   return { passed, failed };
 }

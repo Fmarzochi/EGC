@@ -42,52 +42,53 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // parseSessionFilename tests
   console.log('parseSessionFilename:');
 
-  if (test('parses new format with short ID', () => {
+  tally(test('parses new format with short ID', () => {
     const result = sessionManager.parseSessionFilename('2026-02-01-a1b2c3d4-session.tmp');
     assert.ok(result);
     assert.strictEqual(result.shortId, 'a1b2c3d4');
     assert.strictEqual(result.date, '2026-02-01');
     assert.strictEqual(result.filename, '2026-02-01-a1b2c3d4-session.tmp');
-  })) passed++; else failed++;
+  }));
 
-  if (test('parses old format without short ID', () => {
+  tally(test('parses old format without short ID', () => {
     const result = sessionManager.parseSessionFilename('2026-01-17-session.tmp');
     assert.ok(result);
     assert.strictEqual(result.shortId, 'no-id');
     assert.strictEqual(result.date, '2026-01-17');
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns null for invalid filename', () => {
+  tally(test('returns null for invalid filename', () => {
     assert.strictEqual(sessionManager.parseSessionFilename('not-a-session.txt'), null);
     assert.strictEqual(sessionManager.parseSessionFilename(''), null);
     assert.strictEqual(sessionManager.parseSessionFilename('random.tmp'), null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns null for malformed date', () => {
+  tally(test('returns null for malformed date', () => {
     assert.strictEqual(sessionManager.parseSessionFilename('20260-01-17-session.tmp'), null);
     assert.strictEqual(sessionManager.parseSessionFilename('26-01-17-session.tmp'), null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('parses long short IDs (8+ chars)', () => {
+  tally(test('parses long short IDs (8+ chars)', () => {
     const result = sessionManager.parseSessionFilename('2026-02-01-abcdef12345678-session.tmp');
     assert.ok(result);
     assert.strictEqual(result.shortId, 'abcdef12345678');
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts short IDs under 8 chars', () => {
+  tally(test('accepts short IDs under 8 chars', () => {
     const result = sessionManager.parseSessionFilename('2026-02-01-abc-session.tmp');
     assert.ok(result);
     assert.strictEqual(result.shortId, 'abc');
-  })) passed++; else failed++;
+  }));
 
   // parseSessionMetadata tests
   console.log('\nparseSessionMetadata:');
 
-  if (test('parses full session content', () => {
+  tally(test('parses full session content', () => {
     const content = `# My Session Title
 
 **Date:** 2026-02-01
@@ -125,9 +126,9 @@ src/main.ts
     assert.strictEqual(meta.inProgress[0], 'Fix bug');
     assert.strictEqual(meta.notes, 'Remember to check the logs');
     assert.strictEqual(meta.context, 'src/main.ts');
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles null/undefined/empty content', () => {
+  tally(test('handles null/undefined/empty content', () => {
     const meta1 = sessionManager.parseSessionMetadata(null);
     assert.strictEqual(meta1.title, null);
     assert.deepStrictEqual(meta1.completed, []);
@@ -137,19 +138,19 @@ src/main.ts
 
     const meta3 = sessionManager.parseSessionMetadata('');
     assert.strictEqual(meta3.title, null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles content with no sections', () => {
+  tally(test('handles content with no sections', () => {
     const meta = sessionManager.parseSessionMetadata('Just some text');
     assert.strictEqual(meta.title, null);
     assert.deepStrictEqual(meta.completed, []);
     assert.deepStrictEqual(meta.inProgress, []);
-  })) passed++; else failed++;
+  }));
 
   // getSessionStats tests
   console.log('\ngetSessionStats:');
 
-  if (test('calculates stats from content string', () => {
+  tally(test('calculates stats from content string', () => {
     const content = `# Test Session
 
 ### Completed
@@ -164,26 +165,26 @@ src/main.ts
     assert.strictEqual(stats.completedItems, 2);
     assert.strictEqual(stats.inProgressItems, 1);
     assert.ok(stats.lineCount > 0);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles empty content', () => {
+  tally(test('handles empty content', () => {
     const stats = sessionManager.getSessionStats('');
     assert.strictEqual(stats.totalItems, 0);
     assert.strictEqual(stats.completedItems, 0);
     assert.strictEqual(stats.lineCount, 0);
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not treat non-absolute path as file path', () => {
+  tally(test('does not treat non-absolute path as file path', () => {
     // This tests the bug fix: content that ends with .tmp but is not a path
     const stats = sessionManager.getSessionStats('Some content ending with test.tmp');
     assert.strictEqual(stats.totalItems, 0);
     assert.strictEqual(stats.lineCount, 1);
-  })) passed++; else failed++;
+  }));
 
   // File I/O tests
   console.log('\nSession CRUD:');
 
-  if (test('writeSessionContent and getSessionContent round-trip', () => {
+  tally(test('writeSessionContent and getSessionContent round-trip', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, '2026-02-01-testid01-session.tmp');
@@ -197,9 +198,9 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('appendSessionContent appends to existing', () => {
+  tally(test('appendSessionContent appends to existing', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, '2026-02-01-testid02-session.tmp');
@@ -212,19 +213,19 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('writeSessionContent returns false for invalid path', () => {
+  tally(test('writeSessionContent returns false for invalid path', () => {
     const result = sessionManager.writeSessionContent('/nonexistent/deep/path/session.tmp', 'content');
     assert.strictEqual(result, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionContent returns null for non-existent file', () => {
+  tally(test('getSessionContent returns null for non-existent file', () => {
     const result = sessionManager.getSessionContent('/nonexistent/session.tmp');
     assert.strictEqual(result, null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('deleteSession removes file', () => {
+  tally(test('deleteSession removes file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'test-session.tmp');
@@ -237,14 +238,14 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('deleteSession returns false for non-existent file', () => {
+  tally(test('deleteSession returns false for non-existent file', () => {
     const result = sessionManager.deleteSession('/nonexistent/session.tmp');
     assert.strictEqual(result, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('sessionExists returns true for existing file', () => {
+  tally(test('sessionExists returns true for existing file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'test.tmp');
@@ -253,25 +254,25 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('sessionExists returns false for non-existent file', () => {
+  tally(test('sessionExists returns false for non-existent file', () => {
     assert.strictEqual(sessionManager.sessionExists('/nonexistent/path.tmp'), false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('sessionExists returns false for directory', () => {
+  tally(test('sessionExists returns false for directory', () => {
     const dir = createTempSessionDir();
     try {
       assert.strictEqual(sessionManager.sessionExists(dir), false);
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // getSessionSize tests
   console.log('\ngetSessionSize:');
 
-  if (test('returns human-readable size for existing file', () => {
+  tally(test('returns human-readable size for existing file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'sized.tmp');
@@ -281,14 +282,14 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns "0 B" for non-existent file', () => {
+  tally(test('returns "0 B" for non-existent file', () => {
     const size = sessionManager.getSessionSize('/nonexistent/file.tmp');
     assert.strictEqual(size, '0 B');
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns bytes for small file', () => {
+  tally(test('returns bytes for small file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'small.tmp');
@@ -299,12 +300,12 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // getSessionTitle tests
   console.log('\ngetSessionTitle:');
 
-  if (test('extracts title from session file', () => {
+  tally(test('extracts title from session file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'titled.tmp');
@@ -314,9 +315,9 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns "Untitled Session" for empty content', () => {
+  tally(test('returns "Untitled Session" for empty content', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'empty.tmp');
@@ -326,12 +327,12 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns "Untitled Session" for non-existent file', () => {
+  tally(test('returns "Untitled Session" for non-existent file', () => {
     const title = sessionManager.getSessionTitle('/nonexistent/file.tmp');
     assert.strictEqual(title, 'Untitled Session');
-  })) passed++; else failed++;
+  }));
 
   // getAllSessions tests
   console.log('\ngetAllSessions:');
@@ -367,14 +368,14 @@ src/main.ts
   process.env.HOME = tmpHome;
   process.env.USERPROFILE = tmpHome;
 
-  if (test('getAllSessions returns all sessions', () => {
+  tally(test('getAllSessions returns all sessions', () => {
     const result = sessionManager.getAllSessions({ limit: 100 });
     assert.strictEqual(result.total, 5);
     assert.strictEqual(result.sessions.length, 5);
     assert.strictEqual(result.hasMore, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions paginates correctly', () => {
+  tally(test('getAllSessions paginates correctly', () => {
     const page1 = sessionManager.getAllSessions({ limit: 2, offset: 0 });
     assert.strictEqual(page1.sessions.length, 2);
     assert.strictEqual(page1.hasMore, true);
@@ -387,21 +388,21 @@ src/main.ts
     const page3 = sessionManager.getAllSessions({ limit: 2, offset: 4 });
     assert.strictEqual(page3.sessions.length, 1);
     assert.strictEqual(page3.hasMore, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions filters by date', () => {
+  tally(test('getAllSessions filters by date', () => {
     const result = sessionManager.getAllSessions({ date: '2026-02-01', limit: 100 });
     assert.strictEqual(result.total, 2);
     assert.ok(result.sessions.every(s => s.date === '2026-02-01'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions filters by search (short ID)', () => {
+  tally(test('getAllSessions filters by search (short ID)', () => {
     const result = sessionManager.getAllSessions({ search: 'abcd', limit: 100 });
     assert.strictEqual(result.total, 1);
     assert.strictEqual(result.sessions[0].shortId, 'abcd1234');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions prefers canonical session-data duplicates over newer legacy copies', () => {
+  tally(test('getAllSessions prefers canonical session-data duplicates over newer legacy copies', () => {
     const duplicateName = '2026-01-15-abcd1234-session.tmp';
     const legacyDuplicatePath = path.join(tmpLegacySessionsDir, duplicateName);
     const legacyMtime = new Date(Date.now() + 60000);
@@ -416,9 +417,9 @@ src/main.ts
     } finally {
       fs.rmSync(legacyDuplicatePath, { force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions returns sorted by newest first', () => {
+  tally(test('getAllSessions returns sorted by newest first', () => {
     const result = sessionManager.getAllSessions({ limit: 100 });
     for (let i = 1; i < result.sessions.length; i++) {
       assert.ok(
@@ -426,44 +427,44 @@ src/main.ts
         'Sessions should be sorted newest first'
       );
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions handles offset beyond total', () => {
+  tally(test('getAllSessions handles offset beyond total', () => {
     const result = sessionManager.getAllSessions({ offset: 999, limit: 10 });
     assert.strictEqual(result.sessions.length, 0);
     assert.strictEqual(result.total, 5);
     assert.strictEqual(result.hasMore, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions returns empty for non-existent date', () => {
+  tally(test('getAllSessions returns empty for non-existent date', () => {
     const result = sessionManager.getAllSessions({ date: '2099-12-31', limit: 100 });
     assert.strictEqual(result.total, 0);
     assert.strictEqual(result.sessions.length, 0);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions ignores non-.tmp files', () => {
+  tally(test('getAllSessions ignores non-.tmp files', () => {
     fs.writeFileSync(path.join(tmpCanonicalSessionsDir, 'notes.txt'), 'not a session');
     fs.writeFileSync(path.join(tmpCanonicalSessionsDir, 'compaction-log.txt'), 'log');
     const result = sessionManager.getAllSessions({ limit: 100 });
     assert.strictEqual(result.total, 5, 'Should only count .tmp session files');
-  })) passed++; else failed++;
+  }));
 
   // getSessionById tests
   console.log('\ngetSessionById:');
 
-  if (test('getSessionById finds by short ID prefix', () => {
+  tally(test('getSessionById finds by short ID prefix', () => {
     const result = sessionManager.getSessionById('abcd1234');
     assert.ok(result, 'Should find session by exact short ID');
     assert.strictEqual(result.shortId, 'abcd1234');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById finds by short ID prefix match', () => {
+  tally(test('getSessionById finds by short ID prefix match', () => {
     const result = sessionManager.getSessionById('abcd');
     assert.ok(result, 'Should find session by short ID prefix');
     assert.strictEqual(result.shortId, 'abcd1234');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById prefers canonical session-data duplicates over newer legacy copies', () => {
+  tally(test('getSessionById prefers canonical session-data duplicates over newer legacy copies', () => {
     const duplicateName = '2026-01-15-abcd1234-session.tmp';
     const legacyDuplicatePath = path.join(tmpLegacySessionsDir, duplicateName);
     const legacyMtime = new Date(Date.now() + 120000);
@@ -478,120 +479,120 @@ src/main.ts
     } finally {
       fs.rmSync(legacyDuplicatePath, { force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById finds by full filename', () => {
+  tally(test('getSessionById finds by full filename', () => {
     const result = sessionManager.getSessionById('2026-01-15-abcd1234-session.tmp');
     assert.ok(result, 'Should find session by full filename');
     assert.strictEqual(result.shortId, 'abcd1234');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById finds by filename without .tmp', () => {
+  tally(test('getSessionById finds by filename without .tmp', () => {
     const result = sessionManager.getSessionById('2026-01-15-abcd1234-session');
     assert.ok(result, 'Should find session by filename without extension');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById returns null for non-existent ID', () => {
+  tally(test('getSessionById returns null for non-existent ID', () => {
     const result = sessionManager.getSessionById('zzzzzzzz');
     assert.strictEqual(result, null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById includes content when requested', () => {
+  tally(test('getSessionById includes content when requested', () => {
     const result = sessionManager.getSessionById('abcd1234', true);
     assert.ok(result, 'Should find session');
     assert.ok(result.content, 'Should include content');
     assert.ok(result.content.includes('Session 1'), 'Content should match');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById finds old format (no short ID)', () => {
+  tally(test('getSessionById finds old format (no short ID)', () => {
     const result = sessionManager.getSessionById('2026-02-10-session');
     assert.ok(result, 'Should find old-format session by filename');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById returns null for empty string', () => {
+  tally(test('getSessionById returns null for empty string', () => {
     const result = sessionManager.getSessionById('');
     assert.strictEqual(result, null, 'Empty string should not match any session');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById returns null for non-string IDs', () => {
+  tally(test('getSessionById returns null for non-string IDs', () => {
     assert.strictEqual(sessionManager.getSessionById(null), null);
     assert.strictEqual(sessionManager.getSessionById(undefined), null);
     assert.strictEqual(sessionManager.getSessionById(42), null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById metadata and stats populated when includeContent=true', () => {
+  tally(test('getSessionById metadata and stats populated when includeContent=true', () => {
     const result = sessionManager.getSessionById('abcd1234', true);
     assert.ok(result, 'Should find session');
     assert.ok(result.metadata, 'Should have metadata');
     assert.ok(result.stats, 'Should have stats');
     assert.strictEqual(typeof result.stats.totalItems, 'number', 'stats.totalItems should be number');
     assert.strictEqual(typeof result.stats.lineCount, 'number', 'stats.lineCount should be number');
-  })) passed++; else failed++;
+  }));
 
   // parseSessionMetadata edge cases
   console.log('\nparseSessionMetadata (edge cases):');
 
-  if (test('handles CRLF line endings', () => {
+  tally(test('handles CRLF line endings', () => {
     const content = '# CRLF Session\r\n\r\n**Date:** 2026-03-01\r\n**Started:** 09:00\r\n\r\n### Completed\r\n- [x] Task A\r\n- [x] Task B\r\n';
     const meta = sessionManager.parseSessionMetadata(content);
     assert.strictEqual(meta.title, 'CRLF Session');
     assert.strictEqual(meta.date, '2026-03-01');
     assert.strictEqual(meta.started, '09:00');
     assert.strictEqual(meta.completed.length, 2);
-  })) passed++; else failed++;
+  }));
 
-  if (test('takes first h1 heading as title', () => {
+  tally(test('takes first h1 heading as title', () => {
     const content = '# First Title\n\nSome text\n\n# Second Title\n';
     const meta = sessionManager.parseSessionMetadata(content);
     assert.strictEqual(meta.title, 'First Title');
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles empty sections (Completed with no items)', () => {
+  tally(test('handles empty sections (Completed with no items)', () => {
     const content = '# Session\n\n### Completed\n\n### In Progress\n\n';
     const meta = sessionManager.parseSessionMetadata(content);
     assert.deepStrictEqual(meta.completed, []);
     assert.deepStrictEqual(meta.inProgress, []);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles content with only title and notes', () => {
+  tally(test('handles content with only title and notes', () => {
     const content = '# Just Notes\n\n### Notes for Next Session\nRemember to test\n';
     const meta = sessionManager.parseSessionMetadata(content);
     assert.strictEqual(meta.title, 'Just Notes');
     assert.strictEqual(meta.notes, 'Remember to test');
     assert.deepStrictEqual(meta.completed, []);
     assert.deepStrictEqual(meta.inProgress, []);
-  })) passed++; else failed++;
+  }));
 
-  if (test('extracts context with backtick fenced block', () => {
+  tally(test('extracts context with backtick fenced block', () => {
     const content = '# Session\n\n### Context to Load\n```\nsrc/index.ts\nlib/utils.js\n```\n';
     const meta = sessionManager.parseSessionMetadata(content);
     assert.strictEqual(meta.context, 'src/index.ts\nlib/utils.js');
-  })) passed++; else failed++;
+  }));
 
-  if (test('trims whitespace from title', () => {
+  tally(test('trims whitespace from title', () => {
     const content = '#   Spaces Around Title   \n';
     const meta = sessionManager.parseSessionMetadata(content);
     assert.strictEqual(meta.title, 'Spaces Around Title');
-  })) passed++; else failed++;
+  }));
 
   // getSessionStats edge cases
   console.log('\ngetSessionStats (edge cases):');
 
-  if (test('detects notes and context presence', () => {
+  tally(test('detects notes and context presence', () => {
     const content = '# Stats Test\n\n### Notes for Next Session\nSome notes\n\n### Context to Load\n```\nfile.ts\n```\n';
     const stats = sessionManager.getSessionStats(content);
     assert.strictEqual(stats.hasNotes, true);
     assert.strictEqual(stats.hasContext, true);
-  })) passed++; else failed++;
+  }));
 
-  if (test('detects absence of notes and context', () => {
+  tally(test('detects absence of notes and context', () => {
     const content = '# Simple Session\n\nJust some content\n';
     const stats = sessionManager.getSessionStats(content);
     assert.strictEqual(stats.hasNotes, false);
     assert.strictEqual(stats.hasContext, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('treats Unix absolute path ending with .tmp as file path', () => {
+  tally(test('treats Unix absolute path ending with .tmp as file path', () => {
     // Content that starts with / and ends with .tmp should be treated as a path
     // This tests the looksLikePath heuristic
     const fakeContent = '/some/path/session.tmp';
@@ -600,12 +601,12 @@ src/main.ts
     const stats = sessionManager.getSessionStats(fakeContent);
     assert.strictEqual(stats.totalItems, 0);
     assert.strictEqual(stats.lineCount, 0);
-  })) passed++; else failed++;
+  }));
 
   // getSessionSize edge case
   console.log('\ngetSessionSize (edge cases):');
 
-  if (test('returns MB for large file', () => {
+  tally(test('returns MB for large file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'large.tmp');
@@ -615,104 +616,104 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // appendSessionContent edge case
-  if (test('appendSessionContent returns false for invalid path', () => {
+  tally(test('appendSessionContent returns false for invalid path', () => {
     const result = sessionManager.appendSessionContent('/nonexistent/deep/path/session.tmp', 'content');
     assert.strictEqual(result, false);
-  })) passed++; else failed++;
+  }));
 
   // parseSessionFilename edge cases
   console.log('\nparseSessionFilename (additional edge cases):');
 
-  if (test('accepts uppercase letters in short ID', () => {
+  tally(test('accepts uppercase letters in short ID', () => {
     const result = sessionManager.parseSessionFilename('2026-02-01-ABCD1234-session.tmp');
     assert.ok(result, 'Uppercase letters should be accepted');
     assert.strictEqual(result.shortId, 'ABCD1234');
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts underscores in short ID', () => {
+  tally(test('accepts underscores in short ID', () => {
     const result = sessionManager.parseSessionFilename('2026-02-01-ChezMoi_2-session.tmp');
     assert.ok(result, 'Underscores should be accepted');
     assert.strictEqual(result.shortId, 'ChezMoi_2');
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts hyphenated short IDs (extra segments)', () => {
+  tally(test('accepts hyphenated short IDs (extra segments)', () => {
     const result = sessionManager.parseSessionFilename('2026-02-01-abc12345-extra-session.tmp');
     assert.ok(result, 'Hyphenated short IDs should be accepted');
     assert.strictEqual(result.shortId, 'abc12345-extra');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects impossible month (13)', () => {
+  tally(test('rejects impossible month (13)', () => {
     const result = sessionManager.parseSessionFilename('2026-13-01-abcd1234-session.tmp');
     assert.strictEqual(result, null, 'Month 13 should be rejected');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects impossible day (32)', () => {
+  tally(test('rejects impossible day (32)', () => {
     const result = sessionManager.parseSessionFilename('2026-01-32-abcd1234-session.tmp');
     assert.strictEqual(result, null, 'Day 32 should be rejected');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects month 00', () => {
+  tally(test('rejects month 00', () => {
     const result = sessionManager.parseSessionFilename('2026-00-15-abcd1234-session.tmp');
     assert.strictEqual(result, null, 'Month 00 should be rejected');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects day 00', () => {
+  tally(test('rejects day 00', () => {
     const result = sessionManager.parseSessionFilename('2026-01-00-abcd1234-session.tmp');
     assert.strictEqual(result, null, 'Day 00 should be rejected');
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts valid edge date (month 12, day 31)', () => {
+  tally(test('accepts valid edge date (month 12, day 31)', () => {
     const result = sessionManager.parseSessionFilename('2026-12-31-abcd1234-session.tmp');
     assert.ok(result, 'Month 12, day 31 should be accepted');
     assert.strictEqual(result.date, '2026-12-31');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects Feb 31 (calendar-inaccurate date)', () => {
+  tally(test('rejects Feb 31 (calendar-inaccurate date)', () => {
     const result = sessionManager.parseSessionFilename('2026-02-31-abcd1234-session.tmp');
     assert.strictEqual(result, null, 'Feb 31 does not exist');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects Apr 31 (calendar-inaccurate date)', () => {
+  tally(test('rejects Apr 31 (calendar-inaccurate date)', () => {
     const result = sessionManager.parseSessionFilename('2026-04-31-abcd1234-session.tmp');
     assert.strictEqual(result, null, 'Apr 31 does not exist');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects Feb 29 in non-leap year', () => {
+  tally(test('rejects Feb 29 in non-leap year', () => {
     const result = sessionManager.parseSessionFilename('2025-02-29-abcd1234-session.tmp');
     assert.strictEqual(result, null, '2025 is not a leap year');
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts Feb 29 in leap year', () => {
+  tally(test('accepts Feb 29 in leap year', () => {
     const result = sessionManager.parseSessionFilename('2024-02-29-abcd1234-session.tmp');
     assert.ok(result, '2024 is a leap year');
     assert.strictEqual(result.date, '2024-02-29');
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts Jun 30 (valid 30-day month)', () => {
+  tally(test('accepts Jun 30 (valid 30-day month)', () => {
     const result = sessionManager.parseSessionFilename('2026-06-30-abcd1234-session.tmp');
     assert.ok(result, 'June has 30 days');
     assert.strictEqual(result.date, '2026-06-30');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects Jun 31 (invalid 30-day month)', () => {
+  tally(test('rejects Jun 31 (invalid 30-day month)', () => {
     const result = sessionManager.parseSessionFilename('2026-06-31-abcd1234-session.tmp');
     assert.strictEqual(result, null, 'June has only 30 days');
-  })) passed++; else failed++;
+  }));
 
-  if (test('datetime field is a Date object', () => {
+  tally(test('datetime field is a Date object', () => {
     const result = sessionManager.parseSessionFilename('2026-06-15-abcdef12-session.tmp');
     assert.ok(result);
     assert.ok(result.datetime instanceof Date, 'datetime should be a Date');
     assert.ok(!isNaN(result.datetime.getTime()), 'datetime should be valid');
-  })) passed++; else failed++;
+  }));
 
   // writeSessionContent tests
   console.log('\nwriteSessionContent:');
 
-  if (test('creates new session file', () => {
+  tally(test('creates new session file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'write-test.tmp');
@@ -723,9 +724,9 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('overwrites existing session file', () => {
+  tally(test('overwrites existing session file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'overwrite-test.tmp');
@@ -736,17 +737,17 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('writeSessionContent returns false for invalid path', () => {
+  tally(test('writeSessionContent returns false for invalid path', () => {
     const result = sessionManager.writeSessionContent('/nonexistent/deep/path/session.tmp', 'content');
     assert.strictEqual(result, false, 'Should return false for invalid path');
-  })) passed++; else failed++;
+  }));
 
   // appendSessionContent tests
   console.log('\nappendSessionContent:');
 
-  if (test('appends to existing session file', () => {
+  tally(test('appends to existing session file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'append-test.tmp');
@@ -759,12 +760,12 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // deleteSession tests
   console.log('\ndeleteSession:');
 
-  if (test('deletes existing session file', () => {
+  tally(test('deletes existing session file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'delete-me.tmp');
@@ -776,17 +777,17 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('deleteSession returns false for non-existent file', () => {
+  tally(test('deleteSession returns false for non-existent file', () => {
     const result = sessionManager.deleteSession('/nonexistent/session.tmp');
     assert.strictEqual(result, false, 'Should return false for missing file');
-  })) passed++; else failed++;
+  }));
 
   // sessionExists tests
   console.log('\nsessionExists:');
 
-  if (test('returns true for existing session file', () => {
+  tally(test('returns true for existing session file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, 'exists.tmp');
@@ -795,73 +796,73 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns false for non-existent file', () => {
+  tally(test('returns false for non-existent file', () => {
     assert.strictEqual(sessionManager.sessionExists('/nonexistent/file.tmp'), false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns false for directory (not a file)', () => {
+  tally(test('returns false for directory (not a file)', () => {
     const dir = createTempSessionDir();
     try {
       assert.strictEqual(sessionManager.sessionExists(dir), false, 'Directory should not count as session');
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // getAllSessions pagination edge cases (offset/limit clamping)
   console.log('\ngetAllSessions (pagination edge cases):');
 
-  if (test('getAllSessions clamps negative offset to 0', () => {
+  tally(test('getAllSessions clamps negative offset to 0', () => {
     const result = sessionManager.getAllSessions({ offset: -5, limit: 2 });
     // Negative offset should be clamped to 0, returning the first 2 sessions
     assert.strictEqual(result.sessions.length, 2);
     assert.strictEqual(result.offset, 0);
     assert.strictEqual(result.total, 5);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions clamps NaN offset to 0', () => {
+  tally(test('getAllSessions clamps NaN offset to 0', () => {
     const result = sessionManager.getAllSessions({ offset: NaN, limit: 3 });
     assert.strictEqual(result.sessions.length, 3);
     assert.strictEqual(result.offset, 0);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions clamps NaN limit to default', () => {
+  tally(test('getAllSessions clamps NaN limit to default', () => {
     const result = sessionManager.getAllSessions({ offset: 0, limit: NaN });
     // NaN limit should be clamped to default (50), returning all 5 sessions
     assert.ok(result.sessions.length > 0);
     assert.strictEqual(result.total, 5);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions clamps negative limit to 1', () => {
+  tally(test('getAllSessions clamps negative limit to 1', () => {
     const result = sessionManager.getAllSessions({ offset: 0, limit: -10 });
     // Negative limit should be clamped to 1
     assert.strictEqual(result.sessions.length, 1);
     assert.strictEqual(result.limit, 1);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions clamps zero limit to 1', () => {
+  tally(test('getAllSessions clamps zero limit to 1', () => {
     const result = sessionManager.getAllSessions({ offset: 0, limit: 0 });
     assert.strictEqual(result.sessions.length, 1);
     assert.strictEqual(result.limit, 1);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions handles string offset/limit gracefully', () => {
+  tally(test('getAllSessions handles string offset/limit gracefully', () => {
     const result = sessionManager.getAllSessions({ offset: 'abc', limit: 'xyz' });
     // String non-numeric should be treated as 0/default
     assert.strictEqual(result.offset, 0);
     assert.ok(result.sessions.length > 0);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions handles fractional offset (floors to integer)', () => {
+  tally(test('getAllSessions handles fractional offset (floors to integer)', () => {
     const result = sessionManager.getAllSessions({ offset: 1.7, limit: 2 });
     // 1.7 should floor to 1, skip first session, return next 2
     assert.strictEqual(result.offset, 1);
     assert.strictEqual(result.sessions.length, 2);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getAllSessions handles Infinity offset', () => {
+  tally(test('getAllSessions handles Infinity offset', () => {
     // Infinity should clamp to 0 since Number(Infinity) is Infinity but
     // Math.floor(Infinity) is Infinity: however slice(Infinity) returns []
     // Actually: Number(Infinity) || 0 = Infinity, Math.floor(Infinity) = Infinity
@@ -869,82 +870,82 @@ src/main.ts
     const result = sessionManager.getAllSessions({ offset: Infinity, limit: 2 });
     assert.strictEqual(result.sessions.length, 0);
     assert.strictEqual(result.total, 5);
-  })) passed++; else failed++;
+  }));
 
   // getSessionStats with code blocks and special characters
   console.log('\ngetSessionStats (code blocks & special chars):');
 
-  if (test('counts tasks with inline backticks correctly', () => {
+  tally(test('counts tasks with inline backticks correctly', () => {
     const content = '# Test\n\n### Completed\n- [x] Fixed `app.js` bug with `fs.readFile()`\n- [x] Ran `npm install` successfully\n\n### In Progress\n- [ ] Review `config.ts` changes\n';
     const stats = sessionManager.getSessionStats(content);
     assert.strictEqual(stats.completedItems, 2, 'Should count 2 completed items');
     assert.strictEqual(stats.inProgressItems, 1, 'Should count 1 in-progress item');
     assert.strictEqual(stats.totalItems, 3);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles special chars in notes section', () => {
+  tally(test('handles special chars in notes section', () => {
     const content = '# Test\n\n### Notes for Next Session\nDon\'t forget: <important> & "quotes" & \'apostrophes\'\n';
     const stats = sessionManager.getSessionStats(content);
     assert.strictEqual(stats.hasNotes, true, 'Should detect notes section');
     const meta = sessionManager.parseSessionMetadata(content);
     assert.ok(meta.notes.includes('<important>'), 'Notes should preserve HTML-like content');
-  })) passed++; else failed++;
+  }));
 
-  if (test('counts items in multiline code-heavy session', () => {
+  tally(test('counts items in multiline code-heavy session', () => {
     const content = '# Code Session\n\n### Completed\n- [x] Refactored `lib/utils.js`\n- [x] Updated `package.json` version\n- [x] Fixed `\\`` escaping bug\n\n### In Progress\n- [ ] Test `getSessionStats()` function\n- [ ] Review PR #42\n';
     const stats = sessionManager.getSessionStats(content);
     assert.strictEqual(stats.completedItems, 3);
     assert.strictEqual(stats.inProgressItems, 2);
-  })) passed++; else failed++;
+  }));
 
   // getSessionStats with empty content
-  if (test('getSessionStats handles empty string content', () => {
+  tally(test('getSessionStats handles empty string content', () => {
     const stats = sessionManager.getSessionStats('');
     assert.strictEqual(stats.totalItems, 0);
     // Empty string is falsy in JS, so content ? ... : 0 returns 0
     assert.strictEqual(stats.lineCount, 0, 'Empty string is falsy, lineCount = 0');
     assert.strictEqual(stats.hasNotes, false);
     assert.strictEqual(stats.hasContext, false);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 26 tests ──
 
   console.log('\nparseSessionFilename (30-day month validation):');
 
-  if (test('rejects Sep 31 (September has 30 days)', () => {
+  tally(test('rejects Sep 31 (September has 30 days)', () => {
     const result = sessionManager.parseSessionFilename('2026-09-31-abcd1234-session.tmp');
     assert.strictEqual(result, null, 'Sep 31 does not exist');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects Nov 31 (November has 30 days)', () => {
+  tally(test('rejects Nov 31 (November has 30 days)', () => {
     const result = sessionManager.parseSessionFilename('2026-11-31-abcd1234-session.tmp');
     assert.strictEqual(result, null, 'Nov 31 does not exist');
-  })) passed++; else failed++;
+  }));
 
-  if (test('accepts Sep 30 (valid 30-day month boundary)', () => {
+  tally(test('accepts Sep 30 (valid 30-day month boundary)', () => {
     const result = sessionManager.parseSessionFilename('2026-09-30-abcd1234-session.tmp');
     assert.ok(result, 'Sep 30 is valid');
     assert.strictEqual(result.date, '2026-09-30');
-  })) passed++; else failed++;
+  }));
 
   console.log('\ngetSessionStats (path heuristic edge cases):');
 
-  if (test('multiline content ending with .tmp is treated as content', () => {
+  tally(test('multiline content ending with .tmp is treated as content', () => {
     const content = 'Line 1\nLine 2\nDownload file.tmp';
     const stats = sessionManager.getSessionStats(content);
     // Has newlines so looksLikePath is false → treated as content
     assert.strictEqual(stats.lineCount, 3, 'Should count 3 lines');
-  })) passed++; else failed++;
+  }));
 
-  if (test('single-line content not starting with / treated as content', () => {
+  tally(test('single-line content not starting with / treated as content', () => {
     const content = 'some random text.tmp';
     const stats = sessionManager.getSessionStats(content);
     assert.strictEqual(stats.lineCount, 1, 'Should treat as content, not a path');
-  })) passed++; else failed++;
+  }));
 
   console.log('\ngetAllSessions (combined filters):');
 
-  if (test('combines date filter + search filter + pagination', () => {
+  tally(test('combines date filter + search filter + pagination', () => {
     // We have 2026-02-01-ijkl9012 and 2026-02-01-mnop3456 with date 2026-02-01
     const result = sessionManager.getAllSessions({
       date: '2026-02-01',
@@ -953,9 +954,9 @@ src/main.ts
     });
     assert.strictEqual(result.total, 1, 'Only one session matches both date and search');
     assert.strictEqual(result.sessions[0].shortId, 'ijkl9012');
-  })) passed++; else failed++;
+  }));
 
-  if (test('date filter + offset beyond matches returns empty', () => {
+  tally(test('date filter + offset beyond matches returns empty', () => {
     const result = sessionManager.getAllSessions({
       date: '2026-02-01',
       offset: 100,
@@ -964,40 +965,40 @@ src/main.ts
     assert.strictEqual(result.sessions.length, 0);
     assert.strictEqual(result.total, 2, 'Two sessions match the date');
     assert.strictEqual(result.hasMore, false);
-  })) passed++; else failed++;
+  }));
 
   console.log('\ngetSessionById (ambiguous prefix):');
 
-  if (test('returns first match when multiple sessions share a prefix', () => {
+  tally(test('returns first match when multiple sessions share a prefix', () => {
     // Sessions with IDs abcd1234 and efgh5678 exist
     // 'e' should match efgh5678 (only match)
     const result = sessionManager.getSessionById('efgh');
     assert.ok(result, 'Should find session by prefix');
     assert.strictEqual(result.shortId, 'efgh5678');
-  })) passed++; else failed++;
+  }));
 
   console.log('\nparseSessionMetadata (edge cases):');
 
-  if (test('handles unclosed code fence in Context section', () => {
+  tally(test('handles unclosed code fence in Context section', () => {
     const content = '# Session\n\n### Context to Load\n```\nsrc/index.ts\n';
     const meta = sessionManager.parseSessionMetadata(content);
     // Regex requires closing ```, so no context should be extracted
     assert.strictEqual(meta.context, '', 'Unclosed code fence should not extract context');
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles empty task text in checklist items', () => {
+  tally(test('handles empty task text in checklist items', () => {
     const content = '# Session\n\n### Completed\n- [x] \n- [x] Real task\n';
     const meta = sessionManager.parseSessionMetadata(content);
     // \s* in the regex bridges across newlines, collapsing the empty
     // task + next task into a single match. This is an edge case ,
     // real sessions don't have empty checklist items.
     assert.strictEqual(meta.completed.length, 1);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 43: getSessionById default excludes content ──
   console.log('\nRound 43: getSessionById (default excludes content):');
 
-  if (test('getSessionById without includeContent omits content, metadata, and stats', () => {
+  tally(test('getSessionById without includeContent omits content, metadata, and stats', () => {
     // Default call (includeContent=false) should NOT load file content
     const result = sessionManager.getSessionById('abcd1234');
     assert.ok(result, 'Should find the session');
@@ -1010,20 +1011,20 @@ src/main.ts
     assert.ok(result.sessionPath, 'sessionPath should be present');
     assert.ok(result.size !== undefined, 'size should be present');
     assert.ok(result.modifiedTime, 'modifiedTime should be present');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 54: search filter scope and getSessionPath utility ──
   console.log('\nRound 54: search filter scope and path utility:');
 
-  if (test('getAllSessions search filter matches only short ID, not title or content', () => {
+  tally(test('getAllSessions search filter matches only short ID, not title or content', () => {
     // "Session" appears in file CONTENT (e.g. "# Session 1") but not in any shortId
     const result = sessionManager.getAllSessions({ search: 'Session', limit: 100 });
     assert.strictEqual(result.total, 0, 'Search should not match title/content, only shortId');
     const result2 = sessionManager.getAllSessions({ search: 'abcd', limit: 100 });
     assert.strictEqual(result2.total, 1, 'Search by shortId should still work');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionPath returns absolute path for session filename', () => {
+  tally(test('getSessionPath returns absolute path for session filename', () => {
     const filename = '2026-02-01-testpath-session.tmp';
     const result = sessionManager.getSessionPath(filename);
     assert.ok(path.isAbsolute(result), 'Should return an absolute path');
@@ -1031,12 +1032,12 @@ src/main.ts
     // Since HOME is overridden, sessions dir should be under tmpHome
     assert.ok(result.includes('.gemini'), 'Path should include .gemini directory');
     assert.ok(result.includes('session-data'), 'Path should use canonical session-data directory');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 66: getSessionById noIdMatch path (date-only string for old format) ──
   console.log('\nRound 66: getSessionById (noIdMatch: date-only match for old format):');
 
-  if (test('getSessionById finds old-format session by date-only string (noIdMatch)', () => {
+  tally(test('getSessionById finds old-format session by date-only string (noIdMatch)', () => {
     // File is 2026-02-10-session.tmp (old format, shortId = 'no-id')
     // Calling with '2026-02-10' → filenameMatch fails (filename !== '2026-02-10' and !== '2026-02-10.tmp')
     // shortIdMatch fails (shortId === 'no-id', not !== 'no-id')
@@ -1047,7 +1048,7 @@ src/main.ts
     assert.ok(result.filename.includes('2026-02-10-session.tmp'), 'Should match old-format file');
     assert.ok(result.sessionPath, 'Should have sessionPath');
     assert.ok(result.date === '2026-02-10', 'Should have correct date');
-  })) passed++; else failed++;
+  }));
 
   // Cleanup: restore both HOME and USERPROFILE (Windows)
   process.env.HOME = origHome;
@@ -1065,7 +1066,7 @@ src/main.ts
   // ── Round 30: datetime local-time fix and parseSessionFilename edge cases ──
   console.log('\nRound 30: datetime local-time fix:');
 
-  if (test('datetime day matches the filename date (local-time constructor)', () => {
+  tally(test('datetime day matches the filename date (local-time constructor)', () => {
     const result = sessionManager.parseSessionFilename('2026-06-15-abcdef12-session.tmp');
     assert.ok(result);
     // With the fix, getDate()/getMonth() should return local-time values
@@ -1073,50 +1074,50 @@ src/main.ts
     assert.strictEqual(result.datetime.getDate(), 15, 'Day should be 15 (local time)');
     assert.strictEqual(result.datetime.getMonth(), 5, 'Month should be 5 (June, 0-indexed)');
     assert.strictEqual(result.datetime.getFullYear(), 2026, 'Year should be 2026');
-  })) passed++; else failed++;
+  }));
 
-  if (test('datetime matches for January 1 (timezone-sensitive date)', () => {
+  tally(test('datetime matches for January 1 (timezone-sensitive date)', () => {
     // Jan 1 at UTC midnight is Dec 31 in negative offsets: this tests the fix
     const result = sessionManager.parseSessionFilename('2026-01-01-abc12345-session.tmp');
     assert.ok(result);
     assert.strictEqual(result.datetime.getDate(), 1, 'Day should be 1 in local time');
     assert.strictEqual(result.datetime.getMonth(), 0, 'Month should be 0 (January)');
-  })) passed++; else failed++;
+  }));
 
-  if (test('datetime matches for December 31 (year boundary)', () => {
+  tally(test('datetime matches for December 31 (year boundary)', () => {
     const result = sessionManager.parseSessionFilename('2025-12-31-abc12345-session.tmp');
     assert.ok(result);
     assert.strictEqual(result.datetime.getDate(), 31);
     assert.strictEqual(result.datetime.getMonth(), 11); // December
     assert.strictEqual(result.datetime.getFullYear(), 2025);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nRound 30: parseSessionFilename edge cases:');
 
-  if (test('parses session ID with many dashes (UUID-like)', () => {
+  tally(test('parses session ID with many dashes (UUID-like)', () => {
     const result = sessionManager.parseSessionFilename('2026-02-13-a1b2c3d4-session.tmp');
     assert.ok(result);
     assert.strictEqual(result.shortId, 'a1b2c3d4');
     assert.strictEqual(result.date, '2026-02-13');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects filename with missing session.tmp suffix', () => {
+  tally(test('rejects filename with missing session.tmp suffix', () => {
     const result = sessionManager.parseSessionFilename('2026-02-13-abc12345.tmp');
     assert.strictEqual(result, null, 'Should reject filename without -session.tmp');
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects filename with extra text after suffix', () => {
+  tally(test('rejects filename with extra text after suffix', () => {
     const result = sessionManager.parseSessionFilename('2026-02-13-abc12345-session.tmp.bak');
     assert.strictEqual(result, null, 'Should reject filenames with extra extension');
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles old-format filename without session ID', () => {
+  tally(test('handles old-format filename without session ID', () => {
     // The regex match[2] is undefined for old format → shortId defaults to 'no-id'
     const result = sessionManager.parseSessionFilename('2026-02-13-session.tmp');
     // Either null (regex doesn't match) or has no-id: both are acceptable
     assert.ok(result === null || result.shortId === 'no-id',
       'Old format yields null or a no-id shortId');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 33: birthtime / createdTime fallback ──
   console.log('\ncreatedTime fallback (Round 33):');
@@ -1134,7 +1135,7 @@ src/main.ts
   const r33FilePath = path.join(r33SessionsDir, r33Filename);
   fs.writeFileSync(r33FilePath, '{"type":"test"}');
 
-  if (test('getAllSessions returns createdTime from birthtime when available', () => {
+  tally(test('getAllSessions returns createdTime from birthtime when available', () => {
     const result = sessionManager.getAllSessions({ limit: 100 });
     assert.ok(result.sessions.length > 0, 'Should find the test session');
     const session = result.sessions[0];
@@ -1148,16 +1149,16 @@ src/main.ts
         'createdTime should match birthtime when available'
       );
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionById returns createdTime field', () => {
+  tally(test('getSessionById returns createdTime field', () => {
     const session = sessionManager.getSessionById('r33birth');
     assert.ok(session, 'Should find the session');
     assert.ok(session.createdTime instanceof Date, 'createdTime should be a Date');
     assert.ok(session.createdTime.getTime() > 0, 'createdTime should be non-zero');
-  })) passed++; else failed++;
+  }));
 
-  if (test('createdTime falls back to ctime when birthtime is epoch-zero', () => {
+  tally(test('createdTime falls back to ctime when birthtime is epoch-zero', () => {
     // This tests the || fallback logic: stats.birthtime || stats.ctime
     // On some FS, birthtime may be epoch 0 (falsy as a Date number comparison
     // but truthy as a Date object). The fallback is defensive.
@@ -1168,7 +1169,7 @@ src/main.ts
     const fallbackResult = stats.birthtime || stats.ctime;
     assert.ok(fallbackResult instanceof Date, 'Fallback should produce a Date');
     assert.ok(fallbackResult.getTime() > 0, 'Fallback date should be non-zero');
-  })) passed++; else failed++;
+  }));
 
   // Cleanup Round 33 HOME override
   process.env.HOME = r33OrigHome;
@@ -1182,7 +1183,7 @@ src/main.ts
   // ── Round 46: path heuristic and checklist edge cases ──
   console.log('\ngetSessionStats Windows path heuristic (Round 46):');
 
-  if (test('recognises Windows drive-letter path as a file path', () => {
+  tally(test('recognises Windows drive-letter path as a file path', () => {
     // The looksLikePath regex includes /^[A-Za-z]:[/\\]/ for Windows
     // A non-existent Windows path should still be treated as a path
     // (getSessionContent returns null → parseSessionMetadata(null) → defaults)
@@ -1190,26 +1191,26 @@ src/main.ts
     assert.strictEqual(stats1.lineCount, 0, 'C:/ path treated as path, not content');
     const stats2 = sessionManager.getSessionStats('D:\\Sessions\\2026-01-01.tmp');
     assert.strictEqual(stats2.lineCount, 0, 'D:\\ path treated as path, not content');
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not treat bare drive letter without slash as path', () => {
+  tally(test('does not treat bare drive letter without slash as path', () => {
     // "C:session.tmp" has no slash after colon → regex fails → treated as content
     const stats = sessionManager.getSessionStats('C:session.tmp');
     assert.strictEqual(stats.lineCount, 1, 'Bare C: without slash treated as content');
-  })) passed++; else failed++;
+  }));
 
   console.log('\nparseSessionMetadata checkbox case sensitivity (Round 46):');
 
-  if (test('uppercase [X] does not match completed items regex', () => {
+  tally(test('uppercase [X] does not match completed items regex', () => {
     const content = '# Test\n\n### Completed\n- [X] Uppercase task\n- [x] Lowercase task\n';
     const meta = sessionManager.parseSessionMetadata(content);
     // Regex is /- \[x\]\s*(.+)/g: only matches lowercase [x]
     assert.strictEqual(meta.completed.length, 1, 'Only lowercase [x] should match');
     assert.strictEqual(meta.completed[0], 'Lowercase task');
-  })) passed++; else failed++;
+  }));
 
   // getAllSessions returns empty result when sessions directory does not exist
-  if (test('getAllSessions returns empty when sessions dir missing', () => {
+  tally(test('getAllSessions returns empty when sessions dir missing', () => {
     const tmpDir = createTempSessionDir();
     const origHome = process.env.HOME;
     const origUserProfile = process.env.USERPROFILE;
@@ -1232,12 +1233,12 @@ src/main.ts
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       cleanup(tmpDir);
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 69: getSessionById returns null when sessions dir missing ──
   console.log('\nRound 69: getSessionById (missing sessions directory):');
 
-  if (test('getSessionById returns null when sessions directory does not exist', () => {
+  tally(test('getSessionById returns null when sessions directory does not exist', () => {
     const tmpDir = createTempSessionDir();
     const origHome = process.env.HOME;
     const origUserProfile = process.env.USERPROFILE;
@@ -1258,12 +1259,12 @@ src/main.ts
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       cleanup(tmpDir);
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 78: getSessionStats reads real file when given existing .tmp path ──
   console.log('\nRound 78: getSessionStats (actual file path → reads from disk):');
 
-  if (test('getSessionStats reads from disk when given path to existing .tmp file', () => {
+  tally(test('getSessionStats reads from disk when given path to existing .tmp file', () => {
     const dir = createTempSessionDir();
     try {
       const sessionPath = path.join(dir, '2026-03-01-test1234-session.tmp');
@@ -1280,12 +1281,12 @@ src/main.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 78: getAllSessions hasContent field ──
   console.log('\nRound 78: getAllSessions (hasContent field):');
 
-  if (test('getAllSessions hasContent is true for non-empty and false for empty files', () => {
+  tally(test('getAllSessions hasContent is true for non-empty and false for empty files', () => {
     const isoHome = path.join(os.tmpdir(), `egc-hascontent-${Date.now()}`);
     const isoSessions = path.join(isoHome, '.gemini', 'sessions');
     fs.mkdirSync(isoSessions, { recursive: true });
@@ -1318,12 +1319,12 @@ src/main.ts
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       fs.rmSync(isoHome, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 75: deleteSession catch: unlinkSync throws on read-only dir ──
   console.log('\nRound 75: deleteSession (unlink failure in read-only dir):');
 
-  if (test('deleteSession returns false when file exists but directory is read-only', () => {
+  tally(test('deleteSession returns false when file exists but directory is read-only', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
       console.log('    (skipped: chmod ineffective on Windows/root)');
       return;
@@ -1341,12 +1342,12 @@ src/main.ts
       try { fs.chmodSync(tmpDir, 0o755); } catch { /* best-effort */ }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 81: getSessionStats(null) ──
   console.log('\nRound 81: getSessionStats(null) (null input):');
 
-  if (test('getSessionStats(null) returns zero lineCount and empty metadata', () => {
+  tally(test('getSessionStats(null) returns zero lineCount and empty metadata', () => {
     // session-manager.js line 158-177: getSessionStats accepts path or content.
     // typeof null === 'string' is false → looksLikePath = false → content = null.
     // Line 177: content ? content.split('\n').length : 0 → lineCount: 0.
@@ -1358,12 +1359,12 @@ src/main.ts
     assert.strictEqual(stats.inProgressItems, 0, 'null input should yield inProgressItems 0');
     assert.strictEqual(stats.hasNotes, false, 'null input should yield hasNotes false');
     assert.strictEqual(stats.hasContext, false, 'null input should yield hasContext false');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 83: getAllSessions TOCTOU statSync catch (broken symlink) ──
   console.log('\nRound 83: getAllSessions (broken symlink: statSync catch):');
 
-  if (test('getAllSessions skips broken symlink .tmp files gracefully', () => {
+  tally(test('getAllSessions skips broken symlink .tmp files gracefully', () => {
     // getAllSessions at line 241-246: statSync throws for broken symlinks,
     // the catch causes `continue`, skipping that entry entirely.
     const isoHome = path.join(os.tmpdir(), `egc-r83-toctou-${Date.now()}`);
@@ -1397,12 +1398,12 @@ src/main.ts
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       fs.rmSync(isoHome, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 84: getSessionById TOCTOU: statSync catch returns null for broken symlink ──
   console.log('\nRound 84: getSessionById (broken symlink: statSync catch):');
 
-  if (test('getSessionById returns null when matching session is a broken symlink', () => {
+  tally(test('getSessionById returns null when matching session is a broken symlink', () => {
     // getSessionById at line 307-310: statSync throws for broken symlinks,
     // the catch returns null (file deleted between readdir and stat).
     const isoHome = path.join(os.tmpdir(), `egc-r84-getbyid-toctou-${Date.now()}`);
@@ -1431,11 +1432,11 @@ src/main.ts
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       fs.rmSync(isoHome, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 88: parseSessionMetadata null date/started/lastUpdated fields ──
   console.log('\nRound 88: parseSessionMetadata content lacking Date/Started/Updated fields:');
-  if (test('parseSessionMetadata returns null for date, started, lastUpdated when fields absent', () => {
+  tally(test('parseSessionMetadata returns null for date, started, lastUpdated when fields absent', () => {
     const content = '# Title Only\n\n### Notes for Next Session\nSome notes\n';
     const meta = sessionManager.parseSessionMetadata(content);
     assert.strictEqual(meta.date, null,
@@ -1447,12 +1448,12 @@ src/main.ts
     // Confirm other fields still parse correctly
     assert.strictEqual(meta.title, 'Title Only');
     assert.strictEqual(meta.notes, 'Some notes');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 89: getAllSessions skips subdirectories (!entry.isFile()) ──
   console.log('\nRound 89: getAllSessions (subdirectory skip):');
 
-  if (test('getAllSessions skips subdirectories inside sessions dir', () => {
+  tally(test('getAllSessions skips subdirectories inside sessions dir', () => {
     // session-manager.js line 220: if (!entry.isFile() || ...) continue;
     // Existing tests create non-.tmp FILES to test filtering (e.g., notes.txt).
     // This test creates a DIRECTORY: entry.isFile() returns false, so it should be skipped.
@@ -1492,12 +1493,12 @@ src/main.ts
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       fs.rmSync(isoHome, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 91: getSessionStats with mixed Windows path separators ──
   console.log('\nRound 91: getSessionStats (mixed Windows path separators):');
 
-  if (test('getSessionStats treats mixed Windows separators as a file path', () => {
+  tally(test('getSessionStats treats mixed Windows separators as a file path', () => {
     // session-manager.js line 166: regex /^[A-Za-z]:[/\\]/ checks only the
     // character right after the colon. Mixed separators like C:\Users/Mixed\session.tmp
     // should still match because the first separator (\) satisfies the regex.
@@ -1505,12 +1506,12 @@ src/main.ts
     assert.strictEqual(stats.lineCount, 0,
       'Mixed separators should be treated as path (file does not exist → lineCount 0)');
     assert.strictEqual(stats.totalItems, 0, 'Non-existent path should have 0 items');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 92: getSessionStats with UNC path treated as content ──
   console.log('\nRound 92: getSessionStats (Windows UNC path):');
 
-  if (test('getSessionStats treats UNC path as content (not recognized as file path)', () => {
+  tally(test('getSessionStats treats UNC path as content (not recognized as file path)', () => {
     // session-manager.js line 163-166: The path heuristic checks for Unix paths
     // (starts with /) and Windows drive-letter paths (/^[A-Za-z]:[/\\]/). UNC paths
     // (\\server\share\file.tmp) don't match either pattern, so the function treats
@@ -1518,12 +1519,12 @@ src/main.ts
     const stats = sessionManager.getSessionStats('\\\\server\\share\\session.tmp');
     assert.strictEqual(stats.lineCount, 1,
       'UNC path should be treated as single-line content (not a recognized path)');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 93: getSessionStats with drive letter but no slash (regex boundary) ──
   console.log('\nRound 93: getSessionStats (drive letter without slash: regex boundary):');
 
-  if (test('getSessionStats treats drive letter without slash as content (not a path)', () => {
+  tally(test('getSessionStats treats drive letter without slash as content (not a path)', () => {
     // session-manager.js line 166: /^[A-Za-z]:[/\\]/ requires a '/' or '\'
     // immediately after the colon.  'Z:nosession.tmp' has 'Z:n' which does NOT
     // match, so looksLikePath is false even though .endsWith('.tmp') is true.
@@ -1532,7 +1533,7 @@ src/main.ts
       'Z:nosession.tmp (no slash) should be treated as single-line content');
     assert.strictEqual(stats.totalItems, 0,
       'Content without session items should have 0 totalItems');
-  })) passed++; else failed++;
+  }));
 
   // Re-establish test environment for Rounds 95-98 (these tests need sessions to exist)
   const tmpHome2 = path.join(os.tmpdir(), `egc-session-mgr-test-2-${Date.now()}`);
@@ -1557,7 +1558,7 @@ src/main.ts
   // ── Round 95: getAllSessions with both negative offset AND negative limit ──
   console.log('\nRound 95: getAllSessions (both negative offset and negative limit):');
 
-  if (test('getAllSessions clamps both negative offset (to 0) and negative limit (to 1) simultaneously', () => {
+  tally(test('getAllSessions clamps both negative offset (to 0) and negative limit (to 1) simultaneously', () => {
     const result = sessionManager.getAllSessions({ offset: -5, limit: -10 });
     // offset clamped: Math.max(0, Math.floor(-5)) → 0
     // limit clamped: Math.max(1, Math.floor(-10)) → 1
@@ -1568,23 +1569,23 @@ src/main.ts
       'Negative limit should be clamped to 1');
     assert.ok(result.sessions.length <= 1,
       'Should return at most 1 session (slice(0, 1))');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 96: parseSessionFilename with Feb 30 (impossible date) ──
   console.log('\nRound 96: parseSessionFilename (Feb 30: impossible date):');
 
-  if (test('parseSessionFilename rejects Feb 30 (passes day<=31 but fails Date rollover)', () => {
+  tally(test('parseSessionFilename rejects Feb 30 (passes day<=31 but fails Date rollover)', () => {
     // Feb 30 passes the bounds check (month 1-12, day 1-31) at line 37
     // but new Date(2026, 1, 30) → March 2 (rollover), so getMonth() !== 1 → returns null
     const result = sessionManager.parseSessionFilename('2026-02-30-abcd1234-session.tmp');
     assert.strictEqual(result, null,
       'Feb 30 should be rejected by Date constructor rollover check (line 41)');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 96: getAllSessions with limit: Infinity ──
   console.log('\nRound 96: getAllSessions (limit: Infinity: pagination bypass):');
 
-  if (test('getAllSessions with limit: Infinity returns all sessions (no pagination)', () => {
+  tally(test('getAllSessions with limit: Infinity returns all sessions (no pagination)', () => {
     // Number(Infinity) = Infinity, Number.isNaN(Infinity) = false
     // Math.max(1, Math.floor(Infinity)) = Math.max(1, Infinity) = Infinity
     // slice(0, 0 + Infinity) returns all elements
@@ -1595,12 +1596,12 @@ src/main.ts
       'All sessions should be returned (no pagination truncation)');
     assert.strictEqual(result.hasMore, false,
       'hasMore should be false since all sessions are returned');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 96: getAllSessions with limit: null ──
   console.log('\nRound 96: getAllSessions (limit: null: destructuring default bypass):');
 
-  if (test('getAllSessions with limit: null clamps to 1 (null bypasses destructuring default)', () => {
+  tally(test('getAllSessions with limit: null clamps to 1 (null bypasses destructuring default)', () => {
     // Destructuring default only fires for undefined, NOT null
     // rawLimit = null (not 50), Number(null) = 0, Math.max(1, 0) = 1
     const result = sessionManager.getAllSessions({ limit: null });
@@ -1608,12 +1609,12 @@ src/main.ts
       'null limit should become 1 (Number(null)=0, clamped via Math.max(1,0))');
     assert.ok(result.sessions.length <= 1,
       'Should return at most 1 session (clamped limit)');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 97: getAllSessions with whitespace search filters out everything ──
   console.log('\nRound 97: getAllSessions (whitespace search: truthy but unmatched):');
 
-  if (test('getAllSessions with search: " " returns empty because space is truthy but never matches shortId', () => {
+  tally(test('getAllSessions with search: " " returns empty because space is truthy but never matches shortId', () => {
     // session-manager.js line 233: if (search && !metadata.shortId.includes(search))
     // ' ' (space) is truthy so the filter is applied, but shortIds are hex strings
     // that never contain spaces, so ALL sessions are filtered out.
@@ -1629,16 +1630,16 @@ src/main.ts
     const allResult = sessionManager.getAllSessions({ search: null, limit: 100 });
     assert.ok(allResult.total > 0,
       'Null search should return sessions (confirming they exist but space filtered them)');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 98: getSessionById with null sessionId returns null ──
   console.log('\nRound 98: getSessionById (null sessionId: guarded null return):');
 
-  if (test('getSessionById(null) returns null when session files exist', () => {
+  tally(test('getSessionById(null) returns null when session files exist', () => {
     // Keep a populated sessions directory so the early input guard is exercised even when
     // candidate files are present.
     assert.strictEqual(sessionManager.getSessionById(null), null);
-  })) passed++; else failed++;
+  }));
 
   // (Round 98: parseSessionFilename below doesn't need sessions)
   process.env.HOME = origHome2;
@@ -1656,16 +1657,16 @@ src/main.ts
   // ── Round 98: parseSessionFilename with null input returns null ──
   console.log('\nRound 98: parseSessionFilename (null input is safely rejected):');
 
-  if (test('parseSessionFilename(null) returns null instead of throwing', () => {
+  tally(test('parseSessionFilename(null) returns null instead of throwing', () => {
     assert.strictEqual(sessionManager.parseSessionFilename(null), null);
     assert.strictEqual(sessionManager.parseSessionFilename(undefined), null);
     assert.strictEqual(sessionManager.parseSessionFilename(123), null);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 99: writeSessionContent with null path returns false (error caught) ──
   console.log('\nRound 99: writeSessionContent (null path: error handling):');
 
-  if (test('writeSessionContent(null, content) returns false (TypeError caught by try/catch)', () => {
+  tally(test('writeSessionContent(null, content) returns false (TypeError caught by try/catch)', () => {
     // session-manager.js lines 372-378: writeSessionContent wraps fs.writeFileSync
     // in a try/catch. When sessionPath is null, fs.writeFileSync throws TypeError:
     // 'The "path" argument must be of type string or Buffer or URL. Received null'
@@ -1673,11 +1674,11 @@ src/main.ts
     const result = sessionManager.writeSessionContent(null, 'some content');
     assert.strictEqual(result, false,
       'null path should be caught by try/catch and return false');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 100: parseSessionMetadata with ### inside item text (premature section termination) ──
   console.log('\nRound 100: parseSessionMetadata (### in item text: lazy regex truncation):');
-  if (test('parseSessionMetadata truncates item text at embedded ### due to lazy regex lookahead', () => {
+  tally(test('parseSessionMetadata truncates item text at embedded ### due to lazy regex lookahead', () => {
     const content = `# Session
 
 ### Completed
@@ -1695,11 +1696,11 @@ src/main.ts
       'Only 1 item extracted: second item is after the inner ### terminator');
     assert.strictEqual(meta.completed[0], 'Fix issue',
       'Item text truncated at embedded ### (lazy regex stops at first ### match)');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 101: getSessionStats with non-string input (number) throws TypeError ──
   console.log('\nRound 101: getSessionStats (non-string input: type confusion crash):');
-  if (test('getSessionStats(123) throws TypeError (number reaches parseSessionMetadata → .match() fails)', () => {
+  tally(test('getSessionStats(123) throws TypeError (number reaches parseSessionMetadata → .match() fails)', () => {
     // typeof 123 === 'number' → looksLikePath = false → content = 123
     // parseSessionMetadata(123) → !123 is false → 123.match(...) → TypeError
     assert.throws(
@@ -1707,19 +1708,19 @@ src/main.ts
       { name: 'TypeError' },
       'Non-string input (number) should crash in parseSessionMetadata (.match not a function)'
     );
-  })) passed++; else failed++;
+  }));
 
   // ── Round 101: appendSessionContent(null, 'content') returns false (error caught) ──
   console.log('\nRound 101: appendSessionContent (null path: error handling):');
-  if (test('appendSessionContent(null, content) returns false (TypeError caught by try/catch)', () => {
+  tally(test('appendSessionContent(null, content) returns false (TypeError caught by try/catch)', () => {
     const result = sessionManager.appendSessionContent(null, 'some content');
     assert.strictEqual(result, false,
       'null path should cause fs.appendFileSync to throw TypeError, caught by try/catch');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 102: getSessionStats with Unix nonexistent .tmp path (looksLikePath heuristic) ──
   console.log('\nRound 102: getSessionStats (Unix nonexistent .tmp path: looksLikePath → null content):');
-  if (test('getSessionStats returns zeroed stats when Unix path looks like file but does not exist', () => {
+  tally(test('getSessionStats returns zeroed stats when Unix path looks like file but does not exist', () => {
     // session-manager.js lines 163-166: looksLikePath heuristic checks typeof string,
     // no newlines, endsWith('.tmp'), startsWith('/').  A nonexistent Unix path triggers
     // the file-read branch → readFile returns null → parseSessionMetadata(null) returns
@@ -1733,11 +1734,11 @@ src/main.ts
       'No notes section in null content');
     assert.strictEqual(stats.hasContext, false,
       'No context section in null content');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 102: parseSessionMetadata with [x] checked items in In Progress section ──
   console.log('\nRound 102: parseSessionMetadata ([x] items in In Progress: regex skips checked):');
-  if (test('parseSessionMetadata skips [x] checked items in In Progress section (regex only matches [ ])', () => {
+  tally(test('parseSessionMetadata skips [x] checked items in In Progress section (regex only matches [ ])', () => {
     // session-manager.js line 130: progressSection regex uses `- \[ \]\s*(.+)` which
     // only matches unchecked checkboxes.  Checked items `- [x]` in the In Progress
     // section are silently ignored: they don't match the regex pattern.
@@ -1756,11 +1757,11 @@ src/main.ts
       'First unchecked item');
     assert.strictEqual(meta.inProgress[1], 'Second active task',
       'Second unchecked item');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 104: parseSessionMetadata with whitespace-only notes section ──
   console.log('\nRound 104: parseSessionMetadata (whitespace-only notes: trim reduces to empty):');
-  if (test('parseSessionMetadata treats whitespace-only notes as absent (trim → empty string → falsy)', () => {
+  tally(test('parseSessionMetadata treats whitespace-only notes as absent (trim → empty string → falsy)', () => {
     // session-manager.js line 139: `metadata.notes = notesSection[1].trim()`: when the
     // Notes section heading exists but only contains whitespace/newlines, trim() returns "".
     // Then getSessionStats line 178: `hasNotes: !!metadata.notes`: `!!""` is `false`.
@@ -1783,12 +1784,12 @@ file.ts
       'hasNotes should be false because !!"" is false (whitespace-only notes treated as absent)');
     assert.strictEqual(stats.hasContext, true,
       'hasContext should be true (context section has actual content)');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 105: parseSessionMetadata blank-line boundary truncates section items ──
   console.log('\nRound 105: parseSessionMetadata (blank line inside section: regex stops at \\n\\n):');
 
-  if (test('parseSessionMetadata drops completed items after a blank line within the section', () => {
+  tally(test('parseSessionMetadata drops completed items after a blank line within the section', () => {
     // session-manager.js line 119: regex `(?=###|\n\n|$)` uses lazy [\s\S]*? with
     // a lookahead that stops at the first \n\n. If completed items are separated
     // by a blank line, items below the blank line are silently lost.
@@ -1805,11 +1806,11 @@ file.ts
       'In Progress should still capture Task C');
     assert.strictEqual(meta.inProgress[0], 'Task C',
       'In-progress item should be Task C');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 106: getAllSessions with array/object limit: Number() coercion edge cases ──
   console.log('\nRound 106: getAllSessions (array/object limit coercion: Number([5])→5, Number({})→NaN→50):');
-  if (test('getAllSessions coerces array/object limit via Number() with NaN fallback to 50', () => {
+  tally(test('getAllSessions coerces array/object limit via Number() with NaN fallback to 50', () => {
     const isoHome = path.join(os.tmpdir(), `egc-r106-limit-coerce-${Date.now()}`);
     const isoSessionsDir = path.join(isoHome, '.gemini', 'sessions');
     fs.mkdirSync(isoSessionsDir, { recursive: true });
@@ -1850,11 +1851,11 @@ file.ts
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       fs.rmSync(isoHome, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 109: getAllSessions skips .tmp files that don't match session filename format ──
   console.log('\nRound 109: getAllSessions (non-session .tmp files: parseSessionFilename returns null → skip):');
-  if (test('getAllSessions ignores .tmp files with non-matching filenames', () => {
+  tally(test('getAllSessions ignores .tmp files with non-matching filenames', () => {
     const isoHome = path.join(os.tmpdir(), `egc-r109-nonsession-${Date.now()}`);
     const isoSessionsDir = path.join(isoHome, '.gemini', 'sessions');
     fs.mkdirSync(isoSessionsDir, { recursive: true });
@@ -1883,11 +1884,11 @@ file.ts
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       fs.rmSync(isoHome, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 108: getSessionSize exact boundary at 1024 bytes: B→KB transition ──
   console.log('\nRound 108: getSessionSize (exact 1024-byte boundary: < means 1024 is KB, 1023 is B):');
-  if (test('getSessionSize returns KB at exactly 1024 bytes and B at 1023', () => {
+  tally(test('getSessionSize returns KB at exactly 1024 bytes and B at 1023', () => {
     const dir = createTempSessionDir();
     try {
       // Exactly 1024 bytes → size < 1024 is FALSE → goes to KB branch
@@ -1913,11 +1914,11 @@ file.ts
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 110: parseSessionFilename year 0000: JS Date maps year 0 to 1900 ──
   console.log('\nRound 110: parseSessionFilename (year 0000: Date constructor maps 0→1900):');
-  if (test('parseSessionFilename with year 0000 produces datetime in 1900 due to JS Date legacy mapping', () => {
+  tally(test('parseSessionFilename with year 0000 produces datetime in 1900 due to JS Date legacy mapping', () => {
     // JavaScript's multi-arg Date constructor treats years 0-99 as 1900-1999
     // So new Date(0, 0, 1) → January 1, 1900 (not year 0000)
     const result = sessionManager.parseSessionFilename('0000-01-01-abcd1234-session.tmp');
@@ -1937,11 +1938,11 @@ file.ts
     assert.notStrictEqual(result100, null, 'Year 0100 should also parse');
     assert.strictEqual(result100.datetime.getFullYear(), 100,
       'Year 100+ is not affected by the 0-99 → 1900-1999 mapping');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 110: parseSessionFilename accepts mixed-case IDs ──
   console.log('\nRound 110: parseSessionFilename (mixed-case IDs are accepted):');
-  if (test('parseSessionFilename accepts filenames with uppercase characters in short ID', () => {
+  tally(test('parseSessionFilename accepts filenames with uppercase characters in short ID', () => {
     const upperResult = sessionManager.parseSessionFilename('2026-01-15-ABCD1234-session.tmp');
     assert.notStrictEqual(upperResult, null,
       'All-uppercase ID should be accepted');
@@ -1956,11 +1957,11 @@ file.ts
     assert.notStrictEqual(lowerResult, null,
       'All-lowercase ID should still be accepted');
     assert.strictEqual(lowerResult.shortId, 'abcd1234');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 111: parseSessionMetadata context with nested triple backticks: lazy regex truncation ──
   console.log('\nRound 111: parseSessionMetadata (nested ``` in context: lazy \\S*? stops at first ```):");');
-  if (test('parseSessionMetadata context capture truncated by nested triple backticks', () => {
+  tally(test('parseSessionMetadata context capture truncated by nested triple backticks', () => {
     // The regex: /### Context to Load\s*\n```\n([\s\S]*?)```/
     // The lazy [\s\S]*? matches as few chars as possible, so it stops at the
     // FIRST ``` it encounters: even if that's inside the code block content.
@@ -1995,11 +1996,11 @@ file.ts
       'Clean context should have first line');
     assert.ok(cleanMeta.context.includes('const y = 2'),
       'Clean context should have second line');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 112: getSessionStats with newline-containing absolute path: treated as content ──
   console.log('\nRound 112: getSessionStats (newline-in-path heuristic):');
-  if (test('getSessionStats treats absolute .tmp path containing newline as content, not a file path', () => {
+  tally(test('getSessionStats treats absolute .tmp path containing newline as content, not a file path', () => {
     // The looksLikePath heuristic at line 163-166 checks:
     //   !sessionPathOrContent.includes('\n')
     // A string with embedded newline fails this check and is treated as content
@@ -2022,11 +2023,11 @@ file.ts
     assert.ok(realStats, 'Should return stats even for nonexistent path');
     assert.strictEqual(realStats.lineCount, 0,
       'Non-existent file returns empty content with 0 lines');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 112: appendSessionContent with read-only file: returns false ──
   console.log('\nRound 112: appendSessionContent (read-only file):');
-  if (test('appendSessionContent returns false when file is read-only (EACCES)', () => {
+  tally(test('appendSessionContent returns false when file is read-only (EACCES)', () => {
     if (process.platform === 'win32') {
       // chmod doesn't work reliably on Windows: skip
       return;
@@ -2052,11 +2053,11 @@ file.ts
       try { fs.chmodSync(readOnlyFile, 0o644); } catch (_e) { /* ignore permission errors */ }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 113: parseSessionFilename century leap year validation (1900, 2100 not leap; 2000 is) ──
   console.log('\nRound 113: parseSessionFilename (century leap year: 100/400 rules):');
-  if (test('parseSessionFilename rejects Feb 29 in century non-leap years (1900, 2100) but accepts 2000', () => {
+  tally(test('parseSessionFilename rejects Feb 29 in century non-leap years (1900, 2100) but accepts 2000', () => {
     // Gregorian rule: divisible by 100 → NOT leap, UNLESS also divisible by 400
     // 1900: divisible by 100 but NOT by 400 → NOT leap → Feb 29 invalid
     const result1900 = sessionManager.parseSessionFilename('1900-02-29-abcd1234-session.tmp');
@@ -2082,11 +2083,11 @@ file.ts
     const result1900Feb28 = sessionManager.parseSessionFilename('1900-02-28-abcd1234-session.tmp');
     assert.notStrictEqual(result1900Feb28, null,
       'Feb 28 should always be valid even in non-leap years');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 113: parseSessionMetadata title with markdown formatting: raw markdown preserved ──
   console.log('\nRound 113: parseSessionMetadata (title with markdown formatting: raw markdown preserved):');
-  if (test('parseSessionMetadata captures raw markdown formatting in title without stripping', () => {
+  tally(test('parseSessionMetadata captures raw markdown formatting in title without stripping', () => {
     // The regex /^#\s+(.+)$/m captures everything after "# ", including markdown
     const boldContent = '# **Important Session**\n\nSome content';
     const boldMeta = sessionManager.parseSessionMetadata(boldContent);
@@ -2116,11 +2117,11 @@ file.ts
     const trailingMeta = sessionManager.parseSessionMetadata(trailingContent);
     assert.strictEqual(trailingMeta.title, 'Title with spaces',
       'Trailing whitespace should be trimmed');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 115: parseSessionMetadata with CRLF line endings: section boundaries differ ──
   console.log('\nRound 115: parseSessionMetadata (CRLF line endings: \\r\\n vs \\n in section regexes):');
-  if (test('parseSessionMetadata handles CRLF content: title trimmed, sections may over-capture', () => {
+  tally(test('parseSessionMetadata handles CRLF content: title trimmed, sections may over-capture', () => {
     // Title regex /^#\s+(.+)$/m: . matches \r, trim() removes it
     const crlfTitle = '# My Session\r\n\r\n**Date:** 2026-01-15';
     const titleMeta = sessionManager.parseSessionMetadata(crlfTitle);
@@ -2172,11 +2173,11 @@ file.ts
     // so [\s\S]*? extends to $ and captures everything including trailing text
     assert.ok(noNextMeta.completed.length >= 1,
       'Should find at least 1 completed item in CRLF-only content');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 117: getSessionSize boundary values: B/KB/MB formatting thresholds ──
   console.log('\nRound 117: getSessionSize (B/KB/MB formatting at exact boundary thresholds):');
-  if (test('getSessionSize formats correctly at B→KB boundary (1023→"1023 B", 1024→"1.0 KB") and KB→MB', () => {
+  tally(test('getSessionSize formats correctly at B→KB boundary (1023→"1023 B", 1024→"1.0 KB") and KB→MB', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r117-size-boundary-'));
     try {
       // Zero-byte file
@@ -2215,11 +2216,11 @@ file.ts
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 117: parseSessionFilename accepts uppercase, underscores, and short IDs ──
   console.log('\nRound 117: parseSessionFilename (uppercase, underscores, and short IDs are accepted):');
-  if (test('parseSessionFilename accepts uppercase short IDs, underscores, and 7-char names', () => {
+  tally(test('parseSessionFilename accepts uppercase short IDs, underscores, and 7-char names', () => {
     const upper = sessionManager.parseSessionFilename('2026-01-15-ABCDEFGH-session.tmp');
     assert.notStrictEqual(upper, null,
       'All-uppercase ID should be accepted');
@@ -2245,11 +2246,11 @@ file.ts
     const shortName = sessionManager.parseSessionFilename('2026-01-15-homelab-session.tmp');
     assert.notStrictEqual(shortName, null, '7-character names should be accepted');
     assert.strictEqual(shortName.shortId, 'homelab');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 119: parseSessionMetadata "Context to Load" code block extraction ──
   console.log('\nRound 119: parseSessionMetadata ("Context to Load": code block extraction edge cases):');
-  if (test('parseSessionMetadata extracts Context to Load from code block, handles missing/nested blocks', () => {
+  tally(test('parseSessionMetadata extracts Context to Load from code block, handles missing/nested blocks', () => {
     // Valid context extraction
     const validContent = [
       '# Session\n\n',
@@ -2305,11 +2306,11 @@ file.ts
     const emptyMeta = sessionManager.parseSessionMetadata(emptyBlock);
     assert.strictEqual(emptyMeta.context, '',
       'Empty code block should result in empty context (trim of empty)');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 120: parseSessionMetadata "Notes for Next Session" extraction edge cases ──
   console.log('\nRound 120: parseSessionMetadata ("Notes for Next Session": extraction edge cases):');
-  if (test('parseSessionMetadata extracts notes section: last section, empty, followed by ###', () => {
+  tally(test('parseSessionMetadata extracts notes section: last section, empty, followed by ###', () => {
     // Notes as the last section (no ### or \n\n after)
     const lastSection = '# Session\n\n### Notes for Next Session\nRemember to review PR #42\nAlso check CI status';
     const lastMeta = sessionManager.parseSessionMetadata(lastSection);
@@ -2343,11 +2344,11 @@ file.ts
       'Markdown bold should be preserved in notes');
     assert.ok(mdMeta.notes.includes('`config.js`'),
       'Markdown code should be preserved in notes');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 121: parseSessionMetadata Started/Last Updated time extraction ──
   console.log('\nRound 121: parseSessionMetadata (Started/Last Updated time extraction):');
-  if (test('parseSessionMetadata extracts Started and Last Updated times from markdown', () => {
+  tally(test('parseSessionMetadata extracts Started and Last Updated times from markdown', () => {
     // Standard format
     const standard = '# Session\n\n**Date:** 2026-01-15\n**Started:** 14:30\n**Last Updated:** 16:45';
     const stdMeta = sessionManager.parseSessionMetadata(standard);
@@ -2383,11 +2384,11 @@ file.ts
     const looseMeta = sessionManager.parseSessionMetadata(loose);
     assert.strictEqual(looseMeta.started, '1:2:3:4',
       'Loose [\\d:]+ regex captures any digits-and-colons combination');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 122: getSessionById old format (no-id): noIdMatch path ──
   console.log('\nRound 122: getSessionById (old format no-id: date-only filename match):');
-  if (test('getSessionById matches old format YYYY-MM-DD-session.tmp via noIdMatch path', () => {
+  tally(test('getSessionById matches old format YYYY-MM-DD-session.tmp via noIdMatch path', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'r122-old-format-'));
     const origHome = process.env.HOME;
     const origUserProfile = process.env.USERPROFILE;
@@ -2426,11 +2427,11 @@ file.ts
       delete require.cache[require.resolve('../../scripts/lib/session-manager')];
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 123: parseSessionMetadata with CRLF line endings: section boundaries break ──
   console.log('\nRound 123: parseSessionMetadata (CRLF section boundaries: \\n\\n fails to match \\r\\n\\r\\n):');
-  if (test('parseSessionMetadata CRLF content: \\n\\n boundary fails, lazy match bleeds across sections', () => {
+  tally(test('parseSessionMetadata CRLF content: \\n\\n boundary fails, lazy match bleeds across sections', () => {
     // session-manager.js lines 119-134: regex uses (?=###|\n\n|$) to delimit sections.
     // On CRLF content, a blank line is \r\n\r\n, NOT \n\n. The \n\n alternation
     // won't match, so the lazy [\s\S]*? extends past the blank line until it hits
@@ -2499,11 +2500,11 @@ file.ts
     // CRLF notes will be longer (bleed through blank line)
     assert.ok(meta4.notes.length >= meta5.notes.length,
       'CRLF notes >= LF notes length (CRLF may bleed past blank line)');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 124: getAllSessions with invalid date format (strict equality, no normalization) ──
   console.log('\nRound 124: getAllSessions (invalid date format: strict !== comparison):');
-  if (test('getAllSessions date filter uses strict equality so wrong format returns empty', () => {
+  tally(test('getAllSessions date filter uses strict equality so wrong format returns empty', () => {
     // session-manager.js line 228: `if (date && metadata.date !== date)`: strict inequality.
     // metadata.date is always "YYYY-MM-DD" format. Passing a different format like
     // "2026/01/15" or "Jan 15 2026" will never match, silently returning empty.
@@ -2562,11 +2563,11 @@ file.ts
       delete require.cache[require.resolve('../../scripts/lib/session-manager')];
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 124: parseSessionMetadata title edge cases (no space, wrong level, multiple, empty) ──
   console.log('\nRound 124: parseSessionMetadata (title regex edge cases: /^#\\s+(.+)$/m):');
-  if (test('parseSessionMetadata title: no space after # fails, ## fails, multiple picks first, empty trims', () => {
+  tally(test('parseSessionMetadata title: no space after # fails, ## fails, multiple picks first, empty trims', () => {
     // session-manager.js line 95: /^#\s+(.+)$/m
     // \s+ requires at least one whitespace after #, (.+) captures rest of line
 
@@ -2609,7 +2610,7 @@ file.ts
     const meta6 = sessionManager.parseSessionMetadata(tabTitle);
     assert.strictEqual(meta6.title, 'Tab Title',
       'Tab after # matches \\s+ (\\s includes \\t)');
-  })) passed++; else failed++;
+  }));
 
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

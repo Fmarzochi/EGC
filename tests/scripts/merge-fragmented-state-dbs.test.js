@@ -94,8 +94,9 @@ async function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (await test('dry-run reports rows that would be inserted without touching the canonical db', async () => {
+  tally(await test('dry-run reports rows that would be inserted without touching the canonical db', async () => {
     const dir = createTempDir('egc-merge-dryrun-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -125,9 +126,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('--apply inserts only the rows missing from canonical, keyed by primary key', async () => {
+  tally(await test('--apply inserts only the rows missing from canonical, keyed by primary key', async () => {
     const dir = createTempDir('egc-merge-apply-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -168,9 +169,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a source db missing a table (older schema) is skipped without crashing, other tables still merge', async () => {
+  tally(await test('a source db missing a table (older schema) is skipped without crashing, other tables still merge', async () => {
     const dir = createTempDir('egc-merge-oldschema-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -196,9 +197,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a source db file is never modified on disk, even when it has rows to merge', async () => {
+  tally(await test('a source db file is never modified on disk, even when it has rows to merge', async () => {
     const dir = createTempDir('egc-merge-readonly-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -223,9 +224,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('--apply creates a timestamped backup of the canonical db before writing, dry-run does not', async () => {
+  tally(await test('--apply creates a timestamped backup of the canonical db before writing, dry-run does not', async () => {
     const dir = createTempDir('egc-merge-backup-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -243,9 +244,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a missing source path is reported as an error instead of throwing', async () => {
+  tally(await test('a missing source path is reported as an error instead of throwing', async () => {
     const dir = createTempDir('egc-merge-missing-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -260,9 +261,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('--apply renames each merged source to a .merged-<timestamp>.bak next to itself, sidecars included, byte for byte', async () => {
+  tally(await test('--apply renames each merged source to a .merged-<timestamp>.bak next to itself, sidecars included, byte for byte', async () => {
     const dir = createTempDir('egc-merge-archive-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -294,9 +295,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a dry run archives nothing, and neither does a source that could not be merged', async () => {
+  tally(await test('a dry run archives nothing, and neither does a source that could not be merged', async () => {
     const dir = createTempDir('egc-merge-noarchive-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -317,9 +318,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('the canonical store handed in as a source is refused and left in place', async () => {
+  tally(await test('the canonical store handed in as a source is refused and left in place', async () => {
     const dir = createTempDir('egc-merge-self-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -332,9 +333,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('after --apply the doctor no longer lists the merged copies as stray', async () => {
+  tally(await test('after --apply the doctor no longer lists the merged copies as stray', async () => {
     const homeDir = createTempDir('egc-merge-home-');
     const projectRoot = createTempDir('egc-merge-project-');
     try {
@@ -366,9 +367,9 @@ async function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('the CLI honours --keep-sources and explains the archive step in its usage text', async () => {
+  tally(await test('the CLI honours --keep-sources and explains the archive step in its usage text', async () => {
     const dir = createTempDir('egc-merge-cli-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -397,9 +398,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a rename that fails is reported on that source while the merge result stands', async () => {
+  tally(await test('a rename that fails is reported on that source while the merge result stands', async () => {
     const dir = createTempDir('egc-merge-archive-error-');
     const originalRename = fs.renameSync;
     try {
@@ -429,9 +430,9 @@ async function runTests() {
       fs.renameSync = originalRename;
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('the canonical store reached through a symlink or another spelling is refused all the same', async () => {
+  tally(await test('the canonical store reached through a symlink or another spelling is refused all the same', async () => {
     const dir = createTempDir('egc-merge-alias-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -453,9 +454,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('an archive destination that already exists is never overwritten', async () => {
+  tally(await test('an archive destination that already exists is never overwritten', async () => {
     const dir = createTempDir('egc-merge-collision-');
     try {
       const sourcePath = path.join(dir, 'source.db');
@@ -482,9 +483,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a sidecar that fails to move puts the store back under its original name', async () => {
+  tally(await test('a sidecar that fails to move puts the store back under its original name', async () => {
     const dir = createTempDir('egc-merge-rollback-');
     const originalRename = fs.renameSync;
     try {
@@ -515,9 +516,9 @@ async function runTests() {
       fs.renameSync = originalRename;
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a source none of whose tables could be read stays in place and says why', async () => {
+  tally(await test('a source none of whose tables could be read stays in place and says why', async () => {
     const dir = createTempDir('egc-merge-unreadable-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -538,9 +539,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a source reached through a symlink is refused so its target never stays behind', async () => {
+  tally(await test('a source reached through a symlink is refused so its target never stays behind', async () => {
     if (process.platform === 'win32') {
       // Creating a symlink needs a privilege the CI runner does not hold; the
       // hard-link case below exercises the same refusal path on Windows.
@@ -563,9 +564,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a source with other hard links is refused, and a hard link to the live store counts as the live store', async () => {
+  tally(await test('a source with other hard links is refused, and a hard link to the live store counts as the live store', async () => {
     const dir = createTempDir('egc-merge-hardlink-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -587,9 +588,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a dry run against a canonical store that does not exist yet still tells the source apart from it', async () => {
+  tally(await test('a dry run against a canonical store that does not exist yet still tells the source apart from it', async () => {
     const dir = createTempDir('egc-merge-fresh-');
     try {
       const canonicalPath = path.join(dir, 'fresh', 'state.db');
@@ -602,9 +603,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('a rollback that fails too still leaves the original error on the source entry', async () => {
+  tally(await test('a rollback that fails too still leaves the original error on the source entry', async () => {
     const dir = createTempDir('egc-merge-rollback-fail-');
     const originalRename = fs.renameSync;
     try {
@@ -627,9 +628,9 @@ async function runTests() {
       fs.renameSync = originalRename;
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('the CLI exits with code 1 and prints the error when a source is not a database', async () => {
+  tally(await test('the CLI exits with code 1 and prints the error when a source is not a database', async () => {
     const dir = createTempDir('egc-merge-cli-error-');
     try {
       const canonicalPath = path.join(dir, 'canonical.db');
@@ -644,9 +645,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('an in-memory canonical store never archives the sources, since nothing outlives the run', async () => {
+  tally(await test('an in-memory canonical store never archives the sources, since nothing outlives the run', async () => {
     const dir = createTempDir('egc-merge-memory-');
     try {
       const sourcePath = path.join(dir, 'source.db');
@@ -659,7 +660,7 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

@@ -193,125 +193,132 @@ export function nativeMemoryDir(absolutePath) {
 
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
-/** Render the human-readable CONTEXT.md from context.json */
-export function renderContextMd(ctx) {
-  const latest = ctx.sessions?.[ctx.sessions.length - 1] || null;
+const stackText = (stack, empty) => (Array.isArray(stack) ? stack.join(', ') : (stack || empty));
+
+// A section's lines, or its placeholder when it has none.
+const listOr = (items, render, placeholder) => (items?.length ? items.map(render) : [placeholder]);
+
+function contextHeader(ctx) {
+  const sessionCount = ctx.sessions?.length || 0;
   const lines = [
     `# Project: ${ctx.displayName ?? ctx.name}`,
     `> Path: ${ctx.path}`,
   ];
   if (ctx.repo) lines.push(`> Repo: ${ctx.repo}`);
-  const sessionCount = ctx.sessions?.length || 0;
-  lines.push(`> Last Session: ${ctx.sessions?.[sessionCount - 1]?.date || 'never'} | Sessions: ${sessionCount}`);
-  lines.push(``);
-  lines.push(`## What This Is`);
-  lines.push(ctx.description || '_Not set._');
-  lines.push(``);
-  lines.push(`## Tech Stack`);
-  lines.push(Array.isArray(ctx.stack) ? ctx.stack.join(', ') : (ctx.stack || '_Not set._'));
-  lines.push(``);
-  lines.push(`## Current Goal`);
-  lines.push(ctx.goal || '_Not set._');
-  lines.push(``);
-  lines.push(`## Where I Left Off`);
-  lines.push(latest?.leftOff || '_Not yet recorded. Run /ck:save after your first session._');
-  lines.push(``);
-  lines.push(`## Next Steps`);
-  if (latest?.nextSteps?.length) {
-    latest.nextSteps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
-  } else {
-    lines.push(`_Not yet recorded._`);
-  }
-  lines.push(``);
-  lines.push(`## Blockers`);
-  if (latest?.blockers?.length) {
-    latest.blockers.forEach(b => lines.push(`- ${b}`));
-  } else {
-    lines.push(`- None`);
-  }
-  lines.push(``);
-  lines.push(`## Do Not Do`);
-  if (ctx.constraints?.length) {
-    ctx.constraints.forEach(c => lines.push(`- ${c}`));
-  } else {
-    lines.push(`- None specified`);
-  }
-  lines.push(``);
+  lines.push(`> Last Session: ${ctx.sessions?.[sessionCount - 1]?.date || 'never'} | Sessions: ${sessionCount}`, ``);
+  return lines;
+}
 
-  // All decisions across sessions
-  const allDecisions = (ctx.sessions || []).flatMap(s =>
+// Every decision across the sessions, as table rows.
+function decisionRows(sessions) {
+  const allDecisions = (sessions || []).flatMap(s =>
     (s.decisions || []).map(d => ({ ...d, date: s.date }))
   );
-  lines.push(`## Decisions Made`);
-  lines.push(`| Decision | Why | Date |`);
-  lines.push(`|----------|-----|------|`);
-  if (allDecisions.length) {
-    allDecisions.forEach(d => lines.push(`| ${d.what} | ${d.why || ''} | ${d.date || ''} |`));
-  } else {
-    lines.push(`| _(none yet)_ | | |`);
+  return listOr(allDecisions, d => `| ${d.what} | ${d.why || ''} | ${d.date || ''} |`, `| _(none yet)_ | | |`);
+}
+
+// The session history, most recent first, when there is more than one.
+function sessionHistory(sessions) {
+  if (!(sessions?.length > 1)) return [];
+  const lines = [`## Session History`];
+  for (const s of [...sessions].reverse()) {
+    lines.push(`### ${s.date} — ${s.summary || 'Session'}`);
+    if (s.gitActivity) lines.push(`_${s.gitActivity}_`);
+    if (s.leftOff) lines.push(`**Left off:** ${s.leftOff}`);
   }
   lines.push(``);
+  return lines;
+}
 
-  // Session history (most recent first)
-  if (ctx.sessions?.length > 1) {
-    lines.push(`## Session History`);
-    const reversed = [...ctx.sessions].reverse();
-    reversed.forEach(s => {
-      lines.push(`### ${s.date} — ${s.summary || 'Session'}`);
-      if (s.gitActivity) lines.push(`_${s.gitActivity}_`);
-      if (s.leftOff) lines.push(`**Left off:** ${s.leftOff}`);
-    });
-    lines.push(``);
+/** Render the human-readable CONTEXT.md from context.json */
+export function renderContextMd(ctx) {
+  const latest = ctx.sessions?.[ctx.sessions.length - 1] || null;
+  return [
+    ...contextHeader(ctx),
+    `## What This Is`,
+    ctx.description || '_Not set._',
+    ``,
+    `## Tech Stack`,
+    stackText(ctx.stack, '_Not set._'),
+    ``,
+    `## Current Goal`,
+    ctx.goal || '_Not set._',
+    ``,
+    `## Where I Left Off`,
+    latest?.leftOff || '_Not yet recorded. Run /ck:save after your first session._',
+    ``,
+    `## Next Steps`,
+    ...listOr(latest?.nextSteps, (s, i) => `${i + 1}. ${s}`, `_Not yet recorded._`),
+    ``,
+    `## Blockers`,
+    ...listOr(latest?.blockers, b => `- ${b}`, `- None`),
+    ``,
+    `## Do Not Do`,
+    ...listOr(ctx.constraints, c => `- ${c}`, `- None specified`),
+    ``,
+    `## Decisions Made`,
+    `| Decision | Why | Date |`,
+    `|----------|-----|------|`,
+    ...decisionRows(ctx.sessions),
+    ``,
+    ...sessionHistory(ctx.sessions),
+  ].join('\n');
+}
+
+const BRIEFING_WIDTH = 57;
+const briefingRule = (left, right) => `${left}${'─'.repeat(BRIEFING_WIDTH)}${right}`;
+
+function padCell(str, w) {
+  const s = String(str || '');
+  return s.length > w ? s.slice(0, w - 1) + '…' : s.padEnd(w);
+}
+
+const briefingRow = (label, value) => `│  ${label} → ${padCell(value, BRIEFING_WIDTH - label.length - 7)}│`;
+
+// The briefing's title and what the project is.
+function briefingProject(ctx, latest) {
+  const W = BRIEFING_WIDTH;
+  const when = daysAgoLabel(ctx.sessions?.[ctx.sessions.length - 1]?.date);
+  const sessions = ctx.sessions?.length || 0;
+  const shortSessId = latest.id?.slice(0, 8) || null;
+  const lastSeen = `${when}  |  Sessions: ${sessions}`;
+
+  const lines = [
+    briefingRule('┌', '┐'),
+    `│  RESUMING: ${padCell(ctx.displayName ?? ctx.name, W - 12)}│`,
+    `│  Last session: ${padCell(lastSeen, W - 16)}│`,
+  ];
+  if (shortSessId) lines.push(`│  Session ID: ${padCell(shortSessId, W - 14)}│`);
+  lines.push(briefingRule('├', '┤'));
+  lines.push(briefingRow('WHAT IT IS', ctx.description || '—'));
+  lines.push(briefingRow('STACK     ', stackText(ctx.stack, '—')));
+  lines.push(briefingRow('PATH      ', ctx.path));
+  if (ctx.repo) lines.push(briefingRow('REPO      ', ctx.repo));
+  lines.push(briefingRow('GOAL      ', ctx.goal || '—'));
+  return lines;
+}
+
+// Where the last session left off, what comes next, and what blocks it.
+function briefingProgress(latest) {
+  const W = BRIEFING_WIDTH;
+  const lines = [briefingRule('├', '┤'), `│  WHERE I LEFT OFF${' '.repeat(W - 18)}│`];
+  const leftOffLines = (latest.leftOff || '—').split('\n').filter(Boolean);
+  leftOffLines.forEach(l => lines.push(`│    • ${padCell(l, W - 7)}│`));
+  lines.push(briefingRule('├', '┤'), `│  NEXT STEPS${' '.repeat(W - 12)}│`);
+  lines.push(...listOr(latest.nextSteps || [], (s, i) => `│    ${i + 1}. ${padCell(s, W - 8)}│`, `│    —${' '.repeat(W - 5)}│`));
+  const blockers = latest.blockers?.length ? latest.blockers.join(', ') : 'None';
+  lines.push(`│  BLOCKERS → ${padCell(blockers, W - 13)}│`);
+  if (latest.gitActivity) {
+    lines.push(`│  GIT      → ${padCell(latest.gitActivity, W - 13)}│`);
   }
-
-  return lines.join('\n');
+  lines.push(briefingRule('└', '┘'));
+  return lines;
 }
 
 /** Render the bordered briefing box used by /ck:resume */
 export function renderBriefingBox(ctx, _meta = {}) {
   const latest = ctx.sessions?.[ctx.sessions.length - 1] || {};
-  const W = 57;
-  const pad = (str, w) => {
-    const s = String(str || '');
-    return s.length > w ? s.slice(0, w - 1) + '…' : s.padEnd(w);
-  };
-  const row = (label, value) => `│  ${label} → ${pad(value, W - label.length - 7)}│`;
-
-  const when = daysAgoLabel(ctx.sessions?.[ctx.sessions.length - 1]?.date);
-  const sessions = ctx.sessions?.length || 0;
-  const shortSessId = latest.id?.slice(0, 8) || null;
-
-  const lines = [
-    `┌${'─'.repeat(W)}┐`,
-    `│  RESUMING: ${pad(ctx.displayName ?? ctx.name, W - 12)}│`,
-    `│  Last session: ${pad(`${when}  |  Sessions: ${sessions}`, W - 16)}│`,
-  ];
-  if (shortSessId) lines.push(`│  Session ID: ${pad(shortSessId, W - 14)}│`);
-  lines.push(`├${'─'.repeat(W)}┤`);
-  lines.push(row('WHAT IT IS', ctx.description || '—'));
-  lines.push(row('STACK     ', Array.isArray(ctx.stack) ? ctx.stack.join(', ') : (ctx.stack || '—')));
-  lines.push(row('PATH      ', ctx.path));
-  if (ctx.repo) lines.push(row('REPO      ', ctx.repo));
-  lines.push(row('GOAL      ', ctx.goal || '—'));
-  lines.push(`├${'─'.repeat(W)}┤`);
-  lines.push(`│  WHERE I LEFT OFF${' '.repeat(W - 18)}│`);
-  const leftOffLines = (latest.leftOff || '—').split('\n').filter(Boolean);
-  leftOffLines.forEach(l => lines.push(`│    • ${pad(l, W - 7)}│`));
-  lines.push(`├${'─'.repeat(W)}┤`);
-  lines.push(`│  NEXT STEPS${' '.repeat(W - 12)}│`);
-  const steps = latest.nextSteps || [];
-  if (steps.length) {
-    steps.forEach((s, i) => lines.push(`│    ${i + 1}. ${pad(s, W - 8)}│`));
-  } else {
-    lines.push(`│    —${' '.repeat(W - 5)}│`);
-  }
-  const blockers = latest.blockers?.length ? latest.blockers.join(', ') : 'None';
-  lines.push(`│  BLOCKERS → ${pad(blockers, W - 13)}│`);
-  if (latest.gitActivity) {
-    lines.push(`│  GIT      → ${pad(latest.gitActivity, W - 13)}│`);
-  }
-  lines.push(`└${'─'.repeat(W)}┘`);
-  return lines.join('\n');
+  return [...briefingProject(ctx, latest), ...briefingProgress(latest)].join('\n');
 }
 
 /** Render compact info block used by /ck:info */

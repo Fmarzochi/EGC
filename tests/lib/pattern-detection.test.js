@@ -113,6 +113,25 @@ async function runTests() {
     assert.strictEqual(err.occurrences, 3);
   })) passed += 1; else failed += 1;
 
+  if (await test('an error key comes from the code, else the TS code or the first six words of the message, on error events only', async () => {
+    const keyOf = (eventType, payload) => {
+      const events = [1, 2, 3].map(n => makeEvent(`k${n}`, eventType, payload, daysAgo(n)));
+      const found = detectPatternsFromEvents(events, 7, 3).find(p => p.type === 'recurring_error');
+      return found ? found.key : null;
+    };
+    assert.strictEqual(keyOf('Error', { errorCode: 'E_ONE' }), 'error:E_ONE');
+    assert.strictEqual(keyOf('error', { code: 'E_TWO', error: 'ignored' }), 'error:E_TWO');
+    assert.strictEqual(keyOf('error', { error_code: '', error: 'first second third fourth fifth sixth seventh' }), 'error:first second third fourth fifth sixth');
+    assert.strictEqual(keyOf('error', { error: 'from error', message: 'from message' }), 'error:from error');
+    assert.strictEqual(keyOf('error', { errorMessage: '  spaced   out  ' }), 'error:spaced out');
+    assert.strictEqual(keyOf('PostToolUse', { message: 'build failed TS1005 here' }), 'error:TS1005');
+    assert.strictEqual(keyOf('PostToolUse', { errorCode: 'E_POST' }), 'error:E_POST');
+    assert.strictEqual(keyOf('PostToolUse', { tool: 'Bash' }), null, 'a PostToolUse without an error is not one');
+    assert.strictEqual(keyOf('PreToolUse', { error: 'not an error event' }), null);
+    assert.strictEqual(keyOf('error', { error: 42 }), null, 'a message that is not text gives no key');
+    assert.strictEqual(keyOf('error', { error: '   ' }), null, 'a blank message gives no key');
+  })) passed += 1; else failed += 1;
+
   if (await test('does not report errors below min_occurrences threshold', async () => {
     const events = [
       makeEvent('e1', 'error', { error_code: 'ENOENT' }, daysAgo(3)),

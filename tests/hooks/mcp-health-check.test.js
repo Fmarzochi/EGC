@@ -181,8 +181,9 @@ async function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('passes through non-MCP tools untouched', () => {
+  tally(test('passes through non-MCP tools untouched', () => {
     const result = runHook(
       { tool_name: 'Read', tool_input: { file_path: 'README.md' } },
       { GEMINI_HOOK_EVENT_NAME: 'PreToolUse' }
@@ -190,9 +191,9 @@ async function runTests() {
 
     assert.strictEqual(result.code, 0, 'Expected non-MCP tool to pass through');
     assert.strictEqual(result.stderr, '', 'Expected no stderr for non-MCP tool');
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks truncated MCP hook input by default', () => {
+  tally(test('blocks truncated MCP hook input by default', () => {
     const rawInput = JSON.stringify({ tool_name: 'mcp__flaky__search', tool_input: {} });
     const result = runRawHook(rawInput, {
       GEMINI_HOOK_EVENT_NAME: 'PreToolUse',
@@ -204,9 +205,9 @@ async function runTests() {
     assert.strictEqual(result.stdout, rawInput, 'Expected raw input passthrough on stdout');
     assert.ok(result.stderr.includes('Hook input exceeded 512 bytes'), `Expected size warning, got: ${result.stderr}`);
     assert.ok(/blocking search/i.test(result.stderr), `Expected blocking message, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('allows truncated MCP hook input when fail-open mode is enabled', () => {
+  tally(test('allows truncated MCP hook input when fail-open mode is enabled', () => {
     const rawInput = JSON.stringify({ tool_name: 'mcp__flaky__search', tool_input: {} });
     const result = runRawHook(rawInput, {
       GEMINI_HOOK_EVENT_NAME: 'PreToolUse',
@@ -219,9 +220,9 @@ async function runTests() {
     assert.strictEqual(result.stdout, rawInput, 'Expected raw input passthrough on stdout');
     assert.ok(result.stderr.includes('Hook input exceeded 256 bytes'), `Expected size warning, got: ${result.stderr}`);
     assert.ok(/fail-open mode is enabled/i.test(result.stderr), `Expected fail-open log, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('uses default cwd config path and default home state path', async () => {
+  tally(await asyncTest('uses default cwd config path and default home state path', async () => {
     const tempDir = createTempDir();
     const homeDir = path.join(tempDir, 'home');
     const configDir = path.join(tempDir, '.gemini');
@@ -266,9 +267,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('uses cached healthy and unhealthy states without probing configs', () => {
+  tally(test('uses cached healthy and unhealthy states without probing configs', () => {
     const tempDir = createTempDir();
     const now = Date.now();
     const healthyStatePath = path.join(tempDir, 'healthy-state.json');
@@ -325,9 +326,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('ignores malformed state files and allows missing MCP configs', () => {
+  tally(test('ignores malformed state files and allows missing MCP configs', () => {
     const tempDir = createTempDir();
     const statePath = path.join(tempDir, 'malformed-state.json');
 
@@ -353,9 +354,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('supports explicit tool_input server targets and mcp_servers config aliases', async () => {
+  tally(await asyncTest('supports explicit tool_input server targets and mcp_servers config aliases', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'egc.json');
     const statePath = path.join(tempDir, 'mcp-health.json');
@@ -389,9 +390,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('marks healthy command MCP servers and allows the tool call', async () => {
+  tally(await asyncTest('marks healthy command MCP servers and allows the tool call', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'egc.json');
     const statePath = path.join(tempDir, 'mcp-health.json');
@@ -421,9 +422,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('blocks unhealthy command MCP servers and records backoff state', async () => {
+  tally(await asyncTest('blocks unhealthy command MCP servers and records backoff state', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'egc.json');
     const statePath = path.join(tempDir, 'mcp-health.json');
@@ -456,9 +457,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('fail-open mode warns but does not block unhealthy MCP servers', async () => {
+  tally(await asyncTest('fail-open mode warns but does not block unhealthy MCP servers', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'egc.json');
     const statePath = path.join(tempDir, 'mcp-health.json');
@@ -488,9 +489,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('blocks unsupported MCP configs and command spawn failures', async () => {
+  tally(await asyncTest('blocks unsupported MCP configs and command spawn failures', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'egc.json');
     const statePath = path.join(tempDir, 'mcp-health.json');
@@ -535,9 +536,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('includes command stderr and config env in unhealthy probe reasons', async () => {
+  tally(await asyncTest('includes command stderr and config env in unhealthy probe reasons', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'egc.json');
     const statePath = path.join(tempDir, 'mcp-health.json');
@@ -591,9 +592,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('records reconnect reprobe failures for previously unhealthy servers', async () => {
+  tally(await asyncTest('records reconnect reprobe failures for previously unhealthy servers', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'egc.json');
     const statePath = path.join(tempDir, 'mcp-health.json');
@@ -646,9 +647,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('post-failure reconnect command restores server health when a reprobe succeeds', async () => {
+  tally(await asyncTest('post-failure reconnect command restores server health when a reprobe succeeds', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'egc.json');
     const statePath = path.join(tempDir, 'mcp-health.json');
@@ -708,9 +709,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('ignores post-failure events without a reconnect-worthy failure code', () => {
+  tally(test('ignores post-failure events without a reconnect-worthy failure code', () => {
     const tempDir = createTempDir();
     const statePath = path.join(tempDir, 'mcp-health.json');
 
@@ -733,9 +734,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('post-failure marks servers unhealthy and skips reconnect when no command is configured', () => {
+  tally(test('post-failure marks servers unhealthy and skips reconnect when no command is configured', () => {
     const tempDir = createTempDir();
     const statePath = path.join(tempDir, 'mcp-health.json');
 
@@ -765,9 +766,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('post-failure reports failed reconnect commands', () => {
+  tally(test('post-failure reports failed reconnect commands', () => {
     const tempDir = createTempDir();
     const statePath = path.join(tempDir, 'mcp-health.json');
     const reconnectScript = path.join(tempDir, 'failed-reconnect.js');
@@ -794,9 +795,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('post-failure expands per-server reconnect commands before follow-up config checks', () => {
+  tally(test('post-failure expands per-server reconnect commands before follow-up config checks', () => {
     const tempDir = createTempDir();
     const statePath = path.join(tempDir, 'mcp-health.json');
     const reconnectScript = path.join(tempDir, 'server-reconnect.js');
@@ -833,9 +834,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('treats HTTP 400 probe responses as healthy reachable servers', async () => {
+  tally(await asyncTest('treats HTTP 400 probe responses as healthy reachable servers', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'egc.json');
     const statePath = path.join(tempDir, 'mcp-health.json');
@@ -897,9 +898,9 @@ async function runTests() {
       serverProcess.kill('SIGTERM');
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await asyncTest('treats HTTP 401 probe responses as healthy reachable OAuth-protected servers', async () => {
+  tally(await asyncTest('treats HTTP 401 probe responses as healthy reachable OAuth-protected servers', async () => {
     const tempDir = createTempDir();
     const configPath = path.join(tempDir, 'egc.json');
     const statePath = path.join(tempDir, 'mcp-health.json');
@@ -964,7 +965,7 @@ async function runTests() {
       serverProcess.kill('SIGTERM');
       cleanupTempDir(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
