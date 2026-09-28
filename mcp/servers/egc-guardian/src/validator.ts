@@ -496,6 +496,11 @@ const ENV_ASSIGNMENT_RE = /^([A-Za-z_]\w*)=/;
 const DANGEROUS_ENV_VAR_EXACT = new Set([
   'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_EXEC_PATH',
   'GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_EDITOR', 'GIT_PAGER',
+  // A program git runs (a diff tool, the rebase todo editor, a password
+  // prompt, a proxy), a config file it loads whole, a template it copies
+  // hooks from, and the input filters of less, git's pager.
+  'GIT_EXTERNAL_DIFF', 'GIT_SEQUENCE_EDITOR', 'GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_PROXY_COMMAND',
+  'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_TEMPLATE_DIR', 'LESSOPEN', 'LESSCLOSE',
 ]);
 const DANGEROUS_ENV_VAR_PATTERN = /^GIT_CONFIG_(KEY|VALUE)_\d+$/;
 
@@ -504,6 +509,37 @@ function isDangerousEnvVarName(varName: string): boolean {
   return DANGEROUS_ENV_VAR_EXACT.has(upper)
     || DANGEROUS_ENV_VAR_PATTERN.test(upper)
     || upper.startsWith('GIT_ALIAS_');
+}
+
+// A pager or an editor may be named by itself or from the system's program
+// directories; one named by another path is a script the hook never sees run.
+const PROGRAM_ENV_VARS = new Set(['PAGER', 'MANPAGER', 'EDITOR', 'VISUAL']);
+const SYSTEM_PROGRAM_DIRS = ['/usr/', '/bin/', '/sbin/', '/opt/'];
+const TRACE_ENV_VAR_RE = /^GIT_TRACE/;
+
+// Why the value a line gives a variable is refused: a trace git writes to a
+// protected file, or a pager or an editor that is inline code or a script
+// named by its path. null when the value is free.
+function envValueDenial(name: string, value: string): string | null {
+  const upper = name.toUpperCase();
+  const text = stripQuotes(value);
+  if (TRACE_ENV_VAR_RE.test(upper)) {
+    return /^[/~]/.test(text) && isProtectedPath(text) ? `'${name}' makes git write its trace to the protected file ${text}, which is forbidden` : null;
+  }
+  if (!PROGRAM_ENV_VARS.has(upper)) return null;
+  const program = text.trim().split(/\s+/)[0] ?? '';
+  const byPath = program.includes('/') && !SYSTEM_PROGRAM_DIRS.some(dir => program.startsWith(dir));
+  if (!isInlineProgram(text) && !byPath) return null;
+  return `'${name}' is run as a pager or an editor, and '${text}' is inline code or a script named by its path, which is forbidden: name the program itself`;
+}
+
+// The block a `VAR=value` or `export VAR=value` gets, if any.
+function envAssignmentBlock(name: string, value: string, verb: string): ValidationResultLike | null {
+  if (isDangerousEnvVarName(name)) {
+    return { allowed: false, reason: `${verb} '${name}' persists a git execution/config override and is forbidden`, trust_level: 'DANGEROUS' };
+  }
+  const reason = envValueDenial(name, value);
+  return reason ? { allowed: false, reason, trust_level: 'DANGEROUS' } : null;
 }
 
 interface UnwrapResult {
@@ -536,16 +572,8 @@ interface UnwrapStep {
 function tryUnwrapEnvAssignment(current: string[]): UnwrapStep | null {
   const envMatch = ENV_ASSIGNMENT_RE.exec(current[0]);
   if (!envMatch) return null;
-  if (isDangerousEnvVarName(envMatch[1])) {
-    return {
-      blocked: {
-        allowed: false,
-        reason: `setting '${envMatch[1]}' persists a git execution/config override and is forbidden`,
-        trust_level: 'DANGEROUS',
-      },
-    };
-  }
-  return { remaining: current.slice(1) };
+  const blocked = envAssignmentBlock(envMatch[1], current[0].slice(envMatch[0].length), 'setting');
+  return blocked ? { blocked } : { remaining: current.slice(1) };
 }
 
 // `export VAR=value` persists the same way a bare `VAR=value` prefix does
@@ -570,16 +598,8 @@ function tryUnwrapExport(current: string[]): UnwrapStep | null {
   const exportMatch = idx < current.length ? ENV_ASSIGNMENT_RE.exec(current[idx]) : null;
   if (!exportMatch) return null;
 
-  if (isDangerousEnvVarName(exportMatch[1])) {
-    return {
-      blocked: {
-        allowed: false,
-        reason: `exporting '${exportMatch[1]}' persists a git execution/config override and is forbidden`,
-        trust_level: 'DANGEROUS',
-      },
-    };
-  }
-  return { remaining: current.slice(idx + 1) };
+  const blocked = envAssignmentBlock(exportMatch[1], current[idx].slice(exportMatch[0].length), 'exporting');
+  return blocked ? { blocked } : { remaining: current.slice(idx + 1) };
 }
 
 const FLOCK_COMMAND_FLAGS = new Set(['-c', '--command']);
