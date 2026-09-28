@@ -169,9 +169,19 @@ record(test('a directory is not copied, synced or linked into a git directory, a
   fs.symlinkSync(at('repo.git'), at('alias'), process.platform === 'win32' ? 'junction' : 'dir');
   for (const [command, cwd] of [
     [`git --git-dir=${at('link.git')} status`, at('plain')], ['git status', at('link.git')], [`git --git-dir=${at('alias')} status`, at('plain')],
+    // A relative GIT_DIR is followed from where the command runs.
+    ['GIT_DIR=link.git git status', root], ['export GIT_DIR=link.git', root],
   ]) {
     assert.match(denied(command, cwd).reason, /git directory/, `${command} in ${cwd}`);
   }
+  passes('GIT_DIR=repo.git git status', root);
+  // A regular file named like a git directory is none, and writing it makes
+  // none; a new path so named may become one, and a .git file only points.
+  fs.writeFileSync(at('notes.git'), 'x\n');
+  assert.strictEqual(isProtectedPath(at('notes.git')), false, 'an existing regular file named x.git');
+  assert.strictEqual(isProtectedPath(at('linked', '.git')), false, 'a .git file');
+  assert.strictEqual(isProtectedPath(at('new.git')), true, 'a new path named x.git');
+  assert.strictEqual(isProtectedPath(at('repo.git')), true, 'a git directory named x.git');
 }));
 
 record(test('a .git file is followed to the git directory it names', () => {

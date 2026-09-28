@@ -556,13 +556,14 @@ function programValueDenied(text: string, alone: boolean): boolean {
 // is protected, a config home for the git command it prefixes, less options
 // that run a command, or a pager or an editor that is inline code, a script
 // named by its path or a program handed an argument. null when it is free.
-function envValueDenial(name: string, value: string, command: string | undefined, persists: boolean): string | null {
+function envValueDenial(name: string, value: string, command: string | undefined, persists: boolean, cwd?: string): string | null {
   const upper = name.toUpperCase();
   const text = stripQuotes(value);
   if (GIT_PATH_ENV_VAR_RE.test(upper) && isProtectedPath(text)) {
     return `'${name}' makes git write to the protected path ${text}, which is forbidden`;
   }
-  if (REPOSITORY_ENV_VARS.has(upper) && !isTrustedGitDirectory(text)) {
+  // Read from where the command runs, so a relative link is followed there.
+  if (REPOSITORY_ENV_VARS.has(upper) && !isTrustedGitDirectory(path.resolve(cwd ?? process.cwd(), expandHome(text)))) {
     return `'${name}' points git at ${text}, a repository whose config this line can choose, which is forbidden: name a .git or <name>.git directory`;
   }
   // When it persists (export, a bare assignment) it holds for the git
@@ -609,14 +610,14 @@ function commandThroughWrappers(tokens: string[]): string | undefined {
 
 // The block a `VAR=value` or `export VAR=value` gets, if any; `command` is
 // the command the assignment prefixes, when there is one.
-function envAssignmentBlock(name: string, value: string, verb: string, command: string | undefined, persists: boolean): ValidationResultLike | null {
+function envAssignmentBlock(name: string, value: string, verb: string, command: string | undefined, persists: boolean, cwd?: string): ValidationResultLike | null {
   if (isDangerousEnvVarName(name)) {
     return { allowed: false, reason: `${verb} '${name}' persists a git execution/config override and is forbidden`, trust_level: 'DANGEROUS' };
   }
   if (CODE_INJECTION_ENV_VARS.has(name.toUpperCase())) {
     return { allowed: false, reason: `${verb} '${name}' makes the next program run code this line chooses before its own (a startup script or a library), which is forbidden`, trust_level: 'DANGEROUS' };
   }
-  const reason = envValueDenial(name, value, command, persists);
+  const reason = envValueDenial(name, value, command, persists, cwd);
   return reason ? { allowed: false, reason, trust_level: 'DANGEROUS' } : null;
 }
 
@@ -647,14 +648,14 @@ interface UnwrapStep {
 // command that follows, so a dangerous git-persistence variable here is a
 // hard block rather than a silent strip: stripping it would judge the
 // command by a name that never actually ran with that override in effect.
-function tryUnwrapEnvAssignment(current: string[]): UnwrapStep | null {
+function tryUnwrapEnvAssignment(current: string[], cwd?: string): UnwrapStep | null {
   const envMatch = ENV_ASSIGNMENT_RE.exec(current[0]);
   if (!envMatch) return null;
   let start = 0;
   while (start < current.length && ENV_ASSIGNMENT_RE.test(current[start])) start += 1;
   const rest = current.slice(start);
   const command = commandThroughWrappers(rest);
-  const blocked = envAssignmentBlock(envMatch[1], current[0].slice(envMatch[0].length), 'setting', command, rest.length === 0);
+  const blocked = envAssignmentBlock(envMatch[1], current[0].slice(envMatch[0].length), 'setting', command, rest.length === 0, cwd);
   return blocked ? { blocked } : { remaining: current.slice(1) };
 }
 
@@ -667,7 +668,7 @@ function tryUnwrapEnvAssignment(current: string[]): UnwrapStep | null {
 // other bash builtin — skipping straight to current[1] missed
 // `export -- GIT_SSH_COMMAND=...`, which real bash still treats as an
 // assignment despite the leading `--`.
-function tryUnwrapExport(current: string[]): UnwrapStep | null {
+function tryUnwrapExport(current: string[], cwd?: string): UnwrapStep | null {
   if (bareToken(current[0]) !== 'export' || current.length <= 1) return null;
 
   let idx = 1;
@@ -683,7 +684,7 @@ function tryUnwrapExport(current: string[]): UnwrapStep | null {
   const exportMatch = ENV_ASSIGNMENT_RE.exec(assignment);
   if (!exportMatch) return null;
 
-  const blocked = envAssignmentBlock(exportMatch[1], assignment.slice(exportMatch[0].length), 'exporting', undefined, true);
+  const blocked = envAssignmentBlock(exportMatch[1], assignment.slice(exportMatch[0].length), 'exporting', undefined, true, cwd);
   return blocked ? { blocked } : { remaining: current.slice(idx + 1) };
 }
 
@@ -922,13 +923,13 @@ function tryUnwrapEgcExecutor(current: string[]): UnwrapStep | null {
   return { remaining: rest };
 }
 
-function unwrapLeadingConstructs(tokens: string[]): UnwrapResult {
+function unwrapLeadingConstructs(tokens: string[], cwd?: string): UnwrapResult {
   let current = tokens;
   let changed = true;
   while (changed && current.length > 0) {
     changed = false;
 
-    const step = tryUnwrapEnvAssignment(current) ?? tryUnwrapExport(current) ?? tryUnwrapEgcExecutor(current) ?? tryUnwrapWrapper(current) ?? tryUnwrapShellKeyword(current);
+    const step = tryUnwrapEnvAssignment(current, cwd) ?? tryUnwrapExport(current, cwd) ?? tryUnwrapEgcExecutor(current) ?? tryUnwrapWrapper(current) ?? tryUnwrapShellKeyword(current);
     if (step) {
       if (step.blocked) return { tokens: [], blocked: step.blocked };
       current = step.remaining as string[];
@@ -1463,16 +1464,27 @@ function expandHome(p: string): string {
 const GIT_CONTROL_FILES = new Set(['config', 'config.worktree', 'commondir']);
 const GIT_CONTROL_DIRS = new Set(['hooks', 'worktrees', 'modules']);
 
-function isGitControlPath(rest: string[]): boolean {
-  if (rest.length === 0 || GIT_CONTROL_DIRS.has(rest[0])) return true;
+function isGitControlPath(rest: string[], regularFile: boolean): boolean {
+  if (rest.length === 0) return !regularFile;
+  if (GIT_CONTROL_DIRS.has(rest[0])) return true;
   return rest.length === 1 && GIT_CONTROL_FILES.has(rest[0]);
 }
 
 // A git directory is one named `.git` or `<name>.git`: only there are its
 // control files protected from a write, whatever repository they belong to.
-function isGitControlFile(candidate: string): boolean {
+// A path so named is one, or may become one, unless it is a regular file
+// already (`regularFile`): writing that makes no git directory.
+function isGitControlFile(candidate: string, regularFile = false): boolean {
   const parts = candidate.split(/[\\/]/);
-  return parts.some((part, i) => part.endsWith('.git') && isGitControlPath(parts.slice(i + 1)));
+  return parts.some((part, i) => part.endsWith('.git') && isGitControlPath(parts.slice(i + 1), regularFile));
+}
+
+function isRegularFile(p: string): boolean {
+  try {
+    return fs.lstatSync(p).isFile();
+  } catch {
+    return false;
+  }
 }
 
 // Whether git may use `dir` as its git directory: its config is protected
@@ -1518,7 +1530,7 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
     }
   }
 
-  return isGitControlFile(candidate);
+  return isGitControlFile(candidate, isRegularFile(normalizedP));
 }
 
 // Reading and writing carry different risk, and treating them alike is what
@@ -3156,7 +3168,7 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
       trust_level: 'DANGEROUS',
     };
   }
-  const unwrapped = unwrapLeadingConstructs(expandedTokens);
+  const unwrapped = unwrapLeadingConstructs(expandedTokens, cwd);
   if (unwrapped.blocked) return unwrapped.blocked as ValidationResult;
   const tokens = unwrapped.tokens;
   if (tokens.length === 0) {
