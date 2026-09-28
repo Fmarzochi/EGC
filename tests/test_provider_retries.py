@@ -37,10 +37,20 @@ class _StatusError(Exception):
         (Exception("503 UNAVAILABLE: the model is overloaded"), True),
         (Exception("RESOURCE_EXHAUSTED"), True),
         (Exception("invalid argument"), False),
+        (Exception("HTTP 400: the word 'rate limit' or 503 is not a status"), False),
     ],
 )
 def test_is_transient(error, transient):
     assert retry.is_transient(error) is transient
+
+
+@pytest.mark.unit
+def test_the_gemini_sdk_errors_are_read_by_their_code():
+    errors = pytest.importorskip("google.genai.errors")
+    assert retry.is_transient(errors.ClientError(429, {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED"}}))
+    assert retry.is_transient(errors.ServerError(503, {"error": {"code": 503, "status": "UNAVAILABLE"}}))
+    assert not retry.is_transient(errors.ClientError(400, {"error": {"code": 400, "status": "INVALID_ARGUMENT"}}))
+    assert not retry.is_transient(errors.ClientError(403, {"error": {"code": 403, "status": "PERMISSION_DENIED"}}))
 
 
 @pytest.mark.unit
@@ -111,11 +121,13 @@ def test_ollama_retries_a_server_error_before_answering():
 
     provider = OllamaProvider(base_url="http://localhost:11434", default_model="llama3")
     busy = urllib.error.HTTPError("http://localhost:11434/api/chat", 503, "busy", {}, None)
-    with patch("urllib.request.urlopen", side_effect=[busy, _Response()]) as urlopen, patch.object(retry.time, "sleep") as sleep:
+    with patch("urllib.request.urlopen", side_effect=[busy, _Response()]) as urlopen, patch.object(retry.time, "sleep") as sleep, \
+            patch.object(busy, "close", wraps=busy.close) as closed:
         result = provider.generate(LLMInput(messages=[Message(role=Role.USER, content="hi")], model="llama3"))
     assert result.content == "ok"
     assert urlopen.call_count == 2
     sleep.assert_called_once_with(0.5)
+    closed.assert_called_once_with()
 
 
 @pytest.mark.unit

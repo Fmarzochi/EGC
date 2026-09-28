@@ -113,6 +113,7 @@ class OllamaProvider(LLMProvider):
             # of silently downgrading to a blocking call, which would mislead
             # callers into thinking they are consuming a stream.
             raise NotImplementedError("streaming not supported")
+        import urllib.error
         import urllib.request
         import json
 
@@ -127,8 +128,14 @@ class OllamaProvider(LLMProvider):
             )
 
             def post_chat() -> dict:
-                with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT) as response:
-                    return json.loads(response.read().decode("utf-8"))
+                try:
+                    with urllib.request.urlopen(req, timeout=CLIENT_TIMEOUT) as response:
+                        return json.loads(response.read().decode("utf-8"))
+                except urllib.error.HTTPError as error:
+                    # The error holds the response open; it is closed before
+                    # a retry, keeping its code and headers.
+                    error.close()
+                    raise
 
             result = call_with_retries(post_chat)
 

@@ -19,9 +19,9 @@ MAX_ATTEMPTS = 3
 BASE_DELAY_S = 0.5
 MAX_DELAY_S = 8.0
 
-# Text an error from a client without a status attribute carries when a
-# later attempt can succeed.
-_TRANSIENT_MARKERS = ("429", "rate limit", "resource_exhausted", "unavailable", "overloaded", "503", "502", "504")
+# The status words the Gemini API gives an error a later attempt can fix,
+# read only from an error that carries no status code of its own.
+_TRANSIENT_MARKERS = ("resource_exhausted", "unavailable", "overloaded")
 
 
 def _status_of(error: BaseException) -> int | None:
