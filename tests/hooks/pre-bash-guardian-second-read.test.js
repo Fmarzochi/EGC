@@ -48,7 +48,8 @@ function runTests() {
         `if true; then X='ls; ${wipe}'; fi; bash <<EOF\nls $X\nEOF`, `X='ls; ${wipe}'; sudo bash <<EOF\nls $X\nEOF`,
         `X="x'; ${wipe}; '"; Y=ok; bash <<EOF\necho $Y '$X'\nEOF`, `LIST_CMD='ls; ${wipe}'; bash <<EOF\n$LIST_CMD\nEOF`,
         `A=ls; B='ls; ${wipe}'; bash <<EOF\n$A $B\nEOF`, `X='ls; ${wipe}'; bash <<EOF\nls \\\\$X\nEOF`,
-        `X='ls; ${wipe}'; bash <<EOF\nls \${X:-y}\nEOF`, `X=; bash <<EOF\nls \${X:-;${wipe}}\nEOF`, `X=a; bash <<EOF\n\${X:+ls; ${wipe}}\nEOF`,
+        `X='ls; ${wipe}'; bash <<EOF\nls \${X:-y}\nEOF`, 'X=; bash <<EOF\nls ${X:-;r}m -rf /\nEOF', 'X=a; bash <<EOF\nls ${X:+;r}m -rf /\nEOF',
+        'X=a; bash <<EOF\necho $X ${X:+;r}m -rf /\nEOF',
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
