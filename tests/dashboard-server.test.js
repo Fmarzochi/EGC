@@ -713,14 +713,20 @@ test('the data routes answer only a request that carries the dashboard token', (
   }
 }));
 
-test('no data route answers a longer path that the token check does not cover', () => withDashboardServer(async port => {
+test('no data route answers another spelling of its path that the token check does not cover', () => withDashboardServer(async port => {
   for (const route of new Set(DATA_ROUTES.map(([reqPath]) => reqPath.split('?')[0]))) {
-    for (const reqPath of [`${route}XYZ?session=x`, `${route}/?session=x`]) {
+    const forms = [
+      `${route}XYZ?session=x`, `${route}/?session=x`, `${route}#x`, `${route}%23x`, `${route}%3Fsession=x`,
+      `http://127.0.0.1:${port}${route}`, route.toUpperCase(),
+    ];
+    for (const reqPath of forms) {
       const missing = await getWithToken(port, reqPath);
       assert.ok(missing.status === 401 || (missing.status === 404 && missing.body === 'Not found'),
         `${reqPath} without the token answered ${missing.status} ${missing.body}`);
     }
   }
+  const upper = await getWithToken(port, '/INDEX.HTML');
+  assert.equal(upper.status, 404, 'a page is served only by its own name, so it always carries the token');
 }));
 
 test('every page the server serves carries the token, and reads the data routes with it', () => withDashboardServer(async port => {
