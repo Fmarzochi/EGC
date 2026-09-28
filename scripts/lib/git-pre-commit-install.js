@@ -109,10 +109,15 @@ function installPreCommitHook(rootDir) {
   return outcome;
 }
 
-if (require.main === module) {
-  const outcome = installPreCommitHook(path.resolve(__dirname, '..', '..'));
+// What install.sh and install.ps1 run: the hook in the clone this script
+// belongs to, and a line saying what happened, a warning when it was left.
+function main(rootDir = path.resolve(__dirname, '..', '..')) {
+  const outcome = installPreCommitHook(rootDir);
   if (outcome === 'linked' || outcome === 'conflict') console.log(`  ! ${MESSAGES[outcome]}`);
   else if (outcome !== 'skipped') console.log(`  ✓ ${MESSAGES[outcome]}`);
+  return outcome;
 }
 
-module.exports = { installPreCommitHook, HOOK, PREVIOUS_NAME };
+if (require.main === module) main();
+
+module.exports = { installPreCommitHook, main, HOOK, PREVIOUS_NAME };

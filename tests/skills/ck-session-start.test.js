@@ -124,6 +124,22 @@ function runTests() {
     }
   }));
 
+  tally(test('a registered project with no session and no goal yet reads its creation date, and the hook finds it without PWD', () => {
+    const dirs = makeHome();
+    try {
+      registerProject(dirs.ck, fs.realpathSync(dirs.project), 'fresh', { name: 'fresh', createdAt: '2026-01-03' });
+      const env = { ...process.env, HOME: dirs.home, USERPROFILE: dirs.home };
+      delete env.PWD;
+      const result = spawnSync(process.execPath, [hook], { cwd: dirs.project, input: JSON.stringify({ session_id: 'first' }), encoding: 'utf8', env, timeout: 20000 });
+      assert.strictEqual(result.status, 0, result.stderr);
+      const context = JSON.parse(result.stdout).additionalContext;
+      assert.match(context, /ck: fresh \| \d+ days ago \| 0 sessions\n/);
+      assert.ok(context.includes(`0 sessions\nGoal: ${String.fromCharCode(0x2014)}\n`), context);
+    } finally {
+      fs.rmSync(dirs.home, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('an unregistered folder lists the three most recent projects, and the skill file comes first', () => {
     const dirs = makeHome();
     try {
