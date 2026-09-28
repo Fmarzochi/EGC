@@ -65,6 +65,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A committed script's delete target is narrow only when every variable on the way to it is, a start known only at run time cannot make a protected end narrow, and a malformed committed marker is judged as typed (#1562).
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
 - The command log and the Guardian audit log mask passwords named with pass or pwd and those the mysql, mariadb, sshpass and redis-cli clients take on their command line (#1566).
+- `install.ps1` puts the git pre-commit hook in a clone through the same helper as `install.sh` (#1568).
 - A hook input larger than the 1 MiB the guards read is refused instead of judged by its start, and the write hook blocks a write its validator gave no verdict on (#1574).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
