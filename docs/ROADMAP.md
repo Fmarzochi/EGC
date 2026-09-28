@@ -22,6 +22,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - Gemini CLI, Continue.dev and Roo Code leave the MCP registration list and the memory propagation, the two places that still ran for them after #1279: seven registration targets, twelve propagated files, the privacy filter bound only to what is written, the Continue dev dependency gone, and the spec listing the 21 target ids the code has (#1502).
 - The Crowdin sync translates what it uploads: the pre-translation request carries the file and the languages the repository ships, a refusal fails the run instead of hiding behind a warning, and a language directory the repository does not track is dropped after the download (#1505).
 - A script handed to `egc run --shell` is validated segment by segment by the Guardian hook, so a compound script cannot carry a refused command past the advisory metacharacter verdict (#1503).
+- The Guardian reads `git config` and `git grep` the way git reads them, subcommands, option clusters and the file `--file` names included (#1569).
 - The contributing guide lists the twelve translations the repository carries instead of two with hand-kept percentages (#1506).
 - The context files receive project memory only after the commit-privacy filter is in place: the hook library and the memory server mirror the block once the filter is armed or the path is outside any git working tree, leave the files as they are and say why on stderr when a checkout cannot take the filter, and the planner tells a checkout git cannot open apart from a directory that is no repository (#1510).
 - Disk and memory devices are protected paths, read or written (#1570).
@@ -45,18 +46,24 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A tool config is replaced in one step: `egc init` and the installers write it to a temporary file beside it and rename it over the previous one, so a write cut short leaves the config whole; a dotfiles link, the config's mode and, under root, its owner are kept, and where the folder or a mount refuses the replacement the config is written in place as before (#1540).
 - A TOML config keeps any install path as one string: the registrar escapes every control character in the paths it writes for Codex and Mistral Vibe, and the reader that finds egc-guardian through the Codex config reads each escape back (#1541).
 - A wrapper's options are read the way the wrapper reads them: the Guardian reads grouped short flags, attached and optional values and every value option of sudo, doas, env, exec, xargs, strace, systemd-run and the other wrappers the way getopt does, and refuses `env -S` in any spelling and `flock FILE -c` alike (#1542).
+- On Windows the Claude Code registration runs the CLI's own script with node, so cmd.exe never expands a % or ! in an install path (#1579).
 - validate_write judges a relative path where the agent works: it takes the agent's absolute `cwd`, resolves a relative path against it before checking the protected paths, and the audit trail records the path judged (#1544).
 - The dashboard answers only to its loopback names: a request or WebSocket upgrade whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` is refused before any route (#1545).
+- Every form of the installed protocol passes cwd to validate_write, and the protocol version moves to 9 (#1580).
 - The Economy tab shows a provider name as text: a provider the panel does not know is labeled with its escaped id (#1546).
 - A wrapper's long options are read in any abbreviation the wrapper accepts: a unique prefix counts as the option it names, an exact name keeps its own meaning, and `env --split` is refused like `--split-string` (#1548).
+- The dashboard's data routes ask for the dashboard token, which every page it serves carries (#1581).
 - GNU parallel's options are read the way parallel reads them: its own Getopt::Long table, letter case, abbreviations and optional values included (#1549).
 - The Bash hook finds the command behind a wrapper by the validator's own rules, through a shared copy that a test keeps in step with the validator (#1550).
 - The Guardian reads through the local wrappers that run a command (setsid, taskset, chrt, unshare, nsenter, runuser, prlimit, chroot, numactl, pkexec, busybox, bwrap) by their own option tables, and denies the ones that hand a string or the words after a user to a shell (#1551).
 - The fact-forcing gate reads the wrappers in front of a destructive command through the Guardian's own tables, and every target is checked to copy both hooks with their helpers (#1552).
+- The OpenCode prompt-timeout test gets its own budget, and the gain, watch-state and CI steps stop leaking temporary directories or waiting for nothing (#1583, closes #1448).
 - The PreCompact memory save is installed with every helper it loads on any Claude profile, and the package-only auto-update script is no longer copied into targets (#1553).
 - A file an earlier install wrote and today's plan no longer writes is retired on every target, OpenCode, Cursor, Codex and egc included, when EGC recorded writing it and it still holds the bytes EGC copied; a file the person changed, or a directory that cannot be listed, stays (#1554).
+- The hooks schema reads the four shapes the validator reads, the cost trackers share one cost source, and the lifecycle commands share their skeleton (#1584).
 - Host plugins (Amp, Cline, OpenCode) are installed only where their host loads them, and the unloadable copies earlier installs left under scripts/hooks are retired (#1555).
 - The Bash hook follows sudo -R and sudo -i to where sudo runs a script, and fails closed on a script it cannot read (#1556).
+- The Gemini and Ollama providers retry a rate limit, a server error or a timeout up to three times with backoff, honouring Retry-After, and fail at once on anything a later attempt cannot fix (#1585).
 - The Bash hook reads the command line as the shell does to find the script it runs, and holds scripts committed in git and unchanged to the grave denials only (#1557).
 - The Bash hook and the Guardian read a shell comment as bash does: a `#` that opens a word is inert, one inside quotes or `${...}` or glued to a word is not (#1558).
 - A command whose name comes from a variable the command fixes is judged by the name it resolves to; opaque sources fail closed, the environment stays advisory (#1559).

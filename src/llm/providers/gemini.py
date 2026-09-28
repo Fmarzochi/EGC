@@ -18,6 +18,7 @@ except ImportError:
     types = None
     APIError = Exception
 
+from llm.core.retry import call_with_retries
 from llm.core.interface import (
     CLIENT_TIMEOUT,
     AuthenticationError,
@@ -238,12 +239,14 @@ class GeminiProvider(LLMProvider):
         while current_model and current_model not in tried_models:
             tried_models.add(current_model)
             try:
-                response = self.client.models.generate_content(
-                    model=current_model,
-                    contents=contents,
-                    config=types.GenerateContentConfig(**config_args)
-                    if config_args
-                    else None,
+                response = call_with_retries(
+                    lambda model=current_model: self.client.models.generate_content(
+                        model=model,
+                        contents=contents,
+                        config=types.GenerateContentConfig(**config_args)
+                        if config_args
+                        else None,
+                    )
                 )
                 model_name = current_model
                 break

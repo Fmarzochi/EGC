@@ -3,21 +3,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { toolCallEstimate } = require('./llm-costs');
 
 const BUDGET_CONFIG_PATH = path.join(os.homedir(), '.egc', 'budget.json');
 const BUDGET_USAGE_PATH = path.join(os.homedir(), '.egc', 'state', 'budget-usage.json');
-
-const TOOL_COST_ESTIMATES = {
-  Read:     { tokens: 500,   cost: 0.001 },
-  Write:    { tokens: 1500,  cost: 0.003 },
-  Edit:     { tokens: 2000,  cost: 0.004 },
-  Bash:     { tokens: 3000,  cost: 0.006 },
-  Glob:     { tokens: 300,   cost: 0.0005 },
-  Grep:     { tokens: 800,   cost: 0.0015 },
-  Task:     { tokens: 10000, cost: 0.02 },
-};
-
-const DEFAULT_TOOL_COST = { tokens: 1000, cost: 0.002 };
 
 function getDefaultBudget() {
   return {
@@ -68,7 +57,7 @@ function writeBudgetUsage(usage) {
 }
 
 function getToolCost(toolName) {
-  return TOOL_COST_ESTIMATES[toolName] || DEFAULT_TOOL_COST;
+  return toolCallEstimate(toolName);
 }
 
 function recordToolCall(toolName, extraTokens) {
@@ -137,6 +126,7 @@ module.exports = {
   checkBudget,
   resetBudgetUsage,
   getDefaultBudget,
+  getToolCost,
   BUDGET_CONFIG_PATH,
   BUDGET_USAGE_PATH,
 };
