@@ -111,6 +111,12 @@ record(test('the config, hooks and links of any .git or <name>.git directory are
   ]) {
     assert.strictEqual(isProtectedPath(file), false, `${file} is protected`);
   }
+  // macOS and Windows open .GIT/CONFIG as .git/config, so every spelling is
+  // protected there; on Linux those name other files, which git never uses.
+  const foldsCase = process.platform === 'darwin' || process.platform === 'win32';
+  for (const file of ['/p/.GIT/config', '/p/.git/CONFIG', '/p/.Git/Hooks/pre-commit', '/tmp/evil.GIT/config']) {
+    assert.strictEqual(isProtectedPath(file), foldsCase, `${file} on ${process.platform}`);
+  }
 }));
 
 record(test('--git-dir is refused a directory outside the .git convention', () => {
@@ -155,7 +161,7 @@ record(test('a bare repository outside the convention is refused where git runs,
   }
 }));
 
-record(test('a directory is not copied, synced or linked into a git directory, and a link is trusted for where it leads', () => {
+record(test('nothing is copied, synced or linked into a git directory, and a link is trusted for where it leads', () => {
   for (const command of [
     `cp -r ${at('evil')} ${at('c.git')}`, `cp ${at('evil', 'config')} ${at('repo.git')}/`, `cp -r ${at('evil')} ${at('work', '.git', 'worktrees', 'x')}`,
     `rsync -a ${at('evil')}/ ${at('s.git')}/`, `ln -s ${at('evil')} ${at('l.git')}`,
