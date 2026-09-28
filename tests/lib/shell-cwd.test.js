@@ -8,9 +8,16 @@ const assert = require('assert');
 const path = require('path');
 const { startCwd, afterMove } = require('../../scripts/lib/shell-cwd');
 
+// What a test body returns when this system cannot run it: counted apart,
+// neither passed nor failed.
+const SKIPPED = Symbol('skipped');
+
 function test(name, fn) {
   try {
-    fn();
+    if (fn() === SKIPPED) {
+      console.log(`  - ${name} (skipped)`);
+      return null;
+    }
     console.log(`  ✓ ${name}`);
     return true;
   } catch (error) {
@@ -38,7 +45,12 @@ function runTests() {
   console.log('\n=== Testing the directories cd, pushd and popd lead to ===\n');
   let passed = 0;
   let failed = 0;
-  const record = ok => (ok ? passed++ : failed++);
+  let skipped = 0;
+  const record = ok => {
+    if (ok === null) skipped++;
+    else if (ok) passed++;
+    else failed++;
+  };
 
   record(test('a cd adds where it leads and keeps where the line was, since a failed or subshell cd leaves it there', () => {
     assert.deepStrictEqual(through('cd sub').dirs, [root, path.join(root, 'sub')]);
@@ -59,6 +71,12 @@ function runTests() {
   }));
 
   record(test('cd -P follows a symlink before its .., as the system does, and cd -L or plain cd reads .. by name', () => {
+    // Windows reads `..` by name before it follows a link, so -P and -L
+    // land in the same place there.
+    if (process.platform === 'win32') {
+      console.log('    Windows resolves .. before it follows a link');
+      return SKIPPED;
+    }
     const fs = require('fs');
     const os = require('os');
     const top = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-cd-physical-')));
@@ -67,8 +85,8 @@ function runTests() {
       try {
         fs.symlinkSync(path.join(top, 'real', 'sub'), path.join(top, 'link'), 'dir');
       } catch {
-        console.log('    - skipped: this system does not let the test create a symlink');
-        return;
+        console.log('    this system does not let the test create a symlink');
+        return SKIPPED;
       }
       const at = (...lines) => lines.reduce((state, line) => {
         const [name, ...args] = line.split(' ');
@@ -83,6 +101,14 @@ function runTests() {
     } finally {
       fs.rmSync(top, { recursive: true, force: true });
     }
+  }));
+
+  record(test('cd -P after another command on the line is unknown, since that command may change the links it resolves', () => {
+    assert.match(through('ln -sfn /tmp/evil/sub link', 'cd -P link/..').unknown, /resolves links that an earlier command on this line may change/);
+    assert.match(through('true', 'cd -LP x').unknown, /may change/);
+    assert.strictEqual(through('cd a', 'cd -P b').unknown, null, 'a move before it changes no link');
+    assert.strictEqual(through('ls', 'cd b').unknown, null, 'a logical cd reads .. by name whatever ran before');
+    assert.strictEqual(through('ls', 'cd -PL b').unknown, null, '-L after -P is logical');
   }));
 
   record(test('a target that expands to - is cd -, and one that expands to an option is unknown', () => {
@@ -131,7 +157,7 @@ function runTests() {
     assert.strictEqual(through(...lines.slice(0, 3)).unknown, null);
   }));
 
-  console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
+  console.log(`\nResults: Passed: ${passed}, Failed: ${failed}, Skipped: ${skipped}`);
   process.exit(failed > 0 ? 1 : 0);
 }
 

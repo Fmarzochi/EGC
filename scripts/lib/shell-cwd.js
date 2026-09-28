@@ -25,7 +25,7 @@ const STACK_INDEX_RE = /^[+-]\d+$/;
 const INHERITED_STACK = 'uses a directory stack the shell had before this command, which this hook does not know';
 
 function startCwd(dir) {
-  return { dirs: [dir], stack: [], previous: null, unknown: null };
+  return { dirs: [dir], stack: [], previous: null, unknown: null, ranOther: false };
 }
 
 // The operands of cd, pushd and popd. Options come before the first operand
@@ -91,7 +91,8 @@ function popped(state, operands) {
 // `targetsOf(word)` gives the directories a target word names (null when
 // only the running shell knows it; `word` null asks for the home directory).
 function afterMove(state, name, args, targetsOf) {
-  if (!CWD_CHANGERS.has(name) || state.unknown) return state;
+  if (state.unknown) return state;
+  if (!CWD_CHANGERS.has(name)) return state.ranOther ? state : { ...state, ranOther: true };
   const operands = moveOperands(args);
   if (name === 'popd') return popped(state, operands);
   if (name === 'pushd' && operands.length === 0) {
@@ -102,7 +103,12 @@ function afterMove(state, name, args, targetsOf) {
   const word = operands[0];
   if (name === 'pushd' && STACK_INDEX_RE.test(word.value)) return unknownAfter(state, `pushd ${word.value} rotates a stack this hook does not follow`);
   if (word?.value === '-') return returned(state, name, `${name} -`);
-  const targets = targetsOf(word ?? null);
+  return movedToTargets(state, name, args, word, targetsOf(word ?? null));
+}
+
+// Where a move to the directories `targets` (the target word's values, null
+// when only the running shell knows them) leads.
+function movedToTargets(state, name, args, word, targets) {
   const spelled = word ? `${name} ${word.value}` : name;
   if (targets === null) return unknownAfter(state, `${spelled} moves to a directory only known when the command runs`);
   // The shell reads options after expanding the word: `cd "$X"` with X set
@@ -110,7 +116,11 @@ function afterMove(state, name, args, targetsOf) {
   const expanded = targets.filter(target => target !== word?.value);
   if (expanded.length > 0 && targets.every(target => target === '-')) return returned(state, name, spelled);
   if (expanded.some(target => /^[-+]/.test(target))) return unknownAfter(state, `${spelled} expands to an option, which moves where only the running shell knows`);
-  return movedTo(state, targets, name, isPhysicalMove(name, args));
+  // A link is resolved as it stands before the line runs; a command earlier
+  // on the line can create or replace it first.
+  const physical = isPhysicalMove(name, args);
+  if (physical && state.ranOther) return unknownAfter(state, `${name} -P ${word?.value ?? ''} resolves links that an earlier command on this line may change`);
+  return movedTo(state, targets, name, physical);
 }
 
 // cd - returns to where the last move of this line started.
