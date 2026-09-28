@@ -692,18 +692,40 @@ function quoteForCmdShell(arg) {
   return '"' + arg.replaceAll('"', '""') + '"';
 }
 
+// npm puts a global package's command on Windows as a .cmd shim beside its
+// node_modules, and that shim only runs the package's own script with node:
+// running the script directly needs no shell at all.
+function claudeScriptBehindShim(cli) {
+  const script = path.join(path.dirname(cli), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
+  return fs.existsSync(script) ? script : null;
+}
+
+// How to run the claude CLI with an argv: the executable itself, the script
+// behind its .cmd shim with node, or, with neither, through cmd.exe, which
+// expands %var% and !var! whatever the quoting; a path holding either is
+// refused there rather than handed over changed.
+function claudeRunner(cli) {
+  // Same Windows rule as the crusher shim: .cmd/.bat need a shell.
+  const { needsShellOnWindows } = require('./crusher/shim-dispatch');
+  if (!needsShellOnWindows(cli)) return args => spawnSync(cli, args, { encoding: 'utf8' }); // NOSONAR javascript:S4036 -- cli was resolved from the user's own PATH on purpose; fixed argv
+  const script = claudeScriptBehindShim(cli);
+  if (script) return args => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' });
+  return args => {
+    const expanded = args.find(arg => /[%!]/.test(arg));
+    if (expanded !== undefined) {
+      const name = args[args.indexOf('--') - 1];
+      const bin = args.at(-1);
+      throw new Error(`cmd.exe would expand the % or ! in '${expanded}', so ${name} is not registered through claude.cmd; add it by hand: claude mcp add -s user ${name} -- node "${bin}"`);
+    }
+    return spawnSync(quoteForCmdShell(cli), args.map(quoteForCmdShell), { encoding: 'utf8', shell: true }); // NOSONAR javascript:S4036 -- cli was resolved from the user's own PATH on purpose; fixed argv
+  };
+}
+
 function registerClaudeCli(_targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
   const cli = resolveClaudeCli();
   if (!cli) throw new Error('claude CLI not found on PATH');
-  // Same Windows rule as the crusher shim: .cmd/.bat need a shell.
-  const { needsShellOnWindows } = require('./crusher/shim-dispatch');
-  const useShell = needsShellOnWindows(cli);
-  const runCli = (args) => spawnSync(
-    useShell ? quoteForCmdShell(cli) : cli,
-    useShell ? args.map(quoteForCmdShell) : args,
-    { encoding: 'utf8', shell: useShell }
-  ); // NOSONAR javascript:S4036 -- cli was resolved above from the user's own PATH on purpose; fixed argv
+  const runCli = claudeRunner(cli);
 
   const servers = [
     ['egc-guardian', guardianBin],

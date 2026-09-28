@@ -506,6 +506,55 @@ function runTests() {
       });
     }) ? passed++ : failed++);
 
+    (test('behind a .cmd shim the package script runs with node, so cmd.exe never expands a % in a path', () => {
+      withFakeClaude('1', (logPath) => {
+        const dispatch = require('../../scripts/lib/crusher/shim-dispatch');
+        const originalNeedsShell = dispatch.needsShellOnWindows;
+        dispatch.needsShellOnWindows = () => true;
+        const binDir = path.dirname(logPath);
+        const script = path.join(binDir, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
+        fs.mkdirSync(path.dirname(script), { recursive: true });
+        fs.writeFileSync(script, fs.readFileSync(path.join(binDir, 'claude'), 'utf8').replace('JSON.stringify(process.argv.slice(2))', "JSON.stringify(['script', ...process.argv.slice(2)])"));
+        const percentBins = {
+          guardianBin: '/home/100%USERNAME%dir/egc-guardian/build/index.js',
+          memoryBin: '/home/100%USERNAME%dir/egc-memory/build/index.js',
+        };
+        try {
+          assert.strictEqual(registerClaudeCli('/ignored', percentBins), true);
+          const calls = fs.readFileSync(logPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+          assert.deepStrictEqual(calls.filter(call => call.includes('add')), [
+            ['script', 'mcp', 'add', '-s', 'user', 'egc-guardian', '--', 'node', percentBins.guardianBin],
+            ['script', 'mcp', 'add', '-s', 'user', 'egc-memory', '--', 'node', percentBins.memoryBin],
+          ], 'the package script runs, with every argument as it is');
+        } finally {
+          dispatch.needsShellOnWindows = originalNeedsShell;
+        }
+      });
+    }) ? passed++ : failed++);
+
+    (test('without a script to run directly, a % or ! that cmd.exe would expand stops the add and says how to add it by hand', () => {
+      withFakeClaude('1', (logPath) => {
+        const dispatch = require('../../scripts/lib/crusher/shim-dispatch');
+        const originalNeedsShell = dispatch.needsShellOnWindows;
+        dispatch.needsShellOnWindows = () => true;
+        try {
+          for (const dir of ['/home/100%USERNAME%dir', '/home/wow!dir']) {
+            const risky = { guardianBin: `${dir}/egc-guardian/build/index.js`, memoryBin: `${dir}/egc-memory/build/index.js` };
+            assert.throws(() => registerClaudeCli('/ignored', risky), error => {
+              assert.match(error.message, /cmd\.exe would expand/);
+              assert.ok(error.message.includes(`claude mcp add -s user egc-guardian -- node "${risky.guardianBin}"`), error.message);
+              return true;
+            });
+          }
+          const calls = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
+          assert.strictEqual(calls.filter(call => call[1] === 'add').length, 0, 'nothing is added with a path cmd.exe would change');
+          assert.strictEqual(registerClaudeCli('/ignored', bins), true, 'a path without them still goes through the shell');
+        } finally {
+          dispatch.needsShellOnWindows = originalNeedsShell;
+        }
+      });
+    }) ? passed++ : failed++);
+
     (test('registerClaudeCli throws when the CLI refuses an add, so init warns instead of reporting success', () => {
       withFakeClaude('1', () => {
         const savedAdd = process.env.FAKE_ADD_STATUS;
