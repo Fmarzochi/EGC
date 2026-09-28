@@ -61,6 +61,12 @@ const SECRET_VALUE_PREFIXES: RegExp[] = [
   /\b[\w-]*(?:token|password|passwd|secret|apikey)[\w-]*\s*=\s*/gi,
   /\b[\w-]*(?:api|access|private)[-_]?key[\w-]*\s*=\s*/gi,
   /\b(?:auth|authorization|credentials?)\s*=\s*/gi,
+  // A name whose part is pass or passphrase (DBPASS, DB_PASS, DBPASS2), not
+  // a word that only ends that way (BYPASS, COMPASS), nor PASSPORT.
+  /\b[\w-]*(?<!by|com|sur|tres|over|under|encom)pass(?:phrase)?\d*(?:[_-][\w-]*)?\s*=\s*/gi,
+  // pwd after a name (MYSQL_PWD, DB_OLDPWD), never the shell's own PWD or
+  // OLDPWD.
+  /\b(?!(?:old)?pwd\s*=)[\w-]*pwd\d*(?:[_-][\w-]*)?\s*=\s*/gi,
 ];
 const SECRET_SHAPES: RegExp[] = [
   /(:\/\/[^\s/:@]+:)[^\s@]+(?=@)/g,
@@ -358,8 +364,39 @@ const SHELL_NAMES = new Set(['sh', 'bash', 'zsh', 'ksh', 'dash', 'ash']);
 const CURL_NAME_RE = /^curl(?:\.exe|\.cmd|\.bat)?$/i;
 const GLUED_USER_FLAGS = ['--user=', '-u=', '-u'];
 
+// Clients that take a password on their own command line: the flags it
+// comes glued to, and the flags it follows as the next word. A bare -p makes
+// the mysql family prompt for one instead. post-bash-command-log.js carries
+// the same table.
+interface PasswordFlags {
+  glued: string[];
+  separate: string[];
+}
+const MYSQL_FLAGS: PasswordFlags = { glued: ['-p'], separate: [] };
+const PASSWORD_CLIENTS: Record<string, PasswordFlags> = {
+  mysql: MYSQL_FLAGS,
+  mysqldump: MYSQL_FLAGS,
+  mysqladmin: MYSQL_FLAGS,
+  mysqlimport: MYSQL_FLAGS,
+  mysqlcheck: MYSQL_FLAGS,
+  mysqlshow: MYSQL_FLAGS,
+  mariadb: MYSQL_FLAGS,
+  'mariadb-dump': MYSQL_FLAGS,
+  'mariadb-admin': MYSQL_FLAGS,
+  'mariadb-import': MYSQL_FLAGS,
+  'mariadb-check': MYSQL_FLAGS,
+  sshpass: { glued: ['-p'], separate: ['-p'] },
+  'redis-cli': { glued: ['-a'], separate: ['-a', '--pass'] },
+};
+
 function basename(value: string): string {
   return value.split(/[\\/]/).pop() ?? '';
+}
+
+// A client by its name, with or without a Windows executable suffix.
+function passwordClient(value: string): PasswordFlags | null {
+  const name = basename(value).toLowerCase().replace(/\.(?:exe|cmd|bat)$/, '');
+  return Object.hasOwn(PASSWORD_CLIENTS, name) ? PASSWORD_CLIENTS[name] : null;
 }
 
 // Whether a shell's option word asks for a command string (-c, -lc, -ic).
@@ -415,12 +452,16 @@ class CurlRedactor {
   private sawShell = false;
   private valueNext = false;
   private bodyNext = false;
+  private client: PasswordFlags | null = null;
+  private secretNext = false;
 
   private reset(): void {
     this.sawCurl = false;
     this.sawShell = false;
     this.valueNext = false;
     this.bodyNext = false;
+    this.client = null;
+    this.secretNext = false;
   }
 
   // Nested command lines recurse through this entry; the counter bounds them.
@@ -463,6 +504,10 @@ class CurlRedactor {
       this.valueNext = false;
       return this.credential(word.raw, word.value);
     }
+    if (this.secretNext) {
+      this.secretNext = false;
+      return REDACTED;
+    }
     if (SHELL_NAMES.has(basename(word.value).toLowerCase())) {
       this.sawShell = true;
     } else if (this.sawShell && isCommandStringFlag(word.value)) {
@@ -472,10 +517,34 @@ class CurlRedactor {
     } else if (this.sawCurl && (word.value === '-u' || word.value === '--user')) {
       this.valueNext = true;
     } else if (this.sawCurl) {
-      const glued = GLUED_USER_FLAGS.find(flag => word.raw.startsWith(flag) && word.raw.length > flag.length);
-      if (glued) return `${glued}${this.credential(word.raw.slice(glued.length), word.value.slice(glued.length))}`;
+      return this.curlUser(word);
+    } else if (passwordClient(word.value)) {
+      this.client = passwordClient(word.value);
+    } else if (this.client) {
+      return this.passwordWord(word, this.client);
     }
     return word.raw;
+  }
+
+  // A word after curl: the credential glued to -u or --user=, read as the
+  // shell passes it ('-uuser:pass' and \-uuser:pass are -u).
+  private curlUser(word: ShellWord): string {
+    const flag = GLUED_USER_FLAGS.find(glued => word.value.startsWith(glued) && word.value.length > glued.length);
+    if (flag === undefined) return word.raw;
+    const typed = word.raw.startsWith(flag) ? word.raw : word.value;
+    return flag + this.credential(typed.slice(flag.length), word.value.slice(flag.length));
+  }
+
+  // A word of a password client, read as the shell passes it ('-psecret'
+  // is -psecret): the password glued to its flag, or its flag, whose next
+  // word is the password.
+  private passwordWord(word: ShellWord, flags: PasswordFlags): string {
+    if (flags.separate.includes(word.value)) {
+      this.secretNext = true;
+      return word.raw;
+    }
+    const glued = flags.glued.find(flag => word.value.startsWith(flag) && word.value.length > flag.length);
+    return glued ? `${glued}${REDACTED}` : word.raw;
   }
 
   // curl by basename, with or without a Windows executable suffix, also
