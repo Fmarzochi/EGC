@@ -1,10 +1,10 @@
 // The files and the commands the text of a program names, read in the
 // program's own language: the file of a sed r, R, w or W command or of an
-// s///w flag and the command of a sed e; the file an awk program reads with
-// getline or writes with print, and the command it runs with system() or a
-// pipe; the file a jq import or include reads; the file a yq load reads. A
-// command or a file the program builds from the data it reads cannot be
-// judged before it runs: `opaque` says what does that.
+// s///w flag and the command of a sed e; the file a jq import or include
+// reads; the file a yq load reads. An awk program that runs a command, reads
+// a file or writes one is refused as a whole (see awkRefs). A command or a
+// file the program builds from the data it reads cannot be judged before it
+// runs: `opaque` says what does that.
 
 export interface ProgramRefs {
   files: string[];
@@ -121,103 +121,20 @@ function readSedSubstitute(script: string, at: number, refs: ProgramRefs): numbe
   return flag;
 }
 
-// awk: string literals, regular expressions (a slash where an operand can
-// start), comments, pipes and system() calls.
-interface AwkLiteral {
-  value: string;
-  start: number;
-  end: number;
-}
-
-interface AwkScan {
-  literals: AwkLiteral[];
-  pipes: number[];
-  systems: number[];
-  previous: string;
-}
-
-const AWK_REGEX_AFTER = new Set(['', '(', ',', '~', '!', '{', '}', ';', '&', '|', '=', '\n', '?', ':', '[']);
-
-const unescapeAwk = (value: string): string => value.replaceAll(/\\(.)/g, '$1');
-
-function scanAwk(program: string): AwkScan {
-  const scan: AwkScan = { literals: [], pipes: [], systems: [], previous: '' };
-  let at = 0;
-  while (at < program.length) at = stepAwk(program, at, scan);
-  return scan;
-}
-
-function stepAwk(program: string, at: number, scan: AwkScan): number {
-  const char = program[at];
-  if (char === '"') return readAwkString(program, at, scan);
-  if (char === '/' && AWK_REGEX_AFTER.has(scan.previous)) {
-    scan.previous = '/';
-    return pastDelimiter(program, at + 1, '/');
-  }
-  if (char === '#') return lineEnd(program, at);
-  if (char === '|') return readAwkPipe(program, at, scan);
-  if (startsCall(program, at, 'system')) scan.systems.push(at);
-  if (char !== ' ' && char !== '\t') scan.previous = char;
-  return at + 1;
-}
-
-function readAwkString(program: string, at: number, scan: AwkScan): number {
-  const end = pastDelimiter(program, at + 1, '"');
-  scan.literals.push({ value: unescapeAwk(program.slice(at + 1, end - 1)), start: at, end });
-  scan.previous = '"';
-  return end;
-}
-
-function readAwkPipe(program: string, at: number, scan: AwkScan): number {
-  scan.previous = '|';
-  if (program[at + 1] === '|') return at + 2;
-  scan.pipes.push(at);
-  return at + (program[at + 1] === '&' ? 2 : 1);
-}
-
-function startsCall(program: string, at: number, name: string): boolean {
-  if (!program.startsWith(name, at) || /\w/.test(program[at - 1] ?? '')) return false;
-  return program[nextVisible(program, at + name.length)] === '(';
-}
-
-// The literal that alone fills a place starting at `from`: what follows it
-// ends the expression (a closing, a separator or the end).
-function soleLiteralAt(program: string, scan: AwkScan, from: number): AwkLiteral | null {
-  const literal = scan.literals.find(item => item.start === nextVisible(program, from));
-  if (!literal) return null;
-  const after = program[nextVisible(program, literal.end)];
-  return after === undefined || ';})\n'.includes(after) ? literal : null;
-}
-
-// A file an awk program reads or writes: a literal right after <, > or >>.
-const redirectsTo = (program: string, start: number): boolean => /[<>]$/.test(program.slice(0, start).trimEnd());
+// awk is a language of its own, and a slash in it is a division or a
+// regular expression depending on its grammar, so a reader of its text can
+// be led to take code for a string. What gawk --sandbox turns off is looked
+// for in the raw text instead: system(), getline, extensions and includes,
+// and a > or | after a print or a printf (an output redirection or a pipe).
+// A program that has one is inline code with effects the Guardian cannot
+// follow, as perl -e is; the plain text processing awk is used for passes.
+const AWK_EFFECT_WORDS = /\b(?:system|getline)\b|@(?:load|include)\b/;
 
 function awkRefs(program: string): ProgramRefs {
-  const scan = scanAwk(program);
-  const refs = noRefs();
-  for (const literal of scan.literals) {
-    if (redirectsTo(program, literal.start)) refs.files.push(literal.value);
-  }
-  for (const at of scan.systems) noteAwkCommand(soleLiteralAt(program, scan, program.indexOf('(', at) + 1), refs, 'system()');
-  for (const at of scan.pipes) noteAwkCommand(pipeCommand(program, scan, at), refs, 'a pipe');
-  return refs;
-}
-
-function noteAwkCommand(literal: AwkLiteral | null, refs: ProgramRefs, place: string): void {
-  if (literal) refs.commands.push(literal.value);
-  else refs.opaque = `runs a command it builds from the data it reads through ${place}`;
-}
-
-// The command a pipe runs: the literal after it (print | "cmd"), or the
-// literal before it when getline reads from it ("cmd" | getline).
-function pipeCommand(program: string, scan: AwkScan, at: number): AwkLiteral | null {
-  const right = nextVisible(program, at + (program[at + 1] === '&' ? 2 : 1));
-  if (!program.startsWith('getline', right)) return soleLiteralAt(program, scan, right);
-  const end = program.slice(0, at).trimEnd().length;
-  const literal = scan.literals.find(item => item.end === end);
-  if (!literal) return null;
-  const before = program.slice(0, literal.start).trimEnd();
-  return before === '' || /[;{}(,\n]$/.test(before) ? literal : null;
+  const print = /\bprintf?\b/.exec(program);
+  const redirected = print !== null && /[>|]/.test(program.slice(print.index));
+  if (!AWK_EFFECT_WORDS.test(program) && !redirected) return noRefs();
+  return { files: [], commands: [], opaque: 'runs a command, reads a file or writes one from its program (system(), getline, or a print sent to a file or a pipe)' };
 }
 
 // The string literals right after a pattern in a jq or yq program, and
@@ -227,7 +144,7 @@ function quotedAfter(text: string, pattern: RegExp): { values: string[]; compute
   let computed = false;
   for (const match of text.matchAll(pattern)) {
     const from = nextVisible(text, (match.index ?? 0) + match[0].length);
-    if (text[from] === '"') values.push(unescapeAwk(text.slice(from + 1, pastDelimiter(text, from + 1, '"') - 1)));
+    if (text[from] === '"') values.push(text.slice(from + 1, pastDelimiter(text, from + 1, '"') - 1).replaceAll(/\\(.)/g, '$1'));
     else computed = true;
   }
   return { values, computed };

@@ -3464,7 +3464,7 @@ function programTextVerdict(baseCommand: string, read: ProgramRead): { files: st
   for (const text of read.programs) {
     const refs = programRefs(read.language, text);
     if (refs.opaque) {
-      return { files, denial: { allowed: false, reason: `'${baseCommand}' ${refs.opaque}, which cannot be judged before it runs; write the command out`, trust_level: 'DANGEROUS' } };
+      return { files, denial: { allowed: false, reason: `'${baseCommand}' ${refs.opaque}, which cannot be judged before it runs; write that part in the shell instead, where it is judged`, trust_level: 'DANGEROUS' } };
     }
     for (const inner of refs.commands) {
       const verdict = validateCommand(inner);
