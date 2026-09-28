@@ -205,8 +205,15 @@ allowed('git log -o ~/.bashrc');
 allowed('git -C src log -1');
 // A file an option reads is judged as the shell hands its name: a backslash
 // inside single quotes stays in it, so it names neither more nor less.
-allowed("git ls-files --exclude-from='x.en\\v'");
-allowed("git ls-files --exclude-from 'x.en\\v'");
+// On Windows a shell may read that backslash as an escape too, so the name
+// it then makes (x.env) is judged as well.
+if (process.platform === 'win32') {
+  denied("git ls-files --exclude-from='x.en\\v'", READ);
+  denied("git ls-files --exclude-from 'x.en\\v'", READ);
+} else {
+  allowed("git ls-files --exclude-from='x.en\\v'");
+  allowed("git ls-files --exclude-from 'x.en\\v'");
+}
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);
