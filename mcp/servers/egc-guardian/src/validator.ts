@@ -713,6 +713,8 @@ function tryUnwrapWrapper(current: string[]): UnwrapStep | null {
   // simple opaque flag argument to skip past; it can itself be a full
   // destructive command, so this is a hard deny rather than an unwrap.
   const options = readWrapperOptions(current, spec);
+  // command -v and -V only say what each name would run: nothing runs.
+  if (head === 'command' && options.names.some(name => name === '-v' || name === '-V')) return { remaining: [] };
   if (head === 'env' && envSplitsString(current, options.names)) {
     return forbiddenCommandString(`'env -S/--split-string' re-splits and executes its value and is forbidden`);
   }
