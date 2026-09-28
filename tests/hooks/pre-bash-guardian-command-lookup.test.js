@@ -53,7 +53,10 @@ function runTests() {
 
     record(test('any other command runs what follows it, and the hook judges that', () => {
       // Another wrapper's -v (strace's verbose) still runs what follows it.
-      for (const command of ['command bash x.sh', 'command ./x.sh', 'command -p ./x.sh', 'command -- ./x.sh', 'sudo command bash x.sh', 'strace -v ./x.sh']) {
+      for (const command of [
+        'command bash x.sh', 'command ./x.sh', 'command -p ./x.sh', 'command -- ./x.sh', 'sudo command bash x.sh', 'strace -v ./x.sh',
+        'command -v ls; ./x.sh', 'command -v ls && bash x.sh', 'command -v $(./x.sh)',
+      ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
         assert.match(result.stderr, /destructive/, command);
@@ -75,6 +78,12 @@ function runTests() {
         const verdict = validateCommand(command);
         assert.strictEqual(verdict.allowed, false, `${command}: ${JSON.stringify(verdict)}`);
         assert.match(verdict.reason, /destructive/, command);
+      }
+      // The validator reads one line whole: what goes on past the names is
+      // still flagged by its chaining check, as any other chain is.
+      for (const command of [`command -v ls ; ${wipe}`, `command -v ls;${wipe}`, `command -v ls && ${wipe}`, `command -v ls | ${wipe}`, `command -v $(${wipe})`]) {
+        const verdict = validateCommand(command);
+        assert.strictEqual(verdict.allowed, false, `${command}: ${JSON.stringify(verdict)}`);
       }
     }));
   } finally {
