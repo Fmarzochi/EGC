@@ -24,7 +24,8 @@ The prompt library (agents, skills, commands and rules) ships in the same packag
 ## Where EGC is going
 
 - **Agent Memory Interchange.** A specification for how memory moves between agents and tools, so EGC's memory is readable and writable by anything that speaks the format; `egc export` is the first reference implementation (see [spec/](spec/README.md)).
-- **Team Brain.** Shared memory across a team: organization-level installs, role-based scoping, cross-project federation and a stable, versioned MCP API. This is the only layer where a commercial offer is ever considered, and only after the engine has the adoption to justify it.
+- **Team Brain.** Shared memory across a team: organization-level installs, role-based scoping, cross-project federation and a stable, versioned MCP API. It stays free like the rest of the engine, funded by sponsors, never by fees.
+- **Neural mesh.** Assistants that talk to each other in real time over the session bus, the next step beyond the durable event queue that already carries messages between sessions.
 - **Public savings.** The Token Crusher's ledger, `egc gain`, as a number people can compare and publish.
 - **One-command onboarding.** With the library opt-in, the three-stage install (bare install, project setup, optional library) folds into a single guided `egc install`.
 
@@ -34,9 +35,9 @@ EGC is maintained by one developer. The plan against a bus factor of one is peop
 
 ## Milestones
 
-### v1.2.0: Teams
+### Next focus: neural mesh and Team Brain
 
-Multi-developer workflows and shared context:
+The direction after the current 1.1.x line, once its scope is settled. No version or date is promised until it ships, and none of it is built yet. Multi-developer workflows and shared context:
 
 - Shared state between team members (multi-user installations beyond git-backend team memory)
 - Organization-level installations and role-based context scoping
