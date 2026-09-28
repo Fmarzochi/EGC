@@ -1213,9 +1213,9 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // and rdisk0. Under Git for Windows /dev/sda is the first physical drive,
   // and it resolves below the current drive; there, and on macOS, the path
   // is already folded to lower case when it is matched.
-  new RegExp(String.raw`${DEVICE_DIR}(?:sd|hd|vd|xvd)[a-z]`),
+  new RegExp(`${DEVICE_DIR}(?:sd|hd|vd|xvd)[a-z]`),
   new RegExp(String.raw`${DEVICE_DIR}(?:${NUMBERED_DEVICES.join('|')})\d`),
-  new RegExp(String.raw`${DEVICE_DIR}(?:k?mem|port)$`),
+  new RegExp(`${DEVICE_DIR}(?:k?mem|port)$`),
   new RegExp(String.raw`${DEVICE_DIR}(?:disk[\\/][^\\/]+|mapper|block)[\\/].`),
   /^[\\/]proc[\\/]kcore$/,
   /^[\\/]proc[\\/](?:\d+|self|thread-self)[\\/](?:task[\\/]\d+[\\/])?mem$/,
@@ -1609,7 +1609,7 @@ const GIT_CONFIG_ACTION_OPTIONS = new Map<string, GitConfigAction>([
 ]);
 // Long options that take the next word as their value unless it is glued on
 // with =, abbreviated or not: `--comment --get` is a comment, not a read.
-const GIT_CONFIG_VALUE_OPTIONS = ['--file', '--blob', '--type', '--default', '--comment', '--value', '--url'];
+const GIT_CONFIG_VALUE_OPTIONS = new Set(['--file', '--blob', '--type', '--default', '--comment', '--value', '--url']);
 // Options that change neither the action nor the operands.
 const GIT_CONFIG_SWITCHES = new Set([
   '--global', '--system', '--local', '--worktree', '--includes', '--no-includes',
@@ -1668,7 +1668,7 @@ function resolveGitConfigLong(option: string): string | null {
   let full: string | null = null;
   if (matches.includes(name)) full = name;
   else if (matches.length === 1) full = matches[0];
-  return full !== null && (eq < 0 || GIT_CONFIG_VALUE_OPTIONS.includes(full)) ? full : null;
+  return full !== null && (eq < 0 || GIT_CONFIG_VALUE_OPTIONS.has(full)) ? full : null;
 }
 
 // The index of the last word the option at i uses.
