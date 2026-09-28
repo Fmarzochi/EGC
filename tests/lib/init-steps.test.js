@@ -51,6 +51,19 @@ const MIXED = [
   '  [cognitive] Zed: already configured (v6)',
 ].join('\n');
 
+test('summarizeCognitiveOutput reads a file that kept its block once as upgraded, never as other', () => {
+  const summary = summarizeCognitiveOutput([
+    '  [cognitive] Claude Code: memory protocol kept once, 1 stale block removed (v9 -> v9) (~/.claude/CLAUDE.md)',
+    '  [cognitive] Cursor: memory protocol kept once, 2 stale blocks removed (v1 -> v9) (~/.config/Cursor/User/settings.json)',
+  ].join('\n'));
+  assert.deepStrictEqual(summary.upgraded.map(t => t.label), ['Claude Code', 'Cursor']);
+  assert.strictEqual(summary.upgraded[0].from, '9');
+  assert.strictEqual(summary.upgraded[1].from, '1');
+  assert.strictEqual(summary.upgraded[0].path, '~/.claude/CLAUDE.md');
+  assert.strictEqual(summary.version, 9);
+  assert.deepStrictEqual(summary.other, []);
+});
+
 test('summarizeCognitiveOutput groups every tool by what happened to it', () => {
   const summary = summarizeCognitiveOutput(MIXED);
   assert.strictEqual(summary.tools.length, 7);

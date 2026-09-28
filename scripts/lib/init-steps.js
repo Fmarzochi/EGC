@@ -12,6 +12,8 @@ const COGNITIVE_LINE_RE = /^\s*\[cognitive\] (.+?): (.+)$/;
 const ALREADY_RE = /^already configured(?: \(v(\w+)\))?$/;
 const INSTALLED_RE = /^(?:memory protocol|session hooks) installed(?: \((.+)\))?$/;
 const UPGRADED_RE = /^memory protocol upgraded(?: v(\w+) -> v(\d+))?(?: \((.+)\))?$/;
+// A file that carried the block more than once keeps one current block.
+const KEPT_ONCE_RE = /^memory protocol kept once, \d+ stale blocks? removed \(v(\w+) -> v(\d+)\)(?: \((.+)\))?$/;
 const ERROR_RE = /^unexpected error: (.+)$/;
 const STATE_DB_OK_RE = /^\[bootstrap-state-db\] OK (.+) \((\d+) migrations?\)$/;
 const STATE_DB_WARNING_RE = /^\[bootstrap-state-db\] WARNING: (.+)$/;
@@ -32,7 +34,7 @@ function classifyCognitiveMessage(message) {
   if (match) return { status: 'up-to-date', version: /^\d+$/.test(match[1] || '') ? Number(match[1]) : null };
   match = INSTALLED_RE.exec(message);
   if (match) return { status: 'installed', path: match[1] || null };
-  match = UPGRADED_RE.exec(message);
+  match = UPGRADED_RE.exec(message) ?? KEPT_ONCE_RE.exec(message);
   if (match) return { status: 'upgraded', from: match[1] || null, version: match[2] ? Number(match[2]) : null, path: match[3] || null };
   match = ERROR_RE.exec(message);
   if (match) return { status: 'error', reason: match[1] };

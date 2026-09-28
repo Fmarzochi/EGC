@@ -136,20 +136,46 @@ const CODEX_PROTOCOL_FULL   = `persistent_instructions = "State is owned by egc-
 
 const HOME = os.homedir();
 
+// Every protocol block in a file: an older install could append a second one,
+// which a check of the first alone would then leave in place for good.
+const MARKER_BLOCKS_RE = new RegExp(MARKER_BLOCK_RE.source, 'g');
+
+// How a file that carried the block more than once is reported.
+function keptOnce(stale) {
+  return `kept once, ${stale} stale block${stale === 1 ? '' : 's'} removed`;
+}
+
+// The file with its first protocol block made the current one and every
+// later block removed, the text around them left as it was.
+function withSingleBlock(raw) {
+  let first = true;
+  return raw.replace(MARKER_BLOCKS_RE, () => {
+    if (!first) return '';
+    first = false;
+    return BLOCK.trim() + '\n';
+  });
+}
+
 function injectProtocol(filepath, label) {
   const exists = fs.existsSync(filepath);
   if (exists) {
     const raw = fs.readFileSync(filepath, 'utf8');
-    const blockMatch = raw.match(MARKER_BLOCK_RE);
-    if (blockMatch) {
-      const installedVersion = blockMatch[1] ? Number(blockMatch[1]) : 1;
-      if (installedVersion >= PROTOCOL_VERSION) {
+    const blocks = [...raw.matchAll(MARKER_BLOCKS_RE)];
+    if (blocks.length > 0) {
+      const installedVersion = blocks[0][1] ? Number(blocks[0][1]) : 1;
+      if (blocks.length === 1 && installedVersion >= PROTOCOL_VERSION) {
         console.log(`  [cognitive] ${label}: already configured (v${installedVersion})`);
         return;
       }
       fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
-      fs.writeFileSync(filepath, raw.replace(MARKER_BLOCK_RE, BLOCK.trim() + '\n'), 'utf8');
-      console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION} (${filepath.replace(HOME, '~')})`);
+      fs.writeFileSync(filepath, withSingleBlock(raw), 'utf8');
+      const where = filepath.replace(HOME, '~');
+      const stale = blocks.length - 1;
+      if (stale > 0) {
+        console.log(`  [cognitive] ${label}: memory protocol ${keptOnce(stale)} (v${installedVersion} -> v${PROTOCOL_VERSION}) (${where})`);
+      } else {
+        console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION} (${where})`);
+      }
       return;
     }
     fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
@@ -218,21 +244,32 @@ function cursorRulesBlock() {
 // shallow. Nothing at all, or an old unclosed v1 tag with no reliable end
 // marker, appends rather than guessing where a legacy block ends, so nothing
 // the user wrote is ever deleted.
+// Every closed protocol block in the rules: an older install could leave a
+// second one, kept for good if only the first were checked.
+const CURSOR_BLOCKS_RE = new RegExp(CURSOR_BLOCK_RE.source, 'g');
+
 function computeCursorRulesUpdate(existing) {
-  const blockMatch = existing.match(CURSOR_BLOCK_RE);
+  const blocks = [...existing.matchAll(CURSOR_BLOCKS_RE)];
+  const blockMatch = blocks[0] ?? null;
   const hasLegacyTag = !blockMatch && existing.includes('[egc-memory-protocol]');
   const installedVersion = resolveInstalledVersion(blockMatch, hasLegacyTag ? 1 : 0);
+  const stale = Math.max(0, blocks.length - 1);
 
-  if (installedVersion >= PROTOCOL_VERSION) {
+  if (stale === 0 && installedVersion >= PROTOCOL_VERSION) {
     return { upToDate: true, installedVersion };
   }
 
   const separator = existing.trim() ? '\n\n' : '';
+  let first = true;
   const newRules = blockMatch
-    ? existing.replace(CURSOR_BLOCK_RE, cursorRulesBlock())
+    ? existing.replace(CURSOR_BLOCKS_RE, () => {
+      if (!first) return '';
+      first = false;
+      return cursorRulesBlock();
+    })
     : existing + separator + cursorRulesBlock();
 
-  return { upToDate: false, installedVersion, newRules };
+  return { upToDate: false, installedVersion, newRules, stale };
 }
 
 // ── Cursor (global User Rules via settings.json) ──────────────────────────────
@@ -270,7 +307,10 @@ function computeCursorRulesUpdate(existing) {
     obj['cursor.rules'] = update.newRules;
     fs.writeFileSync(settingsFile + '.egc.bak', rawContent, 'utf8');
     fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2) + '\n', 'utf8');
-    const action = update.installedVersion > 0 ? `upgraded v${update.installedVersion} -> v${PROTOCOL_VERSION}` : 'installed';
+    const upgraded = update.stale > 0
+      ? `${keptOnce(update.stale)} (v${update.installedVersion} -> v${PROTOCOL_VERSION})`
+      : `upgraded v${update.installedVersion} -> v${PROTOCOL_VERSION}`;
+    const action = update.installedVersion > 0 ? upgraded : 'installed';
     console.log(`  [cognitive] Cursor: memory protocol ${action} (${settingsFile.replace(HOME, '~')})`);
   } catch (e) {
     console.log(`  [cognitive] Cursor: unexpected error: ${e.message}`);

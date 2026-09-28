@@ -103,6 +103,62 @@ async function runClaudeCodeAndGeminiCliTests() {
     }
   })) passed++; else failed++;
 
+  // A file that once got the block twice (an old install appended a second
+  // one) must end with one current block: the first check used to stop at
+  // the current block on top and leave a stale one below it for good.
+  const LEGACY_BLOCK = [
+    '<!-- egc-memory-protocol -->',
+    '## EGC Session Memory',
+    '',
+    'State files live at `~/.egc/state/<project-slug>.md`: plain Markdown, one file per project.',
+    '<!-- /egc-memory-protocol -->',
+    '',
+  ].join('\n');
+  const MARKERS_RE = /<!-- egc-memory-protocol(?::v\d+)? -->/g;
+
+  if (await test('Claude Code: a current block with a stale one below keeps a single current block, the rest untouched', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.claude'));
+      const target = path.join(home, '.claude', 'CLAUDE.md');
+      run(home);
+      const installed = fs.readFileSync(target, 'utf8');
+      const doubled = `${installed}\n## My rules\n\nKeep this line.\n\n${LEGACY_BLOCK}\nKeep this line too.\n`;
+      fs.writeFileSync(target, doubled, 'utf8');
+
+      const output = run(home);
+      assert.ok(/Claude Code: memory protocol kept once, 1 stale block removed/.test(output), `should report the cleanup, got: ${output}`);
+      const content = fs.readFileSync(target, 'utf8');
+      assert.strictEqual((content.match(MARKERS_RE) || []).length, 1, 'exactly one protocol block');
+      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'the block left is the current one');
+      assert.ok(!content.includes('plain Markdown'), 'the stale block is gone');
+      assert.ok(content.includes('Keep this line.') && content.includes('Keep this line too.') && content.includes('## My rules'), 'content around the blocks must survive');
+      assert.strictEqual(fs.readFileSync(target + '.egc.bak', 'utf8'), doubled, 'backup must hold the file as it was');
+      assert.ok(/Claude Code: already configured/.test(run(home)), 'a rerun finds it configured');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Claude Code: two stale blocks become one current block where the first stood', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.claude'));
+      const target = path.join(home, '.claude', 'CLAUDE.md');
+      const v1 = LEGACY_BLOCK.replace('<!-- egc-memory-protocol -->', '<!-- egc-memory-protocol:v1 -->');
+      fs.writeFileSync(target, `# Top\n\n${v1}\nMiddle line.\n\n${LEGACY_BLOCK}\nBottom line.\n`, 'utf8');
+
+      const output = run(home);
+      assert.ok(/Claude Code: memory protocol kept once, 1 stale block removed \(v1 -> v\d+\)/.test(output), `should report the cleanup, got: ${output}`);
+      const content = fs.readFileSync(target, 'utf8');
+      assert.strictEqual((content.match(MARKERS_RE) || []).length, 1, 'exactly one protocol block');
+      assert.ok(content.indexOf(`<!-- egc-memory-protocol:${V} -->`) < content.indexOf('Middle line.'), 'the current block takes the place of the first');
+      assert.ok(content.includes('# Top') && content.includes('Middle line.') && content.includes('Bottom line.'), 'content around the blocks must survive');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('protocol carries the busy-session drain rule in both the block and Codex forms (#1293)', () => {
     const home = mktempHome();
     try {
@@ -289,6 +345,30 @@ async function runCursorAndCodexUpgradeTests() {
       assert.ok(parsed['cursor.rules'].includes('Legacy pre-Crusher rules'), 'the old unclosed legacy block is never deleted, since there is no reliable end marker to cut it at');
       assert.ok(parsed['cursor.rules'].includes('[egc-token-crusher]'), 'upgraded cursor.rules must include the Crusher tag');
       assert.ok(parsed['cursor.rules'].includes(`[egc-memory-protocol:${V}]`), 'marker must be stamped with the current version');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Cursor settings.json: a current closed block with a stale closed one after it keeps a single current block, the user rules untouched', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      fs.writeFileSync(settingsFile, JSON.stringify({ 'cursor.rules': 'Always use tabs.' }), 'utf8');
+      run(home);
+      const current = JSON.parse(fs.readFileSync(settingsFile, 'utf8'))['cursor.rules'];
+      const stale = '[egc-memory-protocol:v2] Old closed block. [/egc-memory-protocol]';
+      fs.writeFileSync(settingsFile, JSON.stringify({ 'cursor.rules': `${current}\n\nNever commit secrets.\n\n${stale}` }), 'utf8');
+
+      const output = run(home);
+      assert.ok(output.includes(`Cursor: memory protocol kept once, 1 stale block removed (${V} -> ${V})`), `should report the cleanup, got: ${output}`);
+      const rules = JSON.parse(fs.readFileSync(settingsFile, 'utf8'))['cursor.rules'];
+      assert.strictEqual((rules.match(/\[egc-memory-protocol:v\d+\]/g) || []).length, 1, 'exactly one protocol block');
+      assert.ok(rules.includes(`[egc-memory-protocol:${V}]`) && !rules.includes('Old closed block'), 'the current block stays, the stale one goes');
+      assert.ok(rules.includes('Always use tabs.') && rules.includes('Never commit secrets.'), 'the user rules survive');
+      assert.ok(run(home).includes(`Cursor: already configured (${V})`), 'a rerun finds it configured');
     } finally {
       cleanup(home);
     }
