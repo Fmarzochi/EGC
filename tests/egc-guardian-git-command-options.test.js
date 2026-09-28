@@ -32,7 +32,8 @@ function test(name, fn) {
   }
 }
 
-const wipe = ['rm', '-rf', 'x'].join(' ');
+// No -f in it: an unquoted -f would trip git's own --force check first.
+const wipe = ['rm', '-r', 'x'].join(' ');
 const denied = command => {
   const verdict = validateCommand(command);
   assert.strictEqual(verdict.allowed, false, `${command}: ${JSON.stringify(verdict)}`);
@@ -90,7 +91,7 @@ record(test('bisect run judges the command it runs', () => {
 record(test('a plain command in the value, and git without such an option, are judged as before', () => {
   for (const command of [
     "git rebase -x 'npm test' HEAD~3", 'git rebase --exec=make HEAD~2', 'git rebase -i HEAD~3', 'git submodule foreach git pull',
-    "git submodule foreach 'git status'", 'git submodule update --init', "git filter-branch --msg-filter cat HEAD", 'git difftool -x meld HEAD',
+    "git submodule foreach 'git status'", 'git submodule foreach --recursive git pull', 'git submodule -q foreach -q git status', 'git submodule update --init', "git filter-branch --msg-filter cat HEAD", 'git difftool -x meld HEAD',
     'git difftool HEAD', 'git fetch --upload-pack=git-upload-pack origin', 'git clone -u /usr/bin/git-upload-pack repo', 'git grep -O foo',
     'git grep -n pattern', 'git push origin main', 'git clone https://example.com/r.git', 'git archive --format=tar HEAD',
     // -O takes its pager glued only, and after -- come paths, not options.
