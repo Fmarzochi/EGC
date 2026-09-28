@@ -654,5 +654,55 @@ run('a mid-word # is not a comment, so a real path after it is still read', () =
   assert.ok(/protected path/.test(v.reason), `the real path must be what denies it, got: ${v.reason}`);
 });
 
+// A ${...} expansion closes at its own `}`, not at one inside a nested
+// expansion, command substitution or backquoted command: a # before it is
+// still inside the expansion, so the real path after it is read.
+run('a # inside a ${...} that holds a nested expansion is not a comment', () => {
+  for (const command of [
+    'cat ${x:-${y} #} ~/.ssh/id_rsa', 'cat ${x:-$(echo }) #} ~/.ssh/id_rsa', 'cat ${x:-`echo }` #} ~/.ssh/id_rsa', 'cat ${x:-$((1+2)) #} ~/.ssh/id_rsa',
+    'cat ${x:-<(echo }) #} ~/.ssh/id_rsa', 'cat ${x:->(true }) #} ~/.ssh/id_rsa', 'cat ${x:-$(echo `echo )`) #} ~/.ssh/id_rsa',
+    // A ) in a comment of the command body does not close it: bash reads the
+    // comment to its newline, and the } after it is still inside $(...).
+    'cat ${x:-$(echo # )\necho }) #} ~/.ssh/id_rsa',
+    // An escaped backquote inside backquotes does not close them.
+    'cat ${x:-`echo \\`}` #} ~/.ssh/id_rsa',
+  ]) {
+    const v = validateCommand(command);
+    assert.strictEqual(v.allowed, false, `${command}: ${v.reason}`);
+    assert.ok(/protected path/.test(v.reason), `${command}: the real path must be what denies it, got: ${v.reason}`);
+  }
+});
+
+// Quotes are read as bash reads them: `$'...'` keeps its escapes, a
+// backslash escapes a quote inside double quotes, and a quote inside a
+// ${...} in double quotes opens a string of its own; none of them runs the
+// rest of the line into one quoted word that hides a real path.
+run('a protected path after an escaped quote is still read', () => {
+  for (const command of [
+    "cat $'\\'' ~/.ssh/id_rsa",
+    'cat "\\"" ~/.ssh/id_rsa',
+    'cat "${x:-"a"}" ~/.ssh/id_rsa',
+    'cat "$(echo ")")" ~/.ssh/id_rsa',
+    // A # between the nested quotes is text, so it hides no path after it.
+    'cat "${x:-"a # b"}" ~/.ssh/id_rsa',
+    'cat "$(echo " # ")" ~/.ssh/id_rsa',
+  ]) {
+    const v = validateCommand(command);
+    assert.strictEqual(v.allowed, false, `${command}: ${v.reason}`);
+    assert.ok(/protected path/.test(v.reason), `${command}: the real path must be what denies it, got: ${v.reason}`);
+  }
+  for (const command of ["cat $'a\\'b' # see ~/.ssh/id_rsa", 'cat "a\\"b" # see ~/.ssh/id_rsa', 'cat "${x:-"a # b"}" # see ~/.ssh/id_rsa']) {
+    const v = validateCommand(command);
+    assert.ok(v.allowed || v.advisory === true, `${command}: the path only sits in a comment, got: ${v.reason}`);
+  }
+});
+
+run('a # glued mid-word inside a command body is text, so a comment after the expansion stays inert', () => {
+  for (const command of ['ls ${x:-$(echo a#)} # see ~/.ssh/id_rsa', 'ls $(echo a#) # see ~/.ssh/id_rsa']) {
+    const v = validateCommand(command);
+    assert.ok(v.allowed || v.advisory === true, `${command}: the path only sits in a comment, got: ${v.reason}`);
+  }
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

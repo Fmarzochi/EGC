@@ -58,6 +58,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The Bash hook and the Guardian read a shell comment as bash does: a `#` that opens a word is inert, one inside quotes or `${...}` or glued to a word is not (#1558).
 - A command whose name comes from a variable the command fixes is judged by the name it resolves to; opaque sources fail closed, the environment stays advisory (#1559).
 - A command word that comes from an expansion is judged by every value it can take, in the command and in the scripts it runs; a value the hook cannot read fails closed (#1560).
+- A `${...}` expansion closes where bash closes it, past nested expansions and substitutions, and a comment ends at its newline whatever quote or backslash it holds (#1561).
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
