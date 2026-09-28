@@ -115,7 +115,9 @@ function runPluginHarness(pluginPath, toolEvent) {
   try {
     const result = spawnSync('bun', [harnessPath], {
       encoding: 'utf8',
-      env: { ...process.env, EGC_ASSUME_EGC_CLI: '1' },
+      // The installed layout carries no Guardian build of its own, so the
+      // plugin is pointed at this checkout's, not at one the machine has.
+      env: { ...process.env, EGC_ASSUME_EGC_CLI: '1', EGC_GUARDIAN_CLI: guardianBuildPath },
       timeout: 15000,
     });
     if (result.error || result.status !== 0) {

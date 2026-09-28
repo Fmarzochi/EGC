@@ -168,6 +168,7 @@ jobs:
         run: |
           npm --prefix mcp/servers/egc-guardian ci
           npm --prefix mcp/servers/egc-guardian run build
+          test -f mcp/servers/egc-guardian/build/validator.js
 
       # Run tests
       - name: Run tests
