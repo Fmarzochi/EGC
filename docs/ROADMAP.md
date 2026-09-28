@@ -54,6 +54,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A file an earlier install wrote and today's plan no longer writes is retired on every target, OpenCode, Cursor, Codex and egc included, when EGC recorded writing it and it still holds the bytes EGC copied; a file the person changed, or a directory that cannot be listed, stays (#1554).
 - Host plugins (Amp, Cline, OpenCode) are installed only where their host loads them, and the unloadable copies earlier installs left under scripts/hooks are retired (#1555).
 - The Bash hook follows sudo -R and sudo -i to where sudo runs a script, and fails closed on a script it cannot read (#1556).
+- The Gemini and Ollama providers retry a rate limit, a server error or a timeout up to three times with backoff, honouring Retry-After, and fail at once on anything a later attempt cannot fix (#1585).
 - The Bash hook reads the command line as the shell does to find the script it runs, and holds scripts committed in git and unchanged to the grave denials only (#1557).
 - The Bash hook and the Guardian read a shell comment as bash does: a `#` that opens a word is inert, one inside quotes or `${...}` or glued to a word is not (#1558).
 - A command whose name comes from a variable the command fixes is judged by the name it resolves to; opaque sources fail closed, the environment stays advisory (#1559).
@@ -66,7 +67,6 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
 - The command log and the Guardian audit log mask passwords named with pass or pwd and those the mysql, mariadb, sshpass and redis-cli clients take on their command line (#1566).
 - `install.ps1` puts the git pre-commit hook in a clone through the same helper as `install.sh` (#1568).
-- The Gemini and Ollama providers retry a rate limit, a server error or a timeout up to three times with backoff, honouring Retry-After, and fail at once on anything a later attempt cannot fix (#1585).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
 - Routing on this machine, without an API key: the catalog index records the source of every component, the prompt router and `orchestrate_task` read the install state of the active tool and never offer what it has not installed (a named `Not installed for this tool` line and `not_installed` carry the command that adds them), the local scorers weigh tokens by rarity, name and activation text, stem plurals and ignore Portuguese and Spanish function words, and the decision stays with the tool's model, by intent (#1453).
