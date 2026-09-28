@@ -96,10 +96,13 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('sanitizeCommand reads a password flag as the shell passes it, a client by any Windows suffix, and a name by its digits', () => {
+    // A backslash outside quotes escapes only where the platform's shell
+    // reads it so; on Windows it reaches the program as typed.
+    const ESCAPES = process.platform !== 'win32';
     const cases = [
       ["mysql '-psenha123' db", 'mysql -p<REDACTED> db'],
       ['mysql "-psenha123" db', 'mysql -p<REDACTED> db'],
-      ['mysql \\-psenha123 db', 'mysql -p<REDACTED> db'],
+      ['mysql \\-psenha123 db', ESCAPES ? 'mysql -p<REDACTED> db' : 'mysql \\-psenha123 db'],
       ['mysql.cmd -psenha123', 'mysql.cmd -p<REDACTED>'],
       ['mariadb.bat -psenha123', 'mariadb.bat -p<REDACTED>'],
       ['MYSQL.EXE -psenha123', 'MYSQL.EXE -p<REDACTED>'],
@@ -110,7 +113,7 @@ function runTests() {
       ['OLDPWD=/y PWD=/x ./run', 'OLDPWD=/y PWD=/x ./run'],
       ["mysql '-p' db", "mysql '-p' db"],
       ["curl '-uadmin:hunter2' http://x", 'curl -uadmin:<REDACTED> http://x'],
-      ['curl \\-uadmin:hunter2 http://x', 'curl -uadmin:<REDACTED> http://x'],
+      ['curl \\-uadmin:hunter2 http://x', ESCAPES ? 'curl -uadmin:<REDACTED> http://x' : 'curl \\-uadmin:hunter2 http://x'],
       ['curl -uadmin:hunter2 http://x', 'curl -uadmin:<REDACTED> http://x'],
     ];
     for (const [input, expected] of cases) assert.strictEqual(sanitizeCommand(input), expected, input);
