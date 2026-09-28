@@ -1547,6 +1547,9 @@ async function handleClaimPath(db: Database, toolArgs: unknown) {
     await busSweepDead(db);
     return busClaimPath(db, { sessionId, path: args.path, ttlSeconds: args.ttl_seconds });
   });
+  if (!result.ok && result.reason) {
+    return { content: [{ type: "text", text: `Claim REFUSED: ${result.reason}.` }] };
+  }
   if (!result.ok) {
     const holderNote = territoryNote(result.holderTerritory);
     return { content: [{ type: "text", text: `Claim REFUSED: ${args.path} is locked by live session ${result.holder}${holderNote}.\nCoordinate with that session or work elsewhere; do not retry in a loop.` }] };

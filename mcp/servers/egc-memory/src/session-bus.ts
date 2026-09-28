@@ -113,23 +113,45 @@ export interface ClaimResult {
   ok: boolean;
   holder?: string;
   holderTerritory?: string;
+  reason?: string;
 }
 
 // The key a claim is held under: the path it names, resolved against the
 // project of the session that claims it (the same words in another project
 // are another file), normalized, with no trailing separator.
-async function claimKey(db: BusDb, sessionId: string, claimed: string): Promise<string> {
-  if (path.isAbsolute(claimed)) return path.resolve(claimed);
+// Windows and a default macOS disk name one file in any case, so a key is
+// kept in one case there.
+export function claimKeyOf(project: string, claimed: string, platform: string = process.platform): string {
+  const key = project ? path.resolve(project, claimed) : path.resolve(claimed);
+  return platform === 'win32' || platform === 'darwin' ? key.toLowerCase() : key;
+}
+
+async function sessionProject(db: BusDb, sessionId: string): Promise<string> {
   const session = await db.get('SELECT project_path FROM bus_sessions WHERE id = ?', sessionId);
-  const project = session?.project_path ? rowText(session.project_path) : '';
-  return project ? path.resolve(project, claimed) : path.resolve(claimed);
+  return session?.project_path ? rowText(session.project_path) : '';
+}
+
+async function claimKey(db: BusDb, sessionId: string, claimed: string): Promise<string> {
+  return claimKeyOf(await sessionProject(db, sessionId), claimed);
+}
+
+// A claim of the file system's root, or of a directory above the project,
+// would lock every project under it: it is refused.
+function tooWideClaim(key: string, projectKey: string): string | null {
+  if (key === path.parse(key).root) return `${key} is the root of the file system`;
+  if (projectKey && isInside(projectKey, key)) return `${key} holds the whole project, and every project beside it`;
+  return null;
 }
 
 // Whether two claim keys cover a common file: the same path, or one inside
 // the other.
 export function claimsOverlap(a: string, b: string): boolean {
-  const inside = (inner: string, outer: string) => inner.startsWith(outer.endsWith(path.sep) ? outer : outer + path.sep);
-  return a === b || inside(a, b) || inside(b, a);
+  return a === b || isInside(a, b) || isInside(b, a);
+}
+
+// Whether the key `inner` lies under the key `outer`.
+function isInside(inner: string, outer: string): boolean {
+  return inner.startsWith(outer.endsWith(path.sep) ? outer : outer + path.sep);
 }
 
 // The live foreign locks above or inside `key` (not on it: that path has its
@@ -176,14 +198,15 @@ export async function claimPath(
   input: { sessionId: string; path: string; ttlSeconds?: number },
   nowMs: number = Date.now()
 ): Promise<ClaimResult> {
-  const key = await claimKey(db, input.sessionId, input.path);
+  const project = await sessionProject(db, input.sessionId);
+  const key = claimKeyOf(project, input.path);
+  const tooWide = tooWideClaim(key, project ? claimKeyOf('', project) : '');
+  if (tooWide) return { ok: false, reason: `${tooWide}; claim a path inside the project` };
   const blocking = await overlappingLocks(db, key, input.sessionId);
-  if (blocking.length > 0) {
-    // Already holding it when an overlapping lock appeared: the order of
-    // the two decides which one stays.
-    const held = await db.get('SELECT session_id FROM bus_locks WHERE path = ? AND session_id = ?', key, input.sessionId);
-    return held ? yieldToEarlierOverlap(db, key, input.sessionId) : refusedBy(blocking[0]);
-  }
+  // A session already holding the path when an overlapping lock appeared
+  // renews it, and the order of the two decides which one stays.
+  const held = await db.get('SELECT session_id FROM bus_locks WHERE path = ? AND session_id = ?', key, input.sessionId);
+  if (blocking.length > 0 && !held) return refusedBy(blocking[0]);
   const claimed = await claimExactPath(db, { ...input, path: key }, nowMs);
   return claimed.ok ? yieldToEarlierOverlap(db, key, input.sessionId) : claimed;
 }
@@ -204,8 +227,10 @@ async function claimExactPath(
     typeof (result as { changes?: number })?.changes === 'number'
     && (result as { changes: number }).changes > 0;
 
+  // A renewal keeps the time the lock was first taken, which orders
+  // overlapping claims, and extends its lifetime to `ttl` from now.
   const refresh = await db.run(
-    'UPDATE bus_locks SET acquired_at = ?, ttl_seconds = ? WHERE path = ? AND session_id = ?',
+    'UPDATE bus_locks SET ttl_seconds = CAST(ROUND((julianday(?) - julianday(acquired_at)) * 86400) AS INTEGER) + ? WHERE path = ? AND session_id = ?',
     now, ttl, input.path, input.sessionId
   );
   if (changed(refresh)) return { ok: true };

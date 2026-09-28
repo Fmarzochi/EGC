@@ -117,7 +117,7 @@ async function main() {
     assert.deepStrictEqual((await bus.listLocks(db)).map(lock => lock.session_id), ['alive']);
   });
 
-  await run('two sessions that land overlapping claims at once: the later one yields', async () => {
+  await run('two overlapping claims taken at the same moment: the tie goes to the session id that sorts first', async () => {
     const db = await freshDb();
     await bus.announce(db, { sessionId: 'first', projectPath: '/p' });
     await bus.announce(db, { sessionId: 'second', projectPath: '/p' });
@@ -166,6 +166,45 @@ async function main() {
     assert.strictEqual(claim.ok, false, 'the claim that landed later yields');
     assert.strictEqual(claim.holder, 'racer');
     assert.deepStrictEqual((await bus.listLocks(db)).map(lock => lock.session_id), ['racer']);
+  });
+
+  await run('a holder that renews its claim beside a later overlapping one keeps it and extends its lifetime, and keeps its place in the order', async () => {
+    const db = await freshDb();
+    await bus.announce(db, { sessionId: 'b', projectPath: '/p' });
+    await bus.announce(db, { sessionId: 'a', projectPath: '/p' });
+    const root = path.resolve('/p');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 60)', path.join(root, 'src'), 'b', '2026-09-28T00:00:00.000Z');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src', 'a.ts'), 'a', '2026-09-28T00:00:05.000Z');
+    const renewed = await bus.claimPath(db, { sessionId: 'b', path: 'src', ttlSeconds: 600 }, Date.parse('2026-09-28T00:01:00.000Z'));
+    assert.strictEqual(renewed.ok, true);
+    const row = await db.get('SELECT acquired_at, ttl_seconds FROM bus_locks WHERE session_id = ?', 'b');
+    assert.strictEqual(row.acquired_at, '2026-09-28T00:00:00.000Z', 'the time it was first taken is kept');
+    assert.strictEqual(row.ttl_seconds, 660, 'it lives 600 s from the renewal');
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 'a', path: 'src/a.ts' }, Date.parse('2026-09-28T00:01:01.000Z'))).ok, false, 'the later overlapping claim still yields');
+  });
+
+  await run('a claim of the file system root or of a directory above the project is refused with its reason', async () => {
+    const db = await freshDb();
+    const project = path.resolve('/p/app');
+    await bus.announce(db, { sessionId: 's1', projectPath: project });
+    for (const wide of ['../../../..', '/', '..', path.dirname(project)]) {
+      const claim = await bus.claimPath(db, { sessionId: 's1', path: wide });
+      assert.strictEqual(claim.ok, false, wide);
+      assert.match(claim.reason, /root of the file system|whole project/, wide);
+    }
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 's1', path: '.' })).ok, true, 'the project itself can be claimed');
+    assert.strictEqual((await bus.claimPath(db, { sessionId: 's1', path: '../sibling/file' })).ok, true, 'a path beside the project covers only itself');
+    assert.strictEqual((await bus.listLocks(db)).length, 2);
+    const loose = await bus.claimPath(db, { sessionId: 'never-announced', path: path.parse(project).root });
+    assert.strictEqual(loose.ok, false, 'the root is refused to a session without a project too');
+    assert.match(loose.reason, /root of the file system/);
+  });
+
+  await run('a key is kept in one case where the file system ignores case', async () => {
+    assert.strictEqual(bus.claimKeyOf('/P/App', 'Src/A.ts', 'win32'), bus.claimKeyOf('/p/app', 'src/a.ts', 'win32'));
+    assert.strictEqual(bus.claimKeyOf('/P/App', 'Src', 'darwin'), path.resolve('/p/app/src'));
+    assert.notStrictEqual(bus.claimKeyOf('/P/App', 'Src', 'linux'), bus.claimKeyOf('/p/app', 'src', 'linux'));
+    assert.ok(bus.claimsOverlap(bus.claimKeyOf('/P', 'SRC', 'darwin'), bus.claimKeyOf('/p', 'src/x.ts', 'darwin')));
   });
 
   await run('holder can re-claim its own path and only the holder releases', async () => {
