@@ -122,6 +122,7 @@ async function runTests() {
     return new Promise((resolve, reject) => {
       const dir = mktemp();
       let watcher;
+      let guard;
 
       try {
         fs.writeFileSync(path.join(dir, 'GEMINI.md'), `# Gemini\n\n${SAMPLE_MDC}`);
@@ -132,6 +133,7 @@ async function runTests() {
             try {
               assert.strictEqual(sourceTool, 'gemini', 'source tool should be gemini');
               assert.ok(syncedTools.includes('aider'), 'should sync to aider (CONVENTIONS.md)');
+              clearTimeout(guard);
               watcher.stop();
               cleanup(dir);
               resolve();
@@ -149,8 +151,8 @@ async function runTests() {
           fs.writeFileSync(path.join(dir, 'GEMINI.md'), updated);
         }, 50);
 
-        // Timeout guard in case the event never fires
-        setTimeout(() => {
+        // Timeout guard in case the event never fires; cleared once it does.
+        guard = setTimeout(() => {
           watcher.stop();
           cleanup(dir);
           reject(new Error(`onSync did not fire within ${EVENT_BUDGET_MS} ms after file change`));
@@ -179,6 +181,7 @@ async function runTests() {
     return new Promise((resolve, reject) => {
       const dir = mktemp();
       let watcher;
+      let guard;
 
       try {
         const targetPath = path.join(dir, 'GEMINI.md');
@@ -188,6 +191,7 @@ async function runTests() {
           onSync({ sourceTool }) {
             try {
               assert.strictEqual(sourceTool, 'gemini');
+              clearTimeout(guard);
               watcher.stop();
               cleanup(dir);
               resolve();
@@ -207,7 +211,7 @@ async function runTests() {
           fs.renameSync(tmpPath, targetPath);
         }, 50);
 
-        setTimeout(() => {
+        guard = setTimeout(() => {
           watcher.stop();
           cleanup(dir);
           reject(new Error(`onSync did not fire within ${EVENT_BUDGET_MS} ms after atomic rename`));

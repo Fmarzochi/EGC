@@ -30,7 +30,11 @@ function run(name, fn) {
   }
 }
 
-// Every directory a case makes, removed once the cases have run.
+// Every directory a case makes, removed once the cases have run, and the
+// ones with the same prefixes that were there before, which are not ours.
+const TEMP_PREFIXES = ['egc-gain-home-', 'egc-discover-'];
+const prefixedTempDirs = () => fs.readdirSync(os.tmpdir()).filter(name => TEMP_PREFIXES.some(prefix => name.startsWith(prefix)));
+const tempDirsBefore = new Set(prefixedTempDirs());
 const tempDirs = [];
 function tempDir(prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -145,8 +149,9 @@ run('discover reports zero on an empty directory', () => {
 });
 
 for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
-run('every directory the cases made is removed', () => {
-  for (const dir of tempDirs) assert.ok(!fs.existsSync(dir), dir);
+run('no directory a case made is left behind, including one a case made without tempDir', () => {
+  assert.ok(tempDirs.length >= 4, 'the cases made their directories through tempDir');
+  assert.deepStrictEqual(prefixedTempDirs().filter(name => !tempDirsBefore.has(name)), []);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
