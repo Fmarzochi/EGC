@@ -131,5 +131,18 @@ denied('GIT_CONFIG=~/.bashrc git config user.name x');
 denied('HOME=/tmp/evil git-upload-pack .');
 denied('XDG_CONFIG_HOME=/tmp/evil git-receive-pack .');
 
+console.log('\n=== An editor\'s startup commands and gpg\'s home ===\n');
+denied("VIMINIT='!id' EDITOR=vim git commit");
+denied("EXINIT='!id' EDITOR=vi git commit");
+denied("GVIMINIT='!id' gvim x");
+denied('VIM=/tmp/evil EDITOR=vim git commit');
+denied('VIMRUNTIME=/tmp/evil vim x');
+denied('EMACSLOADPATH=/tmp/evil emacs x');
+denied("GNUPGHOME=/tmp/evil git commit -S -m 'x'");
+denied('GNUPGHOME=/tmp/evil gpg --sign f');
+denied('HOME=/tmp/evil gpg --sign f');
+denied('export GNUPGHOME=/tmp/evil');
+notDenied('GNUPGHOME=/tmp/x npm test');
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

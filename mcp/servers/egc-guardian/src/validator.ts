@@ -527,8 +527,10 @@ const GIT_PATH_ENV_VAR_RE = /^GIT_(?:TRACE\w*|INDEX_FILE|WORK_TREE|OBJECT_DIRECT
 // whose config is protected, and no other.
 const REPOSITORY_ENV_VARS = new Set(['GIT_DIR', 'GIT_COMMON_DIR']);
 const GIT_DIRECTORY_RE = /(?:^|[\\/])\.git[\\/]?$/;
-// Where git finds its global config, which can name commands it runs.
-const CONFIG_HOME_ENV_VARS = new Set(['HOME', 'XDG_CONFIG_HOME']);
+// Where git and gpg, which git runs to sign, find their config, which can
+// name commands they run.
+const CONFIG_HOME_ENV_VARS = new Set(['HOME', 'XDG_CONFIG_HOME', 'GNUPGHOME']);
+const CONFIG_HOME_COMMANDS = new Set(['git', 'gpg', 'gpg2']);
 // less options that hand it an initial command or a key file.
 const LESS_COMMAND_RE = /\+|--lesskey|(?:^|\s)-?[A-Za-z]*k/;
 
@@ -556,8 +558,8 @@ function envValueDenial(name: string, value: string, command?: string): string |
   // Without a command (export, a bare assignment) it holds for the git
   // commands later on the line; git's own programs (git-upload-pack) read
   // the same config.
-  if (CONFIG_HOME_ENV_VARS.has(upper) && (command === undefined || command === 'git' || command.startsWith('git-'))) {
-    return `'${name}' points git at a config this line chooses, which can name commands git runs, and is forbidden`;
+  if (CONFIG_HOME_ENV_VARS.has(upper) && (command === undefined || CONFIG_HOME_COMMANDS.has(command) || command.startsWith('git-'))) {
+    return `'${name}' points git or gpg at a config this line chooses, which can name commands they run, and is forbidden`;
   }
   if (upper === 'LESS' && LESS_COMMAND_RE.test(text)) {
     return `'LESS' hands less an initial command or a key file, which is forbidden`;
@@ -569,8 +571,12 @@ function envValueDenial(name: string, value: string, command?: string): string |
 }
 
 // Code a shell sources before the script it runs, which the hook never
-// reads, and libraries the loader puts into a program before it starts.
-const CODE_INJECTION_ENV_VARS = new Set(['BASH_ENV', 'ENV', 'LD_PRELOAD', 'LD_AUDIT', 'DYLD_INSERT_LIBRARIES']);
+// reads, libraries the loader puts into a program before it starts, and the
+// startup commands and files an editor git runs reads first.
+const CODE_INJECTION_ENV_VARS = new Set([
+  'BASH_ENV', 'ENV', 'LD_PRELOAD', 'LD_AUDIT', 'DYLD_INSERT_LIBRARIES',
+  'VIMINIT', 'EXINIT', 'GVIMINIT', 'VIM', 'VIMRUNTIME', 'EMACSLOADPATH',
+]);
 
 // The block a `VAR=value` or `export VAR=value` gets, if any; `command` is
 // the command the assignment prefixes, when there is one.
