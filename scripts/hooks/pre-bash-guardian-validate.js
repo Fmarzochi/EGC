@@ -33,6 +33,7 @@ const path = require('node:path');
 const { resolveGuardianCli, callGuardianVerdict } = require('../lib/guardian-bin');
 const { splitShellSegments, extractSubstitutionBodies, constructEnd } = require('../lib/shell-split');
 const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption } = require('../lib/wrapper-options');
+const { stdinReaderOf, producedProgram } = require('../lib/stdin-programs');
 const { collectBindings, mergeBindings, valuesOf, commandWordChoices, quoteField, singleQuoted } = require('../lib/shell-bindings');
 
 const MAX_STDIN = 1024 * 1024;
@@ -1330,6 +1331,88 @@ function findExecCommandsOf(line) {
   return commands;
 }
 
+// A program a command runs that this hook cannot read: the whole command
+// is refused, with the reason.
+class ProgramUnreadable extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ProgramUnreadable';
+  }
+}
+
+const inlineCode = name => `${name} reads the program it runs from its standard input, which is inline code; write the code to a file and run the file instead`;
+
+// The values of a stage's words, environment assignments and wrappers
+// skipped: the command it runs, first.
+function stageValues(stage) {
+  const words = shellWords(splitHeredoc(stage).command);
+  return words.slice(skipEnvAndWrappers(words)).map(word => word.value);
+}
+
+// The text a here-string (`<<< word`) feeds a command's standard input.
+function hereString(line) {
+  const words = shellWords(line);
+  for (let i = 0; i < words.length; i += 1) {
+    if (words[i].value === '<<<') return words[i + 1]?.value ?? null;
+    if (words[i].value.startsWith('<<<')) return words[i].value.slice(3);
+  }
+  return null;
+}
+
+// What a command that reads its program on standard input is given there,
+// as the command lines to judge: a shell's or at's script, read like any
+// other, and the files it reads, as the script operands they are. An
+// interpreter of another language reading its code there is inline code.
+function fedLines(reader, produced) {
+  if (reader.kind === 'interpreter') throw new ProgramUnreadable(inlineCode(reader.name));
+  const shell = reader.kind === 'shell' ? reader.name : 'sh';
+  return produced.text === undefined ? produced.files.map(file => `${shell} ${singleQuoted(file)}`) : [produced.text];
+}
+
+// The stages of a pipeline, a heredoc's body given to the stage whose
+// operator opened it: in `cat <<EOF | sh` the body is what cat reads, and sh
+// reads cat's output, not a script operand on the line after it.
+function pipelineStages(pipeline) {
+  const { command: line, body } = splitHeredoc(pipeline);
+  if (body === null) return splitShellSegments(pipeline, { splitOnPipe: true, stripComments: true });
+  const stages = splitShellSegments(line, { splitOnPipe: true, stripComments: true });
+  const owner = stages.findIndex(stage => HEREDOC_OPERATOR_RE.test(stage));
+  return stages.map((stage, i) => (i === owner ? `${stage}\n${body}` : stage));
+}
+
+// The programs each stage of the pipelines in `command` hands the next one
+// as the program that one reads on standard input.
+function fedPrograms(command) {
+  const fed = [];
+  for (const pipeline of splitShellSegments(command, { stripComments: true })) {
+    const stages = pipelineStages(pipeline);
+    for (let s = 1; s < stages.length; s += 1) {
+      const reader = stdinReaderOf(stageValues(stages[s]));
+      if (reader === null) continue;
+      const producer = stageValues(stages[s - 1]);
+      const produced = producedProgram(producer, splitHeredoc(stages[s - 1]).body);
+      if (produced === null && reader.kind !== 'interpreter') {
+        throw new ProgramUnreadable(`${reader.name} reads the program it runs from the output of '${producer.join(' ')}', which this hook cannot read; save that output to a file, read it, and run the file instead`);
+      }
+      fed.push(...fedLines(reader, produced ?? { text: '' }));
+    }
+  }
+  return fed;
+}
+
+// The program a stage's own input hands the command it runs: a heredoc or
+// a here-string, or the files at is given.
+function ownFedPrograms(line, body) {
+  const reader = stdinReaderOf(stageValues(line));
+  if (reader === null) return [];
+  const here = hereString(line);
+  const text = here ?? body;
+  if (reader.kind === 'scheduler') {
+    return [...(text === null ? [] : [text]), ...reader.files.map(file => `sh ${singleQuoted(file)}`)];
+  }
+  return text === null ? [] : fedLines(reader, { text });
+}
+
 // The segments one pipeline stage contributes: the stage itself and, when
 // it hands a script to a shell, the segments of that script.
 function segmentsOfStage(raw, depth) {
@@ -1345,7 +1428,7 @@ function segmentsOfStage(raw, depth) {
   const trimmed = line.trim();
   const inline = inlineShellCodeOf(line);
   let own = trimmed ? [trimmed] : [];
-  for (const code of [...(inline === null ? [] : [inline]), ...findExecCommandsOf(line)]) {
+  for (const code of [...(inline === null ? [] : [inline]), ...findExecCommandsOf(line), ...ownFedPrograms(line, readsItsInputAsCode(line) ? null : body)]) {
     own = own === null ? null : withNested(own, code, depth);
   }
   if (own === null) return null;
@@ -1367,7 +1450,7 @@ function extractSegments(rawCommand, depth = 0) {
   if (bodies.length > 0 && depth >= MAX_SUBSTITUTION_DEPTH) return null;
 
   const segments = [];
-  for (const raw of splitShellSegments(command, { splitOnPipe: true, stripComments: true })) {
+  for (const raw of splitShellSegments(command, { stripComments: true }).flatMap(pipelineStages)) {
     const stage = segmentsOfStage(raw, depth);
     if (stage === null) return null;
     segments.push(...stage);
@@ -1375,6 +1458,12 @@ function extractSegments(rawCommand, depth = 0) {
 
   for (const body of bodies) {
     const nested = extractSegments(body, depth + 1);
+    if (nested === null) return null;
+    segments.push(...nested);
+  }
+
+  for (const program of fedPrograms(command)) {
+    const nested = withNested([], program, depth);
     if (nested === null) return null;
     segments.push(...nested);
   }
@@ -1440,6 +1529,15 @@ function withoutVerdict(failure) {
 }
 
 function run(inputOrRaw) {
+  try {
+    return judgeCommand(inputOrRaw);
+  } catch (error) {
+    if (error instanceof ProgramUnreadable) return { exitCode: 2, stderr: `EGC Guardian BLOCKED this command: ${error.message}.` };
+    throw error;
+  }
+}
+
+function judgeCommand(inputOrRaw) {
   const input = parseInput(inputOrRaw);
   const command = input?.tool_input?.command;
   if (!command || typeof command !== 'string') return { exitCode: 0 };
@@ -1512,7 +1610,7 @@ function run(inputOrRaw) {
   return { exitCode: 0 };
 }
 
-module.exports = { run, extractSegments, isAdvisory, bindingsOfSegments };
+module.exports = { run, extractSegments, isAdvisory, bindingsOfSegments, ProgramUnreadable };
 
 if (require.main === module) {
   let raw = '';

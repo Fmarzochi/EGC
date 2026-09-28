@@ -128,7 +128,13 @@ function scriptSegments(content) {
   if (Buffer.byteLength(content, 'utf8') > MAX_SCRIPT_BYTES) {
     return { error: 'the script is too large to analyze. Split it so every command can be validated.' };
   }
-  const segments = bashGuardian.extractSegments(content);
+  let segments;
+  try {
+    segments = bashGuardian.extractSegments(content);
+  } catch (error) {
+    if (error?.name === 'ProgramUnreadable') return { error: `${error.message}.` };
+    throw error;
+  }
   if (segments === null) {
     return { error: 'nested command/process substitutions in the script go deeper than this validator can safely unwrap and analyze.' };
   }
