@@ -613,7 +613,7 @@ const MISSING_OPERAND_CODES = new Set(['ENOENT', 'ENOTDIR', 'ENAMETOOLONG', 'ELO
 function expandedOperandValue(operand, homeKnown) {
   if (!homeKnown && (operand.tilde || HOME_PARAMETER_RE.test(operand.value))) return null;
   if (operand.tilde) {
-    if (operand.value !== '~' && !/^~[\\/]/.test(operand.value)) return null;
+    if (operand.expands || (operand.value !== '~' && !/^~[\\/]/.test(operand.value))) return null;
     return os.homedir() + operand.value.slice(1);
   }
   if (!operand.expands) return operand.value;
@@ -1342,22 +1342,46 @@ function cdpathSearched(context) {
 
 // The directories a cd target word names (see scripts/lib/shell-cwd.js);
 // null when only the running shell knows them. `word` null is a bare cd,
-// which goes home.
-function cdTargetsOf(word, context) {
+// which goes home; `raw` is the word as the line spells it.
+function cdTargetsOf(word, context, raw) {
   if (word === null) return context.homeKnown ? [os.homedir()] : null;
   if (word.globbed || word.unsure) return null;
+  let targets = [word.value];
   if (word.tilde || word.expands) {
     const beside = word.expands ? scriptRelative(word.value, context) : null;
     const value = beside ?? expandedOperandValue(word, context.homeKnown);
-    if (value !== null) return [value];
-    // A variable the line fixes to literal directories names each of them.
-    const probe = { ...word, script: true };
-    const named = expandScriptVar(probe, context);
-    if (named.includes(probe) || named.length === 0 || named.some(target => target.globbed)) return null;
-    return named.map(target => target.value);
+    targets = value === null ? boundCdTargets(raw, context) : [value];
   }
-  const searched = cdpathSearched(context) && !path.isAbsolute(word.value) && !/^\.{0,2}(?:[\\/]|$)/.test(word.value);
-  return searched ? null : [word.value];
+  // A relative target that CDPATH may find elsewhere lands where only the
+  // running shell knows.
+  const searched = targets !== null && cdpathSearched(context) && targets.some(target => !path.isAbsolute(target) && !/^\.{0,2}(?:[\\/]|$)/.test(target));
+  return searched ? null : targets;
+}
+
+// The directories a target word names once the shell expands it with the
+// values the line gives the variables in it, and HOME for a leading ~ (see
+// commandWordChoices). A variable the line does not set is one only the
+// running shell knows: null then, and for any value this hook cannot read.
+function boundCdTargets(raw, context) {
+  const { bindings } = context;
+  const lookup = name => {
+    if (bindings.names.has(name)) return valuesOf(bindings, name, process.env);
+    return name === 'HOME' && context.homeKnown ? [os.homedir()] : null;
+  };
+  const outcome = commandWordChoices(raw, lookup, bindings.ifs);
+  if (!outcome.choices) return null;
+  const targets = [];
+  for (const fields of outcome.choices) {
+    // A word that expands to nothing leaves a bare cd, which goes home; one
+    // that splits into several is too many operands, and cd stays.
+    if (fields.length === 0) {
+      if (!context.homeKnown) return null;
+      targets.push(os.homedir());
+    } else if (fields.length === 1) {
+      targets.push(fields[0]);
+    }
+  }
+  return targets;
 }
 
 // Whether a sourced script, whose own commands run in its caller, has one
@@ -1395,7 +1419,7 @@ function scriptSegmentsOf(segments, cwd, depth, seen, context) {
     }
     homeKnown = homeKnown && !changesHome(segment) && !sourcedChangesHome;
     const { name, args } = commandOf(segment);
-    where = afterMove(where, name, args, word => cdTargetsOf(word, { ...here, homeKnown }));
+    where = afterMove(where, name, args, word => cdTargetsOf(word, { ...here, homeKnown }, word && segment.slice(word.start, word.end)));
   }
   return outcome(null);
 }

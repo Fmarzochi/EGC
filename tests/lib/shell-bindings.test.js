@@ -74,6 +74,19 @@ function runTests() {
     for (const raw of ['"$@"', '$1', '$*', '$#', '${1}', '$0']) assert.ok(commandWordChoices(raw, none).unknown, `${raw} with no words known`);
   }));
 
+  record(test('a leading tilde is the home directory HOME holds, expanded before the rest of the word', () => {
+    const lookup = lookupFrom({ HOME: ['/h', ''], D: ['x'] });
+    assert.deepStrictEqual(commandWordChoices('~/$D/run', lookup).choices, [['/h/x/run']]);
+    assert.deepStrictEqual(commandWordChoices('~/"$D"', lookup).choices, [['/h/x']]);
+    assert.ok(commandWordChoices('~$D', lookup).unknown, '~$D is no home directory');
+    assert.ok(commandWordChoices('~root/$D', lookup).unknown, "another user's home is not looked up");
+    assert.ok(commandWordChoices('~/$D', lookupFrom({ HOME: [''], D: ['x'] })).unknown, 'an empty HOME leaves the home unknown');
+    assert.ok(commandWordChoices('~/$D', name => (name === 'HOME' ? null : ['x'])).unknown, 'an unreadable HOME leaves the home unknown');
+    assert.deepStrictEqual(commandWordChoices('"~"/$D', lookup).choices, [['~/x']], 'a quoted tilde is text');
+    assert.deepStrictEqual(commandWordChoices('a~/$D', lookup).choices, [['a~/x']], 'a tilde inside the word is text');
+    assert.deepStrictEqual(commandWordChoices('~/$D', lookupFrom({ HOME: ['/my home'], D: ['x'] })).choices, [['/my home/x']], 'the home directory is never split');
+  }));
+
   record(test('a lookup substitution names the program; any other one is unknown unless only a literal name follows it', () => {
     assert.deepStrictEqual(commandWordChoices('$(which rm)', lookupFrom({})).choices, [['rm'], []]);
     assert.deepStrictEqual(commandWordChoices('$(command -v rm)', lookupFrom({})).choices, [['rm'], []]);
