@@ -78,6 +78,16 @@ function runTests() {
       }
     }));
 
+    record(test('code whose variables take more combinations of values than the hook follows fails closed', () => {
+      // Ten values each (nine from the list and unset) make a hundred readings.
+      const nine = 'a b c d e f g h i';
+      const result = judge(`for A in ${nine}; do :; done; for B in ${nine}; do :; done; bash <<EOF\necho $A $B\nEOF`);
+      assert.strictEqual(result.exitCode, 2, JSON.stringify(result));
+      assert.match(result.stderr, /more combinations of values than this hook follows/);
+      const few = judge('for A in a b c; do :; done; for B in a b c; do :; done; bash <<EOF\necho $A $B\nEOF');
+      assert.strictEqual(few.exitCode, 0, few.stderr);
+    }));
+
     record(test('what the shell does not read twice, and a variable only the environment holds, stay as they were', () => {
       for (const command of [
         'bash <<EOF\ncd $HOME && ls\nEOF', 'X=ls; bash <<EOF\nls $X\nEOF', `X='ls; ${wipe}'; bash <<'EOF'\nls $X\nEOF`,
