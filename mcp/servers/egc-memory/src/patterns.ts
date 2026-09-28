@@ -59,35 +59,40 @@ function extractCommand(event: RuntimeEvent): string | null {
   return null;
 }
 
+const ERROR_EVENT_TYPES = new Set(['error', 'Error', 'ToolError']);
+
+function errorCodeOf(p: Record<string, unknown>): unknown {
+  return p['error_code'] ?? p['errorCode'] ?? p['code'];
+}
+
+function errorMessageOf(p: Record<string, unknown>): unknown {
+  return p['error'] ?? p['message'] ?? p['errorMessage'];
+}
+
+// An error event by its type, or a PostToolUse that carries an error code
+// or message.
+function isErrorEvent(event: RuntimeEvent, p: Record<string, unknown>): boolean {
+  if (ERROR_EVENT_TYPES.has(event.eventType)) return true;
+  return event.eventType === 'PostToolUse'
+    && (typeof errorCodeOf(p) === 'string' || typeof errorMessageOf(p) === 'string');
+}
+
+// A TypeScript error code in the message, or its first six words.
+function messageKey(message: string): string | null {
+  const tsMatch = /TS\d+/.exec(message);
+  if (tsMatch) return tsMatch[0];
+  return message.trim().split(/\s+/).slice(0, 6).join(' ') || null;
+}
+
 function extractErrorKey(event: RuntimeEvent): string | null {
   const p = event.payload;
-  if (!p || typeof p !== 'object') return null;
+  if (!p || typeof p !== 'object' || !isErrorEvent(event, p)) return null;
 
-  const hasErrorSignal =
-    typeof (p['error_code'] ?? p['errorCode'] ?? p['code']) === 'string' ||
-    typeof (p['error'] ?? p['message'] ?? p['errorMessage']) === 'string';
-
-  const isErrorEvent =
-    event.eventType === 'error' ||
-    event.eventType === 'Error' ||
-    event.eventType === 'ToolError' ||
-    (event.eventType === 'PostToolUse' && hasErrorSignal);
-
-  if (!isErrorEvent) return null;
-
-  const errorCode = p['error_code'] ?? p['errorCode'] ?? p['code'];
+  const errorCode = errorCodeOf(p);
   if (typeof errorCode === 'string' && errorCode) return errorCode;
 
-  const message = p['error'] ?? p['message'] ?? p['errorMessage'];
-  if (typeof message === 'string' && message) {
-    const tsMatch = /TS\d+/.exec(message);
-    if (tsMatch) return tsMatch[0];
-
-    const words = message.trim().split(/\s+/).slice(0, 6).join(' ');
-    return words || null;
-  }
-
-  return null;
+  const message = errorMessageOf(p);
+  return typeof message === 'string' && message ? messageKey(message) : null;
 }
 
 function buildCommandSuggestion(cmd: string, count: number): string {

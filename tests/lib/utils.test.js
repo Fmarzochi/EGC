@@ -35,34 +35,35 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // Platform detection tests
   console.log('Platform Detection:');
 
-  if (test('isWindows/isMacOS/isLinux are booleans', () => {
+  tally(test('isWindows/isMacOS/isLinux are booleans', () => {
     assert.strictEqual(typeof utils.isWindows, 'boolean');
     assert.strictEqual(typeof utils.isMacOS, 'boolean');
     assert.strictEqual(typeof utils.isLinux, 'boolean');
-  })) passed++; else failed++;
+  }));
 
-  if (test('exactly one platform should be true', () => {
+  tally(test('exactly one platform should be true', () => {
     const platforms = [utils.isWindows, utils.isMacOS, utils.isLinux];
     const trueCount = platforms.filter(p => p).length;
     // Note: Could be 0 on other platforms like FreeBSD
     assert.ok(trueCount <= 1, 'More than one platform is true');
-  })) passed++; else failed++;
+  }));
 
   // Directory functions tests
   console.log('\nDirectory Functions:');
 
-  if (test('getHomeDir returns valid path', () => {
+  tally(test('getHomeDir returns valid path', () => {
     const home = utils.getHomeDir();
     assert.strictEqual(typeof home, 'string');
     assert.ok(home.length > 0, 'Home dir should not be empty');
     assert.ok(fs.existsSync(home), 'Home dir should exist');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getHomeDir prefers HOME override when set', () => {
+  tally(test('getHomeDir prefers HOME override when set', () => {
     const originalHome = process.env.HOME;
     const originalUserProfile = process.env.USERPROFILE;
     const fakeHome = path.join(process.cwd(), 'tmp-home-override');
@@ -82,9 +83,9 @@ function runTests() {
         process.env.USERPROFILE = originalUserProfile;
       }
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getHomeDir falls back to USERPROFILE when HOME is empty', () => {
+  tally(test('getHomeDir falls back to USERPROFILE when HOME is empty', () => {
     const originalHome = process.env.HOME;
     const originalUserProfile = process.env.USERPROFILE;
     const fakeHome = path.join(process.cwd(), 'tmp-userprofile-override');
@@ -104,16 +105,16 @@ function runTests() {
         process.env.USERPROFILE = originalUserProfile;
       }
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getEGCDir returns path under home', () => {
+  tally(test('getEGCDir returns path under home', () => {
     const egcDir = utils.getEGCDir();
     const homeDir = utils.getHomeDir();
     assert.ok(egcDir.startsWith(homeDir), 'EGC dir should be under home');
     assert.ok(egcDir !== homeDir, 'EGC dir should be a subdirectory of home');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getEGCDir (BUG-08): ~/.egc wins over an installed harness dir in a bare context', () => {
+  tally(test('getEGCDir (BUG-08): ~/.egc wins over an installed harness dir in a bare context', () => {
     const originalHome = process.env.HOME;
     const originalUserProfile = process.env.USERPROFILE;
     const originalEgcDir = process.env.EGC_DIR;
@@ -139,9 +140,9 @@ function runTests() {
       if (originalEgcDir === undefined) delete process.env.EGC_DIR; else process.env.EGC_DIR = originalEgcDir;
       fs.rmSync(fakeHome, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getEGCDir (BUG-08): still falls back to an installed harness dir when ~/.egc does not exist yet', () => {
+  tally(test('getEGCDir (BUG-08): still falls back to an installed harness dir when ~/.egc does not exist yet', () => {
     const originalHome = process.env.HOME;
     const originalUserProfile = process.env.USERPROFILE;
     const originalEgcDir = process.env.EGC_DIR;
@@ -164,28 +165,28 @@ function runTests() {
       if (originalEgcDir === undefined) delete process.env.EGC_DIR; else process.env.EGC_DIR = originalEgcDir;
       fs.rmSync(fakeHome, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionsDir returns path under EGC dir', () => {
+  tally(test('getSessionsDir returns path under EGC dir', () => {
     const sessionsDir = utils.getSessionsDir();
     const egcDir = utils.getEGCDir();
     assert.ok(sessionsDir.startsWith(egcDir), 'Sessions should be under EGC dir');
     assert.ok(sessionsDir.endsWith('session-data'), 'Should use canonical session-data directory');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionSearchDirs includes canonical and legacy paths', () => {
+  tally(test('getSessionSearchDirs includes canonical and legacy paths', () => {
     const searchDirs = utils.getSessionSearchDirs();
     assert.strictEqual(searchDirs[0], utils.getSessionsDir(), 'Canonical session dir should be searched first');
     assert.strictEqual(searchDirs[1], utils.getLegacySessionsDir(), 'Legacy session dir should be searched second');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getTempDir returns valid temp directory', () => {
+  tally(test('getTempDir returns valid temp directory', () => {
     const tempDir = utils.getTempDir();
     assert.strictEqual(typeof tempDir, 'string');
     assert.ok(tempDir.length > 0, 'Temp dir should not be empty');
-  })) passed++; else failed++;
+  }));
 
-  if (test('ensureDir creates directory', () => {
+  tally(test('ensureDir creates directory', () => {
     const testDir = path.join(utils.getTempDir(), `utils-test-${Date.now()}`);
     try {
       utils.ensureDir(testDir);
@@ -193,78 +194,78 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // Date/Time functions tests
   console.log('\nDate/Time Functions:');
 
-  if (test('getDateString returns YYYY-MM-DD format', () => {
+  tally(test('getDateString returns YYYY-MM-DD format', () => {
     const date = utils.getDateString();
     assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(date), `Expected YYYY-MM-DD, got ${date}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getTimeString returns HH:MM format', () => {
+  tally(test('getTimeString returns HH:MM format', () => {
     const time = utils.getTimeString();
     assert.ok(/^\d{2}:\d{2}$/.test(time), `Expected HH:MM, got ${time}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getDateTimeString returns full datetime format', () => {
+  tally(test('getDateTimeString returns full datetime format', () => {
     const dt = utils.getDateTimeString();
     assert.ok(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dt), `Expected YYYY-MM-DD HH:MM:SS, got ${dt}`);
-  })) passed++; else failed++;
+  }));
 
   // Project name tests
   console.log('\nProject Name Functions:');
 
-  if (test('getGitRepoName returns string or null', () => {
+  tally(test('getGitRepoName returns string or null', () => {
     const repoName = utils.getGitRepoName();
     assert.ok(repoName === null || typeof repoName === 'string');
-  })) passed++; else failed++;
+  }));
 
-  if (test('getProjectName returns non-empty string', () => {
+  tally(test('getProjectName returns non-empty string', () => {
     const name = utils.getProjectName();
     assert.ok(name && name.length > 0);
-  })) passed++; else failed++;
+  }));
 
   // sanitizeSessionId tests
   console.log('\nsanitizeSessionId:');
 
-  if (test('sanitizeSessionId strips leading dots', () => {
+  tally(test('sanitizeSessionId strips leading dots', () => {
     assert.strictEqual(utils.sanitizeSessionId('.gemini'), 'egc');
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeSessionId replaces dots and spaces', () => {
+  tally(test('sanitizeSessionId replaces dots and spaces', () => {
     assert.strictEqual(utils.sanitizeSessionId('my.project'), 'my-project');
     assert.strictEqual(utils.sanitizeSessionId('my project'), 'my-project');
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeSessionId replaces special chars and collapses runs', () => {
+  tally(test('sanitizeSessionId replaces special chars and collapses runs', () => {
     assert.strictEqual(utils.sanitizeSessionId('project@v2'), 'project-v2');
     assert.strictEqual(utils.sanitizeSessionId('a...b'), 'a-b');
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeSessionId preserves valid chars', () => {
+  tally(test('sanitizeSessionId preserves valid chars', () => {
     assert.strictEqual(utils.sanitizeSessionId('my-project_123'), 'my-project_123');
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeSessionId appends hash suffix for all Windows reserved device names', () => {
+  tally(test('sanitizeSessionId appends hash suffix for all Windows reserved device names', () => {
     for (const reservedName of ['CON', 'prn', 'Aux', 'nul', 'COM1', 'lpt9']) {
       const sanitized = utils.sanitizeSessionId(reservedName);
       assert.ok(sanitized, `Expected sanitized output for ${reservedName}`);
       assert.notStrictEqual(sanitized.toUpperCase(), reservedName.toUpperCase());
       assert.ok(/-[a-f0-9]{6}$/i.test(sanitized), `Expected deterministic hash suffix for ${reservedName}, got ${sanitized}`);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeSessionId returns null for empty or punctuation-only values', () => {
+  tally(test('sanitizeSessionId returns null for empty or punctuation-only values', () => {
     assert.strictEqual(utils.sanitizeSessionId(''), null);
     assert.strictEqual(utils.sanitizeSessionId(null), null);
     assert.strictEqual(utils.sanitizeSessionId(undefined), null);
     assert.strictEqual(utils.sanitizeSessionId('...'), null);
     assert.strictEqual(utils.sanitizeSessionId('…'), null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeSessionId returns stable hashes for non-ASCII values', () => {
+  tally(test('sanitizeSessionId returns stable hashes for non-ASCII values', () => {
     const chinese = utils.sanitizeSessionId('我的项目');
     const cyrillic = utils.sanitizeSessionId('проект');
     const emoji = utils.sanitizeSessionId(rocketParty);
@@ -274,9 +275,9 @@ function runTests() {
     assert.notStrictEqual(chinese, cyrillic);
     assert.notStrictEqual(chinese, emoji);
     assert.strictEqual(utils.sanitizeSessionId('日本語プロジェクト'), utils.sanitizeSessionId('日本語プロジェクト'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeSessionId disambiguates mixed-script names from pure ASCII', () => {
+  tally(test('sanitizeSessionId disambiguates mixed-script names from pure ASCII', () => {
     const mixed = utils.sanitizeSessionId('我的app');
     const mixedTwo = utils.sanitizeSessionId('他的app');
     const pure = utils.sanitizeSessionId('app');
@@ -284,28 +285,28 @@ function runTests() {
     assert.ok(mixed.startsWith('app-'), `Expected mixed-script prefix, got: ${mixed}`);
     assert.notStrictEqual(mixed, pure);
     assert.notStrictEqual(mixed, mixedTwo);
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeSessionId is idempotent', () => {
+  tally(test('sanitizeSessionId is idempotent', () => {
     for (const input of ['.gemini', 'my.project', 'project@v2', 'a...b', 'my-project_123']) {
       const once = utils.sanitizeSessionId(input);
       const twice = utils.sanitizeSessionId(once);
       assert.strictEqual(once, twice, `Expected idempotent result for ${input}`);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('sanitizeSessionId preserves readable prefixes for Windows reserved device names', () => {
+  tally(test('sanitizeSessionId preserves readable prefixes for Windows reserved device names', () => {
     const con = utils.sanitizeSessionId('CON');
     const aux = utils.sanitizeSessionId('aux');
     assert.ok(con.startsWith('CON-'), `Expected CON to get a suffix, got: ${con}`);
     assert.ok(aux.startsWith('aux-'), `Expected aux to get a suffix, got: ${aux}`);
     assert.notStrictEqual(utils.sanitizeSessionId('COM1'), 'COM1');
-  })) passed++; else failed++;
+  }));
 
   // Session ID tests
   console.log('\nSession ID Functions:');
 
-  if (test('getSessionIdShort falls back to sanitized project name', () => {
+  tally(test('getSessionIdShort falls back to sanitized project name', () => {
     const original = process.env.EGC_SESSION_ID;
     delete process.env.EGC_SESSION_ID;
     try {
@@ -315,9 +316,9 @@ function runTests() {
       if (original !== undefined) process.env.EGC_SESSION_ID = original;
       else delete process.env.EGC_SESSION_ID;
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionIdShort returns last 8 characters', () => {
+  tally(test('getSessionIdShort returns last 8 characters', () => {
     const original = process.env.EGC_SESSION_ID;
     process.env.EGC_SESSION_ID = 'test-session-abc12345';
     try {
@@ -326,9 +327,9 @@ function runTests() {
       if (original) process.env.EGC_SESSION_ID = original;
       else delete process.env.EGC_SESSION_ID;
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionIdShort handles short session IDs', () => {
+  tally(test('getSessionIdShort handles short session IDs', () => {
     const original = process.env.EGC_SESSION_ID;
     process.env.EGC_SESSION_ID = 'short';
     try {
@@ -337,9 +338,9 @@ function runTests() {
       if (original) process.env.EGC_SESSION_ID = original;
       else delete process.env.EGC_SESSION_ID;
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionIdShort sanitizes explicit fallback parameter', () => {
+  tally(test('getSessionIdShort sanitizes explicit fallback parameter', () => {
     if (process.platform === 'win32') {
       console.log('    (skipped: root CWD differs on Windows)');
       return true;
@@ -359,17 +360,17 @@ function runTests() {
 
     assert.strictEqual(result.status, 0, `Expected exit 0, got ${result.status}. stderr: ${result.stderr}`);
     assert.strictEqual(result.stdout, 'my-fallback');
-  })) passed++; else failed++;
+  }));
 
   // File operations tests
   console.log('\nFile Operations:');
 
-  if (test('readFile returns null for non-existent file', () => {
+  tally(test('readFile returns null for non-existent file', () => {
     const content = utils.readFile('/non/existent/file/path.txt');
     assert.strictEqual(content, null);
-  })) passed++; else failed++;
+  }));
 
-  if (test('writeFile and readFile work together', () => {
+  tally(test('writeFile and readFile work together', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     const testContent = 'Hello, World!';
     try {
@@ -379,9 +380,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('appendFile adds content to file', () => {
+  tally(test('appendFile adds content to file', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'Line 1\n');
@@ -391,9 +392,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('replaceInFile replaces text', () => {
+  tally(test('replaceInFile replaces text', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'Hello, World!');
@@ -403,9 +404,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('countInFile counts occurrences', () => {
+  tally(test('countInFile counts occurrences', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'foo bar foo baz foo');
@@ -414,9 +415,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('grepFile finds matching lines', () => {
+  tally(test('grepFile finds matching lines', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'line 1 foo\nline 2 bar\nline 3 foo');
@@ -427,17 +428,17 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
   // findFiles tests
   console.log('\nfindFiles:');
 
-  if (test('findFiles returns empty for non-existent directory', () => {
+  tally(test('findFiles returns empty for non-existent directory', () => {
     const results = utils.findFiles('/non/existent/dir', '*.txt');
     assert.strictEqual(results.length, 0);
-  })) passed++; else failed++;
+  }));
 
-  if (test('findFiles finds matching files', () => {
+  tally(test('findFiles finds matching files', () => {
     const testDir = path.join(utils.getTempDir(), `utils-test-${Date.now()}`);
     try {
       fs.mkdirSync(testDir);
@@ -453,24 +454,24 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // Edge case tests for defensive code
   console.log('\nEdge Cases:');
 
-  if (test('findFiles returns empty for null/undefined dir', () => {
+  tally(test('findFiles returns empty for null/undefined dir', () => {
     assert.deepStrictEqual(utils.findFiles(null, '*.txt'), []);
     assert.deepStrictEqual(utils.findFiles(undefined, '*.txt'), []);
     assert.deepStrictEqual(utils.findFiles('', '*.txt'), []);
-  })) passed++; else failed++;
+  }));
 
-  if (test('findFiles returns empty for null/undefined pattern', () => {
+  tally(test('findFiles returns empty for null/undefined pattern', () => {
     assert.deepStrictEqual(utils.findFiles('/tmp', null), []);
     assert.deepStrictEqual(utils.findFiles('/tmp', undefined), []);
     assert.deepStrictEqual(utils.findFiles('/tmp', ''), []);
-  })) passed++; else failed++;
+  }));
 
-  if (test('findFiles supports maxAge filter', () => {
+  tally(test('findFiles supports maxAge filter', () => {
     const testDir = path.join(utils.getTempDir(), `utils-test-maxage-${Date.now()}`);
     try {
       fs.mkdirSync(testDir);
@@ -481,9 +482,9 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('findFiles supports recursive option', () => {
+  tally(test('findFiles supports recursive option', () => {
     const testDir = path.join(utils.getTempDir(), `utils-test-recursive-${Date.now()}`);
     const subDir = path.join(testDir, 'sub');
     try {
@@ -499,9 +500,9 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('countInFile handles invalid regex pattern', () => {
+  tally(test('countInFile handles invalid regex pattern', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'test content');
@@ -510,9 +511,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('countInFile handles non-string non-regex pattern', () => {
+  tally(test('countInFile handles non-string non-regex pattern', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'test content');
@@ -521,9 +522,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('countInFile enforces global flag on RegExp', () => {
+  tally(test('countInFile enforces global flag on RegExp', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'foo bar foo baz foo');
@@ -533,9 +534,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('grepFile handles invalid regex pattern', () => {
+  tally(test('grepFile handles invalid regex pattern', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'test content');
@@ -544,30 +545,30 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('replaceInFile returns false for non-existent file', () => {
+  tally(test('replaceInFile returns false for non-existent file', () => {
     const result = utils.replaceInFile('/non/existent/file.txt', 'foo', 'bar');
     assert.strictEqual(result, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('countInFile returns 0 for non-existent file', () => {
+  tally(test('countInFile returns 0 for non-existent file', () => {
     const count = utils.countInFile('/non/existent/file.txt', /foo/g);
     assert.strictEqual(count, 0);
-  })) passed++; else failed++;
+  }));
 
-  if (test('grepFile returns empty for non-existent file', () => {
+  tally(test('grepFile returns empty for non-existent file', () => {
     const matches = utils.grepFile('/non/existent/file.txt', /foo/);
     assert.deepStrictEqual(matches, []);
-  })) passed++; else failed++;
+  }));
 
-  if (test('commandExists rejects unsafe command names', () => {
+  tally(test('commandExists rejects unsafe command names', () => {
     assert.strictEqual(utils.commandExists('cmd; rm -rf'), false);
     assert.strictEqual(utils.commandExists('$(whoami)'), false);
     assert.strictEqual(utils.commandExists('cmd && echo hi'), false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('ensureDir is idempotent', () => {
+  tally(test('ensureDir is idempotent', () => {
     const testDir = path.join(utils.getTempDir(), `utils-test-idem-${Date.now()}`);
     try {
       const result1 = utils.ensureDir(testDir);
@@ -578,17 +579,17 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // System functions tests
   console.log('\nSystem Functions:');
 
-  if (test('commandExists finds node', () => {
+  tally(test('commandExists finds node', () => {
     const exists = utils.commandExists('node');
     assert.strictEqual(exists, true);
-  })) passed++; else failed++;
+  }));
 
-  if (test('commandExists resolves a real command in a child process without a DEP0190 warning', () => {
+  tally(test('commandExists resolves a real command in a child process without a DEP0190 warning', () => {
     // The Windows branch shells out to `where` with shell:true; Node 24 warns
     // (DEP0190) when an args array is passed with a shell, and the warning
     // lands in the middle of egc init output on Windows (#1394). The child
@@ -609,28 +610,28 @@ function runTests() {
     } finally {
       fs.rmSync(scriptDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('commandExists returns false for fake command', () => {
+  tally(test('commandExists returns false for fake command', () => {
     const exists = utils.commandExists('nonexistent_command_12345');
     assert.strictEqual(exists, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand executes simple command', () => {
+  tally(test('runCommand executes simple command', () => {
     const result = utils.runCommand('node --version');
     assert.strictEqual(result.success, true);
     assert.ok(result.output.startsWith('v'), 'Should start with v');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand handles failed command', () => {
+  tally(test('runCommand handles failed command', () => {
     const result = utils.runCommand('node --invalid-flag-12345');
     assert.strictEqual(result.success, false);
-  })) passed++; else failed++;
+  }));
 
   // output() and log() tests
   console.log('\noutput() and log():');
 
-  if (test('output() writes string to stdout', () => {
+  tally(test('output() writes string to stdout', () => {
     // Capture stdout by temporarily replacing console.log
     let captured = null;
     const origLog = console.log;
@@ -641,9 +642,9 @@ function runTests() {
     } finally {
       console.log = origLog;
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('output() JSON-stringifies objects', () => {
+  tally(test('output() JSON-stringifies objects', () => {
     let captured = null;
     const origLog = console.log;
     console.log = (v) => { captured = v; };
@@ -653,9 +654,9 @@ function runTests() {
     } finally {
       console.log = origLog;
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('output() JSON-stringifies null (typeof null === "object")', () => {
+  tally(test('output() JSON-stringifies null (typeof null === "object")', () => {
     let captured = null;
     const origLog = console.log;
     console.log = (v) => { captured = v; };
@@ -666,9 +667,9 @@ function runTests() {
     } finally {
       console.log = origLog;
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('output() handles arrays as objects', () => {
+  tally(test('output() handles arrays as objects', () => {
     let captured = null;
     const origLog = console.log;
     console.log = (v) => { captured = v; };
@@ -678,9 +679,9 @@ function runTests() {
     } finally {
       console.log = origLog;
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('log() writes to stderr', () => {
+  tally(test('log() writes to stderr', () => {
     let captured = null;
     const origError = console.error;
     console.error = (v) => { captured = v; };
@@ -690,12 +691,12 @@ function runTests() {
     } finally {
       console.error = origError;
     }
-  })) passed++; else failed++;
+  }));
 
   // isGitRepo() tests
   console.log('\nisGitRepo():');
 
-  if (test('isGitRepo returns true in a git repo', () => {
+  tally(test('isGitRepo returns true in a git repo', () => {
     const fs = require('fs');
     const gitDir = require('path').join(__dirname, '..', '..', '.git');
     if (!fs.existsSync(gitDir)) {
@@ -703,46 +704,46 @@ function runTests() {
       return;
     }
     assert.strictEqual(utils.isGitRepo(), true);
-  })) passed++; else failed++;
+  }));
 
   // getGitModifiedFiles() tests
   console.log('\ngetGitModifiedFiles():');
 
-  if (test('getGitModifiedFiles returns an array', () => {
+  tally(test('getGitModifiedFiles returns an array', () => {
     const files = utils.getGitModifiedFiles();
     assert.ok(Array.isArray(files));
-  })) passed++; else failed++;
+  }));
 
-  if (test('getGitModifiedFiles filters by regex patterns', () => {
+  tally(test('getGitModifiedFiles filters by regex patterns', () => {
     const files = utils.getGitModifiedFiles(['\\.NONEXISTENT_EXTENSION$']);
     assert.ok(Array.isArray(files));
     assert.strictEqual(files.length, 0);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getGitModifiedFiles skips invalid patterns', () => {
+  tally(test('getGitModifiedFiles skips invalid patterns', () => {
     const files = utils.getGitModifiedFiles(['(unclosed', '\\.js$', '[invalid']);
     assert.ok(Array.isArray(files));
-  })) passed++; else failed++;
+  }));
 
-  if (test('getGitModifiedFiles skips non-string patterns', () => {
+  tally(test('getGitModifiedFiles skips non-string patterns', () => {
     const files = utils.getGitModifiedFiles([null, undefined, 42, '', '\\.js$']);
     assert.ok(Array.isArray(files));
-  })) passed++; else failed++;
+  }));
 
   // getLearnedSkillsDir() test
   console.log('\ngetLearnedSkillsDir():');
 
-  if (test('getLearnedSkillsDir returns path under EGC dir', () => {
+  tally(test('getLearnedSkillsDir returns path under EGC dir', () => {
     const dir = utils.getLearnedSkillsDir();
     assert.ok(dir.startsWith(utils.getEGCDir()), 'Should be under EGC dir');
     assert.ok(dir.includes('skills'));
     assert.ok(dir.includes('learned'));
-  })) passed++; else failed++;
+  }));
 
   // replaceInFile behavior tests
   console.log('\nreplaceInFile (behavior):');
 
-  if (test('replaces first match when regex has no g flag', () => {
+  tally(test('replaces first match when regex has no g flag', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'foo bar foo baz foo');
@@ -753,9 +754,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('replaces all matches when regex has g flag', () => {
+  tally(test('replaces all matches when regex has g flag', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'foo bar foo baz foo');
@@ -765,9 +766,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('replaces with string search (first occurrence)', () => {
+  tally(test('replaces with string search (first occurrence)', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'hello world hello');
@@ -778,9 +779,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('replaces all occurrences with string when options.all is true', () => {
+  tally(test('replaces all occurrences with string when options.all is true', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'hello world hello again hello');
@@ -790,9 +791,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('options.all is ignored for regex patterns', () => {
+  tally(test('options.all is ignored for regex patterns', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'foo bar foo');
@@ -803,9 +804,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('replaces with capture groups', () => {
+  tally(test('replaces with capture groups', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, '**Last Updated:** 10:30');
@@ -815,12 +816,12 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
   // writeFile edge cases
   console.log('\nwriteFile (edge cases):');
 
-  if (test('writeFile overwrites existing content', () => {
+  tally(test('writeFile overwrites existing content', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'original');
@@ -830,9 +831,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('writeFile handles unicode content', () => {
+  tally(test('writeFile handles unicode content', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-${Date.now()}.txt`);
     try {
       const unicode = `日本語テスト ${String.fromCodePoint(0x1F680)} émojis`;
@@ -842,12 +843,12 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
   // findFiles with regex special characters in pattern
   console.log('\nfindFiles (regex chars):');
 
-  if (test('findFiles handles regex special chars in pattern', () => {
+  tally(test('findFiles handles regex special chars in pattern', () => {
     const testDir = path.join(utils.getTempDir(), `utils-test-regex-${Date.now()}`);
     try {
       fs.mkdirSync(testDir);
@@ -867,9 +868,9 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('findFiles wildcard still works with special chars', () => {
+  tally(test('findFiles wildcard still works with special chars', () => {
     const testDir = path.join(utils.getTempDir(), `utils-test-glob-${Date.now()}`);
     try {
       fs.mkdirSync(testDir);
@@ -882,7 +883,7 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // readStdinJson tests (via subprocess: safe hardcoded inputs)
   // Use execFileSync with input option instead of shell echo|pipe for Windows compat
@@ -891,36 +892,36 @@ function runTests() {
   const stdinScript = 'const u=require("./scripts/lib/utils");u.readStdinJson({timeoutMs:2000}).then(d=>{process.stdout.write(JSON.stringify(d))})';
   const stdinOpts = { encoding: 'utf8', cwd: path.join(__dirname, '..', '..'), timeout: 5000 };
 
-  if (test('readStdinJson parses valid JSON from stdin', () => {
+  tally(test('readStdinJson parses valid JSON from stdin', () => {
     const { execFileSync } = require('child_process');
     const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: '{"tool_input":{"command":"ls"}}' });
     const parsed = JSON.parse(result);
     assert.deepStrictEqual(parsed, { tool_input: { command: 'ls' } });
-  })) passed++; else failed++;
+  }));
 
-  if (test('readStdinJson returns {} for invalid JSON', () => {
+  tally(test('readStdinJson returns {} for invalid JSON', () => {
     const { execFileSync } = require('child_process');
     const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: 'not json' });
     assert.deepStrictEqual(JSON.parse(result), {});
-  })) passed++; else failed++;
+  }));
 
-  if (test('readStdinJson returns {} for empty stdin', () => {
+  tally(test('readStdinJson returns {} for empty stdin', () => {
     const { execFileSync } = require('child_process');
     const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: '' });
     assert.deepStrictEqual(JSON.parse(result), {});
-  })) passed++; else failed++;
+  }));
 
-  if (test('readStdinJson handles nested objects', () => {
+  tally(test('readStdinJson handles nested objects', () => {
     const { execFileSync } = require('child_process');
     const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: '{"a":{"b":1},"c":[1,2]}' });
     const parsed = JSON.parse(result);
     assert.deepStrictEqual(parsed, { a: { b: 1 }, c: [1, 2] });
-  })) passed++; else failed++;
+  }));
 
   // grepFile with global regex (regression: g flag causes alternating matches)
   console.log('\ngrepFile (global regex fix):');
 
-  if (test('grepFile with /g flag finds ALL matching lines (not alternating)', () => {
+  tally(test('grepFile with /g flag finds ALL matching lines (not alternating)', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-grep-g-${Date.now()}.txt`);
     try {
       // 4 consecutive lines matching the same pattern
@@ -935,9 +936,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('grepFile preserves regex flags other than g (e.g. case-insensitive)', () => {
+  tally(test('grepFile preserves regex flags other than g (e.g. case-insensitive)', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-grep-flags-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'FOO\nfoo\nFoO\nbar');
@@ -946,41 +947,41 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
   // commandExists edge cases
   console.log('\ncommandExists Edge Cases:');
 
-  if (test('commandExists rejects empty string', () => {
+  tally(test('commandExists rejects empty string', () => {
     assert.strictEqual(utils.commandExists(''), false, 'Empty string should not be a valid command');
-  })) passed++; else failed++;
+  }));
 
-  if (test('commandExists rejects command with spaces', () => {
+  tally(test('commandExists rejects command with spaces', () => {
     assert.strictEqual(utils.commandExists('my command'), false, 'Commands with spaces should be rejected');
-  })) passed++; else failed++;
+  }));
 
-  if (test('commandExists rejects command with path separators', () => {
+  tally(test('commandExists rejects command with path separators', () => {
     assert.strictEqual(utils.commandExists('/usr/bin/node'), false, 'Commands with / should be rejected');
     assert.strictEqual(utils.commandExists('..\\cmd'), false, 'Commands with \\ should be rejected');
-  })) passed++; else failed++;
+  }));
 
-  if (test('commandExists rejects shell metacharacters', () => {
+  tally(test('commandExists rejects shell metacharacters', () => {
     assert.strictEqual(utils.commandExists('cmd;ls'), false, 'Semicolons should be rejected');
     assert.strictEqual(utils.commandExists('$(whoami)'), false, 'Subshell syntax should be rejected');
     assert.strictEqual(utils.commandExists('cmd|cat'), false, 'Pipes should be rejected');
-  })) passed++; else failed++;
+  }));
 
-  if (test('commandExists allows dots and underscores', () => {
+  tally(test('commandExists allows dots and underscores', () => {
     // These are valid chars per the regex check: the command might not exist
     // but it shouldn't be rejected by the validator
     const dotResult = utils.commandExists('definitely.not.a.real.tool.12345');
     assert.strictEqual(typeof dotResult, 'boolean', 'Should return boolean, not throw');
-  })) passed++; else failed++;
+  }));
 
   // findFiles edge cases
   console.log('\nfindFiles Edge Cases:');
 
-  if (test('findFiles with ? wildcard matches single character', () => {
+  tally(test('findFiles with ? wildcard matches single character', () => {
     const testDir = path.join(utils.getTempDir(), `ff-qmark-${Date.now()}`);
     utils.ensureDir(testDir);
     try {
@@ -994,9 +995,9 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('findFiles sorts by mtime (newest first)', () => {
+  tally(test('findFiles sorts by mtime (newest first)', () => {
     const testDir = path.join(utils.getTempDir(), `ff-sort-${Date.now()}`);
     utils.ensureDir(testDir);
     try {
@@ -1016,9 +1017,9 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('findFiles with maxAge filters old files', () => {
+  tally(test('findFiles with maxAge filters old files', () => {
     const testDir = path.join(utils.getTempDir(), `ff-age-${Date.now()}`);
     utils.ensureDir(testDir);
     try {
@@ -1035,12 +1036,12 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ensureDir edge cases
   console.log('\nensureDir Edge Cases:');
 
-  if (test('ensureDir is safe for concurrent calls (EEXIST race)', () => {
+  tally(test('ensureDir is safe for concurrent calls (EEXIST race)', () => {
     const testDir = path.join(utils.getTempDir(), `ensure-race-${Date.now()}`, 'nested');
     try {
       // Call concurrently: both should succeed without throwing
@@ -1051,9 +1052,9 @@ function runTests() {
     } finally {
       fs.rmSync(path.dirname(testDir), { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('ensureDir returns the directory path', () => {
+  tally(test('ensureDir returns the directory path', () => {
     const testDir = path.join(utils.getTempDir(), `ensure-ret-${Date.now()}`);
     try {
       const result = utils.ensureDir(testDir);
@@ -1061,36 +1062,36 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // runCommand edge cases
   console.log('\nrunCommand Edge Cases:');
 
-  if (test('runCommand returns trimmed output', () => {
+  tally(test('runCommand returns trimmed output', () => {
     // Windows echo includes quotes in output, use node to ensure consistent behavior
     const result = utils.runCommand('node -e "process.stdout.write(\'  hello  \')"');
     assert.strictEqual(result.success, true);
     assert.strictEqual(result.output, 'hello', 'Should trim leading/trailing whitespace');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand captures stderr on failure', () => {
+  tally(test('runCommand captures stderr on failure', () => {
     const result = utils.runCommand('node -e "process.exit(1)"');
     assert.strictEqual(result.success, false);
     assert.ok(typeof result.output === 'string', 'Output should be a string on failure');
-  })) passed++; else failed++;
+  }));
 
   // getGitModifiedFiles edge cases
   console.log('\ngetGitModifiedFiles Edge Cases:');
 
-  if (test('getGitModifiedFiles returns array with empty patterns', () => {
+  tally(test('getGitModifiedFiles returns array with empty patterns', () => {
     const files = utils.getGitModifiedFiles([]);
     assert.ok(Array.isArray(files), 'Should return array');
-  })) passed++; else failed++;
+  }));
 
   // replaceInFile edge cases
   console.log('\nreplaceInFile Edge Cases:');
 
-  if (test('replaceInFile with regex capture groups works correctly', () => {
+  tally(test('replaceInFile with regex capture groups works correctly', () => {
     const testFile = path.join(utils.getTempDir(), `replace-capture-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'version: 1.0.0');
@@ -1100,22 +1101,22 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
   // readStdinJson (function API, not actual stdin: more thorough edge cases)
   console.log('\nreadStdinJson Edge Cases:');
 
-  if (test('readStdinJson type check: returns a Promise', () => {
+  tally(test('readStdinJson type check: returns a Promise', () => {
     // readStdinJson returns a Promise regardless of stdin state
     const result = utils.readStdinJson({ timeoutMs: 100 });
     assert.ok(result instanceof Promise, 'Should return a Promise');
     // Don't await: just verify it's a Promise type
-  })) passed++; else failed++;
+  }));
 
   // ── Round 28: readStdinJson maxSize truncation and edge cases ──
   console.log('\nreadStdinJson maxSize truncation:');
 
-  if (test('readStdinJson maxSize stops accumulating after threshold (chunk-level guard)', () => {
+  tally(test('readStdinJson maxSize stops accumulating after threshold (chunk-level guard)', () => {
     if (process.platform === 'win32') {
       console.log('    (skipped: stdin chunking behavior differs on Windows)');
       return true;
@@ -1131,41 +1132,41 @@ function runTests() {
     const result = execFileSync('node', ['-e', script], { ...stdinOpts, input: bigInput });
     // Truncated mid-string → invalid JSON → resolves to {}
     assert.deepStrictEqual(JSON.parse(result), {});
-  })) passed++; else failed++;
+  }));
 
-  if (test('readStdinJson with maxSize large enough preserves valid JSON', () => {
+  tally(test('readStdinJson with maxSize large enough preserves valid JSON', () => {
     const { execFileSync } = require('child_process');
     const script = 'const u=require("./scripts/lib/utils");u.readStdinJson({timeoutMs:2000,maxSize:1024}).then(d=>{process.stdout.write(JSON.stringify(d))})';
     const input = JSON.stringify({ key: 'value' });
     const result = execFileSync('node', ['-e', script], { ...stdinOpts, input });
     assert.deepStrictEqual(JSON.parse(result), { key: 'value' });
-  })) passed++; else failed++;
+  }));
 
-  if (test('readStdinJson resolves {} for whitespace-only stdin', () => {
+  tally(test('readStdinJson resolves {} for whitespace-only stdin', () => {
     const { execFileSync } = require('child_process');
     const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: '   \n  \t  ' });
     // data.trim() is empty → resolves {}
     assert.deepStrictEqual(JSON.parse(result), {});
-  })) passed++; else failed++;
+  }));
 
-  if (test('readStdinJson handles JSON with trailing whitespace/newlines', () => {
+  tally(test('readStdinJson handles JSON with trailing whitespace/newlines', () => {
     const { execFileSync } = require('child_process');
     const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: '{"a":1}  \n\n' });
     assert.deepStrictEqual(JSON.parse(result), { a: 1 });
-  })) passed++; else failed++;
+  }));
 
-  if (test('readStdinJson handles JSON with BOM prefix (returns {})', () => {
+  tally(test('readStdinJson handles JSON with BOM prefix (returns {})', () => {
     const { execFileSync } = require('child_process');
     // BOM (\uFEFF) before JSON makes it invalid for JSON.parse
     const result = execFileSync('node', ['-e', stdinScript], { ...stdinOpts, input: '\uFEFF{"a":1}' });
     // BOM prefix makes JSON.parse fail → resolve {}
     assert.deepStrictEqual(JSON.parse(result), {});
-  })) passed++; else failed++;
+  }));
 
   // ── Round 31: ensureDir error propagation ──
   console.log('\nensureDir Error Propagation (Round 31):');
 
-  if (test('ensureDir wraps non-EEXIST errors with descriptive message', () => {
+  tally(test('ensureDir wraps non-EEXIST errors with descriptive message', () => {
     // Attempting to create a dir under a file should fail with ENOTDIR, not EEXIST
     const testFile = path.join(utils.getTempDir(), `ensure-err-${Date.now()}.txt`);
     try {
@@ -1179,9 +1180,9 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('ensureDir error includes the directory path', () => {
+  tally(test('ensureDir error includes the directory path', () => {
     const testFile = path.join(utils.getTempDir(), `ensure-err2-${Date.now()}.txt`);
     try {
       fs.writeFileSync(testFile, 'blocker');
@@ -1195,147 +1196,147 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 31: runCommand stderr preference on failure ──
   console.log('\nrunCommand failure output (Round 31):');
 
-  if (test('runCommand returns stderr content on failure when stderr exists', () => {
+  tally(test('runCommand returns stderr content on failure when stderr exists', () => {
     const result = utils.runCommand('node -e "process.stderr.write(\'custom error\'); process.exit(1)"');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('custom error'), 'Should include stderr output');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand returns error output on failed command', () => {
+  tally(test('runCommand returns error output on failed command', () => {
     // Use an allowed prefix with a nonexistent subcommand to reach execSync
     const result = utils.runCommand('git nonexistent-subcmd-xyz-12345');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.length > 0, 'Should have some error output');
-  })) passed++; else failed++;
+  }));
 
   // ── runCommand security: allowlist and metacharacter blocking ──
   console.log('\nrunCommand Security (allowlist + metacharacters):');
 
-  if (test('runCommand blocks disallowed command prefix', () => {
+  tally(test('runCommand blocks disallowed command prefix', () => {
     const result = utils.runCommand('rm -rf /');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('unrecognized command prefix'), 'Should mention blocked prefix');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks curl command', () => {
+  tally(test('runCommand blocks curl command', () => {
     const result = utils.runCommand('curl http://example.com');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('unrecognized command prefix'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks bash command', () => {
+  tally(test('runCommand blocks bash command', () => {
     const result = utils.runCommand('bash -c "echo hello"');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('unrecognized command prefix'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks semicolon command chaining', () => {
+  tally(test('runCommand blocks semicolon command chaining', () => {
     const result = utils.runCommand('git status; echo pwned');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('metacharacters not allowed'), 'Should block semicolon chaining');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks pipe command chaining', () => {
+  tally(test('runCommand blocks pipe command chaining', () => {
     const result = utils.runCommand('git log | cat');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('metacharacters not allowed'), 'Should block pipe chaining');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks ampersand command chaining', () => {
+  tally(test('runCommand blocks ampersand command chaining', () => {
     const result = utils.runCommand('git status && echo pwned');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('metacharacters not allowed'), 'Should block ampersand chaining');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks dollar sign command substitution', () => {
+  tally(test('runCommand blocks dollar sign command substitution', () => {
     const result = utils.runCommand('git log $(whoami)');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('metacharacters not allowed'), 'Should block $ substitution');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks backtick command substitution', () => {
+  tally(test('runCommand blocks backtick command substitution', () => {
     const result = utils.runCommand('git log `whoami`');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('metacharacters not allowed'), 'Should block backtick substitution');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand allows metacharacters inside double quotes', () => {
+  tally(test('runCommand allows metacharacters inside double quotes', () => {
     // Semicolon inside quotes should not trigger metacharacter blocking
     const result = utils.runCommand('node -e "console.log(1);process.exit(0)"');
     assert.strictEqual(result.success, true);
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand allows metacharacters inside single quotes', () => {
+  tally(test('runCommand allows metacharacters inside single quotes', () => {
     const result = utils.runCommand("node -e 'process.exit(0);'");
     assert.strictEqual(result.success, true);
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks unquoted metacharacters alongside quoted ones', () => {
+  tally(test('runCommand blocks unquoted metacharacters alongside quoted ones', () => {
     // Semicolon inside quotes is safe, but && outside is not
     const result = utils.runCommand('git log "safe;part" && echo pwned');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('metacharacters not allowed'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks prefix without trailing space', () => {
+  tally(test('runCommand blocks prefix without trailing space', () => {
     // "gitconfig" starts with "git" but not "git ": must be blocked
     const result = utils.runCommand('gitconfig --list');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('unrecognized command prefix'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand allows npx prefix', () => {
+  tally(test('runCommand allows npx prefix', () => {
     const result = utils.runCommand('npx --version');
     assert.strictEqual(result.success, true);
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks newline command injection', () => {
+  tally(test('runCommand blocks newline command injection', () => {
     const result = utils.runCommand('git status\necho pwned');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('metacharacters not allowed'), 'Should block newline injection');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks $() inside double quotes (shell still evaluates)', () => {
+  tally(test('runCommand blocks $() inside double quotes (shell still evaluates)', () => {
     // $() inside double quotes is still evaluated by the shell, so block $ everywhere
     const result = utils.runCommand('node -e "$(whoami)"');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('metacharacters not allowed'), 'Should block $ inside quotes');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand blocks backtick inside double quotes (shell still evaluates)', () => {
+  tally(test('runCommand blocks backtick inside double quotes (shell still evaluates)', () => {
     const result = utils.runCommand('node -e "`whoami`"');
     assert.strictEqual(result.success, false);
     assert.ok(result.output.includes('metacharacters not allowed'), 'Should block backtick inside quotes');
-  })) passed++; else failed++;
+  }));
 
-  if (test('runCommand error message does not leak command string', () => {
+  tally(test('runCommand error message does not leak command string', () => {
     const secret = 'rm secret_password_123';
     const result = utils.runCommand(secret);
     assert.strictEqual(result.success, false);
     assert.ok(!result.output.includes('secret_password_123'), 'Should not leak command contents');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 31: getGitModifiedFiles with empty patterns ──
   console.log('\ngetGitModifiedFiles empty patterns (Round 31):');
 
-  if (test('getGitModifiedFiles with empty array returns all modified files', () => {
+  tally(test('getGitModifiedFiles with empty array returns all modified files', () => {
     // With an empty patterns array, every file should match (no filter applied)
     const withEmpty = utils.getGitModifiedFiles([]);
     const withNone = utils.getGitModifiedFiles();
     // Both should return the same list (no filtering)
     assert.deepStrictEqual(withEmpty, withNone,
       'Empty patterns array should behave same as no patterns');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 33: readStdinJson error event handling ──
   console.log('\nreadStdinJson error event (Round 33):');
 
-  if (test('readStdinJson resolves {} when stdin emits error (via broken pipe)', () => {
+  tally(test('readStdinJson resolves {} when stdin emits error (via broken pipe)', () => {
     // Spawn a subprocess that reads from stdin, but close the pipe immediately
     // to trigger an error or early-end condition
     const { execFileSync } = require('child_process');
@@ -1349,9 +1350,9 @@ function runTests() {
     });
     const parsed = JSON.parse(result);
     assert.deepStrictEqual(parsed, {}, 'Should resolve to {} for empty stdin (end event path)');
-  })) passed++; else failed++;
+  }));
 
-  if (test('readStdinJson error handler is guarded by settled flag', () => {
+  tally(test('readStdinJson error handler is guarded by settled flag', () => {
     // We test this by verifying the code structure works: send valid JSON, the end event
     // fires, settled=true, any late error is safely ignored
     const { execFileSync } = require('child_process');
@@ -1364,10 +1365,10 @@ function runTests() {
     });
     const parsed = JSON.parse(result);
     assert.strictEqual(parsed.test, 'settled-guard', 'Should parse normally when end fires first');
-  })) passed++; else failed++;
+  }));
 
   // replaceInFile returns false when write fails (e.g., read-only file)
-  if (test('replaceInFile returns false on write failure (read-only file)', () => {
+  tally(test('replaceInFile returns false on write failure (read-only file)', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
       console.log('    (skipped: chmod ineffective on Windows/root)');
       return;
@@ -1386,12 +1387,12 @@ function runTests() {
       fs.chmodSync(filePath, 0o644);
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 69: getGitModifiedFiles with ALL invalid patterns ──
   console.log('\ngetGitModifiedFiles all-invalid patterns (Round 69):');
 
-  if (test('getGitModifiedFiles with all-invalid patterns skips filtering (returns all files)', () => {
+  tally(test('getGitModifiedFiles with all-invalid patterns skips filtering (returns all files)', () => {
     // When every pattern is invalid regex, compiled.length === 0 at line 386,
     // so the filtering is skipped entirely and all modified files are returned.
     // This differs from the mixed-valid test where at least one pattern compiles.
@@ -1400,12 +1401,12 @@ function runTests() {
     // Both should return the same list: all-invalid patterns = no filtering
     assert.deepStrictEqual(allInvalid, unfiltered,
       'All-invalid patterns should return same result as no patterns (no filtering)');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 71: findFiles recursive scan skips unreadable subdirectory ──
   console.log('\nRound 71: findFiles (unreadable subdirectory in recursive scan):');
 
-  if (test('findFiles recursive scan skips unreadable subdirectory silently', () => {
+  tally(test('findFiles recursive scan skips unreadable subdirectory silently', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
       console.log('    (skipped: chmod ineffective on Windows/root)');
       return;
@@ -1433,12 +1434,12 @@ function runTests() {
       fs.chmodSync(unreadableSubdir, 0o755);
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 79: countInFile with valid string pattern ──
   console.log('\nRound 79: countInFile (valid string pattern):');
 
-  if (test('countInFile counts occurrences using a plain string pattern', () => {
+  tally(test('countInFile counts occurrences using a plain string pattern', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-count-str-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'apple banana apple cherry apple');
@@ -1449,12 +1450,12 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 79: grepFile with valid string pattern ──
   console.log('\nRound 79: grepFile (valid string pattern):');
 
-  if (test('grepFile finds matching lines using a plain string pattern', () => {
+  tally(test('grepFile finds matching lines using a plain string pattern', () => {
     const testFile = path.join(utils.getTempDir(), `utils-test-grep-str-${Date.now()}.txt`);
     try {
       utils.writeFile(testFile, 'line1 alpha\nline2 beta\nline3 alpha\nline4 gamma');
@@ -1468,12 +1469,12 @@ function runTests() {
     } finally {
       fs.unlinkSync(testFile);
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 84: findFiles inner statSync catch (TOCTOU: broken symlink) ──
   console.log('\nRound 84: findFiles (inner statSync catch: broken symlink):');
 
-  if (test('findFiles skips broken symlinks that match the pattern', () => {
+  tally(test('findFiles skips broken symlinks that match the pattern', () => {
     // findFiles at utils.js:170-173: readdirSync returns entries including broken
     // symlinks (entry.isFile() returns false for broken symlinks, but the test also
     // verifies the overall robustness). On some systems, broken symlinks can be
@@ -1501,12 +1502,12 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 85: getSessionIdShort fallback parameter ──
   console.log('\ngetSessionIdShort fallback (Round 85):');
 
-  if (test('getSessionIdShort uses fallback when getProjectName returns null (CWD at root)', () => {
+  tally(test('getSessionIdShort uses fallback when getProjectName returns null (CWD at root)', () => {
     if (process.platform === 'win32') {
       console.log('    (skipped: root CWD differs on Windows)');
       return;
@@ -1530,11 +1531,11 @@ function runTests() {
     assert.strictEqual(result.status, 0, `Should exit 0, got status ${result.status}. stderr: ${result.stderr}`);
     assert.strictEqual(result.stdout, 'my-custom-fallback',
       `At CWD=/ with no session ID, should use the fallback parameter. Got: "${result.stdout}"`);
-  })) passed++; else failed++;
+  }));
 
   // ── Round 88: replaceInFile with empty replacement (deletion) ──
   console.log('\nRound 88: replaceInFile with empty replacement string (deletion):');
-  if (test('replaceInFile with empty string replacement deletes matched text', () => {
+  tally(test('replaceInFile with empty string replacement deletes matched text', () => {
     const tmpDir = path.join(utils.getTempDir(), `egc-r88-replace-empty-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
     const tmpFile = path.join(tmpDir, 'delete-test.txt');
@@ -1548,11 +1549,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 88: countInFile with valid file but zero matches ──
   console.log('\nRound 88: countInFile with existing file but non-matching pattern:');
-  if (test('countInFile returns 0 for valid file with no pattern matches', () => {
+  tally(test('countInFile returns 0 for valid file with no pattern matches', () => {
     const tmpDir = path.join(utils.getTempDir(), `egc-r88-count-zero-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
     const tmpFile = path.join(tmpDir, 'no-match.txt');
@@ -1567,12 +1568,12 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 92: countInFile with object pattern type ──
   console.log('\nRound 92: countInFile (non-string non-RegExp pattern):');
 
-  if (test('countInFile returns 0 for object pattern (neither string nor RegExp)', () => {
+  tally(test('countInFile returns 0 for object pattern (neither string nor RegExp)', () => {
     // utils.js line 443-444: The else branch returns 0 when pattern is
     // not instanceof RegExp and typeof !== 'string'. An object like {invalid: true}
     // triggers this early return without throwing.
@@ -1584,12 +1585,12 @@ function runTests() {
     } finally {
       try { fs.unlinkSync(testFile); } catch { /* best-effort */ }
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 93: countInFile with /pattern/i (g flag appended) ──
   console.log('\nRound 93: countInFile (case-insensitive RegExp, g flag auto-appended):');
 
-  if (test('countInFile with /pattern/i appends g flag and counts case-insensitively', () => {
+  tally(test('countInFile with /pattern/i appends g flag and counts case-insensitively', () => {
     // utils.js line 440: pattern.flags = 'i', 'i'.includes('g') → false,
     // so new RegExp(source, 'i' + 'g') → /pattern/ig
     const testFile = path.join(utils.getTempDir(), `utils-test-ci-flag-${Date.now()}.txt`);
@@ -1601,12 +1602,12 @@ function runTests() {
     } finally {
       try { fs.unlinkSync(testFile); } catch { /* best-effort */ }
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 93: countInFile with /pattern/gi (g flag already present) ──
   console.log('\nRound 93: countInFile (case-insensitive RegExp, g flag preserved):');
 
-  if (test('countInFile with /pattern/gi preserves existing flags and counts correctly', () => {
+  tally(test('countInFile with /pattern/gi preserves existing flags and counts correctly', () => {
     // utils.js line 440: pattern.flags = 'gi', 'gi'.includes('g') → true,
     // so new RegExp(source, 'gi'): flags preserved unchanged
     const testFile = path.join(utils.getTempDir(), `utils-test-gi-flag-${Date.now()}.txt`);
@@ -1618,12 +1619,12 @@ function runTests() {
     } finally {
       try { fs.unlinkSync(testFile); } catch { /* best-effort */ }
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 95: countInFile with regex alternation (no g flag) ──
   console.log('\nRound 95: countInFile (regex alternation without g flag):');
 
-  if (test('countInFile with /apple|banana/ (alternation, no g) counts all matches', () => {
+  tally(test('countInFile with /apple|banana/ (alternation, no g) counts all matches', () => {
     const tmpDir = path.join(utils.getTempDir(), `egc-r95-alternation-${Date.now()}`);
     fs.mkdirSync(tmpDir, { recursive: true });
     const testFile = path.join(tmpDir, 'alternation.txt');
@@ -1636,12 +1637,12 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 97: getSessionIdShort with whitespace-only EGC_SESSION_ID ──
   console.log('\nRound 97: getSessionIdShort (whitespace-only session ID):');
 
-  if (test('getSessionIdShort sanitizes whitespace-only EGC_SESSION_ID to fallback', () => {
+  tally(test('getSessionIdShort sanitizes whitespace-only EGC_SESSION_ID to fallback', () => {
     if (process.platform === 'win32') {
       console.log('    (skipped: root CWD differs on Windows)');
       return true;
@@ -1661,12 +1662,12 @@ function runTests() {
 
     assert.strictEqual(result.status, 0, `Expected exit 0, got ${result.status}. stderr: ${result.stderr}`);
     assert.strictEqual(result.stdout, 'fallback');
-  })) passed++; else failed++;
+  }));
 
   // ── Round 97: countInFile with same RegExp object called twice (lastIndex reuse) ──
   console.log('\nRound 97: countInFile (RegExp lastIndex reuse validation):');
 
-  if (test('countInFile returns consistent count when same RegExp object is reused', () => {
+  tally(test('countInFile returns consistent count when same RegExp object is reused', () => {
     // utils.js lines 438-440: Always creates a new RegExp to prevent lastIndex
     // state bugs. Without this defense, a global regex's lastIndex would persist
     // between calls, causing alternating match/miss behavior.
@@ -1687,12 +1688,12 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 98: findFiles with maxAge: -1 (negative boundary: excludes everything) ──
   console.log('\nRound 98: findFiles (maxAge: -1: negative boundary excludes all):');
 
-  if (test('findFiles with maxAge: -1 excludes all files (ageInDays always >= 0)', () => {
+  tally(test('findFiles with maxAge: -1 excludes all files (ageInDays always >= 0)', () => {
     // utils.js line 176-178: `if (maxAge !== null) { ageInDays = ...; if (ageInDays <= maxAge) }`
     // With maxAge: -1, the condition requires ageInDays <= -1. Since ageInDays =
     // (Date.now() - mtimeMs) / 86400000 is always >= 0 for real files, nothing passes.
@@ -1710,12 +1711,12 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 99: replaceInFile returns true even when pattern not found ──
   console.log('\nRound 99: replaceInFile (no-match still returns true):');
 
-  if (test('replaceInFile returns true and rewrites file even when search does not match', () => {
+  tally(test('replaceInFile returns true and rewrites file even when search does not match', () => {
     // utils.js lines 405-417: replaceInFile reads content, calls content.replace(search, replace),
     // and writes back the result. When the search pattern doesn't match anything,
     // String.replace() returns the original string unchanged, but the function still
@@ -1734,12 +1735,12 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 99: grepFile with CR-only line endings (\r without \n) ──
   console.log('\nRound 99: grepFile (CR-only line endings: classic Mac format):');
 
-  if (test('grepFile treats CR-only file as a single line (splits on \\n only)', () => {
+  tally(test('grepFile treats CR-only file as a single line (splits on \\n only)', () => {
     // utils.js line 474: `content.split('\\n')` splits only on \\n (LF).
     // A file using \\r (CR) line endings (classic Mac format) has no \\n characters,
     // so split('\\n') returns the entire content as a single element array.
@@ -1758,11 +1759,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 100: findFiles with both maxAge AND recursive (interaction test) ──
   console.log('\nRound 100: findFiles (maxAge + recursive combined: untested interaction):');
-  if (test('findFiles with maxAge AND recursive filters age across subdirectories', () => {
+  tally(test('findFiles with maxAge AND recursive filters age across subdirectories', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r100-maxage-recur-'));
     const subDir = path.join(tmpDir, 'nested');
     try {
@@ -1789,11 +1790,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 101: output() with circular reference object throws (no try/catch around JSON.stringify) ──
   console.log('\nRound 101: output() (circular reference: JSON.stringify crash):');
-  if (test('output() throws TypeError on circular reference object (JSON.stringify has no try/catch)', () => {
+  tally(test('output() throws TypeError on circular reference object (JSON.stringify has no try/catch)', () => {
     const circular = { a: 1 };
     circular.self = circular; // Creates circular reference
 
@@ -1802,11 +1803,11 @@ function runTests() {
       { name: 'TypeError' },
       'JSON.stringify of circular object should throw TypeError (no try/catch in output())'
     );
-  })) passed++; else failed++;
+  }));
 
   // ── Round 103: countInFile with boolean false pattern (non-string non-RegExp) ──
   console.log('\nRound 103: countInFile (boolean false: explicit type guard returns 0):');
-  if (test('countInFile returns 0 for boolean false pattern (else branch at line 443)', () => {
+  tally(test('countInFile returns 0 for boolean false pattern (else branch at line 443)', () => {
     // utils.js lines 438-444: countInFile checks `instanceof RegExp` then `typeof === "string"`.
     // Boolean `false` fails both checks and falls to the `else return 0` at line 443.
     // This is the correct rejection path for non-string non-RegExp patterns, but was
@@ -1826,11 +1827,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 103: grepFile with numeric 0 pattern (implicit RegExp coercion) ──
   console.log('\nRound 103: grepFile (numeric 0: implicit toString via RegExp constructor):');
-  if (test('grepFile with numeric 0 implicitly coerces to /0/ via RegExp constructor', () => {
+  tally(test('grepFile with numeric 0 implicitly coerces to /0/ via RegExp constructor', () => {
     // utils.js line 468: grepFile's non-RegExp path does `regex = new RegExp(pattern)`.
     // Unlike countInFile (which has explicit type guards), grepFile passes any value
     // to the RegExp constructor, which calls toString() on it.  So new RegExp(0)
@@ -1854,12 +1855,12 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 105: grepFile with sticky (y) flag: not stripped, causes stateful .test() ──
   console.log('\nRound 105: grepFile (sticky y flag: not stripped like g, stateful .test() bug):');
 
-  if (test('grepFile with /pattern/y sticky flag misses lines due to lastIndex state', () => {
+  tally(test('grepFile with /pattern/y sticky flag misses lines due to lastIndex state', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r105-grep-sticky-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -1883,11 +1884,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 107: grepFile with ^$ pattern: empty line matching after split ──
   console.log('\nRound 107: grepFile (empty line matching: ^$ on split lines, trailing \\n creates extra empty element):');
-  if (test('grepFile matches empty lines with ^$ pattern including trailing newline phantom line', () => {
+  tally(test('grepFile matches empty lines with ^$ pattern including trailing newline phantom line', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r107-grep-empty-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -1902,11 +1903,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 107: replaceInFile where replacement re-introduces search pattern (single-pass) ──
   console.log('\nRound 107: replaceInFile (replacement contains search pattern: String.replace is single-pass):');
-  if (test('replaceInFile does not re-scan replacement text (single-pass, no infinite loop)', () => {
+  tally(test('replaceInFile does not re-scan replacement text (single-pass, no infinite loop)', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r107-replace-reintr-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -1920,11 +1921,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 106: countInFile with named capture groups: match(g) ignores group details ──
   console.log('\nRound 106: countInFile (named capture groups: String.match(g) returns full matches only):');
-  if (test('countInFile with named capture groups counts matches not groups', () => {
+  tally(test('countInFile with named capture groups counts matches not groups', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r106-count-named-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -1940,11 +1941,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 106: grepFile with multiline (m) flag: preserved, unlike g which is stripped ──
   console.log('\nRound 106: grepFile (multiline m flag: preserved in regex, unlike g which is stripped):');
-  if (test('grepFile preserves multiline (m) flag and anchors work on split lines', () => {
+  tally(test('grepFile preserves multiline (m) flag and anchors work on split lines', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r106-grep-multiline-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -1963,11 +1964,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 109: appendFile creating new file in non-existent directory (ensureDir + appendFileSync) ──
   console.log('\nRound 109: appendFile (new file creation: ensureDir creates parent, appendFileSync creates file):');
-  if (test('appendFile creates parent directory and new file when neither exist', () => {
+  tally(test('appendFile creates parent directory and new file when neither exist', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r109-append-new-'));
     const nestedPath = path.join(tmpDir, 'deep', 'nested', 'dir', 'newfile.txt');
     try {
@@ -1985,11 +1986,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 108: grepFile with Unicode/emoji content: UTF-16 string matching on split lines ──
   console.log('\nRound 108: grepFile (Unicode/emoji: regex matching on UTF-16 split lines):');
-  if (test('grepFile finds Unicode emoji patterns across lines', () => {
+  tally(test('grepFile finds Unicode emoji patterns across lines', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r108-grep-unicode-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -2008,11 +2009,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 110: findFiles root directory unreadable: silent empty return (not throw) ──
   console.log('\nRound 110: findFiles (root directory unreadable: EACCES on readdirSync caught silently):');
-  if (test('findFiles returns empty array when root directory exists but is unreadable', () => {
+  tally(test('findFiles returns empty array when root directory exists but is unreadable', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
       console.log('    (skipped: chmod ineffective on Windows/root)');
       return true;
@@ -2037,11 +2038,11 @@ function runTests() {
       try { fs.chmodSync(unreadableDir, 0o755); } catch (_e) { /* ignore permission errors */ }
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 113: replaceInFile with zero-width regex: inserts between every character ──
   console.log('\nRound 113: replaceInFile (zero-width regex /(?:)/g: matches every position):');
-  if (test('replaceInFile with zero-width regex /(?:)/g inserts replacement at every position', () => {
+  tally(test('replaceInFile with zero-width regex /(?:)/g inserts replacement at every position', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r113-zero-width-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -2063,11 +2064,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 114: replaceInFile options.all is silently ignored for RegExp search ──
   console.log('\nRound 114: replaceInFile (options.all silently ignored for RegExp search):');
-  if (test('replaceInFile ignores options.all when search is a RegExp: falls through to .replace()', () => {
+  tally(test('replaceInFile ignores options.all when search is a RegExp: falls through to .replace()', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r114-all-regex-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -2099,11 +2100,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 114: output with object containing BigInt: JSON.stringify throws ──
   console.log('\nRound 114: output (object containing BigInt: JSON.stringify throws):');
-  if (test('output throws TypeError when object contains BigInt values (JSON.stringify cannot serialize)', () => {
+  tally(test('output throws TypeError when object contains BigInt values (JSON.stringify cannot serialize)', () => {
     // Capture original console.log to prevent actual output during test
     const originalLog = console.log;
 
@@ -2134,11 +2135,11 @@ function runTests() {
     } finally {
       console.log = originalLog;
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 115: countInFile with empty string pattern: matches at every position boundary ──
   console.log('\nRound 115: countInFile (empty string pattern: matches at every zero-width position):');
-  if (test('countInFile with empty string pattern returns content.length + 1 (matches between every char)', () => {
+  tally(test('countInFile with empty string pattern returns content.length + 1 (matches between every char)', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r115-empty-pattern-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -2168,11 +2169,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 117: grepFile with CRLF content: split('\n') leaves \r, anchored patterns fail ──
   console.log('\nRound 117: grepFile (CRLF content: trailing \\r breaks anchored regex patterns):');
-  if (test('grepFile with CRLF content: unanchored patterns work but anchored $ fails due to trailing \\r', () => {
+  tally(test('grepFile with CRLF content: unanchored patterns work but anchored $ fails due to trailing \\r', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r117-grep-crlf-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -2203,11 +2204,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 116: replaceInFile with null/undefined replacement: JS coerces to string ──
   console.log('\nRound 116: replaceInFile (null/undefined replacement: JS coerces to string "null"/"undefined"):');
-  if (test('replaceInFile with null replacement coerces to string "null" via String.replace ToString', () => {
+  tally(test('replaceInFile with null replacement coerces to string "null" via String.replace ToString', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r116-null-replace-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -2242,11 +2243,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 116: ensureDir with null path: throws wrapped TypeError ──
   console.log('\nRound 116: ensureDir (null path: fs.existsSync(null) throws TypeError):');
-  if (test('ensureDir with null path throws wrapped Error from TypeError (ERR_INVALID_ARG_TYPE)', () => {
+  tally(test('ensureDir with null path throws wrapped Error from TypeError (ERR_INVALID_ARG_TYPE)', () => {
     // fs.existsSync(null) throws TypeError in modern Node.js
     // Caught by ensureDir catch block, err.code !== 'EEXIST' → re-thrown as wrapped Error
     assert.throws(
@@ -2267,11 +2268,11 @@ function runTests() {
       (err) => err instanceof Error && err.message.includes('Failed to create directory'),
       'ensureDir(undefined) should also throw wrapped Error'
     );
-  })) passed++; else failed++;
+  }));
 
   // ── Round 118: writeFile with non-string content: TypeError propagates (no try/catch) ──
   console.log('\nRound 118: writeFile (non-string content: TypeError propagates uncaught):');
-  if (test('writeFile with null/number content throws TypeError because fs.writeFileSync rejects non-string data', () => {
+  tally(test('writeFile with null/number content throws TypeError because fs.writeFileSync rejects non-string data', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r118-writefile-type-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -2308,11 +2309,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 119: appendFile with non-string content: TypeError propagates (no try/catch) ──
   console.log('\nRound 119: appendFile (non-string content: TypeError propagates like writeFile):');
-  if (test('appendFile with null/number content throws TypeError (no try/catch wrapper)', () => {
+  tally(test('appendFile with null/number content throws TypeError (no try/catch wrapper)', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r119-appendfile-type-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -2349,11 +2350,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 120: replaceInFile with empty string search: prepend vs insert-between-every-char ──
   console.log('\nRound 120: replaceInFile (empty string search: replace vs replaceAll dramatic difference):');
-  if (test('replaceInFile with empty search: replace prepends at pos 0; replaceAll inserts between every char', () => {
+  tally(test('replaceInFile with empty search: replace prepends at pos 0; replaceAll inserts between every char', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r120-empty-search-'));
     const testFile = path.join(tmpDir, 'test.txt');
     try {
@@ -2387,11 +2388,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 121: findFiles with ? glob pattern: single character wildcard ──
   console.log('\nRound 121: findFiles (? glob pattern: converted to . regex for single char match):');
-  if (test('findFiles with ? glob matches single character only: test?.txt matches test1 but not test12', () => {
+  tally(test('findFiles with ? glob matches single character only: test?.txt matches test1 but not test12', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r121-glob-question-'));
     try {
       fs.writeFileSync(path.join(tmpDir, 'test1.txt'), 'a');
@@ -2417,11 +2418,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 122: findFiles dot extension escaping: *.txt must not match filetxt ──
   console.log('\nRound 122: findFiles (dot escaping: *.txt matches file.txt but not filetxt):');
-  if (test('findFiles escapes dots in glob pattern so *.txt only matches literal .txt extension', () => {
+  tally(test('findFiles escapes dots in glob pattern so *.txt only matches literal .txt extension', () => {
     const tmpDir = fs.mkdtempSync(path.join(utils.getTempDir(), 'r122-dot-escape-'));
     try {
       fs.writeFileSync(path.join(tmpDir, 'file.txt'), 'a');
@@ -2441,11 +2442,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 123: countInFile with overlapping patterns: match(g) is non-overlapping ──
   console.log('\nRound 123: countInFile (overlapping patterns: String.match(/g/) is non-overlapping):');
-  if (test('countInFile counts non-overlapping matches only: "aaa" with /aa/g returns 1 not 2', () => {
+  tally(test('countInFile counts non-overlapping matches only: "aaa" with /aa/g returns 1 not 2', () => {
     // utils.js line 449: `content.match(regex)` with 'g' flag returns an array of
     // non-overlapping matches. After matching "aa" starting at index 0, the engine
     // advances to index 2, where only one "a" remains: no second match.
@@ -2479,11 +2480,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 123: replaceInFile with $& and $$ substitution tokens in replacement string ──
   console.log('\nRound 123: replaceInFile ($& and $$ substitution tokens in replacement):');
-  if (test('replaceInFile replacement string interprets $& as matched text and $$ as literal $', () => {
+  tally(test('replaceInFile replacement string interprets $& as matched text and $$ as literal $', () => {
     // JS String.replace() interprets special patterns in the replacement string:
     //   $&  → inserts the entire matched substring
     //   $$  → inserts a literal "$" character
@@ -2520,11 +2521,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 124: findFiles matches dotfiles (unlike shell glob where * excludes hidden files) ──
   console.log('\nRound 124: findFiles (* glob matches dotfiles: unlike shell globbing):');
-  if (test('findFiles with * pattern matches dotfiles because .* regex includes hidden files', () => {
+  tally(test('findFiles with * pattern matches dotfiles because .* regex includes hidden files', () => {
     // In shell: `ls *` excludes .hidden files. In findFiles, `*` → `.*` regex which
     // matches ANY filename including those starting with `.`. This is a behavioral
     // difference from shell globbing that could surprise users.
@@ -2562,11 +2563,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 125: readFile with binary content: returns garbled UTF-8, not null ──
   console.log('\nRound 125: readFile (binary/non-UTF8 content: garbled, not null):');
-  if (test('readFile with binary content returns garbled string (not null) because UTF-8 decode does not throw', () => {
+  tally(test('readFile with binary content returns garbled string (not null) because UTF-8 decode does not throw', () => {
     // utils.js line 285: fs.readFileSync(filePath, 'utf8'): binary data gets UTF-8 decoded.
     // Invalid byte sequences become U+FFFD replacement characters. The function does
     // NOT return null for binary files (only returns null on ENOENT/permission errors).
@@ -2600,11 +2601,11 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Round 125: output() with undefined, NaN, Infinity: non-object primitives logged directly ──
   console.log('\nRound 125: output() (undefined/NaN/Infinity: typeof checks and JSON.stringify):');
-  if (test('output() handles undefined, NaN, Infinity as non-objects: logs directly', () => {
+  tally(test('output() handles undefined, NaN, Infinity as non-objects: logs directly', () => {
     // utils.js line 273: `if (typeof data === 'object')`: undefined/NaN/Infinity are NOT objects.
     // typeof undefined → "undefined", typeof NaN → "number", typeof Infinity → "number"
     // All three bypass JSON.stringify and go to console.log(data) directly.
@@ -2637,66 +2638,66 @@ function runTests() {
     } finally {
       console.log = origLog;
     }
-  })) passed++; else failed++;
+  }));
 
   // ─── stripAnsi ───
   console.log('\nstripAnsi:');
 
-  if (test('strips SGR color codes (\\x1b[...m)', () => {
+  tally(test('strips SGR color codes (\\x1b[...m)', () => {
     assert.strictEqual(utils.stripAnsi('\x1b[31mRed text\x1b[0m'), 'Red text');
     assert.strictEqual(utils.stripAnsi('\x1b[1;36mBold cyan\x1b[0m'), 'Bold cyan');
-  })) passed++; else failed++;
+  }));
 
-  if (test('strips cursor movement sequences (\\x1b[H, \\x1b[2J, \\x1b[3J)', () => {
+  tally(test('strips cursor movement sequences (\\x1b[H, \\x1b[2J, \\x1b[3J)', () => {
     // These are the exact sequences reported in issue #642
     assert.strictEqual(utils.stripAnsi('\x1b[H\x1b[2J\x1b[3JHello'), 'Hello');
     assert.strictEqual(utils.stripAnsi('before\x1b[Hafter'), 'beforeafter');
-  })) passed++; else failed++;
+  }));
 
-  if (test('strips cursor position sequences (\\x1b[row;colH)', () => {
+  tally(test('strips cursor position sequences (\\x1b[row;colH)', () => {
     assert.strictEqual(utils.stripAnsi('\x1b[5;10Hplaced'), 'placed');
-  })) passed++; else failed++;
+  }));
 
-  if (test('strips erase line sequences (\\x1b[K, \\x1b[2K)', () => {
+  tally(test('strips erase line sequences (\\x1b[K, \\x1b[2K)', () => {
     assert.strictEqual(utils.stripAnsi('line\x1b[Kend'), 'lineend');
     assert.strictEqual(utils.stripAnsi('line\x1b[2Kend'), 'lineend');
-  })) passed++; else failed++;
+  }));
 
-  if (test('strips OSC sequences (window title, hyperlinks)', () => {
+  tally(test('strips OSC sequences (window title, hyperlinks)', () => {
     // OSC terminated by BEL (\x07)
     assert.strictEqual(utils.stripAnsi('\x1b]0;My Title\x07content'), 'content');
     // OSC terminated by ST (\x1b\\)
     assert.strictEqual(utils.stripAnsi('\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\'), 'link');
-  })) passed++; else failed++;
+  }));
 
-  if (test('strips charset selection (\\x1b(B)', () => {
+  tally(test('strips charset selection (\\x1b(B)', () => {
     assert.strictEqual(utils.stripAnsi('\x1b(Bnormal'), 'normal');
-  })) passed++; else failed++;
+  }));
 
-  if (test('strips bare ESC + letter (\\x1bM reverse index)', () => {
+  tally(test('strips bare ESC + letter (\\x1bM reverse index)', () => {
     assert.strictEqual(utils.stripAnsi('line\x1bMup'), 'lineup');
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles mixed ANSI sequences in one string', () => {
+  tally(test('handles mixed ANSI sequences in one string', () => {
     const input = '\x1b[H\x1b[2J\x1b[1;36mSession\x1b[0m summary\x1b[K';
     assert.strictEqual(utils.stripAnsi(input), 'Session summary');
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns empty string for non-string input', () => {
+  tally(test('returns empty string for non-string input', () => {
     assert.strictEqual(utils.stripAnsi(null), '');
     assert.strictEqual(utils.stripAnsi(undefined), '');
     assert.strictEqual(utils.stripAnsi(42), '');
-  })) passed++; else failed++;
+  }));
 
-  if (test('preserves string with no ANSI codes', () => {
+  tally(test('preserves string with no ANSI codes', () => {
     assert.strictEqual(utils.stripAnsi('plain text'), 'plain text');
     assert.strictEqual(utils.stripAnsi(''), '');
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles CSI with question mark parameter (DEC private modes)', () => {
+  tally(test('handles CSI with question mark parameter (DEC private modes)', () => {
     // e.g. \x1b[?25h (show cursor), \x1b[?25l (hide cursor)
     assert.strictEqual(utils.stripAnsi('\x1b[?25hvisible\x1b[?25l'), 'visible');
-  })) passed++; else failed++;
+  }));
 
   // Summary
   console.log('\n=== Test Results ===');

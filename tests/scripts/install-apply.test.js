@@ -71,8 +71,9 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('merge-json never carries a prototype key into the config', () => {
+  tally(test('merge-json never carries a prototype key into the config', () => {
     const { deepMergeJson } = require('../../scripts/lib/install/apply');
     const merged = deepMergeJson({ mcpServers: { a: { command: 'x' } } }, JSON.parse('{"__proto__": {"polluted": true}, "constructor": {"prototype": {"p": 1}}, "mcpServers": {"b": {"command": "y"}}}'));
     assert.strictEqual(Object.prototype.polluted, undefined, 'the global prototype is untouched');
@@ -85,26 +86,26 @@ function runTests() {
     assert.ok(!Object.hasOwn(nested.list[0], '__proto__'), 'objects inside arrays are filtered');
     assert.strictEqual(nested.list[0].ok, true);
 
-  })) passed++; else failed++;
+  }));
 
 
-  if (test('shows help with --help', () => {
+  tally(test('shows help with --help', () => {
     const result = run(['--help'], PROBE);
     assert.strictEqual(result.code, 0);
     assert.ok(result.stdout.includes('Usage:'));
     assert.ok(result.stdout.includes('--dry-run'));
     assert.ok(result.stdout.includes('--profile <name>'));
     assert.ok(result.stdout.includes('--modules <id,id,...>'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects mixing legacy languages with manifest profile flags', () => {
+  tally(test('rejects mixing legacy languages with manifest profile flags', () => {
     const result = run(['--profile', 'core', 'typescript']);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('cannot be combined'));
-  })) passed++; else failed++;
+  }));
 
   if (process.platform !== 'win32') {
-    if (test('bare install delegates to the shipped install.sh wrapper', () => {
+    tally(test('bare install delegates to the shipped install.sh wrapper', () => {
       const homeDir = createTempDir('install-apply-home-');
       const projectDir = createTempDir('install-apply-project-');
       const binDir = createTempDir('install-apply-bin-');
@@ -127,11 +128,11 @@ function runTests() {
         cleanup(projectDir);
         cleanup(binDir);
       }
-    })) passed++; else failed++;
+    }));
   }
 
   if (process.platform !== 'win32') {
-    if (test('bare install surfaces a wrapper launch failure instead of swallowing it', () => {
+    tally(test('bare install surfaces a wrapper launch failure instead of swallowing it', () => {
       const homeDir = createTempDir('install-apply-home-');
       const projectDir = createTempDir('install-apply-project-');
       const binDir = createTempDir('install-apply-bin-');
@@ -146,10 +147,10 @@ function runTests() {
         cleanup(projectDir);
         cleanup(binDir);
       }
-    })) passed++; else failed++;
+    }));
   }
 
-  if (test('delegated bare install keeps the explicit selection contract', () => {
+  tally(test('delegated bare install keeps the explicit selection contract', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -165,9 +166,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs Gemini rules and writes install-state', () => {
+  tally(test('installs Gemini rules and writes install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -203,9 +204,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs Cursor configs and writes install-state', () => {
+  tally(test('installs Cursor configs and writes install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -256,9 +257,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs Aider memory protocol via rules-core and writes valid install-state', () => {
+  tally(test('installs Aider memory protocol via rules-core and writes valid install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -287,9 +288,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs Warp memory protocol via rules-core and writes valid install-state', () => {
+  tally(test('installs Warp memory protocol via rules-core and writes valid install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -315,9 +316,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('Cursor install preserves an existing mcp.json without injecting bundled servers', () => {
+  tally(test('Cursor install preserves an existing mcp.json without injecting bundled servers', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -344,9 +345,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs Antigravity configs and writes install-state', () => {
+  tally(test('installs Antigravity configs and writes install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -375,9 +376,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('supports dry-run without mutating the target project', () => {
+  tally(test('supports dry-run without mutating the target project', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -396,9 +397,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('lists the egc-universal package files an earlier OpenCode install wrote in the dry run and retires them on apply (#1396)', () => {
+  tally(test('lists the egc-universal package files an earlier OpenCode install wrote in the dry run and retires them on apply (#1396)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
     try {
@@ -456,9 +457,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
   if (process.platform !== 'win32') {
-    if (test('lists a June 2026 legacy skill link in the dry run and reports it migrated on apply (#1400)', () => {
+    tally(test('lists a June 2026 legacy skill link in the dry run and reports it migrated on apply (#1400)', () => {
       const homeDir = createTempDir('install-apply-home-');
       const projectDir = createTempDir('install-apply-project-');
       try {
@@ -500,10 +501,10 @@ function runTests() {
         cleanup(homeDir);
         cleanup(projectDir);
       }
-    })) passed++; else failed++;
+    }));
   }
 
-  if (test('a skill the egc target installs first as a single file is listed as a file-to-dir transition in the dry run (#1428)', () => {
+  tally(test('a skill the egc target installs first as a single file is listed as a file-to-dir transition in the dry run (#1428)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
     try {
@@ -555,9 +556,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('supports manifest profile dry-runs through the installer', () => {
+  tally(test('supports manifest profile dry-runs through the installer', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -573,9 +574,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('supports minimal profile dry-runs without hooks through the installer', () => {
+  tally(test('supports minimal profile dry-runs without hooks through the installer', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -591,9 +592,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs manifest profiles and writes non-legacy install-state', () => {
+  tally(test('installs manifest profiles and writes non-legacy install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -625,9 +626,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('writes the home-scoped Guardian CLI marker on every install (EGC-465, Copilot/CodeBuddy resolution gap)', () => {
+  tally(test('writes the home-scoped Guardian CLI marker on every install (EGC-465, Copilot/CodeBuddy resolution gap)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -648,9 +649,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('a Guardian CLI marker write failure warns but does not fail the install (EGC-465)', () => {
+  tally(test('a Guardian CLI marker write failure warns but does not fail the install (EGC-465)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -689,9 +690,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs the Claude Code SessionStart state hook and records install-state', () => {
+  tally(test('installs the Claude Code SessionStart state hook and records install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -734,9 +735,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude reinstall is idempotent and preserves third-party settings.json content', () => {
+  tally(test('claude reinstall is idempotent and preserves third-party settings.json content', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -811,9 +812,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('preserves existing top-level Gemini rules and skills during managed install', () => {
+  tally(test('preserves existing top-level Gemini rules and skills during managed install', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -837,9 +838,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs antigravity manifest profiles while skipping only unsupported modules', () => {
+  tally(test('installs antigravity manifest profiles while skipping only unsupported modules', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -866,9 +867,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs explicit modules for cursor using manifest operations', () => {
+  tally(test('installs explicit modules for cursor using manifest operations', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -897,15 +898,15 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects unknown explicit manifest modules before resolution', () => {
+  tally(test('rejects unknown explicit manifest modules before resolution', () => {
     const result = run(['--modules', 'ghost-module'], PROBE);
     assert.strictEqual(result.code, 1);
     assert.ok(result.stderr.includes('Unknown install module: ghost-module'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs egc hooks without generating settings.json', () => {
+  tally(test('installs egc hooks without generating settings.json', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -920,9 +921,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs egc hooks with the safe plugin bootstrap contract', () => {
+  tally(test('installs egc hooks with the safe plugin bootstrap contract', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -960,9 +961,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('preserves existing settings.json without mutating it during egc install', () => {
+  tally(test('preserves existing settings.json without mutating it during egc install', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -1001,9 +1002,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('filters copied mcp config files when EGC_DISABLED_MCPS is set', () => {
+  tally(test('filters copied mcp config files when EGC_DISABLED_MCPS is set', () => {
     const tempDir = createTempDir('install-apply-mcp-');
     const sourcePath = path.join(tempDir, '.mcp.json');
     const destinationPath = path.join(tempDir, 'installed', '.mcp.json');
@@ -1075,9 +1076,9 @@ function runTests() {
       }
       cleanup(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('reinstall does not create settings.json when only managed hooks are installed', () => {
+  tally(test('reinstall does not create settings.json when only managed hooks are installed', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -1093,9 +1094,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('reinstall leaves pre-existing hook-based settings.json untouched', () => {
+  tally(test('reinstall leaves pre-existing hook-based settings.json untouched', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -1119,9 +1120,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('ignores malformed existing settings.json during egc install', () => {
+  tally(test('ignores malformed existing settings.json during egc install', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -1140,9 +1141,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('ignores non-object existing settings.json during egc install', () => {
+  tally(test('ignores non-object existing settings.json during egc install', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
 
@@ -1161,9 +1162,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('fails when source hooks.json root is not an object before copying files', () => {
+  tally(test('fails when source hooks.json root is not an object before copying files', () => {
     const tempDir = createTempDir('install-apply-invalid-hooks-');
     const targetRoot = path.join(tempDir, '.gemini');
     const installStatePath = path.join(targetRoot, 'egc', 'install-state.json');
@@ -1223,9 +1224,9 @@ function runTests() {
     } finally {
       cleanup(tempDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('installs from egc-install.json and persists component selections', () => {
+  tally(test('installs from egc-install.json and persists component selections', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
     const configPath = path.join(projectDir, 'egc-install.json');
@@ -1255,9 +1256,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('auto-detects egc-install.json from the project root', () => {
+  tally(test('auto-detects egc-install.json from the project root', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
     const configPath = path.join(projectDir, 'egc-install.json');
@@ -1287,9 +1288,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('preserves legacy language installs when a project config is present', () => {
+  tally(test('preserves legacy language installs when a project config is present', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
     const configPath = path.join(projectDir, 'egc-install.json');
@@ -1316,7 +1317,7 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

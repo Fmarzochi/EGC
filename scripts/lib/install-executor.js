@@ -720,8 +720,16 @@ function dedupeCopyFileDestinations(operations, nativeRootRelativePath) {
   return result;
 }
 
+// The value when it is an array, an empty one otherwise.
 function toValidationIssueArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+// A list the install request records as the caller gave it: the request*
+// field when the caller set one, else the plain field, copied either way.
+function requestIds(options, requestKey, plainKey) {
+  if (Object.hasOwn(options, requestKey)) return [...options[requestKey]];
+  return Array.isArray(options[plainKey]) ? [...options[plainKey]] : [];
 }
 
 function createManifestInstallPlan(options = {}) {
@@ -734,30 +742,9 @@ function createManifestInstallPlan(options = {}) {
   const requestProfileId = Object.hasOwn(options, 'requestProfileId')
     ? options.requestProfileId
     : (options.profileId || null);
-  let requestModuleIds;
-  if (Object.hasOwn(options, 'requestModuleIds')) {
-    requestModuleIds = [...options.requestModuleIds];
-  } else if (Array.isArray(options.moduleIds)) {
-    requestModuleIds = [...options.moduleIds];
-  } else {
-    requestModuleIds = [];
-  }
-  let requestIncludeComponentIds;
-  if (Object.hasOwn(options, 'requestIncludeComponentIds')) {
-    requestIncludeComponentIds = [...options.requestIncludeComponentIds];
-  } else if (Array.isArray(options.includeComponentIds)) {
-    requestIncludeComponentIds = [...options.includeComponentIds];
-  } else {
-    requestIncludeComponentIds = [];
-  }
-  let requestExcludeComponentIds;
-  if (Object.hasOwn(options, 'requestExcludeComponentIds')) {
-    requestExcludeComponentIds = [...options.requestExcludeComponentIds];
-  } else if (Array.isArray(options.excludeComponentIds)) {
-    requestExcludeComponentIds = [...options.excludeComponentIds];
-  } else {
-    requestExcludeComponentIds = [];
-  }
+  const requestModuleIds = requestIds(options, 'requestModuleIds', 'moduleIds');
+  const requestIncludeComponentIds = requestIds(options, 'requestIncludeComponentIds', 'includeComponentIds');
+  const requestExcludeComponentIds = requestIds(options, 'requestExcludeComponentIds', 'excludeComponentIds');
   const plan = resolveInstallPlan({
     repoRoot: sourceRoot,
     projectRoot,
@@ -809,8 +796,8 @@ function createManifestInstallPlan(options = {}) {
     targetRoot: plan.targetRoot,
     installRoot: plan.targetRoot,
     installStatePath: plan.installStatePath,
-    retirements: Array.isArray(plan.retirements) ? plan.retirements : [],
-    managedRoots: Array.isArray(plan.managedRoots) ? plan.managedRoots : [],
+    retirements: toValidationIssueArray(plan.retirements),
+    managedRoots: toValidationIssueArray(plan.managedRoots),
     // The structured issues ride along untouched: the CLI's detection gate
     // needs the machine-readable code (ide-not-detected), not just the
     // flattened warning strings below.

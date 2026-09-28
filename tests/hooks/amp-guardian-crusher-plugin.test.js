@@ -69,6 +69,7 @@ function buildInstalledLayout() {
     'scripts/lib/wrapper-options.js',
     'scripts/lib/shell-bindings.js',
     'scripts/lib/shell-cwd.js',
+    'scripts/lib/handoff-commands.js',
     'scripts/lib/stdin-programs.js',
     'scripts/hooks/pre-bash-crusher-rewrite.js',
     'scripts/lib/crusher/engine.js',

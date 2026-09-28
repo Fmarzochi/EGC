@@ -80,19 +80,7 @@ function readSessionId() {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-function main() {
-  const cwd = process.env.PWD || process.cwd();
-  const sessionId = readSessionId();
-
-  const skill = existsSync(SKILL_FILE) ? readFileSync(SKILL_FILE, 'utf8') : '';
-
-  const projects = readJson(PROJECTS_FILE) || {};
-  const entry = projects[cwd];
-
-  // Read previous session BEFORE overwriting current-session.json
-  const prevSession = readJson(CURRENT_SESSION);
-
-  // Write current-session.json
+function recordCurrentSession(cwd, sessionId, entry) {
   try {
     writeFileSync(CURRENT_SESSION, JSON.stringify({
       sessionId,
@@ -101,78 +89,81 @@ function main() {
       startedAt: new Date().toISOString(),
     }, null, 2), 'utf8');
   } catch { /* non-fatal */ }
+}
 
-  const parts = [];
-  if (skill) parts.push(skill);
+function unsavedWarning(context, sessionId, prevSession) {
+  if (!prevSession?.sessionId || prevSession.sessionId === sessionId) return [];
+  const alreadySaved = context.sessions?.some(s => s.id === prevSession.sessionId);
+  return alreadySaved ? [] : [`WARNING Last session wasn't saved — run /ck:save to capture it`];
+}
 
-  // ── REGISTERED PROJECT ────────────────────────────────────────────────────
-  if (entry?.contextDir) {
-    const contextFile = resolve(CK_HOME, 'contexts', entry.contextDir, 'context.json');
-    const context = readJson(contextFile);
+function goalMismatchWarning(context, cwd) {
+  const geminiMdGoal = extractGeminiMdGoal(cwd);
+  if (!geminiMdGoal || !context.goal ||
+      geminiMdGoal.toLowerCase().trim() === context.goal.toLowerCase().trim()) return [];
+  return [
+    `WARNING Goal mismatch — ck: "${context.goal.slice(0, 40)}" · GEMINI.md: "${geminiMdGoal.slice(0, 40)}"`,
+    `   Run /ck:save with updated goal to sync`,
+  ];
+}
 
-    if (context) {
-      const latest = context.sessions?.[context.sessions.length - 1] || {};
-      const sessionDate = latest.date || context.createdAt;
-      const sessionCount = context.sessions?.length || 0;
-      const displayName = context.displayName ?? context.name;
+// The compact summary of a registered project (~100 tokens).
+function summaryLinesFor(context, { cwd, sessionId, prevSession }) {
+  const latest = context.sessions?.[context.sessions.length - 1] || {};
+  const sessionDate = latest.date || context.createdAt;
+  const sessionCount = context.sessions?.length || 0;
+  const displayName = context.displayName ?? context.name;
 
-      // ── Compact summary block (~100 tokens) ──────────────────────────────
-      const summaryLines = [
-        `ck: ${displayName} | ${daysAgo(sessionDate)} | ${sessionCount} session${sessionCount !== 1 ? 's' : ''}`,
-        `Goal: ${context.goal || '—'}`,
-        latest.leftOff ? `Left off: ${latest.leftOff.split('\n')[0]}` : null,
-        latest.nextSteps?.length ? `Next: ${latest.nextSteps.slice(0, 2).join(' · ')}` : null,
-      ].filter(Boolean);
+  const summaryLines = [
+    `ck: ${displayName} | ${daysAgo(sessionDate)} | ${sessionCount} session${sessionCount !== 1 ? 's' : ''}`,
+    `Goal: ${context.goal || '—'}`,
+    latest.leftOff ? `Left off: ${latest.leftOff.split('\n')[0]}` : null,
+    latest.nextSteps?.length ? `Next: ${latest.nextSteps.slice(0, 2).join(' · ')}` : null,
+  ].filter(Boolean);
+  summaryLines.push(...unsavedWarning(context, sessionId, prevSession));
+  const gitLine = gitLogSince(cwd, sessionDate);
+  if (gitLine) summaryLines.push(`Git: ${gitLine}`);
+  summaryLines.push(...goalMismatchWarning(context, cwd));
+  return summaryLines;
+}
 
-      // ── Unsaved session detection ─────────────────────────────────────────
-      if (prevSession?.sessionId && prevSession.sessionId !== sessionId) {
-        const alreadySaved = context.sessions?.some(s => s.id === prevSession.sessionId);
-        if (!alreadySaved) {
-          summaryLines.push(`WARNING Last session wasn't saved — run /ck:save to capture it`);
-        }
-      }
+// The context of a registered project and the instruction to show its
+// summary first, or null when this folder is not one.
+function registeredProjectParts(entry, session) {
+  if (!entry?.contextDir) return null;
+  const context = readJson(resolve(CK_HOME, 'contexts', entry.contextDir, 'context.json'));
+  if (!context) return null;
 
-      // ── Git activity ──────────────────────────────────────────────────────
-      const gitLine = gitLogSince(cwd, sessionDate);
-      if (gitLine) summaryLines.push(`Git: ${gitLine}`);
+  const displayName = context.displayName ?? context.name;
+  const summary = summaryLinesFor(context, session).join('\n');
+  return [
+    [
+      `---`,
+      `## ck: ${displayName}`,
+      ``,
+      summary,
+    ].join('\n'),
+    // Instruct Gemini to display compact briefing at session start
+    [
+      `---`,
+      `## ck: SESSION START`,
+      ``,
+      `IMPORTANT: Display the following as your FIRST message, verbatim:`,
+      ``,
+      '```',
+      summary,
+      '```',
+      ``,
+      `After the block, add one line: "Ready — what are we working on?"`,
+      `If you see WARNING lines above, mention them briefly after the block.`,
+    ].join('\n'),
+  ];
+}
 
-      // ── Goal mismatch detection ───────────────────────────────────────────
-      const geminiMdGoal = extractGeminiMdGoal(cwd);
-      if (geminiMdGoal && context.goal &&
-          geminiMdGoal.toLowerCase().trim() !== context.goal.toLowerCase().trim()) {
-        summaryLines.push(`WARNING Goal mismatch — ck: "${context.goal.slice(0, 40)}" · GEMINI.md: "${geminiMdGoal.slice(0, 40)}"`);
-        summaryLines.push(`   Run /ck:save with updated goal to sync`);
-      }
-
-      parts.push([
-        `---`,
-        `## ck: ${displayName}`,
-        ``,
-        summaryLines.join('\n'),
-      ].join('\n'));
-
-      // Instruct Gemini to display compact briefing at session start
-      parts.push([
-        `---`,
-        `## ck: SESSION START`,
-        ``,
-        `IMPORTANT: Display the following as your FIRST message, verbatim:`,
-        ``,
-        '```',
-        summaryLines.join('\n'),
-        '```',
-        ``,
-        `After the block, add one line: "Ready — what are we working on?"`,
-        `If you see WARNING lines above, mention them briefly after the block.`,
-      ].join('\n'));
-
-      return parts;
-    }
-  }
-
-  // ── NOT IN A REGISTERED PROJECT ────────────────────────────────────────────
+// The three most recent registered projects, or null when there are none.
+function recentProjectsPart(projects) {
   const entries = Object.entries(projects);
-  if (entries.length === 0) return parts;
+  if (entries.length === 0) return null;
 
   const recent = entries
     .map(([path, info]) => {
@@ -201,7 +192,7 @@ function main() {
     `Run /ck:list · /ck:resume <name> · /ck:init to register this folder`,
   ].join('\n');
 
-  parts.push([
+  return [
     `---`,
     `## ck: SESSION START`,
     ``,
@@ -210,9 +201,27 @@ function main() {
     '```',
     miniStatus,
     '```',
-  ].join('\n'));
+  ].join('\n');
+}
 
-  return parts;
+function main() {
+  const cwd = process.env.PWD || process.cwd();
+  const sessionId = readSessionId();
+
+  const skill = existsSync(SKILL_FILE) ? readFileSync(SKILL_FILE, 'utf8') : '';
+
+  const projects = readJson(PROJECTS_FILE) || {};
+  const entry = projects[cwd];
+
+  // Read previous session BEFORE overwriting current-session.json
+  const prevSession = readJson(CURRENT_SESSION);
+  recordCurrentSession(cwd, sessionId, entry);
+
+  const parts = skill ? [skill] : [];
+  const registered = registeredProjectParts(entry, { cwd, sessionId, prevSession });
+  if (registered) return [...parts, ...registered];
+  const recent = recentProjectsPart(projects);
+  return recent ? [...parts, recent] : parts;
 }
 
 const parts = main();

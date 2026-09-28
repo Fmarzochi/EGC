@@ -105,8 +105,9 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('explains that no install-state is expected after a bare install', () => {
+  tally(test('explains that no install-state is expected after a bare install', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -119,9 +120,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('reports a healthy install with exit code 0', () => {
+  tally(test('reports a healthy install with exit code 0', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -173,9 +174,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('reports issues and exits 1 for unhealthy installs', () => {
+  tally(test('reports issues and exits 1 for unhealthy installs', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -225,9 +226,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('--repo-root overrides the default reference repo (dev-checkout sync scenario)', () => {
+  tally(test('--repo-root overrides the default reference repo (dev-checkout sync scenario)', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
     const altRepoRoot = createTempDir('doctor-altrepo-');
@@ -284,9 +285,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(altRepoRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('a CRLF-only difference (Windows checkout vs. a rewrite that always emits LF) is not drift (audit issue #1049)', () => {
+  tally(test('a CRLF-only difference (Windows checkout vs. a rewrite that always emits LF) is not drift (audit issue #1049)', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
     const altRepoRoot = createTempDir('doctor-altrepo-');
@@ -338,9 +339,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(altRepoRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('a real content difference is still reported as drift even when both files use CRLF', () => {
+  tally(test('a real content difference is still reported as drift even when both files use CRLF', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
     const altRepoRoot = createTempDir('doctor-altrepo-');
@@ -393,9 +394,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(altRepoRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('--repo-root rejects a path that does not exist with a clear error', () => {
+  tally(test('--repo-root rejects a path that does not exist with a clear error', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -409,9 +410,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('--repo-root with no path argument fails loudly instead of silently falling back', () => {
+  tally(test('--repo-root with no path argument fails loudly instead of silently falling back', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -423,9 +424,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('--help prints usage and exits 0 without running a diagnosis', () => {
+  tally(test('--help prints usage and exits 0 without running a diagnosis', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -440,9 +441,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('-h prints usage and exits 0', () => {
+  tally(test('-h prints usage and exits 0', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -454,9 +455,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('a warnings-only run exits 0, an error exits 1 (warnings are informative)', () => {
+  tally(test('a warnings-only run exits 0, an error exits 1 (warnings are informative)', () => {
     // Product decision: drift and version skew are worth reporting but do not
     // mean the install is broken. Exit 1 is reserved for real failures so a
     // script or CI job can branch on it. Both directions are asserted here so
@@ -519,9 +520,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('reports a drifted install as WARNING with issue detail in human-readable output', () => {
+  tally(test('reports a drifted install as WARNING with issue detail in human-readable output', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -574,9 +575,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('reports missing managed files as ERROR with issue detail in human-readable output', () => {
+  tally(test('reports missing managed files as ERROR with issue detail in human-readable output', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -625,9 +626,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('stays quiet when both stores live in the shared ~/.egc (two-store layout is the current design)', () => {
+  tally(test('stays quiet when both stores live in the shared ~/.egc (two-store layout is the current design)', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -648,9 +649,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('lists stray state.db fragments with size, last write, and the merge-script pointer', () => {
+  tally(test('lists stray state.db fragments with size, last write, and the merge-script pointer', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -681,9 +682,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('names every stray copy as its own --source when more than one is left behind', () => {
+  tally(test('names every stray copy as its own --source when more than one is left behind', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -716,9 +717,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('keeps the egc init guidance when nothing exists but a stray fragment does', () => {
+  tally(test('keeps the egc init guidance when nothing exists but a stray fragment does', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -739,9 +740,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('warns about a misplaced CLI store without listing the canonical ~/.egc store as a stray', () => {
+  tally(test('warns about a misplaced CLI store without listing the canonical ~/.egc store as a stray', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -770,9 +771,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('keeps the CLI store under .egc when a harness variable is set and lists the harness copy as a stray', () => {
+  tally(test('keeps the CLI store under .egc when a harness variable is set and lists the harness copy as a stray', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -797,9 +798,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('--json always emits the full stateDb shape', () => {
+  tally(test('--json always emits the full stateDb shape', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -816,9 +817,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('notes a not-yet-created memory store as informational, not a warning', () => {
+  tally(test('notes a not-yet-created memory store as informational, not a warning', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -835,9 +836,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('warns about plain-text state files and lists them with the encryption guidance', () => {
+  tally(test('warns about plain-text state files and lists them with the encryption guidance', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -869,9 +870,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('stays silent about state files when every one is encrypted, empty, archived, or behind a link', () => {
+  tally(test('stays silent about state files when every one is encrypted, empty, archived, or behind a link', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
     const outside = createTempDir('doctor-outside-');
@@ -915,9 +916,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(outside);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('never blocks on a FIFO planted as a state file and skips a file it cannot open', () => {
+  tally(test('never blocks on a FIFO planted as a state file and skips a file it cannot open', () => {
     if (process.platform === 'win32') return;
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
@@ -946,9 +947,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('caps the plain-text listing and counts the rest', () => {
+  tally(test('caps the plain-text listing and counts the rest', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');
 
@@ -969,7 +970,7 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

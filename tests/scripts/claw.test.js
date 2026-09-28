@@ -52,24 +52,25 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // ── Storage tests (6) ──────────────────────────────────────────────────
 
   console.log('Storage:');
 
-  if (test('getClawDir() returns path ending in .gemini/claw', () => {
+  tally(test('getClawDir() returns path ending in .gemini/claw', () => {
     const dir = getClawDir();
     assert.ok(dir.endsWith(path.join('.gemini', 'claw')),
       `Expected path ending in .gemini/claw, got: ${dir}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('getSessionPath("foo") returns correct .md path', () => {
+  tally(test('getSessionPath("foo") returns correct .md path', () => {
     const p = getSessionPath('foo');
     assert.ok(p.endsWith(path.join('.gemini', 'claw', 'foo.md')),
       `Expected path ending in .gemini/claw/foo.md, got: ${p}`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('listSessions() returns empty array for empty dir', () => {
+  tally(test('listSessions() returns empty array for empty dir', () => {
     const tmpDir = makeTmpDir();
     try {
       const sessions = listSessions(tmpDir);
@@ -77,9 +78,9 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('listSessions() finds .md files and strips extension', () => {
+  tally(test('listSessions() finds .md files and strips extension', () => {
     const tmpDir = makeTmpDir();
     try {
       fs.writeFileSync(path.join(tmpDir, 'alpha.md'), 'test');
@@ -92,14 +93,14 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('loadHistory() returns "" for non-existent file', () => {
+  tally(test('loadHistory() returns "" for non-existent file', () => {
     const result = loadHistory('/tmp/claw-test-nonexistent-' + Date.now() + '.md');
     assert.strictEqual(result, '');
-  })) passed++; else failed++;
+  }));
 
-  if (test('appendTurn() writes correct markdown format', () => {
+  tally(test('appendTurn() writes correct markdown format', () => {
     const tmpDir = makeTmpDir();
     const filePath = path.join(tmpDir, 'test.md');
     try {
@@ -112,23 +113,23 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Context tests (3) ─────────────────────────────────────────────────
 
   console.log('\nContext:');
 
-  if (test('loadEGCContext() returns "" when no skills specified', () => {
+  tally(test('loadEGCContext() returns "" when no skills specified', () => {
     const result = loadEGCContext('');
     assert.strictEqual(result, '');
-  })) passed++; else failed++;
+  }));
 
-  if (test('loadEGCContext() skips missing skill directories gracefully', () => {
+  tally(test('loadEGCContext() skips missing skill directories gracefully', () => {
     const result = loadEGCContext('nonexistent-skill-xyz');
     assert.strictEqual(result, '');
-  })) passed++; else failed++;
+  }));
 
-  if (test('loadEGCContext() concatenates multiple skill files', () => {
+  tally(test('loadEGCContext() concatenates multiple skill files', () => {
     // Use real skills from the EGC repo if they exist
     const skillsDir = path.join(process.cwd(), 'skills');
     if (!fs.existsSync(skillsDir)) {
@@ -157,13 +158,13 @@ function runTests() {
           `Should include content from skill ${name}`);
       }
     }
-  })) passed++; else failed++;
+  }));
 
   // ── Delegation tests (2) ──────────────────────────────────────────────
 
   console.log('\nDelegation:');
 
-  if (test('buildPrompt() constructs correct prompt structure', () => {
+  tally(test('buildPrompt() constructs correct prompt structure', () => {
     const prompt = buildPrompt('system info', 'chat history', 'user question');
     assert.ok(prompt.includes('=== SYSTEM CONTEXT ==='), 'Should have system section');
     assert.ok(prompt.includes('system info'), 'Should include system prompt');
@@ -177,21 +178,21 @@ function runTests() {
     const userIdx = prompt.indexOf('USER MESSAGE');
     assert.ok(sysIdx < histIdx, 'System should come before history');
     assert.ok(histIdx < userIdx, 'History should come before user message');
-  })) passed++; else failed++;
+  }));
 
-  if (test('askGemini() handles subprocess error gracefully', () => {
+  tally(test('askGemini() handles subprocess error gracefully', () => {
     // Use a non-existent command to trigger an error
     const result = askGemini('sys', 'hist', 'msg');
     // Should return an error string, not throw
     assert.strictEqual(typeof result, 'string', 'Should return a string');
     assert.ok(result.length > 0, 'Should return non-empty result');
-  })) passed++; else failed++;
+  }));
 
   // ── REPL/Meta tests (3) ───────────────────────────────────────────────
 
   console.log('\nREPL/Meta:');
 
-  if (test('module exports all required functions', () => {
+  tally(test('module exports all required functions', () => {
     const claw = require(path.join(__dirname, '..', '..', 'scripts', 'claw.js'));
     const required = [
       'getClawDir', 'getSessionPath', 'listSessions', 'loadHistory',
@@ -201,9 +202,9 @@ function runTests() {
       assert.strictEqual(typeof claw[fn], 'function',
         `Should export function ${fn}`);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('/clear truncates session file', () => {
+  tally(test('/clear truncates session file', () => {
     const tmpDir = makeTmpDir();
     const filePath = path.join(tmpDir, 'session.md');
     try {
@@ -215,9 +216,9 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('isValidSessionName rejects invalid characters', () => {
+  tally(test('isValidSessionName rejects invalid characters', () => {
     assert.strictEqual(isValidSessionName('my-project'), true);
     assert.strictEqual(isValidSessionName('default'), true);
     assert.strictEqual(isValidSessionName('test123'), true);
@@ -229,11 +230,11 @@ function runTests() {
     assert.strictEqual(isValidSessionName('-starts-dash'), false);
     assert.strictEqual(isValidSessionName(null), false);
     assert.strictEqual(isValidSessionName(undefined), false);
-  })) passed++; else failed++;
+  }));
 
   console.log('\nNanoClaw v2:');
 
-  if (test('getSessionMetrics returns non-zero token estimate for populated history', () => {
+  tally(test('getSessionMetrics returns non-zero token estimate for populated history', () => {
     const tmpDir = makeTmpDir();
     const filePath = path.join(tmpDir, 'metrics.md');
     try {
@@ -245,9 +246,9 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('searchSessions finds query in saved session', () => {
+  tally(test('searchSessions finds query in saved session', () => {
     const tmpDir = makeTmpDir();
     try {
       const clawDir = path.join(tmpDir, '.gemini', 'claw');
@@ -260,9 +261,9 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('branchSession copies history into new branch session', () => {
+  tally(test('branchSession copies history into new branch session', () => {
     const tmpDir = makeTmpDir();
     try {
       const clawDir = path.join(tmpDir, '.gemini', 'claw');
@@ -276,9 +277,9 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('exportSession writes JSON export', () => {
+  tally(test('exportSession writes JSON export', () => {
     const tmpDir = makeTmpDir();
     const filePath = path.join(tmpDir, 'export.md');
     const outPath = path.join(tmpDir, 'export.json');
@@ -293,9 +294,9 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('compactSession reduces long histories', () => {
+  tally(test('compactSession reduces long histories', () => {
     const tmpDir = makeTmpDir();
     const filePath = path.join(tmpDir, 'compact.md');
     try {
@@ -311,19 +312,19 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('askGemini() throws on invalid model name', () => {
+  tally(test('askGemini() throws on invalid model name', () => {
     assert.throws(
       () => askGemini('sys', '', 'msg', 'bad model!'),
       (err) => err.message === 'Invalid model name'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('askGemini() strips null bytes from prompt before spawning', () => {
+  tally(test('askGemini() strips null bytes from prompt before spawning', () => {
     const result = askGemini('sys', '', 'hello\0world');
     assert.strictEqual(typeof result, 'string');
-  })) passed++; else failed++;
+  }));
 
   // ── Summary ───────────────────────────────────────────────────────────
 

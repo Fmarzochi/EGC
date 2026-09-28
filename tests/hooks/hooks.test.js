@@ -330,35 +330,27 @@ async function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   const scriptsDir = path.join(__dirname, '..', '..', 'scripts', 'hooks');
 
   // session-start.js tests
   console.log('session-start.js:');
 
-  if (
-    await asyncTest('runs without error', async () => {
+  tally(await asyncTest('runs without error', async () => {
       const result = await runScript(path.join(scriptsDir, 'session-start.js'));
       assert.strictEqual(result.code, 0, `Exit code should be 0, got ${result.code}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('outputs session info to stderr', async () => {
+  tally(await asyncTest('outputs session info to stderr', async () => {
       const result = await runScript(path.join(scriptsDir, 'session-start.js'));
       assert.ok(result.stderr.includes('[SessionStart]') || result.stderr.includes('Package manager'), 'Should output session info');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // session-start.js edge cases
   console.log('\nsession-start.js (edge cases):');
 
-  if (
-    await asyncTest('exits 0 even with isolated empty HOME', async () => {
+  tally(await asyncTest('exits 0 even with isolated empty HOME', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-iso-start-${Date.now()}`);
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
       fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
@@ -371,22 +363,14 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('reports package manager detection', async () => {
+  tally(await asyncTest('reports package manager detection', async () => {
       const result = await runScript(path.join(scriptsDir, 'session-start.js'));
       assert.ok(result.stderr.includes('Package manager') || result.stderr.includes('[SessionStart]'), 'Should report package manager info');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('skips template session content', async () => {
+  tally(await asyncTest('skips template session content', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-tpl-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -406,13 +390,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('injects real session content', async () => {
+  tally(await asyncTest('injects real session content', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-real-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -448,13 +428,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('caps very large session-start context by default', async () => {
+  tally(await asyncTest('caps very large session-start context by default', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-large-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -477,13 +453,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('honors ECC_SESSION_START_MAX_CHARS for injected context', async () => {
+  tally(await asyncTest('honors ECC_SESSION_START_MAX_CHARS for injected context', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-max-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -505,13 +477,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('disables session-start additional context when requested', async () => {
+  tally(await asyncTest('disables session-start additional context when requested', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-disabled-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -533,13 +501,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('prefers canonical session-data content over legacy duplicates', async () => {
+  tally(await asyncTest('prefers canonical session-data content over legacy duplicates', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-canonical-start-${Date.now()}`);
       const canonicalDir = getCanonicalSessionsDir(isoHome);
       const legacyDir = getLegacySessionsDir(isoHome);
@@ -571,13 +535,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('strips ANSI escape codes from injected session content', async () => {
+  tally(await asyncTest('strips ANSI escape codes from injected session content', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-ansi-start-${Date.now()}`);
       const sessionsDir = getLegacySessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -605,13 +565,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('reports learned skills count', async () => {
+  tally(await asyncTest('reports learned skills count', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-skills-start-${Date.now()}`);
       const learnedDir = path.join(isoHome, '.egc', 'skills', 'learned');
       fs.mkdirSync(learnedDir, { recursive: true });
@@ -630,13 +586,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('injects learned skills into session-start additional context', async () => {
+  tally(await asyncTest('injects learned skills into session-start additional context', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-skills-context-${Date.now()}`);
       const learnedDir = path.join(isoHome, '.egc', 'skills', 'learned');
       fs.mkdirSync(learnedDir, { recursive: true });
@@ -708,58 +660,38 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\ncheck-console-log.js:');
 
-  if (
-    await asyncTest('passes through stdin data to stdout', async () => {
+  tally(await asyncTest('passes through stdin data to stdout', async () => {
       const stdinData = JSON.stringify({ tool_name: 'Write', tool_input: {} });
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), stdinData);
       assert.strictEqual(result.code, 0);
       assert.ok(result.stdout.includes('tool_name'), 'Should pass through stdin data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('exits 0 with empty stdin', async () => {
+  tally(await asyncTest('exits 0 with empty stdin', async () => {
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), '');
       assert.strictEqual(result.code, 0);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles invalid JSON stdin gracefully', async () => {
+  tally(await asyncTest('handles invalid JSON stdin gracefully', async () => {
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), 'not valid json');
       assert.strictEqual(result.code, 0, 'Should exit 0 on invalid JSON');
       // Should still pass through the data
       assert.ok(result.stdout.includes('not valid json'), 'Should pass through invalid data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // session-end.js tests
   console.log('\nsession-end.js:');
 
-  if (
-    await asyncTest('runs without error', async () => {
+  tally(await asyncTest('runs without error', async () => {
       const result = await runScript(path.join(scriptsDir, 'session-end.js'));
       assert.strictEqual(result.code, 0, `Exit code should be 0, got ${result.code}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('creates or updates session file', async () => {
+  tally(await asyncTest('creates or updates session file', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-session-create-${Date.now()}`);
 
       try {
@@ -782,13 +714,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('includes session ID in filename', async () => {
+  tally(await asyncTest('includes session ID in filename', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-session-id-${Date.now()}`);
       const testSessionId = 'test-session-abc12345';
       const expectedShortId = 'abc12345'; // Last 8 chars
@@ -810,16 +738,12 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // Regression test for #1494: transcript_path UUID-derived shortId (last 8 chars)
   // isolates sibling subprocess invocations while preserving getSessionIdShort()
   // backward compatibility (same `.slice(-8)` convention).
-  if (
-    await asyncTest('derives shortId from transcript_path UUID when available', async () => {
+  tally(await asyncTest('derives shortId from transcript_path UUID when available', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-session-transcript-${Date.now()}`);
       const transcriptUuid = 'abcdef12-3456-4789-a012-bcdef3456789';
       const expectedShortId = 'f3456789'; // Last 8 chars of UUID (matches getSessionIdShort convention)
@@ -848,15 +772,11 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // Regression test for #1494: uppercase UUID hex digits should be normalized to
   // lowercase so the filename is consistent with getSessionIdShort()'s output.
-  if (
-    await asyncTest('normalizes transcript UUID shortId to lowercase', async () => {
+  tally(await asyncTest('normalizes transcript UUID shortId to lowercase', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-session-transcript-upper-${Date.now()}`);
       const transcriptUuid = 'ABCDEF12-3456-4789-A012-BCDEF3456789';
       const expectedShortId = 'f3456789'; // last 8 lowercased
@@ -882,16 +802,12 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // Regression test for #1494: when EGC_SESSION_ID and transcript_path refer to the
   // same UUID, the derived shortId must be identical to the pre-fix behaviour so that
   // existing .tmp files are not orphaned on upgrade.
-  if (
-    await asyncTest('matches getSessionIdShort when transcript UUID equals EGC_SESSION_ID', async () => {
+  tally(await asyncTest('matches getSessionIdShort when transcript UUID equals EGC_SESSION_ID', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-session-transcript-match-${Date.now()}`);
       const sessionUuid = '11223344-5566-4778-8899-aabbccddeeff';
       const expectedShortId = 'ccddeeff'; // last 8 chars of both transcript UUID and EGC_SESSION_ID
@@ -917,13 +833,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('writes project, branch, and worktree metadata into new session files', async () => {
+  tally(await asyncTest('writes project, branch, and worktree metadata into new session files', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-session-metadata-${Date.now()}`);
       const testSessionId = 'test-session-meta1234';
       const expectedShortId = testSessionId.slice(-8);
@@ -950,34 +862,22 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // pre-compact.js tests
   console.log('\npre-compact.js:');
 
-  if (
-    await asyncTest('runs without error', async () => {
+  tally(await asyncTest('runs without error', async () => {
       const result = await runScript(path.join(scriptsDir, 'pre-compact.js'));
       assert.strictEqual(result.code, 0, `Exit code should be 0, got ${result.code}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('outputs PreCompact message', async () => {
+  tally(await asyncTest('outputs PreCompact message', async () => {
       const result = await runScript(path.join(scriptsDir, 'pre-compact.js'));
       assert.ok(result.stderr.includes('[PreCompact]'), 'Should output PreCompact message');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('creates compaction log', async () => {
+  tally(await asyncTest('creates compaction log', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-compact-create-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -991,13 +891,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('annotates active session file with compaction marker', async () => {
+  tally(await asyncTest('annotates active session file with compaction marker', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-compact-annotate-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -1016,13 +912,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('compaction log contains timestamp', async () => {
+  tally(await asyncTest('compaction log contains timestamp', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-compact-ts-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -1041,27 +933,19 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // suggest-compact.js tests
   console.log('\nsuggest-compact.js:');
 
-  if (
-    await asyncTest('runs without error', async () => {
+  tally(await asyncTest('runs without error', async () => {
       const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
         EGC_SESSION_ID: 'test-session-' + Date.now()
       });
       assert.strictEqual(result.code, 0, `Exit code should be 0, got ${result.code}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('increments counter on each call', async () => {
+  tally(await asyncTest('increments counter on each call', async () => {
       const sessionId = 'test-counter-' + Date.now();
 
       for (let i = 0; i < 3; i++) {
@@ -1075,13 +959,9 @@ async function runTests() {
       assert.strictEqual(count, 3, `Counter should be 3, got ${count}`);
 
       fs.unlinkSync(counterFile);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('suggests compact at threshold', async () => {
+  tally(await asyncTest('suggests compact at threshold', async () => {
       const sessionId = 'test-threshold-' + Date.now();
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
 
@@ -1095,13 +975,9 @@ async function runTests() {
       assert.ok(result.stderr.includes('50 tool calls reached'), 'Should suggest compact at threshold');
 
       fs.unlinkSync(counterFile);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('does not suggest below threshold', async () => {
+  tally(await asyncTest('does not suggest below threshold', async () => {
       const sessionId = 'test-below-' + Date.now();
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
 
@@ -1115,13 +991,9 @@ async function runTests() {
       assert.ok(!result.stderr.includes('tool calls'), 'Should not suggest compact below threshold');
 
       fs.unlinkSync(counterFile);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('suggests at regular intervals after threshold', async () => {
+  tally(await asyncTest('suggests at regular intervals after threshold', async () => {
       const sessionId = 'test-interval-' + Date.now();
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
 
@@ -1135,13 +1007,9 @@ async function runTests() {
       assert.ok(result.stderr.includes('75 tool calls'), 'Should suggest at 25-call intervals after threshold');
 
       fs.unlinkSync(counterFile);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles corrupted counter file', async () => {
+  tally(await asyncTest('handles corrupted counter file', async () => {
       const sessionId = 'test-corrupt-' + Date.now();
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
 
@@ -1158,13 +1026,9 @@ async function runTests() {
       assert.strictEqual(newCount, 1, 'Should reset counter to 1 on corrupt data');
 
       fs.unlinkSync(counterFile);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('uses default session ID when no env var', async () => {
+  tally(await asyncTest('uses default session ID when no env var', async () => {
       const result = await runScript(path.join(scriptsDir, 'suggest-compact.js'), '', {
         EGC_SESSION_ID: '' // Empty, should use 'default'
       });
@@ -1173,13 +1037,9 @@ async function runTests() {
 
       const counterFile = path.join(os.tmpdir(), 'egc-tool-count-default');
       if (fs.existsSync(counterFile)) fs.unlinkSync(counterFile);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('validates threshold bounds', async () => {
+  tally(await asyncTest('validates threshold bounds', async () => {
       const sessionId = 'test-bounds-' + Date.now();
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
 
@@ -1194,25 +1054,17 @@ async function runTests() {
       assert.ok(result.stderr.includes('50 tool calls'), 'Should use default threshold (50) for invalid value');
 
       fs.unlinkSync(counterFile);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // evaluate-session.js tests
   console.log('\nevaluate-session.js:');
 
-  if (
-    await asyncTest('runs without error when no transcript', async () => {
+  tally(await asyncTest('runs without error when no transcript', async () => {
       const result = await runScript(path.join(scriptsDir, 'evaluate-session.js'));
       assert.strictEqual(result.code, 0, `Exit code should be 0, got ${result.code}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('skips short sessions', async () => {
+  tally(await asyncTest('skips short sessions', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1225,13 +1077,9 @@ async function runTests() {
       assert.ok(result.stderr.includes('Session too short'), 'Should indicate session is too short');
 
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('processes sessions with enough messages', async () => {
+  tally(await asyncTest('processes sessions with enough messages', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1244,14 +1092,10 @@ async function runTests() {
       assert.ok(result.stderr.includes('15 messages'), 'Should report message count');
 
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // evaluate-session.js: whitespace tolerance regression test
-  if (
-    await asyncTest('counts user messages with whitespace in JSON (regression)', async () => {
+  tally(await asyncTest('counts user messages with whitespace in JSON (regression)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1267,14 +1111,10 @@ async function runTests() {
       assert.ok(result.stderr.includes('15 messages'), 'Should count user messages with whitespace in JSON, got: ' + result.stderr.trim());
 
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // session-end.js: content array with null elements regression test
-  if (
-    await asyncTest('handles transcript with null content array elements (regression)', async () => {
+  tally(await asyncTest('handles transcript with null content array elements (regression)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1291,16 +1131,12 @@ async function runTests() {
 
       // Should not crash (exit 0)
       assert.strictEqual(result.code, 0, 'Should handle null content elements without crash');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // post-edit-console-warn.js tests
   console.log('\npost-edit-console-warn.js:');
 
-  if (
-    await asyncTest('warns about console.log in JS files', async () => {
+  tally(await asyncTest('warns about console.log in JS files', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'test.js');
       fs.writeFileSync(testFile, 'const x = 1;\nconsole.log(x);\nreturn x;');
@@ -1310,13 +1146,9 @@ async function runTests() {
 
       assert.ok(result.stderr.includes('console.log'), 'Should warn about console.log');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('does not warn for non-JS files', async () => {
+  tally(await asyncTest('does not warn for non-JS files', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'test.md');
       fs.writeFileSync(testFile, 'Use console.log for debugging');
@@ -1326,13 +1158,9 @@ async function runTests() {
 
       assert.ok(!result.stderr.includes('console.log'), 'Should not warn for non-JS files');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('does not warn for clean JS files', async () => {
+  tally(await asyncTest('does not warn for clean JS files', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'clean.ts');
       fs.writeFileSync(testFile, 'const x = 1;\nreturn x;');
@@ -1342,24 +1170,16 @@ async function runTests() {
 
       assert.ok(!result.stderr.includes('WARNING'), 'Should not warn for clean files');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles missing file gracefully', async () => {
+  tally(await asyncTest('handles missing file gracefully', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/file.ts' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinJson);
 
       assert.strictEqual(result.code, 0, 'Should not crash on missing file');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('limits console.log output to 5 matches', async () => {
+  tally(await asyncTest('limits console.log output to 5 matches', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'many-logs.js');
       const lines = [];
@@ -1379,13 +1199,9 @@ async function runTests() {
       assert.ok(result.stderr.includes('debug 1'), 'Should include first match');
       assert.ok(!result.stderr.includes('debug 8'), 'Should not include 8th match');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('ignores console.warn and console.error (only flags console.log)', async () => {
+  tally(await asyncTest('ignores console.warn and console.error (only flags console.log)', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'other-console.ts');
       fs.writeFileSync(testFile, ['console.warn("this is a warning");', 'console.error("this is an error");', 'console.debug("this is debug");', 'console.info("this is info");'].join('\n'));
@@ -1395,89 +1211,57 @@ async function runTests() {
 
       assert.ok(!result.stderr.includes('WARNING'), 'Should NOT warn about console.warn/error/debug/info');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('passes through original data on stdout', async () => {
+  tally(await asyncTest('passes through original data on stdout', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/test.py' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinJson);
 
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through stdin data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // post-edit-format.js tests
   console.log('\npost-edit-format.js:');
 
-  if (
-    await asyncTest('runs without error on empty stdin', async () => {
+  tally(await asyncTest('runs without error on empty stdin', async () => {
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'));
       assert.strictEqual(result.code, 0, 'Should exit 0 on empty stdin');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('skips non-JS/TS files', async () => {
+  tally(await asyncTest('skips non-JS/TS files', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/test.py' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should exit 0 for non-JS files');
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through stdin data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('passes through data for invalid JSON', async () => {
+  tally(await asyncTest('passes through data for invalid JSON', async () => {
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), 'not json');
       assert.strictEqual(result.code, 0, 'Should exit 0 for invalid JSON');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles null tool_input gracefully', async () => {
+  tally(await asyncTest('handles null tool_input gracefully', async () => {
       const stdinJson = JSON.stringify({ tool_input: null });
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should exit 0 for null tool_input');
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles missing file_path in tool_input', async () => {
+  tally(await asyncTest('handles missing file_path in tool_input', async () => {
       const stdinJson = JSON.stringify({ tool_input: {} });
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should exit 0 for missing file_path');
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('exits 0 and passes data when prettier is unavailable', async () => {
+  tally(await asyncTest('exits 0 and passes data when prettier is unavailable', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/path/file.ts' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should exit 0 even when prettier fails');
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through original data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('finds formatter config in parent dirs without package.json', async () => {
+  tally(await asyncTest('finds formatter config in parent dirs without package.json', async () => {
       const testDir = createTestDir();
       const rootDir = path.join(testDir, 'config-only-repo');
       const nestedDir = path.join(rootDir, 'src', 'nested');
@@ -1504,13 +1288,9 @@ async function runTests() {
       assert.strictEqual(fs.realpathSync(logEntries[0].cwd), fs.realpathSync(rootDir), 'Should run formatter from config root');
       assert.deepStrictEqual(logEntries[0].args, ['prettier', '--write', filePath], 'Should use the formatter on the nested file');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('respects GEMINI_PACKAGE_MANAGER for formatter fallback runner', async () => {
+  tally(await asyncTest('respects GEMINI_PACKAGE_MANAGER for formatter fallback runner', async () => {
       const testDir = createTestDir();
       const rootDir = path.join(testDir, 'pnpm-repo');
       const filePath = path.join(rootDir, 'index.ts');
@@ -1531,13 +1311,9 @@ async function runTests() {
       assert.strictEqual(logEntries[0].bin, 'pnpm', 'Should use pnpm runner');
       assert.deepStrictEqual(logEntries[0].args, ['dlx', 'prettier', '--write', filePath], 'Should use pnpm dlx for fallback formatter execution');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('respects project package-manager config for formatter fallback runner', async () => {
+  tally(await asyncTest('respects project package-manager config for formatter fallback runner', async () => {
       const testDir = createTestDir();
       const rootDir = path.join(testDir, 'bun-repo');
       const filePath = path.join(rootDir, 'index.ts');
@@ -1559,15 +1335,11 @@ async function runTests() {
       assert.strictEqual(logEntries[0].bin, 'bunx', 'Should use bunx runner');
       assert.deepStrictEqual(logEntries[0].args, ['prettier', '--write', filePath], 'Should use bunx for fallback formatter execution');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\npre-bash-dev-server-block.js:');
 
-  if (
-    await asyncTest('allows non-dev commands whose heredoc text mentions npm run dev', async () => {
+  tally(await asyncTest('allows non-dev commands whose heredoc text mentions npm run dev', async () => {
       const command = ['gh pr create --title "fix: docs" --body "$(cat <<\'EOF\'', '## Test plan', '- run npm run dev to verify the site starts', 'EOF', ')"'].join('\n');
       const stdinJson = JSON.stringify({ tool_input: { command } });
       const result = await runScript(path.join(scriptsDir, 'pre-bash-dev-server-block.js'), stdinJson);
@@ -1575,13 +1347,9 @@ async function runTests() {
       assert.strictEqual(result.code, 0, 'Non-dev commands should pass through');
       assert.strictEqual(result.stdout, stdinJson, 'Should preserve original input');
       assert.ok(!result.stderr.includes('BLOCKED'), 'Should not emit a block message');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('blocks bare npm run dev outside tmux on non-Windows platforms', async () => {
+  tally(await asyncTest('blocks bare npm run dev outside tmux on non-Windows platforms', async () => {
       const stdinJson = JSON.stringify({ tool_input: { command: 'npm run dev' } });
       const result = await runScript(path.join(scriptsDir, 'pre-bash-dev-server-block.js'), stdinJson);
 
@@ -1592,13 +1360,9 @@ async function runTests() {
         assert.strictEqual(result.code, 2, 'Unix path should block bare dev servers');
         assert.ok(result.stderr.includes('BLOCKED'), 'Should explain why the command was blocked');
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('blocks env-wrapped npm run dev outside tmux on non-Windows platforms', async () => {
+  tally(await asyncTest('blocks env-wrapped npm run dev outside tmux on non-Windows platforms', async () => {
       const stdinJson = JSON.stringify({ tool_input: { command: '/usr/bin/env npm run dev' } });
       const result = await runScript(path.join(scriptsDir, 'pre-bash-dev-server-block.js'), stdinJson);
 
@@ -1609,13 +1373,9 @@ async function runTests() {
         assert.strictEqual(result.code, 2, 'Unix path should block wrapped dev servers');
         assert.ok(result.stderr.includes('BLOCKED'), 'Should explain why the command was blocked');
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('blocks nohup-wrapped npm run dev outside tmux on non-Windows platforms', async () => {
+  tally(await asyncTest('blocks nohup-wrapped npm run dev outside tmux on non-Windows platforms', async () => {
       const stdinJson = JSON.stringify({ tool_input: { command: 'nohup npm run dev >/tmp/dev.log 2>&1 &' } });
       const result = await runScript(path.join(scriptsDir, 'pre-bash-dev-server-block.js'), stdinJson);
 
@@ -1626,46 +1386,30 @@ async function runTests() {
         assert.strictEqual(result.code, 2, 'Unix path should block wrapped dev servers');
         assert.ok(result.stderr.includes('BLOCKED'), 'Should explain why the command was blocked');
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // post-edit-typecheck.js tests
   console.log('\npost-edit-typecheck.js:');
 
-  if (
-    await asyncTest('runs without error on empty stdin', async () => {
+  tally(await asyncTest('runs without error on empty stdin', async () => {
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'));
       assert.strictEqual(result.code, 0, 'Should exit 0 on empty stdin');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('skips non-TypeScript files', async () => {
+  tally(await asyncTest('skips non-TypeScript files', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/test.js' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should exit 0 for non-TS files');
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through stdin data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles nonexistent TS file gracefully', async () => {
+  tally(await asyncTest('handles nonexistent TS file gracefully', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/file.ts' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should exit 0 for missing file');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles TS file with no tsconfig gracefully', async () => {
+  tally(await asyncTest('handles TS file with no tsconfig gracefully', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'test.ts');
       fs.writeFileSync(testFile, 'const x: number = 1;');
@@ -1674,13 +1418,9 @@ async function runTests() {
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should exit 0 when no tsconfig found');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('stops tsconfig walk at max depth (20)', async () => {
+  tally(await asyncTest('stops tsconfig walk at max depth (20)', async () => {
       const testDir = createTestDir();
       let deepDir = testDir;
       for (let i = 0; i < 25; i++) {
@@ -1698,13 +1438,9 @@ async function runTests() {
       assert.strictEqual(result.code, 0, 'Should not hang at depth limit');
       assert.ok(elapsed < 5000, `Should complete quickly at depth limit, took ${elapsed}ms`);
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('passes through stdin data on stdout (post-edit-typecheck)', async () => {
+  tally(await asyncTest('passes through stdin data on stdout (post-edit-typecheck)', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'test.ts');
       fs.writeFileSync(testFile, 'const x: number = 1;');
@@ -1714,16 +1450,12 @@ async function runTests() {
       assert.strictEqual(result.code, 0);
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through stdin data on stdout');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // session-end.js extractSessionSummary tests
   console.log('\nsession-end.js (extractSessionSummary):');
 
-  if (
-    await asyncTest('extracts user messages from transcript', async () => {
+  tally(await asyncTest('extracts user messages from transcript', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1734,13 +1466,9 @@ async function runTests() {
       const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson);
       assert.strictEqual(result.code, 0);
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles transcript with array content fields', async () => {
+  tally(await asyncTest('handles transcript with array content fields', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1751,13 +1479,9 @@ async function runTests() {
       const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should handle array content without crash');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('extracts tool names and file paths from transcript', async () => {
+  tally(await asyncTest('extracts tool names and file paths from transcript', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1778,13 +1502,9 @@ async function runTests() {
       // Session file should contain summary with tools used
       assert.ok(result.stderr.includes('Created session file') || result.stderr.includes('Updated session file'), 'Should create/update session file');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles transcript with malformed JSON lines', async () => {
+  tally(await asyncTest('handles transcript with malformed JSON lines', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1796,13 +1516,9 @@ async function runTests() {
       assert.strictEqual(result.code, 0, 'Should skip malformed lines gracefully');
       assert.ok(result.stderr.includes('unparseable') || result.stderr.includes('Skipped'), `Should report parse errors, got: ${result.stderr.substring(0, 200)}`);
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles empty transcript (no user messages)', async () => {
+  tally(await asyncTest('handles empty transcript (no user messages)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1814,13 +1530,9 @@ async function runTests() {
       const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should handle transcript with no user messages');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('truncates long user messages to 200 chars', async () => {
+  tally(await asyncTest('truncates long user messages to 200 chars', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1832,13 +1544,9 @@ async function runTests() {
       const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should handle and truncate long messages');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('uses GEMINI_TRANSCRIPT_PATH env var as fallback', async () => {
+  tally(await asyncTest('uses GEMINI_TRANSCRIPT_PATH env var as fallback', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1851,13 +1559,9 @@ async function runTests() {
       });
       assert.strictEqual(result.code, 0, 'Should use env var fallback');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('escapes backticks in user messages in session file', async () => {
+  tally(await asyncTest('escapes backticks in user messages in session file', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1882,13 +1586,9 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('session file contains tools used and files modified', async () => {
+  tally(await asyncTest('session file contains tools used and files modified', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1920,13 +1620,9 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('omits Tools Used and Files Modified sections when empty', async () => {
+  tally(await asyncTest('omits Tools Used and Files Modified sections when empty', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1952,13 +1648,9 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('slices user messages to last 10', async () => {
+  tally(await asyncTest('slices user messages to last 10', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -1990,13 +1682,9 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('slices tools to first 20', async () => {
+  tally(await asyncTest('slices tools to first 20', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -2027,13 +1715,9 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('slices files modified to first 30', async () => {
+  tally(await asyncTest('slices files modified to first 30', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -2064,13 +1748,9 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('parses Gemini Code JSONL format (entry.message.content)', async () => {
+  tally(await asyncTest('parses Gemini Code JSONL format (entry.message.content)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -2094,13 +1774,9 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('extracts tool_use from assistant message content blocks', async () => {
+  tally(await asyncTest('extracts tool_use from assistant message content blocks', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -2138,26 +1814,18 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // hooks.json validation
   console.log('\nhooks.json Validation:');
 
-  if (
-    test('hooks.json is valid JSON', () => {
+  tally(test('hooks.json is valid JSON', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const content = fs.readFileSync(hooksPath, 'utf8');
       JSON.parse(content); // Will throw if invalid
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    test('hooks.json has required event types', () => {
+  tally(test('hooks.json has required event types', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
 
@@ -2167,13 +1835,9 @@ async function runTests() {
       assert.ok(hooks.hooks.SessionEnd, 'Should have SessionEnd hooks');
       assert.ok(hooks.hooks.Stop, 'Should have Stop hooks');
       assert.ok(hooks.hooks.PreCompact, 'Should have PreCompact hooks');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    test('hooks.json consolidates Bash hooks into one pre and one post dispatcher', () => {
+  tally(test('hooks.json consolidates Bash hooks into one pre and one post dispatcher', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
 
@@ -2194,13 +1858,9 @@ async function runTests() {
 
       assert.ok(preCommand.includes('pre-bash-dispatcher.js'), 'PreToolUse Bash hook should use the pre dispatcher');
       assert.ok(postCommand.includes('post-bash-dispatcher.js'), 'PostToolUse Bash hook should use the post dispatcher');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    test('SessionEnd marker hook is async and cleanup-safe', () => {
+  tally(test('SessionEnd marker hook is async and cleanup-safe', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
       const sessionEndHooks = hooks.hooks.SessionEnd.flatMap(entry => entry.hooks);
@@ -2209,13 +1869,9 @@ async function runTests() {
       assert.ok(markerHook, 'SessionEnd should invoke session-end-marker.js');
       assert.strictEqual(markerHook.async, true, 'SessionEnd marker hook should run async during cleanup');
       assert.ok(Number.isInteger(markerHook.timeout) && markerHook.timeout > 0, 'SessionEnd marker hook should define a timeout');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    test('all hook commands use string form for Gemini Code schema compatibility', () => {
+  tally(test('all hook commands use string form for Gemini Code schema compatibility', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
 
@@ -2230,13 +1886,9 @@ async function runTests() {
           }
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    test('all hook commands use node or approved shell wrappers', () => {
+  tally(test('all hook commands use node or approved shell wrappers', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
 
@@ -2261,13 +1913,9 @@ async function runTests() {
       for (const [, hookArray] of Object.entries(hooks.hooks)) {
         checkHooks(hookArray);
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    test('SessionStart hook uses safe inline resolver without plugin-tree scanning', () => {
+  tally(test('SessionStart hook uses safe inline resolver without plugin-tree scanning', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
       const sessionStartHook = hooks.hooks.SessionStart?.[0]?.hooks?.[0];
@@ -2291,12 +1939,8 @@ async function runTests() {
       assert.ok(bootstrapSrc.includes('run-with-flags.js'), 'Bootstrap should resolve the runner script');
       assert.ok(bootstrapSrc.includes('GEMINI_PLUGIN_ROOT'), 'Bootstrap should consult GEMINI_PLUGIN_ROOT');
       assert.ok(bootstrapSrc.includes('plugins'), 'Bootstrap should probe known plugin roots');
-    })
-  )
-    passed++;
-  else failed++;
-  if (
-    test('Stop and SessionEnd hooks use the safe inline resolver when plugin root may be unset', () => {
+    }));
+  tally(test('Stop and SessionEnd hooks use the safe inline resolver when plugin root may be unset', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
       const stopHooks = (hooks.hooks.Stop || []).flatMap(entry => entry.hooks || []);
@@ -2316,12 +1960,8 @@ async function runTests() {
         assert.ok(!commandText.includes('find '), 'Lifecycle hook should not scan arbitrary plugin paths with find');
         assert.ok(!commandText.includes('head -n 1'), 'Lifecycle hook should not pick the first matching plugin path');
       }
-    })
-  )
-    passed++;
-  else failed++;
-  if (
-    test('script references use the safe inline resolver or plugin bootstrap', () => {
+    }));
+  tally(test('script references use the safe inline resolver or plugin bootstrap', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
 
@@ -2346,17 +1986,13 @@ async function runTests() {
       for (const [, hookArray] of Object.entries(hooks.hooks)) {
         checkHooks(hookArray);
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
 
   // plugin.json validation
   console.log('\nplugin.json Validation:');
 
-  if (
-    test('plugin.json does NOT have explicit hooks declaration', () => {
+  tally(test('plugin.json does NOT have explicit hooks declaration', () => {
       // Gemini Code automatically loads hooks/hooks.json by convention.
       // Explicitly declaring it in plugin.json causes a duplicate detection error.
       // See: https://github.com/Fmarzochi/EGC/issues/103
@@ -2364,35 +2000,23 @@ async function runTests() {
       const plugin = JSON.parse(fs.readFileSync(pluginPath, 'utf8'));
 
       assert.ok(!plugin.hooks, 'plugin.json should NOT have "hooks" field - Gemini Code auto-loads hooks/hooks.json');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ─── evaluate-session.js tests ───
   console.log('\nevaluate-session.js:');
 
-  if (
-    await asyncTest('skips when no transcript_path in stdin', async () => {
+  tally(await asyncTest('skips when no transcript_path in stdin', async () => {
       const result = await runScript(path.join(scriptsDir, 'evaluate-session.js'), '{}');
       assert.strictEqual(result.code, 0, 'Should exit 0 (non-blocking)');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('skips when transcript file does not exist', async () => {
+  tally(await asyncTest('skips when transcript file does not exist', async () => {
       const stdinJson = JSON.stringify({ transcript_path: '/tmp/nonexistent-transcript-12345.jsonl' });
       const result = await runScript(path.join(scriptsDir, 'evaluate-session.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should exit 0 when file missing');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('skips short sessions (< 10 user messages)', async () => {
+  tally(await asyncTest('skips short sessions (< 10 user messages)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'short.jsonl');
       // Only 3 user messages: below the default threshold of 10
@@ -2403,13 +2027,9 @@ async function runTests() {
       assert.strictEqual(result.code, 0);
       assert.ok(result.stderr.includes('too short'), 'Should log "too short" message');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('evaluates long sessions (>= 10 user messages)', async () => {
+  tally(await asyncTest('evaluates long sessions (>= 10 user messages)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'long.jsonl');
       // 12 user messages: above the default threshold
@@ -2424,26 +2044,18 @@ async function runTests() {
       assert.ok(result.stderr.includes('12 messages'), 'Should report message count');
       assert.ok(result.stderr.includes('evaluate'), 'Should signal evaluation');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles malformed stdin JSON (falls back to env var)', async () => {
+  tally(await asyncTest('handles malformed stdin JSON (falls back to env var)', async () => {
       const result = await runScript(path.join(scriptsDir, 'evaluate-session.js'), 'not json at all', { GEMINI_TRANSCRIPT_PATH: '' });
       // No valid transcript path from either source → exit 0
       assert.strictEqual(result.code, 0);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ─── suggest-compact.js tests ───
   console.log('\nsuggest-compact.js:');
 
-  if (
-    await asyncTest('increments tool counter on each invocation', async () => {
+  tally(await asyncTest('increments tool counter on each invocation', async () => {
       const sessionId = `test-counter-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
@@ -2467,13 +2079,9 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('suggests compact at exact threshold', async () => {
+  tally(await asyncTest('suggests compact at exact threshold', async () => {
       const sessionId = `test-threshold-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
@@ -2492,13 +2100,9 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('suggests at periodic intervals after threshold', async () => {
+  tally(await asyncTest('suggests at periodic intervals after threshold', async () => {
       const sessionId = `test-periodic-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
@@ -2518,13 +2122,9 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('does not suggest below threshold', async () => {
+  tally(await asyncTest('does not suggest below threshold', async () => {
       const sessionId = `test-below-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
@@ -2543,13 +2143,9 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('resets counter when file contains huge overflow number', async () => {
+  tally(await asyncTest('resets counter when file contains huge overflow number', async () => {
       const sessionId = `test-overflow-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
@@ -2568,13 +2164,9 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('resets counter when file contains negative number', async () => {
+  tally(await asyncTest('resets counter when file contains negative number', async () => {
       const sessionId = `test-negative-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
@@ -2592,13 +2184,9 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles COMPACT_THRESHOLD of zero (falls back to 50)', async () => {
+  tally(await asyncTest('handles COMPACT_THRESHOLD of zero (falls back to 50)', async () => {
       const sessionId = `test-zero-thresh-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
@@ -2616,13 +2204,9 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles invalid COMPACT_THRESHOLD (falls back to 50)', async () => {
+  tally(await asyncTest('handles invalid COMPACT_THRESHOLD (falls back to 50)', async () => {
       const sessionId = `test-invalid-thresh-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
@@ -2641,52 +2225,36 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ─── Round 20 bug fix tests ───
   console.log('\ncheck-console-log.js (exact pass-through):');
 
-  if (
-    await asyncTest('stdout is exact byte match of stdin (no trailing newline)', async () => {
+  tally(await asyncTest('stdout is exact byte match of stdin (no trailing newline)', async () => {
       // Before the fix, console.log(data) added a trailing \n.
       const stdinData = '{"tool":"test","value":42}';
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), stdinData);
       assert.strictEqual(result.code, 0);
       // stdout should be exactly the input: no extra newline appended
       assert.strictEqual(result.stdout, stdinData, 'Should not append extra newline to output');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('preserves empty string stdin without adding newline', async () => {
+  tally(await asyncTest('preserves empty string stdin without adding newline', async () => {
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), '');
       assert.strictEqual(result.code, 0);
       assert.strictEqual(result.stdout, '', 'Empty input should produce empty output');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('preserves data with embedded newlines exactly', async () => {
+  tally(await asyncTest('preserves data with embedded newlines exactly', async () => {
       const stdinData = 'line1\nline2\nline3';
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), stdinData);
       assert.strictEqual(result.code, 0);
       assert.strictEqual(result.stdout, stdinData, 'Should preserve embedded newlines without adding extra');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\npost-edit-format.js (security & extension tests):');
 
-  if (
-    await asyncTest('source code does not pass shell option to execFileSync (security)', async () => {
+  tally(await asyncTest('source code does not pass shell option to execFileSync (security)', async () => {
       const formatSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-format.js'), 'utf8');
       // Strip comments to avoid matching "shell: true" in comment text
       const codeOnly = formatSource.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -2697,61 +2265,41 @@ async function runTests() {
       const resolverSource = fs.readFileSync(path.join(scriptsDir, '..', 'lib', 'resolve-formatter.js'), 'utf8');
       assert.ok(resolverSource.includes('npx.cmd'), 'resolve-formatter.js should use npx.cmd for Windows cross-platform safety');
       assert.ok(formatSource.includes('resolveFormatterBin'), 'post-edit-format.js should use shared resolveFormatterBin');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('matches .tsx extension for formatting', async () => {
+  tally(await asyncTest('matches .tsx extension for formatting', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/component.tsx' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
       assert.strictEqual(result.code, 0);
       // Should attempt to format (will fail silently since file doesn't exist, but should pass through)
       assert.ok(result.stdout.includes('component.tsx'), 'Should pass through data for .tsx files');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('matches .jsx extension for formatting', async () => {
+  tally(await asyncTest('matches .jsx extension for formatting', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/component.jsx' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
       assert.strictEqual(result.code, 0);
       assert.ok(result.stdout.includes('component.jsx'), 'Should pass through data for .jsx files');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\npost-edit-typecheck.js (security & extension tests):');
 
-  if (
-    await asyncTest('source code does not pass shell option to execFileSync (security)', async () => {
+  tally(await asyncTest('source code does not pass shell option to execFileSync (security)', async () => {
       const typecheckSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-typecheck.js'), 'utf8');
       // Strip comments to avoid matching "shell: true" in comment text
       const codeOnly = typecheckSource.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
       assert.ok(!codeOnly.includes('shell:'), 'post-edit-typecheck.js should not pass shell option in code');
       assert.ok(codeOnly.includes('process.execPath'), 'Should run the resolved tsc through node (process.execPath): spawning the npx.cmd shim without a shell throws EINVAL on Node >= 20.12 (CVE-2024-27980 mitigation), so the old npx path never ran on Windows, and shell:true would reopen an injection surface');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nShell wrapper portability:');
 
-  if (
-    test('run-with-flags-shell resolves plugin root when GEMINI_PLUGIN_ROOT is unset', () => {
+  tally(test('run-with-flags-shell resolves plugin root when GEMINI_PLUGIN_ROOT is unset', () => {
       const wrapperSource = fs.readFileSync(path.join(scriptsDir, 'run-with-flags-shell.sh'), 'utf8');
       assert.ok(wrapperSource.includes('PLUGIN_ROOT="${GEMINI_PLUGIN_ROOT:-'), 'Shell wrapper should derive PLUGIN_ROOT from its own script path');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    test('continuous-learning shell scripts use resolved Python command instead of hardcoded python3 invocations', () => {
+  tally(test('continuous-learning shell scripts use resolved Python command instead of hardcoded python3 invocations', () => {
       const observeSource = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'ai', 'continuous-learning-v2', 'hooks', 'observe.sh'), 'utf8');
       const startObserverSource = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'ai', 'continuous-learning-v2', 'agents', 'start-observer.sh'), 'utf8');
       const detectProjectSource = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'ai', 'continuous-learning-v2', 'scripts', 'detect-project.sh'), 'utf8');
@@ -2761,13 +2309,9 @@ async function runTests() {
       assert.ok(observeSource.includes('PYTHON_CMD'), 'observe.sh should resolve Python dynamically');
       assert.ok(startObserverSource.includes('CLV2_PYTHON_CMD'), 'start-observer.sh should reuse detected Python command');
       assert.ok(detectProjectSource.includes('_clv2_resolve_python_cmd'), 'detect-project.sh should provide shared Python resolution');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    test('observer-loop uses a configurable max-turn budget with safe default', () => {
+  tally(test('observer-loop uses a configurable max-turn budget with safe default', () => {
       const observerLoopSource = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'ai', 'continuous-learning-v2', 'agents', 'observer-loop.sh'), 'utf8');
 
       // EGC_* is canonical; ECC_* must remain a valid fallback (never removed).
@@ -2782,16 +2326,12 @@ async function runTests() {
       assert.ok(observerLoopSource.includes('prompt_content="$(cat "$prompt_file" 2>/dev/null || true)"'), 'observer-loop should read prompt_file into memory before egc is spawned');
       assert.ok(observerLoopSource.includes('-p "$prompt_content"'), 'observer-loop should pass in-memory prompt content to egc');
       assert.ok(!observerLoopSource.includes('-p "$(cat "$prompt_file")"'), 'observer-loop should not re-read prompt_file at invocation time');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   if (SKIP_BASH) {
     console.log('  ⊘ detect-project exports the resolved Python command (skipped on Windows)');
     passed++;
-  } else if (
-    await asyncTest('detect-project exports the resolved Python command for downstream scripts', async () => {
+  } else tally(await asyncTest('detect-project exports the resolved Python command for downstream scripts', async () => {
       const detectProjectPath = path.join(__dirname, '..', '..', 'skills', 'ai', 'continuous-learning-v2', 'scripts', 'detect-project.sh');
       const shellCommand = [`source "${toBashPath(detectProjectPath)}" >/dev/null 2>&1`, 'printf "%s\\n" "${CLV2_PYTHON_CMD:-}"'].join('; ');
 
@@ -2813,16 +2353,12 @@ async function runTests() {
 
       assert.strictEqual(code, 0, `detect-project.sh should source cleanly, stderr: ${stderr}`);
       assert.ok(stdout.trim().length > 0, 'CLV2_PYTHON_CMD should export a resolved interpreter path');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   if (SKIP_BASH) {
     console.log('  ⊘ detect-project writes project metadata (skipped on Windows)');
     passed++;
-  } else if (
-    await asyncTest('detect-project writes project metadata to the registry and project directory', async () => {
+  } else tally(await asyncTest('detect-project writes project metadata to the registry and project directory', async () => {
       const testRoot = createTestDir();
       const homeDir = path.join(testRoot, 'home');
       const repoDir = path.join(testRoot, 'repo');
@@ -2901,16 +2437,12 @@ async function runTests() {
       } finally {
         cleanupTestDir(testRoot);
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   if (SKIP_BASH) {
     console.log('  ⊘ observe.sh falls back to legacy output fields (skipped on Windows)');
     passed++;
-  } else if (
-    await asyncTest('observe.sh falls back to legacy output fields when tool_response is null', async () => {
+  } else tally(await asyncTest('observe.sh falls back to legacy output fields when tool_response is null', async () => {
       const homeDir = createTestDir();
       const projectDir = createTestDir();
       const observePath = path.join(__dirname, '..', '..', 'skills', 'ai', 'continuous-learning-v2', 'hooks', 'observe.sh');
@@ -2952,61 +2484,41 @@ async function runTests() {
         cleanupTestDir(homeDir);
         cleanupTestDir(projectDir);
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   if (SKIP_BASH) {
     console.log('  \u2298 observe.sh skips non-cli entrypoints (skipped on Windows)');
     passed++;
-  } else if (
-    await asyncTest('observe.sh skips non-cli entrypoints before project detection side effects', async () => {
+  } else tally(await asyncTest('observe.sh skips non-cli entrypoints before project detection side effects', async () => {
       await assertObserveSkipBeforeProjectDetection({
         name: 'non-cli entrypoint',
         env: { GEMINI_CODE_ENTRYPOINT: 'mcp' }
       });
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (SKIP_BASH) { console.log("  ⊘ observe.sh skips minimal hook profile (skipped on Windows)"); passed++; } else if (
-    await asyncTest('observe.sh skips minimal hook profile before project detection side effects', async () => {
+  if (SKIP_BASH) { console.log("  ⊘ observe.sh skips minimal hook profile (skipped on Windows)"); passed++; } else tally(await asyncTest('observe.sh skips minimal hook profile before project detection side effects', async () => {
       await assertObserveSkipBeforeProjectDetection({
         name: 'minimal hook profile',
         env: { GEMINI_CODE_ENTRYPOINT: 'cli', EGC_HOOK_PROFILE: 'minimal' }
       });
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (SKIP_BASH) { console.log("  ⊘ observe.sh skips cooperative skip env (skipped on Windows)"); passed++; } else if (
-    await asyncTest('observe.sh skips cooperative skip env before project detection side effects', async () => {
+  if (SKIP_BASH) { console.log("  ⊘ observe.sh skips cooperative skip env (skipped on Windows)"); passed++; } else tally(await asyncTest('observe.sh skips cooperative skip env before project detection side effects', async () => {
       await assertObserveSkipBeforeProjectDetection({
         name: 'cooperative skip env',
         env: { GEMINI_CODE_ENTRYPOINT: 'cli', ECC_SKIP_OBSERVE: '1' }
       });
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (SKIP_BASH) { console.log("  ⊘ observe.sh skips subagent payloads (skipped on Windows)"); passed++; } else if (
-    await asyncTest('observe.sh skips subagent payloads before project detection side effects', async () => {
+  if (SKIP_BASH) { console.log("  ⊘ observe.sh skips subagent payloads (skipped on Windows)"); passed++; } else tally(await asyncTest('observe.sh skips subagent payloads before project detection side effects', async () => {
       await assertObserveSkipBeforeProjectDetection({
         name: 'subagent payload',
         env: { GEMINI_CODE_ENTRYPOINT: 'cli' },
         payload: { agent_id: 'agent-123' }
       });
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (SKIP_BASH) { console.log("  ⊘ observe.sh skips configured observer-session paths (skipped on Windows)"); passed++; } else if (
-    await asyncTest('observe.sh skips configured observer-session paths before project detection side effects', async () => {
+  if (SKIP_BASH) { console.log("  ⊘ observe.sh skips configured observer-session paths (skipped on Windows)"); passed++; } else tally(await asyncTest('observe.sh skips configured observer-session paths before project detection side effects', async () => {
       await assertObserveSkipBeforeProjectDetection({
         name: 'cwd skip path',
         env: {
@@ -3015,13 +2527,9 @@ async function runTests() {
         },
         cwdSuffix: path.join('observer-sessions', 'worker')
       });
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('matches .tsx extension for type checking', async () => {
+  tally(await asyncTest('matches .tsx extension for type checking', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'component.tsx');
       fs.writeFileSync(testFile, 'const x: number = 1;');
@@ -3031,10 +2539,7 @@ async function runTests() {
       assert.strictEqual(result.code, 0);
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through data for .tsx files');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ─── Round 23: Bug fixes & high-priority gap coverage ───
 
@@ -3054,8 +2559,7 @@ async function runTests() {
 
   console.log('\nRound 23: evaluate-session.js (config & nullish coalescing):');
 
-  if (
-    await asyncTest('respects min_session_length=0 from config (nullish coalescing)', async () => {
+  tally(await asyncTest('respects min_session_length=0 from config (nullish coalescing)', async () => {
       // This tests the ?? fix: min_session_length=0 should mean "evaluate ALL sessions"
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'short.jsonl');
@@ -3085,13 +2589,9 @@ async function runTests() {
       // With min_session_length=0, even 2 messages should trigger evaluation
       assert.ok(result.stderr.includes('2 messages') && result.stderr.includes('evaluate'), 'Should evaluate session with min_session_length=0 (not skip as too short)');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('config with min_session_length=null falls back to default 10', async () => {
+  tally(await asyncTest('config with min_session_length=null falls back to default 10', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'short.jsonl');
       // 5 messages: below default 10
@@ -3121,13 +2621,9 @@ async function runTests() {
       // null ?? 10 === 10, so 5 messages should be "too short"
       assert.ok(result.stderr.includes('too short'), 'Should fall back to default 10 when null');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('config with custom learned_skills_path creates directory', async () => {
+  tally(await asyncTest('config with custom learned_skills_path creates directory', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
       fs.writeFileSync(transcriptPath, '{"type":"user","content":"msg"}');
@@ -3152,13 +2648,9 @@ async function runTests() {
       });
       assert.ok(fs.existsSync(customLearnedDir), 'Should create custom learned skills directory');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles invalid config JSON gracefully (uses defaults)', async () => {
+  tally(await asyncTest('handles invalid config JSON gracefully (uses defaults)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
       const lines = [];
@@ -3181,15 +2673,11 @@ async function runTests() {
       // Should log parse failure and fall back to default 10 → 5 msgs too short
       assert.ok(result.stderr.includes('too short'), 'Should use defaults when config is invalid JSON');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 23: session-end.js (update existing file path):');
 
-  if (
-    await asyncTest('updates Last Updated timestamp in existing session file', async () => {
+  tally(await asyncTest('updates Last Updated timestamp in existing session file', async () => {
       const testDir = createTestDir();
       const sessionsDir = getCanonicalSessionsDir(testDir);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -3213,13 +2701,9 @@ async function runTests() {
       // The timestamp should have been updated (no longer 09:00)
       assert.ok(updated.includes('**Last Updated:**'), 'Should still have Last Updated field');
       assert.ok(result.stderr.includes('Updated session file'), 'Should log update');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('normalizes existing session headers with project, branch, and worktree metadata', async () => {
+  tally(await asyncTest('normalizes existing session headers with project, branch, and worktree metadata', async () => {
       const testDir = createTestDir();
       const sessionsDir = getCanonicalSessionsDir(testDir);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -3246,13 +2730,9 @@ async function runTests() {
       assert.ok(updated.includes(`**Worktree:** ${process.cwd()}`), 'Should inject worktree metadata into existing headers');
 
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('replaces blank template with summary when updating existing file', async () => {
+  tally(await asyncTest('replaces blank template with summary when updating existing file', async () => {
       const testDir = createTestDir();
       const sessionsDir = getCanonicalSessionsDir(testDir);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -3283,13 +2763,9 @@ async function runTests() {
       assert.ok(!updated.includes('[Session context goes here]'), 'Should replace blank template');
       assert.ok(updated.includes('Fix auth bug'), 'Should include user message in summary');
       assert.ok(updated.includes('/src/auth.ts'), 'Should include modified file');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('always updates session summary content on session end', async () => {
+  tally(await asyncTest('always updates session summary content on session end', async () => {
       const testDir = createTestDir();
       const sessionsDir = getCanonicalSessionsDir(testDir);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -3318,15 +2794,11 @@ async function runTests() {
       // Session summary should always be refreshed with current content (#317)
       assert.ok(updated.includes('## Session Summary'), 'Should have Session Summary section');
       assert.ok(updated.includes('# Session:'), 'Should preserve session header');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 23: pre-compact.js (glob specificity):');
 
-  if (
-    await asyncTest('only annotates *-session.tmp files, not other .tmp files', async () => {
+  tally(await asyncTest('only annotates *-session.tmp files, not other .tmp files', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-compact-glob-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -3350,13 +2822,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles no active session files gracefully', async () => {
+  tally(await asyncTest('handles no active session files gracefully', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-compact-nosession-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -3375,15 +2843,11 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 23: session-end.js (extractSessionSummary edge cases):');
 
-  if (
-    await asyncTest('handles transcript with only assistant messages (no user messages)', async () => {
+  tally(await asyncTest('handles transcript with only assistant messages (no user messages)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
       // Only assistant messages: no user messages
@@ -3406,13 +2870,9 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('extracts tool_use from assistant message content blocks', async () => {
+  tally(await asyncTest('extracts tool_use from assistant message content blocks', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
       // Gemini Code JSONL format: tool_use blocks inside assistant message content array
@@ -3448,16 +2908,12 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ─── Round 24: suggest-compact interval fix, fd fallback, session-start maxAge ───
   console.log('\nRound 24: suggest-compact.js (interval fix & fd fallback):');
 
-  if (
-    await asyncTest('periodic intervals are consistent with non-25-divisible threshold', async () => {
+  tally(await asyncTest('periodic intervals are consistent with non-25-divisible threshold', async () => {
       // Regression test: with threshold=13, periodic suggestions should fire at 38, 63, 88...
       // (count - 13) % 25 === 0 → 38-13=25, 63-13=50, etc.
       const sessionId = `test-interval-fix-${Date.now()}`;
@@ -3478,13 +2934,9 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('does not suggest at old-style multiples that skip threshold offset', async () => {
+  tally(await asyncTest('does not suggest at old-style multiples that skip threshold offset', async () => {
       // With threshold=13, count=50 should NOT trigger (old behavior would: 50%25===0)
       // New behavior: (50-13)%25 = 37%25 = 12 → no suggestion
       const sessionId = `test-no-false-suggest-${Date.now()}`;
@@ -3504,13 +2956,9 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('fd fallback: handles corrupted counter file gracefully', async () => {
+  tally(await asyncTest('fd fallback: handles corrupted counter file gracefully', async () => {
       const sessionId = `test-corrupt-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
@@ -3528,13 +2976,9 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles counter at exact 1000000 boundary', async () => {
+  tally(await asyncTest('handles counter at exact 1000000 boundary', async () => {
       const sessionId = `test-boundary-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       try {
@@ -3553,64 +2997,44 @@ async function runTests() {
           /* ignore */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 24: post-edit-format.js (edge cases):');
 
-  if (
-    await asyncTest('passes through malformed JSON unchanged', async () => {
+  tally(await asyncTest('passes through malformed JSON unchanged', async () => {
       const malformedJson = '{"tool_input": {"file_path": "/test.ts"';
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), malformedJson);
       assert.strictEqual(result.code, 0);
       // Should pass through the malformed data unchanged
       assert.ok(result.stdout.includes(malformedJson), 'Should pass through malformed JSON');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('passes through data for non-JS/TS file extensions', async () => {
+  tally(await asyncTest('passes through data for non-JS/TS file extensions', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/path/to/file.py' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
       assert.strictEqual(result.code, 0);
       assert.ok(result.stdout.includes('file.py'), 'Should pass through for .py files');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 24: post-edit-typecheck.js (edge cases):');
 
-  if (
-    await asyncTest('skips typecheck for non-existent file and still passes through', async () => {
+  tally(await asyncTest('skips typecheck for non-existent file and still passes through', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/deep/file.ts' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
       assert.strictEqual(result.code, 0);
       assert.ok(result.stdout.includes('file.ts'), 'Should pass through for non-existent .ts file');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('passes through for non-TS extensions without running tsc', async () => {
+  tally(await asyncTest('passes through for non-TS extensions without running tsc', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/path/to/file.js' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
       assert.strictEqual(result.code, 0);
       assert.ok(result.stdout.includes('file.js'), 'Should pass through for .js file without running tsc');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 24: session-start.js (edge cases):');
 
-  if (
-    await asyncTest('exits 0 with empty sessions directory (no recent sessions)', async () => {
+  tally(await asyncTest('exits 0 with empty sessions directory (no recent sessions)', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-empty-${Date.now()}`);
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
       fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
@@ -3626,13 +3050,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('does not inject blank template session into context', async () => {
+  tally(await asyncTest('does not inject blank template session into context', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-blank-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -3654,63 +3074,43 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ─── Round 25: post-edit-console-warn pass-through fix, check-console-log edge cases ───
   console.log('\nRound 25: post-edit-console-warn.js (pass-through fix):');
 
-  if (
-    await asyncTest('stdout is exact byte match of stdin (no trailing newline)', async () => {
+  tally(await asyncTest('stdout is exact byte match of stdin (no trailing newline)', async () => {
       // Regression test: console.log(data) was replaced with process.stdout.write(data)
       const stdinData = '{"tool_input":{"file_path":"/nonexistent/file.py"}}';
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinData);
       assert.strictEqual(result.code, 0);
       assert.strictEqual(result.stdout, stdinData, 'stdout should exactly match stdin (no extra newline)');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('passes through malformed JSON unchanged without crash', async () => {
+  tally(await asyncTest('passes through malformed JSON unchanged without crash', async () => {
       const malformed = '{"tool_input": {"file_path": "/test.ts"';
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), malformed);
       assert.strictEqual(result.code, 0);
       assert.strictEqual(result.stdout, malformed, 'Should pass through malformed JSON exactly');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles missing file_path in tool_input gracefully', async () => {
+  tally(await asyncTest('handles missing file_path in tool_input gracefully', async () => {
       const stdinJson = JSON.stringify({ tool_input: {} });
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinJson);
       assert.strictEqual(result.code, 0);
       assert.strictEqual(result.stdout, stdinJson, 'Should pass through with missing file_path');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('passes through when file does not exist (readFile returns null)', async () => {
+  tally(await asyncTest('passes through when file does not exist (readFile returns null)', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/deep/file.ts' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinJson);
       assert.strictEqual(result.code, 0);
       assert.strictEqual(result.stdout, stdinJson, 'Should pass through exactly when file not found');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 25: check-console-log.js (edge cases):');
 
-  if (
-    await asyncTest('source has expected exclusion patterns', async () => {
+  tally(await asyncTest('source has expected exclusion patterns', async () => {
       // The EXCLUDED_PATTERNS array includes .test.ts, .spec.ts, etc.
       const source = fs.readFileSync(path.join(scriptsDir, 'check-console-log.js'), 'utf8');
       // Verify the exclusion patterns exist (regex escapes use \. so check for the pattern names)
@@ -3720,13 +3120,9 @@ async function runTests() {
       assert.ok(source.includes('scripts'), 'Should exclude scripts/ directory');
       assert.ok(source.includes('__tests__'), 'Should exclude __tests__/ directory');
       assert.ok(source.includes('__mocks__'), 'Should exclude __mocks__/ directory');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('passes through data unchanged on non-git repo', async () => {
+  tally(await asyncTest('passes through data unchanged on non-git repo', async () => {
       // In a temp dir with no git repo, the hook should pass through data unchanged
       const testDir = createTestDir();
       const stdinData = '{"tool_input":"test"}';
@@ -3740,138 +3136,90 @@ async function runTests() {
       assert.strictEqual(result.code, 0);
       assert.ok(result.stdout.includes(stdinData), 'Should pass through data');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('exits 0 even when no stdin is provided', async () => {
+  tally(await asyncTest('exits 0 even when no stdin is provided', async () => {
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), '');
       assert.strictEqual(result.code, 0, 'Should exit 0 with empty stdin');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 29: post-edit-format.js cwd fix and process.exit(0) consistency ──
   console.log('\nRound 29: post-edit-format.js (cwd and exit):');
 
-  if (
-    await asyncTest('source uses cwd based on file directory for npx', async () => {
+  tally(await asyncTest('source uses cwd based on file directory for npx', async () => {
       const formatSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-format.js'), 'utf8');
       assert.ok(formatSource.includes('cwd:'), 'Should set cwd option for execFileSync');
       assert.ok(formatSource.includes('path.dirname'), 'cwd should use path.dirname of the file');
       assert.ok(formatSource.includes('path.resolve'), 'cwd should resolve the file path first');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('source calls process.exit(0) after writing output', async () => {
+  tally(await asyncTest('source calls process.exit(0) after writing output', async () => {
       const formatSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-format.js'), 'utf8');
       assert.ok(formatSource.includes('process.exit(0)'), 'Should call process.exit(0) for clean termination');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('uses process.stdout.write instead of console.log for pass-through', async () => {
+  tally(await asyncTest('uses process.stdout.write instead of console.log for pass-through', async () => {
       const formatSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-format.js'), 'utf8');
       assert.ok(formatSource.includes('process.stdout.write(data)'), 'Should use process.stdout.write to avoid trailing newline');
       const lines = formatSource.split('\n');
       const passThrough = lines.filter(l => /console\.log\(data\)/.test(l));
       assert.strictEqual(passThrough.length, 0, 'Should not use console.log(data) for pass-through');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 29: post-edit-typecheck.js (exit and pass-through):');
 
-  if (
-    await asyncTest('source calls process.exit(0) after writing output', async () => {
+  tally(await asyncTest('source calls process.exit(0) after writing output', async () => {
       const tcSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-typecheck.js'), 'utf8');
       assert.ok(tcSource.includes('process.exit(0)'), 'Should call process.exit(0) for clean termination');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('uses process.stdout.write instead of console.log for pass-through', async () => {
+  tally(await asyncTest('uses process.stdout.write instead of console.log for pass-through', async () => {
       const tcSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-typecheck.js'), 'utf8');
       assert.ok(tcSource.includes('process.stdout.write(data)'), 'Should use process.stdout.write');
       const lines = tcSource.split('\n');
       const passThrough = lines.filter(l => /console\.log\(data\)/.test(l));
       assert.strictEqual(passThrough.length, 0, 'Should not use console.log(data) for pass-through');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('exact stdout pass-through without trailing newline (typecheck)', async () => {
+  tally(await asyncTest('exact stdout pass-through without trailing newline (typecheck)', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/file.py' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
       assert.strictEqual(result.code, 0);
       assert.strictEqual(result.stdout, stdinJson, 'stdout should exactly match stdin (no trailing newline)');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('exact stdout pass-through without trailing newline (format)', async () => {
+  tally(await asyncTest('exact stdout pass-through without trailing newline (format)', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/nonexistent/file.py' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
       assert.strictEqual(result.code, 0);
       assert.strictEqual(result.stdout, stdinJson, 'stdout should exactly match stdin (no trailing newline)');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 29: post-edit-console-warn.js (extension and exit):');
 
-  if (
-    await asyncTest('source calls process.exit(0) after writing output', async () => {
+  tally(await asyncTest('source calls process.exit(0) after writing output', async () => {
       const cwSource = fs.readFileSync(path.join(scriptsDir, 'post-edit-console-warn.js'), 'utf8');
       assert.ok(cwSource.includes('process.exit(0)'), 'Should call process.exit(0)');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('does NOT match .mts or .mjs extensions', async () => {
+  tally(await asyncTest('does NOT match .mts or .mjs extensions', async () => {
       const stdinMts = JSON.stringify({ tool_input: { file_path: '/some/file.mts' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinMts);
       assert.strictEqual(result.code, 0);
       // .mts is not in the regex /\.(ts|tsx|js|jsx)$/, so no console.log scan
       assert.strictEqual(result.stdout, stdinMts, 'Should pass through .mts without scanning');
       assert.ok(!result.stderr.includes('console.log'), 'Should NOT scan .mts files for console.log');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('does NOT match uppercase .TS extension', async () => {
+  tally(await asyncTest('does NOT match uppercase .TS extension', async () => {
       const stdinTS = JSON.stringify({ tool_input: { file_path: '/some/file.TS' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinTS);
       assert.strictEqual(result.code, 0);
       assert.strictEqual(result.stdout, stdinTS, 'Should pass through .TS without scanning');
       assert.ok(!result.stderr.includes('console.log'), 'Should NOT scan .TS (uppercase) files');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('detects console.log in commented-out code', async () => {
+  tally(await asyncTest('detects console.log in commented-out code', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'commented.js');
       fs.writeFileSync(testFile, '// console.log("debug")\nconst x = 1;\n');
@@ -3881,26 +3229,18 @@ async function runTests() {
       // The regex /console\.log/ matches even in comments: this is intentional
       assert.ok(result.stderr.includes('console.log'), 'Should detect console.log even in comments');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 29: check-console-log.js (exclusion patterns and exit):');
 
-  if (
-    await asyncTest('source calls process.exit(0) after writing output', async () => {
+  tally(await asyncTest('source calls process.exit(0) after writing output', async () => {
       const clSource = fs.readFileSync(path.join(scriptsDir, 'check-console-log.js'), 'utf8');
       // Should have at least 2 process.exit(0) calls (early return + end)
       const exitCalls = clSource.match(/process\.exit\(0\)/g) || [];
       assert.ok(exitCalls.length >= 2, `Should have at least 2 process.exit(0) calls, found ${exitCalls.length}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('EXCLUDED_PATTERNS correctly excludes test files', async () => {
+  tally(await asyncTest('EXCLUDED_PATTERNS correctly excludes test files', async () => {
       // Test the patterns directly by reading the source and evaluating the regex
       const source = fs.readFileSync(path.join(scriptsDir, 'check-console-log.js'), 'utf8');
       // Verify the 6 exclusion patterns exist in the source (as regex literals with escapes)
@@ -3909,13 +3249,9 @@ async function runTests() {
         assert.ok(source.includes(substr), `Should include pattern containing "${substr}"`);
       }
       assert.ok(source.includes('EXCLUDED_PATTERNS'), 'Should have EXCLUDED_PATTERNS array');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('exclusion patterns match expected file paths', async () => {
+  tally(await asyncTest('exclusion patterns match expected file paths', async () => {
       // Recreate the EXCLUDED_PATTERNS from the source and test them
       const EXCLUDED_PATTERNS = [/\.test\.[jt]sx?$/, /\.spec\.[jt]sx?$/, /\.config\.[jt]s$/, /scripts\//, /__tests__\//, /__mocks__\//];
       // These SHOULD be excluded
@@ -3948,27 +3284,19 @@ async function runTests() {
         const matches = EXCLUDED_PATTERNS.some(p => p.test(f));
         assert.ok(!matches, `Expected "${f}" to NOT be excluded but it was`);
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 29: run-all.js test runner improvements:');
 
-  if (
-    await asyncTest('test runner uses spawnSync to capture stderr on success', async () => {
+  tally(await asyncTest('test runner uses spawnSync to capture stderr on success', async () => {
       const runAllSource = fs.readFileSync(path.join(__dirname, '..', 'run-all.js'), 'utf8');
       assert.ok(runAllSource.includes('spawnSync'), 'Should use spawnSync instead of execSync');
       assert.ok(!runAllSource.includes('execSync'), 'Should not use execSync');
       assert.ok(runAllSource.includes('stderr'), 'Should handle stderr output');
       assert.ok(runAllSource.includes('result.status !== 0'), 'Should treat non-zero child exits as failures');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('test runner discovers nested tests via tests/**/*.test.js glob', async () => {
+  tally(await asyncTest('test runner discovers nested tests via tests/**/*.test.js glob', async () => {
       const testRoot = createTestDir();
       const testsDir = path.join(testRoot, 'tests');
       const nestedDir = path.join(testsDir, 'nested');
@@ -3988,16 +3316,12 @@ async function runTests() {
       } finally {
         cleanupTestDir(testRoot);
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 32: post-edit-typecheck special characters & check-console-log ──
   console.log('\nRound 32: post-edit-typecheck (special character paths):');
 
-  if (
-    await asyncTest('handles file path with spaces gracefully', async () => {
+  tally(await asyncTest('handles file path with spaces gracefully', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'my file.ts');
       fs.writeFileSync(testFile, 'const x: number = 1;');
@@ -4007,13 +3331,9 @@ async function runTests() {
       assert.strictEqual(result.code, 0, 'Should handle spaces in path');
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through data');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles file path with shell metacharacters safely', async () => {
+  tally(await asyncTest('handles file path with shell metacharacters safely', async () => {
       const testDir = createTestDir();
       // File name with characters that could be dangerous in shell contexts
       const testFile = path.join(testDir, 'test$(echo).ts');
@@ -4025,13 +3345,9 @@ async function runTests() {
       // execFileSync prevents shell injection: just verify no crash
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through data safely');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles .tsx file extension', async () => {
+  tally(await asyncTest('handles .tsx file extension', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'component.tsx');
       fs.writeFileSync(testFile, 'const App = () => <div>Hello</div>;');
@@ -4041,41 +3357,29 @@ async function runTests() {
       assert.strictEqual(result.code, 0, 'Should handle .tsx files');
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through data');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 32: check-console-log (edge cases):');
 
-  if (
-    await asyncTest('passes through data when git commands fail', async () => {
+  tally(await asyncTest('passes through data when git commands fail', async () => {
       const testDir = createTestDir();
       const stdinData = JSON.stringify({ tool_name: 'Write', tool_input: {} });
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), stdinData);
       assert.strictEqual(result.code, 0, 'Should exit 0');
       assert.ok(result.stdout.includes('tool_name'), 'Should pass through stdin');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles very large stdin within limit', async () => {
+  tally(await asyncTest('handles very large stdin within limit', async () => {
       // Send just under the 1MB limit
       const largePayload = JSON.stringify({ tool_name: 'x'.repeat(500000) });
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), largePayload);
       assert.strictEqual(result.code, 0, 'Should handle large stdin');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 32: post-edit-console-warn (additional edge cases):');
 
-  if (
-    await asyncTest('handles file with only console.error (no warning)', async () => {
+  tally(await asyncTest('handles file with only console.error (no warning)', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'errors-only.ts');
       fs.writeFileSync(testFile, 'console.error("this is fine");\nconsole.warn("also fine");');
@@ -4084,26 +3388,18 @@ async function runTests() {
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinJson);
       assert.ok(!result.stderr.includes('WARNING'), 'Should NOT warn for console.error/warn only');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles null tool_input gracefully', async () => {
+  tally(await asyncTest('handles null tool_input gracefully', async () => {
       const stdinJson = JSON.stringify({ tool_input: null });
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should handle null tool_input');
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 32: session-end.js (empty transcript):');
 
-  if (
-    await asyncTest('handles completely empty transcript file', async () => {
+  tally(await asyncTest('handles completely empty transcript file', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'empty.jsonl');
       fs.writeFileSync(transcriptPath, '');
@@ -4112,13 +3408,9 @@ async function runTests() {
       const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should handle empty transcript');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('handles transcript with only whitespace lines', async () => {
+  tally(await asyncTest('handles transcript with only whitespace lines', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'whitespace.jsonl');
       fs.writeFileSync(transcriptPath, '  \n\n  \n');
@@ -4127,16 +3419,12 @@ async function runTests() {
       const result = await runScript(path.join(scriptsDir, 'session-end.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should handle whitespace-only transcript');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 38: evaluate-session.js tilde expansion & missing config ──
   console.log('\nRound 38: evaluate-session.js (tilde expansion & missing config):');
 
-  if (
-    await asyncTest('expands ~ in learned_skills_path to home directory', async () => {
+  tally(await asyncTest('expands ~ in learned_skills_path to home directory', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
       // 1 user message: below threshold, but we only need to verify directory creation
@@ -4165,13 +3453,9 @@ async function runTests() {
       // The script creates the directory via ensureDir: check that it attempted to
       assert.ok(!fs.existsSync(path.join(testDir, '~', 'test-tilde-skills')), 'Should NOT create literal ~/test-tilde-skills directory');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('does NOT expand ~ in middle of learned_skills_path', async () => {
+  tally(await asyncTest('does NOT expand ~ in middle of learned_skills_path', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
       fs.writeFileSync(transcriptPath, '{"type":"user","content":"msg"}');
@@ -4199,13 +3483,9 @@ async function runTests() {
       // The directory with ~ in the middle should be created as-is
       assert.ok(fs.existsSync(midTildeDir), 'Should create directory with ~ in middle of path unchanged');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('uses defaults when config file does not exist', async () => {
+  tally(await asyncTest('uses defaults when config file does not exist', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
       // 5 user messages: below default threshold of 10
@@ -4229,16 +3509,12 @@ async function runTests() {
       // No error messages about missing config
       assert.ok(!result.stderr.includes('Failed to parse config'), 'Should NOT log config parse error for missing file');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // Round 41: pre-compact.js (multiple session files)
   console.log('\nRound 41: pre-compact.js (multiple session files):');
 
-  if (
-    await asyncTest('annotates only the newest session file when multiple exist', async () => {
+  tally(await asyncTest('annotates only the newest session file when multiple exist', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-compact-multi-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -4267,16 +3543,12 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // Round 40: session-end.js (newline collapse in markdown list items)
   console.log('\nRound 40: session-end.js (newline collapse):');
 
-  if (
-    await asyncTest('collapses newlines in user messages to single-line markdown items', async () => {
+  tally(await asyncTest('collapses newlines in user messages to single-line markdown items', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
@@ -4305,16 +3577,12 @@ async function runTests() {
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 44: session-start.js empty session file ──
   console.log('\nRound 44: session-start.js (empty session file):');
 
-  if (
-    await asyncTest('does not inject empty session file content into context', async () => {
+  tally(await asyncTest('does not inject empty session file content into context', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-empty-file-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -4336,16 +3604,12 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 49: typecheck extension matching and session-end conditional sections ──
   console.log('\nRound 49: post-edit-typecheck.js (extension edge cases):');
 
-  if (
-    await asyncTest('.d.ts files match the TS regex and trigger typecheck path', async () => {
+  tally(await asyncTest('.d.ts files match the TS regex and trigger typecheck path', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'types.d.ts');
       fs.writeFileSync(testFile, 'declare const x: number;');
@@ -4355,26 +3619,18 @@ async function runTests() {
       assert.strictEqual(result.code, 0, 'Should exit 0 for .d.ts file');
       assert.ok(result.stdout.includes('tool_input'), 'Should pass through stdin data');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('.mts extension does not trigger typecheck', async () => {
+  tally(await asyncTest('.mts extension does not trigger typecheck', async () => {
       const stdinJson = JSON.stringify({ tool_input: { file_path: '/project/utils.mts' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
       assert.strictEqual(result.code, 0, 'Should exit 0 for .mts file');
       assert.strictEqual(result.stdout, stdinJson, 'Should pass through .mts unchanged');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 49: session-end.js (conditional summary sections):');
 
-  if (
-    await asyncTest('summary omits Files Modified and Tools Used when none found', async () => {
+  tally(await asyncTest('summary omits Files Modified and Tools Used when none found', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-notools-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -4403,16 +3659,12 @@ async function runTests() {
         fs.rmSync(isoHome, { recursive: true, force: true });
         cleanupTestDir(testDir);
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 50: alias reporting, parallel compaction, graceful degradation ──
   console.log('\nRound 50: session-start.js (alias reporting):');
 
-  if (
-    await asyncTest('reports available session aliases on startup', async () => {
+  tally(await asyncTest('reports available session aliases on startup', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-alias-${Date.now()}`);
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
       fs.mkdirSync(path.join(isoHome, '.egc', 'skills', 'learned'), { recursive: true });
@@ -4441,15 +3693,11 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 50: pre-compact.js (parallel execution):');
 
-  if (
-    await asyncTest('parallel compaction runs all append to log without loss', async () => {
+  tally(await asyncTest('parallel compaction runs all append to log without loss', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-compact-par-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -4474,15 +3722,11 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 50: session-start.js (graceful degradation):');
 
-  if (
-    await asyncTest('exits 0 when sessions path is a file (not a directory)', async () => {
+  tally(await asyncTest('exits 0 when sessions path is a file (not a directory)', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-blocked-${Date.now()}`);
       fs.mkdirSync(path.join(isoHome, '.egc'), { recursive: true });
       // Block sessions dir creation by placing a file at that path
@@ -4497,16 +3741,12 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 53: console-warn max matches and format non-existent file ──
   console.log('\nRound 53: post-edit-console-warn.js (max matches truncation):');
 
-  if (
-    await asyncTest('reports maximum 5 console.log matches per file', async () => {
+  tally(await asyncTest('reports maximum 5 console.log matches per file', async () => {
       const testDir = createTestDir();
       const testFile = path.join(testDir, 'many-logs.js');
       const lines = Array(7)
@@ -4522,15 +3762,11 @@ async function runTests() {
       const lineReports = (result.stderr.match(/^\d+:/gm) || []).length;
       assert.strictEqual(lineReports, 5, `Should report max 5 matches, got ${lineReports}`);
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 53: post-edit-format.js (non-existent file):');
 
-  if (
-    await asyncTest('passes through data for non-existent .tsx file path', async () => {
+  tally(await asyncTest('passes through data for non-existent .tsx file path', async () => {
       const stdinJson = JSON.stringify({
         tool_input: { file_path: '/nonexistent/path/file.tsx' }
       });
@@ -4538,16 +3774,12 @@ async function runTests() {
 
       assert.strictEqual(result.code, 0, 'Should exit 0 for non-existent file');
       assert.strictEqual(result.stdout, stdinJson, 'Should pass through stdin data unchanged');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 55: maxAge boundary, multi-session injection, stdin overflow ──
   console.log('\nRound 55: session-start.js (maxAge 7-day boundary):');
 
-  if (
-    await asyncTest('excludes session files older than 7 days', async () => {
+  tally(await asyncTest('excludes session files older than 7 days', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-7day-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -4576,13 +3808,9 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('prunes session files older than the retention window', async () => {
+  tally(await asyncTest('prunes session files older than the retention window', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-prune-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -4612,15 +3840,11 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 55: session-start.js (newest session selection):');
 
-  if (
-    await asyncTest('injects newest session when multiple recent sessions exist', async () => {
+  tally(await asyncTest('injects newest session when multiple recent sessions exist', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-start-multi-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -4649,15 +3873,11 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 55: session-end.js (stdin overflow):');
 
-  if (
-    await asyncTest('handles stdin exceeding MAX_STDIN (1MB) gracefully', async () => {
+  tally(await asyncTest('handles stdin exceeding MAX_STDIN (1MB) gracefully', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
       fs.writeFileSync(transcriptPath, JSON.stringify({ type: 'user', content: 'Overflow test' }) + '\n');
@@ -4677,16 +3897,12 @@ async function runTests() {
       } finally {
         cleanupTestDir(testDir);
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 56: typecheck tsconfig walk-up, suggest-compact fallback path ──
   console.log('\nRound 56: post-edit-typecheck.js (tsconfig in parent directory):');
 
-  if (
-    await asyncTest('walks up directory tree to find tsconfig.json in grandparent', async () => {
+  tally(await asyncTest('walks up directory tree to find tsconfig.json in grandparent', async () => {
       const testDir = createTestDir();
       // Place tsconfig at the TOP level, file is nested 2 levels deep
       fs.writeFileSync(
@@ -4708,15 +3924,11 @@ async function runTests() {
       const parsed = JSON.parse(result.stdout);
       assert.strictEqual(parsed.tool_input.file_path, testFile, 'Should pass through original stdin data with file_path intact');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 56: suggest-compact.js (counter file as directory: fallback path):');
 
-  if (
-    await asyncTest('exits 0 when counter file path is occupied by a directory', async () => {
+  tally(await asyncTest('exits 0 when counter file path is occupied by a directory', async () => {
       const sessionId = `dirblock-${Date.now()}`;
       const counterFile = path.join(os.tmpdir(), `egc-tool-count-${sessionId}`);
       // Create a DIRECTORY at the counter file path: openSync('a+') will fail with EISDIR
@@ -4735,16 +3947,12 @@ async function runTests() {
           /* best-effort */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 59: session-start unreadable file, console-log stdin overflow, pre-compact write error ──
   console.log('\nRound 59: session-start.js (unreadable session file: readFile returns null):');
 
-  if (
-    await asyncTest('does not inject content when session file is unreadable', async () => {
+  tally(await asyncTest('does not inject content when session file is unreadable', async () => {
       // Skip on Windows or when running as root (permissions won't work)
       if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
         console.log('    (skipped: not supported on this platform)');
@@ -4779,15 +3987,11 @@ async function runTests() {
           /* best-effort */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 59: check-console-log.js (stdin exceeding 1MB: truncation):');
 
-  if (
-    await asyncTest('truncates stdin at 1MB limit and still passes through data', async () => {
+  tally(await asyncTest('truncates stdin at 1MB limit and still passes through data', async () => {
       // Send 1.2MB of data: exceeds the 1MB MAX_STDIN limit
       const payload = 'x'.repeat(1024 * 1024 + 200000);
       const result = await runScript(path.join(scriptsDir, 'check-console-log.js'), payload);
@@ -4798,15 +4002,11 @@ async function runTests() {
       // Output should be approximately 1MB (last accepted chunk may push slightly over)
       assert.ok(result.stdout.length <= 1024 * 1024 + 65536, `stdout (${result.stdout.length}) should be near 1MB, not unbounded`);
       assert.ok(result.stdout.length > 0, 'Should still pass through truncated data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 59: pre-compact.js (read-only session file: appendFile error):');
 
-  if (
-    await asyncTest('exits 1 when session file is read-only (appendFile fails)', async () => {
+  tally(await asyncTest('exits 1 when session file is read-only (appendFile fails)', async () => {
       if (process.platform === 'win32' || (process.getuid && process.getuid() === 0)) {
         console.log('    (skipped: not supported on this platform)');
         return;
@@ -4841,16 +4041,12 @@ async function runTests() {
           /* best-effort */
         }
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 60: replaceInFile failure, console-warn stdin overflow, format missing tool_input ──
   console.log('\nRound 60: session-end.js (replaceInFile returns false: timestamp update warning):');
 
-  if (
-    await asyncTest('logs warning when existing session file lacks Last Updated field', async () => {
+  tally(await asyncTest('logs warning when existing session file lacks Last Updated field', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-end-nots-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -4881,15 +4077,11 @@ async function runTests() {
       } catch {
         /* best-effort */
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 60: post-edit-console-warn.js (stdin exceeding 1MB: truncation):');
 
-  if (
-    await asyncTest('truncates stdin at 1MB limit and still passes through data', async () => {
+  tally(await asyncTest('truncates stdin at 1MB limit and still passes through data', async () => {
       // Send 1.2MB of data: exceeds the 1MB MAX_STDIN limit
       const payload = 'x'.repeat(1024 * 1024 + 200000);
       const result = await runScript(path.join(scriptsDir, 'post-edit-console-warn.js'), payload);
@@ -4900,47 +4092,35 @@ async function runTests() {
       // Should be approximately 1MB (last accepted chunk may push slightly over)
       assert.ok(result.stdout.length <= 1024 * 1024 + 65536, `stdout (${result.stdout.length}) should be near 1MB, not unbounded`);
       assert.ok(result.stdout.length > 0, 'Should still pass through truncated data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 60: post-edit-format.js (valid JSON without tool_input key):');
 
-  if (
-    await asyncTest('skips formatting when JSON has no tool_input field', async () => {
+  tally(await asyncTest('skips formatting when JSON has no tool_input field', async () => {
       const stdinJson = JSON.stringify({ result: 'ok', output: 'some data' });
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), stdinJson);
 
       assert.strictEqual(result.code, 0, 'Should exit 0 for JSON without tool_input');
       // input.tool_input?.file_path is undefined → skips formatting → passes through
       assert.strictEqual(result.stdout, stdinJson, 'Should pass through data unchanged when tool_input is absent');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 64: post-edit-typecheck.js valid JSON without tool_input ──
   console.log('\nRound 64: post-edit-typecheck.js (valid JSON without tool_input):');
 
-  if (
-    await asyncTest('skips typecheck when JSON has no tool_input field', async () => {
+  tally(await asyncTest('skips typecheck when JSON has no tool_input field', async () => {
       const stdinJson = JSON.stringify({ result: 'ok', metadata: { action: 'test' } });
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), stdinJson);
 
       assert.strictEqual(result.code, 0, 'Should exit 0 for JSON without tool_input');
       // input.tool_input?.file_path is undefined → skips TS check → passes through
       assert.strictEqual(result.stdout, stdinJson, 'Should pass through data unchanged when tool_input is absent');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 66: session-end.js entry.role === 'user' fallback and nonexistent transcript ──
   console.log('\nRound 66: session-end.js (entry.role user fallback):');
 
-  if (
-    await asyncTest('extracts user messages from role-only format (no type field)', async () => {
+  tally(await asyncTest('extracts user messages from role-only format (no type field)', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-role-only-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -4968,15 +4148,11 @@ async function runTests() {
         fs.rmSync(isoHome, { recursive: true, force: true });
         cleanupTestDir(testDir);
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 66: session-end.js (nonexistent transcript path):');
 
-  if (
-    await asyncTest('logs "Transcript not found" for nonexistent transcript_path', async () => {
+  tally(await asyncTest('logs "Transcript not found" for nonexistent transcript_path', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-notfound-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -4996,16 +4172,12 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 70: session-end.js entry.name / entry.input fallback in direct tool_use entries ──
   console.log('\nRound 70: session-end.js (entry.name/entry.input fallback):');
 
-  if (
-    await asyncTest('extracts tool name and file path from entry.name/entry.input (not tool_name/tool_input)', async () => {
+  tally(await asyncTest('extracts tool name and file path from entry.name/entry.input (not tool_name/tool_input)', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-r70-entryname-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -5043,16 +4215,12 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 71: session-start.js default source shows getSelectionPrompt ──
   console.log('\nRound 71: session-start.js (default source: selection prompt):');
 
-  if (
-    await asyncTest('shows selection prompt when no package manager preference found (default source)', async () => {
+  tally(await asyncTest('shows selection prompt when no package manager preference found (default source)', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-r71-ss-default-${Date.now()}`);
       const isoProject = path.join(isoHome, 'project');
       fs.mkdirSync(getCanonicalSessionsDir(isoHome), { recursive: true });
@@ -5082,16 +4250,12 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 74: session-start.js main().catch handler ──
   console.log('\nRound 74: session-start.js (main catch: unrecoverable error):');
 
-  if (
-    await asyncTest('session-start exits 1 with error message when HOME is non-directory', async () => {
+  tally(await asyncTest('session-start exits 1 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
         console.log('    (skipped: /dev/null not available on Windows)');
         return;
@@ -5104,16 +4268,12 @@ async function runTests() {
       });
       assert.strictEqual(result.code, 1, `Should exit 1 (report errors), got ${result.code}`);
       assert.ok(result.stderr.includes('[SessionStart] Error:'), `stderr should contain [SessionStart] Error:, got: ${result.stderr}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 75: pre-compact.js main().catch handler ──
   console.log('\nRound 75: pre-compact.js (main catch: unrecoverable error):');
 
-  if (
-    await asyncTest('pre-compact exits 1 with error message when HOME is non-directory', async () => {
+  tally(await asyncTest('pre-compact exits 1 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
         console.log('    (skipped: /dev/null not available on Windows)');
         return;
@@ -5126,16 +4286,12 @@ async function runTests() {
       });
       assert.strictEqual(result.code, 1, `Should exit 1 (report errors), got ${result.code}`);
       assert.ok(result.stderr.includes('[PreCompact] Error:'), `stderr should contain [PreCompact] Error:, got: ${result.stderr}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 75: session-end.js main().catch handler ──
   console.log('\nRound 75: session-end.js (main catch: unrecoverable error):');
 
-  if (
-    await asyncTest('session-end exits 1 with error message when HOME is non-directory', async () => {
+  tally(await asyncTest('session-end exits 1 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
         console.log('    (skipped: /dev/null not available on Windows)');
         return;
@@ -5148,16 +4304,12 @@ async function runTests() {
       });
       assert.strictEqual(result.code, 1, `Should exit 1 (report errors), got ${result.code}`);
       assert.ok(result.stderr.includes('[SessionEnd] Unexpected error'), `stderr should contain [SessionEnd] Unexpected error, got: ${result.stderr}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 76: evaluate-session.js main().catch handler ──
   console.log('\nRound 76: evaluate-session.js (main catch: unrecoverable error):');
 
-  if (
-    await asyncTest('evaluate-session exits 0 with error message when HOME is non-directory', async () => {
+  tally(await asyncTest('evaluate-session exits 0 with error message when HOME is non-directory', async () => {
       if (process.platform === 'win32') {
         console.log('    (skipped: /dev/null not available on Windows)');
         return;
@@ -5170,16 +4322,12 @@ async function runTests() {
       });
       assert.strictEqual(result.code, 0, `Should exit 0 (don't block on errors), got ${result.code}`);
       assert.ok(result.stderr.includes('[ContinuousLearning] Error:'), `stderr should contain [ContinuousLearning] Error:, got: ${result.stderr}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 76: suggest-compact.js main().catch handler ──
   console.log('\nRound 76: suggest-compact.js (main catch: double-failure):');
 
-  if (
-    await asyncTest('suggest-compact exits 0 with error when TMPDIR is non-directory', async () => {
+  tally(await asyncTest('suggest-compact exits 0 with error when TMPDIR is non-directory', async () => {
       if (process.platform === 'win32') {
         console.log('    (skipped: /dev/null not available on Windows)');
         return;
@@ -5191,16 +4339,12 @@ async function runTests() {
       });
       assert.strictEqual(result.code, 0, `Should exit 0 (don't block on errors), got ${result.code}`);
       assert.ok(result.stderr.includes('[StrategicCompact] Unexpected error'), `stderr should contain [StrategicCompact] Unexpected error, got: ${result.stderr}`);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 80: session-end.js entry.message?.role === 'user' third OR condition ──
   console.log('\nRound 80: session-end.js (entry.message.role user: third OR condition):');
 
-  if (
-    await asyncTest('extracts user messages from entries where only message.role is user (not type or role)', async () => {
+  tally(await asyncTest('extracts user messages from entries where only message.role is user (not type or role)', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-msgrole-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -5234,16 +4378,12 @@ async function runTests() {
         fs.rmSync(isoHome, { recursive: true, force: true });
         cleanupTestDir(testDir);
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 81: suggest-compact threshold upper bound, session-end non-string content ──
   console.log('\nRound 81: suggest-compact.js (COMPACT_THRESHOLD > 10000):');
 
-  if (
-    await asyncTest('COMPACT_THRESHOLD exceeding 10000 falls back to default 50', async () => {
+  tally(await asyncTest('COMPACT_THRESHOLD exceeding 10000 falls back to default 50', async () => {
       // suggest-compact.js line 31: rawThreshold <= 10000 ? rawThreshold : 50
       // Values > 10000 are positive and finite but fail the upper-bound check.
       // Existing tests cover 0, negative, NaN: this covers the > 10000 boundary.
@@ -5257,15 +4397,11 @@ async function runTests() {
       // The condition at line 31: rawThreshold <= 10000 ? rawThreshold : 50
       assert.ok(compactSource.includes('<= 10000'), 'Source should have <= 10000 upper bound check');
       assert.ok(compactSource.includes(': 50'), 'Source should fall back to 50 when threshold exceeds 10000');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 81: session-end.js (user entry with non-string non-array content):');
 
-  if (
-    await asyncTest('skips user messages with numeric content (non-string non-array branch)', async () => {
+  tally(await asyncTest('skips user messages with numeric content (non-string non-array branch)', async () => {
       // session-end.js line 50-55: rawContent is checked for string, then array, else ''
       // When content is a number (42), neither branch matches, text = '', message is skipped.
       const isoHome = path.join(os.tmpdir(), `egc-r81-numcontent-${Date.now()}`);
@@ -5306,17 +4442,13 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 82: tool_name OR fallback, template marker regex no-match ──
 
   console.log('\nRound 82: session-end.js (entry.tool_name without type=tool_use):');
 
-  if (
-    await asyncTest('collects tool name from entry with tool_name but non-tool_use type', async () => {
+  tally(await asyncTest('collects tool name from entry with tool_name but non-tool_use type', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-r82-toolname-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -5346,15 +4478,11 @@ async function runTests() {
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 82: session-end.js (template marker present but regex no-match):');
 
-  if (
-    await asyncTest('preserves file when marker present but regex does not match corrupted template', async () => {
+  tally(await asyncTest('preserves file when marker present but regex does not match corrupted template', async () => {
       const isoHome = path.join(os.tmpdir(), `egc-r82-tmpl-${Date.now()}`);
       const sessionsDir = getCanonicalSessionsDir(isoHome);
       fs.mkdirSync(sessionsDir, { recursive: true });
@@ -5404,16 +4532,12 @@ Some random content without the expected ### Context to Load section
       } finally {
         fs.rmSync(isoHome, { recursive: true, force: true });
       }
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 87: post-edit-format.js and post-edit-typecheck.js stdin overflow (1MB) ──
   console.log('\nRound 87: post-edit-format.js (stdin exceeding 1MB: truncation):');
 
-  if (
-    await asyncTest('truncates stdin at 1MB limit and still passes through data (post-edit-format)', async () => {
+  tally(await asyncTest('truncates stdin at 1MB limit and still passes through data (post-edit-format)', async () => {
       // Send 1.2MB of data: exceeds the 1MB MAX_STDIN limit (lines 14-22)
       const payload = 'x'.repeat(1024 * 1024 + 200000);
       const result = await runScript(path.join(scriptsDir, 'post-edit-format.js'), payload);
@@ -5424,15 +4548,11 @@ Some random content without the expected ### Context to Load section
       // Output should be approximately 1MB (last accepted chunk may push slightly over)
       assert.ok(result.stdout.length <= 1024 * 1024 + 65536, `stdout (${result.stdout.length}) should be near 1MB, not unbounded`);
       assert.ok(result.stdout.length > 0, 'Should still pass through truncated data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   console.log('\nRound 87: post-edit-typecheck.js (stdin exceeding 1MB: truncation):');
 
-  if (
-    await asyncTest('truncates stdin at 1MB limit and still passes through data (post-edit-typecheck)', async () => {
+  tally(await asyncTest('truncates stdin at 1MB limit and still passes through data (post-edit-typecheck)', async () => {
       // Send 1.2MB of data: exceeds the 1MB MAX_STDIN limit (lines 16-24)
       const payload = 'x'.repeat(1024 * 1024 + 200000);
       const result = await runScript(path.join(scriptsDir, 'post-edit-typecheck.js'), payload);
@@ -5443,16 +4563,12 @@ Some random content without the expected ### Context to Load section
       // Output should be approximately 1MB (last accepted chunk may push slightly over)
       assert.ok(result.stdout.length <= 1024 * 1024 + 65536, `stdout (${result.stdout.length}) should be near 1MB, not unbounded`);
       assert.ok(result.stdout.length > 0, 'Should still pass through truncated data');
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 89: post-edit-typecheck.js error detection path (relevantLines) ──
   console.log('\nRound 89: post-edit-typecheck.js (TypeScript error detection path):');
 
-  if (
-    await asyncTest('filters TypeScript errors to edited file when tsc reports errors', async () => {
+  tally(await asyncTest('filters TypeScript errors to edited file when tsc reports errors', async () => {
       // post-edit-typecheck.js lines 60-85: when execFileSync('npx', ['tsc', ...]) throws,
       // the catch block filters error output by file path candidates and logs relevant lines.
       // All existing tests either have no tsconfig (tsc never runs) or valid TS (tsc succeeds).
@@ -5482,13 +4598,9 @@ Some random content without the expected ### Context to Load section
       }
       // Either way, no crash and data passes through (verified above)
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('runs the resolved tsc through node without a shell (Windows EINVAL-safe execution)', async () => {
+  tally(await asyncTest('runs the resolved tsc through node without a shell (Windows EINVAL-safe execution)', async () => {
       const testDir = createTestDir();
       // A fake local typescript compiler that only records how it was invoked.
       const tscBinDir = path.join(testDir, 'node_modules', 'typescript', 'bin');
@@ -5517,16 +4629,12 @@ Some random content without the expected ### Context to Load section
       const entry = JSON.parse(log.split('\n')[0]);
       assert.deepStrictEqual(entry.args, ['--noEmit', '--pretty', 'false'], 'Should pass the expected tsc flags');
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 89: extractSessionSummary entry.name + entry.input fallback paths ──
   console.log('\nRound 89: session-end.js (entry.name + entry.input fallback in extractSessionSummary):');
 
-  if (
-    await asyncTest('extracts tool name from entry.name and file path from entry.input (fallback format)', async () => {
+  tally(await asyncTest('extracts tool name from entry.name and file path from entry.input (fallback format)', async () => {
       // session-end.js line 63: const toolName = entry.tool_name || entry.name || '';
       // session-end.js line 66: const filePath = entry.tool_input?.file_path || entry.input?.file_path || '';
       // All existing tests use tool_name + tool_input format. This tests the name + input fallback.
@@ -5563,16 +4671,12 @@ Some random content without the expected ### Context to Load section
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 90: readStdinJson timeout path (utils.js lines 215-229) ──
   console.log('\nRound 90: readStdinJson (timeout fires when stdin stays open):');
 
-  if (
-    await asyncTest('readStdinJson resolves with {} when stdin never closes (timeout fires, no data)', async () => {
+  tally(await asyncTest('readStdinJson resolves with {} when stdin never closes (timeout fires, no data)', async () => {
       // utils.js line 215: setTimeout fires because stdin 'end' never arrives.
       // Line 225: data.trim() is empty → resolves with {}.
       // Exercises: removeAllListeners, process.stdin.unref(), and the empty-data timeout resolution.
@@ -5601,13 +4705,9 @@ Some random content without the expected ### Context to Load section
           }
         });
       });
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
-  if (
-    await asyncTest('readStdinJson resolves with {} when timeout fires with invalid partial JSON', async () => {
+  tally(await asyncTest('readStdinJson resolves with {} when timeout fires with invalid partial JSON', async () => {
       // utils.js lines 224-228: setTimeout fires, data.trim() is non-empty,
       // JSON.parse(data) throws → catch at line 226 resolves with {}.
       const script = 'const u=require("./scripts/lib/utils");u.readStdinJson({timeoutMs:100}).then(d=>{process.stdout.write(JSON.stringify(d));process.exit(0)})';
@@ -5636,16 +4736,12 @@ Some random content without the expected ### Context to Load section
           }
         });
       });
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // ── Round 94: session-end.js tools used but no files modified ──
   console.log('\nRound 94: session-end.js (tools used without files modified):');
 
-  if (
-    await asyncTest('session file includes Tools Used but omits Files Modified when only Read/Grep used', async () => {
+  tally(await asyncTest('session file includes Tools Used but omits Files Modified when only Read/Grep used', async () => {
       // session-end.js buildSummarySection (lines 217-228):
       //   filesModified.length > 0 → include "### Files Modified" section
       //   toolsUsed.length > 0 → include "### Tools Used" section
@@ -5682,10 +4778,7 @@ Some random content without the expected ### Context to Load section
         }
       }
       cleanupTestDir(testDir);
-    })
-  )
-    passed++;
-  else failed++;
+    }));
 
   // Summary
   console.log('\n=== Test Results ===');

@@ -131,8 +131,9 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('parseArgs reads repo-root, target, dry-run, and json flags', () => {
+  tally(test('parseArgs reads repo-root, target, dry-run, and json flags', () => {
     const repoRootDir = createTempDir('auto-update-parseargs-repo-');
     try {
       const parsed = parseArgs([
@@ -153,16 +154,16 @@ function runTests() {
     } finally {
       cleanup(repoRootDir);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('parseArgs rejects unknown arguments', () => {
+  tally(test('parseArgs rejects unknown arguments', () => {
     assert.throws(
       () => parseArgs(['node', 'scripts/auto-update.js', '--bogus']),
       /Unknown argument: --bogus/
     );
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('the npm upgrade hint warns Windows about files held open in the package folder, and only Windows', () => {
+  tally(test('the npm upgrade hint warns Windows about files held open in the package folder, and only Windows', () => {
     const windows = npmUpgradeHint('win32');
     assert.ok(windows[1].includes('npm install -g @egchq/egc@latest'), 'the upgrade command stays first');
     assert.ok(windows.some(line => line.includes('EBUSY')), 'Windows must be told what the failure looks like');
@@ -172,9 +173,9 @@ function runTests() {
       assert.strictEqual(lines.length, 2, `${platform} gets the two original lines and nothing else`);
       assert.ok(!lines.join(' ').includes('EBUSY'));
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('deriveRepoRootFromState uses sourcePath and sourceRelativePath', () => {
+  tally(test('deriveRepoRootFromState uses sourcePath and sourceRelativePath', () => {
     // Use a sourceRelativePath that does not exist in the running EGC package so
     // the __dirname-based fast path falls through to the absolute-sourcePath fallback.
     const state = {
@@ -190,16 +191,16 @@ function runTests() {
       deriveRepoRootFromState(state),
       path.resolve(path.join('/tmp', 'egc'))
     );
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('deriveRepoRootFromState fails when source metadata is unavailable', () => {
+  tally(test('deriveRepoRootFromState fails when source metadata is unavailable', () => {
     assert.throws(
       () => deriveRepoRootFromState({ operations: [{ destinationPath: '/tmp/file' }] }),
       /Unable to infer EGC repo root/
     );
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('buildInstallApplyArgs reconstructs legacy installs', () => {
+  tally(test('buildInstallApplyArgs reconstructs legacy installs', () => {
     const record = {
       adapter: { target: 'egc', kind: 'home' },
       state: {
@@ -220,9 +221,9 @@ function runTests() {
       'typescript',
       'python',
     ]);
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('buildInstallApplyArgs reconstructs manifest installs', () => {
+  tally(test('buildInstallApplyArgs reconstructs manifest installs', () => {
     const record = {
       adapter: { target: 'cursor', kind: 'project' },
       state: {
@@ -245,9 +246,9 @@ function runTests() {
       '--with', 'component:alpha',
       '--without', 'component:beta',
     ]);
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('determineInstallCwd uses the project root for project installs', () => {
+  tally(test('determineInstallCwd uses the project root for project installs', () => {
     const record = {
       adapter: { kind: 'project' },
       state: {
@@ -258,9 +259,9 @@ function runTests() {
     };
 
     assert.strictEqual(determineInstallCwd(record, '/tmp/egc'), path.join('/tmp', 'project'));
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate reports when no install-state files are present', () => {
+  tally(test('runAutoUpdate reports when no install-state files are present', () => {
     const result = runAutoUpdate(
       {
         homeDir: '/tmp/home',
@@ -275,9 +276,9 @@ function runTests() {
     assert.strictEqual(result.results.length, 0);
     assert.strictEqual(result.summary.checkedCount, 0);
     assert.strictEqual(result.summary.errorCount, 0);
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate rejects mixed inferred repo roots', () => {
+  tally(test('runAutoUpdate rejects mixed inferred repo roots', () => {
     const homeDir = createTempDir('auto-update-home-');
     const projectRoot = createTempDir('auto-update-project-');
     const repoOne = createTempDir('auto-update-repo-');
@@ -363,9 +364,9 @@ function runTests() {
       cleanup(repoOne);
       cleanup(repoTwo);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate fetches, pulls, and reinstalls using reconstructed args', () => {
+  tally(test('runAutoUpdate fetches, pulls, and reinstalls using reconstructed args', () => {
     const homeDir = createTempDir('auto-update-home-');
     const projectRoot = createTempDir('auto-update-project-');
     const repoRoot = createTempDir('auto-update-repo-');
@@ -451,9 +452,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate also re-runs bootstrap-cognitive.js when the repo has it, so already-configured global protocol files get refreshed', () => {
+  tally(test('runAutoUpdate also re-runs bootstrap-cognitive.js when the repo has it, so already-configured global protocol files get refreshed', () => {
     const homeDir = createTempDir('auto-update-home-');
     const projectRoot = createTempDir('auto-update-project-');
     const repoRoot = createTempDir('auto-update-repo-');
@@ -531,9 +532,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate skips bootstrap-cognitive.js when the repo root does not have it (e.g. an npm package that excludes it) and does not run it on dry-run', () => {
+  tally(test('runAutoUpdate skips bootstrap-cognitive.js when the repo root does not have it (e.g. an npm package that excludes it) and does not run it on dry-run', () => {
     const homeDir = createTempDir('auto-update-home-');
     const projectRoot = createTempDir('auto-update-project-');
     const repoRoot = createTempDir('auto-update-repo-');
@@ -590,9 +591,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('deriveRepoRootFromState skips fallback entries missing a relative path or resolving to zero path segments', () => {
+  tally(test('deriveRepoRootFromState skips fallback entries missing a relative path or resolving to zero path segments', () => {
     const operations = [
       {
         // Present sourcePath but no sourceRelativePath at all: the fallback
@@ -628,9 +629,9 @@ function runTests() {
       deriveRepoRootFromState({ operations }),
       path.resolve(path.join('/tmp', 'egc-fallback', 'pkg', 'nested'))
     );
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate rejects a repo root missing package.json', () => {
+  tally(test('runAutoUpdate rejects a repo root missing package.json', () => {
     const repoRoot = createTempDir('auto-update-missing-pkg-');
     try {
       assert.throws(
@@ -643,9 +644,9 @@ function runTests() {
     } finally {
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate rejects a repo root missing the install-apply.js script', () => {
+  tally(test('runAutoUpdate rejects a repo root missing the install-apply.js script', () => {
     const repoRoot = createTempDir('auto-update-missing-install-apply-');
     try {
       fs.writeFileSync(
@@ -663,9 +664,9 @@ function runTests() {
     } finally {
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate reports an error result and bails out when no repo root can be resolved', () => {
+  tally(test('runAutoUpdate reports an error result and bails out when no repo root can be resolved', () => {
     const homeDir = createTempDir('auto-update-norepo-home-');
     const projectRoot = createTempDir('auto-update-norepo-project-');
 
@@ -695,9 +696,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runCognitiveBootstrap returns an error status when the bootstrap script execution throws', () => {
+  tally(test('runCognitiveBootstrap returns an error status when the bootstrap script execution throws', () => {
     const repoRoot = createTempDir('auto-update-cognitive-error-');
     try {
       fs.mkdirSync(path.join(repoRoot, 'scripts'), { recursive: true });
@@ -711,9 +712,9 @@ function runTests() {
     } finally {
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate rethrows a git pull failure whose message does not mention upstream tracking', () => {
+  tally(test('runAutoUpdate rethrows a git pull failure whose message does not mention upstream tracking', () => {
     const homeDir = createTempDir('auto-update-pull-rethrow-home-');
     const projectRoot = createTempDir('auto-update-pull-rethrow-project-');
     const repoRoot = createTempDir('auto-update-pull-rethrow-repo-');
@@ -771,9 +772,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate uses the real runExternalCommand to fetch and surfaces the friendly upstream error on a real git pull failure', () => {
+  tally(test('runAutoUpdate uses the real runExternalCommand to fetch and surfaces the friendly upstream error on a real git pull failure', () => {
     const homeDir = createTempDir('auto-update-realgit-home-');
     const projectRoot = createTempDir('auto-update-realgit-project-');
     const repoRoot = createTempDir('auto-update-realgit-repo-');
@@ -835,9 +836,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('runAutoUpdate surfaces a real ENOENT spawn error when git is not resolvable on PATH', () => {
+  tally(test('runAutoUpdate surfaces a real ENOENT spawn error when git is not resolvable on PATH', () => {
     const homeDir = createTempDir('auto-update-enoent-home-');
     const projectRoot = createTempDir('auto-update-enoent-project-');
     const repoRoot = createTempDir('auto-update-enoent-repo-');
@@ -896,9 +897,9 @@ function runTests() {
       cleanup(repoRoot);
       cleanup(emptyPathDir);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('auto-update.js CLI prints the empty-state message and exits 0 when no install-state files exist', () => {
+  tally(test('auto-update.js CLI prints the empty-state message and exits 0 when no install-state files exist', () => {
     const homeDir = createTempDir('auto-update-cli-empty-home-');
     const projectRoot = createTempDir('auto-update-cli-empty-project-');
 
@@ -918,9 +919,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('auto-update.js CLI dry-run summary lists a planned target with reinstall args', () => {
+  tally(test('auto-update.js CLI dry-run summary lists a planned target with reinstall args', () => {
     const homeDir = createTempDir('auto-update-cli-dryrun-home-');
     const projectRoot = createTempDir('auto-update-cli-dryrun-project-');
     const repoRoot = createTempDir('auto-update-cli-dryrun-repo-');
@@ -956,9 +957,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('auto-update.js CLI skips a retired target with a notice instead of crashing', () => {
+  tally(test('auto-update.js CLI skips a retired target with a notice instead of crashing', () => {
     const homeDir = createTempDir('auto-update-cli-retired-home-');
     const projectRoot = createTempDir('auto-update-cli-retired-project-');
     const repoRoot = createTempDir('auto-update-cli-retired-repo-');
@@ -988,9 +989,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('auto-update.js CLI full run prints cognitive bootstrap output and an updated summary', () => {
+  tally(test('auto-update.js CLI full run prints cognitive bootstrap output and an updated summary', () => {
     const homeDir = createTempDir('auto-update-cli-full-home-');
     const projectRoot = createTempDir('auto-update-cli-full-project-');
     const repoRoot = createTempDir('auto-update-cli-full-repo-');
@@ -1033,9 +1034,9 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('auto-update.js CLI prints bootstrap and per-target errors, exiting with a non-zero status', () => {
+  tally(test('auto-update.js CLI prints bootstrap and per-target errors, exiting with a non-zero status', () => {
     const homeDir = createTempDir('auto-update-cli-err-home-');
     const projectRoot = createTempDir('auto-update-cli-err-project-');
     const repoRoot = createTempDir('auto-update-cli-err-repo-');
@@ -1079,16 +1080,16 @@ function runTests() {
       cleanup(projectRoot);
       cleanup(repoRoot);
     }
-  })) passed += 1; else failed += 1;
+  }));
 
-  if (test('auto-update.js CLI exits 1 and prints an error for unknown arguments', () => {
+  tally(test('auto-update.js CLI exits 1 and prints an error for unknown arguments', () => {
     const result = spawnSync(process.execPath, [AUTO_UPDATE_SCRIPT_PATH, '--bogus'], {
       encoding: 'utf8',
     });
 
     assert.strictEqual(result.status, 1);
     assert.ok(result.stderr.includes('Error: Unknown argument: --bogus'), result.stderr);
-  })) passed += 1; else failed += 1;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

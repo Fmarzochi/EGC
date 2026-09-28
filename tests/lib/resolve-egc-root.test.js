@@ -66,20 +66,21 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // ─── Env Var Priority ───
 
-  if (test('returns GEMINI_PLUGIN_ROOT when set', () => {
+  tally(test('returns GEMINI_PLUGIN_ROOT when set', () => {
     const result = resolveEccRoot({ envRoot: '/custom/plugin/root' });
     assert.strictEqual(result, '/custom/plugin/root');
-  })) passed++; else failed++;
+  }));
 
-  if (test('trims whitespace from GEMINI_PLUGIN_ROOT', () => {
+  tally(test('trims whitespace from GEMINI_PLUGIN_ROOT', () => {
     const result = resolveEccRoot({ envRoot: '  /trimmed/root  ' });
     assert.strictEqual(result, '/trimmed/root');
-  })) passed++; else failed++;
+  }));
 
-  if (test('skips empty GEMINI_PLUGIN_ROOT', () => {
+  tally(test('skips empty GEMINI_PLUGIN_ROOT', () => {
     const homeDir = createTempDir();
     try {
       setupStandardInstall(homeDir);
@@ -88,9 +89,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('skips whitespace-only GEMINI_PLUGIN_ROOT', () => {
+  tally(test('skips whitespace-only GEMINI_PLUGIN_ROOT', () => {
     const homeDir = createTempDir();
     try {
       setupStandardInstall(homeDir);
@@ -99,11 +100,11 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ─── Standard Install ───
 
-  if (test('finds standard install at ~/.gemini/', () => {
+  tally(test('finds standard install at ~/.gemini/', () => {
     const homeDir = createTempDir();
     try {
       setupStandardInstall(homeDir);
@@ -112,9 +113,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('finds current plugin install at ~/.gemini/plugins/egc', () => {
+  tally(test('finds current plugin install at ~/.gemini/plugins/egc', () => {
     const homeDir = createTempDir();
     try {
       const expected = setupLegacyPluginInstall(homeDir, ['egc']);
@@ -123,9 +124,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('finds current plugin install at ~/.gemini/plugins/egc@egc', () => {
+  tally(test('finds current plugin install at ~/.gemini/plugins/egc@egc', () => {
     const homeDir = createTempDir();
     try {
       const expected = setupLegacyPluginInstall(homeDir, ['egc@egc']);
@@ -134,9 +135,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('finds exact legacy plugin install at ~/.gemini/plugins/everything-gemini', () => {
+  tally(test('finds exact legacy plugin install at ~/.gemini/plugins/everything-gemini', () => {
     const homeDir = createTempDir();
     try {
       const expected = setupLegacyPluginInstall(homeDir, ['everything-gemini']);
@@ -145,9 +146,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('finds exact legacy plugin install at ~/.gemini/plugins/egc@egc', () => {
+  tally(test('finds exact legacy plugin install at ~/.gemini/plugins/egc@egc', () => {
     const homeDir = createTempDir();
     try {
       const expected = setupLegacyPluginInstall(homeDir, ['egc@egc']);
@@ -156,9 +157,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('finds marketplace current plugin install at ~/.gemini/plugins/marketplace/egc', () => {
+  tally(test('finds marketplace current plugin install at ~/.gemini/plugins/marketplace/egc', () => {
     const homeDir = createTempDir();
     try {
       const expected = setupLegacyPluginInstall(homeDir, ['marketplace', 'egc']);
@@ -167,9 +168,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('finds marketplace legacy plugin install at ~/.gemini/plugins/marketplace/everything-gemini', () => {
+  tally(test('finds marketplace legacy plugin install at ~/.gemini/plugins/marketplace/everything-gemini', () => {
     const homeDir = createTempDir();
     try {
       const expected = setupLegacyPluginInstall(homeDir, ['marketplace', 'everything-gemini']);
@@ -178,9 +179,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('prefers exact legacy plugin install over plugin cache', () => {
+  tally(test('prefers exact legacy plugin install over plugin cache', () => {
     const homeDir = createTempDir();
     try {
       const expected = setupLegacyPluginInstall(homeDir, ['marketplace', 'egc']);
@@ -190,10 +191,10 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
   // ─── Plugin Cache Auto-Detection ───
 
-  if (test('discovers plugin root from cache directory', () => {
+  tally(test('discovers plugin root from cache directory', () => {
     const homeDir = createTempDir();
     try {
       const expected = setupPluginCache(homeDir, 'egc', 'Fmarzochi', CURRENT_PACKAGE_VERSION);
@@ -202,9 +203,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('prefers standard install over plugin cache', () => {
+  tally(test('prefers standard install over plugin cache', () => {
     const homeDir = createTempDir();
     try {
       const claudeDir = setupStandardInstall(homeDir);
@@ -215,9 +216,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('handles multiple versions in plugin cache', () => {
+  tally(test('handles multiple versions in plugin cache', () => {
     const homeDir = createTempDir();
     try {
       setupPluginCache(homeDir, 'everything-gemini', 'legacy-org', '1.7.0');
@@ -232,11 +233,11 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ─── Fallback ───
 
-  if (test('falls back to ~/.gemini/ when nothing is found', () => {
+  tally(test('falls back to ~/.gemini/ when nothing is found', () => {
     const homeDir = createTempDir();
     try {
       fs.mkdirSync(path.join(homeDir, '.gemini'), { recursive: true });
@@ -245,9 +246,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('falls back gracefully when ~/.gemini/ does not exist', () => {
+  tally(test('falls back gracefully when ~/.gemini/ does not exist', () => {
     const homeDir = createTempDir();
     try {
       const result = resolveEccRoot({ envRoot: '', homeDir });
@@ -255,11 +256,11 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ─── Custom Probe ───
 
-  if (test('supports custom probe path', () => {
+  tally(test('supports custom probe path', () => {
     const homeDir = createTempDir();
     try {
       const claudeDir = path.join(homeDir, '.gemini');
@@ -274,16 +275,16 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ─── INLINE_RESOLVE ───
 
-  if (test('INLINE_RESOLVE is a non-empty string', () => {
+  tally(test('INLINE_RESOLVE is a non-empty string', () => {
     assert.ok(typeof INLINE_RESOLVE === 'string');
     assert.ok(INLINE_RESOLVE.length > 50, 'Should be a substantial inline expression');
-  })) passed++; else failed++;
+  }));
 
-  if (test('INLINE_RESOLVE returns GEMINI_PLUGIN_ROOT when set', () => {
+  tally(test('INLINE_RESOLVE returns GEMINI_PLUGIN_ROOT when set', () => {
     const { execFileSync } = require('child_process');
     const result = execFileSync('node', [
       '-e', `console.log(${INLINE_RESOLVE})`,
@@ -292,9 +293,9 @@ function runTests() {
       encoding: 'utf8',
     }).trim();
     assert.strictEqual(result, '/inline/test/root');
-  })) passed++; else failed++;
+  }));
 
-  if (test('INLINE_RESOLVE discovers exact legacy plugin root when env var is unset', () => {
+  tally(test('INLINE_RESOLVE discovers exact legacy plugin root when env var is unset', () => {
     const homeDir = createTempDir();
     try {
       const expected = setupLegacyPluginInstall(homeDir, ['marketplace', 'egc']);
@@ -309,8 +310,8 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
-  if (test('INLINE_RESOLVE discovers plugin cache when env var is unset', () => {
+  }));
+  tally(test('INLINE_RESOLVE discovers plugin cache when env var is unset', () => {
     const homeDir = createTempDir();
     try {
       const expected = setupPluginCache(homeDir, 'egc', 'Fmarzochi', CURRENT_PACKAGE_VERSION);
@@ -325,9 +326,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('INLINE_RESOLVE falls back to ~/.gemini/ when nothing found', () => {
+  tally(test('INLINE_RESOLVE falls back to ~/.gemini/ when nothing found', () => {
     const homeDir = createTempDir();
     try {
       const { execFileSync } = require('child_process');
@@ -341,7 +342,7 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

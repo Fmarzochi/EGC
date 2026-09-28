@@ -30,6 +30,7 @@ function runTests() {
   console.log('\n=== Testing linked destinations in the installer ===\n');
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-apply-links-'));
   const root = path.join(dir, 'root');
   const outside = path.join(dir, 'outside');
@@ -47,16 +48,16 @@ function runTests() {
   }
   try {
     if (links) {
-      if (test('a destination that is a link is refused', () => {
+      tally(test('a destination that is a link is refused', () => {
         assert.throws(() => refuseLinkedDestination(path.join(root, 'linked.md'), root), /symbolic link/);
-      })) passed++; else failed++;
+      }));
 
-      if (test('a destination under a linked directory inside the root is refused, even when the file does not exist yet', () => {
+      tally(test('a destination under a linked directory inside the root is refused, even when the file does not exist yet', () => {
         assert.throws(() => refuseLinkedDestination(path.join(root, 'linked-dir', 'deep', 'new.md'), root), /symbolic link/);
         assert.ok(!fs.existsSync(path.join(outside, 'deep')));
-      })) passed++; else failed++;
+      }));
 
-      if (test('the Guardian marker is not written through a linked .egc directory', () => {
+      tally(test('the Guardian marker is not written through a linked .egc directory', () => {
         const home = path.join(dir, 'home');
         fs.mkdirSync(home, { recursive: true });
         fs.symlinkSync(outside, path.join(home, '.egc'), 'dir');
@@ -64,9 +65,9 @@ function runTests() {
         writeGuardianCliMarker(message => warnings.push(message), home);
         assert.ok(warnings.some(message => message.includes('symbolic link')), JSON.stringify(warnings));
         assert.ok(!fs.existsSync(path.join(outside, 'guardian-cli-path.json')), 'nothing lands behind the link');
-      })) passed++; else failed++;
+      }));
 
-      if (test('a link into the managed skills copy under the same root is EGC\'s legacy layout: listed by a dry run, replaced on apply (#1400)', () => {
+      tally(test('a link into the managed skills copy under the same root is EGC\'s legacy layout: listed by a dry run, replaced on apply (#1400)', () => {
         // The June 2026 Antigravity CLI layout: skills/<skill> under the
         // target root as a link into <root>/skills/egc/<skill>.
         const home = path.join(dir, 'legacy-home');
@@ -94,9 +95,9 @@ function runTests() {
         assert.strictEqual(fs.readFileSync(path.join(managed, 'SKILL.md'), 'utf8'), 'managed copy', 'what it pointed at is untouched');
         assert.doesNotThrow(() => refuseLinkedDestination(destination, home, { migrate }), 'a second pass finds no link');
         assert.strictEqual(migrate.length, 1);
-      })) passed++; else failed++;
+      }));
 
-      if (test('a link that resolves anywhere else is refused even when migration is on', () => {
+      tally(test('a link that resolves anywhere else is refused even when migration is on', () => {
         const home = path.join(dir, 'foreign-home');
         const cliSkills = path.join(home, 'antigravity-cli', 'skills');
         fs.mkdirSync(cliSkills, { recursive: true });
@@ -113,9 +114,9 @@ function runTests() {
         const plan = { targetRoot: home, installStatePath: path.join(home, 'egc', 'install-state.json'), operations: [{ destinationPath: path.join(elsewhere, 'SKILL.md') }] };
         assert.deepStrictEqual(findLegacyLinks(plan), [], 'the dry run lists nothing for it');
         assert.throws(() => findLegacyLinks(plan, { strict: true }), /symbolic link/, 'the strict pass refuses it before anything is removed');
-      })) passed++; else failed++;
+      }));
 
-      if (test('a managed skills directory that is itself a link elsewhere is not EGC\'s copy: links into it keep the refusal', () => {
+      tally(test('a managed skills directory that is itself a link elsewhere is not EGC\'s copy: links into it keep the refusal', () => {
         const home = path.join(dir, 'linked-managed-home');
         const elsewhere = path.join(dir, 'elsewhere-copy');
         fs.mkdirSync(path.join(elsewhere, 'demo'), { recursive: true });
@@ -128,9 +129,9 @@ function runTests() {
         assert.throws(() => refuseLinkedDestination(path.join(cliSkills, 'demo', 'SKILL.md'), home, { migrate }), /symbolic link/);
         assert.deepStrictEqual(migrate, []);
         assert.ok(fs.lstatSync(path.join(cliSkills, 'demo')).isSymbolicLink(), 'nothing removed');
-      })) passed++; else failed++;
+      }));
 
-      if (test('a link that changed after the scan is refused at removal time, and nothing is removed', () => {
+      tally(test('a link that changed after the scan is refused at removal time, and nothing is removed', () => {
         const home = path.join(dir, 'swap-home');
         const managed = path.join(home, 'skills', 'egc', 'demo');
         fs.mkdirSync(managed, { recursive: true });
@@ -153,9 +154,9 @@ function runTests() {
         assert.throws(() => removeLegacyLinks(migrate, home), /changed during the install/);
         assert.ok(fs.lstatSync(link).isSymbolicLink() && fs.realpathSync.native(link) === fs.realpathSync.native(outside), 'the foreign link stays');
         assert.ok(fs.lstatSync(other).isSymbolicLink(), 'the other legacy link was not removed either');
-      })) passed++; else failed++;
+      }));
 
-      if (test('nested legacy links are removed deepest first, whatever order the scan produced', () => {
+      tally(test('nested legacy links are removed deepest first, whatever order the scan produced', () => {
         const home = path.join(dir, 'nested-home');
         const managed = path.join(home, 'skills', 'egc');
         fs.mkdirSync(path.join(managed, 'real'), { recursive: true });
@@ -173,9 +174,9 @@ function runTests() {
         assert.ok(!fs.existsSync(path.join(cli, 'skills')), 'the outer link is gone');
         assert.ok(!fs.existsSync(path.join(managed, 'demo')), 'the inner link is gone');
         assert.ok(fs.existsSync(path.join(managed, 'real')), 'what it pointed at stays');
-      })) passed++; else failed++;
+      }));
 
-      if (test('the dry run walks the install-state path too, so a legacy link above it is listed', () => {
+      tally(test('the dry run walks the install-state path too, so a legacy link above it is listed', () => {
         const home = path.join(dir, 'state-home');
         const managed = path.join(home, 'skills', 'egc', 'egc');
         fs.mkdirSync(managed, { recursive: true });
@@ -183,9 +184,9 @@ function runTests() {
         const plan = { targetRoot: home, installStatePath: path.join(home, 'egc', 'install-state.json'), operations: [] };
         assert.deepStrictEqual(checkedDestinations(plan), [plan.installStatePath]);
         assert.deepStrictEqual(findLegacyLinks(plan).map(entry => entry.linkPath), [path.join(home, 'egc')]);
-      })) passed++; else failed++;
+      }));
 
-      if (test('a destination under a declared second root is walked against that root: a linked ancestor there is refused before any write (#1412)', () => {
+      tally(test('a destination under a declared second root is walked against that root: a linked ancestor there is refused before any write (#1412)', () => {
         const target = path.join(dir, 'two-roots-target');
         const second = path.join(dir, 'two-roots-config');
         fs.mkdirSync(path.join(target, 'skills'), { recursive: true });
@@ -208,14 +209,14 @@ function runTests() {
         assert.throws(() => findLegacyLinks(plan, { strict: true }), /symbolic link/, 'the preflight refuses the plan before anything is written');
         assert.deepStrictEqual(findLegacyLinks(plan), [], 'and lists nothing to migrate: the legacy layout never lived under a second root');
         assert.ok(!fs.existsSync(path.join(outside, 'plugin.js')), 'nothing was written through the link');
-      })) passed++; else failed++;
+      }));
 
-      if (test('a root that is itself a link is allowed', () => {
+      tally(test('a root that is itself a link is allowed', () => {
         const viaLink = path.join(dir, 'root-link');
         assert.doesNotThrow(() => refuseLinkedDestination(path.join(viaLink, 'rules', 'plain.md'), viaLink));
-      })) passed++; else failed++;
+      }));
 
-      if (test('a linked root installs through the full apply: the file lands behind the link (the linked-root regression)', () => {
+      tally(test('a linked root installs through the full apply: the file lands behind the link (the linked-root regression)', () => {
         const viaLink = path.join(dir, 'root-link');
         const base = path.join(dir, 'linked-root-apply');
         const sourceDir = path.join(base, 'source');
@@ -265,10 +266,10 @@ function runTests() {
         assert.strictEqual(fs.readFileSync(path.join(root, 'rules', 'foo.md'), 'utf8'), 'foo behind the link', 'the file lands behind the linked root');
         assert.ok(fs.lstatSync(path.join(root, 'rules', 'foo.md')).isFile(), 'it is a real file, not through the link');
         assert.deepStrictEqual(result.shapeTransitions, [], 'no transition is involved');
-      })) passed++; else failed++;
+      }));
     }
 
-    if (test('a hard link at the destination is replaced and the aliased file keeps its content', () => {
+    tally(test('a hard link at the destination is replaced and the aliased file keeps its content', () => {
       const aliased = path.join(outside, 'aliased.md');
       fs.writeFileSync(aliased, 'aliased content');
       fs.mkdirSync(path.join(root, 'notes'), { recursive: true });
@@ -299,9 +300,9 @@ function runTests() {
       assert.strictEqual(fs.readFileSync(aliased, 'utf8'), 'aliased content', 'the state file never writes through a link either');
       assert.strictEqual(fs.statSync(statePath).nlink, 1);
       assert.strictEqual(fs.readdirSync(path.join(root, 'notes')).filter(name => name.endsWith('.tmp')).length, 0, 'no temporary survives');
-    })) passed++; else failed++;
+    }));
 
-    if (test('retirePlannedFiles removes only the files EGC wrote, inside the root, and drops the directories it empties (#1396)', () => {
+    tally(test('retirePlannedFiles removes only the files EGC wrote, inside the root, and drops the directories it empties (#1396)', () => {
       const root2 = path.join(dir, 'retire-root');
       const source = path.join(dir, 'retire-source');
       fs.mkdirSync(path.join(root2, 'tools'), { recursive: true });
@@ -358,9 +359,9 @@ function runTests() {
         assert.ok(fs.existsSync(path.join(outside, 'behind-link.ts')), 'a file behind a linked directory is left alone');
       }
       assert.ok(fs.existsSync(root2), 'the root itself stays');
-    })) passed++; else failed++;
+    }));
 
-    if (test('retirePlannedFiles honors a second managed root the plan declares, and still refuses anything outside every root (#1412)', () => {
+    tally(test('retirePlannedFiles honors a second managed root the plan declares, and still refuses anything outside every root (#1412)', () => {
       const root4 = path.join(dir, 'retire-two-roots');
       const second = path.join(dir, 'retire-two-roots-config');
       const source4 = path.join(dir, 'retire-two-roots-source');
@@ -393,9 +394,9 @@ function runTests() {
       assert.ok(fs.existsSync(second), 'the second root itself stays');
       assert.ok(fs.existsSync(path.join(outside, 'elsewhere.js')), 'a path outside every root is never touched');
       assert.ok(retired.every(item => !('root' in item)), 'the reported entries carry no bookkeeping field');
-    })) passed++; else failed++;
+    }));
 
-    if (test('retirePlannedFiles retires a file whose recorded source is gone only when its bytes match a file the plan copies today (#1412)', () => {
+    tally(test('retirePlannedFiles retires a file whose recorded source is gone only when its bytes match a file the plan copies today (#1412)', () => {
       const root5 = path.join(dir, 'retire-renamed');
       const source5 = path.join(dir, 'retire-renamed-source');
       fs.mkdirSync(path.join(root5, 'commands'), { recursive: true });
@@ -425,9 +426,9 @@ function runTests() {
       assert.ok(fs.existsSync(path.join(root5, 'commands', 'dropped.md')), 'a dropped file matching nothing the plan writes stays');
       assert.ok(fs.existsSync(path.join(root5, 'commands', 'edited.md')), 'a file the person edited stays');
       assert.deepStrictEqual(retirePlannedFiles({ targetRoot: root5, retirements: plan.retirements.slice(1) }), [], 'without plan operations nothing vouches for a missing source');
-    })) passed++; else failed++;
+    }));
 
-    if (test('retirePlannedFiles stops climbing when a parent cannot be read after the removal', () => {
+    tally(test('retirePlannedFiles stops climbing when a parent cannot be read after the removal', () => {
       const root3 = path.join(dir, 'retire-sealed');
       const sealed = path.join(root3, 'sealed');
       const source3 = path.join(dir, 'retire-sealed-source');
@@ -458,9 +459,9 @@ function runTests() {
         if (fs.existsSync(sealed)) fs.chmodSync(sealed, 0o700);
       }
       assert.ok(fs.existsSync(sealed), 'a parent that could not be read is left where it is');
-    })) passed++; else failed++;
+    }));
 
-    if (test('a destination file whose source became a directory is retired and replaced by the directory (file-to-dir)', () => {
+    tally(test('a destination file whose source became a directory is retired and replaced by the directory (file-to-dir)', () => {
       const base = path.join(dir, 'shape-f2d-ok');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -516,9 +517,9 @@ function runTests() {
       assert.deepStrictEqual(result.shapeTransitions, [
         { type: 'file-to-dir', destinationPath: path.join(root, 'rules', 'foo.md'), sourceRelativePath: 'rules/foo.md' },
       ], 'the apply reports the transition');
-    })) passed++; else failed++;
+    }));
 
-    if (test('a file in the way of a directory that is no longer a byte-identical EGC copy refuses the file-to-dir transition', () => {
+    tally(test('a file in the way of a directory that is no longer a byte-identical EGC copy refuses the file-to-dir transition', () => {
       const base = path.join(dir, 'shape-f2d-edit');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -568,9 +569,9 @@ function runTests() {
       assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'nothing is written when the file would have to go');
       assert.strictEqual(fs.readFileSync(path.join(root, 'rules', 'foo.md'), 'utf8'), 'user edited this, not EGC', 'the file the person changed stays');
       assert.ok(!fs.existsSync(path.join(root, 'rules', 'foo.md', 'index.md')), 'nothing is written under it');
-    })) passed++; else failed++;
+    }));
 
-    if (test('a destination directory whose source became a file is emptied and replaced by the file (dir-to-file)', () => {
+    tally(test('a destination directory whose source became a file is emptied and replaced by the file (dir-to-file)', () => {
       const base = path.join(dir, 'shape-d2f-ok');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -634,9 +635,9 @@ function runTests() {
         children: [path.join(root, 'widget', 'use.md'), path.join(root, 'widget', 'notes.md')].sort((a, b) => a.localeCompare(b)),
         directories: [path.join(root, 'widget')],
       }, 'the apply reports the transition in a deterministic order');
-    })) passed++; else failed++;
+    }));
 
-    if (test('a directory in the way of a file whose child is no longer a byte-identical EGC copy refuses the dir-to-file transition', () => {
+    tally(test('a directory in the way of a file whose child is no longer a byte-identical EGC copy refuses the dir-to-file transition', () => {
       const base = path.join(dir, 'shape-d2f-edit');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -694,9 +695,9 @@ function runTests() {
       assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'notes.md'), 'utf8'), 'widget-old-notes.md bytes', 'and so does the rest of it');
       assert.ok(!fs.existsSync(path.join(root, 'widget-old-notes.md')), 'even the reconcilable child is not written: the refusal precedes every operation');
       assert.ok(!fs.existsSync(path.join(root, 'widget-old-use.md')), 'nothing is written');
-    })) passed++; else failed++;
+    }));
 
-    if (test('collectShapeTransitions is read-only: it lists the resolvable transitions and every refusal without touching the disk (the dry run)', () => {
+    tally(test('collectShapeTransitions is read-only: it lists the resolvable transitions and every refusal without touching the disk (the dry run)', () => {
       const base = path.join(dir, 'shape-dryrun');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -762,10 +763,10 @@ function runTests() {
       assert.ok(fs.existsSync(path.join(root, 'widget', 'use.md')), 'the children are all still there');
       assert.ok(fs.existsSync(path.join(root, 'widget', 'notes.md')), 'all of them');
       assert.strictEqual(fs.readFileSync(path.join(root, 'rules', 'foo.md'), 'utf8'), 'hand-made, unrecorded, foreign', 'and the refused file still holds its content');
-    })) passed++; else failed++;
+    }));
 
     if (links) {
-      if (test('a non-legacy link in the way of a planned directory is refused by the scan and by the apply', () => {
+      tally(test('a non-legacy link in the way of a planned directory is refused by the scan and by the apply', () => {
         const base = path.join(dir, 'shape-link');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -819,9 +820,9 @@ function runTests() {
       assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'the apply refuses before writing behind the link');
       assert.ok(fs.lstatSync(path.join(root, 'rules', 'foo.md')).isSymbolicLink(), 'the link is untouched');
       assert.ok(!fs.existsSync(path.join(root, 'rules', 'foo.md', 'index.md')), 'nothing is written behind it');
-      })) passed++; else failed++;
+      }));
 
-      if (test('a non-legacy link in the way of a planned file is refused by the scan and by the apply (dry run matches apply)', () => {
+      tally(test('a non-legacy link in the way of a planned file is refused by the scan and by the apply (dry run matches apply)', () => {
         const base = path.join(dir, 'shape-link-file');
         const sourceDir = path.join(base, 'source');
         const root = path.join(base, 'root');
@@ -880,9 +881,9 @@ function runTests() {
         assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'the apply refuses before writing behind the link');
         assert.ok(fs.lstatSync(path.join(root, 'rules', 'foo.md')).isSymbolicLink(), 'the link is untouched');
         assert.strictEqual(fs.readFileSync(path.join(base, 'elsewhere', 'ghost.md'), 'utf8'), 'not EGC', 'what it points at is untouched');
-      })) passed++; else failed++;
+      }));
 
-      if (test('a symbolic link inside the directory a dir-to-file wants refuses the transition', () => {
+      tally(test('a symbolic link inside the directory a dir-to-file wants refuses the transition', () => {
         const base = path.join(dir, 'shape-d2f-linkchild');
         const sourceDir = path.join(base, 'source');
         const root = path.join(base, 'root');
@@ -944,10 +945,10 @@ function runTests() {
         assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'use.md'), 'utf8'), 'widget-old-use.md bytes', 'the reconcilable child stays');
         assert.ok(fs.lstatSync(path.join(root, 'widget', 'link.md')).isSymbolicLink(), 'the link stays');
         assert.ok(!fs.existsSync(path.join(root, 'widget-old-use.md')), 'nothing is written');
-      })) passed++; else failed++;
+      }));
     }
 
-    if (test('an empty subdirectory the person made inside a dir-to-file directory is dropped with the transition (settled in review)', () => {
+    tally(test('an empty subdirectory the person made inside a dir-to-file directory is dropped with the transition (settled in review)', () => {
       const base = path.join(dir, 'shape-d2f-emptydir');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -1011,9 +1012,9 @@ function runTests() {
       assert.strictEqual(fs.readFileSync(path.join(root, 'widget'), 'utf8'), 'new widget', 'the file content is EGC\'s');
       assert.ok(!fs.existsSync(path.join(root, 'widget', 'unused')), 'the empty subdirectory the person made is dropped with the transition');
       assert.strictEqual(result.shapeTransitions.length, 1, 'the apply reports the transition');
-    })) passed++; else failed++;
+    }));
 
-    if (test('a destination the plan writes both as a file and a directory refuses on a fresh install, exactly once', () => {
+    tally(test('a destination the plan writes both as a file and a directory refuses on a fresh install, exactly once', () => {
       const base = path.join(dir, 'shape-both-shapes');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -1077,9 +1078,9 @@ function runTests() {
       assert.ok(existing.refusals[0].reason.includes('both a file and a directory'), existing.refusals[0].reason);
       assert.strictEqual(fs.readFileSync(path.join(root, 'rules', 'person.md'), 'utf8'), 'mine', 'the existing path was touched by nothing');
       assert.ok(fs.statSync(path.join(root, 'rules')).isDirectory(), 'the directory the person made stays');
-    })) passed++; else failed++;
+    }));
 
-    if (test('a directory in the way of a file that cannot be listed refuses the dir-to-file transition', () => {
+    tally(test('a directory in the way of a file that cannot be listed refuses the dir-to-file transition', () => {
       const base = path.join(dir, 'shape-d2f-unlistable');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -1160,9 +1161,9 @@ function runTests() {
           /* restore best effort */
         }
       }
-    })) passed++; else failed++;
+    }));
 
-    if (test('a flatten whose replacement matches none of the recorded children refuses: the honest outcome when the content is new', () => {
+    tally(test('a flatten whose replacement matches none of the recorded children refuses: the honest outcome when the content is new', () => {
       const base = path.join(dir, 'shape-d2f-newcontent');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -1217,9 +1218,9 @@ function runTests() {
       assert.throws(() => applyInstallPlan(plan, { homeDir: base }), /Shape transition refused/, 'the apply refuses before anything changes');
       assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'use.md'), 'utf8'), 'use bytes', 'the directory and its contents stay exactly as they were');
       assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'notes.md'), 'utf8'), 'notes bytes');
-    })) passed++; else failed++;
+    }));
 
-    if (test('a failing operation earlier in the plan leaves a resolved transition fully intact (all-or-nothing)', () => {
+    tally(test('a failing operation earlier in the plan leaves a resolved transition fully intact (all-or-nothing)', () => {
       const base = path.join(dir, 'shape-d2f-laterfail');
       const sourceDir = path.join(base, 'source');
       const root = path.join(base, 'root');
@@ -1279,9 +1280,9 @@ function runTests() {
       assert.strictEqual(fs.readFileSync(path.join(root, 'widget', 'notes.md'), 'utf8'), 'widget-old-notes.md bytes');
       assert.ok(!fs.existsSync(path.join(root, 'widget-old-use.md')), 'nothing after the failure was written');
       assert.ok(!fs.existsSync(path.join(root, 'widget-old-notes.md')), 'any of it');
-    })) passed++; else failed++;
+    }));
 
-    if (test('a planned destination outside every managed root never makes its ancestors transition candidates', () => {
+    tally(test('a planned destination outside every managed root never makes its ancestors transition candidates', () => {
       const base = path.join(dir, 'shape-outside');
       const root = path.join(base, 'root');
       const foreign = path.join(base, 'foreign');
@@ -1335,15 +1336,15 @@ function runTests() {
       assert.strictEqual(transitions.length, 0, 'no transition is offered on foreign territory');
       assert.strictEqual(refusals.length, 0, 'and nothing there is refused either');
       assert.strictEqual(fs.readFileSync(path.join(foreign, 'x'), 'utf8'), 'an unrelated file', 'the foreign file is untouched');
-    })) passed++; else failed++;
+    }));
 
-    if (test('a plain destination, existing or not, passes', () => {
+    tally(test('a plain destination, existing or not, passes', () => {
       fs.mkdirSync(path.join(root, 'rules'), { recursive: true });
       fs.writeFileSync(path.join(root, 'rules', 'existing.md'), 'x');
       assert.doesNotThrow(() => refuseLinkedDestination(path.join(root, 'rules', 'existing.md'), root));
       assert.doesNotThrow(() => refuseLinkedDestination(path.join(root, 'rules', 'later.md'), root));
       assert.doesNotThrow(() => refuseLinkedDestination(path.join(outside, 'elsewhere.md'), root));
-    })) passed++; else failed++;
+    }));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

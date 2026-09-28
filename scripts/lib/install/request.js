@@ -102,43 +102,52 @@ function parseInstallArgs(argv) {
   return parsed;
 }
 
-function normalizeInstallRequest(options = {}) {
-  const config = options.config && typeof options.config === 'object'
-    ? options.config
-    : null;
-  const profileId = options.profileId || config?.profileId || null;
-  const moduleIds = validateInstallModuleIds(
-    dedupeStrings([...(config?.moduleIds || []), ...(options.moduleIds || [])])
-  );
-  const includeComponentIds = dedupeStrings([
-    ...(config?.includeComponentIds || []),
-    ...(options.includeComponentIds || []),
-  ]);
-  const excludeComponentIds = dedupeStrings([
-    ...(config?.excludeComponentIds || []),
-    ...(options.excludeComponentIds || []),
-  ]);
-  const legacyLanguages = dedupeStrings(dedupeStrings([
-    ...(Array.isArray(options.legacyLanguages) ? options.legacyLanguages : []),
-    ...(Array.isArray(options.languages) ? options.languages : []),
-  ]).map(language => language.toLowerCase()));
-  const target = options.target || config?.target || 'egc';
-  const hasManifestBaseSelection = Boolean(profileId) || moduleIds.length > 0 || includeComponentIds.length > 0;
-  const usingManifestMode = hasManifestBaseSelection || excludeComponentIds.length > 0;
+const listOrEmpty = value => (Array.isArray(value) ? value : []);
 
+// A list the request carries in its config and in its options, in that
+// order, without repeats.
+function mergedList(config, options, key) {
+  return dedupeStrings([...(config?.[key] || []), ...(options[key] || [])]);
+}
+
+function requestedLanguages(options) {
+  return dedupeStrings(dedupeStrings([
+    ...listOrEmpty(options.legacyLanguages),
+    ...listOrEmpty(options.languages),
+  ]).map(language => language.toLowerCase()));
+}
+
+// A request selects either by manifest or by legacy language, never both,
+// and selects something unless it only asks for help.
+function checkSelection({ usingManifestMode, hasManifestBaseSelection, legacyLanguages, help }) {
   if (usingManifestMode && legacyLanguages.length > 0) {
     throw new Error(
       'Legacy language arguments cannot be combined with --profile, --modules, --with, --without, or manifest config selections'
     );
   }
 
-  if (!options.help && !hasManifestBaseSelection && legacyLanguages.length === 0) {
+  if (!help && !hasManifestBaseSelection && legacyLanguages.length === 0) {
     throw new Error('No install profile, module IDs, included components, or legacy languages were provided');
   }
+}
+
+function normalizeInstallRequest(options = {}) {
+  const config = options.config && typeof options.config === 'object'
+    ? options.config
+    : null;
+  const profileId = options.profileId || config?.profileId || null;
+  const moduleIds = validateInstallModuleIds(mergedList(config, options, 'moduleIds'));
+  const includeComponentIds = mergedList(config, options, 'includeComponentIds');
+  const excludeComponentIds = mergedList(config, options, 'excludeComponentIds');
+  const legacyLanguages = requestedLanguages(options);
+  const hasManifestBaseSelection = Boolean(profileId) || moduleIds.length > 0 || includeComponentIds.length > 0;
+  const usingManifestMode = hasManifestBaseSelection || excludeComponentIds.length > 0;
+
+  checkSelection({ usingManifestMode, hasManifestBaseSelection, legacyLanguages, help: options.help });
 
   return {
     mode: usingManifestMode ? 'manifest' : 'legacy-compat',
-    target,
+    target: options.target || config?.target || 'egc',
     profileId,
     moduleIds,
     includeComponentIds,

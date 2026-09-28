@@ -893,6 +893,7 @@ const BASH_GUARDIAN_HOOK_LIB_SOURCES = [
   'scripts/lib/wrapper-options.js',
   'scripts/lib/shell-bindings.js',
   'scripts/lib/shell-cwd.js',
+  'scripts/lib/handoff-commands.js',
   'scripts/lib/stdin-programs.js',
 ];
 

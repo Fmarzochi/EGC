@@ -34,6 +34,27 @@ function toNullableNumber(value, fieldName) {
   return numericValue;
 }
 
+function requireText(value, fieldName) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${fieldName} is required`);
+  }
+}
+
+// The outcome, the feedback and the time a run is recorded with.
+function checkOutcome(outcome, userFeedback, recordedAt) {
+  if (!VALID_OUTCOMES.has(outcome)) {
+    throw new Error('outcome must be one of success, failure, or partial');
+  }
+
+  if (userFeedback !== null && !VALID_FEEDBACK.has(userFeedback)) {
+    throw new Error('user_feedback must be accepted, corrected, rejected, or null');
+  }
+
+  if (Number.isNaN(Date.parse(recordedAt))) {
+    throw new TypeError('recorded_at must be an ISO timestamp');
+  }
+}
+
 function normalizeExecutionRecord(input, options = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('skill execution payload must be an object');
@@ -46,29 +67,10 @@ function normalizeExecutionRecord(input, options = {}) {
   const recordedAt = input.recorded_at || options.now || new Date().toISOString();
   const userFeedback = input.user_feedback || input.userFeedback || null;
 
-  if (typeof skillId !== 'string' || skillId.trim().length === 0) {
-    throw new Error('skill_id is required');
-  }
-
-  if (typeof skillVersion !== 'string' || skillVersion.trim().length === 0) {
-    throw new Error('skill_version is required');
-  }
-
-  if (typeof taskDescription !== 'string' || taskDescription.trim().length === 0) {
-    throw new Error('task_description is required');
-  }
-
-  if (!VALID_OUTCOMES.has(outcome)) {
-    throw new Error('outcome must be one of success, failure, or partial');
-  }
-
-  if (userFeedback !== null && !VALID_FEEDBACK.has(userFeedback)) {
-    throw new Error('user_feedback must be accepted, corrected, rejected, or null');
-  }
-
-  if (Number.isNaN(Date.parse(recordedAt))) {
-    throw new TypeError('recorded_at must be an ISO timestamp');
-  }
+  requireText(skillId, 'skill_id');
+  requireText(skillVersion, 'skill_version');
+  requireText(taskDescription, 'task_description');
+  checkOutcome(outcome, userFeedback, recordedAt);
 
   return {
     skill_id: skillId,

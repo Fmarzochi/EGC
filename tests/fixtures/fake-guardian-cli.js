@@ -41,7 +41,9 @@ function verdictForCommand(segment) {
   let tokens = segment.trim().split(/\s+/).filter(Boolean);
   tokens = unwrapCarriers(tokens);
   if (tokens[0] && /^[({]./.test(tokens[0])) tokens[0] = tokens[0].slice(1);
-  const base = (tokens[0] || '').split(/[\\/]/).pop();
+  // The validator reads a quoted command word as the word it quotes.
+  const word = (tokens[0] || '').replace(/^(['"])(.*)\1$/, '$2');
+  const base = word.split(/[\\/]/).pop();
   if (base === 'rm' || base === 'mv') {
     return { allowed: false, reason: `'${base}' is a destructive command and is always denied`, trust_level: 'DANGEROUS' };
   }

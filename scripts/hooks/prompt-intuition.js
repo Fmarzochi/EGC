@@ -115,30 +115,40 @@ function handleHistoryQuery(projectPath) {
   return parts.join('\n');
 }
 
+// What each detected intent injects into the prompt.
+const INTENT_HANDLERS = {
+  session_end: ({ cli, projectPath, transcriptPath }) => handleSessionEnd(cli, projectPath, transcriptPath),
+  session_resume: ({ projectPath }) => handleSessionResume(projectPath),
+  remember: ({ projectPath, prompt }) => handleRemember(projectPath, prompt),
+  history_query: ({ projectPath }) => handleHistoryQuery(projectPath),
+};
+
+const silent = () => ({ exitCode: 0, stdout: '' });
+
+// The user's prompt, or null when there is none worth reading.
+function promptOf(input) {
+  const prompt = input?.prompt || input?.user_prompt || '';
+  return typeof prompt === 'string' && prompt.trim().length >= 2 ? prompt : null;
+}
+
 function run(inputOrRaw) {
   const input = parseInput(inputOrRaw);
-  const prompt = input?.prompt || input?.user_prompt || '';
-  if (typeof prompt !== 'string' || prompt.trim().length < 2) return { exitCode: 0, stdout: '' };
+  const prompt = promptOf(input);
+  if (!prompt) return silent();
 
   const cli = resolveGuardianCli();
-  if (!cli) return { exitCode: 0, stdout: '' };
+  if (!cli) return silent();
 
-  const detection = callGuardian(cli, ['intent'], prompt, INTENT_TIMEOUT_MS);
-  const intent = detection?.intent;
-  if (!intent || intent === 'none') return { exitCode: 0, stdout: '' };
+  const intent = callGuardian(cli, ['intent'], prompt, INTENT_TIMEOUT_MS)?.intent;
+  const handler = intent && Object.hasOwn(INTENT_HANDLERS, intent) ? INTENT_HANDLERS[intent] : null;
+  if (!handler) return silent();
 
   const projectPath = input?.cwd || process.env.PWD || process.cwd();
   const transcriptPath = typeof input?.transcript_path === 'string' ? input.transcript_path : '';
-
   try {
-    let stdout = '';
-    if (intent === 'session_end') stdout = handleSessionEnd(cli, projectPath, transcriptPath);
-    else if (intent === 'session_resume') stdout = handleSessionResume(projectPath);
-    else if (intent === 'remember') stdout = handleRemember(projectPath, prompt);
-    else if (intent === 'history_query') stdout = handleHistoryQuery(projectPath);
-    return { exitCode: 0, stdout };
+    return { exitCode: 0, stdout: handler({ cli, projectPath, transcriptPath, prompt }) };
   } catch {
-    return { exitCode: 0, stdout: '' };
+    return silent();
   }
 }
 

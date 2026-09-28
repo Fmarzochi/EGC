@@ -65,32 +65,31 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // PACKAGE_MANAGERS constant tests
   console.log('PACKAGE_MANAGERS Constant:');
 
-  if (test('PACKAGE_MANAGERS has all expected managers', () => {
+  tally(test('PACKAGE_MANAGERS has all expected managers', () => {
     assert.ok(pm.PACKAGE_MANAGERS.npm, 'Should have npm');
     assert.ok(pm.PACKAGE_MANAGERS.pnpm, 'Should have pnpm');
     assert.ok(pm.PACKAGE_MANAGERS.yarn, 'Should have yarn');
     assert.ok(pm.PACKAGE_MANAGERS.bun, 'Should have bun');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('Each manager has required properties', () => {
+  tally(test('Each manager has required properties', () => {
     const requiredProps = ['name', 'lockFile', 'installCmd', 'runCmd', 'execCmd', 'testCmd', 'buildCmd', 'devCmd'];
     for (const [name, config] of Object.entries(pm.PACKAGE_MANAGERS)) {
       for (const prop of requiredProps) {
         assert.ok(config[prop], `${name} should have ${prop}`);
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // detectFromLockFile tests
   console.log('\ndetectFromLockFile:');
 
-  if (test('detects npm from package-lock.json', () => {
+  tally(test('detects npm from package-lock.json', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'package-lock.json'), '{}');
@@ -99,10 +98,9 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('detects pnpm from pnpm-lock.yaml', () => {
+  tally(test('detects pnpm from pnpm-lock.yaml', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'pnpm-lock.yaml'), '');
@@ -111,10 +109,9 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('detects yarn from yarn.lock', () => {
+  tally(test('detects yarn from yarn.lock', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'yarn.lock'), '');
@@ -123,10 +120,9 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('detects bun from bun.lockb', () => {
+  tally(test('detects bun from bun.lockb', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'bun.lockb'), '');
@@ -135,10 +131,9 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('returns null when no lock file exists', () => {
+  tally(test('returns null when no lock file exists', () => {
     const testDir = createTestDir();
     try {
       const result = pm.detectFromLockFile(testDir);
@@ -146,10 +141,9 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('respects detection priority (pnpm > npm)', () => {
+  tally(test('respects detection priority (pnpm > npm)', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'package-lock.json'), '{}');
@@ -160,13 +154,12 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // detectFromPackageJson tests
   console.log('\ndetectFromPackageJson:');
 
-  if (test('detects package manager from packageManager field', () => {
+  tally(test('detects package manager from packageManager field', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ name: 'test', packageManager: 'pnpm@8.6.0' }));
@@ -175,10 +168,9 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('handles packageManager without version', () => {
+  tally(test('handles packageManager without version', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ name: 'test', packageManager: 'yarn' }));
@@ -187,10 +179,9 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('returns null when no packageManager field', () => {
+  tally(test('returns null when no packageManager field', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ name: 'test' }));
@@ -199,10 +190,9 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('returns null when no package.json exists', () => {
+  tally(test('returns null when no package.json exists', () => {
     const testDir = createTestDir();
     try {
       const result = pm.detectFromPackageJson(testDir);
@@ -210,32 +200,29 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getAvailablePackageManagers tests
   console.log('\ngetAvailablePackageManagers:');
 
-  if (test('returns array of available managers', () => {
+  tally(test('returns array of available managers', () => {
     const available = pm.getAvailablePackageManagers();
     assert.ok(Array.isArray(available), 'Should return array');
     // npm should always be available with Node.js
     assert.ok(available.includes('npm'), 'npm should be available');
-  })) passed++;
-  else failed++;
+  }));
 
   // getPackageManager tests
   console.log('\ngetPackageManager:');
 
-  if (test('returns object with name, config, and source', () => {
+  tally(test('returns object with name, config, and source', () => {
     const result = pm.getPackageManager();
     assert.ok(result.name, 'Should have name');
     assert.ok(result.config, 'Should have config');
     assert.ok(result.source, 'Should have source');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('respects environment variable', () => {
+  tally(test('respects environment variable', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'yarn';
@@ -249,10 +236,9 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('detects from lock file in project', () => {
+  tally(test('detects from lock file in project', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     delete process.env.GEMINI_PACKAGE_MANAGER;
     const testDir = createTestDir();
@@ -267,13 +253,12 @@ function runTests() {
         process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getRunCommand tests
   console.log('\ngetRunCommand:');
 
-  if (test('returns correct install command', () => {
+  tally(test('returns correct install command', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'pnpm';
@@ -286,10 +271,9 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('returns correct test command', () => {
+  tally(test('returns correct test command', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -302,13 +286,12 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getExecCommand tests
   console.log('\ngetExecCommand:');
 
-  if (test('returns correct exec command for npm', () => {
+  tally(test('returns correct exec command for npm', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -321,10 +304,9 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('returns correct exec command for pnpm', () => {
+  tally(test('returns correct exec command for pnpm', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'pnpm';
@@ -337,22 +319,20 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getCommandPattern tests
   console.log('\ngetCommandPattern:');
 
-  if (test('generates pattern for dev command', () => {
+  tally(test('generates pattern for dev command', () => {
     const pattern = pm.getCommandPattern('dev');
     assert.ok(pattern.includes('npm run dev'), 'Should include npm');
     assert.ok(pattern.includes('pnpm'), 'Should include pnpm');
     assert.ok(pattern.includes('yarn dev'), 'Should include yarn');
     assert.ok(pattern.includes('bun run dev'), 'Should include bun');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('pattern matches actual commands', () => {
+  tally(test('pattern matches actual commands', () => {
     const pattern = pm.getCommandPattern('test');
     const regex = new RegExp(pattern);
     assert.ok(regex.test('npm test'), 'Should match npm test');
@@ -360,24 +340,22 @@ function runTests() {
     assert.ok(regex.test('yarn test'), 'Should match yarn test');
     assert.ok(regex.test('bun test'), 'Should match bun test');
     assert.ok(!regex.test('cargo test'), 'Should not match cargo test');
-  })) passed++;
-  else failed++;
+  }));
 
   // getSelectionPrompt tests
   console.log('\ngetSelectionPrompt:');
 
-  if (test('returns informative prompt', () => {
+  tally(test('returns informative prompt', () => {
     const prompt = pm.getSelectionPrompt();
     assert.ok(prompt.includes('Supported package managers'), 'Should list supported managers');
     assert.ok(prompt.includes('GEMINI_PACKAGE_MANAGER'), 'Should mention env var');
     assert.ok(prompt.includes('lock file'), 'Should mention lock file option');
-  })) passed++;
-  else failed++;
+  }));
 
   // setProjectPackageManager tests
   console.log('\nsetProjectPackageManager:');
 
-  if (test('sets project package manager', () => {
+  tally(test('sets project package manager', () => {
     const testDir = createTestDir();
     try {
       const result = pm.setProjectPackageManager('pnpm', testDir);
@@ -390,30 +368,27 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects unknown package manager', () => {
+  tally(test('rejects unknown package manager', () => {
     assert.throws(() => {
       pm.setProjectPackageManager('cargo');
     }, /Unknown package manager/);
-  })) passed++;
-  else failed++;
+  }));
 
   // setPreferredPackageManager tests
   console.log('\nsetPreferredPackageManager:');
 
-  if (test('rejects unknown package manager', () => {
+  tally(test('rejects unknown package manager', () => {
     assert.throws(() => {
       pm.setPreferredPackageManager('pip');
     }, /Unknown package manager/);
-  })) passed++;
-  else failed++;
+  }));
 
   // detectFromPackageJson edge cases
   console.log('\ndetectFromPackageJson (edge cases):');
 
-  if (test('handles invalid JSON in package.json', () => {
+  tally(test('handles invalid JSON in package.json', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'package.json'), 'NOT VALID JSON');
@@ -422,10 +397,9 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('returns null for unknown package manager in packageManager field', () => {
+  tally(test('returns null for unknown package manager in packageManager field', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ name: 'test', packageManager: 'deno@1.0' }));
@@ -434,13 +408,12 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getExecCommand edge cases
   console.log('\ngetExecCommand (edge cases):');
 
-  if (test('returns exec command without args', () => {
+  tally(test('returns exec command without args', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -453,13 +426,12 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getRunCommand additional cases
   console.log('\ngetRunCommand (additional):');
 
-  if (test('returns correct build command', () => {
+  tally(test('returns correct build command', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -471,10 +443,9 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('returns correct dev command', () => {
+  tally(test('returns correct dev command', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -486,10 +457,9 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('returns correct custom script command', () => {
+  tally(test('returns correct custom script command', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -501,49 +471,44 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // DETECTION_PRIORITY tests
   console.log('\nDETECTION_PRIORITY:');
 
-  if (test('has pnpm first', () => {
+  tally(test('has pnpm first', () => {
     assert.strictEqual(pm.DETECTION_PRIORITY[0], 'pnpm');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('has npm last', () => {
+  tally(test('has npm last', () => {
     assert.strictEqual(pm.DETECTION_PRIORITY[pm.DETECTION_PRIORITY.length - 1], 'npm');
-  })) passed++;
-  else failed++;
+  }));
 
   // getCommandPattern additional cases
   console.log('\ngetCommandPattern (additional):');
 
-  if (test('generates pattern for install command', () => {
+  tally(test('generates pattern for install command', () => {
     const pattern = pm.getCommandPattern('install');
     const regex = new RegExp(pattern);
     assert.ok(regex.test('npm install'), 'Should match npm install');
     assert.ok(regex.test('pnpm install'), 'Should match pnpm install');
     assert.ok(regex.test('yarn'), 'Should match yarn (install implicit)');
     assert.ok(regex.test('bun install'), 'Should match bun install');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('generates pattern for custom action', () => {
+  tally(test('generates pattern for custom action', () => {
     const pattern = pm.getCommandPattern('lint');
     const regex = new RegExp(pattern);
     assert.ok(regex.test('npm run lint'), 'Should match npm run lint');
     assert.ok(regex.test('pnpm lint'), 'Should match pnpm lint');
     assert.ok(regex.test('yarn lint'), 'Should match yarn lint');
     assert.ok(regex.test('bun run lint'), 'Should match bun run lint');
-  })) passed++;
-  else failed++;
+  }));
 
   // getPackageManager robustness tests
   console.log('\ngetPackageManager (robustness):');
 
-  if (test('falls through on corrupted project config JSON', () => {
+  tally(test('falls through on corrupted project config JSON', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-robust-'));
     const claudeDir = path.join(testDir, '.gemini');
     fs.mkdirSync(claudeDir, { recursive: true });
@@ -561,10 +526,9 @@ function runTests() {
       }
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('falls through on project config with unknown PM', () => {
+  tally(test('falls through on project config with unknown PM', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-robust-'));
     const claudeDir = path.join(testDir, '.gemini');
     fs.mkdirSync(claudeDir, { recursive: true });
@@ -581,33 +545,28 @@ function runTests() {
       }
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getRunCommand validation tests
   console.log('\ngetRunCommand (validation):');
 
-  if (test('rejects empty script name', () => {
+  tally(test('rejects empty script name', () => {
     assert.throws(() => pm.getRunCommand(''), /non-empty string/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects null script name', () => {
+  tally(test('rejects null script name', () => {
     assert.throws(() => pm.getRunCommand(null), /non-empty string/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects script name with shell metacharacters', () => {
+  tally(test('rejects script name with shell metacharacters', () => {
     assert.throws(() => pm.getRunCommand('test; rm -rf /'), /unsafe characters/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects script name with backticks', () => {
+  tally(test('rejects script name with backticks', () => {
     assert.throws(() => pm.getRunCommand('test`whoami`'), /unsafe characters/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('accepts scoped package names', () => {
+  tally(test('accepts scoped package names', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -620,28 +579,24 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getExecCommand validation tests
   console.log('\ngetExecCommand (validation):');
 
-  if (test('rejects empty binary name', () => {
+  tally(test('rejects empty binary name', () => {
     assert.throws(() => pm.getExecCommand(''), /non-empty string/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects null binary name', () => {
+  tally(test('rejects null binary name', () => {
     assert.throws(() => pm.getExecCommand(null), /non-empty string/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects binary name with shell metacharacters', () => {
+  tally(test('rejects binary name with shell metacharacters', () => {
     assert.throws(() => pm.getExecCommand('prettier; cat /etc/passwd'), /unsafe characters/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('accepts dotted binary names like tsc', () => {
+  tally(test('accepts dotted binary names like tsc', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -654,13 +609,12 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getPackageManager source detection tests
   console.log('\ngetPackageManager (source detection):');
 
-  if (test('detects from valid project-config (.gemini/package-manager.json)', () => {
+  tally(test('detects from valid project-config (.gemini/package-manager.json)', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-projcfg-'));
     const claudeDir = path.join(testDir, '.gemini');
     fs.mkdirSync(claudeDir, { recursive: true });
@@ -677,10 +631,9 @@ function runTests() {
       }
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('project-config takes priority over package.json', () => {
+  tally(test('project-config takes priority over package.json', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-priority-'));
     const claudeDir = path.join(testDir, '.gemini');
     fs.mkdirSync(claudeDir, { recursive: true });
@@ -702,10 +655,9 @@ function runTests() {
       }
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('package.json takes priority over lock file', () => {
+  tally(test('package.json takes priority over lock file', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-pj-lock-'));
     // package.json says yarn
     fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ packageManager: 'yarn@4.0.0' }));
@@ -723,10 +675,9 @@ function runTests() {
       }
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('defaults to npm when no config found', () => {
+  tally(test('defaults to npm when no config found', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-default-'));
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
@@ -742,13 +693,12 @@ function runTests() {
       }
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // setPreferredPackageManager success
   console.log('\nsetPreferredPackageManager (success):');
 
-  if (test('successfully saves preferred package manager', () => {
+  tally(test('successfully saves preferred package manager', () => {
     // This writes to ~/.gemini/package-manager.json: read original to restore
     const utils = require('../../scripts/lib/utils');
     const configPath = path.join(utils.getEGCDir(), 'package-manager.json');
@@ -770,31 +720,28 @@ function runTests() {
         }
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getCommandPattern completeness
   console.log('\ngetCommandPattern (completeness):');
 
-  if (test('generates pattern for test command', () => {
+  tally(test('generates pattern for test command', () => {
     const pattern = pm.getCommandPattern('test');
     assert.ok(pattern.includes('npm test'), 'Should include npm test');
     assert.ok(pattern.includes('pnpm test'), 'Should include pnpm test');
     assert.ok(pattern.includes('bun test'), 'Should include bun test');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('generates pattern for build command', () => {
+  tally(test('generates pattern for build command', () => {
     const pattern = pm.getCommandPattern('build');
     assert.ok(pattern.includes('npm run build'), 'Should include npm run build');
     assert.ok(pattern.includes('yarn build'), 'Should include yarn build');
-  })) passed++;
-  else failed++;
+  }));
 
   // getRunCommand PM-specific format tests
   console.log('\ngetRunCommand (PM-specific formats):');
 
-  if (test('pnpm custom script: pnpm (no run keyword)', () => {
+  tally(test('pnpm custom script: pnpm (no run keyword)', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'pnpm';
@@ -804,10 +751,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('yarn custom script: yarn <script>', () => {
+  tally(test('yarn custom script: yarn <script>', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'yarn';
@@ -817,10 +763,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('bun custom script: bun run <script>', () => {
+  tally(test('bun custom script: bun run <script>', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'bun';
@@ -830,10 +775,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('npm custom script: npm run <script>', () => {
+  tally(test('npm custom script: npm run <script>', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -843,10 +787,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('pnpm install returns pnpm install', () => {
+  tally(test('pnpm install returns pnpm install', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'pnpm';
@@ -855,10 +798,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('yarn install returns yarn (no install keyword)', () => {
+  tally(test('yarn install returns yarn (no install keyword)', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'yarn';
@@ -867,10 +809,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('bun test returns bun test', () => {
+  tally(test('bun test returns bun test', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'bun';
@@ -879,13 +820,12 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getExecCommand PM-specific format tests
   console.log('\ngetExecCommand (PM-specific formats):');
 
-  if (test('pnpm exec: pnpm dlx <binary>', () => {
+  tally(test('pnpm exec: pnpm dlx <binary>', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'pnpm';
@@ -894,10 +834,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('yarn exec: yarn dlx <binary>', () => {
+  tally(test('yarn exec: yarn dlx <binary>', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'yarn';
@@ -906,10 +845,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('bun exec: bunx <binary>', () => {
+  tally(test('bun exec: bunx <binary>', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'bun';
@@ -918,10 +856,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('ignores unknown env var package manager', () => {
+  tally(test('ignores unknown env var package manager', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'totally-fake-pm';
@@ -935,108 +872,92 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ─── Round 21: getExecCommand args validation ───
   console.log('\ngetExecCommand (args validation):');
 
-  if (test('rejects args with shell metacharacter semicolon', () => {
+  tally(test('rejects args with shell metacharacter semicolon', () => {
     assert.throws(() => pm.getExecCommand('prettier', '; rm -rf /'), /unsafe characters/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects args with pipe character', () => {
+  tally(test('rejects args with pipe character', () => {
     assert.throws(() => pm.getExecCommand('prettier', '--write . | cat'), /unsafe characters/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects args with backtick injection', () => {
+  tally(test('rejects args with backtick injection', () => {
     assert.throws(() => pm.getExecCommand('prettier', '`whoami`'), /unsafe characters/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects args with dollar sign', () => {
+  tally(test('rejects args with dollar sign', () => {
     assert.throws(() => pm.getExecCommand('prettier', '$HOME'), /unsafe characters/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects args with ampersand', () => {
+  tally(test('rejects args with ampersand', () => {
     assert.throws(() => pm.getExecCommand('prettier', '--write . && echo pwned'), /unsafe characters/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('allows safe args like --write .', () => {
+  tally(test('allows safe args like --write .', () => {
     const cmd = pm.getExecCommand('prettier', '--write .');
     assert.ok(cmd.includes('--write .'), 'Should include safe args');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('allows empty args without trailing space', () => {
+  tally(test('allows empty args without trailing space', () => {
     const cmd = pm.getExecCommand('prettier', '');
     assert.ok(!cmd.endsWith(' '), 'Should not have trailing space for empty args');
-  })) passed++;
-  else failed++;
+  }));
 
   // ─── Round 21: getCommandPattern regex escaping ───
   console.log('\ngetCommandPattern (regex escaping):');
 
-  if (test('escapes dot in action name for regex safety', () => {
+  tally(test('escapes dot in action name for regex safety', () => {
     const pattern = pm.getCommandPattern('test.all');
     // The dot should be escaped to \. in the pattern
     const regex = new RegExp(pattern);
     assert.ok(regex.test('npm run test.all'), 'Should match literal dot');
     assert.ok(!regex.test('npm run testXall'), 'Should NOT match arbitrary character in place of dot');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('escapes brackets in action name', () => {
+  tally(test('escapes brackets in action name', () => {
     const pattern = pm.getCommandPattern('build[prod]');
     const regex = new RegExp(pattern);
     assert.ok(regex.test('npm run build[prod]'), 'Should match literal brackets');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('escapes parentheses in action name', () => {
+  tally(test('escapes parentheses in action name', () => {
     // Should not throw when compiled as regex
     const pattern = pm.getCommandPattern('foo(bar)');
     assert.doesNotThrow(() => new RegExp(pattern), 'Should produce valid regex with escaped parens');
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 27: input validation and escapeRegex edge cases ──
   console.log('\ngetRunCommand (non-string input):');
 
-  if (test('rejects undefined script name', () => {
+  tally(test('rejects undefined script name', () => {
     assert.throws(() => pm.getRunCommand(undefined), /non-empty string/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects numeric script name', () => {
+  tally(test('rejects numeric script name', () => {
     assert.throws(() => pm.getRunCommand(123), /non-empty string/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects boolean script name', () => {
+  tally(test('rejects boolean script name', () => {
     assert.throws(() => pm.getRunCommand(true), /non-empty string/);
-  })) passed++;
-  else failed++;
+  }));
 
   console.log('\ngetExecCommand (non-string binary):');
 
-  if (test('rejects undefined binary name', () => {
+  tally(test('rejects undefined binary name', () => {
     assert.throws(() => pm.getExecCommand(undefined), /non-empty string/);
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('rejects numeric binary name', () => {
+  tally(test('rejects numeric binary name', () => {
     assert.throws(() => pm.getExecCommand(42), /non-empty string/);
-  })) passed++;
-  else failed++;
+  }));
 
   console.log('\ngetCommandPattern (escapeRegex completeness):');
 
-  if (test('escapes all regex metacharacters in action', () => {
+  tally(test('escapes all regex metacharacters in action', () => {
     // All regex metacharacters: . * + ? ^ $ { } ( ) | [ ] \
     const action = 'test.*+?^${}()|[]\\\\';
     const pattern = pm.getCommandPattern(action);
@@ -1045,20 +966,18 @@ function runTests() {
     // Should match the literal string
     const regex = new RegExp(pattern);
     assert.ok(regex.test(`npm run ${action}`), 'Should match literal metacharacters');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('escapeRegex preserves alphanumeric chars', () => {
+  tally(test('escapeRegex preserves alphanumeric chars', () => {
     const pattern = pm.getCommandPattern('simple-test');
     const regex = new RegExp(pattern);
     assert.ok(regex.test('npm run simple-test'), 'Should match simple action name');
     assert.ok(!regex.test('npm run simpleXtest'), 'Dash should not match arbitrary char');
-  })) passed++;
-  else failed++;
+  }));
 
   console.log('\ngetPackageManager (global config edge cases):');
 
-  if (test('ignores global config with non-string packageManager', () => {
+  tally(test('ignores global config with non-string packageManager', () => {
     // This tests the path through loadConfig where packageManager is not a valid PM name
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
@@ -1072,48 +991,43 @@ function runTests() {
         process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 30: getCommandPattern with special action patterns ──
   console.log('\nRound 30: getCommandPattern edge cases:');
 
-  if (test('escapes pipe character in action name', () => {
+  tally(test('escapes pipe character in action name', () => {
     const pattern = pm.getCommandPattern('lint|fix');
     const regex = new RegExp(pattern);
     assert.ok(regex.test('npm run lint|fix'), 'Should match literal pipe');
     assert.ok(!regex.test('npm run lint'), 'Pipe should be literal, not regex OR');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('escapes dollar sign in action name', () => {
+  tally(test('escapes dollar sign in action name', () => {
     const pattern = pm.getCommandPattern('deploy$prod');
     const regex = new RegExp(pattern);
     assert.ok(regex.test('npm run deploy$prod'), 'Should match literal dollar sign');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('handles action with leading/trailing spaces gracefully', () => {
+  tally(test('handles action with leading/trailing spaces gracefully', () => {
     // Spaces aren't special in regex but good to test the full pattern
     const pattern = pm.getCommandPattern(' dev ');
     const regex = new RegExp(pattern);
     assert.ok(regex.test('npm run dev '), 'Should match action with spaces');
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('known action "dev" does NOT use escapeRegex path', () => {
+  tally(test('known action "dev" does NOT use escapeRegex path', () => {
     // "dev" is a known action with hardcoded patterns, not the generic path
     const pattern = pm.getCommandPattern('dev');
     // Should match pnpm dev (without \"run\")
     const regex = new RegExp(pattern);
     assert.ok(regex.test('pnpm dev'), 'Known action pnpm dev should match');
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 31: setProjectPackageManager write verification ──
   console.log('\nsetProjectPackageManager (write verification, Round 31):');
 
-  if (test('setProjectPackageManager creates .gemini directory if missing', () => {
+  tally(test('setProjectPackageManager creates .gemini directory if missing', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-mkdir-'));
     try {
       const claudeDir = path.join(testDir, '.gemini');
@@ -1125,10 +1039,9 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('setProjectPackageManager includes setAt timestamp', () => {
+  tally(test('setProjectPackageManager includes setAt timestamp', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-ts-'));
     try {
       const before = new Date().toISOString();
@@ -1139,13 +1052,12 @@ function runTests() {
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 31: getExecCommand safe argument edge cases ──
   console.log('\ngetExecCommand (safe argument edge cases, Round 31):');
 
-  if (test('allows colons in args (e.g. --fix:all)', () => {
+  tally(test('allows colons in args (e.g. --fix:all)', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -1155,10 +1067,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('allows at-sign in args (e.g. @latest)', () => {
+  tally(test('allows at-sign in args (e.g. @latest)', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -1168,10 +1079,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('allows equals in args (e.g. --config=path)', () => {
+  tally(test('allows equals in args (e.g. --config=path)', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -1181,13 +1091,12 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 34: getExecCommand non-string args & packageManager type ──
   console.log('\nRound 34: getExecCommand non-string args:');
 
-  if (test('getExecCommand with args=0 produces command without extra args', () => {
+  tally(test('getExecCommand with args=0 produces command without extra args', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -1199,10 +1108,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('getExecCommand with args=false produces command without extra args', () => {
+  tally(test('getExecCommand with args=false produces command without extra args', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -1213,10 +1121,9 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('getExecCommand with args=null produces command without extra args', () => {
+  tally(test('getExecCommand with args=null produces command without extra args', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -1227,12 +1134,11 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
   console.log('\nRound 34: detectFromPackageJson with non-string packageManager:');
 
-  if (test('detectFromPackageJson handles array packageManager field gracefully', () => {
+  tally(test('detectFromPackageJson handles array packageManager field gracefully', () => {
     const tmpDir = createTestDir();
     try {
       fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ packageManager: ['pnpm@8', 'yarn@3'] }));
@@ -1242,10 +1148,9 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('detectFromPackageJson handles numeric packageManager field gracefully', () => {
+  tally(test('detectFromPackageJson handles numeric packageManager field gracefully', () => {
     const tmpDir = createTestDir();
     try {
       fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({ packageManager: 42 }));
@@ -1254,13 +1159,12 @@ function runTests() {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 48: detectFromPackageJson format edge cases ──
   console.log('\nRound 48: detectFromPackageJson (version format edge cases):');
 
-  if (test('returns null for packageManager with non-@ separator', () => {
+  tally(test('returns null for packageManager with non-@ separator', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ name: 'test', packageManager: 'pnpm+8.6.0' }));
@@ -1270,10 +1174,9 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
-  if (test('extracts package manager from caret version like yarn@^4.0.0', () => {
+  tally(test('extracts package manager from caret version like yarn@^4.0.0', () => {
     const testDir = createTestDir();
     try {
       fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ name: 'test', packageManager: 'yarn@^4.0.0' }));
@@ -1282,11 +1185,10 @@ function runTests() {
     } finally {
       cleanupTestDir(testDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // getPackageManager falls through corrupted global config to npm default
-  if (test('getPackageManager falls through corrupted global config to npm default', () => {
+  tally(test('getPackageManager falls through corrupted global config to npm default', () => {
     const tmpDir = createTestDir();
     const projDir = path.join(tmpDir, 'proj');
     fs.mkdirSync(projDir, { recursive: true });
@@ -1322,13 +1224,12 @@ function runTests() {
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       cleanupTestDir(tmpDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 69: getPackageManager global-config success path ──
   console.log('\nRound 69: getPackageManager (global-config success):');
 
-  if (test('getPackageManager returns source global-config when valid global config exists', () => {
+  tally(test('getPackageManager returns source global-config when valid global config exists', () => {
     const tmpDir = createTestDir();
     const projDir = path.join(tmpDir, 'proj');
     fs.mkdirSync(projDir, { recursive: true });
@@ -1366,13 +1267,12 @@ function runTests() {
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       cleanupTestDir(tmpDir);
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 71: setPreferredPackageManager save failure wraps error ──
   console.log('\nRound 71: setPreferredPackageManager (save failure):');
 
-  if (test('setPreferredPackageManager throws wrapped error when save fails', () => {
+  tally(test('setPreferredPackageManager throws wrapped error when save fails', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
       console.log(' (skipped: chmod ineffective on Windows/root)');
       return;
@@ -1405,13 +1305,12 @@ function runTests() {
       delete require.cache[require.resolve('../../scripts/lib/utils')];
       fs.rmSync(isoHome, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 72: setProjectPackageManager save failure wraps error ──
   console.log('\nRound 72: setProjectPackageManager (save failure):');
 
-  if (test('setProjectPackageManager throws wrapped error when write fails', () => {
+  tally(test('setProjectPackageManager throws wrapped error when write fails', () => {
     if (process.platform === 'win32' || process.getuid?.() === 0) {
       console.log(' (skipped: chmod ineffective on Windows/root)');
       return;
@@ -1429,13 +1328,12 @@ function runTests() {
       fs.chmodSync(claudeDir, 0o755);
       fs.rmSync(isoProject, { recursive: true, force: true });
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 80: getExecCommand with truthy non-string args ──
   console.log('\nRound 80: getExecCommand (truthy non-string args):');
 
-  if (test('getExecCommand with args=42 (truthy number) appends stringified value', () => {
+  tally(test('getExecCommand with args=42 (truthy number) appends stringified value', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -1449,13 +1347,12 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 86: detectFromPackageJson with empty (0-byte) package.json ──
   console.log('\nRound 86: detectFromPackageJson (empty package.json):');
 
-  if (test('detectFromPackageJson returns null for empty (0-byte) package.json', () => {
+  tally(test('detectFromPackageJson returns null for empty (0-byte) package.json', () => {
     // package-manager.js line 109-111: readFile returns "" for empty file.
     // "" is falsy -> if (content) is false -> skips JSON.parse -> returns null.
     const testDir = createTestDir();
@@ -1463,13 +1360,12 @@ function runTests() {
     const result = pm.detectFromPackageJson(testDir);
     assert.strictEqual(result, null, 'Empty package.json should return null (content="" is falsy)');
     cleanupTestDir(testDir);
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 91: getCommandPattern with empty action string ──
   console.log('\nRound 91: getCommandPattern (empty action):');
 
-  if (test('getCommandPattern with empty string returns valid regex pattern', () => {
+  tally(test('getCommandPattern with empty string returns valid regex pattern', () => {
     // package-manager.js line 401-409: Empty action falls to the else branch.
     // escapeRegex('') returns '', producing patterns like 'npm run ', 'yarn '.
     // The resulting combined regex should be compilable (not throw).
@@ -1481,13 +1377,12 @@ function runTests() {
     // The pattern should match package manager commands with trailing space
     assert.ok(regex.test('npm run '), 'Should match "npm run " with trailing space');
     assert.ok(regex.test('yarn '), 'Should match "yarn " with trailing space');
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 91: detectFromPackageJson with whitespace-only packageManager ──
   console.log('\nRound 91: detectFromPackageJson (whitespace-only packageManager):');
 
-  if (test('detectFromPackageJson returns null for whitespace-only packageManager field', () => {
+  tally(test('detectFromPackageJson returns null for whitespace-only packageManager field', () => {
     // package-manager.js line 114-119: \" \" is truthy, so enters the if block.
     // \" \".split('@')[0] = \" \" which doesn't match any PACKAGE_MANAGERS key.
     const testDir = createTestDir();
@@ -1498,13 +1393,12 @@ function runTests() {
     const result = pm.detectFromPackageJson(testDir);
     assert.strictEqual(result, null, 'Whitespace-only packageManager should return null');
     cleanupTestDir(testDir);
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 92: detectFromPackageJson with empty string packageManager ──
   console.log('\nRound 92: detectFromPackageJson (empty string packageManager):');
 
-  if (test('detectFromPackageJson returns null for empty string packageManager field', () => {
+  tally(test('detectFromPackageJson returns null for empty string packageManager field', () => {
     // package-manager.js line 114: if (pkg.packageManager): empty string \"\" is falsy,
     // so the if block is skipped entirely. Function returns null without attempting split.
     // This is distinct from Round 91's whitespace test (\" \" is truthy and enters the if).
@@ -1516,13 +1410,12 @@ function runTests() {
     const result = pm.detectFromPackageJson(testDir);
     assert.strictEqual(result, null, 'Empty string packageManager should return null (falsy)');
     cleanupTestDir(testDir);
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 94: detectFromPackageJson with scoped package name ──
   console.log('\nRound 94: detectFromPackageJson (scoped package name @scope/pkg@version):');
 
-  if (test('detectFromPackageJson returns null for scoped package name (@scope/pkg@version)', () => {
+  tally(test('detectFromPackageJson returns null for scoped package name (@scope/pkg@version)', () => {
     // package-manager.js line 116: pmName = pkg.packageManager.split('@')[0]\
     // For \"@pnpm/exe@8.0.0\", split('@') -> ['', 'pnpm/exe', '8.0.0'], so [0] = ''\
     // PACKAGE_MANAGERS[''] is undefined -> returns null.\
@@ -1537,13 +1430,12 @@ function runTests() {
     const result = pm.detectFromPackageJson(testDir);
     assert.strictEqual(result, null, 'Scoped package name should return null (split("@")[0] is empty string)');
     cleanupTestDir(testDir);
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 94: getPackageManager with empty string GEMINI_PACKAGE_MANAGER ──
   console.log('\nRound 94: getPackageManager (empty string GEMINI_PACKAGE_MANAGER env var):');
 
-  if (test('getPackageManager skips empty string GEMINI_PACKAGE_MANAGER (falsy short-circuit)', () => {
+  tally(test('getPackageManager skips empty string GEMINI_PACKAGE_MANAGER (falsy short-circuit)', () => {
     // package-manager.js line 168: if (envPm && PACKAGE_MANAGERS[envPm])\
     // Empty string '' is falsy: the && short-circuits before checking PACKAGE_MANAGERS.\
     // This is distinct from the 'totally-fake-pm' test (truthy but unknown PM).
@@ -1560,13 +1452,12 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 104: detectFromLockFile with null projectDir (no input validation) ──
   console.log('\nRound 104: detectFromLockFile (null projectDir: throws TypeError):');
 
-  if (test('detectFromLockFile(null) throws TypeError (path.join rejects null)', () => {
+  tally(test('detectFromLockFile(null) throws TypeError (path.join rejects null)', () => {
     // package-manager.js line 95: `path.join(projectDir, pm.lockFile)`: there is no\
     // guard checking that projectDir is a string before passing it to path.join().\
     // When projectDir is null, path.join(null, 'package-lock.json') throws a TypeError\
@@ -1576,13 +1467,12 @@ function runTests() {
       { name: 'TypeError' },
       'path.join(null, ...) should throw TypeError (no input validation in detectFromLockFile)'
     );
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 105: getExecCommand with object args (bypasses SAFE_ARGS_REGEX, coerced to [object Object]) ──
   console.log('\nRound 105: getExecCommand (object args: typeof bypass coerces to [object Object]):');
 
-  if (test('getExecCommand with args={} bypasses SAFE_ARGS validation and coerces to "[object Object]"', () => {
+  tally(test('getExecCommand with args={} bypasses SAFE_ARGS validation and coerces to "[object Object]"', () => {
     // package-manager.js line 334: `if (args && typeof args === 'string' && !SAFE_ARGS_REGEX.test(args))`
     // SAFE_ARGS_REGEX check is entirely SKIPPED.\
     // Line 339: `args ? ' ' + args : ''`: object is truthy, so it reaches\
@@ -1596,13 +1486,12 @@ function runTests() {
       /unsafe characters/,
       'Same string as explicit string arg is correctly rejected by SAFE_ARGS_REGEX'
     );
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 109: getExecCommand with ../ path traversal in binary: SAFE_NAME_REGEX allows it ──
   console.log('\nRound 109: getExecCommand (path traversal in binary: SAFE_NAME_REGEX permits ../ in binary name):');
 
-  if (test('getExecCommand accepts ../../../etc/passwd as binary because SAFE_NAME_REGEX allows ../', () => {
+  tally(test('getExecCommand accepts ../../../etc/passwd as binary because SAFE_NAME_REGEX allows ../', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -1619,13 +1508,12 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // ── Round 108: getRunCommand with path traversal: SAFE_NAME_REGEX allows ../ sequences ──
   console.log('\nRound 108: getRunCommand (path traversal: SAFE_NAME_REGEX permits ../ via allowed / and . chars):');
 
-  if (test('getRunCommand accepts @scope/../../evil because SAFE_NAME_REGEX allows ../', () => {
+  tally(test('getRunCommand accepts @scope/../../evil because SAFE_NAME_REGEX allows ../', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     try {
       process.env.GEMINI_PACKAGE_MANAGER = 'npm';
@@ -1643,13 +1531,12 @@ function runTests() {
         delete process.env.GEMINI_PACKAGE_MANAGER;
       }
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // Round 111: getExecCommand with newline in args
   console.log('\n' + String.raw`Round 111: getExecCommand (newline in args: SAFE_ARGS_REGEX \s matches \n):`);
 
-  if (test('getExecCommand accepts newline in args because SAFE_ARGS_REGEX includes newline', () => {
+  tally(test('getExecCommand accepts newline in args because SAFE_ARGS_REGEX includes newline', () => {
     // SAFE_ARGS_REGEX = /^[@a-zA-Z0-9\\s_.\\/:=,'\"*+-\\]+$/
     // \\s matches whitespace including newline
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
@@ -1668,8 +1555,7 @@ function runTests() {
       if (originalEnv !== undefined) process.env.GEMINI_PACKAGE_MANAGER = originalEnv;
       else delete process.env.GEMINI_PACKAGE_MANAGER;
     }
-  })) passed++;
-  else failed++;
+  }));
 
   // Summary
   console.log('\n=== Test Results ===');

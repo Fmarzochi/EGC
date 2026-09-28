@@ -37,8 +37,9 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('lists supported target adapters', () => {
+  tally(test('lists supported target adapters', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(adapter => adapter.target);
     assert.ok(targets.includes('egc'), 'Should include egc target');
@@ -51,9 +52,9 @@ function runTests() {
     assert.ok(targets.includes('opencode'), 'Should include opencode target');
     assert.ok(targets.includes('codebuddy'), 'Should include codebuddy target');
     assert.ok(targets.includes('claude'), 'Should include claude target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('retired targets are no longer registered (gemini, continue, roocode)', () => {
+  tally(test('retired targets are no longer registered (gemini, continue, roocode)', () => {
     for (const retired of ['gemini', 'continue', 'continue-project', 'roocode', 'roocode-project']) {
       assert.throws(
         () => getInstallTargetAdapter(retired),
@@ -61,9 +62,9 @@ function runTests() {
         `${retired} must stay retired, with the retirement explained`
       );
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves cursor adapter root and install-state path from project root', () => {
+  tally(test('resolves cursor adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('cursor');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
@@ -71,9 +72,9 @@ function runTests() {
 
     assert.strictEqual(root, path.join(projectRoot, '.cursor'));
     assert.strictEqual(statePath, path.join(projectRoot, '.cursor', 'egc-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves egc adapter root and install-state path from home dir', () => {
+  tally(test('resolves egc adapter root and install-state path from home dir', () => {
     const adapter = getInstallTargetAdapter('egc');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir, repoRoot: '/repo/egc' });
@@ -81,9 +82,9 @@ function runTests() {
 
     assert.strictEqual(root, path.join(homeDir, '.gemini'));
     assert.strictEqual(statePath, path.join(homeDir, '.gemini', 'egc', 'install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('plans egc rules and skills under EGC-managed subdirectories', () => {
+  tally(test('plans egc rules and skills under EGC-managed subdirectories', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -124,9 +125,9 @@ function runTests() {
       )),
       'Should also install bundled Gemini skills under antigravity-cli/skills for AGY'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('plans scaffold operations and flattens native target roots', () => {
+  tally(test('plans scaffold operations and flattens native target roots', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
     const modules = [
@@ -181,9 +182,9 @@ function runTests() {
       preserved.destinationPath,
       path.join(projectRoot, '.cursor', 'rules', 'common-coding-style.mdc')
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('cursor adapter always plans the Guardian beforeShellExecution hook, even with no modules selected (EGC-494/EGC-498)', () => {
+  tally(test('cursor adapter always plans the Guardian beforeShellExecution hook, even with no modules selected (EGC-494/EGC-498)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -217,9 +218,9 @@ function runTests() {
     assert.ok(mergeOperation, 'Should plan the beforeShellExecution hooks.json merge');
     assert.strictEqual(mergeOperation.destinationPath, path.join(targetRoot, 'hooks.json'));
     assert.strictEqual(mergeOperation.hookScriptPath, adapterScriptDestination);
-  })) passed++; else failed++;
+  }));
 
-  if (test('cursor .cursor module never copies the repo\'s own hooks.json raw (the Guardian merge owns that destination alone)', () => {
+  tally(test('cursor .cursor module never copies the repo\'s own hooks.json raw (the Guardian merge owns that destination alone)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -263,9 +264,9 @@ function runTests() {
       undefined,
       'The Crusher merge should never carry a seedPath -- only the Guardian merge seeds the fresh file, so the repo\'s own hooks.json is never seeded twice'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('cursor Guardian merge omits seedPath when the .cursor module was not selected (minimal/rules-only installs stay minimal)', () => {
+  tally(test('cursor Guardian merge omits seedPath when the .cursor module was not selected (minimal/rules-only installs stay minimal)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -285,9 +286,9 @@ function runTests() {
       undefined,
       'Should not seed this repo\'s own platform hooks (dashboard-emit, tmux blocker, etc.) into an install that never selected .cursor'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('cursor hooks-runtime module does not duplicate the Guardian\'s own per-file copies (its directory scaffold already covers them)', () => {
+  tally(test('cursor hooks-runtime module does not duplicate the Guardian\'s own per-file copies (its directory scaffold already covers them)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -306,9 +307,9 @@ function runTests() {
       1,
       'The adapter script should come from the scripts/hooks directory scaffold exactly once, not also as a redundant standalone copy'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('plans cursor rules with flat namespaced filenames to avoid rule collisions', () => {
+  tally(test('plans cursor rules with flat namespaced filenames to avoid rule collisions', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -362,9 +363,9 @@ function runTests() {
       )),
       'Should not flatten localized README docs into Cursor rule files'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('does not install root AGENTS.md into Cursor nested context', () => {
+  tally(test('does not install root AGENTS.md into Cursor nested context', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -392,9 +393,9 @@ function runTests() {
       )),
       'Cursor installs should not create .cursor/AGENTS.md'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('plans cursor agents with egc-prefixed filenames to avoid agent collisions', () => {
+  tally(test('plans cursor agents with egc-prefixed filenames to avoid agent collisions', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -430,9 +431,9 @@ function runTests() {
       )),
       'Should not plan a whole-directory Cursor agent copy'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('plans cursor platform rule files as .mdc and excludes rule README docs', () => {
+  tally(test('plans cursor platform rule files as .mdc and excludes rule README docs', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -486,9 +487,9 @@ function runTests() {
       )),
       'Should not emit Cursor rule README docs as .mdc files'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('deduplicates cursor rule destinations when rules-core and platform-configs overlap', () => {
+  tally(test('deduplicates cursor rule destinations when rules-core and platform-configs overlap', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -518,9 +519,9 @@ function runTests() {
       '.cursor/rules/common-agents.md',
       'Should prefer native .cursor/rules content when cursor platform rules would collide'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('prefers native cursor hooks when hooks-runtime and platform-configs overlap', () => {
+  tally(test('prefers native cursor hooks when hooks-runtime and platform-configs overlap', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -550,9 +551,9 @@ function runTests() {
       '.cursor/hooks',
       'Should prefer native Cursor hooks over generic hooks-runtime hooks'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('plans antigravity remaps for workflows, skills, and flat rules', () => {
+  tally(test('plans antigravity remaps for workflows, skills, and flat rules', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -597,9 +598,9 @@ function runTests() {
       )),
       'Should flatten common rules for antigravity'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('exposes validate and planOperations on adapters', () => {
+  tally(test('exposes validate and planOperations on adapters', () => {
     const claudeAdapter = getInstallTargetAdapter('egc');
     const cursorAdapter = getInstallTargetAdapter('cursor');
 
@@ -618,16 +619,16 @@ function runTests() {
         .some(i => i.severity === 'error'),
       'cursor adapter should have no blocking validation errors'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('throws on unknown target adapter', () => {
+  tally(test('throws on unknown target adapter', () => {
     assert.throws(
       () => getInstallTargetAdapter('ghost-target'),
       /Unknown install target adapter/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves codebuddy adapter root and install-state path from project root', () => {
+  tally(test('resolves codebuddy adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('codebuddy');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
@@ -638,9 +639,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'project');
     assert.strictEqual(root, path.join(projectRoot, '.codebuddy'));
     assert.strictEqual(statePath, path.join(projectRoot, '.codebuddy', 'egc-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves cline adapter root and install-state path from project root', () => {
+  tally(test('resolves cline adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('cline');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
@@ -654,9 +655,9 @@ function runTests() {
       statePath,
       path.join(projectRoot, '.clinerules', 'egc-install-state.json')
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('cline adapter supports lookup by target and adapter id', () => {
+  tally(test('cline adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('cline');
     const byId = getInstallTargetAdapter('cline-project');
 
@@ -664,9 +665,9 @@ function runTests() {
     assert.strictEqual(byId.id, 'cline-project');
     assert.ok(byTarget.supports('cline'));
     assert.ok(byTarget.supports('cline-project'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('plans cline rules as flat namespaced files under .clinerules', () => {
+  tally(test('plans cline rules as flat namespaced files under .clinerules', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -712,16 +713,16 @@ function runTests() {
       )),
       'Should not preserve nested rule directories for Cline installs'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('cline adapter is included in the full adapter list', () => {
+  tally(test('cline adapter is included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(adapter => adapter.target);
 
     assert.ok(targets.includes('cline'), 'Should include cline target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('cline adapter always plans the Guardian PreToolUse hook (Unix + Windows), even with no modules selected', () => {
+  tally(test('cline adapter always plans the Guardian PreToolUse hook (Unix + Windows), even with no modules selected', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
     const targetRoot = path.join(projectRoot, '.clinerules');
@@ -769,9 +770,9 @@ function runTests() {
       )),
       'Should plan the shared adapter-stdin-json.js dependency copy at the destination cline-guardian-adapter.js requires as a sibling'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('cline adapter refuses to overwrite a pre-existing, non-EGC PreToolUse hook, but reinstalls over its own', () => {
+  tally(test('cline adapter refuses to overwrite a pre-existing, non-EGC PreToolUse hook, but reinstalls over its own', () => {
     // Cline has no hooks.json to merge into -- unlike every other host, it
     // looks up exactly one file per hook name, so silently overwriting a
     // user's own unrelated .clinerules/hooks/PreToolUse (and later deleting
@@ -806,9 +807,9 @@ function runTests() {
     } finally {
       fs.rmSync(projectRoot, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('codebuddy adapter supports lookup by target and adapter id', () => {
+  tally(test('codebuddy adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('codebuddy');
     const byId = getInstallTargetAdapter('codebuddy-project');
 
@@ -816,9 +817,9 @@ function runTests() {
     assert.strictEqual(byId.id, 'codebuddy-project');
     assert.ok(byTarget.supports('codebuddy'));
     assert.ok(byTarget.supports('codebuddy-project'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('plans codebuddy rules with flat namespaced filenames', () => {
+  tally(test('plans codebuddy rules with flat namespaced filenames', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -851,9 +852,9 @@ function runTests() {
       )),
       'Should not preserve nested rule directories for codebuddy installs'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('exposes validate and planOperations on codebuddy adapter', () => {
+  tally(test('exposes validate and planOperations on codebuddy adapter', () => {
     const codebuddyAdapter = getInstallTargetAdapter('codebuddy');
 
     assert.strictEqual(typeof codebuddyAdapter.planOperations, 'function');
@@ -863,9 +864,9 @@ function runTests() {
         .some(i => i.severity === 'error'),
       'codebuddy adapter should have no blocking validation errors'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves claude adapter root and install-state path from home dir', () => {
+  tally(test('resolves claude adapter root and install-state path from home dir', () => {
     const adapter = getInstallTargetAdapter('claude');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -876,9 +877,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.claude'));
     assert.strictEqual(statePath, path.join(homeDir, '.claude', 'egc', 'install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude adapter strips category from skill paths and installs flat', () => {
+  tally(test('claude adapter strips category from skill paths and installs flat', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -904,9 +905,9 @@ function runTests() {
       )),
       'Should strip category and install skill flat under ~/.claude/skills/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude adapter always plans the SessionStart state hook operations', () => {
+  tally(test('claude adapter always plans the SessionStart state hook operations', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -940,9 +941,9 @@ function runTests() {
     assert.strictEqual(mergeOperation.hookEvent, 'SessionStart');
     assert.strictEqual(mergeOperation.hookScriptPath, hookScriptPath);
     assert.ok(mergeOperation.hookCommand.includes(hookScriptPath));
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude adapter plans the Scrubber write hook for Edit, Write, and MultiEdit', () => {
+  tally(test('claude adapter plans the Scrubber write hook for Edit, Write, and MultiEdit', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const plan = planInstallTargetScaffold({ target: 'claude', repoRoot, homeDir, modules: [] });
@@ -963,9 +964,9 @@ function runTests() {
         `Should copy ${dep}`
       );
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude adapter copies egc-memory-save.js and its lib deps even with no modules selected (EGC-495)', () => {
+  tally(test('claude adapter copies egc-memory-save.js and its lib deps even with no modules selected (EGC-495)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1002,9 +1003,9 @@ function runTests() {
     );
     assert.ok(preCompactMergeOperation, 'Should plan the PreCompact settings.json hook merge');
     assert.strictEqual(preCompactMergeOperation.hookScriptPath, scriptDestination);
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude adapter registers the GateGuard fact-force hook on Edit/Write/MultiEdit, not just Bash', () => {
+  tally(test('claude adapter registers the GateGuard fact-force hook on Edit/Write/MultiEdit, not just Bash', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1041,9 +1042,9 @@ function runTests() {
       && operation.hookMatcher === 'Edit'
     ));
     assert.ok(stillHasWriteValidator, 'GateGuard should be additive, not a replacement for the protected-path write validator');
-  })) passed++; else failed++;
+  }));
 
-  if (test('codex adapter wires GateGuard into ~/.codex/hooks.json, not ~/.agents (Codex CLI does not read hooks from its skills root)', () => {
+  tally(test('codex adapter wires GateGuard into ~/.codex/hooks.json, not ~/.agents (Codex CLI does not read hooks from its skills root)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1086,9 +1087,9 @@ function runTests() {
       && operation.destinationPath === path.join(codexHome, 'scripts', 'lib', 'utils.js')
     ));
     assert.ok(libCopyOperation, 'Should copy gateguard-fact-force.js\'s only dependency alongside it');
-  })) passed++; else failed++;
+  }));
 
-  if (test('codex adapter also wires the Token Crusher into ~/.codex/hooks.json on the Bash matcher', () => {
+  tally(test('codex adapter also wires the Token Crusher into ~/.codex/hooks.json on the Bash matcher', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1124,9 +1125,9 @@ function runTests() {
       ));
       assert.ok(op, `Should scaffold ${src} into ~/.codex`);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('codex adapter also wires EGC Guardian into ~/.codex/hooks.json on the Bash matcher (2026-07-27 gap fix)', () => {
+  tally(test('codex adapter also wires EGC Guardian into ~/.codex/hooks.json on the Bash matcher (2026-07-27 gap fix)', () => {
     // Confirmed via https://developers.openai.com/codex/hooks (redirects to
     // https://learn.chatgpt.com/docs/hooks) that Codex supports the plain
     // exit-code-2-plus-stderr blocking contract pre-bash-guardian-validate.js
@@ -1166,14 +1167,14 @@ function runTests() {
       ));
       assert.ok(op, `Should scaffold ${src} into ~/.codex`);
     }
-  })) passed++; else failed++;
+  }));
 
 
   for (const [target, rootFn] of [
     ['windsurf', homeDir => path.join(homeDir, '.codeium', 'windsurf')],
     ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.windsurf')],
   ]) {
-    if (test(`${target} adapter wires GateGuard into hooks.json via the Windsurf-contract adapter script (pre_write_code + pre_run_command)`, () => {
+    tally(test(`${target} adapter wires GateGuard into hooks.json via the Windsurf-contract adapter script (pre_write_code + pre_run_command)`, () => {
       const repoRoot = path.join(__dirname, '..', '..');
       const homeDir = '/Users/example';
       const projectRoot = '/workspace/app';
@@ -1210,7 +1211,7 @@ function runTests() {
         && operation.destinationPath === gateGuardScriptPath
       ));
       assert.ok(gateGuardCopyOperation, 'Should also copy gateguard-fact-force.js itself (the adapter requires it in-process)');
-    })) passed++; else failed++;
+    }));
   }
 
   // EGC Guardian: 2026-07-27 audit (EGC-460/462) found Windsurf had
@@ -1223,7 +1224,7 @@ function runTests() {
     ['windsurf', homeDir => path.join(homeDir, '.codeium', 'windsurf')],
     ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.windsurf')],
   ]) {
-    if (test(`${target} adapter wires the EGC Guardian into hooks.json via its own Windsurf-contract adapter script (pre_run_command only)`, () => {
+    tally(test(`${target} adapter wires the EGC Guardian into hooks.json via its own Windsurf-contract adapter script (pre_run_command only)`, () => {
       const repoRoot = path.join(__dirname, '..', '..');
       const homeDir = '/Users/example';
       const projectRoot = '/workspace/app';
@@ -1268,10 +1269,10 @@ function runTests() {
         ));
         assert.ok(libCopyOperation, `Should copy the Guardian's dependency ${lib}`);
       }
-    })) passed++; else failed++;
+    }));
   }
 
-  if (test('resolves codex adapter root to ~/.agents and install-state path', () => {
+  tally(test('resolves codex adapter root to ~/.agents and install-state path', () => {
     const adapter = getInstallTargetAdapter('codex');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -1282,9 +1283,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.agents'));
     assert.strictEqual(statePath, path.join(homeDir, '.agents', 'egc', 'codex-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('codex adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
+  tally(test('codex adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1307,9 +1308,9 @@ function runTests() {
       )),
       'Should strip category and install skill flat under ~/.agents/skills/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('codex adapter filters out foreign-platform source paths (audit EGC-128)', () => {
+  tally(test('codex adapter filters out foreign-platform source paths (audit EGC-128)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1335,9 +1336,9 @@ function runTests() {
       plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'skills/workflow/tdd-workflow'),
       'Should still install the module\'s own skill path'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves opencode adapter root to ~/.config/opencode and install-state path', () => {
+  tally(test('resolves opencode adapter root to ~/.config/opencode and install-state path', () => {
     const adapter = getInstallTargetAdapter('opencode');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -1348,9 +1349,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.config', 'opencode'));
     assert.strictEqual(statePath, path.join(homeDir, '.config', 'opencode', 'egc', 'install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('opencode adapter strips category from skill paths and installs flat under ~/.config/opencode/skills/', () => {
+  tally(test('opencode adapter strips category from skill paths and installs flat under ~/.config/opencode/skills/', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1373,9 +1374,9 @@ function runTests() {
       )),
       'Should strip category and install skill flat under ~/.config/opencode/skills/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('opencode adapter filters out foreign-platform source paths (audit EGC-128)', () => {
+  tally(test('opencode adapter filters out foreign-platform source paths (audit EGC-128)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1401,9 +1402,9 @@ function runTests() {
       plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'skills/workflow/tdd-workflow'),
       'Should still install the module\'s own skill path'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('opencode adapter plans only the markdown folders of the egc-universal package, never its tools, plugin sources, package files or opencode.json (#1396)', () => {
+  tally(test('opencode adapter plans only the markdown folders of the egc-universal package, never its tools, plugin sources, package files or opencode.json (#1396)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const configDir = path.join(homeDir, '.config', 'opencode');
@@ -1448,9 +1449,9 @@ function runTests() {
       single.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('.opencode')).map(op => [normalizedRelativePath(op.sourceRelativePath), op.destinationPath]),
       [['.opencode/commands/build-fix.md', path.join(configDir, 'commands', 'build-fix.md')]]
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('opencode adapter skips a shipped package directory that is a link (#1396)', () => {
+  tally(test('opencode adapter skips a shipped package directory that is a link (#1396)', () => {
     if (process.platform === 'win32') return;
     const fs = require('fs');
     const fakeRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-opencode-linked-'));
@@ -1485,9 +1486,9 @@ function runTests() {
       fs.rmSync(fakeRepo, { recursive: true, force: true });
       fs.rmSync(elsewhere, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('opencode adapter also retires a module file that left the plan, beside the package files it retires on its own', () => {
+  tally(test('opencode adapter also retires a module file that left the plan, beside the package files it retires on its own', () => {
     const fs = require('fs');
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-opencode-retire-module-'));
@@ -1518,9 +1519,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('opencode adapter retires the package files an earlier install wrote, keeps the shipped folders and opencode.json, and plans nothing without a previous state (#1396)', () => {
+  tally(test('opencode adapter retires the package files an earlier install wrote, keeps the shipped folders and opencode.json, and plans nothing without a previous state (#1396)', () => {
     const fs = require('fs');
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-opencode-retire-'));
@@ -1560,9 +1561,9 @@ function runTests() {
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('opencode adapter always plans the Guardian+Crusher plugin, even with no modules selected (EGC-494/EGC-498)', () => {
+  tally(test('opencode adapter always plans the Guardian+Crusher plugin, even with no modules selected (EGC-494/EGC-498)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1589,9 +1590,9 @@ function runTests() {
       plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'scripts/hooks/pre-bash-crusher-rewrite.js'),
       'Should copy pre-bash-crusher-rewrite.js so the plugin\'s require() resolves'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('codebuddy adapter strips category from skill paths and installs flat', () => {
+  tally(test('codebuddy adapter strips category from skill paths and installs flat', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -1614,17 +1615,17 @@ function runTests() {
       )),
       'Should strip category and install skill flat under .codebuddy/skills/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('antigravity-project adapter uses .agents (plural) as root directory', () => {
+  tally(test('antigravity-project adapter uses .agents (plural) as root directory', () => {
     const adapter = getInstallTargetAdapter('antigravity');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
 
     assert.strictEqual(root, path.join(projectRoot, '.agents'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves windsurf home adapter root to ~/.codeium/windsurf and install-state path', () => {
+  tally(test('resolves windsurf home adapter root to ~/.codeium/windsurf and install-state path', () => {
     const adapter = getInstallTargetAdapter('windsurf');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -1635,9 +1636,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.codeium', 'windsurf'));
     assert.strictEqual(statePath, path.join(homeDir, '.codeium', 'windsurf', 'egc', 'install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('windsurf adapter strips category from skill paths and installs flat', () => {
+  tally(test('windsurf adapter strips category from skill paths and installs flat', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1661,9 +1662,9 @@ function runTests() {
       )),
       'Should strip category and install skill flat under ~/.codeium/windsurf/skills/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves amp home adapter root to ~/.amp and install-state path', () => {
+  tally(test('resolves amp home adapter root to ~/.amp and install-state path', () => {
     const adapter = getInstallTargetAdapter('amp');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -1674,9 +1675,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.amp'));
     assert.strictEqual(statePath, path.join(homeDir, '.amp', 'egc', 'install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('amp adapter strips category from skill paths and installs flat', () => {
+  tally(test('amp adapter strips category from skill paths and installs flat', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1700,9 +1701,9 @@ function runTests() {
       )),
       'Should strip category and install skill flat under ~/.amp/skills/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('amp home adapter plans the Guardian+Crusher plugin under ~/.config/amp/, not ~/.amp/ (EGC-507)', () => {
+  tally(test('amp home adapter plans the Guardian+Crusher plugin under ~/.config/amp/, not ~/.amp/ (EGC-507)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const configRoot = path.join(homeDir, '.config', 'amp');
@@ -1735,9 +1736,9 @@ function runTests() {
       )),
       'Should plan the shared Crusher rewrite engine copy next to the plugin, even with no modules selected'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('amp project adapter plans the Guardian+Crusher plugin under .amp/plugins/ (EGC-507)', () => {
+  tally(test('amp project adapter plans the Guardian+Crusher plugin under .amp/plugins/ (EGC-507)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
     const targetRoot = path.join(projectRoot, '.amp');
@@ -1763,9 +1764,9 @@ function runTests() {
       )),
       'Should plan the shared Guardian validator copy under the same .amp/ root as skills, even with no modules selected'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves copilot home adapter root to ~/.github and install-state path', () => {
+  tally(test('resolves copilot home adapter root to ~/.github and install-state path', () => {
     const adapter = getInstallTargetAdapter('copilot');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -1776,9 +1777,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.github'));
     assert.strictEqual(statePath, path.join(homeDir, '.github', 'egc', 'install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('copilot adapter strips category from skill paths and installs flat', () => {
+  tally(test('copilot adapter strips category from skill paths and installs flat', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1802,17 +1803,17 @@ function runTests() {
       )),
       'Should strip category and install skill flat under ~/.github/skills/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('lists all 3 new IDE targets in adapter list', () => {
+  tally(test('lists all 3 new IDE targets in adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(adapter => adapter.target);
     assert.ok(targets.includes('windsurf'), 'Should include windsurf target');
     assert.ok(targets.includes('amp'), 'Should include amp target');
     assert.ok(targets.includes('copilot'), 'Should include copilot target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves zed home adapter root to ~/.config/zed and install-state path', () => {
+  tally(test('resolves zed home adapter root to ~/.config/zed and install-state path', () => {
     const adapter = getInstallTargetAdapter('zed');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -1823,9 +1824,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.config', 'zed'));
     assert.strictEqual(statePath, path.join(homeDir, '.config', 'zed', 'egc', 'install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('zed adapter supports lookup by target and adapter id', () => {
+  tally(test('zed adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('zed');
     const byId = getInstallTargetAdapter('zed-home');
 
@@ -1833,9 +1834,9 @@ function runTests() {
     assert.strictEqual(byId.id, 'zed-home');
     assert.ok(byTarget.supports('zed'));
     assert.ok(byTarget.supports('zed-home'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('zed adapter strips category from skill paths and installs flat under ~/.config/zed/skills/', () => {
+  tally(test('zed adapter strips category from skill paths and installs flat under ~/.config/zed/skills/', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1856,9 +1857,9 @@ function runTests() {
       ),
       'Should strip category and install skill flat under ~/.config/zed/skills/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('zed adapter handles already-flat skill paths without double-stripping', () => {
+  tally(test('zed adapter handles already-flat skill paths without double-stripping', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1876,9 +1877,9 @@ function runTests() {
       ),
       'Should handle already-flat skill path without stripping anything'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('exposes validate and planOperations on zed adapter', () => {
+  tally(test('exposes validate and planOperations on zed adapter', () => {
     const zedAdapter = getInstallTargetAdapter('zed');
 
     assert.strictEqual(typeof zedAdapter.planOperations, 'function');
@@ -1888,15 +1889,15 @@ function runTests() {
         .some(i => i.severity === 'error'),
       'zed adapter should have no blocking validation errors'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('zed adapter is included in the full adapter list', () => {
+  tally(test('zed adapter is included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('zed'), 'Should include zed target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('every schema target enum value has a matching adapter (regression guard)', () => {
+  tally(test('every schema target enum value has a matching adapter (regression guard)', () => {
     const schemaPath = path.join(__dirname, '..', '..', 'schemas', 'egc-install-config.schema.json');
     const schema = JSON.parse(require('fs').readFileSync(schemaPath, 'utf8'));
     const schemaTargets = schema.properties.target.enum;
@@ -1910,9 +1911,9 @@ function runTests() {
         `Available adapter targets: ${adapterTargets.join(', ')}`
       );
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('every adapter target is listed in the schema enum (regression guard)', () => {
+  tally(test('every adapter target is listed in the schema enum (regression guard)', () => {
     const schemaPath = path.join(__dirname, '..', '..', 'schemas', 'egc-install-config.schema.json');
     const schema = JSON.parse(require('fs').readFileSync(schemaPath, 'utf8'));
     const schemaTargets = schema.properties.target.enum;
@@ -1925,9 +1926,9 @@ function runTests() {
         `Schema targets: ${schemaTargets.join(', ')}`
       );
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('every adapter target is in SUPPORTED_INSTALL_TARGETS (regression guard)', () => {
+  tally(test('every adapter target is in SUPPORTED_INSTALL_TARGETS (regression guard)', () => {
     const { SUPPORTED_INSTALL_TARGETS } = require('../../scripts/lib/install-manifests');
     const adapters = listInstallTargetAdapters();
 
@@ -1938,9 +1939,9 @@ function runTests() {
         `Supported: ${SUPPORTED_INSTALL_TARGETS.join(', ')}`
       );
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude target resolves a skills module on its own, without dragging platform-configs (issue #160)', () => {
+  tally(test('claude target resolves a skills module on its own, without dragging platform-configs (issue #160)', () => {
     const { resolveInstallPlan } = require('../../scripts/lib/install-manifests');
 
     const plan = resolveInstallPlan({
@@ -1960,9 +1961,9 @@ function runTests() {
       0,
       'no modules should be silently skipped'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('copilot adapter registers the GateGuard fact-force hook at ~/.copilot/hooks/hooks.json', () => {
+  tally(test('copilot adapter registers the GateGuard fact-force hook at ~/.copilot/hooks/hooks.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -2004,9 +2005,9 @@ function runTests() {
       ['Bash', 'Edit', 'MultiEdit', 'Write'],
       'GateGuard should be registered on Edit, Write, MultiEdit and Bash for VS Code Copilot'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('crusher hook is registered on Bash and scaffolded for Copilot and Antigravity', () => {
+  tally(test('crusher hook is registered on Bash and scaffolded for Copilot and Antigravity', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
@@ -2044,14 +2045,14 @@ function runTests() {
         `${target}: crusher engine dependency scaffolded`
       );
     }
-  })) passed++; else failed++;
+  }));
 
   // Session-mesh wake-signal notice: Antigravity inherited the Gemini CLI
   // hook loop, which reads the hookSpecificOutput.additionalContext field
   // mesh-events-inject.js emits, so the same standalone script is registered
   // on UserPromptSubmit at both the project hooks file (antigravity target)
   // and the global one (egc target owns ~/.gemini).
-  if (test('mesh notice hook is registered on UserPromptSubmit and scaffolded for Antigravity, Codex, and Trae', () => {
+  tally(test('mesh notice hook is registered on UserPromptSubmit and scaffolded for Antigravity, Codex, and Trae', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
@@ -2093,11 +2094,11 @@ function runTests() {
         `${target}: shared mesh implementation scaffolded`
       );
     }
-  })) passed++; else failed++;
+  }));
 
   // Amp has no hooks.json: its turn boundary is the agent.start plugin event,
   // so the mesh ships as a plugin file plus the shared script it requires.
-  if (test('mesh notice plugin is scaffolded for Amp at both plugin roots', () => {
+  tally(test('mesh notice plugin is scaffolded for Amp at both plugin roots', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
@@ -2125,11 +2126,11 @@ function runTests() {
         `${target}: shared mesh script scaffolded next to the plugin`
       );
     }
-  })) passed++; else failed++;
+  }));
 
   // Kiro takes a dedicated whole-file hook document under <root>/hooks/,
   // dispatched on its own tag so apply/remove never merge user content.
-  if (test('mesh notice hook document is planned for Kiro at both roots', () => {
+  tally(test('mesh notice hook document is planned for Kiro at both roots', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
@@ -2159,13 +2160,13 @@ function runTests() {
         `${target}: shared mesh script scaffolded under the adapter root`
       );
     }
-  })) passed++; else failed++;
+  }));
 
   // EGC Guardian: 2026-07-27 audit (EGC-460..464) found these three targets
   // had GateGuard + Crusher wired (tests above) but never the Guardian
   // command validator itself -- neither one actually checks a Bash command
   // against the Guardian's allowlist/denylist.
-  if (test('Guardian hook is registered on Bash and scaffolded for Copilot and Antigravity', () => {
+  tally(test('Guardian hook is registered on Bash and scaffolded for Copilot and Antigravity', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
@@ -2198,9 +2199,9 @@ function runTests() {
         );
       }
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('codebuddy adapter registers the GateGuard fact-force hook at .codebuddy/settings.json', () => {
+  tally(test('codebuddy adapter registers the GateGuard fact-force hook at .codebuddy/settings.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2227,7 +2228,7 @@ function runTests() {
       ['Bash', 'Edit', 'MultiEdit', 'Write'],
       'GateGuard should be registered on Edit, Write, MultiEdit and Bash for CodeBuddy'
     );
-  })) passed++; else failed++;
+  }));
 
   // EGC-539: the GateGuard PreToolUse merge operations above were registered
   // unconditionally (test above), but the script the hooks point at was
@@ -2235,7 +2236,7 @@ function runTests() {
   // did not include scripts/hooks/scripts/lib wrote a hooks.json entry
   // pointing at a file that never existed on disk. Same pattern the sibling
   // Crusher/Guardian tests below already guard for their own scripts.
-  if (test('codebuddy adapter also scaffolds the GateGuard script and its utils.js dependency, unconditional of module selection', () => {
+  tally(test('codebuddy adapter also scaffolds the GateGuard script and its utils.js dependency, unconditional of module selection', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2259,14 +2260,14 @@ function runTests() {
       && operation.destinationPath === path.join(projectRoot, '.codebuddy', 'scripts', 'lib', 'utils.js')
     ));
     assert.ok(utilsOp, 'Should scaffold gateguard-fact-force.js\'s utils.js dependency alongside it');
-  })) passed++; else failed++;
+  }));
 
   // Cubic review (EGC-539, PR #1142): a codebuddy install that explicitly
   // selects a module whose paths already cover scripts/hooks/scripts/lib
   // (e.g. 'hooks-runtime') must not double-copy gateguard-fact-force.js and
   // utils.js -- once via moduleOperations, once via the unconditional copy
   // the test above exercises.
-  if (test('codebuddy adapter does not double-copy the GateGuard script when a selected module already covers scripts/hooks and scripts/lib', () => {
+  tally(test('codebuddy adapter does not double-copy the GateGuard script when a selected module already covers scripts/hooks and scripts/lib', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2318,7 +2319,7 @@ function runTests() {
       && normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
     ));
     assert.strictEqual(explicitFileLevelUtilsOp, undefined, 'createGateGuardScriptCopyOperations\' explicit file-level copy of utils.js should be skipped when the module already covers scripts/lib');
-  })) passed++; else failed++;
+  }));
 
   // Cubic review (EGC-539, PR #1142), violation 1: a module selection that
   // covers only ONE of scripts/hooks or scripts/lib (not both) must still
@@ -2326,7 +2327,7 @@ function runTests() {
   // earlier `.some()`-based guard treated covering either one as proof both
   // were scaffolded, silently dropping utils.js in this scenario and
   // reintroducing the ENOENT fail-open this PR exists to fix.
-  if (test('codebuddy adapter still copies utils.js when a selected module covers only scripts/hooks, not scripts/lib', () => {
+  tally(test('codebuddy adapter still copies utils.js when a selected module covers only scripts/hooks, not scripts/lib', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2351,7 +2352,7 @@ function runTests() {
       && operation.destinationPath === path.join(projectRoot, '.codebuddy', 'scripts', 'lib', 'utils.js')
     ));
     assert.ok(explicitFileLevelUtilsOp, 'utils.js must still be explicitly copied: the selected module does not cover scripts/lib at all');
-  })) passed++; else failed++;
+  }));
 
   // Cubic review (EGC-539, PR #1142), violation 2: a module selection that
   // pins a single unrelated file inside scripts/hooks or scripts/lib (not
@@ -2359,7 +2360,7 @@ function runTests() {
   // mistaken for coverage of gateguard-fact-force.js/utils.js -- an earlier
   // `startsWith('scripts/hooks/')` guard matched any file in that
   // directory, wrongly skipping the explicit copy.
-  if (test('codebuddy adapter still copies the GateGuard script when a selected module only pins an unrelated file in scripts/hooks/scripts/lib', () => {
+  tally(test('codebuddy adapter still copies the GateGuard script when a selected module only pins an unrelated file in scripts/hooks/scripts/lib', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2383,9 +2384,9 @@ function runTests() {
       && operation.destinationPath === path.join(projectRoot, '.codebuddy', 'scripts', 'lib', 'utils.js')
     ));
     assert.ok(explicitFileLevelUtilsOp, 'utils.js must still be explicitly copied: the selected module only pins an unrelated file in scripts/lib, not the directory or utils.js itself');
-  })) passed++; else failed++;
+  }));
 
-  if (test('codebuddy adapter also registers the Token Crusher on Bash at .codebuddy/settings.json', () => {
+  tally(test('codebuddy adapter also registers the Token Crusher on Bash at .codebuddy/settings.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2419,9 +2420,9 @@ function runTests() {
       ));
       assert.ok(op, `Should scaffold ${src} into .codebuddy`);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('codebuddy adapter also registers the EGC Guardian on Bash at .codebuddy/settings.json', () => {
+  tally(test('codebuddy adapter also registers the EGC Guardian on Bash at .codebuddy/settings.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2454,9 +2455,9 @@ function runTests() {
       ));
       assert.ok(op, `Should scaffold ${src} into .codebuddy`);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('antigravity-project adapter registers the GateGuard fact-force hook at .agents/hooks.json', () => {
+  tally(test('antigravity-project adapter registers the GateGuard fact-force hook at .agents/hooks.json', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2498,9 +2499,9 @@ function runTests() {
       ['Bash', 'Edit', 'MultiEdit', 'Write'],
       'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity project scope'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('egc-home adapter registers the GateGuard fact-force hook for Antigravity global scope too', () => {
+  tally(test('egc-home adapter registers the GateGuard fact-force hook for Antigravity global scope too', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -2542,7 +2543,7 @@ function runTests() {
       )),
       'gateguard-fact-force.js must be copied unconditionally, not only via the hooks-runtime module'
     );
-  })) passed++; else failed++;
+  }));
 
   // EGC Guardian: cubic-dev-ai review (PR #1052, 2026-07-27) found
   // createGlobalBashGuardianHookMergeOperation existed in
@@ -2550,7 +2551,7 @@ function runTests() {
   // so global Antigravity installs never got the Guardian despite GateGuard
   // (test above) being wired. A follow-up review then found the same
   // registered-but-never-copied gap once it WAS wired.
-  if (test('egc-home adapter registers the EGC Guardian on Bash for Antigravity global scope too', () => {
+  tally(test('egc-home adapter registers the EGC Guardian on Bash for Antigravity global scope too', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -2583,14 +2584,14 @@ function runTests() {
         `${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
       );
     }
-  })) passed++; else failed++;
+  }));
 
   // Token Crusher: 2026-07-21 audit left Antigravity's PROJECT-level
   // registration (.agents/hooks.json, antigravity-project.js) wired but its
   // GLOBAL registration (this egc-home target, ~/.gemini/antigravity-cli/
   // hooks.json) unverified/unwired -- same pattern as the GateGuard/Guardian
   // global gaps above. Closed 2026-07-28.
-  if (test('egc-home adapter registers the Token Crusher on Bash for Antigravity global scope too', () => {
+  tally(test('egc-home adapter registers the Token Crusher on Bash for Antigravity global scope too', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -2623,7 +2624,7 @@ function runTests() {
         `${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
       );
     }
-  })) passed++; else failed++;
+  }));
 
   // cubic-dev-ai review (PR #1052, 2026-07-27): making the copies above
   // unconditional meant a DEFAULT install (which does select hooks-runtime)
@@ -2634,7 +2635,7 @@ function runTests() {
   // bookkeeping. This must not regress: the explicit per-file operations
   // should be suppressed whenever the broader directory copy already
   // covers them.
-  if (test('egc-home adapter does not duplicate GateGuard/Guardian script copies when hooks-runtime IS selected (default install)', () => {
+  tally(test('egc-home adapter does not duplicate GateGuard/Guardian script copies when hooks-runtime IS selected (default install)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -2687,9 +2688,9 @@ function runTests() {
       )),
       'hooks.json registrations must survive the copy dedup'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves kiro home adapter root to ~/.kiro and install-state path', () => {
+  tally(test('resolves kiro home adapter root to ~/.kiro and install-state path', () => {
     const adapter = getInstallTargetAdapter('kiro');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -2700,9 +2701,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.kiro'));
     assert.strictEqual(statePath, path.join(homeDir, '.kiro', 'egc', 'install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves kiro project adapter root to .kiro and install-state path', () => {
+  tally(test('resolves kiro project adapter root to .kiro and install-state path', () => {
     const adapter = getInstallTargetAdapter('kiro-project');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
@@ -2713,9 +2714,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'project');
     assert.strictEqual(root, path.join(projectRoot, '.kiro'));
     assert.strictEqual(statePath, path.join(projectRoot, '.kiro', 'egc-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('kiro adapter supports lookup by target and adapter id', () => {
+  tally(test('kiro adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('kiro');
     const byId = getInstallTargetAdapter('kiro-home');
     const projectById = getInstallTargetAdapter('kiro-project');
@@ -2727,9 +2728,9 @@ function runTests() {
     assert.ok(byTarget.supports('kiro-home'));
     assert.ok(projectById.supports('kiro'));
     assert.ok(projectById.supports('kiro-project'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('kiro home adapter strips category from skill paths and installs flat under ~/.kiro/skills/', () => {
+  tally(test('kiro home adapter strips category from skill paths and installs flat under ~/.kiro/skills/', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -2748,9 +2749,9 @@ function runTests() {
       )),
       'Should strip category and install skill flat under ~/.kiro/skills/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('kiro project adapter strips category from skill paths and installs flat under .kiro/skills/', () => {
+  tally(test('kiro project adapter strips category from skill paths and installs flat under .kiro/skills/', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -2769,9 +2770,9 @@ function runTests() {
       )),
       'Should strip category and install skill flat under .kiro/skills/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('kiro home and project adapters always plan the Guardian preToolUse hook, even with no modules selected (EGC-494/EGC-498)', () => {
+  tally(test('kiro home and project adapters always plan the Guardian preToolUse hook, even with no modules selected (EGC-494/EGC-498)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
@@ -2805,15 +2806,15 @@ function runTests() {
       assert.strictEqual(mergeOperation.destinationPath, path.join(targetRoot, 'agents', 'default.json'));
       assert.strictEqual(mergeOperation.hookScriptPath, adapterScriptDestination);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('kiro adapters are included in the full adapter list', () => {
+  tally(test('kiro adapters are included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('kiro'), 'Should include kiro target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('Cursor/Windsurf/Kiro all plan a copy of adapter-stdin-json.js, the shared dependency their translation adapters require() (2026-07-29 MODULE_NOT_FOUND regression)', () => {
+  tally(test('Cursor/Windsurf/Kiro all plan a copy of adapter-stdin-json.js, the shared dependency their translation adapters require() (2026-07-29 MODULE_NOT_FOUND regression)', () => {
     // cubic-dev-ai flagged this on PR #1073 (Kiro) as a P1: the adapter
     // scripts require('../lib/adapter-stdin-json') for their
     // truncation-aware stdin reader, but none of the three hosts' copy
@@ -2844,9 +2845,9 @@ function runTests() {
         `[${label}] Should plan a copy of adapter-stdin-json.js alongside the Guardian adapter`
       );
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('trae and opencode ship the write validator next to the Bash guardian', () => {
+  tally(test('trae and opencode ship the write validator next to the Bash guardian', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
     const homeDir = '/Users/example';
@@ -2872,9 +2873,9 @@ function runTests() {
       normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-write-guardian-validate.js'
       && operation.destinationPath === opencodeWriteScript
     )), 'opencode scaffolds the write validator script for its plugin');
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves trae adapter root and install-state path from project root', () => {
+  tally(test('resolves trae adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('trae');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
@@ -2885,9 +2886,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'project');
     assert.strictEqual(root, path.join(projectRoot, '.trae'));
     assert.strictEqual(statePath, path.join(projectRoot, '.trae', 'egc-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves junie home adapter root to ~/.junie and install-state path', () => {
+  tally(test('resolves junie home adapter root to ~/.junie and install-state path', () => {
     const adapter = getInstallTargetAdapter('junie');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -2898,9 +2899,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.junie'));
     assert.strictEqual(statePath, path.join(homeDir, '.junie', 'egc', 'install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves junie project adapter root and install-state path from project root', () => {
+  tally(test('resolves junie project adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('junie-project');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
@@ -2911,9 +2912,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'project');
     assert.strictEqual(root, path.join(projectRoot, '.junie'));
     assert.strictEqual(statePath, path.join(projectRoot, '.junie', 'egc-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('junie adapter supports lookup by target and adapter id', () => {
+  tally(test('junie adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('junie');
     const byId = getInstallTargetAdapter('junie-home');
     const projectById = getInstallTargetAdapter('junie-project');
@@ -2925,9 +2926,9 @@ function runTests() {
     assert.ok(byTarget.supports('junie-home'));
     assert.ok(projectById.supports('junie'));
     assert.ok(projectById.supports('junie-project'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('junie home adapter always plans Guardian and Crusher on PreToolUse/Bash, even with no modules selected', () => {
+  tally(test('junie home adapter always plans Guardian and Crusher on PreToolUse/Bash, even with no modules selected', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const targetRoot = path.join(homeDir, '.junie');
@@ -2975,9 +2976,9 @@ function runTests() {
       )),
       'Should plan the shared adapter-stdin-json.js copy (both Junie adapters require it) -- regression guard for the exact MODULE_NOT_FOUND gap fixed in #1076'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('trae adapter supports lookup by target and adapter id', () => {
+  tally(test('trae adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('trae');
     const byId = getInstallTargetAdapter('trae-project');
 
@@ -2985,9 +2986,9 @@ function runTests() {
     assert.strictEqual(byId.id, 'trae-project');
     assert.ok(byTarget.supports('trae'));
     assert.ok(byTarget.supports('trae-project'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('trae adapter preserves category structure under .trae/skills/ (default scaffold, no flat stripping)', () => {
+  tally(test('trae adapter preserves category structure under .trae/skills/ (default scaffold, no flat stripping)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3006,15 +3007,15 @@ function runTests() {
       )),
       'Should preserve skills/<category>/<name> structure under .trae/skills/, same default scaffold as gemini-project'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('trae adapter is included in the full adapter list', () => {
+  tally(test('trae adapter is included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('trae'), 'Should include trae target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('trae adapter always plans Guardian and Crusher on PreToolUse/RunCommand, even with no modules selected', () => {
+  tally(test('trae adapter always plans Guardian and Crusher on PreToolUse/RunCommand, even with no modules selected', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
     const targetRoot = path.join(projectRoot, '.trae');
@@ -3065,9 +3066,9 @@ function runTests() {
       )),
       'Should plan the shared Crusher hook script copy even with no modules selected'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('trae adapter accepts a singular input.module and treats a fully empty input as no modules', () => {
+  tally(test('trae adapter accepts a singular input.module and treats a fully empty input as no modules', () => {
     // planInstallTargetScaffold() (used by the tests above) always normalizes
     // to an array before calling adapter.planOperations(), so these two
     // fallback branches are only reachable by calling the adapter directly --
@@ -3097,9 +3098,9 @@ function runTests() {
       4,
       'Guardian, write validator, Crusher, and mesh notice should still be planned unconditionally when neither modules nor module is present'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves goose adapter root to ~/.agents (shared with Codex) and its own install-state path', () => {
+  tally(test('resolves goose adapter root to ~/.agents (shared with Codex) and its own install-state path', () => {
     const adapter = getInstallTargetAdapter('goose');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -3110,9 +3111,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.agents'));
     assert.strictEqual(statePath, path.join(homeDir, '.agents', 'egc', 'goose-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('goose adapter supports lookup by target and adapter id', () => {
+  tally(test('goose adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('goose');
     const byId = getInstallTargetAdapter('goose-home');
 
@@ -3120,9 +3121,9 @@ function runTests() {
     assert.strictEqual(byId.id, 'goose-home');
     assert.ok(byTarget.supports('goose'));
     assert.ok(byTarget.supports('goose-home'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('goose adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
+  tally(test('goose adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -3141,9 +3142,9 @@ function runTests() {
       )),
       'Should strip category and install skill flat under ~/.agents/skills/, same root Codex writes to'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('goose adapter wires the Guardian hook under its own self-contained plugin root (EGC-498 corrected)', () => {
+  tally(test('goose adapter wires the Guardian hook under its own self-contained plugin root (EGC-498 corrected)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -3165,9 +3166,9 @@ function runTests() {
       operation.destinationPath === path.join(homeDir, '.agents', 'plugins', 'egc-guardian', 'scripts', 'hooks', 'goose-guardian-adapter.js')
     ));
     assert.ok(adapterScriptOperation, 'Goose adapter should copy goose-guardian-adapter.js as a sibling of the shared Guardian scripts, not the shared .agents/scripts/ root');
-  })) passed++; else failed++;
+  }));
 
-  if (test('goose adapter has no Token Crusher wiring (no rewrite capability documented)', () => {
+  tally(test('goose adapter has no Token Crusher wiring (no rewrite capability documented)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -3182,15 +3183,15 @@ function runTests() {
       !plan.operations.some(operation => operation.destinationPath && operation.destinationPath.includes('crusher')),
       'Goose adapter should not register any Crusher-related operation'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('goose adapter is included in the full adapter list', () => {
+  tally(test('goose adapter is included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('goose'), 'Should include goose target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves amazonq adapter root to .amazonq/rules and install-state path', () => {
+  tally(test('resolves amazonq adapter root to .amazonq/rules and install-state path', () => {
     const adapter = getInstallTargetAdapter('amazonq');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
@@ -3201,9 +3202,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'project');
     assert.strictEqual(root, path.join(projectRoot, '.amazonq', 'rules'));
     assert.strictEqual(statePath, path.join(projectRoot, '.amazonq', 'rules', 'egc-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('amazonq adapter supports lookup by target and adapter id', () => {
+  tally(test('amazonq adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('amazonq');
     const byId = getInstallTargetAdapter('amazonq-project');
 
@@ -3211,9 +3212,9 @@ function runTests() {
     assert.strictEqual(byId.id, 'amazonq-project');
     assert.ok(byTarget.supports('amazonq'));
     assert.ok(byTarget.supports('amazonq-project'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('amazonq adapter preserves category structure under .amazonq/rules/ (default scaffold, no flat stripping)', () => {
+  tally(test('amazonq adapter preserves category structure under .amazonq/rules/ (default scaffold, no flat stripping)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3232,9 +3233,9 @@ function runTests() {
       )),
       'Should preserve skills/<category>/<name> structure under .amazonq/rules/, same default scaffold as gemini-project'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('amazonq adapter does not double-nest a "rules" module path under .amazonq/rules/', () => {
+  tally(test('amazonq adapter does not double-nest a "rules" module path under .amazonq/rules/', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3253,9 +3254,9 @@ function runTests() {
       path.join(projectRoot, '.amazonq', 'rules'),
       'rootSegments already ends in "rules": the module path must sync into that root directly, not .amazonq/rules/rules/'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('amazonq-project adapter wires the Guardian hook as a sibling of rules/, not nested inside it (EGC-498 corrected)', () => {
+  tally(test('amazonq-project adapter wires the Guardian hook as a sibling of rules/, not nested inside it (EGC-498 corrected)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3273,9 +3274,9 @@ function runTests() {
       mergeOperation.destinationPath,
       path.join(projectRoot, '.amazonq', 'cli-agents', 'egc-guardian.json')
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('amazonq-home adapter resolves to ~/.aws/amazonq and wires ONLY the Guardian hook, no rules scaffold', () => {
+  tally(test('amazonq-home adapter resolves to ~/.aws/amazonq and wires ONLY the Guardian hook, no rules scaffold', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -3301,14 +3302,14 @@ function runTests() {
       mergeOperation.destinationPath,
       path.join(homeDir, '.aws', 'amazonq', 'cli-agents', 'egc-guardian.json')
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('bare "amazonq" target still resolves to amazonq-project by default (amazonq-home is reached only by id)', () => {
+  tally(test('bare "amazonq" target still resolves to amazonq-project by default (amazonq-home is reached only by id)', () => {
     const byTarget = getInstallTargetAdapter('amazonq');
     assert.strictEqual(byTarget.id, 'amazonq-project');
-  })) passed++; else failed++;
+  }));
 
-  if (test('openhands-project adapter resolves to .openhands and wires ONLY the Guardian hook, no skill scaffold (EGC-498 corrected)', () => {
+  tally(test('openhands-project adapter resolves to .openhands and wires ONLY the Guardian hook, no skill scaffold (EGC-498 corrected)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3331,20 +3332,20 @@ function runTests() {
     const mergeOperation = plan.operations.find(o => o.destinationPath && o.destinationPath.endsWith('hooks.json'));
     assert.ok(mergeOperation, 'openhands-project should register the Guardian hooks.json merge operation');
     assert.strictEqual(mergeOperation.destinationPath, path.join(projectRoot, '.openhands', 'hooks.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('bare "openhands" target still resolves to openhands-home by default (openhands-project is reached only by id)', () => {
+  tally(test('bare "openhands" target still resolves to openhands-home by default (openhands-project is reached only by id)', () => {
     const byTarget = getInstallTargetAdapter('openhands');
     assert.strictEqual(byTarget.id, 'openhands-home');
-  })) passed++; else failed++;
+  }));
 
-  if (test('amazonq adapter is included in the full adapter list', () => {
+  tally(test('amazonq adapter is included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('amazonq'), 'Should include amazonq target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves openhands adapter root to ~/.agents (shared with Codex/Goose) and its own install-state path', () => {
+  tally(test('resolves openhands adapter root to ~/.agents (shared with Codex/Goose) and its own install-state path', () => {
     const adapter = getInstallTargetAdapter('openhands');
     const homeDir = '/Users/example';
     const root = adapter.resolveRoot({ homeDir });
@@ -3355,9 +3356,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'home');
     assert.strictEqual(root, path.join(homeDir, '.agents'));
     assert.strictEqual(statePath, path.join(homeDir, '.agents', 'egc', 'openhands-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('openhands adapter supports lookup by target and adapter id', () => {
+  tally(test('openhands adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('openhands');
     const byId = getInstallTargetAdapter('openhands-home');
 
@@ -3365,9 +3366,9 @@ function runTests() {
     assert.strictEqual(byId.id, 'openhands-home');
     assert.ok(byTarget.supports('openhands'));
     assert.ok(byTarget.supports('openhands-home'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('openhands adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
+  tally(test('openhands adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -3386,9 +3387,9 @@ function runTests() {
       )),
       'Should strip category and install skill flat under ~/.agents/skills/, same AgentSkills-standard root Codex/Goose write to'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('openhands adapter has no GateGuard hook wiring', () => {
+  tally(test('openhands adapter has no GateGuard hook wiring', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -3403,15 +3404,15 @@ function runTests() {
       !plan.operations.some(operation => operation.kind === 'merge-claude-settings-hooks'),
       'OpenHands adapter should not register any hook merge operations'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('openhands adapter is included in the full adapter list', () => {
+  tally(test('openhands adapter is included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('openhands'), 'Should include openhands target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves aider adapter root and install-state path from project root', () => {
+  tally(test('resolves aider adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('aider');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
@@ -3422,9 +3423,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'project');
     assert.strictEqual(root, path.join(projectRoot, '.aider'));
     assert.strictEqual(statePath, path.join(projectRoot, '.aider', 'egc-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('aider adapter emits a flat skill copy plus a merge-yaml-read-list operation per skill', () => {
+  tally(test('aider adapter emits a flat skill copy plus a merge-yaml-read-list operation per skill', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3446,9 +3447,9 @@ function runTests() {
     assert.ok(mergeOp, 'Should emit a merge-yaml-read-list operation for .aider.conf.yml');
     assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, '.aider.conf.yml'));
     assert.strictEqual(mergeOp.readEntry, '.aider/skills/tdd-workflow.md');
-  })) passed++; else failed++;
+  }));
 
-  if (test('aider adapter filters out non-skill, non-rules module paths (agents, commands)', () => {
+  tally(test('aider adapter filters out non-skill, non-rules module paths (agents, commands)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3460,9 +3461,9 @@ function runTests() {
     });
 
     assert.strictEqual(plan.operations.length, 0, 'Non-skill, non-rules module paths should not produce operations');
-  })) passed++; else failed++;
+  }));
 
-  if (test("aider adapter copies rules-core's memory.md and merges it into the read: list", () => {
+  tally(test("aider adapter copies rules-core's memory.md and merges it into the read: list", () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3481,15 +3482,15 @@ function runTests() {
     assert.ok(mergeOp, 'must emit a merge-yaml-read-list operation');
     assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, '.aider.conf.yml'));
     assert.strictEqual(mergeOp.readEntry, '.aider/rules/common/memory.md');
-  })) passed++; else failed++;
+  }));
 
-  if (test('aider adapter is included in the full adapter list', () => {
+  tally(test('aider adapter is included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('aider'), 'Should include aider target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves qwen adapter root and install-state path from project root', () => {
+  tally(test('resolves qwen adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('qwen');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
@@ -3500,9 +3501,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'project');
     assert.strictEqual(root, path.join(projectRoot, '.qwen'));
     assert.strictEqual(statePath, path.join(projectRoot, '.qwen', 'egc-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('qwen adapter supports lookup by target and adapter id', () => {
+  tally(test('qwen adapter supports lookup by target and adapter id', () => {
     const byTarget = getInstallTargetAdapter('qwen');
     const byId = getInstallTargetAdapter('qwen-project');
 
@@ -3510,9 +3511,9 @@ function runTests() {
     assert.strictEqual(byId.id, 'qwen-project');
     assert.ok(byTarget.supports('qwen'));
     assert.ok(byTarget.supports('qwen-project'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('qwen adapter installs skills into the native .qwen/skills directory', () => {
+  tally(test('qwen adapter installs skills into the native .qwen/skills directory', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3534,9 +3535,9 @@ function runTests() {
       operation.destinationPath,
       path.join(projectRoot, '.qwen', 'skills', 'tdd-workflow')
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('qwen adapter passes non-skill paths through and appears in the adapter list', () => {
+  tally(test('qwen adapter passes non-skill paths through and appears in the adapter list', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3555,9 +3556,9 @@ function runTests() {
       listInstallTargetAdapters().some(adapter => adapter.target === 'qwen'),
       'Should include qwen target'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('qwen adapter always plans Guardian and Crusher on PreToolUse/run_shell_command, even with no modules selected', () => {
+  tally(test('qwen adapter always plans Guardian and Crusher on PreToolUse/run_shell_command, even with no modules selected', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
     const settingsJsonPath = path.join(projectRoot, '.qwen', 'settings.json');
@@ -3595,9 +3596,9 @@ function runTests() {
       )),
       'Should plan the shared Crusher hook script copy even with no modules selected'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('resolves warp adapter root and install-state path from project root', () => {
+  tally(test('resolves warp adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('warp');
     const projectRoot = '/workspace/app';
     const root = adapter.resolveRoot({ projectRoot });
@@ -3608,9 +3609,9 @@ function runTests() {
     assert.strictEqual(adapter.kind, 'project');
     assert.strictEqual(root, path.join(projectRoot, '.warp'));
     assert.strictEqual(statePath, path.join(projectRoot, '.warp', 'egc-install-state.json'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('warp adapter emits a flat skill copy plus a merge-markdown-skill-index operation per skill', () => {
+  tally(test('warp adapter emits a flat skill copy plus a merge-markdown-skill-index operation per skill', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3635,9 +3636,9 @@ function runTests() {
     assert.strictEqual(mergeOp.relativePath, '.warp/skills/tdd-workflow.md');
     assert.ok(mergeOp.skillDescription.startsWith('Use this skill when writing new features'));
     assert.ok(mergeOp.skillDescription.length <= 110, 'Description should be truncated to the shared max length');
-  })) passed++; else failed++;
+  }));
 
-  if (test('warp adapter extracts a description from a multiline YAML block-scalar frontmatter field', () => {
+  tally(test('warp adapter extracts a description from a multiline YAML block-scalar frontmatter field', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3652,9 +3653,9 @@ function runTests() {
     assert.ok(mergeOp, 'Should emit a merge operation for a skill with a block-scalar description');
     assert.ok(mergeOp.skillDescription.length > 0, 'Description should not be empty for a valid block scalar');
     assert.ok(!mergeOp.skillDescription.includes('\n'), 'Description should be collapsed onto one line');
-  })) passed++; else failed++;
+  }));
 
-  if (test('warp adapter falls back to an empty description when SKILL.md has no frontmatter', () => {
+  tally(test('warp adapter falls back to an empty description when SKILL.md has no frontmatter', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3668,9 +3669,9 @@ function runTests() {
     const mergeOp = plan.operations.find(op => op.kind === 'merge-markdown-skill-index');
     assert.ok(mergeOp, 'Should still emit a merge operation even without a real source file');
     assert.strictEqual(mergeOp.skillDescription, '');
-  })) passed++; else failed++;
+  }));
 
-  if (test('warp adapter filters out non-skill, non-rules module paths (agents, commands)', () => {
+  tally(test('warp adapter filters out non-skill, non-rules module paths (agents, commands)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3682,9 +3683,9 @@ function runTests() {
     });
 
     assert.strictEqual(plan.operations.length, 0, 'Non-skill, non-rules module paths should not produce operations');
-  })) passed++; else failed++;
+  }));
 
-  if (test("warp adapter copies rules-core's memory.md and merges an index entry into AGENTS.md", () => {
+  tally(test("warp adapter copies rules-core's memory.md and merges an index entry into AGENTS.md", () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -3703,15 +3704,15 @@ function runTests() {
     assert.ok(mergeOp, 'must emit a merge-markdown-skill-index operation');
     assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, 'AGENTS.md'));
     assert.strictEqual(mergeOp.skillName, 'EGC Session Memory');
-  })) passed++; else failed++;
+  }));
 
-  if (test('warp adapter is included in the full adapter list', () => {
+  tally(test('warp adapter is included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('warp'), 'Should include warp target');
-  })) passed++; else failed++;
+  }));
 
-  if (test('generic planRetirements (the default every target gets with no adapter override) retires a file that left the plan, keeps a still-planned file and a destination outside the root, and plans nothing without a previous install (#1412)', () => {
+  tally(test('generic planRetirements (the default every target gets with no adapter override) retires a file that left the plan, keeps a still-planned file and a destination outside the root, and plans nothing without a previous install (#1412)', () => {
     const fs = require('fs');
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-repo-'));
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-home-'));
@@ -3807,9 +3808,9 @@ function runTests() {
       fs.rmSync(repoRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('generic planRetirements treats a directory-shaped scaffold operation as covering every file under it (#1412)', () => {
+  tally(test('generic planRetirements treats a directory-shaped scaffold operation as covering every file under it (#1412)', () => {
     const fs = require('fs');
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-dir-repo-'));
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-dir-home-'));
@@ -3860,9 +3861,9 @@ function runTests() {
       fs.rmSync(repoRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('generic planRetirements retires a file recorded under a planned directory once it leaves that directory, and a root-wide directory copy no longer shields another module file that left the plan', () => {
+  tally(test('generic planRetirements retires a file recorded under a planned directory once it leaves that directory, and a root-wide directory copy no longer shields another module file that left the plan', () => {
     const fs = require('fs');
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-left-repo-'));
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-left-home-'));
@@ -3932,9 +3933,9 @@ function runTests() {
       fs.rmSync(repoRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('generic planRetirements honors a declared second managed root, so an adapter that writes outside its own root can still retire its files (#1412)', () => {
+  tally(test('generic planRetirements honors a declared second managed root, so an adapter that writes outside its own root can still retire its files (#1412)', () => {
     const fs = require('fs');
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-roots-repo-'));
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-roots-home-'));
@@ -3985,9 +3986,9 @@ function runTests() {
       fs.rmSync(repoRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('generic planRetirements does not retire a file a sibling adapter sharing the same root still owns (#1412)', () => {
+  tally(test('generic planRetirements does not retire a file a sibling adapter sharing the same root still owns (#1412)', () => {
     const fs = require('fs');
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-sibling-repo-'));
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-sibling-home-'));
@@ -4137,9 +4138,9 @@ function runTests() {
       fs.rmSync(repoRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('generic planRetirements leaves the files of a module that was not selected this run alone, and only offers up what left a module the plan still includes (#1412)', () => {
+  tally(test('generic planRetirements leaves the files of a module that was not selected this run alone, and only offers up what left a module the plan still includes (#1412)', () => {
     const fs = require('fs');
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-subset-repo-'));
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-generic-retire-subset-home-'));
@@ -4199,9 +4200,9 @@ function runTests() {
       fs.rmSync(repoRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('planInstallTargetScaffold carries the managed roots of the target into the plan, for the apply to check retirements against (#1412)', () => {
+  tally(test('planInstallTargetScaffold carries the managed roots of the target into the plan, for the apply to check retirements against (#1412)', () => {
     const fs = require('fs');
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-managed-roots-repo-'));
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-managed-roots-home-'));
@@ -4218,9 +4219,9 @@ function runTests() {
       fs.rmSync(repoRoot, { recursive: true, force: true });
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('identity paths .agents and AGENTS.md are foreign for targets that only take the agent files', () => {
+  tally(test('identity paths .agents and AGENTS.md are foreign for targets that only take the agent files', () => {
     const { isForeignPlatformPath } = require('../../scripts/lib/install-targets/helpers');
     for (const target of ['claude', 'windsurf', 'amp', 'copilot', 'junie', 'goose', 'openhands', 'opencode', 'qwen', 'cline', 'amazonq', 'kiro']) {
       assert.ok(isForeignPlatformPath('.agents', target), `.agents must not land on ${target}`);
@@ -4231,9 +4232,9 @@ function runTests() {
       assert.ok(!isForeignPlatformPath('.agents', target), `.agents stays on ${target}`);
       assert.ok(!isForeignPlatformPath('AGENTS.md', target), `AGENTS.md stays on ${target}`);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude adapter installs the agents under ~/.claude/agents with the Claude Code frontmatter transform', () => {
+  tally(test('claude adapter installs the agents under ~/.claude/agents with the Claude Code frontmatter transform', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const plan = planInstallTargetScaffold({
@@ -4252,9 +4253,9 @@ function runTests() {
       !plan.operations.some(op => ['.agents', 'AGENTS.md'].includes(normalizedRelativePath(op.sourceRelativePath))),
       '.agents and AGENTS.md are Codex and Antigravity files'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude adapter installs a single agent file with the same transform and a command as-is', () => {
+  tally(test('claude adapter installs a single agent file with the same transform and a command as-is', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const plan = planInstallTargetScaffold({
@@ -4272,9 +4273,9 @@ function runTests() {
     assert.strictEqual(command.destinationPath, path.join(homeDir, '.claude', 'commands', 'engineering-fix.md'));
     assert.ok(!plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/engineering-audit.md'), 'a single-file command shadowed by the engineering-audit skill of the same plan stays out');
     assert.strictEqual(command.transform, undefined);
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude adapter installs the rules flat under ~/.claude/rules, without the Chinese mirror or READMEs', () => {
+  tally(test('claude adapter installs the rules flat under ~/.claude/rules, without the Chinese mirror or READMEs', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const plan = planInstallTargetScaffold({
@@ -4296,9 +4297,9 @@ function runTests() {
       !ruleOps.some(op => path.basename(op.sourceRelativePath).toLowerCase() === 'readme.md'),
       'a README is navigation, not a rule'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude adapter installs the commands under ~/.claude/commands', () => {
+  tally(test('claude adapter installs the commands under ~/.claude/commands', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const plan = planInstallTargetScaffold({
@@ -4311,9 +4312,9 @@ function runTests() {
     assert.ok(plans.length >= 70, `${plans.length} command files planned`);
     assert.ok(plans.every(op => path.dirname(op.destinationPath) === path.join(homeDir, '.claude', 'commands')), 'every command lands in ~/.claude/commands');
     assert.ok(plans.some(op => normalizedRelativePath(op.sourceRelativePath) === 'commands/plan.md' && op.destinationPath === path.join(homeDir, '.claude', 'commands', 'plan.md')));
-  })) passed++; else failed++;
+  }));
 
-  if (test('claude adapter leaves out a command whose name is also a skill of the same plan: Claude Code would list the slash command twice', () => {
+  tally(test('claude adapter leaves out a command whose name is also a skill of the same plan: Claude Code would list the slash command twice', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const commandNames = plan => new Set(plan.operations
@@ -4331,9 +4332,9 @@ function runTests() {
     const withoutSkills = commandNames(planInstallTargetScaffold({ target: 'claude', repoRoot, homeDir, modules: [{ id: 'commands-core', paths: ['commands'] }] }));
     assert.ok(withoutSkills.has('security-scan') && withoutSkills.has('engineering-audit'), 'a plan without the skill keeps the command');
     assert.ok(withSkills.operations.filter(op => normalizedRelativePath(op.sourceRelativePath).startsWith('commands/')).every(op => path.dirname(op.destinationPath) === path.join(homeDir, '.claude', 'commands')));
-  })) passed++; else failed++;
+  }));
 
-  if (test('opencode adapter installs the catalog agents flat under ~/.config/opencode/agents in the shape OpenCode validates', () => {
+  tally(test('opencode adapter installs the catalog agents flat under ~/.config/opencode/agents in the shape OpenCode validates', () => {
     const { OPENCODE_AGENT_FRONTMATTER_TRANSFORM, plannedFileContent } = require('../../scripts/lib/install/copy-transforms');
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
@@ -4353,9 +4354,9 @@ function runTests() {
       assert.ok(/^mode: subagent$/m.test(head), `${op.sourceRelativePath}: subagent`);
       assert.ok(!/^(model|stack|color):/m.test(head), `${op.sourceRelativePath}: no model, stack or color`);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('kiro adapters plan the Kiro platform assets from the repository .kiro directory at the Kiro root and skip the files other targets keep (retired .kiro/install.sh)', () => {
+  tally(test('kiro adapters plan the Kiro platform assets from the repository .kiro directory at the Kiro root and skip the files other targets keep (retired .kiro/install.sh)', () => {
     const fs = require('fs');
     const REPO_ROOT = path.join(__dirname, '..', '..');
     const { KIRO_PLATFORM_DIRS } = require('../../scripts/lib/kiro-platform-operations');
@@ -4383,9 +4384,9 @@ function runTests() {
       assert.strictEqual(agents[0].destinationPath, path.join(targetRoot, 'agents'), 'the catalog agents share the Kiro agents directory');
     }
     assert.strictEqual(getInstallTargetAdapter('kiro').kind, 'home');
-  })) passed++; else failed++;
+  }));
 
-  if (test('the .kiro directory is a Kiro platform path: foreign everywhere else, native on Kiro, and the catalog agent of the same name yields to the Kiro-shaped one', () => {
+  tally(test('the .kiro directory is a Kiro platform path: foreign everywhere else, native on Kiro, and the catalog agent of the same name yields to the Kiro-shaped one', () => {
     const REPO_ROOT = path.join(__dirname, '..', '..');
     const fs = require('fs');
     const { isForeignPlatformPath } = require('../../scripts/lib/install-targets/helpers');
@@ -4415,9 +4416,9 @@ function runTests() {
     assert.deepStrictEqual(stray, [], 'the README, the docs, the hand-curated skills and the retired script stay out');
     const foreign = materialized.operations.filter(op => /^(mcp-configs|scripts\/auto-update\.js|scripts\/setup-package-manager\.js)/.test(posix(op.sourceRelativePath)));
     assert.deepStrictEqual(foreign, [], 'files other targets keep on their roots stay out of Kiro');
-  })) passed++; else failed++;
+  }));
 
-  if (test('the Trae adapter resolves .trae-cn when TRAE_ENV=cn at resolution time, as the retired .trae/install.sh allowed', () => {
+  tally(test('the Trae adapter resolves .trae-cn when TRAE_ENV=cn at resolution time, as the retired .trae/install.sh allowed', () => {
     const trae = require('../../scripts/lib/install-targets/trae-project');
     const previous = process.env.TRAE_ENV;
     try {
@@ -4428,7 +4429,7 @@ function runTests() {
     } finally {
       if (previous === undefined) delete process.env.TRAE_ENV; else process.env.TRAE_ENV = previous;
     }
-  })) passed++; else failed++;
+  }));
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

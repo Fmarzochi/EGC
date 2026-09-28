@@ -44,10 +44,11 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
   // ─── CLI Argument Parsing ───
 
-  if (test('parses single --with flag', () => {
+  tally(test('parses single --with flag', () => {
     const parsed = parseInstallArgs([
       'node', 'install-apply.js',
       '--profile', 'core',
@@ -55,9 +56,9 @@ function runTests() {
     ]);
     assert.deepStrictEqual(parsed.includeComponentIds, ['lang:typescript']);
     assert.deepStrictEqual(parsed.excludeComponentIds, []);
-  })) passed++; else failed++;
+  }));
 
-  if (test('parses single --without flag', () => {
+  tally(test('parses single --without flag', () => {
     const parsed = parseInstallArgs([
       'node', 'install-apply.js',
       '--profile', 'developer',
@@ -65,9 +66,9 @@ function runTests() {
     ]);
     assert.deepStrictEqual(parsed.excludeComponentIds, ['capability:orchestration']);
     assert.deepStrictEqual(parsed.includeComponentIds, []);
-  })) passed++; else failed++;
+  }));
 
-  if (test('parses multiple --with flags', () => {
+  tally(test('parses multiple --with flags', () => {
     const parsed = parseInstallArgs([
       'node', 'install-apply.js',
       '--with', 'lang:typescript',
@@ -79,9 +80,9 @@ function runTests() {
       'framework:nextjs',
       'capability:database',
     ]);
-  })) passed++; else failed++;
+  }));
 
-  if (test('parses multiple --without flags', () => {
+  tally(test('parses multiple --without flags', () => {
     const parsed = parseInstallArgs([
       'node', 'install-apply.js',
       '--profile', 'full',
@@ -92,9 +93,9 @@ function runTests() {
       'capability:media',
       'capability:social',
     ]);
-  })) passed++; else failed++;
+  }));
 
-  if (test('parses combined --with and --without flags', () => {
+  tally(test('parses combined --with and --without flags', () => {
     const parsed = parseInstallArgs([
       'node', 'install-apply.js',
       '--profile', 'developer',
@@ -105,18 +106,18 @@ function runTests() {
     assert.strictEqual(parsed.profileId, 'developer');
     assert.deepStrictEqual(parsed.includeComponentIds, ['lang:typescript', 'framework:nextjs']);
     assert.deepStrictEqual(parsed.excludeComponentIds, ['capability:orchestration']);
-  })) passed++; else failed++;
+  }));
 
-  if (test('ignores empty --with values', () => {
+  tally(test('ignores empty --with values', () => {
     const parsed = parseInstallArgs([
       'node', 'install-apply.js',
       '--with', '',
       '--with', 'lang:python',
     ]);
     assert.deepStrictEqual(parsed.includeComponentIds, ['lang:python']);
-  })) passed++; else failed++;
+  }));
 
-  if (test('ignores empty --without values', () => {
+  tally(test('ignores empty --without values', () => {
     const parsed = parseInstallArgs([
       'node', 'install-apply.js',
       '--profile', 'core',
@@ -124,11 +125,11 @@ function runTests() {
       '--without', 'capability:media',
     ]);
     assert.deepStrictEqual(parsed.excludeComponentIds, ['capability:media']);
-  })) passed++; else failed++;
+  }));
 
   // ─── Request Normalization ───
 
-  if (test('normalizes --with-only request as manifest mode', () => {
+  tally(test('normalizes --with-only request as manifest mode', () => {
     const request = normalizeInstallRequest({
       target: 'egc',
       profileId: null,
@@ -140,9 +141,9 @@ function runTests() {
     assert.strictEqual(request.mode, 'manifest');
     assert.deepStrictEqual(request.includeComponentIds, ['lang:typescript']);
     assert.deepStrictEqual(request.excludeComponentIds, []);
-  })) passed++; else failed++;
+  }));
 
-  if (test('normalizes --profile + --with + --without as manifest mode', () => {
+  tally(test('normalizes --profile + --with + --without as manifest mode', () => {
     const request = normalizeInstallRequest({
       target: 'cursor',
       profileId: 'developer',
@@ -155,9 +156,9 @@ function runTests() {
     assert.strictEqual(request.profileId, 'developer');
     assert.deepStrictEqual(request.includeComponentIds, ['lang:typescript', 'framework:nextjs']);
     assert.deepStrictEqual(request.excludeComponentIds, ['capability:orchestration']);
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects --with combined with legacy language arguments', () => {
+  tally(test('rejects --with combined with legacy language arguments', () => {
     assert.throws(
       () => normalizeInstallRequest({
         target: 'egc',
@@ -169,9 +170,9 @@ function runTests() {
       }),
       /cannot be combined/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('rejects --without combined with legacy language arguments', () => {
+  tally(test('rejects --without combined with legacy language arguments', () => {
     assert.throws(
       () => normalizeInstallRequest({
         target: 'egc',
@@ -183,9 +184,9 @@ function runTests() {
       }),
       /cannot be combined/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('deduplicates repeated --with component IDs', () => {
+  tally(test('deduplicates repeated --with component IDs', () => {
     const request = normalizeInstallRequest({
       target: 'egc',
       profileId: null,
@@ -195,9 +196,9 @@ function runTests() {
       languages: [],
     });
     assert.deepStrictEqual(request.includeComponentIds, ['lang:typescript', 'lang:python']);
-  })) passed++; else failed++;
+  }));
 
-  if (test('deduplicates repeated --without component IDs', () => {
+  tally(test('deduplicates repeated --without component IDs', () => {
     const request = normalizeInstallRequest({
       target: 'egc',
       profileId: 'full',
@@ -207,57 +208,57 @@ function runTests() {
       languages: [],
     });
     assert.deepStrictEqual(request.excludeComponentIds, ['capability:media', 'capability:social']);
-  })) passed++; else failed++;
+  }));
 
   // ─── Component Catalog Validation ───
 
-  if (test('component catalog includes lang: family entries', () => {
+  tally(test('component catalog includes lang: family entries', () => {
     const components = listInstallComponents({ family: 'language' });
     assert.ok(components.some(c => c.id === 'lang:typescript'), 'Should have lang:typescript');
     assert.ok(components.some(c => c.id === 'lang:python'), 'Should have lang:python');
     assert.ok(components.some(c => c.id === 'lang:go'), 'Should have lang:go');
     assert.ok(components.some(c => c.id === 'lang:java'), 'Should have lang:java');
-  })) passed++; else failed++;
+  }));
 
-  if (test('component catalog includes framework: family entries', () => {
+  tally(test('component catalog includes framework: family entries', () => {
     const components = listInstallComponents({ family: 'framework' });
     assert.ok(components.some(c => c.id === 'framework:react'), 'Should have framework:react');
     assert.ok(components.some(c => c.id === 'framework:nextjs'), 'Should have framework:nextjs');
     assert.ok(components.some(c => c.id === 'framework:django'), 'Should have framework:django');
     assert.ok(components.some(c => c.id === 'framework:springboot'), 'Should have framework:springboot');
-  })) passed++; else failed++;
+  }));
 
-  if (test('component catalog includes capability: family entries', () => {
+  tally(test('component catalog includes capability: family entries', () => {
     const components = listInstallComponents({ family: 'capability' });
     assert.ok(components.some(c => c.id === 'capability:database'), 'Should have capability:database');
     assert.ok(components.some(c => c.id === 'capability:security'), 'Should have capability:security');
     assert.ok(components.some(c => c.id === 'capability:orchestration'), 'Should have capability:orchestration');
-  })) passed++; else failed++;
+  }));
 
-  if (test('component catalog includes agent: family entries', () => {
+  tally(test('component catalog includes agent: family entries', () => {
     const components = listInstallComponents({ family: 'agent' });
     assert.ok(components.length > 0, 'Should have at least one agent component');
     assert.ok(components.some(c => c.id === 'agent:security-reviewer'), 'Should have agent:security-reviewer');
-  })) passed++; else failed++;
+  }));
 
-  if (test('component catalog includes skill: family entries', () => {
+  tally(test('component catalog includes skill: family entries', () => {
     const components = listInstallComponents({ family: 'skill' });
     assert.ok(components.length > 0, 'Should have at least one skill component');
     assert.ok(components.some(c => c.id === 'skill:continuous-learning'), 'Should have skill:continuous-learning');
-  })) passed++; else failed++;
+  }));
 
   // ─── Install Plan Resolution with --with ───
 
-  if (test('--with alone resolves the component module and nothing it does not need', () => {
+  tally(test('--with alone resolves the component module and nothing it does not need', () => {
     const plan = resolveInstallPlan({
       includeComponentIds: ['lang:typescript'],
       target: 'egc',
     });
     assert.deepStrictEqual(plan.selectedModuleIds, ['framework-language'],
       'lang:typescript is a skills component; rules and platform files are not its dependencies');
-  })) passed++; else failed++;
+  }));
 
-  if (test('--with adds modules on top of a profile', () => {
+  tally(test('--with adds modules on top of a profile', () => {
     const plan = resolveInstallPlan({
       profileId: 'core',
       includeComponentIds: ['capability:security'],
@@ -269,9 +270,9 @@ function runTests() {
     // added by --with
     assert.ok(plan.selectedModuleIds.includes('security'),
       'Should include security module from --with');
-  })) passed++; else failed++;
+  }));
 
-  if (test('multiple --with flags union their modules', () => {
+  tally(test('multiple --with flags union their modules', () => {
     const plan = resolveInstallPlan({
       includeComponentIds: ['lang:typescript', 'capability:database'],
       target: 'egc',
@@ -280,11 +281,11 @@ function runTests() {
       'Should include framework-language from lang:typescript');
     assert.ok(plan.selectedModuleIds.includes('database'),
       'Should include database from capability:database');
-  })) passed++; else failed++;
+  }));
 
   // ─── Install Plan Resolution with --without ───
 
-  if (test('--without excludes modules from a profile', () => {
+  tally(test('--without excludes modules from a profile', () => {
     const plan = resolveInstallPlan({
       profileId: 'developer',
       excludeComponentIds: ['capability:orchestration'],
@@ -298,9 +299,9 @@ function runTests() {
     assert.ok(plan.selectedModuleIds.includes('rules-core'));
     assert.ok(plan.selectedModuleIds.includes('framework-language'));
     assert.ok(plan.selectedModuleIds.includes('database'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('multiple --without flags exclude multiple modules', () => {
+  tally(test('multiple --without flags exclude multiple modules', () => {
     const plan = resolveInstallPlan({
       profileId: 'full',
       excludeComponentIds: ['capability:media', 'capability:social', 'capability:supply-chain'],
@@ -312,11 +313,11 @@ function runTests() {
     assert.ok(plan.excludedModuleIds.includes('media-generation'));
     assert.ok(plan.excludedModuleIds.includes('social-distribution'));
     assert.ok(plan.excludedModuleIds.includes('supply-chain-domain'));
-  })) passed++; else failed++;
+  }));
 
   // ─── Combined --with + --without ───
 
-  if (test('--with and --without work together on a profile', () => {
+  tally(test('--with and --without work together on a profile', () => {
     const plan = resolveInstallPlan({
       profileId: 'developer',
       includeComponentIds: ['capability:security'],
@@ -329,9 +330,9 @@ function runTests() {
       'Should exclude orchestration from --without');
     assert.ok(plan.selectedModuleIds.includes('rules-core'),
       'Should keep profile base modules');
-  })) passed++; else failed++;
+  }));
 
-  if (test('--without on a dependency of --with raises an error', () => {
+  tally(test('--without on a dependency of --with raises an error', () => {
     assert.throws(
       () => resolveInstallPlan({
         includeComponentIds: ['capability:social'],
@@ -339,20 +340,20 @@ function runTests() {
       }),
       /depends on excluded module/
     );
-  })) passed++; else failed++;
+  }));
 
   // ─── Validation Errors ───
 
-  if (test('throws for unknown component ID in --with', () => {
+  tally(test('throws for unknown component ID in --with', () => {
     assert.throws(
       () => resolveInstallPlan({
         includeComponentIds: ['lang:brainfuck-plus-plus'],
       }),
       /Unknown install component/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('throws for unknown component ID in --without', () => {
+  tally(test('throws for unknown component ID in --without', () => {
     assert.throws(
       () => resolveInstallPlan({
         profileId: 'core',
@@ -360,9 +361,9 @@ function runTests() {
       }),
       /Unknown install component/
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('throws when all modules are excluded', () => {
+  tally(test('throws when all modules are excluded', () => {
     assert.throws(
       () => resolveInstallPlan({
         profileId: 'core',
@@ -378,11 +379,11 @@ function runTests() {
       }),
       /excludes every requested install module/
     );
-  })) passed++; else failed++;
+  }));
 
   // ─── Target-Specific Behavior ───
 
-  if (test('--with respects target compatibility filtering', () => {
+  tally(test('--with respects target compatibility filtering', () => {
     const plan = resolveInstallPlan({
       includeComponentIds: ['capability:orchestration'],
       target: 'cursor',
@@ -392,9 +393,9 @@ function runTests() {
       'Should skip orchestration for cursor target');
     assert.ok(plan.skippedModuleIds.includes('orchestration'),
       'Should report orchestration as skipped for cursor');
-  })) passed++; else failed++;
+  }));
 
-  if (test('--without with agent: component excludes the agent module', () => {
+  tally(test('--without with agent: component excludes the agent module', () => {
     const plan = resolveInstallPlan({
       profileId: 'core',
       excludeComponentIds: ['agent:security-reviewer'],
@@ -406,29 +407,29 @@ function runTests() {
       'Should exclude agents-core when agent:security-reviewer is excluded');
     assert.ok(plan.excludedModuleIds.includes('agents-core'),
       'Should report agents-core as excluded');
-  })) passed++; else failed++;
+  }));
 
-  if (test('--with agent: component includes the agents-core module', () => {
+  tally(test('--with agent: component includes the agents-core module', () => {
     const plan = resolveInstallPlan({
       includeComponentIds: ['agent:security-reviewer'],
       target: 'egc',
     });
     assert.ok(plan.selectedModuleIds.includes('agents-core'),
       'Should include agents-core module from agent:security-reviewer');
-  })) passed++; else failed++;
+  }));
 
-  if (test('--with skill: component includes the parent skill module', () => {
+  tally(test('--with skill: component includes the parent skill module', () => {
     const plan = resolveInstallPlan({
       includeComponentIds: ['skill:continuous-learning'],
       target: 'egc',
     });
     assert.ok(plan.selectedModuleIds.includes('workflow-quality'),
       'Should include workflow-quality module from skill:continuous-learning');
-  })) passed++; else failed++;
+  }));
 
   // ─── Help Text ───
 
-  if (test('help text documents --with and --without flags', () => {
+  tally(test('help text documents --with and --without flags', () => {
     const { execFileSync } = require('child_process');
     const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
     const result = execFileSync('node', [scriptPath, '--help'], {
@@ -438,11 +439,11 @@ function runTests() {
     assert.ok(result.includes('--with'), 'Help should mention --with');
     assert.ok(result.includes('--without'), 'Help should mention --without');
     assert.ok(result.includes('component'), 'Help should describe components');
-  })) passed++; else failed++;
+  }));
 
   // ─── End-to-End Dry-Run ───
 
-  if (test('end-to-end: --profile developer --with capability:security --without capability:orchestration --dry-run', () => {
+  tally(test('end-to-end: --profile developer --with capability:security --without capability:orchestration --dry-run', () => {
     const { execFileSync } = require('child_process');
     const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'selective-e2e-'));
@@ -471,9 +472,9 @@ function runTests() {
       fs.rmSync(homeDir, { recursive: true, force: true });
       fs.rmSync(projectDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('end-to-end: --with lang:python --with agent:security-reviewer --dry-run', () => {
+  tally(test('end-to-end: --with lang:python --with agent:security-reviewer --dry-run', () => {
     const { execFileSync } = require('child_process');
     const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'selective-e2e-'));
@@ -499,9 +500,9 @@ function runTests() {
       fs.rmSync(homeDir, { recursive: true, force: true });
       fs.rmSync(projectDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('end-to-end: --with with unknown component fails cleanly', () => {
+  tally(test('end-to-end: --with with unknown component fails cleanly', () => {
     const { execFileSync } = require('child_process');
     const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
 
@@ -523,9 +524,9 @@ function runTests() {
 
     assert.strictEqual(exitCode, 1, 'Should exit with error code 1');
     assert.ok(stderr.includes('Unknown install component'), 'Should report unknown component');
-  })) passed++; else failed++;
+  }));
 
-  if (test('end-to-end: --without with unknown component fails cleanly', () => {
+  tally(test('end-to-end: --without with unknown component fails cleanly', () => {
     const { execFileSync } = require('child_process');
     const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
 
@@ -548,11 +549,11 @@ function runTests() {
 
     assert.strictEqual(exitCode, 1, 'Should exit with error code 1');
     assert.ok(stderr.includes('Unknown install component'), 'Should report unknown component');
-  })) passed++; else failed++;
+  }));
 
   // ─── End-to-End Actual Install ───
 
-  if (test('end-to-end: installs --profile core --with capability:security and writes state', () => {
+  tally(test('end-to-end: installs --profile core --with capability:security and writes state', () => {
     const { execFileSync } = require('child_process');
     const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'selective-install-'));
@@ -591,9 +592,9 @@ function runTests() {
       fs.rmSync(homeDir, { recursive: true, force: true });
       fs.rmSync(projectDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('end-to-end: installs --profile developer --without capability:orchestration and state reflects exclusion', () => {
+  tally(test('end-to-end: installs --profile developer --without capability:orchestration and state reflects exclusion', () => {
     const { execFileSync } = require('child_process');
     const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'selective-install-'));
@@ -634,9 +635,9 @@ function runTests() {
       fs.rmSync(homeDir, { recursive: true, force: true });
       fs.rmSync(projectDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('end-to-end: --with alone (no profile) installs just the component modules', () => {
+  tally(test('end-to-end: --with alone (no profile) installs just the component modules', () => {
     const { execFileSync } = require('child_process');
     const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'selective-install-'));
@@ -672,11 +673,11 @@ function runTests() {
       fs.rmSync(homeDir, { recursive: true, force: true });
       fs.rmSync(projectDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   // ─── JSON output mode ───
 
-  if (test('end-to-end: --dry-run --json includes component selections in output', () => {
+  tally(test('end-to-end: --dry-run --json includes component selections in output', () => {
     const { execFileSync } = require('child_process');
     const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
     const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'selective-e2e-'));
@@ -712,7 +713,7 @@ function runTests() {
       fs.rmSync(homeDir, { recursive: true, force: true });
       fs.rmSync(projectDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

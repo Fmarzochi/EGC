@@ -28,6 +28,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - Disk and memory devices are protected paths, read or written (#1570).
 - A Bash command runs only after the installed validator returns a verdict: the Guardian hook blocks, with a message that says why and what to do, when the validator stalls, stops, or answers something unreadable or incomplete; `EGC_GUARDIAN_TIMEOUT_MS` raises the budget on a slow machine, and a machine without the build is never locked out (#1511).
 - The Guardian judges the target of a redirection like any other operand: `>`, `>>`, `&>`, `<` and their descriptor forms, glued or spaced, before the command or behind a wrapper, are refused onto a protected file or from a credential with a reason that names the file, while descriptor duplications, heredocs and here-strings stay untouched (#1512).
+- A git command that names a protected file is refused as a read, and one whose `--output` names it as a write (#1571).
 - The commit-privacy filter puts the memory back on checkout: its smudge side rebuilds the block from the local state whenever git writes a context file anew (pull, branch switch, stash pop), never fails a checkout, and leaves the file reading as unmodified, so the tools that read those files directly keep the memory between sessions (#1513).
 - Propagation leaves the index in step with the files it wrote: the recorded stat of each rewritten context file is cleared and refreshed, so git reads a mirror that still cleans to the committed blob as unmodified and a branch switch after a session start is never refused for it, while a change of the user's own stays unstaged (#1516).
 - The credential stores of common command-line tools and the browser profiles, at their locations under the home directory (and under LocalAppData on Windows), are protected paths (#1572).
@@ -39,6 +40,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A hook input larger than the 1 MiB the guards read is refused instead of judged by its start, and the write hook blocks a write its validator gave no verdict on (#1574).
 - Project memory is written only into regular files inside the project: a context file or a tool folder that is a link, a Windows junction included, is left as it is by the memory server and the session hooks, and the files beside it are written as before (#1528).
 - A decision the user asks to remember goes to `update_state` and comes back through `get_state`; `store_decision` stays the searchable decision history, every protocol copy and `egc-context` mirror carries the same route, and the cognitive protocol moves to v8 so installs in place receive it (#1531 by @Akisolu, closes #1524).
+- A command handed to tmux, screen, ssh, docker exec or kubectl exec is judged as the command it is (#1575).
 - A lesson is stored and handed back as data: `lesson_save` refuses text that reads as an instruction to the model in any of its fields, the way `store_decision` and `update_state` do, and `lesson_recall` and `lesson_reinforce` hand back such a stored field as the blocked marker, never as its text (#1533).
 - A new OpenCode session opens with the project memory again: the restore starts a Node found on an absolute `PATH` entry when OpenCode runs the plugin inside its own runtime, instead of looking `node` up in the project folder (#1530 by @Akisolu, closes #1529).
 - A command run through npx, npm/pnpm/yarn exec, uv run, poetry run and the other runners is judged as the command it is, and PowerShell, php, bun and deno inline code is found in every form; a command is known by its name whatever its case or Windows extension (#1576).
@@ -47,6 +49,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - A shell, at or an interpreter that reads its program from a pipe, a heredoc, a here-string or an input file is judged by what it is given there, read only as it is written; output, a descriptor or a process substitution the hook cannot read that way fails closed (#1577).
 - The install lifecycle follows a link to a file that is not there yet: repair and uninstall refuse such a destination when it leads outside the roots an adapter owns (#1539).
 - A tool config is replaced in one step: `egc init` and the installers write it to a temporary file beside it and rename it over the previous one, so a write cut short leaves the config whole; a dotfiles link, the config's mode and, under root, its owner are kept, and where the folder or a mount refuses the replacement the config is written in place as before (#1540).
+- The content scanner flags a curl or wget piped into a shell or an interpreter whatever options stand before the URL (#1578).
 - A TOML config keeps any install path as one string: the registrar escapes every control character in the paths it writes for Codex and Mistral Vibe, and the reader that finds egc-guardian through the Codex config reads each escape back (#1541).
 - A wrapper's options are read the way the wrapper reads them: the Guardian reads grouped short flags, attached and optional values and every value option of sudo, doas, env, exec, xargs, strace, systemd-run and the other wrappers the way getopt does, and refuses `env -S` in any spelling and `flock FILE -c` alike (#1542).
 - On Windows the Claude Code registration runs the CLI's own script with node, so cmd.exe never expands a % or ! in an install path (#1579).
@@ -58,6 +61,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The dashboard's data routes ask for the dashboard token, which every page it serves carries (#1581).
 - GNU parallel's options are read the way parallel reads them: its own Getopt::Long table, letter case, abbreviations and optional values included (#1549).
 - The Bash hook finds the command behind a wrapper by the validator's own rules, through a shared copy that a test keeps in step with the validator (#1550).
+- The long test runners count through one tally, and the manifest install plan reads its request lists through one helper (#1582).
 - The Guardian reads through the local wrappers that run a command (setsid, taskset, chrt, unshare, nsenter, runuser, prlimit, chroot, numactl, pkexec, busybox, bwrap) by their own option tables, and denies the ones that hand a string or the words after a user to a shell (#1551).
 - The fact-forcing gate reads the wrappers in front of a destructive command through the Guardian's own tables, and every target is checked to copy both hooks with their helpers (#1552).
 - The OpenCode prompt-timeout test gets its own budget, and the gain, watch-state and CI steps stop leaking temporary directories or waiting for nothing (#1583, closes #1448).
@@ -69,16 +73,20 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The Gemini and Ollama providers retry a rate limit, a server error or a timeout up to three times with backoff, honouring Retry-After, and fail at once on anything a later attempt cannot fix (#1585).
 - The Bash hook reads the command line as the shell does to find the script it runs, and holds scripts committed in git and unchanged to the grave denials only (#1557).
 - The Bash hook and the Guardian read a shell comment as bash does: a `#` that opens a word is inert, one inside quotes or `${...}` or glued to a word is not (#1558).
+- A path claim covers the tree under it and is held under the path it names in the claiming session's project, so a claim above or inside another session's lock is refused whatever its spelling (#1586).
 - A command whose name comes from a variable the command fixes is judged by the name it resolves to; opaque sources fail closed, the environment stays advisory (#1559).
 - A command word that comes from an expansion is judged by every value it can take, in the command and in the scripts it runs; a value the hook cannot read fails closed (#1560).
+- The memory server answers its tools from one map of handlers, and the complex production functions eslint flagged are split into named steps with no change in behavior (#1587).
 - A `${...}` expansion closes where bash closes it, past nested expansions and substitutions, and a comment ends at its newline whatever quote or backslash it holds (#1561).
 - The fact-forcing gate reads `taskset -p` and `chrt -p` as acting on a running process, so the words after them are never taken for a command (#1563).
 - Encrypted state and compressed observations are written through a temp file that is exclusive and 0600 from its creation (#1564).
+- install.ps1 reads the last line of node --version, and three tests check what they claim (#1589).
 - A memory write that meets another process's lock waits its backoff without holding up the writes behind it (#1567).
 - A committed script's delete target is narrow only when every variable on the way to it is, a start known only at run time cannot make a protected end narrow, and a malformed committed marker is judged as typed (#1562).
 - The Bash hook follows cd, pushd and popd to the script run after them and fails closed on a move it cannot follow; what a shell or eval named by a variable runs is judged, and a `-c` string under noexec is only parsed (#1565).
 - The command log and the Guardian audit log mask passwords named with pass or pwd and those the mysql, mariadb, sshpass and redis-cli clients take on their command line (#1566).
 - `install.ps1` puts the git pre-commit hook in a clone through the same helper as `install.sh` (#1568).
+- The Guardian reads `git config` and `git grep` the way git reads them, subcommands, option clusters and the file `--file` names included (#1569).
 ## v1.1.22: The Field Round (Released 2026-09-16)
 
 - Routing on this machine, without an API key: the catalog index records the source of every component, the prompt router and `orchestrate_task` read the install state of the active tool and never offer what it has not installed (a named `Not installed for this tool` line and `not_installed` carry the command that adds them), the local scorers weigh tokens by rarity, name and activation text, stem plurals and ignore Portuguese and Spanish function words, and the decision stays with the tool's model, by intent (#1453).

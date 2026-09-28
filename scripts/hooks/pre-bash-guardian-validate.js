@@ -34,6 +34,7 @@ const { resolveGuardianCli, callGuardianVerdict, guardianFailureReason, readHook
 const { splitShellSegments, extractSubstitutionBodies, constructEnd } = require('../lib/shell-split');
 const { WRAPPER_SPECS, SHELL_KEYWORDS, readWrapperOption, runnerCommandStart, commandName } = require('../lib/wrapper-options');
 const { stdinReaderOf, producedProgram, isRedirection, takesTarget, isRuntimeOnly, isStdinPath } = require('../lib/stdin-programs');
+const { handoffCommandsOf } = require('../lib/handoff-commands');
 const { collectBindings, mergeBindings, valuesOf, commandWordChoices, quoteField, singleQuoted } = require('../lib/shell-bindings');
 const { startCwd, afterMove, CWD_CHANGERS } = require('../lib/shell-cwd');
 
@@ -1699,6 +1700,13 @@ function ownFedPrograms(line, body) {
   return reader.files.length === 0 ? programs : [...programs, ...fedLines(reader, { files: reader.files })];
 }
 
+// The command lines this stage hands to another process (a terminal
+// multiplexer, a remote shell, a container) to run.
+function handedOffCommandsOf(line) {
+  const words = shellWords(line);
+  return handoffCommandsOf(words.slice(skipEnvAndWrappers(words)).map(word => word.value));
+}
+
 // The segments one pipeline stage contributes: the stage itself and, when
 // it hands a script to a shell, the segments of that script.
 function segmentsOfStage(raw, depth) {
@@ -1714,7 +1722,7 @@ function segmentsOfStage(raw, depth) {
   const trimmed = line.trim();
   const inline = inlineShellCodeOf(line);
   let own = trimmed ? [trimmed] : [];
-  for (const code of [...(inline === null ? [] : [inline]), ...findExecCommandsOf(line), ...ownFedPrograms(line, readsItsInputAsCode(line) ? null : body)]) {
+  for (const code of [...(inline === null ? [] : [inline]), ...findExecCommandsOf(line), ...handedOffCommandsOf(line), ...ownFedPrograms(line, readsItsInputAsCode(line) ? null : body)]) {
     own = own === null ? null : withNested(own, code, depth);
   }
   if (own === null) return null;

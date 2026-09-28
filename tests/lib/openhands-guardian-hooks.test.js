@@ -43,8 +43,9 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => (ok ? passed++ : failed++);
 
-  if (test('resolveGuardianAdapterScriptDestination and resolveHooksJsonPath compute paths under targetRoot/projectRoot', () => {
+  tally(test('resolveGuardianAdapterScriptDestination and resolveHooksJsonPath compute paths under targetRoot/projectRoot', () => {
     const targetRoot = '/home/user/project/.openhands';
     assert.strictEqual(
       resolveGuardianAdapterScriptDestination(targetRoot),
@@ -54,29 +55,29 @@ function runTests() {
       resolveHooksJsonPath('/home/user/project'),
       path.join('/home/user/project', '.openhands', 'hooks.json')
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('buildHookCommand quotes the node binary and script path', () => {
+  tally(test('buildHookCommand quotes the node binary and script path', () => {
     const command = buildHookCommand('/abs/adapter.js');
     assert.strictEqual(command, `"${process.execPath}" "/abs/adapter.js"`);
-  })) passed++; else failed++;
+  }));
 
-  if (test('addOpenHandsHookEntry appends a brand-new matcher group on an empty config', () => {
+  tally(test('addOpenHandsHookEntry appends a brand-new matcher group on an empty config', () => {
     const { config, changed } = addOpenHandsHookEntry({}, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, 'node adapter.js');
     assert.strictEqual(changed, true);
     assert.deepStrictEqual(config[PRE_TOOL_USE_EVENT], [
       { matcher: TERMINAL_MATCHER, hooks: [{ type: 'command', command: 'node adapter.js' }] },
     ]);
-  })) passed++; else failed++;
+  }));
 
-  if (test('addOpenHandsHookEntry does not duplicate an already-present command in the matching group', () => {
+  tally(test('addOpenHandsHookEntry does not duplicate an already-present command in the matching group', () => {
     const first = addOpenHandsHookEntry({}, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, 'node adapter.js');
     const second = addOpenHandsHookEntry(first.config, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, 'node adapter.js');
     assert.strictEqual(second.config[PRE_TOOL_USE_EVENT].length, 1);
     assert.strictEqual(second.config[PRE_TOOL_USE_EVENT][0].hooks.length, 1);
-  })) passed++; else failed++;
+  }));
 
-  if (test('addOpenHandsHookEntry appends into an existing matching group alongside other hooks', () => {
+  tally(test('addOpenHandsHookEntry appends into an existing matching group alongside other hooks', () => {
     const base = {
       [PRE_TOOL_USE_EVENT]: [
         { matcher: TERMINAL_MATCHER, hooks: [{ type: 'command', command: 'node .openhands/hooks/other.js' }] },
@@ -87,9 +88,9 @@ function runTests() {
     assert.strictEqual(config[PRE_TOOL_USE_EVENT][0].hooks.length, 2);
     assert.ok(config[PRE_TOOL_USE_EVENT][0].hooks.some(h => h.command === 'node .openhands/hooks/other.js'));
     assert.ok(config[PRE_TOOL_USE_EVENT][0].hooks.some(h => h.command === 'node adapter.js'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('addOpenHandsHookEntry preserves unrelated matcher groups and event keys', () => {
+  tally(test('addOpenHandsHookEntry preserves unrelated matcher groups and event keys', () => {
     const base = {
       [PRE_TOOL_USE_EVENT]: [{ matcher: 'file_write', hooks: [{ type: 'command', command: 'node audit.js' }] }],
       post_tool_use: [{ matcher: TERMINAL_MATCHER, hooks: [{ type: 'command', command: 'node log.js' }] }],
@@ -98,9 +99,9 @@ function runTests() {
     assert.strictEqual(config[PRE_TOOL_USE_EVENT].length, 2);
     assert.ok(config[PRE_TOOL_USE_EVENT].some(g => g.matcher === 'file_write'));
     assert.deepStrictEqual(config.post_tool_use, base.post_tool_use);
-  })) passed++; else failed++;
+  }));
 
-  if (test('applyOpenHandsGuardianHookToFile writes a fresh hooks.json and is idempotent on disk', () => {
+  tally(test('applyOpenHandsGuardianHookToFile writes a fresh hooks.json and is idempotent on disk', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openhands-hooks-apply-'));
     const hooksJsonPath = path.join(tempDir, 'hooks.json');
     try {
@@ -117,9 +118,9 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('applyOpenHandsGuardianHookToFile preserves a hand-written hooks.json on disk', () => {
+  tally(test('applyOpenHandsGuardianHookToFile preserves a hand-written hooks.json on disk', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openhands-hooks-preserve-'));
     const hooksJsonPath = path.join(tempDir, 'hooks.json');
     try {
@@ -137,9 +138,9 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('applyOpenHandsGuardianHookToFile on an empty file behaves like a missing one', () => {
+  tally(test('applyOpenHandsGuardianHookToFile on an empty file behaves like a missing one', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openhands-hooks-empty-'));
     const hooksJsonPath = path.join(tempDir, 'hooks.json');
     try {
@@ -149,9 +150,9 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('applyOpenHandsGuardianHookToFile throws a clear error on invalid JSON', () => {
+  tally(test('applyOpenHandsGuardianHookToFile throws a clear error on invalid JSON', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openhands-hooks-invalid-'));
     const hooksJsonPath = path.join(tempDir, 'hooks.json');
     try {
@@ -160,9 +161,9 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('applyOpenHandsGuardianHookToFile throws a clear error when the file is not a JSON object', () => {
+  tally(test('applyOpenHandsGuardianHookToFile throws a clear error when the file is not a JSON object', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openhands-hooks-nonobject-'));
     const hooksJsonPath = path.join(tempDir, 'hooks.json');
     try {
@@ -171,9 +172,9 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeOpenHandsHookEntry drops only the EGC hook, keeps sibling hooks in the same group', () => {
+  tally(test('removeOpenHandsHookEntry drops only the EGC hook, keeps sibling hooks in the same group', () => {
     const base = {
       [PRE_TOOL_USE_EVENT]: [
         {
@@ -190,18 +191,18 @@ function runTests() {
     assert.deepStrictEqual(config[PRE_TOOL_USE_EVENT], [
       { matcher: TERMINAL_MATCHER, hooks: [{ type: 'command', command: 'node other.js' }] },
     ]);
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeOpenHandsHookEntry deletes the matcher group entirely once its hooks are empty', () => {
+  tally(test('removeOpenHandsHookEntry deletes the matcher group entirely once its hooks are empty', () => {
     const base = {
       [PRE_TOOL_USE_EVENT]: [{ matcher: TERMINAL_MATCHER, hooks: [{ type: 'command', command: 'node adapter.js' }] }],
     };
     const { config, changed } = removeOpenHandsHookEntry(base, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, 'node adapter.js');
     assert.strictEqual(changed, true);
     assert.strictEqual(PRE_TOOL_USE_EVENT in config, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeOpenHandsHookEntry preserves unrelated matcher groups after emptying ours', () => {
+  tally(test('removeOpenHandsHookEntry preserves unrelated matcher groups after emptying ours', () => {
     const base = {
       [PRE_TOOL_USE_EVENT]: [
         { matcher: TERMINAL_MATCHER, hooks: [{ type: 'command', command: 'node adapter.js' }] },
@@ -211,36 +212,36 @@ function runTests() {
     const { config } = removeOpenHandsHookEntry(base, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, 'node adapter.js');
     assert.strictEqual(config[PRE_TOOL_USE_EVENT].length, 1);
     assert.strictEqual(config[PRE_TOOL_USE_EVENT][0].matcher, 'file_write');
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeOpenHandsHookEntry treats a non-object config and a non-array event value as empty', () => {
+  tally(test('removeOpenHandsHookEntry treats a non-object config and a non-array event value as empty', () => {
     const fromNull = removeOpenHandsHookEntry(null, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, 'node adapter.js');
     assert.strictEqual(fromNull.changed, false);
 
     const fromMalformedEvent = removeOpenHandsHookEntry({ [PRE_TOOL_USE_EVENT]: 'not-an-array' }, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, 'node adapter.js');
     assert.strictEqual(fromMalformedEvent.changed, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeOpenHandsHookEntry treats a matching group with a non-array hooks field as empty', () => {
+  tally(test('removeOpenHandsHookEntry treats a matching group with a non-array hooks field as empty', () => {
     const base = { [PRE_TOOL_USE_EVENT]: [{ matcher: TERMINAL_MATCHER, hooks: 'not-an-array' }] };
     const { config, changed } = removeOpenHandsHookEntry(base, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, 'node adapter.js');
     assert.strictEqual(changed, false);
     assert.strictEqual(config, base);
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeOpenHandsHookEntry is a no-op when the entry is not present', () => {
+  tally(test('removeOpenHandsHookEntry is a no-op when the entry is not present', () => {
     const base = { [PRE_TOOL_USE_EVENT]: [{ matcher: TERMINAL_MATCHER, hooks: [{ type: 'command', command: 'node other.js' }] }] };
     const { config, changed } = removeOpenHandsHookEntry(base, PRE_TOOL_USE_EVENT, TERMINAL_MATCHER, 'node adapter.js');
     assert.strictEqual(changed, false);
     assert.strictEqual(config, base);
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeOpenHandsGuardianHookFromFile on a missing file is a no-op', () => {
+  tally(test('removeOpenHandsGuardianHookFromFile on a missing file is a no-op', () => {
     const result = removeOpenHandsGuardianHookFromFile('/nonexistent/hooks.json', '/abs/adapter.js');
     assert.strictEqual(result.changed, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeOpenHandsGuardianHookFromFile removes the entry from an existing file', () => {
+  tally(test('removeOpenHandsGuardianHookFromFile removes the entry from an existing file', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openhands-hooks-remove-'));
     const hooksJsonPath = path.join(tempDir, 'hooks.json');
     try {
@@ -252,9 +253,9 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('inspectOpenHandsGuardianHookFile reports drifted when missing, ok when present, drifted on parse error', () => {
+  tally(test('inspectOpenHandsGuardianHookFile reports drifted when missing, ok when present, drifted on parse error', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openhands-hooks-inspect-'));
     const hooksJsonPath = path.join(tempDir, 'hooks.json');
     try {
@@ -270,7 +271,7 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);
