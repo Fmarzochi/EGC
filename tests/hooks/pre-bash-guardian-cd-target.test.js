@@ -43,8 +43,11 @@ function runTests() {
   const record = ok => (ok ? passed++ : failed++);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-cd-target-'));
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-cd-home-'));
+  // os.homedir() reads HOME, and USERPROFILE on Windows.
   const savedHome = process.env.HOME;
+  const savedProfile = process.env.USERPROFILE;
   process.env.HOME = home;
+  process.env.USERPROFILE = home;
   const judge = command => run({ tool_name: 'Bash', tool_input: { command }, cwd: dir });
   const abs = path.join(dir, 'abs');
   put(path.join(abs, 'sub', 'danger.sh'), `${wipe}\n`);
@@ -152,6 +155,7 @@ function runTests() {
     }));
   } finally {
     if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome;
+    if (savedProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = savedProfile;
     fs.rmSync(dir, { recursive: true, force: true });
     fs.rmSync(home, { recursive: true, force: true });
   }
