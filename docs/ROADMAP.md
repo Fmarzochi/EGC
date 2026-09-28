@@ -27,7 +27,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 - The contributing guide lists the twelve translations the repository carries instead of two with hand-kept percentages (#1506).
 - The context files receive project memory only after the commit-privacy filter is in place: the hook library and the memory server mirror the block once the filter is armed or the path is outside any git working tree, leave the files as they are and say why on stderr when a checkout cannot take the filter, and the planner tells a checkout git cannot open apart from a directory that is no repository (#1510).
 - Disk and memory devices are protected paths, read or written (#1570).
-- The lines the latest changes left without a test now run under one (#1596).
+- The lines the latest changes left without a test now run under one (#1597).
 - A Bash command runs only after the installed validator returns a verdict: the Guardian hook blocks, with a message that says why and what to do, when the validator stalls, stops, or answers something unreadable or incomplete; `EGC_GUARDIAN_TIMEOUT_MS` raises the budget on a slow machine, and a machine without the build is never locked out (#1511).
 - The Guardian judges the target of a redirection like any other operand: `>`, `>>`, `&>`, `<` and their descriptor forms, glued or spaced, before the command or behind a wrapper, are refused onto a protected file or from a credential with a reason that names the file, while descriptor duplications, heredocs and here-strings stay untouched (#1512).
 - A git command that names a protected file is refused as a read, and one whose `--output` names it as a write (#1571).
