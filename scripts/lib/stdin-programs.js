@@ -71,14 +71,14 @@ function commandWords(values) {
   return words;
 }
 
-// The file a command reads on standard input through `<` or `0<`, the last
-// one winning as in the shell; input taken from another descriptor (<&3) is
-// that descriptor's path.
+// The file a command reads on standard input through `<`, `0<` or `<>`, the
+// last one winning as in the shell; input taken from another descriptor
+// (<&3) is that descriptor's path.
 function inputFile(values) {
   let file = null;
   for (let i = 1; i < values.length; i += 1) {
     const duplicated = /^0?<&(.*)$/.exec(values[i]);
-    const match = duplicated ? null : /^0?<(?![<&(>])(.*)$/.exec(values[i]);
+    const match = duplicated ? null : /^0?<>?(?![<&(])(.*)$/.exec(values[i]);
     if (duplicated) {
       const fd = duplicated[1] || values[i + 1];
       if (/^\d+$/.test(fd ?? '')) file = `/dev/fd/${fd}`;

@@ -12,6 +12,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 process.env.EGC_GUARDIAN_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 const { run } = require('../../scripts/hooks/pre-bash-guardian-validate');
@@ -105,6 +106,8 @@ function runTests() {
         `sh < <(${fetch})`, `bash 0< <(${fetch})`, 'sh < /dev/stdin', `${fetch} | at -f /dev/stdin now`, `bash /dev/fd/3 3< <(${fetch})`,
         `${fetch} | bash /dev/stdin`, `python3 < <(${fetch})`, `python3 <(${fetch})`, `${fetch} | python3 /dev/stdin`, `${fetch} | node /dev/fd/0`,
         'bash < evil.sh', 'sh -s < evil.sh', `sh 0<&3 3< <(${fetch})`, `bash <&3 3< <(${fetch})`, 'sh <&3 3< evil.sh',
+        'bash <> evil.sh', 'bash 0<> evil.sh', 'bash <>evil.sh', 'sh < good.sh < evil.sh', `${fetch} | sh -- /dev/stdin`,
+        `echo ls '>' '/dev/null; ${wipe}' | sh`, `echo '${wipe};' '>' /dev/null | sh`,
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
@@ -117,7 +120,7 @@ function runTests() {
         `echo '${wipe}' > /dev/null | sh`, `echo '${wipe}' >&2 | sh`, `echo '${wipe}' 2>&1 >/dev/null | sh`, `${fetch} > /dev/null | sh`, 'cat evil.sh &>/dev/null | bash',
         `${fetch} | sh <<< 'ls'`, `${fetch} | sh <<'EOF'\nls\nEOF`, `${fetch} | sh < good.sh`, `${fetch} | at -f good.sh now`,
         'bash < good.sh', 'sh -s < good.sh', 'bash good.sh > evil.sh', 'bash good.sh 2> err.log', "printf '%s\\n' ls pwd | sh",
-        'cat <<EOF | sh\nls\nEOF', "echo 'ls' >/dev/stdout | sh", "bash <<'EOF'\nls\nEOF", 'echo ls | bash /dev/stdin',
+        'cat <<EOF | sh\nls\nEOF', "echo 'ls' >/dev/stdout | sh", "bash <<'EOF'\nls\nEOF", 'echo ls | bash /dev/stdin', 'bash <> good.sh',
       ]) {
         const result = judge(command);
         assert.strictEqual(result.exitCode, 0, `${command}: ${result.stderr}`);
@@ -132,6 +135,7 @@ function runTests() {
       for (const values of [
         ['printf', '%.2s', 'rmxx'], ['printf', '%c', 'rX'], ['printf', '%5s', 'x'], ['printf', '%d', '1'], ['printf', '\\162'], ['printf', '%b', 'a\\nb'],
         ['printf', '-v', 'X', 'ls'], ['echo', '-e', '\\x72'], ['echo', 'a\\b'], ['cat', '/dev/stdin'], ['cat', '/proc/self/fd/0'], ['cat', '<(curl x)'], ['cat', '-n', 'a.sh'],
+        ['cat', '<', '/dev/stdin'], ['cat', '<', '<(curl x)'],
       ]) {
         assert.strictEqual(producedProgram(values), null, values.join(' '));
       }
@@ -144,7 +148,7 @@ function runTests() {
       }
       for (const values of [
         ['echo', 'x', '>', 'out.txt'], ['echo', 'x', '>/dev/stdout'], ['echo', 'x', '>/dev/fd/1'], ['echo', 'x', '3>&1', '1>&3'], ['echo', 'x', '2>&1', '1>&2'],
-        ['echo', 'x', '2>/dev/null'], ['echo', 'x', '>', '>(cat)'],
+        ['echo', 'x', '2>/dev/null'], ['echo', 'x', '>', '>(cat)'], ['echo', 'x', '1>&5'],
       ]) {
         assert.deepStrictEqual(producedProgram(values), { text: 'x\n' }, values.join(' '));
       }
@@ -156,7 +160,20 @@ function runTests() {
       assert.strictEqual(stdinReaderOf(['python3', '<', 'x.py']), null);
       assert.strictEqual(stdinReaderOf(['bash', 'x.sh', '>', 'out.log']), null);
       assert.deepStrictEqual(stdinReaderOf(['sh', '0<&3']), { kind: 'shell', name: 'sh', files: ['/dev/fd/3'] });
+      assert.deepStrictEqual(stdinReaderOf(['bash', '<>', 'x.sh']), { kind: 'shell', name: 'bash', files: ['x.sh'] });
+      assert.deepStrictEqual(stdinReaderOf(['sh', '<', 'a.sh', '<', 'b.sh']), { kind: 'shell', name: 'sh', files: ['b.sh'] }, 'the last input wins');
       assert.deepStrictEqual(splitShellSegments('sh 0<&3 3< x; cat <&4'), ['sh 0<&3 3< x', 'cat <&4'], 'a <& redirection is no background &');
+    }));
+
+    record(test('a script operand that is a pipe is refused, since its bytes exist only when it is read', () => {
+      const fifo = path.join(dir, 'pipe.fifo');
+      if (spawnSync('mkfifo', [fifo]).status !== 0) {
+        console.log('    (skipped: no mkfifo here)');
+        return;
+      }
+      const result = judge('bash pipe.fifo');
+      assert.strictEqual(result.exitCode, 2, JSON.stringify(result));
+      assert.match(result.stderr, /not a regular file/);
     }));
 
     record(test('a script written with such a pipeline is refused by the write hook', () => {
