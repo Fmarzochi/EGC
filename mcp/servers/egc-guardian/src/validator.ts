@@ -2261,19 +2261,23 @@ function hasShellSyntax(text: string): boolean {
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (quote === "'") {
-      quote = ch === "'" ? null : quote;
-    } else if (ch === '\\') {
-      i += 1;
-    } else if (quote === '"') {
-      if (ch === '$' || ch === '`') return true;
-      quote = ch === '"' ? null : quote;
-    } else if (ch === "'" || ch === '"') {
-      quote = ch;
-    } else if (SHELL_SYNTAX_RE.test(ch)) {
-      return true;
+      if (ch === "'") quote = null;
+      continue;
     }
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (isLiveShellChar(ch, quote)) return true;
+    if (ch === '"' || ch === "'") quote = quote === ch ? null : (quote ?? ch);
   }
   return quote !== null;
+}
+
+// Inside double quotes only `$` and a backquote still act; outside, any
+// shell syntax does.
+function isLiveShellChar(ch: string, quote: string | null): boolean {
+  return quote === '"' ? ch === '$' || ch === '`' : SHELL_SYNTAX_RE.test(ch);
 }
 
 function gitInlineCommandDenial(subcommand: string, option: string): ValidationResult {
