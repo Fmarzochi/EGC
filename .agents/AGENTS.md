@@ -6,7 +6,7 @@ These calls are automatic and non-negotiable. Never wait for the user to ask.
 
 - **Start of every non-trivial task:** call `orchestrate_task({ prompt: "<task>" })`
 - **Before every shell/Bash command:** call `validate_command({ command: "<cmd>" })`
-- **Before every new file Write or Edit on a file not yet read:** call `validate_write({ filepath: "<path>" })`
+- **Before every new file Write or Edit on a file not yet read:** call `validate_write({ filepath: "<path>", cwd: "<absolute working directory>" })`
 
 Skipping any of these breaks the EGC contract. There are no exceptions for "simple" tasks.
 

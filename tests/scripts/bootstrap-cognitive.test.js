@@ -687,6 +687,48 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('every form of the protocol tells the agent to give validate_write the directory it works in', () => {
+    assert.ok(SCRIPT_SOURCE.includes('validate_write({ filepath: "<path>", cwd: "<absolute working directory>" })'), 'the Markdown protocol names cwd');
+    const withoutCwd = SCRIPT_SOURCE.match(/validate_write(?![^.\n]*\bcwd\b)/g) || [];
+    assert.deepStrictEqual(withoutCwd, [], 'every form the script installs names cwd in the sentence that calls validate_write');
+    for (const file of ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', 'rules/common/memory.md', '.trae/MEMORY.md', '.trae/rules/egc-context.md',
+      '.opencode/instructions/INSTRUCTIONS.md', '.opencode/instructions/EGC_MEMORY.md', '.kiro/steering/development-workflow.md',
+      '.cursor/rules/common-development-workflow.md', '.codebuddy/MEMORY.md', '.agents/AGENTS.md']) {
+      const text = fs.readFileSync(path.join(__dirname, '..', '..', ...file.split('/')), 'utf8');
+      const calls = text.match(/validate_write\(\{[^}]*\}\)/g) || [];
+      assert.ok(calls.length > 0, `${file} shows the validate_write call`);
+      assert.deepStrictEqual(calls.filter(call => !/\bcwd\b/.test(call)), [], `${file} still calls validate_write without cwd`);
+    }
+  })) passed++; else failed++;
+
+  if (await test('every protocol the script installs names cwd wherever it calls validate_write', () => {
+    const home = mktempHome();
+    try {
+      for (const dir of ['.codex', '.opencode', '.trae', '.codebuddy', '.gemini', '.claude']) fs.mkdirSync(path.join(home, dir), { recursive: true });
+      const cursorSettings = path.join(home, '.config', 'Cursor', 'User', 'settings.json');
+      fs.mkdirSync(path.dirname(cursorSettings), { recursive: true });
+      fs.writeFileSync(cursorSettings, '{}', 'utf8');
+      run(home);
+      const written = [];
+      const walk = dir => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) walk(full);
+          else written.push(full);
+        }
+      };
+      walk(home);
+      const calling = written.filter(file => fs.readFileSync(file, 'utf8').includes('validate_write'));
+      assert.ok(calling.length >= 5, `the protocol reaches the tools: ${calling.map(file => path.relative(home, file)).join(', ')}`);
+      for (const file of calling) {
+        const text = fs.readFileSync(file, 'utf8').replaceAll(String.raw`\"`, '"');
+        assert.deepStrictEqual(text.match(/validate_write(?![^.\n]*\bcwd\b)/g) || [], [], `${path.relative(home, file)} calls validate_write without cwd`);
+      }
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('installs all 9 session bus commands for Cursor, Codex, OpenCode, Trae, and CodeBuddy', () => {
     const home = mktempHome();
     try {

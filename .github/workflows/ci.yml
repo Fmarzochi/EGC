@@ -62,8 +62,10 @@ jobs:
             if corepack prepare yarn@stable --activate; then
               exit 0
             fi
-            echo "corepack prepare yarn@stable failed (attempt ${attempt}/3), retrying in 5s..." >&2
-            sleep 5
+            if [ "$attempt" -lt 3 ]; then
+              echo "corepack prepare yarn@stable failed (attempt ${attempt}/3), retrying in 5s..." >&2
+              sleep 5
+            fi
           done
           echo "corepack prepare yarn@stable failed after 3 attempts" >&2
           exit 1
