@@ -337,12 +337,26 @@ function wordStep(raw, i, state, lookup) {
   return expansion.end;
 }
 
+// A leading unquoted ~ alone or before a slash is the home directory HOME
+// holds, expanded before anything else in the word and never split; ~name
+// is another user's home, which this hook does not look up. The part it
+// makes and where the rest of the word starts; null when the word has none.
+function tildePrefix(raw, lookup) {
+  if (!raw.startsWith('~')) return null;
+  const slash = raw.indexOf('/');
+  const end = slash === -1 ? raw.length : slash;
+  const home = end === 1 ? lookup('HOME')?.filter(value => value !== '') : null;
+  return { part: { values: home?.length ? home : null, literal: false, quoted: true }, end };
+}
+
 // The word split into literal text and expansions, each expansion marked
 // quoted when it sits inside double quotes (the shell neither splits nor
 // drops it there).
 function wordParts(raw, lookup) {
   const state = { parts: [], quoted: false, text: '' };
-  let i = 0;
+  const tilde = tildePrefix(raw, lookup);
+  if (tilde !== null) state.parts.push(tilde.part);
+  let i = tilde?.end ?? 0;
   while (i < raw.length) i = wordStep(raw, i, state, lookup);
   flushText(state);
   return { parts: state.parts, hasQuotes: /["']/.test(raw) };
