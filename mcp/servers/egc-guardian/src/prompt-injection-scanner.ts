@@ -14,43 +14,79 @@ export interface InjectionFinding {
 const MAX_SNIPPET_LEN = 80;
 
 // A curl or wget whose output goes into a pipe, and the programs that run
-// what they read there. Each line is read in one pass with no bound on the
-// URL or the options: every pipe after the fetch counts, quoted or not, since
-// a pipe in a quoted option value and one inside `sh -c "..."` look the same
-// here, and what the pipe feeds is read past sudo, its options and their
-// values, and variable assignments.
+// what they read there. Each command line (a line, or lines joined by a
+// pipe or a backslash that ends one) is read in one pass with no bound on
+// the URL or the options: every pipe after the fetch counts, quoted or not,
+// since a pipe in a quoted option value and one inside `sh -c "..."` look
+// the same here. What the pipe feeds is read past the commands that run the
+// next word (sudo, env, doas, nice, nohup...), their options and the values
+// those take, and variable assignments, up to a shell or an interpreter,
+// named by its path or quoted.
 const FETCH_WORD = /\b(?:curl|wget)\b/i;
 const FETCH_RUNNER = /^(?:(?:ba|z|da|k)?sh|python[\d.]{0,5}|perl|ruby|node)\b/i;
-const NEXT_WORD = /[ \t]*(\S+)/y;
+const NEXT_WORD = /\s*(\S+)/y;
 const ASSIGNMENT = /^\w+=/;
 const MAX_WORDS_BEFORE_RUNNER = 32;
-// The sudo options that take the next word as their value when nothing
-// follows them in their own word (-u root, -Eu root, --user root).
-const SUDO_VALUE_LETTERS = 'CDRTUcgprtu';
-const SUDO_VALUE_LONG = new Set(['--user', '--group', '--host', '--prompt', '--close-from', '--chdir', '--chroot', '--role', '--type', '--command-timeout', '--other-user', '--login-class']);
+// The commands that run the next word, with their options that take the
+// next word as their value when nothing follows them in their own word
+// (sudo -u root, sudo -Eu root, sudo --user root, env -u HOME, nice -n 5).
+const WRAPPERS = new Map<string, { letters: string; long: Set<string> }>([
+  ['sudo', { letters: 'CDRTUcgprtu', long: new Set(['--user', '--group', '--host', '--prompt', '--close-from', '--chdir', '--chroot', '--role', '--type', '--command-timeout', '--other-user', '--login-class']) }],
+  ['doas', { letters: 'Cu', long: new Set() }],
+  ['env', { letters: 'CSu', long: new Set(['--chdir', '--split-string', '--unset']) }],
+  ['nice', { letters: 'n', long: new Set(['--adjustment']) }],
+  ['nohup', { letters: '', long: new Set() }],
+  ['exec', { letters: 'a', long: new Set() }],
+  ['command', { letters: '', long: new Set() }],
+  ['time', { letters: 'fo', long: new Set(['--format', '--output']) }],
+  ['stdbuf', { letters: 'ieo', long: new Set(['--input', '--output', '--error']) }],
+]);
 const WGET_WORD = /\bwget\b/i;
 const URL_START = /https?:\/\//gi;
 
-function sudoOptionTakesNextWord(word: string): boolean {
-  if (word.startsWith('--')) return SUDO_VALUE_LONG.has(word);
+// Whether a line goes on in the next one, as the shell reads it: it ends
+// with a pipe or a backslash, trailing blanks aside.
+function continues(line: string): boolean {
+  let end = line.length;
+  while (end > 0 && ' \t\r'.includes(line[end - 1])) end--;
+  return end > 0 && (line[end - 1] === '|' || line[end - 1] === '\\');
+}
+
+function commandLines(text: string): string[] {
+  const lines: string[] = [];
+  let pending: string[] = [];
+  for (const line of text.split('\n')) {
+    pending.push(line);
+    if (continues(line)) continue;
+    lines.push(pending.join('\n'));
+    pending = [];
+  }
+  if (pending.length > 0) lines.push(pending.join('\n'));
+  return lines;
+}
+
+function optionTakesNextWord(word: string, wrapper: { letters: string; long: Set<string> }): boolean {
+  if (word.startsWith('--')) return wrapper.long.has(word);
   for (let k = 1; k < word.length; k++) {
-    if (SUDO_VALUE_LETTERS.includes(word[k])) return k === word.length - 1;
+    if (wrapper.letters.includes(word[k])) return k === word.length - 1;
   }
   return false;
 }
 
 function runnerEndAfterPipe(line: string, from: number): number {
   NEXT_WORD.lastIndex = from;
-  let underSudo = false;
+  let wrapper: { letters: string; long: Set<string> } | undefined;
   for (let count = 0; count < MAX_WORDS_BEFORE_RUNNER; count++) {
     const match = NEXT_WORD.exec(line);
     if (!match) return -1;
-    const word = match[1];
-    if (FETCH_RUNNER.test(word)) return NEXT_WORD.lastIndex;
-    if (!underSudo && word.toLowerCase() === 'sudo') {
-      underSudo = true;
-    } else if (underSudo && word.startsWith('-')) {
-      if (sudoOptionTakesNextWord(word) && !NEXT_WORD.exec(line)) return -1;
+    const word = match[1].replaceAll(/['"]/g, '');
+    const name = word.slice(word.lastIndexOf('/') + 1);
+    if (FETCH_RUNNER.test(name)) return NEXT_WORD.lastIndex;
+    const runs = WRAPPERS.get(name.toLowerCase());
+    if (runs) {
+      wrapper = runs;
+    } else if (wrapper && word.startsWith('-')) {
+      if (optionTakesNextWord(word, wrapper) && !NEXT_WORD.exec(line)) return -1;
     } else if (!ASSIGNMENT.test(word)) {
       return -1;
     }
@@ -59,7 +95,7 @@ function runnerEndAfterPipe(line: string, from: number): number {
 }
 
 function fetchPipedIntoRunner(text: string): string[] | null {
-  for (const line of text.split('\n')) {
+  for (const line of commandLines(text)) {
     const fetch = FETCH_WORD.exec(line);
     if (!fetch) continue;
     let pipe = line.indexOf('|', fetch.index);
@@ -78,7 +114,7 @@ function fetchPipedIntoRunner(text: string): string[] | null {
 }
 
 function wgetOutputRedirected(text: string): string[] | null {
-  for (const line of text.split('\n')) {
+  for (const line of commandLines(text)) {
     const wget = WGET_WORD.exec(line);
     if (!wget) continue;
     URL_START.lastIndex = wget.index;
