@@ -47,7 +47,7 @@ export class SQLiteArbitrationQueue {
   private kick(): void {
     this.processNext().catch((err: unknown) => {
       this.isProcessing = false;
-      this.report('ERROR', 'Write queue processor failed.', { error: err instanceof Error ? err.message : String(err) });
+      this.report('ERROR', 'Write queue processor failed.', { error: err instanceof Error ? err.message : JSON.stringify(err) });
       if (this.queue.length > 0) this.kick();
     });
   }
@@ -59,7 +59,7 @@ export class SQLiteArbitrationQueue {
     try {
       this.log(level, msg, meta);
     } catch (err: unknown) {
-      process.stderr.write(`[EGC memory] write queue log failed: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.stderr.write(`[EGC memory] write queue log failed: ${err instanceof Error ? err.message : JSON.stringify(err)}\n`);
     }
   }
 
