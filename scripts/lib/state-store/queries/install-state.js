@@ -1,7 +1,17 @@
 'use strict';
 
+const fs = require('node:fs');
+const os = require('node:os');
+
+const { isUnderFolder } = require('../../path-safety');
 const { assertValidEntity } = require('../schema');
 const { parseJsonColumn, stringifyJson } = require('./shared');
+
+// Where the system keeps temporary files: the directory the process is given,
+// and /tmp on the platforms that have it whatever TMPDIR says.
+function defaultTemporaryRoots() {
+  return process.platform === 'win32' ? [os.tmpdir()] : [os.tmpdir(), '/tmp'];
+}
 
 function mapInstallStateRow(row) {
   const modules = parseJsonColumn(row.modules, []);
@@ -70,8 +80,44 @@ function createInstallStateQueries(db) {
       source_version = excluded.source_version
   `);
 
-  function listInstallState() {
+  const deleteInstallStateStatement = db.prepare(`
+    DELETE FROM install_state
+    WHERE target_id = @target_id AND target_root = @target_root
+  `);
+
+  function listRecordedInstallState() {
     return listInstallStateStatement.all().map(mapInstallStateRow);
+  }
+
+  // An install whose folder is gone is not an install any more: a project
+  // that was deleted, or a temporary home that was cleaned up. The
+  // install-state file of a target is the source of truth and lives in that
+  // folder, so a record without it has nothing left to describe.
+  function isStillThere(installState) {
+    return fs.existsSync(installState.targetRoot);
+  }
+
+  function listInstallState() {
+    return listRecordedInstallState().filter(isStillThere);
+  }
+
+  // Drops the records of the folders that are gone for good. A folder under
+  // a temporary directory never comes back, so its record goes. Anywhere
+  // else the folder may be on a drive that is unplugged right now: that
+  // record stays, and the list leaves it out until the folder is back.
+  function pruneMissingInstallState(options = {}) {
+    const temporaryRoots = options.temporaryRoots || defaultTemporaryRoots();
+    const gone = listRecordedInstallState().filter(installState => (
+      !isStillThere(installState)
+      && temporaryRoots.some(root => isUnderFolder(installState.targetRoot, root))
+    ));
+    for (const installState of gone) {
+      deleteInstallStateStatement.run({
+        target_id: installState.targetId,
+        target_root: installState.targetRoot,
+      });
+    }
+    return gone.length;
   }
 
   function upsertInstallState(installState) {
@@ -89,7 +135,7 @@ function createInstallStateQueries(db) {
     return normalized;
   }
 
-  return { listInstallState, upsertInstallState };
+  return { listInstallState, pruneMissingInstallState, upsertInstallState };
 }
 
 module.exports = { mapInstallStateRow, normalizeInstallStateInput, createInstallStateQueries };

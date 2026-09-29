@@ -4,7 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { isInsideReal, realizePath } = require('../../scripts/lib/path-safety');
+const { fileKey, isInsideReal, isUnderFolder, realizePath } = require('../../scripts/lib/path-safety');
 
 function test(name, fn) {
   try {
@@ -34,6 +34,40 @@ function withLayout(fn) {
   }
 }
 
+function runFileKeyTests() {
+  const results = [
+    test('the same file written in two ways has one key', () => {
+      withLayout(({ root }) => {
+        const spelled = path.join(root, 'a', '..', 'a', 'b.json');
+        assert.strictEqual(fileKey(spelled), fileKey(path.join(root, 'a', 'b.json')));
+        const foldsCase = process.platform === 'win32' || process.platform === 'darwin';
+        assert.strictEqual(fileKey(path.join(root, 'A')) === fileKey(path.join(root, 'a')), foldsCase);
+      });
+    }),
+    test('a folder holds what sits under it, not itself and not a sibling that starts with its name', () => {
+      withLayout(({ root }) => {
+        assert.strictEqual(isUnderFolder(path.join(root, 'a', 'b.json'), root), true);
+        assert.strictEqual(isUnderFolder(root, root), false);
+        assert.strictEqual(isUnderFolder(`${root}-other`, root), false);
+        assert.strictEqual(isUnderFolder(root, path.parse(root).root), true, 'the top of the file system holds what sits under it');
+      });
+    }),
+  ];
+
+  if (process.platform !== 'win32') {
+    results.push(test('a file reached through a link has the key of the file it is', () => {
+      withLayout(({ root, outside }) => {
+        fs.symlinkSync(outside, path.join(root, 'linked'), 'dir');
+        assert.strictEqual(fileKey(path.join(root, 'linked', 'x.json')), fileKey(path.join(outside, 'x.json')));
+        assert.strictEqual(isUnderFolder(path.join(root, 'linked', 'x.json'), outside), true);
+      });
+    }));
+  }
+
+  const passed = results.filter(Boolean).length;
+  return { passed, failed: results.length - passed };
+}
+
 function runTests() {
   console.log('\n=== Testing path-safety.js ===\n');
 
@@ -45,6 +79,10 @@ function runTests() {
       assert.strictEqual(realizePath(path.join(root, 'a', 'b.json')), path.join(root, 'a', 'b.json'));
     });
   })) passed++; else failed++;
+
+  const keys = runFileKeyTests();
+  passed += keys.passed;
+  failed += keys.failed;
 
   if (process.platform !== 'win32') {
     if (test('a link to an existing file lands on that file', () => {

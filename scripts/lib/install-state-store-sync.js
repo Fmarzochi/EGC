@@ -23,6 +23,7 @@ function syncInstallStateToStore(state, options = {}) {
         installedAt: state.installedAt,
         sourceVersion: state.source.repoVersion,
       });
+      store.pruneMissingInstallState();
       await store.flush();
     } finally {
       if (store) {
