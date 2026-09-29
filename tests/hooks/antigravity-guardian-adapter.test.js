@@ -106,6 +106,26 @@ function runTests() {
     assert.strictEqual(output.decision, 'deny');
   }));
 
+  // The write validator reads a lone edit at the top of tool_input (Claude
+  // Code's Edit shape) as well as an edits array, so every write tool here
+  // has the content it would leave in a shell script judged.
+  results.push(test('a shell script that would run a denied command is denied, through each write tool', () => {
+    const script = '/workspace/app/run.sh';
+    for (const input of [
+      event('write_to_file', { TargetFile: script, CodeContent: '#!/bin/sh\nrm -rf /\n' }),
+      event('replace_file_content', { TargetFile: script, TargetContent: 'echo safe', ReplacementContent: 'rm -rf /' }),
+      event('multi_replace_file_content', { TargetFile: script, ReplacementChunks: [{ TargetContent: 'a', ReplacementContent: 'rm -rf /' }] }),
+    ]) {
+      const { output } = runAdapter(input);
+      assert.strictEqual(output.decision, 'deny', `${input.toolCall.name} must be judged on its content`);
+      assert.match(output.reason, /script runs a denied command/);
+    }
+    assert.deepStrictEqual(
+      runAdapter(event('replace_file_content', { TargetFile: script, TargetContent: 'a', ReplacementContent: 'echo ok' })).output,
+      { decision: 'ask' }
+    );
+  }));
+
   results.push(test('an allowed command, an allowed write and an unguarded tool are left to the user permission settings', () => {
     for (const input of [
       event('run_command', { CommandLine: 'git status', Cwd: '/workspace/app' }),
