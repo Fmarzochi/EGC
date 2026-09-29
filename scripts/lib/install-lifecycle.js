@@ -1582,15 +1582,6 @@ function uninstallResult(record, status, { removedPaths = [], plannedRemovals = 
   return { adapter: record.adapter, status, installStatePath: record.installStatePath, removedPaths, plannedRemovals, keptPaths, error };
 }
 
-// One spelling per file, so a file two install-states record in two ways is
-// still the same file: every link on the way is followed, and letter case is
-// folded on the platforms whose file systems do not tell it apart. Folding
-// on a volume that does tell it apart can only keep a file, never remove one.
-function sameFileKey(target) {
-  const real = realizePath(target);
-  return process.platform === 'win32' || process.platform === 'darwin' ? real.toLowerCase() : real;
-}
-
 // What the other installs in the same tree still record as their own copies.
 // codex-home, goose-home and openhands-home all install into ~/.agents, each
 // under its own install-state, so uninstalling one of them must leave the
@@ -1600,7 +1591,10 @@ function sameFileKey(target) {
 // takes the shared files with it. A dry run removes no state, so the states
 // it has already planned to remove are passed in as departed and count as
 // gone. A sibling state that cannot be read may still own any of them, so it
-// is named instead of guessed at.
+// is named instead of guessed at. Files are compared by their key, so a file
+// two install-states record in two ways is still the same file; folding the
+// letter case on a volume that tells it apart can only keep a file, never
+// remove one.
 function siblingOwnership(record, context, departed) {
   const adapter = listInstallTargetAdapters().find(candidate => candidate.id === record.adapter.id);
   if (!adapter) {
@@ -1610,13 +1604,13 @@ function siblingOwnership(record, context, departed) {
     homeDir: context.homeDir,
     projectRoot: context.projectRoot,
     repoRoot: context.projectRoot,
-  }).filter(statePath => !departed.has(sameFileKey(statePath)));
+  }).filter(statePath => !departed.has(fileKey(statePath)));
   const owned = collectSiblingOwnedDestinations(statePaths);
   if (!owned) {
     const unreadable = statePaths.find(statePath => readInstallStateOrNull(statePath) === UNREADABLE_STATE);
     return { owned: new Set(), unreadable: unreadable || statePaths[0] };
   }
-  return { owned: new Set(Array.from(owned, sameFileKey)), unreadable: null };
+  return { owned: new Set(Array.from(owned, fileKey)), unreadable: null };
 }
 
 // What uninstalling one target would remove and what it would leave, or the
@@ -1639,7 +1633,7 @@ function planRecordUninstall(record, context, departed) {
     return { error: `Another install in the same tree has an install-state that cannot be read, so the files it still uses are unknown: ${siblings.unreadable}. Repair or remove that file, then uninstall again.` };
   }
 
-  const isKept = operation => operation.kind === 'copy-file' && siblings.owned.has(sameFileKey(operation.destinationPath));
+  const isKept = operation => operation.kind === 'copy-file' && siblings.owned.has(fileKey(operation.destinationPath));
   const removable = operations.filter(operation => !isKept(operation));
   return {
     removable,
@@ -1687,7 +1681,7 @@ function uninstallInstalledStates(options = {}) {
     const { keptPaths, plannedRemovals } = plan;
 
     if (options.dryRun) {
-      departed.add(sameFileKey(record.installStatePath));
+      departed.add(fileKey(record.installStatePath));
       return uninstallResult(record, 'planned', { plannedRemovals, keptPaths });
     }
 
