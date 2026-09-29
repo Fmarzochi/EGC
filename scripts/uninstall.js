@@ -61,6 +61,9 @@ function printHuman(result) {
 
     const paths = result.dryRun ? entry.plannedRemovals : entry.removedPaths;
     console.log(`  ${result.dryRun ? 'Planned removals' : 'Removed paths'}: ${paths.length}`);
+    if (entry.keptPaths.length > 0) {
+      console.log(`  Kept for the other installs in this folder: ${entry.keptPaths.length}`);
+    }
   }
 
   console.log(`\nSummary: checked=${result.summary.checkedCount}, ${result.dryRun ? 'planned' : 'uninstalled'}=${result.dryRun ? result.summary.plannedRemovalCount : result.summary.uninstalledCount}, errors=${result.summary.errorCount}`);

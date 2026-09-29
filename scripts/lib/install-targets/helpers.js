@@ -743,7 +743,9 @@ function createInstallTargetAdapter(config) {
 }
 
 module.exports = {
+  UNREADABLE_STATE,
   buildValidationIssue,
+  collectSiblingOwnedDestinations,
   createDefaultScaffoldOperations,
   createFlatFileOperations,
   createFlatRuleOperations,
@@ -765,6 +767,7 @@ module.exports = {
   planFlatAgentOperations,
   planFlatSkillOperation,
   planGenericRetirements,
+  readInstallStateOrNull,
   resolveAdapterManagedRoots,
   resolveModulesPlan,
 };

@@ -106,7 +106,7 @@ Use `egc catalog` to inspect available targets, profiles, and components before 
 
 ### Removing EGC
 
-`egc uninstall --target <target>` removes every managed file that target's install-state recorded (rules, skills, hooks, platform configuration); `egc uninstall` with no target does that for every install-state in the current context, and `--dry-run` lists the paths first. Two things stay on purpose: the shared state store in `~/.egc` (memory, savings ledger, sessions), and the cognitive protocol block the bare install writes into `~/.gemini/GEMINI.md`, which no install-state tracks. Delete those by hand for a clean slate, then remove the package itself:
+`egc uninstall --target <target>` removes every managed file that target's install-state recorded (rules, skills, hooks, platform configuration); `egc uninstall` with no target does that for every install-state in the current context, and `--dry-run` lists the paths first. Codex, Goose and OpenHands install into the same `~/.agents` folder, so uninstalling one of them leaves the files the others still use and says how many it kept; the last of them to be uninstalled removes them. Two things stay on purpose: the shared state store in `~/.egc` (memory, savings ledger, sessions), and the cognitive protocol block the bare install writes into `~/.gemini/GEMINI.md`, which no install-state tracks. Delete those by hand for a clean slate, then remove the package itself:
 
 ```bash
 npm uninstall -g @egchq/egc

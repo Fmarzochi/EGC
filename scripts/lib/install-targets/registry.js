@@ -170,6 +170,7 @@ function planInstallTargetScaffold(options = {}) {
 }
 
 module.exports = {
+  collectSiblingInstallStatePaths,
   getInstallTargetAdapter,
   listInstallTargetAdapters,
   planInstallTargetScaffold,

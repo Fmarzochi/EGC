@@ -249,6 +249,59 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('says how many files stay for the other installs in a shared folder', () => {
+    const homeDir = createTempDir('uninstall-home-');
+    const projectRoot = createTempDir('uninstall-project-');
+
+    try {
+      const normalizedHome = fs.realpathSync(homeDir);
+      const agentsRoot = path.join(normalizedHome, '.agents');
+      const sharedPath = path.join(agentsRoot, 'skills', 'shared-skill', 'SKILL.md');
+      fs.mkdirSync(path.dirname(sharedPath), { recursive: true });
+      fs.writeFileSync(sharedPath, 'managed\n');
+
+      for (const target of ['codex', 'goose']) {
+        const statePath = path.join(agentsRoot, 'egc', `${target}-install-state.json`);
+        writeState(statePath, {
+          adapter: { id: `${target}-home`, target, kind: 'home' },
+          targetRoot: agentsRoot,
+          installStatePath: statePath,
+          request: {
+            profile: null,
+            modules: [],
+            includeComponents: [],
+            excludeComponents: [],
+            legacyLanguages: [],
+            legacyMode: true,
+          },
+          resolution: { selectedModules: [], skippedModules: [] },
+          operations: [{
+            kind: 'copy-file',
+            moduleId: 'test-module',
+            sourceRelativePath: 'rules/common/coding-style.md',
+            destinationPath: sharedPath,
+            strategy: 'copy-file',
+            ownership: 'managed',
+            scaffoldOnly: false,
+          }],
+          source: {
+            repoVersion: CURRENT_PACKAGE_VERSION,
+            repoCommit: 'abc123',
+            manifestVersion: CURRENT_MANIFEST_VERSION,
+          },
+        });
+      }
+
+      const uninstallResult = run(['--target', 'codex'], { cwd: projectRoot, homeDir: normalizedHome });
+      assert.strictEqual(uninstallResult.code, 0, uninstallResult.stderr);
+      assert.ok(uninstallResult.stdout.includes('Kept for the other installs in this folder: 1'), uninstallResult.stdout);
+      assert.ok(fs.existsSync(sharedPath), 'goose still records the file');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('supports dry-run without mutating managed files', () => {
     const homeDir = createTempDir('uninstall-home-');
     const projectRoot = createTempDir('uninstall-project-');
