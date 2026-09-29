@@ -3,7 +3,7 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
-- Antigravity finds the EGC servers again: `egc init` and the installers register egc-guardian and egc-memory in `~/.gemini/config/mcp_config.json`, the file the Antigravity CLI, IDE and 2.0 all read, whenever any Antigravity surface is installed, and keep the CLI's pre-migration file (#PRNUM).
+- Antigravity finds the EGC servers again: `egc init` and the installers register egc-guardian and egc-memory in `~/.gemini/config/mcp_config.json`, the file the Antigravity CLI, IDE and 2.0 all read, whenever any Antigravity surface is installed, and keep the CLI's pre-migration file (#1611).
 - The full profile delivers the prompt library on every target it names: skills modules stand on their own instead of depending on platform files that only seven tools have, the rules, agents and commands modules name every tool that can hold them, Claude Code receives agents, commands and rules in its native folders (agents rewritten to the frontmatter it reads), `egc doctor` warns when a profile selected nothing, and a contract test counts what lands on all 21 targets (#1465).
 - `egc install --prompt-library` reaches every detected tool through one Node script shared by both installers, instead of a fixed list of six (#1465).
 - An engine-only install is a known, empty installation for the routing: `orchestrate_task` lists every matching component under `not_installed` instead of offering the catalog, and the cognitive protocol (v7) sends the agent to the `/review-pr` agents only when the library is installed (#1467).
