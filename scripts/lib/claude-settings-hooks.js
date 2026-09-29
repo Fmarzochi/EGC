@@ -56,6 +56,12 @@ const {
   removeOpenHandsGuardianHookFromFile,
 } = require('./openhands-guardian-hooks');
 const {
+  ANTIGRAVITY_GUARDIAN_HOOK_TAG,
+  applyAntigravityGuardianHookToFile,
+  inspectAntigravityGuardianHookFile,
+  removeAntigravityGuardianHookFromFile,
+} = require('./antigravity-guardian-hooks');
+const {
   ROOCODE_DENYLIST_TAG,
   applyRoocodeDenylistToFile,
   inspectRoocodeDenylistFile,
@@ -1240,6 +1246,13 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     apply: operation => applyOpenHandsGuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
     remove: operation => removeOpenHandsGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath),
     inspect: operation => inspectOpenHandsGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  [ANTIGRAVITY_GUARDIAN_HOOK_TAG]: {
+    // EGC owns the whole egc-guardian named hook in Antigravity's hooks.json,
+    // so remove drops that key whatever script path it points at.
+    apply: operation => applyAntigravityGuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeAntigravityGuardianHookFromFile(operation.destinationPath),
+    inspect: operation => inspectAntigravityGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
   },
   [ROOCODE_DENYLIST_TAG]: {
     apply: operation => applyRoocodeDenylistToFile(operation.destinationPath),

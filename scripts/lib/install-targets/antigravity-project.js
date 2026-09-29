@@ -14,7 +14,6 @@ const {
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   resolveGateGuardHookScriptDestination,
   createCrusherScriptCopyOperations,
-  createBashGuardianScriptCopyOperations,
   createMeshNoticeScriptCopyOperations,
 } = require('../claude-settings-hooks');
 const {
@@ -23,6 +22,8 @@ const {
   createProjectBashGuardianHookMergeOperation,
   createProjectMeshNoticeHookMergeOperation,
 } = require('../antigravity-settings-hooks');
+const { createAntigravityGuardianOperations } = require('../antigravity-guardian-operations');
+const { resolveProjectHooksJsonPath } = require('../antigravity-guardian-hooks');
 
 const SUPPORTED_SOURCE_PREFIXES = ['rules', 'commands', 'agents', 'skills', '.agents', 'AGENTS.md'];
 const UTILS_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
@@ -80,11 +81,16 @@ function createGateGuardOperations(adapter, targetRoot, projectRoot) {
     // action; it never checks a Bash command against the Guardian's actual
     // allowlist/denylist. 2026-07-27 audit (EGC-460) found this target had
     // GateGuard + Crusher wired but never the Guardian validator itself.
-    ...createBashGuardianScriptCopyOperations(
+    // The entry Antigravity runs is the egc-guardian named hook, in its own
+    // format, at the same .agents/hooks.json (antigravity-guardian-operations.js,
+    // which also copies the Guardian scripts); the Claude-format Bash entry
+    // beside it never matches an Antigravity tool and stays as it was.
+    ...createAntigravityGuardianOperations(
       (moduleId, sourceRelativePath, destinationPath, options) => (
         createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
       ),
-      targetRoot
+      targetRoot,
+      resolveProjectHooksJsonPath(projectRoot)
     ),
     createProjectBashGuardianHookMergeOperation(targetRoot, projectRoot, 'Bash'),
     // Session-mesh wake-signal notice: Antigravity inherited the Gemini CLI

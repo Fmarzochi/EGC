@@ -17,9 +17,10 @@ const {
 const {
   createGateGuardScriptCopyOperations,
   createCrusherScriptCopyOperations,
-  createBashGuardianScriptCopyOperations,
   createMeshNoticeScriptCopyOperations,
 } = require('../claude-settings-hooks');
+const { createAntigravityGuardianOperations } = require('../antigravity-guardian-operations');
+const { resolveGlobalHooksJsonPath } = require('../antigravity-guardian-hooks');
 
 const GEMINI_EGC_NAMESPACE = 'egc';
 const AGY_SKILLS_SUBDIR = 'antigravity-cli/skills';
@@ -85,10 +86,15 @@ function createAntigravityGlobalMeshNoticeOperations(targetRoot, homeDir, create
   ];
 }
 
+// The entry Antigravity actually runs is the egc-guardian named hook in the
+// shared ~/.gemini/config/hooks.json, in Antigravity's own format
+// (antigravity-guardian-operations.js); it also copies the Guardian scripts.
+// The Claude-format entry in antigravity-cli/hooks.json stays as it was: its
+// Bash matcher never matches an Antigravity tool, and its removal goes with
+// the other Claude-format entries there.
 function createAntigravityGlobalGuardianOperations(targetRoot, homeDir, createRemap) {
-  const scriptCopyOperations = createBashGuardianScriptCopyOperations(createRemap, targetRoot);
   return [
-    ...scriptCopyOperations,
+    ...createAntigravityGuardianOperations(createRemap, targetRoot, resolveGlobalHooksJsonPath(homeDir)),
     createGlobalBashGuardianHookMergeOperation(targetRoot, homeDir, 'Bash'),
   ];
 }
