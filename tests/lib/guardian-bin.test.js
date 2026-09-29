@@ -239,11 +239,10 @@ function main() {
     }
   });
 
-  run('resolves via ~/.gemini/config/mcp_config.json on a Gemini-CLI-only install (no ~/.claude.json)', () => {
-    // 2026-07-27 audit (Guardian cross-CLI fail-open fix): guardian-bin.js
-    // used to check ~/.gemini/settings.json, a file Gemini CLI never writes
-    // for MCP config — a Gemini-only install (no Claude Code alongside it)
-    // had no working config-based fallback at all and failed open silently.
+  run('resolves via ~/.gemini/config/mcp_config.json on an Antigravity-only install (no ~/.claude.json)', () => {
+    // The shared file every Antigravity surface reads (CLI, IDE, 2.0). An
+    // install with no Claude Code alongside it must still find the guardian
+    // CLI here, or the hooks fail open silently (2026-07-27 audit).
     const fakeHome = createTempDir('egc-guardian-bin-home-');
     try {
       const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');
@@ -272,12 +271,10 @@ function main() {
     }
   });
 
-  run('resolves via ~/.gemini/antigravity-cli/mcp_config.json on an Antigravity-only install', () => {
-    // Internal audit (EGC-460/461, 2026-07-27): this is a SEPARATE file
-    // from ~/.gemini/config/mcp_config.json above despite sharing the
-    // ~/.gemini home root -- a pure-Antigravity install (no Claude Code, no
-    // Gemini CLI alongside it) had no working config-based fallback here
-    // either and failed open silently.
+  run('resolves via ~/.gemini/antigravity-cli/mcp_config.json on a pre-migration Antigravity CLI install', () => {
+    // The CLI's file from before it moved to the shared config above; an
+    // install that registered only there must still resolve the guardian
+    // CLI (EGC-460/461, 2026-07-27).
     const fakeHome = createTempDir('egc-guardian-bin-home-');
     try {
       const installDir = path.join(fakeHome, 'somewhere', 'egc-guardian', 'build');

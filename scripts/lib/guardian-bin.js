@@ -28,9 +28,9 @@ function fromPackageLayout() {
 // repository the user happens to have open, so a malicious repo could ship
 // one that points egc-guardian's entry at a payload script it also ships,
 // which fromMcpConfigs() would then execute as this process's own security
-// validator (RCE). Only ~/.claude.json and ~/.gemini/settings.json are
-// trusted here, because writes to those two files are already denied by
-// validate_write's PROTECTED_FILE_PATTERNS/DENIED_PATHS — a repo cannot get
+// validator (RCE). Only the home-level registration files listed in
+// fromMcpConfigs() are trusted here, each one because validate_write's
+// PROTECTED_FILE_PATTERNS/DENIED_PATHS deny writes to it: a repo cannot get
 // content into them just by being cloned. A project's own .mcp.json is
 // deliberately never consulted for this resolution.
 // OpenCode's config directory, resolved the way OpenCode resolves it
@@ -51,20 +51,15 @@ function configuredArgs(server) {
 function fromMcpConfigs() {
   const configPaths = [
     path.join(os.homedir(), '.claude.json'),
-    // Gemini CLI's real MCP registration file (confirmed against
-    // scripts/lib/mcp-register.js's "Gemini CLI" target and live on disk,
-    // 2026-07-27 audit) — NOT ~/.gemini/settings.json, which Gemini CLI
-    // does not use for MCP server config at all. Without this fix, a
-    // Gemini-CLI-only install (no ~/.claude.json alongside it) had no
-    // working fallback here and failed open silently.
+    // Antigravity's shared MCP registration file, read by the Antigravity
+    // CLI, the Antigravity IDE and Antigravity 2.0 (mcp-register.js's
+    // "Antigravity" target). Without it an Antigravity-only install (no
+    // ~/.claude.json alongside it) has no config-based fallback here and
+    // fails open silently (2026-07-27 audit, EGC-460/461).
     path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json'),
-    // Antigravity CLI's own MCP registration file — a SEPARATE file from
-    // Gemini CLI's above despite sharing the ~/.gemini home root (see
-    // scripts/lib/mcp-register.js's "Antigravity CLI" target). Internal
-    // audit (EGC-460/461, 2026-07-27) confirmed a pure-Antigravity
-    // install (no Claude Code, no Gemini CLI alongside it) had no working
-    // fallback here either, for the same fail-open reason as Gemini CLI
-    // above.
+    // The Antigravity CLI's pre-migration file (mcp-register.js's
+    // "Antigravity CLI (pre-migration path)" target), kept for installs
+    // that registered there before the CLI moved to the shared file.
     path.join(os.homedir(), '.gemini', 'antigravity-cli', 'mcp_config.json'),
     // OpenCode's real MCP registration files (scripts/lib/mcp-register.js's
     // "OpenCode" target): the documented opencode.json and the legacy

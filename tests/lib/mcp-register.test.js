@@ -102,7 +102,6 @@ function runTests() {
   (tally(test('the retired tools are not registration targets, even when their directories exist', () => {
     const tmpHome = makeTempDir();
     fs.mkdirSync(path.join(tmpHome, '.continue', 'mcpServers'), { recursive: true });
-    fs.mkdirSync(path.join(tmpHome, '.gemini', 'config'), { recursive: true });
     const targets = buildMcpRegistrationTargets(tmpHome);
     const names = targets.map(t => t.name);
     assert.ok(!names.includes('Gemini CLI'), 'Gemini CLI was retired in #1279 and must not be registered');
@@ -110,15 +109,47 @@ function runTests() {
     assert.ok(!targets.some(t => t.format === 'continue-yaml'), 'no target may use the Continue YAML format');
     for (const target of targets) {
       assert.ok(!target.path.startsWith(path.join(tmpHome, '.continue')), `${target.name} must not write under ~/.continue`);
-      assert.notStrictEqual(target.path, path.join(tmpHome, '.gemini', 'config', 'mcp_config.json'), `${target.name} must not write the standalone Gemini CLI config`);
     }
     fs.rmSync(tmpHome, { recursive: true, force: true });
   })));
 
-  (tally(test('the registration list is the seven tools the documentation names, in order', () => {
+  (tally(test('Antigravity: the shared config every Antigravity surface reads is a registration target', () => {
+    const shared = buildMcpRegistrationTargets('/home/person').find(t => t.name === 'Antigravity');
+    assert.ok(shared, 'the CLI, the IDE and Antigravity 2.0 all read ~/.gemini/config/mcp_config.json');
+    assert.strictEqual(shared.path, path.join('/home/person', '.gemini', 'config', 'mcp_config.json'));
+    assert.strictEqual(shared.format, 'json');
+  })));
+
+  (tally(test('Antigravity: the shared config is registered when any Antigravity surface is installed, and not otherwise', () => {
+    for (const surface of ['config', 'antigravity', 'antigravity-cli', 'antigravity-ide']) {
+      const tmpHome = makeTempDir();
+      fs.mkdirSync(path.join(tmpHome, '.gemini', surface), { recursive: true });
+      const shared = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Antigravity');
+      assert.strictEqual(shared.gate(), true, `~/.gemini/${surface} means Antigravity is installed`);
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+    const bare = makeTempDir();
+    fs.mkdirSync(path.join(bare, '.gemini'), { recursive: true });
+    const shared = buildMcpRegistrationTargets(bare).find(t => t.name === 'Antigravity');
+    assert.strictEqual(shared.gate(), false, 'a bare ~/.gemini with no Antigravity surface is not an Antigravity install');
+    fs.rmSync(bare, { recursive: true, force: true });
+  })));
+
+  (tally(test('Antigravity: an IDE-only install gets both servers in the shared config, the directory created', () => {
+    const tmpHome = makeTempDir();
+    fs.mkdirSync(path.join(tmpHome, '.gemini', 'antigravity-ide'), { recursive: true });
+    registerIsolated(tmpHome, {});
+    const written = JSON.parse(fs.readFileSync(path.join(tmpHome, '.gemini', 'config', 'mcp_config.json'), 'utf8'));
+    assert.ok(written.mcpServers['egc-guardian'], 'egc-guardian is registered where the IDE reads it');
+    assert.ok(written.mcpServers['egc-memory'], 'egc-memory is registered where the IDE reads it');
+    assert.ok(!fs.existsSync(path.join(tmpHome, '.gemini', 'antigravity-cli', 'mcp_config.json')), 'the pre-migration CLI file is only written for a CLI install');
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  })));
+
+  (tally(test('the registration list names the shared Antigravity config first, then the tools the documentation names, in order', () => {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
-      'Antigravity CLI', 'Claude Code (user scope)', 'Cursor',
+      'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
       'Kiro', 'Codex CLI', 'OpenCode', 'Zed',
     ]);
   })));

@@ -364,10 +364,24 @@ function openCodeConfigPath(homeDir) {
 
 // Gemini CLI and Continue.dev left this list with their retirement (their
 // adapters went in #1279); the ~/.gemini tree below belongs to Antigravity.
+// The Antigravity CLI, the Antigravity IDE and Antigravity 2.0 all read the
+// shared ~/.gemini/config/mcp_config.json (antigravity.google/docs/mcp); the
+// CLI stopped opening antigravity-cli/mcp_config.json once it migrated its
+// data (changelog 1.0.3 calls that path legacy). Each surface keeps its own
+// data directory, so any of them, or the shared config itself, marks an
+// Antigravity install.
+const ANTIGRAVITY_SURFACES = ['config', 'antigravity', 'antigravity-cli', 'antigravity-ide'];
+
 function buildMcpRegistrationTargets(homeDir) {
   return [
     {
-      name: 'Antigravity CLI',
+      name: 'Antigravity',
+      path: path.join(homeDir, '.gemini', 'config', 'mcp_config.json'),
+      gate: () => ANTIGRAVITY_SURFACES.some(dir => fs.existsSync(path.join(homeDir, '.gemini', dir))),
+      format: 'json',
+    },
+    {
+      name: 'Antigravity CLI (pre-migration path)',
       path: path.join(homeDir, '.gemini', 'antigravity-cli', 'mcp_config.json'),
       gate: () => fs.existsSync(path.join(homeDir, '.gemini', 'antigravity-cli')),
       format: 'json',

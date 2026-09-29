@@ -55,8 +55,9 @@ egc init
 
 These three were retired on 2026-08-16 and no longer receive an install. The ids are still recognized, so `egc install`,
 `egc doctor`, `egc repair` and `egc auto-update` explain the retirement instead of failing on an id that used to be valid.
-Nothing is written to `~/.continue/`, `~/.gemini/` for the standalone Gemini CLI, or the Roo Code settings any more.
-On Windows, Antigravity is the replacement path for what Gemini CLI used to cover.
+Nothing is written to `~/.continue/`, to `~/.gemini/` for the standalone Gemini CLI, or to the Roo Code settings any more.
+Antigravity, the replacement for Gemini CLI, lives under the same `~/.gemini/` home: `egc init` registers the EGC servers
+in `~/.gemini/config/mcp_config.json`, the file the Antigravity CLI, the Antigravity IDE and Antigravity 2.0 all read.
 
 ---
 

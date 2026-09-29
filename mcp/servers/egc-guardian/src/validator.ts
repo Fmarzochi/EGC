@@ -1258,19 +1258,19 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   /\.gemini[\\/]google_accounts\.json$/,
   /\.gemini[\\/].*mcp-oauth-tokens\.json$/,
   /\.gemini[\\/]a2a-oauth-tokens\.json$/,
-  // Gemini CLI's real MCP server registration file (scripts/lib/
-  // mcp-register.js, confirmed 2026-07-27). guardian-bin.js's
-  // fromMcpConfigs() now trusts this file the same way it already trusts
-  // ~/.claude.json, to resolve the guardian CLI for a Gemini-CLI-only
-  // install — that trust is only sound if a write here is denied, or a
-  // prompt-injected agent could repoint egc-guardian's own MCP entry at an
-  // arbitrary script and have this validator treat it as authoritative.
+  // Antigravity's shared MCP server registration file, read by the CLI, the
+  // IDE and Antigravity 2.0 (scripts/lib/mcp-register.js's "Antigravity"
+  // target). guardian-bin.js's fromMcpConfigs() trusts this file the same
+  // way it trusts ~/.claude.json, to resolve the guardian CLI for an
+  // Antigravity-only install; that trust is only sound if a write here is
+  // denied, or a prompt-injected agent could repoint egc-guardian's own MCP
+  // entry at an arbitrary script and have this validator treat it as
+  // authoritative.
   /\.gemini[\\/]config[\\/]mcp_config\.json$/,
-  // Antigravity CLI's own MCP server registration file — a separate file
-  // from Gemini CLI's above despite sharing the ~/.gemini home root
-  // (scripts/lib/mcp-register.js's "Antigravity CLI" target). Internal
+  // The Antigravity CLI's pre-migration registration file (scripts/lib/
+  // mcp-register.js's "Antigravity CLI (pre-migration path)" target). Internal
   // audit (EGC-460/461, 2026-07-27) found guardian-bin.js now also trusts
-  // this file, for the same reasoning as the Gemini CLI entry above.
+  // this file, for the same reasoning as the shared entry above.
   /\.gemini[\\/]antigravity-cli[\\/]mcp_config\.json$/,
   // OpenCode's real MCP server registration file (scripts/lib/
   // mcp-register.js's "OpenCode" target); same reasoning and same audit.
