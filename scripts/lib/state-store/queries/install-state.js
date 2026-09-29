@@ -13,6 +13,14 @@ function defaultTemporaryRoots() {
   return process.platform === 'win32' ? [os.tmpdir()] : [os.tmpdir(), '/tmp'];
 }
 
+// An install whose folder is gone is not an install any more: a project
+// that was deleted, or a temporary home that was cleaned up. The
+// install-state file of a target is the source of truth and lives in that
+// folder, so a record without it has nothing left to describe.
+function isStillThere(installState) {
+  return fs.existsSync(installState.targetRoot);
+}
+
 function mapInstallStateRow(row) {
   const modules = parseJsonColumn(row.modules, []);
   const operations = parseJsonColumn(row.operations, []);
@@ -87,14 +95,6 @@ function createInstallStateQueries(db) {
 
   function listRecordedInstallState() {
     return listInstallStateStatement.all().map(mapInstallStateRow);
-  }
-
-  // An install whose folder is gone is not an install any more: a project
-  // that was deleted, or a temporary home that was cleaned up. The
-  // install-state file of a target is the source of truth and lives in that
-  // folder, so a record without it has nothing left to describe.
-  function isStillThere(installState) {
-    return fs.existsSync(installState.targetRoot);
   }
 
   function listInstallState() {
