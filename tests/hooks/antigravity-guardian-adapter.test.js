@@ -74,7 +74,7 @@ function runTests() {
   results.push(test('multi_replace_file_content becomes the list of its chunks', () => {
     const input = buildGuardianInput(event('multi_replace_file_content', {
       TargetFile: 'a.sh',
-      ReplacementChunks: [{ TargetContent: 'x', ReplacementContent: 'y' }, { ReplacementContent: 'z' }, null],
+      ReplacementChunks: [{ TargetContent: 'x', ReplacementContent: 'y' }, { ReplacementContent: 'z' }],
     }));
     assert.deepStrictEqual(input.tool_input, {
       file_path: 'a.sh',
@@ -86,12 +86,31 @@ function runTests() {
     assert.strictEqual(input.cwd, '/workspace/app');
   }));
 
-  results.push(test('tools the Guardian does not judge, and malformed calls, map to nothing', () => {
+  results.push(test('tools the Guardian does not judge, and events with no tool call, map to nothing', () => {
     assert.strictEqual(buildGuardianInput(event('view_file', { AbsolutePath: '/etc/hostname' })), null);
-    assert.strictEqual(buildGuardianInput(event('run_command', { Cwd: '/workspace/app' })), null);
-    assert.strictEqual(buildGuardianInput(event('write_to_file', { CodeContent: 'x' })), null);
     assert.strictEqual(buildGuardianInput({ toolCall: 'run_command' }), null);
     assert.strictEqual(buildGuardianInput(null), null);
+  }));
+
+  results.push(test('a guarded call whose arguments cannot be read as text is marked unreadable', () => {
+    for (const call of [
+      event('run_command', { Cwd: '/workspace/app' }),
+      event('run_command', { CommandLine: ['rm', '-rf', '/'] }),
+      event('write_to_file', { CodeContent: 'x' }),
+      event('write_to_file', { TargetFile: 'run.sh', CodeContent: ['rm -rf /'] }),
+      event('replace_file_content', { TargetFile: 'run.sh', ReplacementContent: 42 }),
+      event('multi_replace_file_content', { TargetFile: 'run.sh', ReplacementChunks: 'rm -rf /' }),
+      event('multi_replace_file_content', { TargetFile: 'run.sh', ReplacementChunks: [{ ReplacementContent: 'ok' }, null] }),
+      { toolCall: { name: 'run_command', args: 'rm -rf /' } },
+    ]) {
+      assert.deepStrictEqual(buildGuardianInput(call), { tool_name: 'Unreadable' }, JSON.stringify(call.toolCall));
+    }
+  }));
+
+  results.push(test('an unreadable guarded call is denied, never left to the user', () => {
+    const { output } = runAdapter(event('write_to_file', { TargetFile: '/workspace/app/run.sh', CodeContent: ['rm -rf /'] }));
+    assert.strictEqual(output.decision, 'deny');
+    assert.match(output.reason, /could not read this call's arguments/);
   }));
 
   results.push(test('a destructive command is denied with the Guardian reason', () => {

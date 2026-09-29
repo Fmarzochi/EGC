@@ -11,7 +11,8 @@
  * {TargetFile, ReplacementChunks}. Each call is handed to the Guardian
  * validator that already judges it for Claude Code, in the shape that
  * validator reads, and the answer is:
- *   - "deny" with the Guardian's reason when the Guardian blocks;
+ *   - "deny" with the Guardian's reason when the Guardian blocks, and when a
+ *     guarded call carries an argument that cannot be read as text;
  *   - "ask" otherwise.
  * Measured on agy 1.2.12 (2026-09-28): a hook that prints no decision denies
  * the call, "allow" would override the user's own permission settings, and
@@ -28,6 +29,8 @@ const { runJsonEnvelopeGuardianAdapter } = require('../lib/adapter-stdin-json');
 
 const SHELL_TOOL = 'run_command';
 const WRITE_TOOLS = new Set(['write_to_file', 'replace_file_content', 'multi_replace_file_content']);
+const UNREADABLE_TOOL = 'Unreadable';
+const UNREADABLE_REASON = "EGC Guardian could not read this call's arguments as text, so it did not let the call run. Retry it with plain text arguments.";
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -42,10 +45,13 @@ function withCwd(input, cwd) {
   return typeof cwd === 'string' && cwd ? { ...input, cwd } : input;
 }
 
+const isOptionalString = value => value === undefined || typeof value === 'string';
+
+// A chunk the validator cannot read as text makes the whole call unreadable.
 function editOf(chunk) {
-  if (!isPlainObject(chunk) || typeof chunk.ReplacementContent !== 'string') return null;
+  if (!isPlainObject(chunk) || typeof chunk.ReplacementContent !== 'string' || !isOptionalString(chunk.TargetContent)) return null;
   return {
-    old_string: typeof chunk.TargetContent === 'string' ? chunk.TargetContent : '',
+    old_string: chunk.TargetContent ?? '',
     new_string: chunk.ReplacementContent,
     replace_all: chunk.AllowMultiple === true,
   };
@@ -53,37 +59,49 @@ function editOf(chunk) {
 
 // The write validator reads Claude Code's Write/Edit/MultiEdit fields: the
 // target, and the resulting content when the target is a shell script.
+// null means an argument could not be read as text.
 function writeToolInput(name, args) {
   const target = args.TargetFile;
   if (typeof target !== 'string' || !target) return null;
   if (name === 'write_to_file') {
-    return typeof args.CodeContent === 'string' ? { file_path: target, content: args.CodeContent } : { file_path: target };
+    if (!isOptionalString(args.CodeContent)) return null;
+    return args.CodeContent === undefined ? { file_path: target } : { file_path: target, content: args.CodeContent };
   }
   if (name === 'replace_file_content') {
+    if (args.ReplacementContent === undefined) return { file_path: target };
     const edit = editOf(args);
-    return edit ? { file_path: target, ...edit } : { file_path: target };
+    return edit ? { file_path: target, ...edit } : null;
   }
-  const chunks = Array.isArray(args.ReplacementChunks) ? args.ReplacementChunks : [];
-  return { file_path: target, edits: chunks.map(editOf).filter(Boolean) };
+  const chunks = args.ReplacementChunks ?? [];
+  if (!Array.isArray(chunks)) return null;
+  const edits = chunks.map(editOf);
+  return edits.includes(null) ? null : { file_path: target, edits };
 }
 
+function shellInput(event, args) {
+  const command = args.CommandLine;
+  if (typeof command !== 'string' || !command) return null;
+  return withCwd({ tool_name: 'Bash', tool_input: { command } }, typeof args.Cwd === 'string' ? args.Cwd : firstWorkspace(event));
+}
+
+function writeInput(event, name, args) {
+  const toolInput = writeToolInput(name, args);
+  return toolInput ? withCwd({ tool_name: 'Write', tool_input: toolInput }, firstWorkspace(event)) : null;
+}
+
+// A guarded tool whose arguments cannot be read is denied rather than left
+// to the user: the Guardian cannot judge what it cannot read.
 function buildGuardianInput(event) {
   if (!isPlainObject(event) || !isPlainObject(event.toolCall)) return null;
   const { name } = event.toolCall;
+  if (name !== SHELL_TOOL && !WRITE_TOOLS.has(name)) return null;
   const args = isPlainObject(event.toolCall.args) ? event.toolCall.args : {};
-  if (name === SHELL_TOOL) {
-    const command = args.CommandLine;
-    if (typeof command !== 'string' || !command) return null;
-    return withCwd({ tool_name: 'Bash', tool_input: { command } }, typeof args.Cwd === 'string' ? args.Cwd : firstWorkspace(event));
-  }
-  if (WRITE_TOOLS.has(name)) {
-    const toolInput = writeToolInput(name, args);
-    return toolInput ? withCwd({ tool_name: 'Write', tool_input: toolInput }, firstWorkspace(event)) : null;
-  }
-  return null;
+  const input = name === SHELL_TOOL ? shellInput(event, args) : writeInput(event, name, args);
+  return input || { tool_name: UNREADABLE_TOOL };
 }
 
 function runGuardian(input) {
+  if (input.tool_name === UNREADABLE_TOOL) return { exitCode: 2, stderr: UNREADABLE_REASON };
   return input.tool_name === 'Bash' ? runBashGuardian(input) : runWriteGuardian(input);
 }
 
