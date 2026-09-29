@@ -61,6 +61,9 @@ function parseJson(stdout) {
 
 async function seedStore(dbPath) {
   const store = await createStateStore({ dbPath });
+  // The store counts an install only while its folder is there.
+  const installRoot = path.join(path.dirname(dbPath), 'home', '.gemini');
+  fs.mkdirSync(installRoot, { recursive: true });
 
   store.upsertSession({
     id: 'session-active',
@@ -218,13 +221,13 @@ async function seedStore(dbPath) {
 
   store.upsertInstallState({
     targetId: 'egc-home',
-    targetRoot: '/tmp/home/.gemini',
+    targetRoot: installRoot,
     profile: 'developer',
     modules: ['rules-core', 'orchestration'],
     operations: [
       {
         kind: 'copy-file',
-        destinationPath: '/tmp/home/.gemini/agents/planner.md',
+        destinationPath: path.join(installRoot, 'agents', 'planner.md'),
       },
     ],
     installedAt: '2026-03-15T07:00:00.000Z',
@@ -483,6 +486,7 @@ async function runTests() {
         status: 'active',
       });
 
+      fs.mkdirSync(path.join(testDir, '.gemini'), { recursive: true });
       const installState = store.upsertInstallState({
         targetId: 'egc-project',
         targetRoot: path.join(testDir, '.gemini'),

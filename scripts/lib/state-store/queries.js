@@ -105,6 +105,7 @@ function createQueryApi(db) {
     insertGovernanceEvent: governanceEvents.insertGovernanceEvent,
     insertSkillRun: skillRuns.insertSkillRun,
     listRecentSessions: sessions.listRecentSessions,
+    pruneMissingInstallState: installState.pruneMissingInstallState,
     upsertInstallState: installState.upsertInstallState,
     upsertSession: sessions.upsertSession,
     upsertSkillVersion: skillVersions.upsertSkillVersion,

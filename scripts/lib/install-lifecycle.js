@@ -4,7 +4,7 @@ const path = require('node:path');
 
 const { resolveInstallPlan, loadInstallManifests } = require('./install-manifests');
 const { readInstallState, writeInstallState } = require('./install-state');
-const { hasParentSegment, isAnchoredPath, isInsideReal, realizePath } = require('./path-safety');
+const { fileKey, hasParentSegment, isAnchoredPath, isInsideReal, realizePath } = require('./path-safety');
 const { copyFileKeepingMode, replaceFileWith, writeTextKeepingMode } = require('./install/preserving-write');
 const { assertSafeMcpConfig, isMcpConfigPath, parseMcpConfigText } = require('./mcp-config');
 const { cloneJsonValue, deepMergeJson, isPlainObject, withoutPrototypeKeys } = require('./json-merge');
@@ -1398,6 +1398,27 @@ function executeRepairOperations(repoRoot, repairOperations, unrepairable) {
 
 // Repairs one discovered install-state record; the summary over all records
 // is built by repairInstalledStates.
+// The home whose store records a repair. A repair for the home of the
+// process leaves the choice to the store, which honors EGC_DIR; a repair run
+// for another home records the install in the store of that home.
+function storeHomeFor(context) {
+  const processHome = process.env.HOME || process.env.USERPROFILE || os.homedir();
+  return fileKey(context.homeDir) === fileKey(processHome) ? undefined : context.homeDir;
+}
+
+// The store sync of a repair, kept off the enumerable shape of its result so
+// the JSON output stays as it is. Whoever repairs a home it is about to
+// remove awaits it first.
+function withSyncPromise(result, syncPromise) {
+  Object.defineProperty(result, 'syncPromise', {
+    value: syncPromise,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return result;
+}
+
 function repairRecord(record, context, options) {
   if (record.error) {
     return {
@@ -1456,11 +1477,12 @@ function repairRecord(record, context, options) {
 
     writeInstallState(desiredPlan.installStatePath, desiredPlan.statePreview);
 
-    syncInstallStateToStore(desiredPlan.statePreview, {
+    const syncPromise = syncInstallStateToStore(desiredPlan.statePreview, {
+      homeDir: storeHomeFor(context),
       onError: error => console.error(`Warning: Failed to sync install state to status store: ${error.message}`),
     });
 
-    return {
+    return withSyncPromise({
       adapter: record.adapter,
       // 'partial' when real work was done but something is still
       // unfixable: neither a clean success nor a total failure, and the
@@ -1475,7 +1497,7 @@ function repairRecord(record, context, options) {
       unrepairable,
       stateRefreshed: true,
       error: describeUnrepairable(unrepairable),
-    };
+    }, syncPromise);
   } catch (error) {
     return {
       adapter: record.adapter,
@@ -1522,13 +1544,13 @@ function repairInstalledStates(options = {}) {
     plannedPruneCount: 0,
   });
 
-  return {
+  return withSyncPromise({
     dryRun: Boolean(options.dryRun),
     generatedAt: new Date().toISOString(),
     manifestError: loaded.error,
     results,
     summary,
-  };
+  }, Promise.all(results.map(result => result.syncPromise)));
 }
 
 function cleanupEmptyParentDirs(filePath, stopAt) {

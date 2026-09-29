@@ -64,4 +64,20 @@ function isInsideReal(target, root) {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-module.exports = { hasParentSegment, isAnchoredPath, isInsideReal, realizePath };
+// One spelling per file, so the same file written two ways still compares
+// equal: every link on the way is followed, and letter case is folded on the
+// platforms whose file systems do not tell it apart.
+function fileKey(target) {
+  const real = realizePath(target);
+  return process.platform === 'win32' || process.platform === 'darwin' ? real.toLowerCase() : real;
+}
+
+// Whether `target` sits under `root`, the two compared as the files they are.
+// The relative path is what answers, so a root that is the top of a drive or
+// of the file system holds what sits under it like any other folder.
+function isUnderFolder(target, root) {
+  const relative = path.relative(fileKey(root), fileKey(target));
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+module.exports = { fileKey, hasParentSegment, isAnchoredPath, isInsideReal, isUnderFolder, realizePath };

@@ -35,6 +35,14 @@ function cleanupTempDir(dirPath) {
   fs.rmSync(dirPath, { recursive: true, force: true });
 }
 
+// A folder that exists, for the install a state records: the store counts
+// an install only while its folder is there.
+function createInstallRoot(tmpDir, name = 'home') {
+  const targetRoot = path.join(tmpDir, name, '.claude');
+  fs.mkdirSync(targetRoot, { recursive: true });
+  return targetRoot;
+}
+
 function buildSampleState(overrides = {}) {
   return createInstallState({
     adapter: { id: 'claude-home' },
@@ -69,7 +77,7 @@ async function runTests() {
     const tmpDir = createTempDir('install-state-store-sync-');
     const dbPath = path.join(tmpDir, 'state.db');
     try {
-      const state = buildSampleState();
+      const state = buildSampleState({ targetRoot: createInstallRoot(tmpDir) });
       await syncInstallStateToStore(state, { dbPath });
 
       const store = await createStateStore({ dbPath });
@@ -86,11 +94,84 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('an install whose folder is gone is not counted', async () => {
+    const tmpDir = createTempDir('install-state-store-sync-');
+    const dbPath = path.join(tmpDir, 'state.db');
+    try {
+      const staying = createInstallRoot(tmpDir, 'staying');
+      const leaving = createInstallRoot(tmpDir, 'leaving');
+      await syncInstallStateToStore(buildSampleState({ targetRoot: staying }), { dbPath });
+      await syncInstallStateToStore(buildSampleState({ targetRoot: leaving }), { dbPath });
+      fs.rmSync(leaving, { recursive: true, force: true });
+
+      const store = await createStateStore({ dbPath });
+      try {
+        const status = store.getStatus({});
+        assert.strictEqual(status.installHealth.totalCount, 1);
+        assert.strictEqual(status.installHealth.installations[0].targetRoot, staying);
+      } finally {
+        store.close();
+      }
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('only a folder under a temporary directory loses its record when it is gone', async () => {
+    const tmpDir = createTempDir('install-state-store-sync-');
+    const dbPath = path.join(tmpDir, 'state.db');
+    try {
+      const ephemeral = createInstallRoot(tmpDir, 'ephemeral');
+      const lasting = createInstallRoot(tmpDir, 'lasting');
+      const store = await createStateStore({ dbPath });
+      try {
+        for (const targetRoot of [ephemeral, lasting]) {
+          store.upsertInstallState({ targetId: 'claude-home', targetRoot, installedAt: '2026-03-15T07:00:00.000Z', sourceVersion: '1.1.9' });
+        }
+        fs.rmSync(ephemeral, { recursive: true, force: true });
+        fs.rmSync(lasting, { recursive: true, force: true });
+
+        const dropped = store.pruneMissingInstallState({ temporaryRoots: [path.join(tmpDir, 'ephemeral')] });
+
+        assert.strictEqual(dropped, 1);
+        const rows = store._database.prepare('SELECT target_root FROM install_state').all();
+        assert.deepStrictEqual(rows.map(row => row.target_root), [lasting], 'the folder that may be back keeps its record');
+        assert.strictEqual(store.getStatus({}).installHealth.totalCount, 0, 'and is left out of the list while it is gone');
+      } finally {
+        store.close();
+      }
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('a sync drops the records of the folders that are gone', async () => {
+    const tmpDir = createTempDir('install-state-store-sync-');
+    const dbPath = path.join(tmpDir, 'state.db');
+    try {
+      const first = createInstallRoot(tmpDir, 'first');
+      const second = createInstallRoot(tmpDir, 'second');
+      await syncInstallStateToStore(buildSampleState({ targetRoot: first }), { dbPath });
+      fs.rmSync(first, { recursive: true, force: true });
+      await syncInstallStateToStore(buildSampleState({ targetRoot: second }), { dbPath });
+
+      const store = await createStateStore({ dbPath });
+      try {
+        const rows = store._database.prepare('SELECT target_root FROM install_state').all();
+        assert.deepStrictEqual(rows.map(row => row.target_root), [second]);
+      } finally {
+        store.close();
+      }
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  })) passed++; else failed++;
+
   if (await test('syncInstallStateToStore upserts, does not duplicate, on repeated calls for the same target', async () => {
     const tmpDir = createTempDir('install-state-store-sync-');
     const dbPath = path.join(tmpDir, 'state.db');
     try {
-      const state = buildSampleState();
+      const state = buildSampleState({ targetRoot: createInstallRoot(tmpDir) });
       await syncInstallStateToStore(state, { dbPath });
       await syncInstallStateToStore(state, { dbPath });
 
