@@ -22,6 +22,13 @@ const { SQLiteArbitrationQueue } = require(buildPath);
 // would exit cleanly mid-test; only the end of the run clears this.
 process.exitCode = 1;
 
+// A promise the queue starts and nobody handles would end the process on
+// its rejection; collected here, it fails a test instead.
+const unhandled = [];
+process.on('unhandledRejection', reason => {
+  unhandled.push(reason instanceof Error ? reason.message : String(reason));
+});
+
 let passed = 0;
 let failed = 0;
 
@@ -113,10 +120,52 @@ async function runTests() {
     assert.deepStrictEqual(warnings, ['WARN', 'WARN', 'ERROR']);
   });
 
+  await test('a log that throws neither loses the write that met the lock nor holds up the ones behind it', async () => {
+    const queue = new SQLiteArbitrationQueue({ baseBackoffMs: 1, log: () => { throw new Error('the log is down'); } });
+    let attempts = 0;
+    const locked = queue.enqueue(async () => {
+      attempts += 1;
+      if (attempts === 1) throw busy();
+      return 'locked-done';
+    });
+    const behind = queue.enqueue(async () => 'behind-done');
+    assert.strictEqual(await within(2000, locked), 'locked-done');
+    assert.strictEqual(await within(2000, behind), 'behind-done');
+    assert.strictEqual(attempts, 2);
+  });
+
+  await test('a write dead-lettered while the log throws is still rejected, and the queue goes on', async () => {
+    const queue = new SQLiteArbitrationQueue({ baseBackoffMs: 1, maxRetries: 1, log: () => { throw new Error('the log is down'); } });
+    await assert.rejects(within(2000, queue.enqueue(async () => { throw busy(); })), /Arbitration Failed after 1 retries/);
+    assert.strictEqual(await within(2000, queue.enqueue(async () => 'next-done')), 'next-done');
+  });
+
+  await test('should the processor fail on its own, the writes already waiting still run', async () => {
+    const queue = new SQLiteArbitrationQueue({ baseBackoffMs: 1 });
+    const processNext = queue.processNext.bind(queue);
+    let failures = 1;
+    queue.processNext = async () => {
+      if (failures > 0) {
+        failures -= 1;
+        throw new Error('the processor failed');
+      }
+      return processNext();
+    };
+    assert.strictEqual(await within(2000, queue.enqueue(async () => 'waiting-done')), 'waiting-done');
+  });
+
+  await test('no write left a rejection without a handler', async () => {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepStrictEqual(unhandled, []);
+  });
+
   console.log(`\nPassed: ${passed}`);
   console.log(`Failed: ${failed}`);
   process.exitCode = failed > 0 ? 1 : 0;
   process.exit();
 }
 
-runTests();
+runTests().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

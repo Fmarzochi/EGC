@@ -37,8 +37,30 @@ export class SQLiteArbitrationQueue {
   async enqueue<T>(operation: () => Promise<T>): Promise<T> {
     return new Promise((resolve, reject) => {
       this.queue.push({ operation, resolve: resolve as (value: unknown) => void, reject, retries: 0 });
-      this.processNext();
+      this.kick();
     });
+  }
+
+  // Starts the processor. It settles every write it takes; should it fail
+  // on its own, the queue is released and started again, so the writes
+  // already waiting run without having to wait for the next one to arrive.
+  private kick(): void {
+    this.processNext().catch((err: unknown) => {
+      this.isProcessing = false;
+      this.report('ERROR', 'Write queue processor failed.', { error: err instanceof Error ? err.message : String(err) });
+      if (this.queue.length > 0) this.kick();
+    });
+  }
+
+  // The log belongs to the caller. A log that throws must not cost a write
+  // its retry or its answer, so the failure goes to stderr and the queue
+  // carries on.
+  private report(level: 'WARN' | 'ERROR', msg: string, meta?: Record<string, unknown>): void {
+    try {
+      this.log(level, msg, meta);
+    } catch (err: unknown) {
+      process.stderr.write(`[EGC memory] write queue log failed: ${err instanceof Error ? err.message : String(err)}\n`);
+    }
   }
 
   private async processNext() { // NOSONAR: queue processor keeps the single-threaded invariant and SQLITE_BUSY retry logic in one read
@@ -71,7 +93,7 @@ export class SQLiteArbitrationQueue {
           // them all on the same tick and the collision repeats (thundering herd).
           const half = Math.floor(backoff / 2);
           backoff = half + randomInt(0, half + 1);
-          this.log('WARN', `Write Collision Detected (SQLITE_BUSY). Arbitration retrying...`, {
+          this.report('WARN', `Write Collision Detected (SQLITE_BUSY). Arbitration retrying...`, {
             queue_depth: this.queue.length,
             retry_count: task.retries,
             backoff_ms: backoff
@@ -79,10 +101,10 @@ export class SQLiteArbitrationQueue {
 
           setTimeout(() => {
             this.queue.push(task); // Requeue at the end instead of unshift to prevent queue poisoning
-            this.processNext();
+            this.kick();
           }, backoff);
         } else {
-          this.log('ERROR', `Arbitration Failed. Write lock unrecoverable. Dead-lettering task.`, { retries: task.retries });
+          this.report('ERROR', `Arbitration Failed. Write lock unrecoverable. Dead-lettering task.`, { retries: task.retries });
           task.reject(new Error(`Arbitration Failed after ${this.MAX_RETRIES} retries: ` + error.message));
         }
       } else {
@@ -91,6 +113,6 @@ export class SQLiteArbitrationQueue {
     }
 
     this.isProcessing = false;
-    this.processNext();
+    this.kick();
   }
 }

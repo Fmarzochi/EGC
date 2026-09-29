@@ -365,7 +365,9 @@ function emitInstallResult(options, result) {
   printHumanPlan(result, false);
   const { launchDashboard, shouldAutoLaunch } = require('./lib/dashboard-launch');
   if (shouldAutoLaunch()) {
-    launchDashboard({ log: msg => console.log(`  ${msg}`) });
+    launchDashboard({ log: msg => console.log(`  ${msg}`) }).catch(error => {
+      console.error(`  Dashboard startup skipped: ${error.message}`);
+    });
   }
 }
 

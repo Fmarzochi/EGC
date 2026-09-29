@@ -188,7 +188,9 @@ function auditLog(action: string, status: 'ALLOWED'|'DENIED'|'FLAGGED'|'MUTATED'
   if (status === 'FATAL' || status === 'DENIED') level = 'ERROR';
   else if (status === 'ONLINE' || status === 'SHUTDOWN') level = 'INFO';
   else level = 'AUDIT';
-  sysLogger.log(level, action, status, details);
+  sysLogger.log(level, action, status, details).catch((err: unknown) => {
+    console.error('[EGC Guardian] PersistentLogger failed to write:', err);
+  });
   if (status === 'DENIED' || status === 'FLAGGED') writeAuditEntry(action, status, details);
 }
 
@@ -221,7 +223,7 @@ const OrchestrateTaskSchema = z.object({
   heuristic_sandbox_id: z.string().optional()
 });
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
+server.setRequestHandler(ListToolsRequestSchema, () => {
   return {
     tools: [
       { name: "validate_command", description: "Validate command execution safety.", inputSchema: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } },

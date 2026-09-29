@@ -199,4 +199,7 @@ function cleanSandboxAllBestEffort() {
   console.error(e.stack);
   cleanSandboxAllBestEffort();
   process.exit(1);
-}})();
+}})().catch(e => {
+  console.error('\nFATAL: ' + e.message);
+  process.exit(1);
+});
