@@ -2210,15 +2210,15 @@ function runTests() {
     }
   }));
 
-  // Windsurf's hooks.json is a flat {hooks: {<event>: [...]}} map, not
+  // Devin Desktop's hooks.json is a flat {hooks: {<event>: [...]}} map, not
   // Claude's matcher/group settings.json -- doctor/repair/uninstall had no
   // notion of this at all (cubic-dev-ai review, PR #1052, 2026-07-27):
-  // repair injected a bogus SessionStart group into the Windsurf file
+  // repair injected a bogus SessionStart group into the Devin Desktop file
   // instead of touching pre_run_command, doctor always reported drift on a
   // healthy install (it checked for that same bogus group), and uninstall
   // left the real hooks.json entry behind pointing at a script the
   // copy-file uninstall step had already deleted.
-  tally(test('doctor reports a removed Windsurf Guardian hook as drift, not a false positive on a healthy install', () => {
+  tally(test('doctor reports a removed Devin Desktop Guardian hook as drift, not a false positive on a healthy install', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
@@ -2243,7 +2243,7 @@ function runTests() {
     }
   }));
 
-  tally(test('repair restores the Windsurf Guardian hook on pre_run_command without touching third-party hooks or other events', () => {
+  tally(test('repair restores the Devin Desktop Guardian hook on pre_run_command without touching third-party hooks or other events', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
@@ -2265,7 +2265,7 @@ function runTests() {
       assert.strictEqual(hooksConfig.hooks.pre_run_command.length, 2);
       assert.strictEqual(hooksConfig.hooks.pre_run_command[0].command, 'echo third-party');
       assert.ok(hooksConfig.hooks.pre_run_command[1].command.includes(installed.guardianAdapterScriptPath));
-      assert.strictEqual(hooksConfig.hooks.SessionStart, undefined, 'must never inject a Claude-schema SessionStart group into a Windsurf hooks.json');
+      assert.strictEqual(hooksConfig.hooks.SessionStart, undefined, 'must never inject a Claude-schema SessionStart group into a Devin Desktop hooks.json');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
@@ -2277,7 +2277,7 @@ function runTests() {
   // stale entry, the Guardian merge replaced the GateGuard entry, so a fresh
   // install reported hooks.json as drifted and repair only swapped the two
   // entries back and forth without ever converging.
-  tally(test('doctor accepts GateGuard and Guardian side by side on Windsurf pre_run_command and repair leaves them alone', () => {
+  tally(test('doctor accepts GateGuard and Guardian side by side on Devin Desktop pre_run_command and repair leaves them alone', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
@@ -2331,7 +2331,7 @@ function runTests() {
     }
   }));
 
-  tally(test('uninstall removes only the EGC Windsurf Guardian entry and keeps third-party hooks and other events', () => {
+  tally(test('uninstall removes only the EGC Devin Desktop Guardian entry and keeps third-party hooks and other events', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 

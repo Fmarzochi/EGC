@@ -25,7 +25,7 @@ const {
 // claude-settings-hooks.js's destination-driven merge builders instead of
 // a bespoke merge module, same pattern as Junie/Trae's own config files.
 // No rewrite capability is documented (allow/deny only), so Token Crusher
-// stays out of scope here, same as Kiro/Windsurf/Cline.
+// stays out of scope here, same as Kiro/Devin Desktop/Cline.
 function resolveGoosePluginHooksJsonPath(pluginRoot) {
   return path.join(pluginRoot, 'hooks', 'hooks.json');
 }

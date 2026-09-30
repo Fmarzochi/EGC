@@ -5,7 +5,7 @@
  * Junie's PreToolUse hook input already matches Claude Code's own shape
  * ({tool_name, tool_input: {command}}) -- confirmed against
  * junie.jetbrains.com/docs/junie-cli-hooks.html -- so no input remapping is
- * needed, unlike Cursor/Windsurf. Only the OUTPUT envelope differs: Junie
+ * needed, unlike Cursor/Devin Desktop. Only the OUTPUT envelope differs: Junie
  * expects a FLAT {decision, reason, updatedInput} object on stdout, not
  * Claude Code's {hookSpecificOutput: {permissionDecision, updatedInput}}.
  * pre-bash-guardian-validate.js's own run() already returns {exitCode,

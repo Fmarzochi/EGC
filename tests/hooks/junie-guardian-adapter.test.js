@@ -2,7 +2,7 @@
  * Tests for scripts/hooks/junie-guardian-adapter.js
  *
  * Junie's PreToolUse input already matches Claude Code's own shape
- * ({tool_name, tool_input: {command}}), so unlike Cursor/Windsurf, no input
+ * ({tool_name, tool_input: {command}}), so unlike Cursor/Devin Desktop, no input
  * remapping is tested here -- only the flat {decision, reason} output
  * envelope translation and the exit-code contract (0 allow, 2 deny), plus
  * the exitCode-vs-forced-exit fix (cubic-dev-ai finding, PR #1081).

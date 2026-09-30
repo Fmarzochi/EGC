@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Windsurf Cascade Hooks adapter for the EGC Guardian command validator.
+ * Devin Desktop hooks adapter for the EGC Guardian command validator.
  *
- * Windsurf's pre_run_command hook uses a different wire contract than Claude
+ * Devin Desktop's pre_run_command hook uses a different wire contract than Claude
  * Code's PreToolUse hook (see windsurf-gateguard-adapter.js for the same
  * distinction this file mirrors): {agent_action_name, tool_info:
  * {command_line}} on stdin instead of {tool_name, tool_input}, and a plain
@@ -14,7 +14,7 @@
  * adapter this translation only needs to build its input shape and relay
  * its output as-is.
  *
- * Registered only on Windsurf's pre_run_command event (not
+ * Registered only on Devin Desktop's pre_run_command event (not
  * pre_write_code) — the Guardian validates shell commands, not file writes.
  */
 
@@ -39,7 +39,7 @@ function buildGuardianInput(windsurfEvent) {
   // cwd matters here (unlike for GateGuard's fact-forcing gate): the
   // Guardian resolves relative protected paths (e.g. `cat .ssh/id_rsa`)
   // against it. Without it, those checks fall back to this adapter
-  // process's own cwd instead of the directory Windsurf actually runs the
+  // process's own cwd instead of the directory Devin Desktop actually runs the
   // command in.
   const input = { tool_name: 'Bash', tool_input: { command } };
   if (typeof toolInfo.cwd === 'string') {

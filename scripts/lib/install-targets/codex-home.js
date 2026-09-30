@@ -124,7 +124,7 @@ function createCodexCrusherOperations(adapter, codexHome) {
 // commands, not file edits; no install target wires a write-validator hook).
 //
 // pre-bash-guardian-validate.js is registered directly, with no translation
-// adapter (unlike Windsurf's windsurf-guardian-adapter.js): Codex's own docs
+// adapter (unlike Devin Desktop's windsurf-guardian-adapter.js): Codex's own docs
 // (https://developers.openai.com/codex/hooks, redirects to
 // https://learn.chatgpt.com/docs/hooks) confirm the exit-code-2-plus-stderr
 // contract this hook already uses for Claude Code is explicitly supported as

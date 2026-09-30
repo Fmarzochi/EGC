@@ -1,7 +1,7 @@
 /**
  * Tests for scripts/hooks/windsurf-gateguard-adapter.js
  *
- * Windsurf Cascade Hooks use a different wire contract than Claude Code/
+ * Devin Desktop hooks use a different wire contract than Claude Code/
  * Codex/Continue: stdin is {agent_action_name, tool_info}, not {tool_name,
  * tool_input}, and blocking is signaled with exit code 2 + a stderr reason,
  * not a hookSpecificOutput JSON object on stdout. This file exercises both
@@ -94,7 +94,7 @@ function runTests() {
     });
   })) passed++; else failed++;
 
-  if (test('returns null for unmapped Windsurf events (pre_read_code, pre_mcp_tool_use, ...)', () => {
+  if (test('returns null for unmapped Devin Desktop events (pre_read_code, pre_mcp_tool_use, ...)', () => {
     assert.strictEqual(buildGateGuardInput({ agent_action_name: 'pre_read_code', tool_info: {} }), null);
     assert.strictEqual(buildGateGuardInput({ agent_action_name: 'pre_mcp_tool_use', tool_info: {} }), null);
   })) passed++; else failed++;

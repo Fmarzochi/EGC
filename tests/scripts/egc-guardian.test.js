@@ -1067,16 +1067,16 @@ async function runTests() {
         assert.strictEqual(bare.sources.size, 0);
         assert.deepStrictEqual(installedModule.splitByInstallation([{ name: 'github-ops', source: 'skills/devops/github-ops/SKILL.md' }], bare).missing.map(e => e.name), ['github-ops']);
         // No variable, but the MCP client named itself: another tool's state does not count.
-        const named = installedModule.installedComponentSources({ environment: {}, cwd: emptyHome, homeDir, clientName: 'Windsurf' });
+        const named = installedModule.installedComponentSources({ environment: {}, cwd: emptyHome, homeDir, clientName: 'Devin Desktop' });
         assert.strictEqual(named.harnessRoot, path.join(homeDir, '.codeium', 'windsurf'));
         assert.strictEqual(named.known, true);
-        assert.strictEqual(named.sources.size, 0, 'the Claude state under the same home is not offered to Windsurf');
+        assert.strictEqual(named.sources.size, 0, 'the Claude state under the same home is not offered to Devin Desktop');
         // A project-scoped library of the named tool still counts, from the tool's own project directory.
         const windsurfProject = path.join(emptyHome, '.windsurf', 'egc-install-state.json');
         fs.mkdirSync(path.dirname(windsurfProject), { recursive: true });
         fs.writeFileSync(windsurfProject, JSON.stringify({ operations: [{ kind: 'copy-file', sourceRelativePath: 'agents/planner.md' }] }));
-        const withProject = installedModule.installedComponentSources({ environment: {}, cwd: emptyHome, homeDir, clientName: 'Windsurf' });
-        assert.ok(withProject.sources.has('agents/planner.md'), 'the Windsurf project state under cwd counts');
+        const withProject = installedModule.installedComponentSources({ environment: {}, cwd: emptyHome, homeDir, clientName: 'Devin Desktop' });
+        assert.ok(withProject.sources.has('agents/planner.md'), 'the Devin Desktop project state under cwd counts');
         const cursorProject = path.join(emptyHome, '.cursor', 'egc-install-state.json');
         fs.mkdirSync(path.dirname(cursorProject), { recursive: true });
         fs.writeFileSync(cursorProject, JSON.stringify({ operations: [{ kind: 'copy-file', sourceRelativePath: 'agents/architect.md' }] }));

@@ -3,8 +3,8 @@
 // Manages the Guardian entry inside a Cursor Agent Hooks project-level
 // .cursor/hooks.json file. Cursor's schema is a flat
 // {version, hooks: {<event>: [{command, timeout?, matcher?}]}} map -- the
-// same shape flat-hooks-json-merge.js handles for Windsurf's hooks.json
-// too, plus a top-level `version` field Windsurf's file does not have.
+// same shape flat-hooks-json-merge.js handles for Devin Desktop's hooks.json
+// too, plus a top-level `version` field Devin Desktop's file does not have.
 // Docs: https://cursor.com/docs/agent/hooks
 
 const fs = require('node:fs');

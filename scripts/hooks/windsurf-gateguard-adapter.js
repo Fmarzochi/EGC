@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /**
- * Windsurf Cascade Hooks adapter for the GateGuard Fact-Forcing Gate.
+ * Devin Desktop hooks adapter for the GateGuard Fact-Forcing Gate.
  *
- * Windsurf's pre_write_code and pre_run_command hooks (docs:
- * https://docs.windsurf.com/windsurf/cascade/hooks, redirects to
- * https://docs.devin.ai/desktop/cascade/hooks) use a different wire contract
- * than Claude Code/Codex/Continue:
+ * Devin Desktop's pre_write_code and pre_run_command hooks (docs:
+ * https://docs.devin.ai/desktop/cascade/hooks; the product was Windsurf
+ * until 2026-06-02, and the ~/.codeium/windsurf paths stayed) use a
+ * different wire contract than Claude Code/Codex/Continue:
  *   - stdin JSON shape: {agent_action_name, tool_info: {...}}, not
  *     {tool_name, tool_input}
  *   - blocking signal: exit code 2 with the reason on stderr, not a
  *     hookSpecificOutput.permissionDecision:"deny" JSON object on stdout
  *
  * This script translates both directions so gateguard-fact-force.js's own
- * run() function (unchanged) can gate Windsurf's file edits and shell
+ * run() function (unchanged) can gate Devin Desktop's file edits and shell
  * commands too.
  */
 
@@ -31,7 +31,7 @@ function buildGateGuardInput(windsurfEvent) {
     if (!filePath) {
       return null;
     }
-    // Windsurf reports every code write through the same event whether the
+    // Devin Desktop reports every code write through the same event whether the
     // file already exists or is being created; gateguard-fact-force.js
     // phrases the two cases differently, so recover that distinction here.
     const toolName = fs.existsSync(filePath) ? 'Edit' : 'Write';
@@ -68,7 +68,7 @@ function extractDenyReason(result) {
   } catch {
     // Malformed stdout from run() is treated as "no deny decision" -- the
     // same fail-open policy gateguard-fact-force.js applies to its own
-    // parse failures, so a non-JSON stdout never blocks Windsurf's action.
+    // parse failures, so a non-JSON stdout never blocks Devin Desktop's action.
     return null;
   }
   const output = parsed?.hookSpecificOutput;

@@ -1,7 +1,7 @@
 'use strict';
 
 // Shared merge/read/write primitives for "flat {hooks: {<event>:
-// [{command}]}}" hook config files -- the shape used by Windsurf's
+// [{command}]}}" hook config files -- the shape used by Devin Desktop's
 // hooks.json and Cursor's .cursor/hooks.json alike (no matcher/group
 // wrapper, no "type": "command" field like Claude Code's settings.json).
 // Both hosts need the same idempotent, array-preserving merge logic
@@ -60,12 +60,12 @@ function commandScriptBasename(command) {
 }
 
 // isOwnBasename: (command: string) => boolean, lets each host decide which
-// basenames identify ITS OWN managed adapter scripts (Windsurf has two:
+// basenames identify ITS OWN managed adapter scripts (Devin Desktop has two:
 // GateGuard + Guardian; Cursor has one: Guardian only).
 //
 // A stale entry is the SAME script registered at a different install path,
 // so the basename has to match as well. Treating any host-owned entry as
-// stale let the two Windsurf scripts that share pre_run_command migrate
+// stale let the two Devin Desktop scripts that share pre_run_command migrate
 // each other away: whichever applied last replaced the other, every repair
 // swapped them back, and doctor reported hooks.json as drifted forever.
 function isStaleEgcEntry(entry, command, isOwnBasename) {
@@ -77,7 +77,7 @@ function isStaleEgcEntry(entry, command, isOwnBasename) {
 }
 
 // buildExtraTopLevel: (base: object) => object, merged into the result
-// alongside `hooks` -- e.g. Cursor's {version} field, which Windsurf's
+// alongside `hooks` -- e.g. Cursor's {version} field, which Devin Desktop's
 // hooks.json does not have.
 // extraEntryFields: object merged into a newly-appended entry alongside
 // `command` -- e.g. Kiro's {matcher: 'execute_bash'}, needed because its

@@ -258,7 +258,7 @@ function runTests() {
       });
       assert.ok(/no supported tool/i.test(output), output);
 
-      // A detected tool whose install fails: the Windsurf root is a file, so
+      // A detected tool whose install fails: the Devin Desktop root is a file, so
       // it is detected but nothing can be written under it.
       fs.mkdirSync(path.join(homeDir, '.codeium'), { recursive: true });
       fs.writeFileSync(path.join(homeDir, '.codeium', 'windsurf'), 'not a directory');

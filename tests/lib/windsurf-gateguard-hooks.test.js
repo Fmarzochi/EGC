@@ -1,7 +1,7 @@
 /**
  * Tests for scripts/lib/windsurf-gateguard-hooks.js
  *
- * Windsurf's hooks.json schema is a flat {hooks: {<event>: [{command}]}} map
+ * Devin Desktop's hooks.json schema is a flat {hooks: {<event>: [{command}]}} map
  * (no matcher/group wrapper, no "type": "command" field), unlike Claude
  * Code's settings.json, so it needs its own merge logic. These tests exercise
  * that merge logic directly (additive, idempotent, preserves unrelated keys
@@ -140,7 +140,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  // Windsurf registers two adapter scripts on pre_run_command (GateGuard
+  // Devin Desktop registers two adapter scripts on pre_run_command (GateGuard
   // first, Guardian after). The stale-entry migration used to treat ANY
   // host-owned entry as the one being re-registered, so the Guardian merge
   // replaced the GateGuard entry, every repair swapped them back, and doctor

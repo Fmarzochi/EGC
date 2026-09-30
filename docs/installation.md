@@ -30,7 +30,7 @@ egc install --target copilot
 
 The Copilot target installs EGC skills under `~/.github/skills/`. VS Code Copilot discovers that directory automatically.
 
-Memory is shared across EGC targets. Context saved while using Copilot is the same state used by Claude Code, Cursor, Antigravity, Windsurf, and the rest of the supported tools.
+Memory is shared across EGC targets. Context saved while using Copilot is the same state used by Claude Code, Cursor, Antigravity, Devin Desktop, and the rest of the supported tools.
 
 ---
 

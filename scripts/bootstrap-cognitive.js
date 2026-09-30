@@ -503,15 +503,15 @@ const CODEX_SKIP_MESSAGES = {
   }
 })();
 
-// ── Windsurf (~/.codeium/windsurf/memories/global_rules.md) ──────────────────
+// ── Devin Desktop (~/.codeium/windsurf/memories/global_rules.md) ──────────────────
 (function bootstrapWindsurf() {
   try {
     const codeiumDir = path.join(HOME, '.codeium');
     if (!fs.existsSync(codeiumDir)) return;
     const target = path.join(codeiumDir, 'windsurf', 'memories', 'global_rules.md');
-    injectProtocol(target, 'Windsurf');
+    injectProtocol(target, 'Devin Desktop');
   } catch (e) {
-    console.log(`  [cognitive] Windsurf: unexpected error: ${e.message}`);
+    console.log(`  [cognitive] Devin Desktop: unexpected error: ${e.message}`);
   }
 })();
 

@@ -1,7 +1,7 @@
 'use strict';
 
 // Shared truncation-aware stdin JSON reader for host-hook adapters
-// (Windsurf, Cursor, and future hosts with the same "one JSON event object
+// (Devin Desktop, Cursor, and future hosts with the same "one JSON event object
 // on stdin" contract). A parse failure caused by hitting the size cap is
 // not the same as ordinary malformed input: an attacker can pad a command
 // past MAX_STDIN specifically to land here and dodge validation. Callers
@@ -65,7 +65,7 @@ function readAdapterStdinJson(onComplete) {
 }
 
 // Shared main() body for host adapters that block with a plain exit-code-2-
-// plus-stderr contract (Windsurf, Kiro) -- as opposed to Cursor, which also
+// plus-stderr contract (Devin Desktop, Kiro) -- as opposed to Cursor, which also
 // needs a {permission, ...} JSON envelope on stdout and so builds its own
 // main() around readAdapterStdinJson directly instead of this helper.
 // buildGuardianInput: (parsedEvent) => Guardian input object | null.
@@ -121,7 +121,7 @@ function runPlainExitCodeGuardianAdapter(buildGuardianInput, runGuardian) {
 }
 
 // Shared entrypoint for the plain-exit-code adapters (Goose,
-// OpenHands, Kiro, Windsurf): collapses each adapter's identical "run when
+// OpenHands, Kiro, Devin Desktop): collapses each adapter's identical "run when
 // invoked directly, always export buildGuardianInput for tests" boilerplate
 // into one call, so those near-identical translation scripts stop
 // duplicating it verbatim. Each host keeps its own buildGuardianInput (their

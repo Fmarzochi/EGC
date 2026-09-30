@@ -13,7 +13,7 @@
  * line on stdout -- this adapter always uses the exit-code form since
  * pre-bash-guardian-validate.js's run() already returns exactly that
  * contract. No rewrite capability is documented, so Token Crusher stays
- * out of scope here, same as Kiro/Windsurf/Cline/Goose.
+ * out of scope here, same as Kiro/Devin Desktop/Cline/Goose.
  *
  * Registered only on the "terminal" matcher (OpenHands' own example in its
  * hooks.mdx) -- the Guardian validates shell commands, not file

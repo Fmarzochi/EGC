@@ -16,7 +16,7 @@
  * recognizes `cancel` (boolean), `contextModification` (string) and
  * `errorMessage` (string) -- there is no field to rewrite the command, so
  * only Guardian (block) is possible here, not the Token Crusher, the same
- * block-only status as Kiro and Windsurf. `cancel: true` blocks the tool
+ * block-only status as Kiro and Devin Desktop. `cancel: true` blocks the tool
  * call; Cline's own runner treats hooks as fail-open (only an explicit
  * `cancel: true` blocks, a crashed/timed-out hook does not).
  */

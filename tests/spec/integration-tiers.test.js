@@ -37,7 +37,7 @@ const EXPECTED_HARNESSES = [
   'Aider',
   'Cline',
   'Warp',
-  'Windsurf',
+  'Devin Desktop',
   'Amp',
   'VS Code Copilot',
   'Zed',

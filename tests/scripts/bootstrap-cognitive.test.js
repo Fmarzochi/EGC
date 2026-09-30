@@ -74,7 +74,7 @@ const SESSION_BUS_COMMANDS = [
   'working_memory_get', 'working_memory_set', 'working_memory_list',
 ];
 
-// Claude Code and Gemini CLI share injectProtocol() with Windsurf/Zed below,
+// Claude Code and Gemini CLI share injectProtocol() with Devin Desktop/Zed below,
 // but unlike those two, no other test in this suite ever creates ~/.claude
 // or ~/.gemini, so their install and error-catch branches were never
 // exercised. Split out to keep runTests() shallow, same reasoning as the
@@ -912,12 +912,12 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('writes Windsurf global_rules.md when ~/.codeium exists', () => {
+  if (await test('writes Devin Desktop global_rules.md when ~/.codeium exists', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.codeium'));
       const output = run(home);
-      assert.ok(/Windsurf: memory protocol installed/.test(output), 'should report install');
+      assert.ok(/Devin Desktop: memory protocol installed/.test(output), 'should report install');
       const target = path.join(home, '.codeium', 'windsurf', 'memories', 'global_rules.md');
       const content = fs.readFileSync(target, 'utf8');
       assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
@@ -927,24 +927,24 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('skips Windsurf when ~/.codeium does not exist', () => {
+  if (await test('skips Devin Desktop when ~/.codeium does not exist', () => {
     const home = mktempHome();
     try {
       const output = run(home);
-      assert.ok(!/\[cognitive\] Windsurf:/.test(output), 'should not mention Windsurf at all');
+      assert.ok(!/\[cognitive\] Devin Desktop:/.test(output), 'should not mention Devin Desktop at all');
       assert.ok(!fs.existsSync(path.join(home, '.codeium')), 'must not create ~/.codeium');
     } finally {
       cleanup(home);
     }
   })) passed++; else failed++;
 
-  if (await test('Windsurf install is idempotent (no duplicate marker on rerun)', () => {
+  if (await test('Devin Desktop install is idempotent (no duplicate marker on rerun)', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.codeium'));
       run(home);
       const second = run(home);
-      assert.ok(/Windsurf: already configured/.test(second), 'second run should detect existing config');
+      assert.ok(/Devin Desktop: already configured/.test(second), 'second run should detect existing config');
       const target = path.join(home, '.codeium', 'windsurf', 'memories', 'global_rules.md');
       const content = fs.readFileSync(target, 'utf8');
       assert.strictEqual(
@@ -976,7 +976,7 @@ async function runTests() {
       fs.writeFileSync(target, `# My custom rules\n\nKeep this line.\n\n${oldBlock}\nKeep this line too.\n`, 'utf8');
 
       const output = run(home);
-      assert.ok(output.includes(`Windsurf: memory protocol upgraded v1 -> ${V}`), 'should report a v1 upgrade to the current version');
+      assert.ok(output.includes(`Devin Desktop: memory protocol upgraded v1 -> ${V}`), 'should report a v1 upgrade to the current version');
 
       const content = fs.readFileSync(target, 'utf8');
       assert.ok(content.includes('Keep this line.'), 'content before the block must survive');
@@ -1035,7 +1035,7 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('logs an error instead of crashing when the Windsurf target path is structurally broken', () => {
+  if (await test('logs an error instead of crashing when the Devin Desktop target path is structurally broken', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.codeium'));
@@ -1043,7 +1043,7 @@ async function runTests() {
       // fails structurally (ENOTDIR) on every OS, unlike a permission-based failure.
       fs.writeFileSync(path.join(home, '.codeium', 'windsurf'), 'not a directory', 'utf8');
       const output = run(home);
-      assert.ok(/Windsurf: unexpected error:/.test(output), 'should report the error, not crash');
+      assert.ok(/Devin Desktop: unexpected error:/.test(output), 'should report the error, not crash');
     } finally {
       cleanup(home);
     }

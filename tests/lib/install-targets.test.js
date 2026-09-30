@@ -675,6 +675,18 @@ function runTests() {
     );
   }));
 
+  tally(test('the missing-IDE warning names Devin Desktop and links to it, not to Windsurf', () => {
+    const adapter = getInstallTargetAdapter('windsurf-home');
+    const homeDir = path.join(os.tmpdir(), 'egc-devin-desktop-home-that-does-not-exist');
+    const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' })
+      .find(issue => issue.code === 'ide-not-detected');
+
+    assert.ok(warning, 'a home without ~/.codeium/windsurf gets the ide-not-detected warning');
+    assert.match(warning.message, /^Devin Desktop does not appear to be installed/);
+    assert.match(warning.message, /https:\/\/devin\.ai\/desktop/);
+    assert.ok(!warning.message.includes('Windsurf'), 'the former product name is gone from the warning');
+  }));
+
   tally(test('throws on unknown target adapter', () => {
     assert.throws(
       () => getInstallTargetAdapter('ghost-target'),
@@ -1187,7 +1199,7 @@ function runTests() {
     // exit-code-2-plus-stderr blocking contract pre-bash-guardian-validate.js
     // already uses for Claude Code, as an alternative to the JSON
     // hookSpecificOutput.permissionDecision form -- so it is wired directly,
-    // with no translation adapter (unlike Windsurf's).
+    // with no translation adapter (unlike Devin Desktop's).
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -1228,7 +1240,7 @@ function runTests() {
     ['windsurf', homeDir => path.join(homeDir, '.codeium', 'windsurf')],
     ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.windsurf')],
   ]) {
-    tally(test(`${target} adapter wires GateGuard into hooks.json via the Windsurf-contract adapter script (pre_write_code + pre_run_command)`, () => {
+    tally(test(`${target} adapter wires GateGuard into hooks.json via the Devin Desktop-contract adapter script (pre_write_code + pre_run_command)`, () => {
       const repoRoot = path.join(__dirname, '..', '..');
       const homeDir = '/Users/example';
       const projectRoot = '/workspace/app';
@@ -1257,7 +1269,7 @@ function runTests() {
         normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/windsurf-gateguard-adapter.js'
         && operation.destinationPath === adapterScriptPath
       ));
-      assert.ok(adapterCopyOperation, 'Should copy the Windsurf-contract adapter script');
+      assert.ok(adapterCopyOperation, 'Should copy the Devin Desktop-contract adapter script');
 
       const gateGuardScriptPath = path.join(targetRoot, 'scripts', 'hooks', 'gateguard-fact-force.js');
       const gateGuardCopyOperation = plan.operations.find(operation => (
@@ -1268,7 +1280,7 @@ function runTests() {
     }));
   }
 
-  // EGC Guardian: 2026-07-27 audit (EGC-460/462) found Windsurf had
+  // EGC Guardian: 2026-07-27 audit (EGC-460/462) found Devin Desktop had
   // GateGuard wired (test above) but never the Guardian command validator
   // itself -- windsurf-gateguard-adapter.js only ever called
   // gateguard-fact-force.js. Fixed via a dedicated windsurf-guardian-adapter.js
@@ -1278,7 +1290,7 @@ function runTests() {
     ['windsurf', homeDir => path.join(homeDir, '.codeium', 'windsurf')],
     ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.windsurf')],
   ]) {
-    tally(test(`${target} adapter wires the EGC Guardian into hooks.json via its own Windsurf-contract adapter script (pre_run_command only)`, () => {
+    tally(test(`${target} adapter wires the EGC Guardian into hooks.json via its own Devin Desktop-contract adapter script (pre_run_command only)`, () => {
       const repoRoot = path.join(__dirname, '..', '..');
       const homeDir = '/Users/example';
       const projectRoot = '/workspace/app';
@@ -1307,7 +1319,7 @@ function runTests() {
         normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/windsurf-guardian-adapter.js'
         && operation.destinationPath === guardianAdapterScriptPath
       ));
-      assert.ok(adapterCopyOperation, 'Should copy the Windsurf-contract Guardian adapter script');
+      assert.ok(adapterCopyOperation, 'Should copy the Devin Desktop-contract Guardian adapter script');
 
       const guardianScriptPath = path.join(targetRoot, 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
       const guardianCopyOperation = plan.operations.find(operation => (
@@ -2868,7 +2880,7 @@ function runTests() {
     assert.ok(targets.includes('kiro'), 'Should include kiro target');
   }));
 
-  tally(test('Cursor/Windsurf/Kiro all plan a copy of adapter-stdin-json.js, the shared dependency their translation adapters require() (2026-07-29 MODULE_NOT_FOUND regression)', () => {
+  tally(test('Cursor/Devin Desktop/Kiro all plan a copy of adapter-stdin-json.js, the shared dependency their translation adapters require() (2026-07-29 MODULE_NOT_FOUND regression)', () => {
     // cubic-dev-ai flagged this on PR #1073 (Kiro) as a P1: the adapter
     // scripts require('../lib/adapter-stdin-json') for their
     // truncation-aware stdin reader, but none of the three hosts' copy

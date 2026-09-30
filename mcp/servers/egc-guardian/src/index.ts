@@ -277,7 +277,7 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
       },
       {
         name: "auto_learn",
-        description: "Mines recent tool failures from session history and writes actionable recommendations to all AI tool config files found in the project (CLAUDE.md, GEMINI.md, AGENTS.md, Cursor, Copilot, Windsurf, and others). Safe to call at any time; skips gracefully if no failures are found.",
+        description: "Mines recent tool failures from session history and writes actionable recommendations to all AI tool config files found in the project (CLAUDE.md, GEMINI.md, AGENTS.md, Cursor, Copilot, Devin Desktop, and others). Safe to call at any time; skips gracefully if no failures are found.",
         inputSchema: {
           type: "object",
           properties: {

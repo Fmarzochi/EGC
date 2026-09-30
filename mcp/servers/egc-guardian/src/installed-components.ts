@@ -57,7 +57,7 @@ const CLIENT_NAME_HARNESSES: ReadonlyArray<readonly [RegExp, ReadonlyArray<strin
   // The VS Code forks name themselves before the generic VS Code rule
   // catches them.
   [/cursor/i, null, ['.cursor']],
-  [/windsurf|codeium/i, ['.codeium', 'windsurf'], ['.windsurf']],
+  [/windsurf|codeium|devin/i, ['.codeium', 'windsurf'], ['.windsurf']],
   [/copilot|vscode|visual studio/i, ['.github'], ['.github']],
   [/kiro/i, ['.kiro'], ['.kiro']],
   [/trae/i, ['.trae'], ['.trae', '.trae-cn']],

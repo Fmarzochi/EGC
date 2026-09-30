@@ -52,7 +52,7 @@ const TARGET_LABELS = Object.freeze({
   claude: 'Claude Code',
   codex: 'Codex CLI',
   opencode: 'OpenCode',
-  windsurf: 'Windsurf',
+  windsurf: 'Devin Desktop',
   amp: 'Amp',
   copilot: 'VS Code Copilot',
   zed: 'Zed',

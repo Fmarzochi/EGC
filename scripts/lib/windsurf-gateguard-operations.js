@@ -1,7 +1,7 @@
 'use strict';
 
-// Windsurf Cascade Hooks (docs: https://docs.windsurf.com/windsurf/cascade/hooks,
-// redirects to https://docs.devin.ai/desktop/cascade/hooks) reads
+// Devin Desktop hooks (docs: https://docs.devin.ai/desktop/cascade/hooks;
+// the product was Windsurf until 2026-06-02 and kept its paths) read
 // ~/.codeium/windsurf/hooks.json for Devin Desktop (home) and
 // <project>/.windsurf/hooks.json for the workspace level (project), merged
 // together with the user-level file at hook-execution time. pre_write_code
@@ -62,7 +62,7 @@ function createWindsurfGateGuardOperations(adapter, targetRoot, createRemappedOp
   // EGC Guardian: the GateGuard adapter above only forces investigation
   // before a risky action, it never checks a Bash command against the
   // Guardian's actual allowlist/denylist. 2026-07-27 audit (EGC-460/462)
-  // found Windsurf's adapter called only gateguard-fact-force.js, never
+  // found Devin Desktop's adapter called only gateguard-fact-force.js, never
   // pre-bash-guardian-validate.js. Registered on pre_run_command only (the
   // Guardian validates shell commands, not file writes).
   const guardianScriptCopyOperations = createBashGuardianScriptCopyOperations(remap, targetRoot);

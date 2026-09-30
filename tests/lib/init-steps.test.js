@@ -36,7 +36,7 @@ const UP_TO_DATE = [
   '  [cognitive] Antigravity (Gemini home): already configured (v6)',
   '  [cognitive] Codex: already configured (v6)',
   '  [cognitive] Kiro: already configured',
-  '  [cognitive] Windsurf: already configured (v6)',
+  '  [cognitive] Devin Desktop: already configured (v6)',
   '  [cognitive] Zed: already configured (v6)',
   '',
 ].join('\n');
@@ -47,7 +47,7 @@ const MIXED = [
   '  [cognitive] Cursor: memory protocol installed (~/.cursor/rules)',
   '  [cognitive] Codex: memory protocol upgraded v5 -> v6 (~/.codex/config.toml)',
   '  [cognitive] Kiro: session hooks installed (~/.kiro/hooks/)',
-  '  [cognitive] Windsurf: already configured (v6)',
+  '  [cognitive] Devin Desktop: already configured (v6)',
   '  [cognitive] Zed: already configured (v6)',
 ].join('\n');
 
@@ -67,7 +67,7 @@ test('summarizeCognitiveOutput reads a file that kept its block once as upgraded
 test('summarizeCognitiveOutput groups every tool by what happened to it', () => {
   const summary = summarizeCognitiveOutput(MIXED);
   assert.strictEqual(summary.tools.length, 7);
-  assert.deepStrictEqual(summary.upToDate.map(t => t.label), ['Antigravity (Gemini home)', 'Windsurf', 'Zed']);
+  assert.deepStrictEqual(summary.upToDate.map(t => t.label), ['Antigravity (Gemini home)', 'Devin Desktop', 'Zed']);
   assert.deepStrictEqual(summary.installed.map(t => t.label), ['Cursor', 'Kiro']);
   assert.deepStrictEqual(summary.upgraded.map(t => t.label), ['Claude Code', 'Codex']);
   assert.strictEqual(summary.upgraded[0].from, '5');

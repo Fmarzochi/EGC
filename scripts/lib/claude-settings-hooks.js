@@ -700,7 +700,7 @@ const GATEGUARD_LIB_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
  * dependency) under `<targetRoot>/scripts/hooks/` and `<targetRoot>/scripts/lib/`,
  * unconditionally (independent of module selection). Used by install targets
  * whose own root does not already receive the shared "hooks-runtime" module
- * scaffold (Codex, Windsurf) or that want the gate guaranteed regardless of
+ * scaffold (Codex, Devin Desktop) or that want the gate guaranteed regardless of
  * profile (Continue).
  *
  * @param {(moduleId: string, sourceRelativePath: string, destinationPath: string, options?: object) => object} createRemappedOperation
@@ -982,7 +982,7 @@ function createBashGuardianScriptCopyOperations(createRemappedOperation, targetR
   ];
 }
 
-// Windsurf's, Cursor's, and Kiro's translation adapters
+// Devin Desktop's, Cursor's, and Kiro's translation adapters
 // (windsurf-guardian-adapter.js, cursor-guardian-adapter.js,
 // kiro-guardian-adapter.js) all require ../lib/adapter-stdin-json.js for
 // their truncation-aware stdin reader -- unlike pre-bash-guardian-
@@ -1132,7 +1132,7 @@ function createPostCompactHookMergeOperation(targetRoot) {
   };
 }
 
-// Windsurf's two managed events (pre_write_code, pre_run_command) both go
+// Devin Desktop's two managed events (pre_write_code, pre_run_command) both go
 // through the same flat-hooks.json helpers, just forwarding whichever of the
 // two the operation actually carries -- one handler trio, two table keys,
 // equivalent to the old `MANAGED_WINDSURF_HOOK_EVENTS.has(...)` Set check.

@@ -1,7 +1,7 @@
 /**
  * Tests for scripts/hooks/windsurf-guardian-adapter.js
  *
- * Windsurf's pre_run_command hook uses a different wire contract than
+ * Devin Desktop's pre_run_command hook uses a different wire contract than
  * Claude Code's PreToolUse hook (see windsurf-gateguard-adapter.js for the
  * same distinction) -- this file exercises both the pure translation
  * function and the real CLI entrypoint end to end, including the
@@ -74,7 +74,7 @@ function runTests() {
     assert.strictEqual('cwd' in mapped, false);
   })) passed++; else failed++;
 
-  if (test('returns null for unmapped Windsurf events (pre_write_code, pre_read_code, ...)', () => {
+  if (test('returns null for unmapped Devin Desktop events (pre_write_code, pre_read_code, ...)', () => {
     assert.strictEqual(buildGuardianInput({ agent_action_name: 'pre_write_code', tool_info: {} }), null);
     assert.strictEqual(buildGuardianInput({ agent_action_name: 'pre_read_code', tool_info: {} }), null);
   })) passed++; else failed++;

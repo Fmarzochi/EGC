@@ -16,7 +16,7 @@
  * .../reference/built-in-tools/, and .../custom-agents/configuration-
  * reference/ -- none give the schema). This reads tool_input.command by
  * convention, matching every other host wired today (Claude Code, Cursor,
- * Windsurf, Codex all use that field name for their Bash/shell tool). If
+ * Devin Desktop, Codex all use that field name for their Bash/shell tool). If
  * that guess is wrong, buildGuardianInput returns null and the hook fails
  * open (allow) rather than crashing or blocking everything.
  *

@@ -474,7 +474,7 @@ function writeGeminiContext(projectPath, block, stateUpdated) {
   return writeSimpleContext(projectPath, ['GEMINI.md'], block, stateUpdated);
 }
 
-// Shared by Windsurf and Trae: unlike writeSimpleContext, the gate is on the
+// Shared by Devin Desktop and Trae: unlike writeSimpleContext, the gate is on the
 // tool's top-level dir (e.g. .windsurf/) rather than the target file itself,
 // and a rules/ subfolder is created under it on demand before the shared
 // egc-context.md is written there.

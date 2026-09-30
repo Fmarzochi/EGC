@@ -172,23 +172,21 @@ function createManagedOperation({
 const IDE_INSTALL_URLS = Object.freeze({
   claude:       { name: 'Claude Code',        url: 'https://claude.ai/download' },
   cursor:       { name: 'Cursor',             url: 'https://cursor.sh' },
-  gemini:       { name: 'Gemini CLI',         url: 'https://github.com/google-gemini/gemini-cli' },
   antigravity:  { name: 'Antigravity CLI',    url: 'https://github.com/google-gemini/gemini-cli' },
   codex:        { name: 'Codex CLI',          url: 'https://github.com/openai/codex' },
   opencode:     { name: 'OpenCode',           url: 'https://opencode.ai' },
   codebuddy:    { name: 'CodeBuddy',          url: 'https://copilot.tencent.com' },
   kiro:         { name: 'Kiro',               url: 'https://kiro.dev' },
   trae:         { name: 'Trae',               url: 'https://www.trae.ai' },
- junie:         { name: 'Junie', url: 'https://www.jetbrains.com/junie/' },
+  junie:        { name: 'Junie',              url: 'https://www.jetbrains.com/junie/' },
   goose:        { name: 'Goose',              url: 'https://block.github.io/goose/' },
   openhands:    { name: 'OpenHands',          url: 'https://docs.openhands.dev' },
   aider:        { name: 'Aider',              url: 'https://aider.chat' },
   warp:         { name: 'Warp',               url: 'https://www.warp.dev' },
-  windsurf:     { name: 'Windsurf',           url: 'https://windsurf.ai' },
+  windsurf:     { name: 'Devin Desktop',      url: 'https://devin.ai/desktop' },
   amp:          { name: 'Amp',                url: 'https://ampcode.com' },
   copilot:      { name: 'VS Code Copilot',    url: 'https://code.visualstudio.com' },
   zed:          { name: 'Zed',               url: 'https://zed.dev' },
-  continue:     { name: 'Continue.dev',      url: 'https://continue.dev' },
 });
 
 function defaultValidateAdapterInput(config, input = {}) {
@@ -371,7 +369,7 @@ function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningI
 /**
  * Shared planOperations body for Tier 1 targets that discover skills flat
  * and have no adapter-specific path filtering or extra operations beyond
- * planFlatSkillOperation (Windsurf, Amp, Copilot, Zed, Continue.dev).
+ * planFlatSkillOperation (Devin Desktop, Amp, Copilot, Zed, Continue.dev).
  *
  * Signature matches config.planOperations(input, adapter) so it can be
  * assigned directly (e.g. `planOperations: createFlatSkillPlanOperations`)

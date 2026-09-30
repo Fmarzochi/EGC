@@ -1,15 +1,16 @@
 'use strict';
 
-// Manages the GateGuard entry inside a Windsurf Cascade hooks.json file
+// Manages the GateGuard entry inside a Devin Desktop hooks.json file
 // (.windsurf/hooks.json project-level, or ~/.codeium/windsurf/hooks.json
-// user-level). Windsurf's hooks.json schema is a flat
+// user-level). Devin Desktop's hooks.json schema is a flat
 // {hooks: {<event>: [{command, ...}]}} map - no matcher/group wrapper and no
 // "type": "command" field like Claude Code's settings.json - so it shares
 // flat-hooks-json-merge.js's merge logic (also used by Cursor's
 // .cursor/hooks.json, the same non-Claude flat shape) instead of reusing
 // claude-settings-hooks.js's addHookEntry(). Docs:
-// https://docs.windsurf.com/windsurf/cascade/hooks (redirects to
-// https://docs.devin.ai/desktop/cascade/hooks).
+// https://docs.devin.ai/desktop/cascade/hooks (the product was Windsurf
+// until 2026-06-02; the vendor kept the ~/.codeium/windsurf and .windsurf
+// paths, so the file locations did not move).
 
 const path = require('node:path');
 const {
@@ -21,7 +22,7 @@ const {
   removeFlatHookFromFile,
 } = require('./flat-hooks-json-merge');
 
-const HOST_LABEL = 'Windsurf';
+const HOST_LABEL = 'Devin Desktop';
 const PRE_WRITE_CODE_EVENT = 'pre_write_code';
 const PRE_RUN_COMMAND_EVENT = 'pre_run_command';
 const ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/windsurf-gateguard-adapter.js';
@@ -65,8 +66,8 @@ function removeWindsurfHookEntry(config, event, command) {
 }
 
 // install-lifecycle.js's install-manifests.js-driven repair/inspect/
-// uninstall previously had no notion of Windsurf's event-keyed hooks.json
-// at all (only Claude's matcher/group settings.json schema), so a Windsurf
+// uninstall previously had no notion of Devin Desktop's event-keyed hooks.json
+// at all (only Claude's matcher/group settings.json schema), so a Devin Desktop
 // GateGuard/Guardian entry: repair injected a bogus SessionStart group into
 // the same file instead of touching pre_write_code/pre_run_command, doctor
 // always reported drift (it checked for that same bogus SessionStart

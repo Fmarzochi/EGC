@@ -1,6 +1,6 @@
 /**
  * Tests for scripts/lib/adapter-stdin-json.js -- the shared truncation-aware
- * stdin JSON reader used by 12+ host adapters (Windsurf, Cursor, Junie,
+ * stdin JSON reader used by 12+ host adapters (Devin Desktop, Cursor, Junie,
  * Cline, Goose, OpenHands).
  */
 

@@ -7,7 +7,7 @@
 // what `chat.defaultAgent` points to unless a user overrides it) with a
 // flat {hooks: {<event>: [{matcher, command}]}} map inside -- the same
 // non-Claude-schema shape flat-hooks-json-merge.js already handles for
-// Windsurf/Cursor, plus a `matcher` field on each entry (Kiro's preToolUse
+// Devin Desktop/Cursor, plus a `matcher` field on each entry (Kiro's preToolUse
 // fires for every tool -- fs_read, fs_write, execute_bash -- not just shell
 // commands the way Cursor's beforeShellExecution already is scoped, so the
 // Guardian's own entry needs `matcher: "execute_bash"` to avoid running on
@@ -25,7 +25,7 @@
 // (kirodotdev/Kiro#8040). The exact tool_input field holding the shell
 // command string for execute_bash is undocumented publicly as of this
 // writing; kiro-guardian-adapter.js reads tool_input.command by convention
-// (every other host wired today -- Claude Code, Cursor, Windsurf, Codex --
+// (every other host wired today -- Claude Code, Cursor, Devin Desktop, Codex --
 // uses that exact field name) and fails open (allow) if it is absent,
 // so a wrong guess degrades to a no-op instead of blocking everything.
 
