@@ -46,8 +46,11 @@ function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+// A single quote inside a single-quoted shell word: close, escape, reopen.
+const ESCAPED_SINGLE_QUOTE = String.raw`'\''`;
+
 function shellQuote(word) {
-  return SHELL_SAFE_WORD.test(word) ? word : `'${word.replaceAll("'", String.raw`'\''`)}'`;
+  return SHELL_SAFE_WORD.test(word) ? word : `'${word.replaceAll("'", ESCAPED_SINGLE_QUOTE)}'`;
 }
 
 // The readings of one command the Guardian judges, or null when it cannot be
