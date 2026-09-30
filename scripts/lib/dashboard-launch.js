@@ -27,9 +27,9 @@ async function waitForDashboard(timeoutMs) {
     if (up) return true;
     if (Date.now() >= deadline) return false;
     await new Promise(resolve => setTimeout(resolve, 250));
-    return poll();
+    return await poll(); // NOSONAR: every branch of this function resolves to a boolean; spelling out the await keeps that explicit for static analysis
   }
-  return poll();
+  return await poll();
 }
 
 function openBrowser() {
