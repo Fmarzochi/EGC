@@ -49,6 +49,110 @@ function runAdapterCli(input, env = {}) {
   }
 }
 
+// Devin Local, the agent that replaced Cascade on 2026-09-08, sends the
+// Claude Code shape: {hook_event_name: "PreToolUse", tool_name, tool_input,
+// session_id, cwd}. `devin migrate hooks` turns pre_run_command into ^exec$
+// and pre_write_code into ^(edit|write|notebook_edit)$; multi_edit and
+// apply_patch are the other file-writing tools in the vendor's tool list.
+function devinCall(toolName, toolInput, sessionId = 'devin-session-1') {
+  return {
+    hook_event_name: 'PreToolUse',
+    tool_name: toolName,
+    tool_input: toolInput,
+    session_id: sessionId,
+    cwd: os.tmpdir(),
+  };
+}
+
+function runDevinLocalCases() {
+  return [
+    test('maps a Devin Local exec call to a gateguard Bash input with the session id', () => {
+      const mapped = buildGateGuardInput(devinCall('exec', { command: 'ls' }));
+      assert.deepStrictEqual(mapped, { session_id: 'devin-session-1', tool_name: 'Bash', tool_input: { command: 'ls' } });
+    }),
+
+    test('maps Devin Local edit and write calls by whether the file exists, like pre_write_code', () => {
+      const existingFile = path.join(os.tmpdir(), `devin-exists-${Date.now()}.js`);
+      const newFile = path.join(os.tmpdir(), `devin-new-${Date.now()}.js`);
+      fs.writeFileSync(existingFile, 'x');
+      try {
+        assert.deepStrictEqual(
+          buildGateGuardInput(devinCall('edit', { file_path: existingFile, old_string: 'x', new_string: 'y' })),
+          { session_id: 'devin-session-1', tool_name: 'Edit', tool_input: { file_path: existingFile } }
+        );
+        assert.deepStrictEqual(
+          buildGateGuardInput(devinCall('write', { file_path: newFile, content: 'y' })),
+          { session_id: 'devin-session-1', tool_name: 'Write', tool_input: { file_path: newFile } }
+        );
+        // Crossed on purpose: the file on disk decides, not the tool name.
+        assert.strictEqual(buildGateGuardInput(devinCall('edit', { file_path: newFile })).tool_name, 'Write', 'an edit on a file not there yet is a creation');
+        assert.strictEqual(buildGateGuardInput(devinCall('write', { file_path: existingFile })).tool_name, 'Edit', 'a write over an existing file is an edit');
+      } finally {
+        fs.rmSync(existingFile, { force: true });
+      }
+    }),
+
+    test('maps Devin Local notebook_edit and multi_edit calls to the file they touch', () => {
+      const notebook = path.join(os.tmpdir(), `devin-new-${Date.now()}.ipynb`);
+      const target = path.join(os.tmpdir(), `devin-multi-${Date.now()}.js`);
+      assert.strictEqual(buildGateGuardInput(devinCall('notebook_edit', { notebook_path: notebook })).tool_input.file_path, notebook);
+      assert.strictEqual(buildGateGuardInput(devinCall('multi_edit', { file_path: target, edits: [] })).tool_input.file_path, target);
+      assert.strictEqual(
+        buildGateGuardInput(devinCall('multi_edit', { edits: [{ file_path: target, old_string: 'a', new_string: 'b' }] })).tool_input.file_path,
+        target,
+        'a multi_edit that names the file per edit is still gated on that file'
+      );
+      const other = path.join(os.tmpdir(), `devin-multi-other-${Date.now()}.js`);
+      assert.deepStrictEqual(
+        buildGateGuardInput(devinCall('multi_edit', { file_path: target, edits: [{ file_path: other }, { file_path: target }] })),
+        { session_id: 'devin-session-1', tool_name: 'MultiEdit', tool_input: { edits: [{ file_path: target }, { file_path: other }] } },
+        'a multi_edit that touches several files is gated on every one of them'
+      );
+    }),
+
+    test('CLI: a Devin Local apply_patch that adds a new file exits 2 on that file', () => {
+      const added = path.join(os.tmpdir(), `devin-cli-patch-${Date.now()}.js`);
+      const patch = `*** Begin Patch\n*** Add File: ${added}\n+x\n*** End Patch`;
+      const result = runAdapterCli(devinCall('apply_patch', { input: patch }, `devin-cli-patch-${Date.now()}`));
+      assert.strictEqual(result.code, 2);
+      assert.ok(result.stderr.includes('Fact-Forcing Gate'));
+      assert.ok(result.stderr.includes(added));
+    }),
+
+    test('maps a Devin Local apply_patch call to a gateguard ApplyPatch input, finding the patch by its own grammar', () => {
+      const patch = '*** Begin Patch\n*** Add File: workspace/devin-patched.js\n+x\n*** End Patch';
+      assert.deepStrictEqual(
+        buildGateGuardInput(devinCall('apply_patch', { input: patch })),
+        { session_id: 'devin-session-1', tool_name: 'apply_patch', tool_input: patch }
+      );
+      assert.strictEqual(buildGateGuardInput(devinCall('apply_patch', patch)).tool_input, patch, 'a bare string tool_input is the patch itself');
+      assert.strictEqual(buildGateGuardInput(devinCall('apply_patch', { note: 'no patch here' })), null);
+    }),
+
+    test('returns null for Devin Local tools that write nothing and for calls without a path or command', () => {
+      assert.strictEqual(buildGateGuardInput(devinCall('read', { file_path: path.join('workspace', 'read-only.js') })), null);
+      assert.strictEqual(buildGateGuardInput(devinCall('grep', { pattern: 'x' })), null);
+      assert.strictEqual(buildGateGuardInput(devinCall('edit', {})), null);
+      assert.strictEqual(buildGateGuardInput(devinCall('exec', null)), null);
+    }),
+
+    test('CLI: a Devin Local edit on a new file exits 2 with the fact-forcing reason on stderr', () => {
+      const targetFile = path.join(os.tmpdir(), `devin-cli-${Date.now()}.js`);
+      const result = runAdapterCli(devinCall('edit', { file_path: targetFile, old_string: '', new_string: 'x' }, `devin-cli-${Date.now()}`));
+      assert.strictEqual(result.code, 2);
+      assert.ok(result.stderr.includes('Fact-Forcing Gate'));
+      assert.ok(result.stderr.includes(targetFile));
+      assert.strictEqual(result.stdout, '');
+    }),
+
+    test('CLI: the first Devin Local exec call in a session exits 2', () => {
+      const result = runAdapterCli(devinCall('exec', { command: 'ls' }, `devin-cli-bash-${Date.now()}`));
+      assert.strictEqual(result.code, 2);
+      assert.ok(result.stderr.length > 0);
+    }),
+  ];
+}
+
 function runTests() {
   console.log('\n=== Testing windsurf-gateguard-adapter ===\n');
 
@@ -206,6 +310,10 @@ function runTests() {
     assert.strictEqual(result.code, 2, `Expected fail-closed on truncated oversized input, got exit ${result.code}`);
     assert.ok(result.stderr.includes('exceeded the size'), `Expected the truncation reason on stderr, got: ${result.stderr}`);
   })) passed++; else failed++;
+
+  const devinLocalResults = runDevinLocalCases();
+  passed += devinLocalResults.filter(Boolean).length;
+  failed += devinLocalResults.filter(ok => !ok).length;
 
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);

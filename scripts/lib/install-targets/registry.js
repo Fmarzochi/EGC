@@ -143,14 +143,15 @@ function planInstallTargetScaffold(options = {}) {
   // The generic default reuses these instead of planning a second time;
   // an adapter with its own planRetirements is free to ignore the extra
   // field.
-  const retirements = adapter.planRetirements({
+  const retirementInput = {
     ...planningInput,
     modules,
     operations,
     siblingStatePaths: collectSiblingInstallStatePaths(adapter, planningInput),
-  });
+  };
+  const retirements = adapter.planRetirements(retirementInput);
 
-  const { resolveAdapterManagedRoots } = require('./helpers');
+  const { planHookRetirements, resolveAdapterManagedRoots } = require('./helpers');
 
   return {
     adapter: {
@@ -167,6 +168,9 @@ function planInstallTargetScaffold(options = {}) {
     validationIssues,
     operations,
     retirements,
+    // Hook entries an earlier install wrote that this plan no longer makes;
+    // the apply removes them once the current ones are written.
+    hookRetirements: planHookRetirements(retirementInput, adapter),
     // The roots the retirements above may fall under (the target root plus
     // any second root the adapter declared), for the apply to check each
     // candidate against the root it belongs to.

@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {
+  buildValidationIssue,
   createFlatSkillPlanOperations,
   createInstallTargetAdapter,
   createRemappedOperation,
@@ -9,6 +10,7 @@ const {
 const {
   createWindsurfGateGuardOperations,
 } = require('../windsurf-gateguard-operations');
+const { devinConfigIssues, resolveDevinProjectConfigPath } = require('../devin-local-hooks');
 
 const DEVIN_WORKSPACE_DIR = '.devin';
 const WINDSURF_WORKSPACE_DIR = '.windsurf';
@@ -22,14 +24,14 @@ function isDirectory(candidate) {
   }
 }
 
-// Devin Desktop loads .devin/skills/ when it exists and only falls back to
-// .windsurf/skills/ when it does not; the two are never merged
-// (docs.devin.ai/desktop/cascade/skills). Rules are different: .devin/rules/
-// and .windsurf/rules/ both load (docs.devin.ai/cli/extensibility/rules).
-// The skills rule decides the root: .devin/ once .devin/skills/ exists;
-// .windsurf/ while the project has it and no .devin/skills/ (creating
-// .devin/skills/ beside it would hide every skill the person keeps in
-// .windsurf/skills/); .devin/ on a project that has neither.
+// The Devin Desktop docs say .devin/skills/ is loaded when it exists and
+// .windsurf/skills/ only when it does not, never merged
+// (docs.devin.ai/desktop/cascade/skills); the Devin CLI 3000.11.3 lists both
+// (`devin skills list`). Rules from .devin/rules/ and .windsurf/rules/ load
+// in both (`devin rules list`). The root below is right under either skills
+// behavior, since it neither hides a folder nor splits the skills across
+// two: .devin/ once .devin/skills/ exists; .windsurf/ while the project has
+// it and no .devin/skills/; .devin/ on a project that has neither.
 function resolveWorkspaceDir(projectRoot) {
   if (isDirectory(path.join(projectRoot, DEVIN_WORKSPACE_DIR, 'skills'))) return DEVIN_WORKSPACE_DIR;
   if (isDirectory(path.join(projectRoot, WINDSURF_WORKSPACE_DIR))) return WINDSURF_WORKSPACE_DIR;
@@ -54,6 +56,10 @@ module.exports = createInstallTargetAdapter({
     const projectRoot = resolveBaseRoot('project', input);
     return [path.join(projectRoot, DEVIN_WORKSPACE_DIR), path.join(projectRoot, WINDSURF_WORKSPACE_DIR)];
   },
+  validateMore(input) {
+    if (!input.projectRoot && !input.repoRoot) return [];
+    return devinConfigIssues(resolveDevinProjectConfigPath(resolveBaseRoot('project', input)), buildValidationIssue);
+  },
   resolveLegacyInstallStatePaths(input, adapter) {
     const projectRoot = resolveBaseRoot('project', input);
     const legacyStatePath = path.join(projectRoot, WINDSURF_WORKSPACE_DIR, INSTALL_STATE_FILE);
@@ -68,9 +74,17 @@ module.exports = createInstallTargetAdapter({
     };
     const targetRoot = adapter.resolveRoot(planningInput);
 
+    // Devin Local reads project hooks only under .devin/, whichever
+    // directory holds the skills, so the config goes there even while the
+    // scripts stay under .windsurf/.
     return [
       ...createFlatSkillPlanOperations(input, adapter),
-      ...createWindsurfGateGuardOperations(adapter, targetRoot, createRemappedOperation),
+      ...createWindsurfGateGuardOperations(
+        adapter,
+        targetRoot,
+        createRemappedOperation,
+        resolveDevinProjectConfigPath(resolveBaseRoot('project', planningInput))
+      ),
     ];
   },
 });

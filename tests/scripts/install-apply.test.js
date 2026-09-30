@@ -463,6 +463,113 @@ function runTests() {
       cleanup(projectDir);
     }
   }));
+  // Devin Local reads its hooks from ~/.config/devin/config.json
+  // (%APPDATA%\devin\config.json on Windows). APPDATA points inside the
+  // temporary home, so a Windows run never touches the runner's own.
+  const devinEnv = homeDir => ({ EGC_INSTALL_DELEGATED: '1', APPDATA: path.join(homeDir, 'AppData', 'Roaming') });
+  const devinConfigOf = homeDir => (process.platform === 'win32'
+    ? path.join(homeDir, 'AppData', 'Roaming', 'devin', 'config.json')
+    : path.join(homeDir, '.config', 'devin', 'config.json'));
+  const DEVIN_GATEGUARD_MATCHER = '^(exec|edit|write|notebook_edit|multi_edit|apply_patch)$';
+
+  tally(test('a Devin Desktop install wires the Guardian and GateGuard into Devin Local\'s PreToolUse hooks, keeps the person\'s settings and never duplicates on reinstall', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+    try {
+      const configPath = devinConfigOf(homeDir);
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(configPath, JSON.stringify({
+        theme_mode: 'dark',
+        hooks: { PreToolUse: [{ matcher: '^read$', hooks: [{ type: 'command', command: 'echo mine' }] }] },
+      }, null, 2));
+      for (let round = 1; round <= 2; round++) {
+        const applied = run(['--target', 'windsurf', '--profile', 'minimal', '--allow-undetected'], { cwd: projectDir, homeDir, env: devinEnv(homeDir) });
+        assert.strictEqual(applied.code, 0, `round ${round}: ${applied.stderr}`);
+      }
+      const config = readJson(configPath);
+      assert.strictEqual(config.theme_mode, 'dark', 'the person\'s settings stay');
+      const groups = config.hooks.PreToolUse;
+      assert.deepStrictEqual(groups.map(group => group.matcher), ['^read$', DEVIN_GATEGUARD_MATCHER, '^exec$']);
+      assert.deepStrictEqual(groups.map(group => group.hooks.length), [1, 1, 1], 'a reinstall adds no second entry');
+      const scripts = path.join(homeDir, '.codeium', 'windsurf', 'scripts', 'hooks');
+      assert.ok(groups[1].hooks[0].command.includes(path.join(scripts, 'windsurf-gateguard-adapter.js')), groups[1].hooks[0].command);
+      assert.ok(groups[2].hooks[0].command.includes(path.join(scripts, 'windsurf-guardian-adapter.js')), groups[2].hooks[0].command);
+      assert.ok(fs.existsSync(path.join(scripts, 'windsurf-guardian-adapter.js')), 'the script the entry runs is there');
+      assert.ok(!fs.existsSync(path.join(homeDir, '.codeium', 'windsurf', 'hooks.json')), 'no Cascade hooks file is written any more');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('an upgrade removes the Cascade hook entries an earlier Devin Desktop install wrote and keeps the person\'s own', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+    try {
+      const windsurfRoot = path.join(homeDir, '.codeium', 'windsurf');
+      const hooksJsonPath = path.join(windsurfRoot, 'hooks.json');
+      const statePath = path.join(windsurfRoot, 'egc', 'install-state.json');
+      const gateGuardAdapter = path.join(windsurfRoot, 'scripts', 'hooks', 'windsurf-gateguard-adapter.js');
+      const guardianAdapter = path.join(windsurfRoot, 'scripts', 'hooks', 'windsurf-guardian-adapter.js');
+      fs.mkdirSync(windsurfRoot, { recursive: true });
+      fs.writeFileSync(hooksJsonPath, JSON.stringify({ hooks: { pre_run_command: [{ command: 'echo mine' }] } }, null, 2));
+      // What an earlier install wrote for Cascade, which Devin Desktop removed
+      // on 2026-09-08: the entries in hooks.json and the operations in its state.
+      const { applyWindsurfGateGuardHookToFile } = require('../../scripts/lib/windsurf-gateguard-hooks');
+      const recorded = [
+        ['pre_write_code', gateGuardAdapter, 'claude-gateguard-fact-force-hook', 'scripts/hooks/windsurf-gateguard-adapter.js'],
+        ['pre_run_command', gateGuardAdapter, 'claude-gateguard-fact-force-hook', 'scripts/hooks/windsurf-gateguard-adapter.js'],
+        ['pre_run_command', guardianAdapter, 'egc-bash-guardian-hook', 'scripts/hooks/windsurf-guardian-adapter.js'],
+      ];
+      for (const [event, script] of recorded) {
+        applyWindsurfGateGuardHookToFile(hooksJsonPath, event, script);
+      }
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      writeInstallState(statePath, createInstallState({
+        adapter: { id: 'windsurf-home', target: 'windsurf', kind: 'home' },
+        targetRoot: windsurfRoot,
+        installStatePath: statePath,
+        request: { profile: 'minimal', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: recorded.map(([hookEvent, hookScriptPath, moduleId, sourceRelativePath]) => ({
+          kind: 'merge-claude-settings-hooks',
+          moduleId,
+          sourceRelativePath,
+          destinationPath: hooksJsonPath,
+          strategy: 'merge-claude-settings-hooks',
+          ownership: 'managed',
+          scaffoldOnly: false,
+          hookEvent,
+          hookScriptPath,
+        })),
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+      const before = fs.readFileSync(hooksJsonPath, 'utf8');
+      const retiredShape = entries => entries.map(entry => `${entry.hookEvent} ${path.basename(entry.hookScriptPath)}`).sort();
+      const expected = recorded.map(([event, script]) => `${event} ${path.basename(script)}`).sort();
+
+      const dryRun = run(['--target', 'windsurf', '--profile', 'minimal', '--dry-run', '--allow-undetected', '--json'], { cwd: projectDir, homeDir, env: devinEnv(homeDir) });
+      assert.strictEqual(dryRun.code, 0, dryRun.stderr);
+      assert.deepStrictEqual(retiredShape(JSON.parse(dryRun.stdout).plan.hookRetirements), expected, 'the dry run lists the three Cascade entries EGC wrote');
+      assert.strictEqual(fs.readFileSync(hooksJsonPath, 'utf8'), before, 'the dry run touches nothing');
+
+      const applied = run(['--target', 'windsurf', '--profile', 'minimal', '--allow-undetected'], { cwd: projectDir, homeDir, env: devinEnv(homeDir) });
+      assert.strictEqual(applied.code, 0, applied.stderr);
+      assert.ok(applied.stdout.includes(`retired hook entry: pre_write_code in ${hooksJsonPath}`), applied.stdout);
+      const hooksJson = fs.readFileSync(hooksJsonPath, 'utf8');
+      assert.ok(!hooksJson.includes('windsurf-gateguard-adapter') && !hooksJson.includes('windsurf-guardian-adapter'), `no EGC entry is left: ${hooksJson}`);
+      assert.deepStrictEqual(readJson(hooksJsonPath).hooks.pre_run_command, [{ command: 'echo mine' }], 'the person\'s own entry stays');
+      const groups = readJson(devinConfigOf(homeDir)).hooks.PreToolUse;
+      assert.deepStrictEqual(groups.map(group => group.matcher), [DEVIN_GATEGUARD_MATCHER, '^exec$'], 'the Devin Local entries replace them');
+
+      const again = run(['--target', 'windsurf', '--profile', 'minimal', '--allow-undetected', '--json'], { cwd: projectDir, homeDir, env: devinEnv(homeDir) });
+      assert.deepStrictEqual(JSON.parse(again.stdout).result.retiredHooks, [], 'nothing left to retire');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
   tally(test('an upgrade retires the Gemini CLI residue an earlier install wrote under ~/.gemini and keeps the person\'s own files', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');

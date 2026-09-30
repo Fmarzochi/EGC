@@ -119,6 +119,7 @@ function printHumanPlan(plan, dryRun) {
   }
 
   printRetirements(plan, dryRun);
+  printHookRetirements(plan, dryRun);
   printLegacyLinks(plan, dryRun);
   printShapeTransitions(plan, dryRun);
 
@@ -139,6 +140,20 @@ function printRetirements(plan, dryRun) {
     : '\nRetired files:');
   for (const file of files) {
     console.log(`- ${dryRun ? '' : 'retired file: '}${file.destinationPath}`);
+  }
+}
+
+// Hook entries an earlier EGC install wrote that this plan no longer makes
+// (Devin Desktop's Cascade events, gone with Cascade on 2026-09-08). The
+// person's own entries in the same file are never touched.
+function printHookRetirements(plan, dryRun) {
+  const entries = dryRun ? plan.hookRetirements : plan.retiredHooks;
+  if (!entries || entries.length === 0) return;
+  console.log(dryRun
+    ? '\nHook entries to retire (written by an earlier EGC install, no longer part of this target):'
+    : '\nRetired hook entries:');
+  for (const entry of entries) {
+    console.log(`- ${dryRun ? '' : 'retired hook entry: '}${entry.hookEvent} in ${entry.destinationPath}`);
   }
 }
 
@@ -411,11 +426,13 @@ function main() {
     enforceTargetDetection(plan, options);
 
     if (options.dryRun) {
-      const { collectShapeTransitions, findLegacyLinks, retirableFiles } = require('./lib/install/apply');
+      const { collectShapeTransitions, findLegacyLinks, retirableFiles, retirableHooks } = require('./lib/install/apply');
       plan.legacyLinks = findLegacyLinks(plan);
       // The same test the apply runs: a file the person replaced is not
       // listed, because it would not be removed.
       plan.retirements = retirableFiles(plan);
+      // Likewise a hook entry that is no longer in its file.
+      plan.hookRetirements = retirableHooks(plan);
       // Same again for destinations whose source changed shape: the apply
       // resolves a transition only when every file passes identity, so the
       // dry run lists the resolvable transitions and every refusal.

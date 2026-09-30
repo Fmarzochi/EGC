@@ -16,6 +16,7 @@ const { cloneJsonValue, deepMergeJson } = require('../json-merge');
 const {
   HOOK_OPERATION_KIND,
   applyManagedHookOperation,
+  resolveHookOperationHandlers,
 } = require('../claude-settings-hooks');
 const {
   MERGE_YAML_READ_LIST_KIND,
@@ -288,6 +289,40 @@ function retirableEntries(plan) {
 
 function retirableFiles(plan) {
   return retirableEntries(plan).map(entry => entry.retirement);
+}
+
+// The hook entries of plan.hookRetirements still present in their files,
+// for the dry run to list: the inspect handler of each event answers 'ok'
+// only for an EGC entry that is there.
+function retirableHooks(plan) {
+  return (Array.isArray(plan.hookRetirements) ? plan.hookRetirements : [])
+    .filter(retirement => resolveHookOperationHandlers(retirement.hookEvent).inspect(retirement) === 'ok');
+}
+
+function hookEntryKeyOf(operation) {
+  return [path.resolve(operation.destinationPath), operation.hookEvent, path.resolve(operation.hookScriptPath)].join('\n');
+}
+
+// Removes each hook entry that left the plan through the handler the
+// uninstall uses. It runs once the current entries are written, so an
+// install that stops half-way never leaves the person without either set.
+// The handlers remove by script, event and file, which also strips a
+// current entry of that same script (an entry that only changed matcher):
+// that one is written again. Reports the ones removed.
+function retirePlannedHooks(plan) {
+  const retired = [];
+  for (const retirement of Array.isArray(plan.hookRetirements) ? plan.hookRetirements : []) {
+    refuseLinkedDestination(retirement.destinationPath, managedRootFor(plan, retirement.destinationPath));
+    const outcome = resolveHookOperationHandlers(retirement.hookEvent).remove(retirement);
+    if (outcome?.changed) retired.push(retirement);
+  }
+  const retiredKeys = new Set(retired.map(hookEntryKeyOf));
+  for (const operation of plan.operations) {
+    if (operation.kind === HOOK_OPERATION_KIND && retiredKeys.has(hookEntryKeyOf(operation))) {
+      applyManagedHookOperation(operation);
+    }
+  }
+  return retired;
 }
 
 function isSymbolicLink(filePath) {
@@ -926,6 +961,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   performShapeTransitions([...pendingTransitions.values()], plan);
 
   const retiredFiles = retirePlannedFiles(plan);
+  const retiredHooks = retirePlannedHooks(plan);
 
   writeInstallState(plan.installStatePath, plan.statePreview);
   removeLegacyInstallStates(plan);
@@ -950,7 +986,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     },
   });
 
-  const result = { ...plan, applied: true, migratedLegacyLinks, retiredFiles, shapeTransitions: shapeResult.transitions };
+  const result = { ...plan, applied: true, migratedLegacyLinks, retiredFiles, retiredHooks, shapeTransitions: shapeResult.transitions };
   Object.defineProperty(result, 'syncPromise', {
     value: syncPromise,
     enumerable: false,
@@ -964,6 +1000,7 @@ module.exports = {
   applyInstallPlan,
   managedRootFor,
   retirableFiles,
+  retirableHooks,
   retirePlannedFiles,
   checkedDestinations,
   deepMergeJson,
