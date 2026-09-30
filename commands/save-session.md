@@ -28,8 +28,12 @@ Before writing the file, collect:
 
 Create the canonical sessions folder in `<EGC dir>`, the EGC directory of the tool in use (`~/.claude` in Claude Code, `~/.gemini` in Antigravity, `~/.egc` when no tool is detected; `EGC_DIR` overrides it):
 
+Run only the line for the tool you are in:
+
 ```bash
-mkdir -p ~/.claude/session-data   # Claude Code; in another tool, its <EGC dir>/session-data
+mkdir -p ~/.claude/session-data   # Claude Code
+mkdir -p ~/.gemini/session-data   # Antigravity
+mkdir -p ~/.egc/session-data      # any other tool
 ```
 
 ### Step 3: Write the session file

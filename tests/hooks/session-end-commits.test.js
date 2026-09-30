@@ -54,6 +54,10 @@ function git(repo, args, author = ME, date = '2026-01-15T11:00:00', committedAt 
     env: {
       ...process.env,
       ...GIT_ISOLATION,
+      // Older git ignores GIT_CONFIG_GLOBAL; an empty home isolates it too.
+      HOME: GIT_HOME,
+      USERPROFILE: GIT_HOME,
+      XDG_CONFIG_HOME: GIT_HOME,
       GIT_AUTHOR_NAME: author.name,
       GIT_AUTHOR_EMAIL: author.email,
       GIT_AUTHOR_DATE: date,
