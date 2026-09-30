@@ -10,7 +10,9 @@
  * is no hooks.json to merge into. Input on stdin is
  * `{ taskId, preToolUse: { toolName, parameters }, clineVersion, timestamp,
  * workspaceRoots, userId, model, ... }`; for a shell command, toolName is
- * `execute_command` and the command string is `parameters.command`.
+ * `execute_command` and the command string is `parameters.command`. The
+ * Cline SDK and CLI run the same file (they also look in .cline/hooks and
+ * ~/.cline/hooks) with toolName `run_commands`, read below.
  *
  * Cline's hook output schema (validateHookOutput in hook-factory.ts) only
  * recognizes `cancel` (boolean), `contextModification` (string) and
@@ -26,13 +28,99 @@
 const { run } = require('./pre-bash-guardian-validate');
 const { runJsonEnvelopeGuardianAdapter } = require('../lib/adapter-stdin-json');
 
+// The Cline SDK and CLI read the same .clinerules/hooks/PreToolUse, but name
+// their shell tool run_commands (sdk/packages/core/src/runtime/orchestration/
+// runtime-builder.ts maps execute_command and bash to it). Its input is one
+// of the shapes of RunCommandsInputUnionSchema (extensions/tools/schemas.ts):
+// a command string, a list of them, {command}, {cmd} or {commands}, where a
+// command may also be {command, args} run without a shell. The payload
+// carries the raw input in tool_call.input and a copy with every value
+// turned into a string in preToolUse.parameters (hooks/hook-file-hooks.ts).
+const RUN_COMMANDS_TOOL = 'run_commands';
+const UNREADABLE_TOOL = 'UnreadableRunCommands';
+const UNREADABLE_REASON = 'EGC Guardian BLOCKED this command: the run_commands input could not be read, '
+  + 'so it could not be validated. Send the commands as a list of strings.';
+const SHELL_SAFE_WORD = /^[\w@%+=:,./-]+$/;
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function shellQuote(word) {
+  return SHELL_SAFE_WORD.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
+}
+
+// One command as the Guardian reads it, or null when it cannot be read.
+// {command} is either shell text or an executable (the schema accepts both),
+// so the command part is never quoted: the Guardian judges the worse reading.
+function commandText(entry) {
+  if (typeof entry === 'string') return entry;
+  if (!isPlainObject(entry) || typeof entry.command !== 'string' || !entry.command) return null;
+  const args = entry.args === undefined ? [] : entry.args;
+  if (!Array.isArray(args) || !args.every(arg => typeof arg === 'string')) return null;
+  return [entry.command, ...args.map(shellQuote)].join(' ');
+}
+
+function commandList(value) {
+  const entries = Array.isArray(value) ? value : [value];
+  const commands = entries.map(commandText);
+  return commands.includes(null) ? null : commands.filter(command => command.trim().length > 0);
+}
+
+// Every command a run_commands input asks for, or null when unreadable.
+function runCommandsOf(input) {
+  if (!isPlainObject(input)) return commandList(input);
+  for (const key of ['commands', 'cmd']) {
+    if (input[key] !== undefined) return commandList(input[key]);
+  }
+  return commandList(input);
+}
+
+// preToolUse.parameters holds JSON text for every value that was not a
+// string; read it back, keeping plain text as the command itself.
+function parsedParameter(value) {
+  if (typeof value !== 'string') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === 'object' && parsed !== null ? parsed : value;
+  } catch {
+    return value;
+  }
+}
+
+function runCommandsInput(event) {
+  if (isPlainObject(event.tool_call) && event.tool_call.input !== undefined) {
+    return event.tool_call.input;
+  }
+  const parameters = isPlainObject(event.preToolUse?.parameters) ? event.preToolUse.parameters : {};
+  return Object.fromEntries(Object.entries(parameters).map(([key, value]) => [key, parsedParameter(value)]));
+}
+
 function buildGuardianInput(event) {
-  const toolName = event && typeof event === 'object' ? event.preToolUse?.toolName : undefined;
+  if (!isPlainObject(event)) return null;
+  const toolName = event.preToolUse?.toolName ?? event.tool_call?.name;
+  if (toolName === RUN_COMMANDS_TOOL) {
+    const commands = runCommandsOf(runCommandsInput(event));
+    if (commands === null) return { tool_name: UNREADABLE_TOOL };
+    return commands.length > 0 ? { tool_name: 'Bash', commands } : null;
+  }
   const command = toolName === 'execute_command' ? event.preToolUse?.parameters?.command : undefined;
   if (!command || typeof command !== 'string') {
     return null;
   }
   return { tool_name: 'Bash', tool_input: { command } };
+}
+
+// Judges each command of a run_commands call on its own and stops at the
+// first the Guardian blocks.
+function runGuardian(input) {
+  if (input.tool_name === UNREADABLE_TOOL) return { exitCode: 2, stderr: UNREADABLE_REASON };
+  if (!Array.isArray(input.commands)) return run(input);
+  for (const command of input.commands) {
+    const result = run({ tool_name: 'Bash', tool_input: { command } });
+    if (result.exitCode === 2) return result;
+  }
+  return { exitCode: 0, stderr: '' };
 }
 
 function respond(cancel, errorMessage) {
@@ -46,7 +134,7 @@ function respond(cancel, errorMessage) {
 }
 
 function main() {
-  runJsonEnvelopeGuardianAdapter(buildGuardianInput, run, respond);
+  runJsonEnvelopeGuardianAdapter(buildGuardianInput, runGuardian, respond);
 }
 
 if (require.main === module) {
