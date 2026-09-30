@@ -261,21 +261,20 @@ function runTests() {
     }
   }));
 
-  // Devin Desktop reads .devin/ and, once it exists, ignores .windsurf/
-  // entirely (the two are never merged), so the context goes where the
-  // tool will actually read it.
-  tally(test('a workspace with .devin/ gets the context there, not under .windsurf/', () => {
+  // Devin Desktop loads .devin/rules/ and .windsurf/rules/ alike, so a
+  // workspace with both gets exactly one mirror: a second copy would load
+  // twice and go stale.
+  tally(test('a workspace with both .devin/ and .windsurf/ keeps one mirror, under .windsurf/', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.devin'));
       fs.mkdirSync(path.join(dir, '.windsurf'));
       const result = propagateStateContent(dir, SAMPLE_STATE);
       assert.ok(result.windsurf, 'the Devin Desktop mirror is reported');
-      assert.ok(result.windsurf.includes(path.join('.devin', 'rules', 'egc-context.md')), 'the context lands where Devin Desktop reads');
-      assert.ok(!fs.existsSync(path.join(dir, '.windsurf', 'rules', 'egc-context.md')), 'nothing is written where Devin Desktop no longer reads');
+      assert.ok(result.windsurf.includes(path.join('.windsurf', 'rules', 'egc-context.md')), 'the mirror stays where it was, which Devin Desktop still loads');
+      assert.ok(!fs.existsSync(path.join(dir, '.devin', 'rules', 'egc-context.md')), 'no second copy that would load twice');
       const content = fs.readFileSync(result.windsurf, 'utf-8');
-      assert.ok(content.startsWith('---\ntrigger: always_on\n---'), 'a fresh .devin rule file declares its activation mode');
-      assert.ok(content.includes('<!-- egc:start -->'));
+      assert.ok(content.startsWith('<!-- egc:start -->'), 'the legacy mirror keeps its shape');
     } finally {
       cleanup(dir);
     }

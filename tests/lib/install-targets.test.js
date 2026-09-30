@@ -687,20 +687,22 @@ function runTests() {
     assert.ok(!warning.message.includes('Windsurf'), 'the former product name is gone from the warning');
   }));
 
-  // Devin Desktop reads .devin/ and, once it exists, ignores .windsurf/
-  // (the two are never merged); .windsurf/ is read only while .devin/ is
-  // absent. Writing where Devin reads is what these three cases pin down.
-  tally(test('windsurf-project writes where Devin Desktop reads: .devin/ when it exists, .windsurf/ while it is the only one there, .devin/ on a fresh project', () => {
+  // Devin Desktop loads .devin/skills/ when it exists and only falls back to
+  // .windsurf/skills/ when it does not (never merged), so the skills
+  // directory decides the root. These cases pin that down.
+  tally(test('windsurf-project writes where Devin Desktop reads skills: .devin/ once .devin/skills/ exists, .windsurf/ while it holds the only skills, .devin/ on a fresh project', () => {
     const fs = require('fs');
     const adapter = getInstallTargetAdapter('windsurf-project');
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-devin-workspace-'));
     try {
       assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.devin'), 'a fresh project gets the current layout');
       fs.mkdirSync(path.join(projectRoot, '.windsurf'));
-      assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.windsurf'), 'a project that only has .windsurf/ keeps it: Devin still reads it, and a new .devin/ beside it would hide everything in it');
+      assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.windsurf'), 'a project that only has .windsurf/ keeps it: a new .devin/skills/ beside it would hide every skill in it');
       assert.ok(!adapter.validate({ projectRoot, repoRoot: '/repo/egc' }).some(issue => issue.code === 'ide-not-detected'), 'the legacy directory counts as the tool being there');
       fs.mkdirSync(path.join(projectRoot, '.devin'));
-      assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.devin'), 'once .devin/ exists Devin reads only it');
+      assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.windsurf'), 'a .devin/ without skills does not hide .windsurf/skills/, so the root stays');
+      fs.mkdirSync(path.join(projectRoot, '.devin', 'skills'));
+      assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.devin'), 'once .devin/skills/ exists Devin reads skills only there');
       assert.strictEqual(adapter.getInstallStatePath({ projectRoot }), path.join(projectRoot, '.devin', 'egc-install-state.json'));
       assert.deepStrictEqual(
         adapter.resolveManagedRoots({ projectRoot }),
@@ -722,7 +724,7 @@ function runTests() {
       fs.mkdirSync(path.join(projectRoot, '.windsurf'));
       fs.writeFileSync(legacyStatePath, '{}');
       assert.deepStrictEqual(adapter.resolveLegacyInstallStatePaths({ projectRoot }), [], 'while .windsurf/ is the root, its state is the current one');
-      fs.mkdirSync(path.join(projectRoot, '.devin'));
+      fs.mkdirSync(path.join(projectRoot, '.devin', 'skills'), { recursive: true });
       assert.deepStrictEqual(adapter.resolveLegacyInstallStatePaths({ projectRoot }), [legacyStatePath]);
       const plan = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot: path.join(__dirname, '..', '..'), projectRoot, modules: [] });
       assert.deepStrictEqual(plan.legacyInstallStatePaths, [legacyStatePath], 'the plan carries it for the apply');
@@ -765,7 +767,7 @@ function runTests() {
           scaffoldOnly: false,
         }],
       }));
-      fs.mkdirSync(path.join(projectRoot, '.devin'));
+      fs.mkdirSync(path.join(projectRoot, '.devin', 'skills'), { recursive: true });
 
       const modules = [{ id: 'skills-extended', paths: [source] }];
       const plan = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot, projectRoot, modules });

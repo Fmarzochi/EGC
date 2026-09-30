@@ -313,17 +313,19 @@ function writeGeminiContext(projectPath: string, block: string): string | null {
 // frontmatter; always_on matches the always-loaded legacy .windsurf file.
 const DEVIN_RULE_FRONTMATTER = '---\ntrigger: always_on\n---\n\n';
 
-// Devin Desktop reads .devin/ and, once it exists, ignores .windsurf/
-// entirely (the two are never merged), so the context goes where the tool
-// will actually read it; a workspace still on .windsurf/ keeps the legacy
-// file untouched in shape. Mirrors scripts/lib/propagate-state.js.
+// Devin Desktop loads .devin/rules/ and .windsurf/rules/ alike
+// (docs.devin.ai/cli/extensibility/rules), so there must be exactly one
+// mirror: a second copy would load twice and go stale. It stays under
+// .windsurf/ while that directory exists, in its legacy shape; a project
+// on .devin/ alone gets it there, with the trigger frontmatter. Mirrors
+// scripts/lib/propagate-state.js.
 function writeWindsurfContext(projectPath: string, block: string): string | null {
-  const devinDir = path.join(projectPath, '.devin');
-  let toolDirName = '.windsurf';
+  const windsurfDir = path.join(projectPath, '.windsurf');
+  let toolDirName = '.devin';
   try {
-    if (fs.existsSync(devinDir) && fs.statSync(devinDir).isDirectory()) toolDirName = '.devin';
+    if (fs.existsSync(windsurfDir) && fs.statSync(windsurfDir).isDirectory()) toolDirName = '.windsurf';
   } catch {
-    toolDirName = '.windsurf';
+    toolDirName = '.devin';
   }
   const toolDir = path.join(projectPath, toolDirName);
   try {

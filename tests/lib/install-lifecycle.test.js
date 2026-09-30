@@ -1482,7 +1482,7 @@ function runTests() {
       // The person moved the workspace to Devin's layout: from here on Devin
       // reads .devin/ only, and EGC's state must still be found under the
       // directory it was written to.
-      fs.mkdirSync(path.join(projectRoot, '.devin'));
+      fs.mkdirSync(path.join(projectRoot, '.devin', 'skills'), { recursive: true });
 
       const record = discoverInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] })
         .find(entry => entry.adapter.id === 'windsurf-project');

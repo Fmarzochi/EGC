@@ -544,20 +544,26 @@ async function runLinkTests(args) {
     }));
   }
 
-  // Devin Desktop reads .devin/ and, once it exists, ignores .windsurf/
-  // (the two are never merged), so the context goes where the tool reads.
-  tally(await test('a workspace with .devin/ gets the context there, with the trigger frontmatter, and .windsurf/ stays untouched', () => {
-    const dir = mktemp();
+  // Devin Desktop loads .devin/rules/ and .windsurf/rules/ alike, so there
+  // is exactly one mirror: under .windsurf/ while it exists, under .devin/
+  // (with the trigger frontmatter) in a project on .devin/ alone.
+  tally(await test('the Devin Desktop mirror is single: .windsurf/ while it exists, .devin/ with the trigger frontmatter otherwise', () => {
+    const both = mktemp();
+    const devinOnly = mktemp();
     try {
-      fs.mkdirSync(path.join(dir, '.devin'));
-      fs.mkdirSync(path.join(dir, '.windsurf'));
-      const result = propagateStateToTools({ projectPath: dir, ...args });
-      assert.ok(result.windsurf, 'the Devin Desktop mirror is reported');
-      assert.ok(result.windsurf.includes(path.join('.devin', 'rules', 'egc-context.md')), 'the context lands where Devin Desktop reads');
-      assert.ok(!fs.existsSync(path.join(dir, '.windsurf', 'rules', 'egc-context.md')), 'nothing is written where Devin Desktop no longer reads');
-      assert.ok(fs.readFileSync(result.windsurf, 'utf-8').startsWith('---\ntrigger: always_on\n---'), 'a fresh .devin rule file declares its activation mode');
+      fs.mkdirSync(path.join(both, '.devin'));
+      fs.mkdirSync(path.join(both, '.windsurf'));
+      const mixed = propagateStateToTools({ projectPath: both, ...args });
+      assert.ok(mixed.windsurf.includes(path.join('.windsurf', 'rules', 'egc-context.md')), 'the mirror stays under .windsurf/');
+      assert.ok(!fs.existsSync(path.join(both, '.devin', 'rules', 'egc-context.md')), 'no second copy that would load twice');
+
+      fs.mkdirSync(path.join(devinOnly, '.devin'));
+      const devin = propagateStateToTools({ projectPath: devinOnly, ...args });
+      assert.ok(devin.windsurf.includes(path.join('.devin', 'rules', 'egc-context.md')), 'a .devin-only project gets it under .devin/');
+      assert.ok(fs.readFileSync(devin.windsurf, 'utf-8').startsWith('---\ntrigger: always_on\n---'), 'a fresh .devin rule file declares its activation mode');
     } finally {
-      cleanup(dir);
+      cleanup(both);
+      cleanup(devinOnly);
     }
   }));
 

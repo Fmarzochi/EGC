@@ -22,14 +22,16 @@ function isDirectory(candidate) {
   }
 }
 
-// Devin Desktop reads .devin/ and, once it exists, ignores .windsurf/ (the
-// two are never merged); .windsurf/ is read only while .devin/ is absent.
-// Writing where Devin reads therefore means .devin/ when it is there,
-// .windsurf/ while it is the only one there (creating .devin/ beside it
-// would hide everything the person keeps in .windsurf/), and .devin/ on a
-// project that has neither.
+// Devin Desktop loads .devin/skills/ when it exists and only falls back to
+// .windsurf/skills/ when it does not; the two are never merged
+// (docs.devin.ai/desktop/cascade/skills). Rules are different: .devin/rules/
+// and .windsurf/rules/ both load (docs.devin.ai/cli/extensibility/rules).
+// The skills rule decides the root: .devin/ once .devin/skills/ exists;
+// .windsurf/ while the project has it and no .devin/skills/ (creating
+// .devin/skills/ beside it would hide every skill the person keeps in
+// .windsurf/skills/); .devin/ on a project that has neither.
 function resolveWorkspaceDir(projectRoot) {
-  if (isDirectory(path.join(projectRoot, DEVIN_WORKSPACE_DIR))) return DEVIN_WORKSPACE_DIR;
+  if (isDirectory(path.join(projectRoot, DEVIN_WORKSPACE_DIR, 'skills'))) return DEVIN_WORKSPACE_DIR;
   if (isDirectory(path.join(projectRoot, WINDSURF_WORKSPACE_DIR))) return WINDSURF_WORKSPACE_DIR;
   return DEVIN_WORKSPACE_DIR;
 }

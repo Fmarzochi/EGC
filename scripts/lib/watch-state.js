@@ -34,14 +34,13 @@ const TOOL_FILE_RESOLVERS = {
     return fs.existsSync(f) ? f : null;
   },
   windsurf: (p) => {
-    // Devin Desktop reads .devin/ and ignores .windsurf/ entirely once the
-    // directory exists, so the watched mirror follows the directory, not
-    // whichever file happens to exist.
-    let dir = '.windsurf';
+    // The one mirror propagate-state.js writes: under .windsurf/ while that
+    // directory exists, under .devin/ in a project on .devin/ alone.
+    let dir = '.devin';
     try {
-      if (fs.statSync(path.join(p, '.devin')).isDirectory()) dir = '.devin';
+      if (fs.statSync(path.join(p, '.windsurf')).isDirectory()) dir = '.windsurf';
     } catch {
-      dir = '.windsurf';
+      dir = '.devin';
     }
     const f = path.join(p, dir, 'rules', 'egc-context.md');
     return fs.existsSync(f) ? f : null;
