@@ -24,7 +24,7 @@ from llm import paths  # noqa: E402
 from llm import session_paths  # noqa: E402
 
 TOOL_ENV = [
-    "GEMINI_PROJECT_DIR", "GEMINI_PLUGIN_ROOT", "CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT",
+    "GEMINI_PROJECT_DIR", "GEMINI_PLUGIN_ROOT", "CLAUDECODE", "CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT",
     "CODEBUDDY_PROJECT_DIR", "CODEBUDDY_PLUGIN_ROOT", "VSCODE_AGENT", "GITHUB_COPILOT_API_TOKEN",
     "KIRO_HOOK_FILE", "KIRO_FILE_PATH", "TRAE_ENV",
 ]
@@ -69,6 +69,8 @@ def _python_egc_dir(monkeypatch: pytest.MonkeyPatch, home: Path, extra: Optional
         ([".claude"], None, ".claude"),
         ([".egc", ".claude"], None, ".egc"),
         ([".egc", ".gemini"], {"CLAUDE_PROJECT_DIR": "/work"}, ".claude"),
+        ([".egc", ".gemini"], {"CLAUDECODE": "1"}, ".claude"),
+        ([".claude"], {"CLAUDECODE": "1", "GEMINI_PROJECT_DIR": "/work"}, ".gemini"),
         ([".gemini", ".claude"], None, ".gemini"),
     ],
 )

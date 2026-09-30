@@ -98,9 +98,10 @@ _TOOL_DIRS = (
 
 # The variables each tool sets for its hooks, in getEGCDir()'s order: the
 # Gemini ones first, because the retired Gemini CLI also set the Claude ones.
+# Claude Code sets CLAUDECODE in the shell its Bash tool runs.
 _TOOL_ENV = (
     (("GEMINI_PROJECT_DIR", "GEMINI_PLUGIN_ROOT"), _ANTIGRAVITY_DIR),
-    (("CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT"), ".claude"),
+    (("CLAUDECODE", "CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT"), ".claude"),
     (("CODEBUDDY_PROJECT_DIR", "CODEBUDDY_PLUGIN_ROOT"), ".codebuddy"),
     (("VSCODE_AGENT", "GITHUB_COPILOT_API_TOKEN"), ".github"),
     (("KIRO_HOOK_FILE", "KIRO_FILE_PATH"), ".kiro"),
