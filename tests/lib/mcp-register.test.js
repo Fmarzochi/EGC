@@ -775,10 +775,15 @@ function runTests() {
     const dir = path.join(tmpHome, '.cursor');
     fs.mkdirSync(dir, { recursive: true });
     const target = path.join(dir, 'mcp.json');
-    fs.writeFileSync(target, '[1, 2, 3]');
 
-    assert.throws(() => registerJson(target, bins), /not a valid MCP config object/);
-    assert.strictEqual(fs.readFileSync(target, 'utf8'), '[1, 2, 3]', 'invalid root file must be left untouched');
+    // Every JSON value that is not an object: an array, and each primitive,
+    // including the falsy ones (0, "", false, null) that a truthiness check
+    // alone would let through.
+    for (const content of ['[1, 2, 3]', '42', '0', '"hello"', '""', 'true', 'false', 'null']) {
+      fs.writeFileSync(target, content);
+      assert.throws(() => registerJson(target, bins), /not a valid MCP config object/, `root ${content} must be refused`);
+      assert.strictEqual(fs.readFileSync(target, 'utf8'), content, `invalid root ${content} must be left untouched`);
+    }
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   })));
@@ -788,9 +793,19 @@ function runTests() {
     const dir = path.join(tmpHome, '.cursor');
     fs.mkdirSync(dir, { recursive: true });
     const target = path.join(dir, 'mcp.json');
-    fs.writeFileSync(target, JSON.stringify({ mcpServers: [1, 2, 3] }));
 
-    assert.throws(() => registerJson(target, bins), /invalid mcpServers object/);
+    for (const mcpServers of [[1, 2, 3], 42, 0, 'x', '', true, false]) {
+      const content = JSON.stringify({ mcpServers });
+      fs.writeFileSync(target, content);
+      assert.throws(() => registerJson(target, bins), /invalid mcpServers object/, `mcpServers ${content} must be refused`);
+      assert.strictEqual(fs.readFileSync(target, 'utf8'), content, `invalid mcpServers ${content} must be left untouched`);
+    }
+
+    // null is the one non-object the merge accepts: it means "no servers yet".
+    fs.writeFileSync(target, JSON.stringify({ mcpServers: null }));
+    assert.strictEqual(registerJson(target, bins), true);
+    const written = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.ok(written.mcpServers['egc-guardian'] && written.mcpServers['egc-memory'], 'a null mcpServers is replaced by both servers');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   })));
