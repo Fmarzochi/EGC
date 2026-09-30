@@ -10,6 +10,7 @@
  */
 
 const assert = require('assert');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -42,6 +43,47 @@ function runAdapterCli(input, env = {}) {
     stdout: result.stdout || '',
     stderr: result.stderr || '',
   };
+}
+
+// Devin Local, the agent that replaced Cascade on 2026-09-08, runs lifecycle
+// hooks in the Claude Code shape: PreToolUse with tool_name "exec" and
+// tool_input.command for the shell (docs.devin.ai/cli/extensibility/hooks;
+// `devin migrate hooks` turns pre_run_command into the matcher ^exec$).
+function devinExec(command) {
+  return { hook_event_name: 'PreToolUse', tool_name: 'exec', tool_input: { command }, cwd: os.tmpdir() };
+}
+
+function runDevinLocalCases() {
+  return [
+    test('maps a Devin Local exec PreToolUse call to a Guardian Bash input, keeping cwd', () => {
+      const mapped = buildGuardianInput({
+        hook_event_name: 'PreToolUse',
+        tool_name: 'exec',
+        tool_input: { command: 'git status' },
+        cwd: '/work/project',
+        session_id: 'devin-session-1',
+      });
+      assert.deepStrictEqual(mapped, { tool_name: 'Bash', tool_input: { command: 'git status' }, cwd: '/work/project' });
+    }),
+
+    test('returns null for Devin Local tools other than exec and for an exec call without a command', () => {
+      assert.strictEqual(buildGuardianInput({ hook_event_name: 'PreToolUse', tool_name: 'edit', tool_input: { file_path: '/x' } }), null);
+      assert.strictEqual(buildGuardianInput({ hook_event_name: 'PreToolUse', tool_name: 'exec', tool_input: {} }), null);
+      assert.strictEqual(buildGuardianInput({ hook_event_name: 'PreToolUse', tool_name: 'exec', tool_input: null }), null);
+    }),
+
+    test('CLI: blocks a destructive Devin Local exec call with exit 2 and a reason on stderr', () => {
+      const result = runAdapterCli(devinExec('rm -rf /'));
+      assert.strictEqual(result.code, 2);
+      assert.ok(result.stderr.length > 0, 'expected a reason on stderr');
+    }),
+
+    test('CLI: allows a safe Devin Local exec call (exit 0)', () => {
+      const result = runAdapterCli(devinExec('git status'));
+      assert.strictEqual(result.code, 0);
+      assert.strictEqual(result.stderr, '');
+    }),
+  ];
 }
 
 function runTests() {
@@ -93,6 +135,10 @@ function runTests() {
     const result = runAdapterCli('null');
     assert.strictEqual(result.code, 0);
   })) passed++; else failed++;
+
+  const devinLocalResults = runDevinLocalCases();
+  passed += devinLocalResults.filter(Boolean).length;
+  failed += devinLocalResults.filter(ok => !ok).length;
 
   if (test('CLI: blocks a destructive command with exit 2 and a reason on stderr', () => {
     const result = runAdapterCli({

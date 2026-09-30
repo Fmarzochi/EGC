@@ -2,14 +2,14 @@
 /**
  * Devin Desktop hooks adapter for the GateGuard Fact-Forcing Gate.
  *
- * Devin Desktop's pre_write_code and pre_run_command hooks (docs:
- * https://docs.devin.ai/desktop/cascade/hooks; the product was Windsurf
- * until 2026-06-02, and the ~/.codeium/windsurf paths stayed) use a
- * different wire contract than Claude Code/Codex/Continue:
- *   - stdin JSON shape: {agent_action_name, tool_info: {...}}, not
- *     {tool_name, tool_input}
- *   - blocking signal: exit code 2 with the reason on stderr, not a
- *     hookSpecificOutput.permissionDecision:"deny" JSON object on stdout
+ * Devin Local, the agent in Devin Desktop since Cascade was removed on
+ * 2026-09-08, calls it as a PreToolUse hook (see
+ * scripts/lib/devin-local-hooks.js) with {hook_event_name, tool_name,
+ * tool_input, session_id} on stdin. Cascade's pre_write_code and
+ * pre_run_command shape, {agent_action_name, tool_info: {...}}, is still
+ * read, since the Devin CLI also loads a .windsurf/hooks.json written for
+ * it. Either way the block is exit code 2 with the reason on stderr, not a
+ * hookSpecificOutput.permissionDecision:"deny" JSON object on stdout.
  *
  * This script translates both directions so gateguard-fact-force.js's own
  * run() function (unchanged) can gate Devin Desktop's file edits and shell
@@ -22,7 +22,89 @@ const fs = require('node:fs');
 const { run } = require('./gateguard-fact-force');
 const { readAdapterStdinJson } = require('../lib/adapter-stdin-json');
 
+// Devin Local, which replaced Cascade on 2026-09-08, sends the Claude Code
+// shape instead: {hook_event_name: "PreToolUse", tool_name, tool_input,
+// session_id} (docs.devin.ai/cli/extensibility/hooks). `devin migrate
+// hooks` maps pre_run_command to exec and pre_write_code to edit, write and
+// notebook_edit; multi_edit and apply_patch write files too. The patch text
+// is found by its own grammar marker rather than a field name the vendor
+// does not document.
+const DEVIN_PATCH_MARKER = '*** Begin Patch';
+
+function nonEmptyString(value) {
+  return typeof value === 'string' && value.length > 0 ? value : '';
+}
+
+function fileWriteInput(sessionId, filePath) {
+  if (!filePath) {
+    return null;
+  }
+  // Same Edit/Write split as pre_write_code below.
+  const toolName = fs.existsSync(filePath) ? 'Edit' : 'Write';
+  return { session_id: sessionId, tool_name: toolName, tool_input: { file_path: filePath } };
+}
+
+// Every file a multi_edit touches: the top-level file_path and any file_path
+// given per edit, so no file of the call escapes the gate.
+function multiEditPaths(toolInput) {
+  const edits = Array.isArray(toolInput.edits) ? toolInput.edits : [];
+  const paths = [nonEmptyString(toolInput.file_path), ...edits.map(edit => (edit ? nonEmptyString(edit.file_path) : ''))];
+  return [...new Set(paths.filter(Boolean))];
+}
+
+function multiEditInput(sessionId, toolInput) {
+  const paths = multiEditPaths(toolInput);
+  if (paths.length <= 1) {
+    return fileWriteInput(sessionId, paths[0] || '');
+  }
+  // gateguard-fact-force.js gates each edits[].file_path of a MultiEdit.
+  return { session_id: sessionId, tool_name: 'MultiEdit', tool_input: { edits: paths.map(filePath => ({ file_path: filePath })) } };
+}
+
+function findPatchText(toolInput) {
+  if (typeof toolInput === 'string') {
+    return toolInput.includes(DEVIN_PATCH_MARKER) ? toolInput : '';
+  }
+  return Object.values(toolInput).find(value => typeof value === 'string' && value.includes(DEVIN_PATCH_MARKER)) || '';
+}
+
+const DEVIN_LOCAL_TOOL_MAPPERS = {
+  exec: (sessionId, toolInput) => {
+    const command = nonEmptyString(toolInput.command);
+    return command ? { session_id: sessionId, tool_name: 'Bash', tool_input: { command } } : null;
+  },
+  edit: (sessionId, toolInput) => fileWriteInput(sessionId, nonEmptyString(toolInput.file_path)),
+  write: (sessionId, toolInput) => fileWriteInput(sessionId, nonEmptyString(toolInput.file_path)),
+  notebook_edit: (sessionId, toolInput) => fileWriteInput(
+    sessionId,
+    nonEmptyString(toolInput.notebook_path) || nonEmptyString(toolInput.file_path)
+  ),
+  multi_edit: multiEditInput,
+  apply_patch: (sessionId, toolInput) => {
+    const patchText = findPatchText(toolInput);
+    return patchText ? { session_id: sessionId, tool_name: 'apply_patch', tool_input: patchText } : null;
+  },
+};
+
+function buildFromDevinLocalCall(event) {
+  const toolName = typeof event.tool_name === 'string' ? event.tool_name : '';
+  if (!Object.hasOwn(DEVIN_LOCAL_TOOL_MAPPERS, toolName)) {
+    return null;
+  }
+  const rawInput = event.tool_input;
+  const isUsable = typeof rawInput === 'string' || (rawInput !== null && typeof rawInput === 'object');
+  if (!isUsable) {
+    return null;
+  }
+  // Only apply_patch takes a bare string; every other tool reads fields.
+  const toolInput = typeof rawInput === 'string' && toolName !== 'apply_patch' ? {} : rawInput;
+  return DEVIN_LOCAL_TOOL_MAPPERS[toolName](nonEmptyString(event.session_id), toolInput);
+}
+
 function buildGateGuardInput(windsurfEvent) {
+  if (windsurfEvent && windsurfEvent.hook_event_name === 'PreToolUse') {
+    return buildFromDevinLocalCall(windsurfEvent);
+  }
   const actionName = windsurfEvent.agent_action_name || '';
   const toolInfo = windsurfEvent.tool_info || {};
 

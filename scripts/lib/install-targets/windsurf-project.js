@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {
+  buildValidationIssue,
   createFlatSkillPlanOperations,
   createInstallTargetAdapter,
   createRemappedOperation,
@@ -9,6 +10,7 @@ const {
 const {
   createWindsurfGateGuardOperations,
 } = require('../windsurf-gateguard-operations');
+const { devinConfigIssues, resolveDevinProjectConfigPath } = require('../devin-local-hooks');
 
 const DEVIN_WORKSPACE_DIR = '.devin';
 const WINDSURF_WORKSPACE_DIR = '.windsurf';
@@ -54,6 +56,10 @@ module.exports = createInstallTargetAdapter({
     const projectRoot = resolveBaseRoot('project', input);
     return [path.join(projectRoot, DEVIN_WORKSPACE_DIR), path.join(projectRoot, WINDSURF_WORKSPACE_DIR)];
   },
+  validateMore(input) {
+    if (!input.projectRoot && !input.repoRoot) return [];
+    return devinConfigIssues(resolveDevinProjectConfigPath(resolveBaseRoot('project', input)), buildValidationIssue);
+  },
   resolveLegacyInstallStatePaths(input, adapter) {
     const projectRoot = resolveBaseRoot('project', input);
     const legacyStatePath = path.join(projectRoot, WINDSURF_WORKSPACE_DIR, INSTALL_STATE_FILE);
@@ -68,9 +74,17 @@ module.exports = createInstallTargetAdapter({
     };
     const targetRoot = adapter.resolveRoot(planningInput);
 
+    // Devin Local reads project hooks only under .devin/, whichever
+    // directory holds the skills, so the config goes there even while the
+    // scripts stay under .windsurf/.
     return [
       ...createFlatSkillPlanOperations(input, adapter),
-      ...createWindsurfGateGuardOperations(adapter, targetRoot, createRemappedOperation),
+      ...createWindsurfGateGuardOperations(
+        adapter,
+        targetRoot,
+        createRemappedOperation,
+        resolveDevinProjectConfigPath(resolveBaseRoot('project', planningInput))
+      ),
     ];
   },
 });

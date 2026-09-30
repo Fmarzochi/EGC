@@ -1,16 +1,16 @@
 'use strict';
 
-// Manages the GateGuard entry inside a Devin Desktop hooks.json file
-// (.windsurf/hooks.json project-level, or ~/.codeium/windsurf/hooks.json
-// user-level). Devin Desktop's hooks.json schema is a flat
+// Manages the GateGuard and Guardian entries earlier installs wrote for
+// Cascade inside a hooks.json file (.windsurf/hooks.json project-level, or
+// ~/.codeium/windsurf/hooks.json user-level). Cascade was removed from Devin
+// Desktop on 2026-09-08 and EGC now registers its hooks for Devin Local (see
+// devin-local-hooks.js), so these entries are only removed (upgrade and
+// uninstall) and inspected (doctor) now. The schema is a flat
 // {hooks: {<event>: [{command, ...}]}} map - no matcher/group wrapper and no
 // "type": "command" field like Claude Code's settings.json - so it shares
 // flat-hooks-json-merge.js's merge logic (also used by Cursor's
 // .cursor/hooks.json, the same non-Claude flat shape) instead of reusing
-// claude-settings-hooks.js's addHookEntry(). Docs:
-// https://docs.devin.ai/desktop/cascade/hooks (the product was Windsurf
-// until 2026-06-02; the vendor kept the ~/.codeium/windsurf and .windsurf
-// paths, so the file locations did not move).
+// claude-settings-hooks.js's addHookEntry().
 
 const path = require('node:path');
 const {

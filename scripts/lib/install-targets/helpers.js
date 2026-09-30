@@ -3,6 +3,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { isGeneratedRuntimeSourcePath, isHostPlacedSourcePath, isIgnoredSourceDirectory, isIgnoredSourceFile } = require('../install-source-filters');
+const { HOOK_OPERATION_KIND } = require('../claude-settings-hooks');
 
 const PLATFORM_SOURCE_PATH_OWNERS = Object.freeze({
   '.gemini-plugin': 'egc',
@@ -624,24 +625,18 @@ function planGenericRetirements(input, adapter) {
   const siblingOwned = collectSiblingOwnedDestinations(input.siblingStatePaths);
   if (!siblingOwned) return [];
 
-  const selectedModuleIds = new Set(
-    (Array.isArray(input.modules) ? input.modules : [])
-      .map(module => (module && typeof module.id === 'string' ? module.id : null))
-      .filter(Boolean)
-  );
+  const operations = Array.isArray(input.operations) ? input.operations : adapter.planOperations(input);
+  const activeModuleIds = collectActiveModuleIds(input, operations);
   const boundaries = {
     managedRoots: resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root)),
     seen: new Set(),
     siblingOwned,
-    covered: collectCurrentlyCoveredDestinations(
-      Array.isArray(input.operations) ? input.operations : adapter.planOperations(input),
-      repoRoot
-    ),
+    covered: collectCurrentlyCoveredDestinations(operations, repoRoot),
   };
 
   const retirements = [];
   for (const operation of recordedManagedCopies(previous)) {
-    if (!selectedModuleIds.has(operation.moduleId)) continue;
+    if (!activeModuleIds.has(operation.moduleId)) continue;
     const resolved = path.resolve(operation.destinationPath);
     if (!isRetirementCandidate(resolved, boundaries)) continue;
     const source = normalizeRelativePath(String(operation.sourceRelativePath || ''));
@@ -655,6 +650,94 @@ function planGenericRetirements(input, adapter) {
 // The file EGC copied there, for the apply to compare against: a file the
 // person replaced since is theirs and stays. A transformed copy is compared
 // against the transformed source.
+// The modules this install still carries: the ones the person selected plus
+// the ones the adapter plans on its own (hook scripts and their entries,
+// recorded under ids no manifest lists). Whatever such a module no longer
+// plans has left the plan; a module that is no longer installed at all is
+// left to the uninstall.
+function collectActiveModuleIds(input, operations) {
+  const active = new Set();
+  for (const module of Array.isArray(input.modules) ? input.modules : []) {
+    if (module && typeof module.id === 'string') active.add(module.id);
+  }
+  for (const operation of operations) {
+    if (operation && typeof operation.moduleId === 'string') active.add(operation.moduleId);
+  }
+  return active;
+}
+
+function recordedManagedHooks(state) {
+  const operations = Array.isArray(state?.operations) ? state.operations : [];
+  return operations.filter(operation => (
+    operation.ownership === 'managed'
+    && operation.kind === HOOK_OPERATION_KIND
+    && [operation.destinationPath, operation.hookEvent, operation.hookScriptPath]
+      .every(value => typeof value === 'string' && value.length > 0)
+  ));
+}
+
+// One entry is one script under one event in one file; the matcher is part
+// of what the plan asks for, so an entry that only changed matcher is
+// retired and written again.
+function hookEntryKey(operation) {
+  return [path.resolve(operation.destinationPath), operation.hookEvent, path.resolve(operation.hookScriptPath)].join('\n');
+}
+
+function hookEntryIdentity(operation) {
+  return `${hookEntryKey(operation)}\n${operation.hookMatcher || ''}`;
+}
+
+// Entries another adapter's state still records are never retired here;
+// one unreadable sibling state makes every entry untouchable.
+function collectSiblingHookKeys(statePaths) {
+  const keys = new Set();
+  for (const statePath of Array.isArray(statePaths) ? statePaths : []) {
+    const siblingState = readInstallStateOrNull(statePath);
+    if (siblingState === UNREADABLE_STATE) return null;
+    for (const operation of recordedManagedHooks(siblingState)) keys.add(hookEntryKey(operation));
+  }
+  return keys;
+}
+
+// The hook entries a previous install of this adapter recorded, under a
+// module the install still carries, that the current plan no longer makes
+// (Devin Desktop's Cascade events, removed with Cascade on 2026-09-08, are
+// the first). The apply removes each through the handler the uninstall
+// uses, once the current entries are written. Only files under the
+// adapter's managed roots are touched, and only when every recorded state
+// can be read.
+function planHookRetirements(input, adapter) {
+  const previous = readRecordedStates(adapter, input);
+  if (!previous.trusted) return [];
+  const siblingKeys = collectSiblingHookKeys(input.siblingStatePaths);
+  if (!siblingKeys) return [];
+
+  const operations = Array.isArray(input.operations) ? input.operations : adapter.planOperations(input);
+  const planned = new Set(operations.filter(operation => operation && operation.kind === HOOK_OPERATION_KIND).map(hookEntryIdentity));
+  const activeModuleIds = collectActiveModuleIds(input, operations);
+  const managedRoots = resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root));
+  const seen = new Set();
+  const retirements = [];
+  for (const operation of recordedManagedHooks(previous)) {
+    const identity = hookEntryIdentity(operation);
+    const destinationPath = path.resolve(operation.destinationPath);
+    const isManaged = managedRoots.some(root => destinationPath.startsWith(root + path.sep));
+    if (!isManaged || !activeModuleIds.has(operation.moduleId)) continue;
+    if (planned.has(identity) || seen.has(identity) || siblingKeys.has(hookEntryKey(operation))) continue;
+    seen.add(identity);
+    retirements.push({
+      kind: HOOK_OPERATION_KIND,
+      moduleId: operation.moduleId,
+      destinationPath,
+      hookEvent: operation.hookEvent,
+      hookScriptPath: operation.hookScriptPath,
+      ...(operation.hookMatcher ? { hookMatcher: operation.hookMatcher } : {}),
+      reason: 'hook entry left the install plan',
+    });
+  }
+  return retirements;
+}
+
 function retirementOf(operation, destinationPath, source, repoRoot) {
   return {
     destinationPath,
@@ -778,7 +861,12 @@ function createInstallTargetAdapter(config) {
         return config.validate(input, adapter);
       }
 
-      return defaultValidateAdapterInput(config, input, adapter);
+      // validateMore adds the adapter's own checks to the default ones
+      // instead of replacing them.
+      const issues = defaultValidateAdapterInput(config, input, adapter);
+      return typeof config.validateMore === 'function'
+        ? [...issues, ...config.validateMore(input, adapter)]
+        : issues;
     },
   };
 
@@ -810,6 +898,7 @@ module.exports = {
   planFlatAgentOperations,
   planFlatSkillOperation,
   planGenericRetirements,
+  planHookRetirements,
   readInstallStateOrNull,
   resolveAdapterManagedRoots,
   resolveBaseRoot,
