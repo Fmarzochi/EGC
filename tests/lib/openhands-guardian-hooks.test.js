@@ -4,7 +4,7 @@
  * OpenHands' hooks.json has no top-level "hooks" wrapper: event names sit
  * directly at the document root, each value an array of {matcher, hooks:
  * [{command, timeout}]} rule groups. That shape needs its own merge logic
- * distinct from both flat-hooks-json-merge.js (Kiro/Amazon Q) and
+ * distinct from both flat-hooks-json-merge.js (Kiro) and
  * claude-settings-hooks.js (Claude/Goose), so it is exercised directly here.
  */
 

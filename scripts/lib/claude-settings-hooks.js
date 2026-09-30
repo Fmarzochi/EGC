@@ -1213,6 +1213,10 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeKiroMeshHookFromFile(operation.destinationPath),
     inspect: operation => inspectKiroMeshHookFile(operation.destinationPath, operation.hookScriptPath),
   },
+  // Recorded by installs of the retired Amazon Q adapter (the Guardian
+  // entry in .amazonq/cli-agents/egc-guardian.json): nothing plans it any
+  // more, and the handlers stay so doctor and uninstall still handle what
+  // those installs wrote.
   [AMAZONQ_OPERATION_DISPATCH_TAG]: {
     apply: operation => applyAmazonQGuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
     remove: operation => removeAmazonQGuardianHookFromFile(operation.destinationPath, operation.hookScriptPath),

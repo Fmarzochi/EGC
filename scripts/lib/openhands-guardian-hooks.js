@@ -8,7 +8,7 @@
 // wired today: NO top-level "hooks" wrapper key -- event names
 // (pre_tool_use, snake_case) sit directly at the document root, each value
 // an array of {matcher, hooks: [{command, timeout}]} rule groups. That's
-// why this reuses neither flat-hooks-json-merge.js (Kiro/Amazon Q's flat
+// why this reuses neither flat-hooks-json-merge.js (Kiro's flat
 // {hooks: {event: [{matcher, command}]}} shape) nor
 // claude-settings-hooks.js's destination-driven builders (Claude's
 // {hooks: {event: [{matcher, hooks: [...]}]}} shape, which Goose matches

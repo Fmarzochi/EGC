@@ -120,7 +120,7 @@ function runPlainExitCodeGuardianAdapter(buildGuardianInput, runGuardian) {
   });
 }
 
-// Shared entrypoint for the plain-exit-code adapters (Amazon Q, Goose,
+// Shared entrypoint for the plain-exit-code adapters (Goose,
 // OpenHands, Kiro, Windsurf): collapses each adapter's identical "run when
 // invoked directly, always export buildGuardianInput for tests" boilerplate
 // into one call, so those near-identical translation scripts stop
@@ -173,7 +173,7 @@ function runJsonEnvelopeGuardianAdapter(buildGuardianInput, runGuardian, respond
   });
 }
 
-// Amazon Q, Goose, and OpenHands all deliver {tool_name, tool_input:
+// Goose and OpenHands both deliver {tool_name, tool_input:
 // {command}, <cwdKey>} on stdin for their shell tool, differing only in
 // the shell tool's name and which top-level field carries the working
 // directory -- this builds the translation function each adapter exports

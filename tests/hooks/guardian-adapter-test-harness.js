@@ -1,6 +1,6 @@
 /**
  * Shared test harness for the per-host Guardian adapter scripts
- * (amazonq/goose/openhands-guardian-adapter.js). Each of those adapters
+ * (goose/openhands-guardian-adapter.js). Each of those adapters
  * translates a structurally similar but field-name-different stdin
  * envelope into the same Guardian input shape and the same plain
  * exit-code contract -- this harness runs the same suite of cases against

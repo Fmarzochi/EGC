@@ -1,8 +1,6 @@
 const path = require('node:path');
 
 const aiderProject = require('./aider-project');
-const amazonqProject = require('./amazonq-project');
-const amazonqHome = require('./amazonq-home');
 const antigravityProject = require('./antigravity-project');
 const claudeCodeHome = require('./claude-home');
 const egcHome = require('./gemini-home');
@@ -34,14 +32,15 @@ const warpProject = require('./warp-project');
 // Antigravity reads the shared ~/.gemini home, which egc-home still owns),
 // continue-home/continue-project (Continue.dev shut down after the Cursor
 // acqui-hire, repo read-only since 2026-06), roocode-project (project
-// archived upstream since 2026-05-15).
+// archived upstream since 2026-05-15), amazonq-project/amazonq-home
+// (Amazon Q Developer CLI: AWS closed new sign-ups on 2026-05-15 and ends
+// support on 2027-04-30, the CLI became the Kiro CLI, which the kiro
+// adapters serve; retired 2026-09-30).
 const ADAPTERS = Object.freeze([
   egcHome,
   claudeCodeHome,
   cursorProject,
   antigravityProject,
-  amazonqProject,
-  amazonqHome,
   aiderProject,
   codexHome,
   gooseHome,
@@ -75,6 +74,7 @@ const RETIRED_TARGET_IDS = Object.freeze(new Set([
   'gemini', 'gemini-project',
   'continue', 'continue-home', 'continue-project',
   'roocode', 'roocode-project',
+  'amazonq', 'amazonq-home', 'amazonq-project',
 ]));
 
 function getInstallTargetAdapter(targetOrAdapterId) {

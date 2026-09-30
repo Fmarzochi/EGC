@@ -2,7 +2,7 @@
 
 > The honest map of how each supported AI coding tool integrates with EGC.
 
-EGC supports 20 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
+EGC supports 19 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
 
 What the maintainers guarantee per tool is a separate axis: see [support levels](../governance/support-levels.md).
 
@@ -14,9 +14,9 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 | **2** | Custom-script (retired) | Formerly tool-specific assets via a dedicated shell script | none: Kiro, Trae and CodeBuddy assets ship through their Tier 1 adapters |
 | **3** | Protocol-only | MCP server registration + memory protocol injection | `scripts/bootstrap-cognitive.js` + `install.sh` MCP registration |
 
-## The 20 harnesses
+## The 19 harnesses
 
-> Retired on 2026-08-16, after each vendor's own lifecycle decision: Gemini CLI (standalone product stopped serving 2026-06-18; Antigravity succeeded it on the same home directory), Continue.dev (shut down after the Cursor acqui-hire, repository read-only), and Roo Code (archived upstream since 2026-05-15). Their adapter files left the tree on 2026-09-30; the ids stay recognized so `egc install`, `egc doctor`, `egc repair` and `egc auto-update` explain the retirement instead of calling them unknown, and what those installs wrote is still cleaned by `egc uninstall`.
+> Retired on 2026-08-16, after each vendor's own lifecycle decision: Gemini CLI (standalone product stopped serving 2026-06-18; Antigravity succeeded it on the same home directory), Continue.dev (shut down after the Cursor acqui-hire, repository read-only), and Roo Code (archived upstream since 2026-05-15). Their adapter files left the tree on 2026-09-30; the ids stay recognized so `egc install`, `egc doctor`, `egc repair` and `egc auto-update` explain the retirement instead of calling them unknown, and what those installs wrote is still cleaned by `egc uninstall`. Amazon Q Developer CLI was retired on 2026-09-30: AWS closed new sign-ups on 2026-05-15 and ends support on 2027-04-30, its CLI became the Kiro CLI (which EGC supports as `kiro`), and its Guardian agent never activated on its own (upstream bug open since 2025-11-14); `egc uninstall` still removes what its installs wrote.
 
 | # | Tool | Tier | Target id | Install path | Notes |
 |---|------|------|-----------|--------------|-------|
@@ -34,12 +34,11 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 | 12 | **Trae** | 1 | `trae` | `.trae/skills/<name>/` (project; `TRAE_ENV=cn` selects `.trae-cn/`; run `egc install --target trae --profile full` from the home directory for `~/.trae/`) | Skills flat, commands, agents and rules via the unified pipeline, with the Guardian validators in `hooks.json`; the `~/.trae/MEMORY.md` protocol comes from `scripts/bootstrap-cognitive.js`; the former `.trae/install.sh` and `uninstall.sh` are retired |
 | 13 | **JetBrains Junie** | 1 | `junie` | `.junie/guidelines.md` | Project guidelines installed via the unified pipeline using JetBrains Junie's native guidelines discovery path; skills, agents, commands and rules as library folders under `~/.junie/` |
 | 14 | **Goose** | 1 | `goose` | `~/.agents/skills/<name>/SKILL.md` (shared with Codex) | Skills, agents, commands and rules over the same `~/.agents` root `codex-home.js` already writes to; Guardian wired via a real `PreToolUse` hook (EGC-498 corrected -- confirmed against aaif-goose/goose's own docs and its PR #9304, merged 2026-05-19), format byte-for-byte identical to Claude Code's own settings.json, at a self-contained `~/.agents/plugins/egc-guardian/` root; no Token Crusher (allow/deny only, no rewrite capability documented) |
-| 15 | **Amazon Q Developer CLI** | 1 | `amazonq` | `.amazonq/rules/` (project, default target) + `.amazonq/cli-agents/egc-guardian.json` (project and home, id `amazonq-home`) | Rules, agents and commands: default scaffold (category preserved), same passthrough template the retired `gemini-project.js` adapter used. Guardian wired via a real `preToolUse` custom-agent hook (EGC-498 corrected -- confirmed against aws/amazon-q-developer-cli's own docs); not auto-activated by default due to an open upstream bug (aws/amazon-q-developer-cli#2922, `q_cli_default.json` override silently ignored) -- run `q settings chat.defaultAgent egc-guardian` once, or pass `--agent egc-guardian` per session; no Token Crusher |
-| 16 | **OpenHands** | 1 | `openhands` | `~/.agents/skills/<name>/SKILL.md` (shared with Codex/Goose, default target) + `.openhands/hooks.json` (project only, id `openhands-project`) | Skills, agents, commands and rules: discoverability-only adapter, same shape as Goose's. Guardian wired via a real `pre_tool_use` hook (EGC-498 corrected -- confirmed against OpenHands/docs' own hooks.mdx), project-scoped only (no global/home path documented); no Token Crusher |
-| 17 | **Aider** | 1 | `aider` | `.aider/skills/<name>.md` (project only, no home target) | Skills copied flat as single `.md` files (Aider does not scan a skill-folder convention); each file's path is merged into the `read:` list of `.aider.conf.yml` via a new `merge-yaml-read-list` operation kind, preserving any unrelated existing keys; install/repair/uninstall all wired |
-| 18 | **Cline** | 1 | `cline` | `.clinerules/` (project only, no home target) | Rules are flattened into Cline's project-level rules directory using collision-safe namespaced filenames; agents and commands as library folders under `.clinerules/` |
-| 19 | **Warp** | 1 | `warp` | `.warp/skills/<name>.md` + index in project root `AGENTS.md` (project only, no home target) | Warp only discovers a single root `AGENTS.md`/`WARP.md` file as project rules, not a directory of skill files -- confirmed a plain `AGENTS.md` is sufficient (Warp's own docs call it the default project rules file; `WARP.md` is legacy and only takes priority if both exist). Full skill content is copied flat to `.warp/skills/<name>.md` (read on demand); a short index (name + one-line description + path) is merged into a marked block inside `AGENTS.md` via a new `merge-markdown-skill-index` operation kind, since concatenating all 230+ skills (~2MB) into the always-loaded rules file would blow the context budget. Install/repair/uninstall all wired; uninstall never deletes `AGENTS.md` itself, only the EGC block |
-| 20 | **Qwen Code** | 1 | `qwen` | `.qwen/skills/<name>/SKILL.md` (project only, no home target) | Skills installed flat with the source category stripped; Qwen Code discovers project skills natively from `.qwen/skills/`; agents, commands and rules as library folders under `.qwen/`; no hook wiring |
+| 15 | **OpenHands** | 1 | `openhands` | `~/.agents/skills/<name>/SKILL.md` (shared with Codex/Goose, default target) + `.openhands/hooks.json` (project only, id `openhands-project`) | Skills, agents, commands and rules: discoverability-only adapter, same shape as Goose's. Guardian wired via a real `pre_tool_use` hook (EGC-498 corrected -- confirmed against OpenHands/docs' own hooks.mdx), project-scoped only (no global/home path documented); no Token Crusher |
+| 16 | **Aider** | 1 | `aider` | `.aider/skills/<name>.md` (project only, no home target) | Skills copied flat as single `.md` files (Aider does not scan a skill-folder convention); each file's path is merged into the `read:` list of `.aider.conf.yml` via a new `merge-yaml-read-list` operation kind, preserving any unrelated existing keys; install/repair/uninstall all wired |
+| 17 | **Cline** | 1 | `cline` | `.clinerules/` (project only, no home target) | Rules are flattened into Cline's project-level rules directory using collision-safe namespaced filenames; agents and commands as library folders under `.clinerules/` |
+| 18 | **Warp** | 1 | `warp` | `.warp/skills/<name>.md` + index in project root `AGENTS.md` (project only, no home target) | Warp only discovers a single root `AGENTS.md`/`WARP.md` file as project rules, not a directory of skill files -- confirmed a plain `AGENTS.md` is sufficient (Warp's own docs call it the default project rules file; `WARP.md` is legacy and only takes priority if both exist). Full skill content is copied flat to `.warp/skills/<name>.md` (read on demand); a short index (name + one-line description + path) is merged into a marked block inside `AGENTS.md` via a new `merge-markdown-skill-index` operation kind, since concatenating all 230+ skills (~2MB) into the always-loaded rules file would blow the context budget. Install/repair/uninstall all wired; uninstall never deletes `AGENTS.md` itself, only the EGC block |
+| 19 | **Qwen Code** | 1 | `qwen` | `.qwen/skills/<name>/SKILL.md` (project only, no home target) | Skills installed flat with the source category stripped; Qwen Code discovers project skills natively from `.qwen/skills/`; agents, commands and rules as library folders under `.qwen/`; no hook wiring |
 
 ## Prompt library per target
 
@@ -58,7 +57,7 @@ Every harness participates in the real-time session mesh through two always-on l
    - **Trae**: same hook at `.trae/hooks.json` (hook stdout becomes model context).
    - **Amp**: `agent.start` plugin at `.amp/plugins/` and `~/.config/amp/plugins/` returning a hidden context message.
    - **Kiro**: dedicated hook document at `.kiro/hooks/egc-mesh-notice.json` (project and home), `UserPromptSubmit` command action whose stdout becomes agent context (`--format=text`).
-   - **Not wired, by the host's own limitation** (documented upstream, revisited when vendors ship injection): Cursor (`beforeSubmitPrompt` observes/blocks but does not inject), OpenCode (no per-turn context event), Goose (turn-boundary hook stdout is discarded upstream), and the remaining harnesses whose surfaces expose no per-turn hook (Qwen, Windsurf, VS Code Copilot, Zed, Junie, Amazon Q, OpenHands, Aider, Cline, Warp, CodeBuddy). All of these still get layers 1 and 2.
+   - **Not wired, by the host's own limitation** (documented upstream, revisited when vendors ship injection): Cursor (`beforeSubmitPrompt` observes/blocks but does not inject), OpenCode (no per-turn context event), Goose (turn-boundary hook stdout is discarded upstream), and the remaining harnesses whose surfaces expose no per-turn hook (Qwen, Windsurf, VS Code Copilot, Zed, Junie, OpenHands, Aider, Cline, Warp, CodeBuddy). All of these still get layers 1 and 2.
 
 ## Why three tiers (history, not aspiration)
 
@@ -70,7 +69,7 @@ Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude
 
 ## What "supported" guarantees
 
-For all 20 harnesses, EGC guarantees:
+For all 19 harnesses, EGC guarantees:
 
 - The install path is documented above
 - MCP server registration (if the tool supports MCP)

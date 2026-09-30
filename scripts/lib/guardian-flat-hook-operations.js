@@ -2,7 +2,7 @@
 
 // Shared operation-list builder for hosts whose Guardian hook lives in a
 // flat {hooks: {<event>: [{matcher, command}]}} JSON config file (Kiro,
-// Amazon Q -- both confirmed against their own docs to use this exact
+// and the since-retired Amazon Q, both confirmed against their own docs to use this exact
 // shape). Every such host needs the identical four operations (copy the
 // shared Guardian scripts, copy its own translation adapter, copy the
 // shared stdin-JSON reader, merge the hook entry into its config file);

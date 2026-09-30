@@ -12,7 +12,7 @@ const { commandExists: defaultCommandExists } = require('../utils');
 // counts as detected when one of its own directories exists or one of its
 // commands is on PATH. Only targets whose default adapter installs under the
 // home directory take part: the bare install runs from whatever directory
-// the person happens to be in, so a project target (Amazon Q, Cursor) would
+// the person happens to be in, so a project target (Cursor, Trae) would
 // land in the wrong place.
 const HOME_TARGET_COMMANDS = Object.freeze({
   egc: ['gemini', 'agy'],

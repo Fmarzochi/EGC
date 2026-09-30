@@ -1,7 +1,7 @@
 /**
  * Tests for scripts/lib/adapter-stdin-json.js -- the shared truncation-aware
  * stdin JSON reader used by 12+ host adapters (Windsurf, Cursor, Junie,
- * Cline, Amazon Q, Goose, OpenHands).
+ * Cline, Goose, OpenHands).
  */
 
 const assert = require('assert');

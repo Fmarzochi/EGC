@@ -67,13 +67,13 @@ function runTests() {
   })) passed++; else failed++;
 
   if (test('never lists a target whose default adapter installs into a project: the bare install runs from any directory', () => {
-    const homeDir = makeHome(['.cursor', '.trae', '.claude', '.amazonq/rules', '.aws/amazonq']);
+    const homeDir = makeHome(['.cursor', '.trae', '.claude']);
     try {
       const targets = detectPromptLibraryTargets({ homeDir, commandExists: () => true });
       for (const target of targets) {
         assert.strictEqual(getInstallTargetAdapter(target).kind, 'home', `${target} resolves to a project adapter by default and must stay out`);
       }
-      for (const projectFirst of ['cursor', 'trae', 'amazonq', 'antigravity', 'codebuddy', 'qwen', 'cline', 'aider', 'warp']) {
+      for (const projectFirst of ['cursor', 'trae', 'antigravity', 'codebuddy', 'qwen', 'cline', 'aider', 'warp']) {
         assert.ok(!targets.includes(projectFirst), `${projectFirst} must not be installed from the bare path`);
       }
       assert.ok(targets.includes('claude'));

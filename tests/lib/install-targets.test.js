@@ -46,7 +46,7 @@ function runTests() {
     assert.ok(targets.includes('cursor'), 'Should include cursor target');
     assert.ok(targets.includes('antigravity'), 'Should include antigravity target');
     assert.ok(targets.includes('codex'), 'Should include codex target');
-    for (const retired of ['gemini', 'continue', 'roocode']) {
+    for (const retired of ['gemini', 'continue', 'roocode', 'amazonq']) {
       assert.ok(!targets.includes(retired), `${retired} was retired and must stay out of the registry`);
     }
     assert.ok(targets.includes('opencode'), 'Should include opencode target');
@@ -54,8 +54,8 @@ function runTests() {
     assert.ok(targets.includes('claude'), 'Should include claude target');
   }));
 
-  tally(test('retired targets are no longer registered (gemini, continue, roocode)', () => {
-    for (const retired of ['gemini', 'continue', 'continue-project', 'roocode', 'roocode-project']) {
+  tally(test('retired targets are no longer registered (gemini, continue, roocode, amazonq)', () => {
+    for (const retired of ['gemini', 'continue', 'continue-project', 'roocode', 'roocode-project', 'amazonq', 'amazonq-home', 'amazonq-project']) {
       assert.throws(
         () => getInstallTargetAdapter(retired),
         /Install target retired/,
@@ -74,10 +74,14 @@ function runTests() {
       path.join('scripts', 'lib', 'install-targets', 'roocode-project.js'),
       path.join('scripts', 'lib', 'continue-gateguard-hooks.js'),
       path.join('scripts', 'lib', 'roocode-guardian-denylist.js'),
+      path.join('scripts', 'lib', 'install-targets', 'amazonq-home.js'),
+      path.join('scripts', 'lib', 'install-targets', 'amazonq-project.js'),
+      path.join('scripts', 'hooks', 'amazonq-guardian-adapter.js'),
+      path.join('scripts', 'lib', 'amazonq-guardian-operations.js'),
     ]) {
       assert.ok(!fsModule.existsSync(path.join(repoRoot, gone)), `${gone} was retired with its product and is not kept for rollback`);
     }
-    for (const retired of ['gemini', 'gemini-project', 'continue', 'continue-home', 'continue-project', 'roocode', 'roocode-project']) {
+    for (const retired of ['gemini', 'gemini-project', 'continue', 'continue-home', 'continue-project', 'roocode', 'roocode-project', 'amazonq', 'amazonq-home', 'amazonq-project']) {
       assert.throws(() => getInstallTargetAdapter(retired), /Install target retired/, `${retired} is still recognized and explained without its file`);
     }
     const settingsHooks = require('../../scripts/lib/claude-settings-hooks');
@@ -3241,160 +3245,6 @@ function runTests() {
     assert.ok(targets.includes('goose'), 'Should include goose target');
   }));
 
-  tally(test('resolves amazonq adapter root to .amazonq/rules and install-state path', () => {
-    const adapter = getInstallTargetAdapter('amazonq');
-    const projectRoot = '/workspace/app';
-    const root = adapter.resolveRoot({ projectRoot });
-    const statePath = adapter.getInstallStatePath({ projectRoot });
-
-    assert.strictEqual(adapter.id, 'amazonq-project');
-    assert.strictEqual(adapter.target, 'amazonq');
-    assert.strictEqual(adapter.kind, 'project');
-    assert.strictEqual(root, path.join(projectRoot, '.amazonq', 'rules'));
-    assert.strictEqual(statePath, path.join(projectRoot, '.amazonq', 'rules', 'egc-install-state.json'));
-  }));
-
-  tally(test('amazonq adapter supports lookup by target and adapter id', () => {
-    const byTarget = getInstallTargetAdapter('amazonq');
-    const byId = getInstallTargetAdapter('amazonq-project');
-
-    assert.strictEqual(byTarget.id, 'amazonq-project');
-    assert.strictEqual(byId.id, 'amazonq-project');
-    assert.ok(byTarget.supports('amazonq'));
-    assert.ok(byTarget.supports('amazonq-project'));
-  }));
-
-  tally(test('amazonq adapter preserves category structure under .amazonq/rules/ (default scaffold, no flat stripping)', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const projectRoot = '/workspace/app';
-
-    const plan = planInstallTargetScaffold({
-      target: 'amazonq',
-      repoRoot,
-      projectRoot,
-      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
-    });
-
-    assert.strictEqual(plan.adapter.id, 'amazonq-project');
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
-        && operation.destinationPath === path.join(projectRoot, '.amazonq', 'rules', 'skills', 'workflow', 'tdd-workflow')
-      )),
-      'Should preserve skills/<category>/<name> structure under .amazonq/rules/, the default scaffold'
-    );
-  }));
-
-  tally(test('amazonq adapter does not double-nest a "rules" module path under .amazonq/rules/', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const projectRoot = '/workspace/app';
-
-    const plan = planInstallTargetScaffold({
-      target: 'amazonq',
-      repoRoot,
-      projectRoot,
-      modules: [{ id: 'rules-core', paths: ['rules'] }],
-    });
-
-    assert.strictEqual(plan.adapter.id, 'amazonq-project');
-    const op = plan.operations.find(o => normalizedRelativePath(o.sourceRelativePath) === 'rules');
-    assert.ok(op, 'should emit an operation for the rules module path');
-    assert.strictEqual(
-      op.destinationPath,
-      path.join(projectRoot, '.amazonq', 'rules'),
-      'rootSegments already ends in "rules": the module path must sync into that root directly, not .amazonq/rules/rules/'
-    );
-  }));
-
-  tally(test('amazonq-project adapter wires the Guardian hook as a sibling of rules/, not nested inside it (EGC-498 corrected)', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const projectRoot = '/workspace/app';
-
-    const plan = planInstallTargetScaffold({
-      target: 'amazonq',
-      repoRoot,
-      projectRoot,
-      modules: [],
-    });
-
-    assert.strictEqual(plan.adapter.id, 'amazonq-project');
-    const mergeOperation = plan.operations.find(o => o.destinationPath && o.destinationPath.endsWith('egc-guardian.json'));
-    assert.ok(mergeOperation, 'amazonq-project should register the Guardian agent-config merge operation');
-    assert.strictEqual(
-      mergeOperation.destinationPath,
-      path.join(projectRoot, '.amazonq', 'cli-agents', 'egc-guardian.json')
-    );
-  }));
-
-  tally(test('amazonq-home adapter resolves to ~/.aws/amazonq and wires ONLY the Guardian hook, no rules scaffold', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const homeDir = '/Users/example';
-
-    const adapter = getInstallTargetAdapter('amazonq-home');
-    assert.strictEqual(adapter.target, 'amazonq');
-    assert.strictEqual(adapter.kind, 'home');
-    assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, '.aws', 'amazonq'));
-
-    const plan = planInstallTargetScaffold({
-      target: 'amazonq-home',
-      repoRoot,
-      homeDir,
-      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
-    });
-
-    assert.ok(
-      !plan.operations.some(o => normalizedRelativePath(o.sourceRelativePath) === 'skills/workflow/tdd-workflow'),
-      'amazonq-home should not scaffold skills -- rules distribution stays project-scoped via amazonq-project.js'
-    );
-    const mergeOperation = plan.operations.find(o => o.destinationPath && o.destinationPath.endsWith('egc-guardian.json'));
-    assert.ok(mergeOperation, 'amazonq-home should register the Guardian agent-config merge operation');
-    assert.strictEqual(
-      mergeOperation.destinationPath,
-      path.join(homeDir, '.aws', 'amazonq', 'cli-agents', 'egc-guardian.json')
-    );
-  }));
-
-  tally(test('bare "amazonq" target still resolves to amazonq-project by default (amazonq-home is reached only by id)', () => {
-    const byTarget = getInstallTargetAdapter('amazonq');
-    assert.strictEqual(byTarget.id, 'amazonq-project');
-  }));
-
-  tally(test('openhands-project adapter resolves to .openhands and wires ONLY the Guardian hook, no skill scaffold (EGC-498 corrected)', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const projectRoot = '/workspace/app';
-
-    const adapter = getInstallTargetAdapter('openhands-project');
-    assert.strictEqual(adapter.target, 'openhands');
-    assert.strictEqual(adapter.kind, 'project');
-    assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.openhands'));
-
-    const plan = planInstallTargetScaffold({
-      target: 'openhands-project',
-      repoRoot,
-      projectRoot,
-      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
-    });
-
-    assert.ok(
-      !plan.operations.some(o => normalizedRelativePath(o.sourceRelativePath) === 'skills/workflow/tdd-workflow'),
-      'openhands-project should not scaffold skills -- skill discovery stays home-scoped via openhands-home.js'
-    );
-    const mergeOperation = plan.operations.find(o => o.destinationPath && o.destinationPath.endsWith('hooks.json'));
-    assert.ok(mergeOperation, 'openhands-project should register the Guardian hooks.json merge operation');
-    assert.strictEqual(mergeOperation.destinationPath, path.join(projectRoot, '.openhands', 'hooks.json'));
-  }));
-
-  tally(test('bare "openhands" target still resolves to openhands-home by default (openhands-project is reached only by id)', () => {
-    const byTarget = getInstallTargetAdapter('openhands');
-    assert.strictEqual(byTarget.id, 'openhands-home');
-  }));
-
-  tally(test('amazonq adapter is included in the full adapter list', () => {
-    const adapters = listInstallTargetAdapters();
-    const targets = adapters.map(a => a.target);
-    assert.ok(targets.includes('amazonq'), 'Should include amazonq target');
-  }));
-
   tally(test('resolves openhands adapter root to ~/.agents (shared with Codex/Goose) and its own install-state path', () => {
     const adapter = getInstallTargetAdapter('openhands');
     const homeDir = '/Users/example';
@@ -4273,7 +4123,7 @@ function runTests() {
 
   tally(test('identity paths .agents and AGENTS.md are foreign for targets that only take the agent files', () => {
     const { isForeignPlatformPath } = require('../../scripts/lib/install-targets/helpers');
-    for (const target of ['claude', 'windsurf', 'amp', 'copilot', 'junie', 'goose', 'openhands', 'opencode', 'qwen', 'cline', 'amazonq', 'kiro']) {
+    for (const target of ['claude', 'windsurf', 'amp', 'copilot', 'junie', 'goose', 'openhands', 'opencode', 'qwen', 'cline', 'kiro']) {
       assert.ok(isForeignPlatformPath('.agents', target), `.agents must not land on ${target}`);
       assert.ok(isForeignPlatformPath('AGENTS.md', target), `AGENTS.md must not land on ${target}`);
       assert.ok(!isForeignPlatformPath('agents', target), `agents/ must land on ${target}`);

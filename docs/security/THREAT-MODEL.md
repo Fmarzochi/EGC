@@ -8,7 +8,7 @@ EGC is a local-first AI memory and orchestration runtime. It has no network serv
 2. The MCP servers running as local stdio processes
 3. The GitHub Actions CI/CD pipeline
 4. Session hooks that process transcript data
-5. The 20 supported AI harnesses' own config/instruction files, which EGC writes to (see `docs/spec/integration-tiers.md`)
+5. The 19 supported AI harnesses' own config/instruction files, which EGC writes to (see `docs/spec/integration-tiers.md`)
 
 ## Actors
 
@@ -113,13 +113,13 @@ EGC is a local-first AI memory and orchestration runtime. It has no network serv
 |------|------|-----------|
 | `mcp/servers/egc-guardian/src/validator.ts` | High: gates all shell execution and file writes | Reviewed on every change; blocked by branch protection; the destructive-CLI test suite alone is 64 cases |
 | `mcp/servers/egc-guardian/src/index.ts` (bash hook dispatcher entry) | High: an error here used to fail open for every guard | Fails closed since v1.1.16 (#1019); regression-tested |
-| `install.sh` / `install.ps1` | Medium: modifies global AI tool configs across 20 harnesses | Verified in CI across Linux, macOS, Windows (full matrix: Node 20/22 x npm/yarn/bun) |
+| `install.sh` / `install.ps1` | Medium: modifies global AI tool configs across 19 harnesses | Verified in CI across Linux, macOS, Windows (full matrix: Node 20/22 x npm/yarn/bun) |
 | `scripts/hooks/session-end.js` | Medium: reads transcript, writes to disk | Bounded stdin (1MB cap); structured error handling |
 | `mcp/servers/egc-memory/src/index.ts` | Medium: reads/writes encrypted state files, arbitrates concurrent writes | No shell execution; pure file I/O; concurrent-access regression tests required by policy |
 
 ## Residual Risk
 
-EGC is a developer tool that runs with full local-user permissions by design. A compromised host machine, compromised AI tool, or compromised npm package could affect EGC. These risks are outside EGC's control and mitigated by the host environment. A harness that does not support hook wiring (several Tier 1 discoverability-only adapters: Goose, OpenHands, Amazon Q, Roo Code, Qwen Code) receives memory and skills but not command-level Guardian enforcement, since there is no hook API to attach to.
+EGC is a developer tool that runs with full local-user permissions by design. A compromised host machine, compromised AI tool, or compromised npm package could affect EGC. These risks are outside EGC's control and mitigated by the host environment. A harness that does not support hook wiring (several Tier 1 discoverability-only adapters: Goose, OpenHands, Qwen Code) receives memory and skills but not command-level Guardian enforcement, since there is no hook API to attach to.
 
 ## Review Date
 

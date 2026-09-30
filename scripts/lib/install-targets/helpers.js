@@ -181,7 +181,6 @@ const IDE_INSTALL_URLS = Object.freeze({
   trae:         { name: 'Trae',               url: 'https://www.trae.ai' },
  junie:         { name: 'Junie', url: 'https://www.jetbrains.com/junie/' },
   goose:        { name: 'Goose',              url: 'https://block.github.io/goose/' },
-  amazonq:      { name: 'Amazon Q Developer CLI', url: 'https://aws.amazon.com/q/developer/' },
   openhands:    { name: 'OpenHands',          url: 'https://docs.openhands.dev' },
   aider:        { name: 'Aider',              url: 'https://aider.chat' },
   warp:         { name: 'Warp',               url: 'https://www.warp.dev' },
@@ -394,11 +393,11 @@ function createFlatSkillPlanOperations(rawInput, adapter) {
 // supply on its own (preserve category structure, no flat stripping) --
 // factored out so every adapter that defines a custom planOperations (to
 // also emit its own extra operations alongside the default scaffold, e.g.
-// Amazon Q/Roo Code's Guardian wiring) can reuse it instead of each keeping
-// its own copy. Was duplicated verbatim across amazonq-project.js and the
-// since-retired roocode-project.js before this (SonarCloud new-code
-// duplication finding on PR #1122); consolidated here as the single source
-// of truth.
+// the Guardian wiring of the since-retired Amazon Q and Roo Code adapters)
+// can reuse it instead of each keeping its own copy. Was duplicated verbatim
+// across the since-retired amazonq-project.js and roocode-project.js before
+// this (SonarCloud new-code duplication finding on PR #1122); consolidated
+// here as the single source of truth.
 function createDefaultScaffoldOperations(input, adapter) {
   return normalizeModulesInput(input).flatMap(module => {
     const paths = Array.isArray(module.paths) ? module.paths : [];

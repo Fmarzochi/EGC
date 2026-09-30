@@ -21,8 +21,6 @@ const {
   inspectAmazonQGuardianHookFile,
   removeAmazonQGuardianHookFromFile,
   removeAmazonQHookEntry,
-  resolveAgentConfigPath,
-  resolveGuardianAdapterScriptDestination,
 } = require('../../scripts/lib/amazonq-guardian-hooks');
 
 function test(name, fn) {
@@ -37,37 +35,32 @@ function test(name, fn) {
   }
 }
 
+let passed = 0;
+let failed = 0;
+
+function tally(ok) {
+  if (ok) passed++; else failed++;
+}
+
 function runTests() {
   console.log('\n=== Testing amazonq-guardian-hooks ===\n');
 
-  let passed = 0;
-  let failed = 0;
-
-  if (test('resolveAgentConfigPath and resolveGuardianAdapterScriptDestination compute paths under targetRoot', () => {
-    const targetRoot = '/home/user/project/.amazonq';
-    assert.strictEqual(resolveAgentConfigPath(targetRoot), path.join(targetRoot, 'cli-agents', 'egc-guardian.json'));
-    assert.strictEqual(
-      resolveGuardianAdapterScriptDestination(targetRoot),
-      path.join(targetRoot, 'scripts', 'hooks', 'amazonq-guardian-adapter.js')
-    );
-  })) passed++; else failed++;
-
-  if (test('addAmazonQHookEntry appends a new entry on an empty config, tagged with the execute_bash matcher', () => {
+  tally(test('addAmazonQHookEntry appends a new entry on an empty config, tagged with the execute_bash matcher', () => {
     const { config, changed } = addAmazonQHookEntry({}, 'node adapter.js');
     assert.strictEqual(changed, true);
     assert.deepStrictEqual(config.hooks[AGENT_CONFIG_EVENT_KEY], [
       { matcher: EXECUTE_BASH_MATCHER, command: 'node adapter.js' },
     ]);
-  })) passed++; else failed++;
+  }));
 
-  if (test('addAmazonQHookEntry is idempotent (no duplicate on re-add)', () => {
+  tally(test('addAmazonQHookEntry is idempotent (no duplicate on re-add)', () => {
     const first = addAmazonQHookEntry({}, 'node adapter.js');
     const second = addAmazonQHookEntry(first.config, 'node adapter.js');
     assert.strictEqual(second.changed, false);
     assert.strictEqual(second.config.hooks[AGENT_CONFIG_EVENT_KEY].length, 1);
-  })) passed++; else failed++;
+  }));
 
-  if (test('addAmazonQHookEntry migrates a stale entry (same adapter basename, different path) in place', () => {
+  tally(test('addAmazonQHookEntry migrates a stale entry (same adapter basename, different path) in place', () => {
     const base = {
       hooks: {
         [AGENT_CONFIG_EVENT_KEY]: [{ matcher: EXECUTE_BASH_MATCHER, command: 'node /old/path/amazonq-guardian-adapter.js' }],
@@ -77,23 +70,23 @@ function runTests() {
     assert.strictEqual(changed, true);
     assert.strictEqual(config.hooks[AGENT_CONFIG_EVENT_KEY].length, 1, 'must migrate in place, not append a duplicate');
     assert.strictEqual(config.hooks[AGENT_CONFIG_EVENT_KEY][0].command, 'node /new/path/amazonq-guardian-adapter.js');
-  })) passed++; else failed++;
+  }));
 
-  if (test('addAmazonQHookEntry preserves a third-party command instead of migrating it', () => {
+  tally(test('addAmazonQHookEntry preserves a third-party command instead of migrating it', () => {
     const base = { hooks: { [AGENT_CONFIG_EVENT_KEY]: [{ matcher: EXECUTE_BASH_MATCHER, command: 'node .amazonq/hooks/other.js' }] } };
     const { config } = addAmazonQHookEntry(base, 'node adapter.js');
     assert.strictEqual(config.hooks[AGENT_CONFIG_EVENT_KEY].length, 2);
     assert.ok(config.hooks[AGENT_CONFIG_EVENT_KEY].some(e => e.command === 'node .amazonq/hooks/other.js'));
-  })) passed++; else failed++;
+  }));
 
-  if (test('addAmazonQHookEntry preserves unrelated top-level keys', () => {
+  tally(test('addAmazonQHookEntry preserves unrelated top-level keys', () => {
     const base = { name: 'egc-guardian', hooks: { postToolUse: [{ command: 'node log.js' }] } };
     const { config } = addAmazonQHookEntry(base, 'node adapter.js');
     assert.strictEqual(config.name, 'egc-guardian');
     assert.deepStrictEqual(config.hooks.postToolUse, [{ command: 'node log.js' }]);
-  })) passed++; else failed++;
+  }));
 
-  if (test('applyAmazonQGuardianHookToFile writes a fresh agent config and is idempotent', () => {
+  tally(test('applyAmazonQGuardianHookToFile writes a fresh agent config and is idempotent', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amazonq-hooks-apply-'));
     const agentConfigPath = path.join(tempDir, 'egc-guardian.json');
     try {
@@ -109,9 +102,9 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('applyAmazonQGuardianHookToFile preserves a hand-written agent config on disk', () => {
+  tally(test('applyAmazonQGuardianHookToFile preserves a hand-written agent config on disk', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amazonq-hooks-preserve-'));
     const agentConfigPath = path.join(tempDir, 'egc-guardian.json');
     try {
@@ -130,9 +123,9 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeAmazonQHookEntry drops only the EGC entry, keeps third-party hooks and other events', () => {
+  tally(test('removeAmazonQHookEntry drops only the EGC entry, keeps third-party hooks and other events', () => {
     const base = {
       hooks: {
         [AGENT_CONFIG_EVENT_KEY]: [
@@ -148,20 +141,20 @@ function runTests() {
       { matcher: EXECUTE_BASH_MATCHER, command: 'node .amazonq/hooks/other.js' },
     ]);
     assert.deepStrictEqual(config.hooks.postToolUse, [{ command: 'node log.js' }]);
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeAmazonQHookEntry deletes the event key entirely once empty', () => {
+  tally(test('removeAmazonQHookEntry deletes the event key entirely once empty', () => {
     const base = { hooks: { [AGENT_CONFIG_EVENT_KEY]: [{ matcher: EXECUTE_BASH_MATCHER, command: 'node adapter.js' }] } };
     const { config } = removeAmazonQHookEntry(base, 'node adapter.js');
     assert.strictEqual(AGENT_CONFIG_EVENT_KEY in config.hooks, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeAmazonQGuardianHookFromFile on a missing file is a no-op', () => {
+  tally(test('removeAmazonQGuardianHookFromFile on a missing file is a no-op', () => {
     const result = removeAmazonQGuardianHookFromFile('/nonexistent/egc-guardian.json', '/abs/adapter.js');
     assert.strictEqual(result.changed, false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('removeAmazonQGuardianHookFromFile removes the entry from an existing file', () => {
+  tally(test('removeAmazonQGuardianHookFromFile removes the entry from an existing file', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amazonq-hooks-remove-'));
     const agentConfigPath = path.join(tempDir, 'egc-guardian.json');
     try {
@@ -173,9 +166,9 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('inspectAmazonQGuardianHookFile reports ok when present, drifted when absent', () => {
+  tally(test('inspectAmazonQGuardianHookFile reports ok when present, drifted when absent', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amazonq-hooks-inspect-'));
     const agentConfigPath = path.join(tempDir, 'egc-guardian.json');
     try {
@@ -185,9 +178,9 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('inspectAmazonQGuardianHookFile reports drifted on invalid JSON instead of throwing', () => {
+  tally(test('inspectAmazonQGuardianHookFile reports drifted on invalid JSON instead of throwing', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'amazonq-hooks-inspect-invalid-'));
     const agentConfigPath = path.join(tempDir, 'egc-guardian.json');
     try {
@@ -196,7 +189,7 @@ function runTests() {
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);
