@@ -395,9 +395,10 @@ function createFlatSkillPlanOperations(rawInput, adapter) {
 // factored out so every adapter that defines a custom planOperations (to
 // also emit its own extra operations alongside the default scaffold, e.g.
 // Amazon Q/Roo Code's Guardian wiring) can reuse it instead of each keeping
-// its own copy. Was duplicated verbatim across amazonq-project.js and
-// roocode-project.js before this (SonarCloud new-code duplication finding
-// on PR #1122); consolidated here as the single source of truth.
+// its own copy. Was duplicated verbatim across amazonq-project.js and the
+// since-retired roocode-project.js before this (SonarCloud new-code
+// duplication finding on PR #1122); consolidated here as the single source
+// of truth.
 function createDefaultScaffoldOperations(input, adapter) {
   return normalizeModulesInput(input).flatMap(module => {
     const paths = Array.isArray(module.paths) ? module.paths : [];

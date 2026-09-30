@@ -28,12 +28,13 @@ const junieHome = require('./junie-home');
 const junieProject = require('./junie-project');
 const warpProject = require('./warp-project');
 
-// Retired adapters (files kept for history and trivial rollback, never
-// registered): gemini-project (standalone Gemini CLI stopped serving
-// 2026-06-18; its successor Antigravity reads the shared ~/.gemini home,
-// which egc-home still owns), continue-home/continue-project (Continue.dev
-// shut down after the Cursor acqui-hire, repo read-only since 2026-06),
-// roocode-project (project archived upstream since 2026-05-15).
+// Retired adapters (their files left the tree on 2026-09-30; the ids stay
+// recognized below so every command explains the retirement): gemini-project
+// (standalone Gemini CLI stopped serving 2026-06-18; its successor
+// Antigravity reads the shared ~/.gemini home, which egc-home still owns),
+// continue-home/continue-project (Continue.dev shut down after the Cursor
+// acqui-hire, repo read-only since 2026-06), roocode-project (project
+// archived upstream since 2026-05-15).
 const ADAPTERS = Object.freeze([
   egcHome,
   claudeCodeHome,

@@ -1,24 +1,21 @@
 'use strict';
 
-// Roo Code (RooCodeInc/Roo-Code, a VS Code extension) has no external
-// hook API: confirmed against its own docs (docs.roocode.com/features/
-// auto-approving-actions) and issue #12025 ("Run hook command on events
-// requiring prompts"), which is an open feature request, not shipped.
-// There is no way to shell out to pre-bash-guardian-validate.js the way
-// every other host here does -- so this is not a Guardian adapter, it is
-// the closest real substitute: seeding Roo Code's own native
-// `roo-cline.deniedCommands` setting (docs.roocode.com/features/
-// auto-approving-actions) with the same unconditionally-dangerous base
-// commands Guardian itself hard-blocks regardless of arguments (see
-// `DANGEROUS` in mcp/servers/egc-guardian/src/validator.ts). Context-aware
-// checks (docker --privileged, gh api -X DELETE, prisma db execute, ...)
-// cannot be replicated this way: Roo Code's list is plain command-prefix
-// matching ("longest-prefix wins" per its docs), not a script that can
-// inspect arguments. This is a real but partial mitigation, not parity.
+// The `roo-cline.deniedCommands` entries EGC used to seed into a workspace's
+// own .vscode/settings.json for Roo Code, a VS Code extension with no
+// external hook API (its docs.roocode.com/features/auto-approving-actions
+// page documents the field under a VS Code settings key, and issue #12025,
+// "Run hook command on events requiring prompts", is an open request): the
+// closest substitute for the Guardian was to seed that list with the base
+// commands the Guardian hard-blocks regardless of arguments (`DANGEROUS` in
+// mcp/servers/egc-guardian/src/validator.ts).
 //
-// Settings live in the workspace's own .vscode/settings.json -- confirmed
-// via the same docs page, which documents the field directly under a VS
-// Code settings key, not a Roo Code-specific config file.
+// The Roo Code adapter was retired on 2026-08-16 (project archived
+// upstream) and nothing plans this merge any more. What stays here is what
+// the installs of that adapter recorded as a `roocode-denied-commands`
+// hook operation: claude-settings-hooks.js dispatches it to these functions
+// so `egc doctor` still reports it, `egc repair` still restores it and
+// `egc uninstall` still removes exactly the entries EGC added, never the
+// ones the person had.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -137,10 +134,6 @@ function writeSettingsFile(settingsPath, settings) {
   fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
 }
 
-function resolveVsCodeSettingsPath(projectRoot) {
-  return path.join(projectRoot, '.vscode', 'settings.json');
-}
-
 // Union, never replace: a user's own deniedCommands entries (if any) are
 // always preserved. Only the DANGEROUS_COMMANDS missing from the current
 // array are appended, in stable order, so repeat installs are idempotent.
@@ -244,5 +237,4 @@ module.exports = {
   inspectRoocodeDenylistFile,
   removeRoocodeDenylistEntries,
   removeRoocodeDenylistFromFile,
-  resolveVsCodeSettingsPath,
 };

@@ -64,6 +64,28 @@ function runTests() {
     }
   }));
 
+  tally(test('the retired adapters left the tree; their ids stay recognized and the Roo Code seeding factory is gone', () => {
+    const fsModule = require('fs');
+    const repoRoot = path.join(__dirname, '..', '..');
+    for (const gone of [
+      path.join('scripts', 'lib', 'install-targets', 'gemini-project.js'),
+      path.join('scripts', 'lib', 'install-targets', 'continue-home.js'),
+      path.join('scripts', 'lib', 'install-targets', 'continue-project.js'),
+      path.join('scripts', 'lib', 'install-targets', 'roocode-project.js'),
+      path.join('scripts', 'lib', 'continue-gateguard-hooks.js'),
+      path.join('scripts', 'lib', 'roocode-guardian-denylist.js'),
+    ]) {
+      assert.ok(!fsModule.existsSync(path.join(repoRoot, gone)), `${gone} was retired with its product and is not kept for rollback`);
+    }
+    for (const retired of ['gemini', 'gemini-project', 'continue', 'continue-home', 'continue-project', 'roocode', 'roocode-project']) {
+      assert.throws(() => getInstallTargetAdapter(retired), /Install target retired/, `${retired} is still recognized and explained without its file`);
+    }
+    const settingsHooks = require('../../scripts/lib/claude-settings-hooks');
+    assert.strictEqual(settingsHooks.createRoocodeDenylistMergeOperation, undefined, 'nothing plans the Roo Code denylist any more');
+    const handlers = settingsHooks.resolveHookOperationHandlers('roocode-denied-commands');
+    assert.ok(typeof handlers.remove === 'function' && typeof handlers.inspect === 'function', 'what an old install recorded is still inspected and removed');
+  }));
+
   tally(test('resolves cursor adapter root and install-state path from project root', () => {
     const adapter = getInstallTargetAdapter('cursor');
     const projectRoot = '/workspace/app';
@@ -3033,7 +3055,7 @@ function runTests() {
         normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
         && operation.destinationPath === path.join(projectRoot, '.trae', 'skills', 'workflow', 'tdd-workflow')
       )),
-      'Should preserve skills/<category>/<name> structure under .trae/skills/, same default scaffold as gemini-project'
+      'Should preserve skills/<category>/<name> structure under .trae/skills/, the default scaffold'
     );
   }));
 
@@ -3259,7 +3281,7 @@ function runTests() {
         normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
         && operation.destinationPath === path.join(projectRoot, '.amazonq', 'rules', 'skills', 'workflow', 'tdd-workflow')
       )),
-      'Should preserve skills/<category>/<name> structure under .amazonq/rules/, same default scaffold as gemini-project'
+      'Should preserve skills/<category>/<name> structure under .amazonq/rules/, the default scaffold'
     );
   }));
 

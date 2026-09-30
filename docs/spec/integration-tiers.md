@@ -16,7 +16,7 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 
 ## The 20 harnesses
 
-> Retired on 2026-08-16, after each vendor's own lifecycle decision: Gemini CLI (standalone product stopped serving 2026-06-18; Antigravity succeeded it on the same home directory), Continue.dev (shut down after the Cursor acqui-hire, repository read-only), and Roo Code (archived upstream since 2026-05-15). Their adapter files remain in the tree, unregistered, for history and trivial rollback.
+> Retired on 2026-08-16, after each vendor's own lifecycle decision: Gemini CLI (standalone product stopped serving 2026-06-18; Antigravity succeeded it on the same home directory), Continue.dev (shut down after the Cursor acqui-hire, repository read-only), and Roo Code (archived upstream since 2026-05-15). Their adapter files left the tree on 2026-09-30; the ids stay recognized so `egc install`, `egc doctor`, `egc repair` and `egc auto-update` explain the retirement instead of calling them unknown, and what those installs wrote is still cleaned by `egc uninstall`.
 
 | # | Tool | Tier | Target id | Install path | Notes |
 |---|------|------|-----------|--------------|-------|

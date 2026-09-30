@@ -66,7 +66,7 @@ const {
   applyRoocodeDenylistToFile,
   inspectRoocodeDenylistFile,
   removeRoocodeDenylistFromFile,
-} = require('./roocode-guardian-denylist');
+} = require('./vscode-denied-commands');
 
 const SESSION_START_EVENT = 'SessionStart';
 const STOP_EVENT = 'Stop';
@@ -1007,30 +1007,6 @@ function createAdapterStdinJsonCopyOperation(createRemappedOperation, targetRoot
   );
 }
 
-// Roo Code has no external hook API to shell out to (see
-// roocode-guardian-denylist.js's own header for the confirmed evidence), so
-// unlike every other host's merge operation this has no script to copy: it
-// only ever merges roo-cline.deniedCommands into the workspace's own
-// .vscode/settings.json. sourceRelativePath points at the module driving
-// this merge (not a file that gets copied anywhere) purely so install-state
-// tracking has a stable, real identifier for this operation, consistent
-// with every other managed operation in this system.
-const ROOCODE_DENYLIST_MODULE_ID = 'egc-roocode-guardian-denylist';
-const ROOCODE_DENYLIST_SOURCE_RELATIVE_PATH = 'scripts/lib/roocode-guardian-denylist.js';
-
-function createRoocodeDenylistMergeOperation(settingsPath) {
-  return {
-    kind: HOOK_OPERATION_KIND,
-    moduleId: ROOCODE_DENYLIST_MODULE_ID,
-    sourceRelativePath: ROOCODE_DENYLIST_SOURCE_RELATIVE_PATH,
-    destinationPath: settingsPath,
-    strategy: HOOK_OPERATION_KIND,
-    ownership: 'managed',
-    scaffoldOnly: false,
-    hookEvent: ROOCODE_DENYLIST_TAG,
-  };
-}
-
 // PreCompact -> egc-memory-save hook: closes EGC-495 (no mechanism re-injected
 // state after a context compaction). egc-memory-save.js writes a guaranteed
 // on-disk snapshot (writeSnapshotToDisk, no AI cooperation required) and
@@ -1254,6 +1230,10 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeAntigravityGuardianHookFromFile(operation.destinationPath),
     inspect: operation => inspectAntigravityGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
   },
+  // Recorded by installs of the retired Roo Code adapter (roo-cline.deniedCommands
+  // seeded into a workspace's .vscode/settings.json): nothing plans it any
+  // more, and the handlers stay so doctor, repair and uninstall still handle
+  // what those installs wrote.
   [ROOCODE_DENYLIST_TAG]: {
     apply: operation => applyRoocodeDenylistToFile(operation.destinationPath),
     remove: operation => removeRoocodeDenylistFromFile(operation.destinationPath),
@@ -1286,7 +1266,6 @@ module.exports = {
   BASH_DISPATCHER_HOOK_MODULE_ID,
   BASH_DISPATCHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   BASH_GUARDIAN_HOOK_MODULE_ID,
-  createRoocodeDenylistMergeOperation,
   BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
