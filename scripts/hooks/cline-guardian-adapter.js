@@ -47,7 +47,7 @@ function isPlainObject(value) {
 }
 
 function shellQuote(word) {
-  return SHELL_SAFE_WORD.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
+  return SHELL_SAFE_WORD.test(word) ? word : `'${word.replaceAll("'", String.raw`'\''`)}'`;
 }
 
 // The readings of one command the Guardian judges, or null when it cannot be
