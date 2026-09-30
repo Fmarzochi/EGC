@@ -168,6 +168,13 @@ function runTests() {
     }
   }));
 
+  tally(test('resolveHarnessDirFromEnv: the Claude Code shell (CLAUDECODE) is Claude Code, and the Gemini variables still come first', () => {
+    const home = path.join(path.sep, 'home', 'someone');
+    assert.strictEqual(utils.resolveHarnessDirFromEnv({ CLAUDECODE: '1' }, home), path.join(home, '.claude'));
+    assert.strictEqual(utils.resolveHarnessDirFromEnv({ CLAUDECODE: '1', GEMINI_PROJECT_DIR: '/work' }, home), path.join(home, '.gemini'));
+    assert.strictEqual(utils.resolveHarnessDirFromEnv({}, home), null);
+  }));
+
   tally(test('resolveEGCDir(home) applies the same tiers as getEGCDir() to an explicit home, without touching the process home', () => {
     const originalHome = process.env.HOME;
     const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-resolveegcdir-test-'));

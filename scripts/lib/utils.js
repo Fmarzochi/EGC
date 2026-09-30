@@ -43,10 +43,11 @@ function getClaudeDir() {
 // Tier 1: harness-specific env vars injected at hook time. The Gemini
 // variables come first: the retired Gemini CLI set the Claude ones too as a
 // compat alias, and Antigravity inherited its hook loop and its variables
-// (see antigravity-settings-hooks.js).
+// (see antigravity-settings-hooks.js). Claude Code sets CLAUDECODE in the
+// shell its Bash tool runs, where CLAUDE_PROJECT_DIR is absent.
 function resolveHarnessDirFromEnv(env, home) {
   if (env.GEMINI_PROJECT_DIR || env.GEMINI_PLUGIN_ROOT) return path.join(home, '.gemini');
-  if (env.CLAUDE_PROJECT_DIR || env.CLAUDE_PLUGIN_ROOT) return path.join(home, '.claude');
+  if (env.CLAUDECODE || env.CLAUDE_PROJECT_DIR || env.CLAUDE_PLUGIN_ROOT) return path.join(home, '.claude');
   if (env.CODEBUDDY_PROJECT_DIR || env.CODEBUDDY_PLUGIN_ROOT) return path.join(home, '.codebuddy');
   if (env.VSCODE_AGENT || env.GITHUB_COPILOT_API_TOKEN) return path.join(home, '.github');
   if (env.KIRO_HOOK_FILE || env.KIRO_FILE_PATH) return path.join(home, '.kiro');

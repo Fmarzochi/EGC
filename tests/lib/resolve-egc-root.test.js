@@ -1,349 +1,224 @@
 /**
  * Tests for scripts/lib/resolve-egc-root.js
  *
- * Covers the EGC root resolution fallback chain:
- *   1. GEMINI_PLUGIN_ROOT env var
- *   2. Standard install (~/.gemini/)
- *   3. Exact legacy plugin roots under ~/.gemini/plugins/
- *   4. Plugin cache auto-detection
- *   5. Fallback to ~/.gemini/
+ * Every scenario runs twice: through resolveEGCRoot() and through the inline
+ * copy that commands and hooks/hooks.json embed, so the two cannot drift.
+ * Resolution order:
+ *   1. EGC_PLUGIN_ROOT / ECC_PLUGIN_ROOT / GEMINI_PLUGIN_ROOT (set by EGC's own runners)
+ *   2. CLAUDE_PLUGIN_ROOT, EGC_DIR, then the directory of the tool in use, when they hold the probe
+ *   3. The Claude Code plugin under ~/.claude/plugins, then its marketplace cache
+ *   4. The npm package, found from the egc executable on PATH
+ *   5. The tool directories EGC installs its scripts into
+ *   6. Fallback to ~/.egc
  */
 
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const CURRENT_PACKAGE_VERSION = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8')
-).version;
+const { execFileSync } = require('child_process');
 
-const { resolveEccRoot, INLINE_RESOLVE } = require('../../scripts/lib/resolve-egc-root');
+const { resolveEGCRoot, resolveEccRoot, INLINE_RESOLVE, INLINE_RESOLVE_FN } = require('../../scripts/lib/resolve-egc-root');
+
+const UTILS_PROBE = path.join('scripts', 'lib', 'utils.js');
+const HEALTH_PROBE = path.join('scripts', 'skills-health.js');
 
 function test(name, fn) {
   try {
     fn();
-    console.log(`  \u2713 ${name}`);
+    console.log(`  ✓ ${name}`);
     return true;
   } catch (error) {
-    console.log(`  \u2717 ${name}`);
+    console.log(`  ✗ ${name}`);
     console.log(`    Error: ${error.message}`);
     return false;
   }
 }
 
-function createTempDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-root-test-'));
+function withTempDir(fn) {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-root-test-')));
+  try {
+    return fn(dir);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
-function setupStandardInstall(homeDir) {
-  const claudeDir = path.join(homeDir, '.gemini');
-  const scriptDir = path.join(claudeDir, 'scripts', 'lib');
-  fs.mkdirSync(scriptDir, { recursive: true });
-  fs.writeFileSync(path.join(scriptDir, 'utils.js'), '// stub');
-  return claudeDir;
+function withScripts(dir, probes = [UTILS_PROBE]) {
+  for (const probe of probes) {
+    fs.mkdirSync(path.dirname(path.join(dir, probe)), { recursive: true });
+    fs.writeFileSync(path.join(dir, probe), '// stub');
+  }
+  return dir;
 }
 
-function setupLegacyPluginInstall(homeDir, segments) {
-  const legacyDir = path.join(homeDir, '.gemini', 'plugins', ...segments);
-  const scriptDir = path.join(legacyDir, 'scripts', 'lib');
-  fs.mkdirSync(scriptDir, { recursive: true });
-  fs.writeFileSync(path.join(scriptDir, 'utils.js'), '// stub');
-  return legacyDir;
+function packageOnPath(base, probes = [UTILS_PROBE]) {
+  const root = withScripts(path.join(base, 'npm', 'lib', 'node_modules', '@egchq', 'egc'), [...probes, path.join('scripts', 'egc.js')]);
+  const binDir = path.join(base, 'npm', 'bin');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.symlinkSync(path.join(root, 'scripts', 'egc.js'), path.join(binDir, 'egc'));
+  return { root, binDir };
 }
-function setupPluginCache(homeDir, pluginSlug, orgName, version) {
-  const cacheDir = path.join(
-    homeDir, '.gemini', 'plugins', 'cache',
-    pluginSlug, orgName, version
-  );
-  const scriptDir = path.join(cacheDir, 'scripts', 'lib');
-  fs.mkdirSync(scriptDir, { recursive: true });
-  fs.writeFileSync(path.join(scriptDir, 'utils.js'), '// stub');
-  return cacheDir;
+
+function runInline(home, env, probe) {
+  return execFileSync(process.execPath, ['-e', `console.log(${INLINE_RESOLVE_FN}(${JSON.stringify(probe)}))`], {
+    env: { HOME: home, USERPROFILE: home, PATH: '', ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}), ...env },
+    encoding: 'utf8',
+  }).trim();
+}
+
+function resolvesTo(home, env, expected, probe = UTILS_PROBE) {
+  assert.strictEqual(resolveEGCRoot({ homeDir: home, env, probe }), expected, 'module');
+  assert.strictEqual(runInline(home, env, probe), expected, 'inline');
+}
+
+function explicitRootCases() {
+  return [
+    test('EGC_PLUGIN_ROOT is returned as given, trimmed', () => withTempDir(home => {
+      resolvesTo(home, { EGC_PLUGIN_ROOT: '  /custom/plugin/root  ' }, '/custom/plugin/root');
+    })),
+    test('GEMINI_PLUGIN_ROOT, which EGC runners set for their children, is returned as given', () => withTempDir(home => {
+      resolvesTo(home, { GEMINI_PLUGIN_ROOT: '/runner/root' }, '/runner/root');
+    })),
+    test('an empty or blank explicit root is skipped', () => withTempDir(home => {
+      const claude = withScripts(path.join(home, '.claude'));
+      resolvesTo(home, { EGC_PLUGIN_ROOT: '   ', CLAUDECODE: '1' }, claude);
+    })),
+    test('CLAUDE_PLUGIN_ROOT counts only when it holds EGC scripts', () => withTempDir(home => {
+      const plugin = withScripts(path.join(home, 'plugin'));
+      resolvesTo(home, { CLAUDE_PLUGIN_ROOT: plugin }, plugin);
+      resolvesTo(home, { CLAUDE_PLUGIN_ROOT: path.join(home, 'another-plugin') }, path.join(home, '.egc'));
+    })),
+    test('EGC_DIR counts when it holds EGC scripts', () => withTempDir(home => {
+      const chosen = withScripts(path.join(home, 'chosen'));
+      withScripts(path.join(home, '.claude'));
+      resolvesTo(home, { EGC_DIR: chosen, CLAUDECODE: '1' }, chosen);
+    })),
+  ];
+}
+
+function toolInUseCases() {
+  return [
+    test('the Claude Code shell finds ~/.claude before any other tool directory', () => withTempDir(home => {
+      const claude = withScripts(path.join(home, '.claude'));
+      withScripts(path.join(home, '.gemini'));
+      resolvesTo(home, { CLAUDECODE: '1' }, claude);
+    })),
+    test('Antigravity hooks find ~/.gemini', () => withTempDir(home => {
+      withScripts(path.join(home, '.claude'));
+      const gemini = withScripts(path.join(home, '.gemini'));
+      resolvesTo(home, { GEMINI_PROJECT_DIR: '/work' }, gemini);
+    })),
+    test('the tool in use comes before the npm package', () => withTempDir(home => {
+      const claude = withScripts(path.join(home, '.claude'));
+      const { binDir } = packageOnPath(home);
+      resolvesTo(home, { CLAUDECODE: '1', PATH: binDir }, claude);
+    })),
+    test('a probe the tool directory lacks is found in the npm package', () => withTempDir(home => {
+      withScripts(path.join(home, '.claude'));
+      const { root, binDir } = packageOnPath(home, [UTILS_PROBE, HEALTH_PROBE]);
+      resolvesTo(home, { CLAUDECODE: '1', PATH: binDir }, root, HEALTH_PROBE);
+    })),
+  ];
+}
+
+function pluginCases() {
+  return [
+    ...[['egc'], ['egc@egc'], ['marketplace', 'egc']].map(segments =>
+      test(`finds the Claude Code plugin at ~/.claude/plugins/${segments.join('/')}`, () => withTempDir(home => {
+        const plugin = withScripts(path.join(home, '.claude', 'plugins', ...segments));
+        resolvesTo(home, {}, plugin);
+      }))),
+    test('finds the Claude Code marketplace cache', () => withTempDir(home => {
+      const cached = withScripts(path.join(home, '.claude', 'plugins', 'cache', 'egc', 'egc', '1.1.22'));
+      resolvesTo(home, {}, cached);
+    })),
+    test('an installed plugin comes before the cache', () => withTempDir(home => {
+      const plugin = withScripts(path.join(home, '.claude', 'plugins', 'marketplace', 'egc'));
+      withScripts(path.join(home, '.claude', 'plugins', 'cache', 'egc', 'egc', '1.1.22'));
+      resolvesTo(home, {}, plugin);
+    })),
+    ...[['everything-gemini'], ['everything-gemini@everything-gemini'], ['marketplace', 'everything-gemini']].map(segments =>
+      test(`keeps the legacy identifier resolvable at ~/.claude/plugins/${segments.join('/')} (docs/spec compatibility commitment)`, () => withTempDir(home => {
+        const plugin = withScripts(path.join(home, '.claude', 'plugins', ...segments));
+        resolvesTo(home, {}, plugin);
+      }))),
+    test('finds the legacy marketplace cache even when the current one is absent', () => withTempDir(home => {
+      const cached = withScripts(path.join(home, '.claude', 'plugins', 'cache', 'everything-gemini', 'everything-gemini', '1.0.0'));
+      resolvesTo(home, {}, cached);
+    })),
+    test('the retired Gemini CLI plugin tree is not searched', () => withTempDir(home => {
+      withScripts(path.join(home, '.gemini', 'plugins', 'everything-gemini'));
+      resolvesTo(home, {}, path.join(home, '.egc'));
+    })),
+  ];
+}
+
+function packageCases() {
+  const cases = [
+    test('finds the npm package through node_modules next to a PATH entry (Windows layout)', () => withTempDir(home => {
+      const prefix = path.join(home, 'prefix');
+      const root = withScripts(path.join(prefix, 'node_modules', '@egchq', 'egc'));
+      resolvesTo(home, { PATH: prefix }, root);
+    })),
+  ];
+  if (process.platform !== 'win32') {
+    cases.push(
+      test('finds the npm package through the egc executable on PATH', () => withTempDir(home => {
+        const { root, binDir } = packageOnPath(home);
+        resolvesTo(home, { PATH: binDir }, root);
+      })),
+      test('with no tool in use, the npm package comes before the tool directories', () => withTempDir(home => {
+        withScripts(path.join(home, '.gemini'));
+        const { root, binDir } = packageOnPath(home);
+        resolvesTo(home, { PATH: binDir }, root);
+      })),
+    );
+  }
+  return cases;
+}
+
+function fallbackCases() {
+  return [
+    test('with nothing else, the first tool directory holding the scripts', () => withTempDir(home => {
+      const windsurf = withScripts(path.join(home, '.codeium', 'windsurf'));
+      resolvesTo(home, {}, windsurf);
+    })),
+    test('with nothing at all, ~/.egc', () => withTempDir(home => {
+      resolvesTo(home, {}, path.join(home, '.egc'));
+    })),
+    test('resolveEccRoot stays an alias', () => withTempDir(home => {
+      const claude = withScripts(path.join(home, '.claude'));
+      assert.strictEqual(resolveEccRoot({ homeDir: home, env: { CLAUDECODE: '1' } }), claude);
+    })),
+  ];
+}
+
+function inlineShapeCases() {
+  return [
+    test('INLINE_RESOLVE is the inline function applied to scripts/lib/utils.js', () => {
+      assert.strictEqual(INLINE_RESOLVE, `${INLINE_RESOLVE_FN}('scripts/lib/utils.js')`);
+    }),
+    test('the inline copy embeds unchanged in a double-quoted shell string and in JSON', () => {
+      for (const character of ['"', '$', '`', '!', '%', '\\', '\n']) {
+        assert.ok(!INLINE_RESOLVE_FN.includes(character), `must not contain ${JSON.stringify(character)}`);
+      }
+    }),
+  ];
 }
 
 function runTests() {
   console.log('\n=== Testing resolve-egc-root.js ===\n');
-
-  let passed = 0;
-  let failed = 0;
-  const tally = ok => (ok ? passed++ : failed++);
-
-  // ─── Env Var Priority ───
-
-  tally(test('returns GEMINI_PLUGIN_ROOT when set', () => {
-    const result = resolveEccRoot({ envRoot: '/custom/plugin/root' });
-    assert.strictEqual(result, '/custom/plugin/root');
-  }));
-
-  tally(test('trims whitespace from GEMINI_PLUGIN_ROOT', () => {
-    const result = resolveEccRoot({ envRoot: '  /trimmed/root  ' });
-    assert.strictEqual(result, '/trimmed/root');
-  }));
-
-  tally(test('skips empty GEMINI_PLUGIN_ROOT', () => {
-    const homeDir = createTempDir();
-    try {
-      setupStandardInstall(homeDir);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, path.join(homeDir, '.gemini'));
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('skips whitespace-only GEMINI_PLUGIN_ROOT', () => {
-    const homeDir = createTempDir();
-    try {
-      setupStandardInstall(homeDir);
-      const result = resolveEccRoot({ envRoot: '   ', homeDir });
-      assert.strictEqual(result, path.join(homeDir, '.gemini'));
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  // ─── Standard Install ───
-
-  tally(test('finds standard install at ~/.gemini/', () => {
-    const homeDir = createTempDir();
-    try {
-      setupStandardInstall(homeDir);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, path.join(homeDir, '.gemini'));
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('finds current plugin install at ~/.gemini/plugins/egc', () => {
-    const homeDir = createTempDir();
-    try {
-      const expected = setupLegacyPluginInstall(homeDir, ['egc']);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, expected);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('finds current plugin install at ~/.gemini/plugins/egc@egc', () => {
-    const homeDir = createTempDir();
-    try {
-      const expected = setupLegacyPluginInstall(homeDir, ['egc@egc']);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, expected);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('finds exact legacy plugin install at ~/.gemini/plugins/everything-gemini', () => {
-    const homeDir = createTempDir();
-    try {
-      const expected = setupLegacyPluginInstall(homeDir, ['everything-gemini']);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, expected);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('finds exact legacy plugin install at ~/.gemini/plugins/egc@egc', () => {
-    const homeDir = createTempDir();
-    try {
-      const expected = setupLegacyPluginInstall(homeDir, ['egc@egc']);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, expected);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('finds marketplace current plugin install at ~/.gemini/plugins/marketplace/egc', () => {
-    const homeDir = createTempDir();
-    try {
-      const expected = setupLegacyPluginInstall(homeDir, ['marketplace', 'egc']);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, expected);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('finds marketplace legacy plugin install at ~/.gemini/plugins/marketplace/everything-gemini', () => {
-    const homeDir = createTempDir();
-    try {
-      const expected = setupLegacyPluginInstall(homeDir, ['marketplace', 'everything-gemini']);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, expected);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('prefers exact legacy plugin install over plugin cache', () => {
-    const homeDir = createTempDir();
-    try {
-      const expected = setupLegacyPluginInstall(homeDir, ['marketplace', 'egc']);
-      setupPluginCache(homeDir, 'egc', 'Fmarzochi', CURRENT_PACKAGE_VERSION);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, expected);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-  // ─── Plugin Cache Auto-Detection ───
-
-  tally(test('discovers plugin root from cache directory', () => {
-    const homeDir = createTempDir();
-    try {
-      const expected = setupPluginCache(homeDir, 'egc', 'Fmarzochi', CURRENT_PACKAGE_VERSION);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, expected);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('prefers standard install over plugin cache', () => {
-    const homeDir = createTempDir();
-    try {
-      const claudeDir = setupStandardInstall(homeDir);
-      setupPluginCache(homeDir, 'egc', 'Fmarzochi', CURRENT_PACKAGE_VERSION);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, claudeDir,
-        'Standard install should take precedence over plugin cache');
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('handles multiple versions in plugin cache', () => {
-    const homeDir = createTempDir();
-    try {
-      setupPluginCache(homeDir, 'everything-gemini', 'legacy-org', '1.7.0');
-      const expected = setupPluginCache(homeDir, 'egc', 'Fmarzochi', CURRENT_PACKAGE_VERSION);
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      // Should find one of them (either is valid)
-      assert.ok(
-        result === expected ||
-        result === path.join(homeDir, '.gemini', 'plugins', 'cache', 'everything-gemini', 'legacy-org', '1.7.0'),
-        'Should resolve to a valid plugin cache directory'
-      );
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  // ─── Fallback ───
-
-  tally(test('falls back to ~/.gemini/ when nothing is found', () => {
-    const homeDir = createTempDir();
-    try {
-      fs.mkdirSync(path.join(homeDir, '.gemini'), { recursive: true });
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, path.join(homeDir, '.gemini'));
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('falls back gracefully when ~/.gemini/ does not exist', () => {
-    const homeDir = createTempDir();
-    try {
-      const result = resolveEccRoot({ envRoot: '', homeDir });
-      assert.strictEqual(result, path.join(homeDir, '.gemini'));
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  // ─── Custom Probe ───
-
-  tally(test('supports custom probe path', () => {
-    const homeDir = createTempDir();
-    try {
-      const claudeDir = path.join(homeDir, '.gemini');
-      fs.mkdirSync(path.join(claudeDir, 'custom'), { recursive: true });
-      fs.writeFileSync(path.join(claudeDir, 'custom', 'marker.js'), '// probe');
-      const result = resolveEccRoot({
-        envRoot: '',
-        homeDir,
-        probe: path.join('custom', 'marker.js'),
-      });
-      assert.strictEqual(result, claudeDir);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  // ─── INLINE_RESOLVE ───
-
-  tally(test('INLINE_RESOLVE is a non-empty string', () => {
-    assert.ok(typeof INLINE_RESOLVE === 'string');
-    assert.ok(INLINE_RESOLVE.length > 50, 'Should be a substantial inline expression');
-  }));
-
-  tally(test('INLINE_RESOLVE returns GEMINI_PLUGIN_ROOT when set', () => {
-    const { execFileSync } = require('child_process');
-    const result = execFileSync('node', [
-      '-e', `console.log(${INLINE_RESOLVE})`,
-    ], {
-      env: { ...process.env, GEMINI_PLUGIN_ROOT: '/inline/test/root' },
-      encoding: 'utf8',
-    }).trim();
-    assert.strictEqual(result, '/inline/test/root');
-  }));
-
-  tally(test('INLINE_RESOLVE discovers exact legacy plugin root when env var is unset', () => {
-    const homeDir = createTempDir();
-    try {
-      const expected = setupLegacyPluginInstall(homeDir, ['marketplace', 'egc']);
-      const { execFileSync } = require('child_process');
-      const result = execFileSync('node', [
-        '-e', `console.log(${INLINE_RESOLVE})`,
-      ], {
-        env: { PATH: process.env.PATH, HOME: homeDir, USERPROFILE: homeDir },
-        encoding: 'utf8',
-      }).trim();
-      assert.strictEqual(result, expected);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-  tally(test('INLINE_RESOLVE discovers plugin cache when env var is unset', () => {
-    const homeDir = createTempDir();
-    try {
-      const expected = setupPluginCache(homeDir, 'egc', 'Fmarzochi', CURRENT_PACKAGE_VERSION);
-      const { execFileSync } = require('child_process');
-      const result = execFileSync('node', [
-        '-e', `console.log(${INLINE_RESOLVE})`,
-      ], {
-        env: { PATH: process.env.PATH, HOME: homeDir, USERPROFILE: homeDir },
-        encoding: 'utf8',
-      }).trim();
-      assert.strictEqual(result, expected);
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
-  tally(test('INLINE_RESOLVE falls back to ~/.gemini/ when nothing found', () => {
-    const homeDir = createTempDir();
-    try {
-      const { execFileSync } = require('child_process');
-      const result = execFileSync('node', [
-        '-e', `console.log(${INLINE_RESOLVE})`,
-      ], {
-        env: { PATH: process.env.PATH, HOME: homeDir, USERPROFILE: homeDir },
-        encoding: 'utf8',
-      }).trim();
-      assert.strictEqual(result, path.join(homeDir, '.gemini'));
-    } finally {
-      fs.rmSync(homeDir, { recursive: true, force: true });
-    }
-  }));
-
+  const results = [
+    ...explicitRootCases(),
+    ...toolInUseCases(),
+    ...pluginCases(),
+    ...packageCases(),
+    ...fallbackCases(),
+    ...inlineShapeCases(),
+  ];
+  const passed = results.filter(Boolean).length;
+  const failed = results.length - passed;
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

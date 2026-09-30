@@ -3,103 +3,119 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { resolveHarnessDirFromEnv } = require('./utils');
 
-const CURRENT_PLUGIN_SLUG = 'egc';
-const LEGACY_PLUGIN_SLUG = 'everything-gemini';
-const CURRENT_PLUGIN_HANDLE = `${CURRENT_PLUGIN_SLUG}@${CURRENT_PLUGIN_SLUG}`;
-const LEGACY_PLUGIN_HANDLE = `${LEGACY_PLUGIN_SLUG}@${LEGACY_PLUGIN_SLUG}`;
-const PLUGIN_CACHE_SLUGS = [CURRENT_PLUGIN_SLUG, LEGACY_PLUGIN_SLUG];
-const PLUGIN_ROOT_SEGMENTS = [
-  [CURRENT_PLUGIN_SLUG],
-  [CURRENT_PLUGIN_HANDLE],
-  ['marketplace', CURRENT_PLUGIN_SLUG],
-  [LEGACY_PLUGIN_SLUG],
-  [LEGACY_PLUGIN_HANDLE],
-  ['marketplace', LEGACY_PLUGIN_SLUG],
+const DEFAULT_PROBE = path.join('scripts', 'lib', 'utils.js');
+// Claude Code keeps an installed plugin under ~/.claude/plugins, and one from
+// a marketplace under ~/.claude/plugins/cache/<marketplace>/<plugin>/<version>.
+// everything-gemini is the name of the first manifests, which docs/spec
+// commits to keep resolvable.
+const PLUGIN_SLUGS = ['egc', 'everything-gemini'];
+const PLUGIN_ROOT_SEGMENTS = PLUGIN_SLUGS.flatMap(slug => [[slug], [`${slug}@${slug}`], ['marketplace', slug]]);
+// The tool directories EGC installs its scripts into.
+const TOOL_SCRIPT_DIRS = [
+  ['.claude'], ['.gemini'], ['.codeium', 'windsurf'], ['.config', 'opencode'], ['.cursor'], ['.codebuddy'], ['.egc'],
 ];
 
-/**
- * Resolve the EGC source root directory.
- *
- * Tries, in order:
- *   1. EGC_PLUGIN_ROOT / ECC_PLUGIN_ROOT / GEMINI_PLUGIN_ROOT env vars
- *   2. Standard install location (~/.gemini/): when scripts exist there
- *   3. Known plugin roots under ~/.gemini/plugins/ (current + legacy slugs)
- *   4. Plugin cache auto-detection: scans ~/.gemini/plugins/cache/{egc,everything-gemini}/
- *   5. Fallback to ~/.gemini/ (original behaviour)
- *
- * @param {object} [options]
- * @param {string} [options.homeDir]  Override home directory (for testing)
- * @param {string} [options.envRoot]  Override EGC_PLUGIN_ROOT (for testing)
- * @param {string} [options.probe]    Relative path used to verify a candidate root
- *                                    contains EGC scripts. Default: 'scripts/lib/utils.js'
- * @returns {string} Resolved EGC root path
- */
-function getEnvRoot(options) {
-  const envRoot = options.envRoot !== undefined
-    ? options.envRoot
-    : (process.env.EGC_PLUGIN_ROOT || process.env.ECC_PLUGIN_ROOT || process.env.GEMINI_PLUGIN_ROOT || '');
-  return envRoot?.trim() || null;
+function hasProbe(dir, probe) {
+  return typeof dir === 'string' && dir.length > 0 && fs.existsSync(path.join(dir, probe));
 }
 
-function findInOrgDir(orgPath, probe) {
-  let versionDirs;
-  try {
-    versionDirs = fs.readdirSync(orgPath, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-  for (const verEntry of versionDirs) {
-    if (!verEntry.isDirectory()) continue;
-    const candidate = path.join(orgPath, verEntry.name);
-    if (fs.existsSync(path.join(candidate, probe))) return candidate;
-  }
-  return null;
+function explicitRoot(env, options) {
+  const value = options.envRoot === undefined
+    ? (env.EGC_PLUGIN_ROOT || env.ECC_PLUGIN_ROOT || env.GEMINI_PLUGIN_ROOT || '')
+    : options.envRoot;
+  return value?.trim() || null;
 }
 
-function findInPluginCache(claudeDir, probe) {
+function findInCacheBase(cacheBase, probe) {
   try {
-    for (const slug of PLUGIN_CACHE_SLUGS) {
-      const cacheBase = path.join(claudeDir, 'plugins', 'cache', slug);
-      const orgDirs = fs.readdirSync(cacheBase, { withFileTypes: true });
-      for (const orgEntry of orgDirs) {
-        if (!orgEntry.isDirectory()) continue;
-        const found = findInOrgDir(path.join(cacheBase, orgEntry.name), probe);
-        if (found) return found;
+    for (const plugin of fs.readdirSync(cacheBase, { withFileTypes: true })) {
+      if (!plugin.isDirectory()) continue;
+      for (const version of fs.readdirSync(path.join(cacheBase, plugin.name), { withFileTypes: true })) {
+        const candidate = path.join(cacheBase, plugin.name, version.name);
+        if (version.isDirectory() && hasProbe(candidate, probe)) return candidate;
       }
     }
   } catch {
-    // Plugin cache doesn't exist or isn't readable: continue to fallback
+    // No cache for this marketplace, or an unreadable one: the next applies.
   }
   return null;
 }
 
+function findInPluginCache(pluginsDir, probe) {
+  for (const marketplace of PLUGIN_SLUGS) {
+    const found = findInCacheBase(path.join(pluginsDir, 'cache', marketplace), probe);
+    if (found) return found;
+  }
+  return null;
+}
+
+// The npm package holds every script, including those no tool directory gets.
+// Its egc executable links into it (POSIX), or sits beside its node_modules
+// (the Windows npm prefix).
+function findPackageOnPath(pathValue, probe) {
+  for (const dir of (pathValue || '').split(path.delimiter)) {
+    if (!dir) continue;
+    try {
+      const bin = path.join(dir, 'egc');
+      if (fs.existsSync(bin)) {
+        const root = path.resolve(path.dirname(fs.realpathSync(bin)), '..');
+        if (hasProbe(root, probe)) return root;
+      }
+    } catch {
+      // An unreadable PATH entry is skipped.
+    }
+    const besideModules = path.join(dir, 'node_modules', '@egchq', 'egc');
+    if (hasProbe(besideModules, probe)) return besideModules;
+  }
+  return null;
+}
+
+/**
+ * Resolve the EGC root: the directory holding EGC's scripts.
+ *
+ * Tries, in order:
+ *   1. EGC_PLUGIN_ROOT / ECC_PLUGIN_ROOT / GEMINI_PLUGIN_ROOT (EGC's runners set them)
+ *   2. CLAUDE_PLUGIN_ROOT, EGC_DIR, then the directory of the tool in use
+ *      (getEGCDir()'s tier 1), each only when it holds the probe
+ *   3. The Claude Code plugin under ~/.claude/plugins, then its marketplace cache
+ *   4. The npm package, found from the egc executable on PATH
+ *   5. The tool directories EGC installs its scripts into
+ *   6. Fallback to ~/.egc
+ *
+ * INLINE_RESOLVE_FN below is the same order for command and hook code that
+ * cannot require this module before the root is known; the tests run both
+ * over the same layouts.
+ *
+ * @param {object} [options]
+ * @param {string} [options.homeDir]  Override home directory (for testing)
+ * @param {object} [options.env]      Environment to read (default process.env)
+ * @param {string} [options.envRoot]  Override the explicit root variables (for testing)
+ * @param {string} [options.probe]    Relative path a candidate root must hold.
+ *                                    Default: 'scripts/lib/utils.js'
+ * @returns {string} Resolved EGC root path
+ */
 function resolveEGCRoot(options = {}) {
-  const envRoot = getEnvRoot(options);
-  if (envRoot) return envRoot;
+  const env = options.env || process.env;
+  const explicit = explicitRoot(env, options);
+  if (explicit) return explicit;
 
   const homeDir = options.homeDir || os.homedir();
-  const claudeDir = path.join(homeDir, '.gemini');
-  const probe = options.probe || path.join('scripts', 'lib', 'utils.js');
+  const probe = options.probe || DEFAULT_PROBE;
+  const pluginsDir = path.join(homeDir, '.claude', 'plugins');
+  const firstWithProbe = dirs => dirs.find(dir => hasProbe(dir, probe));
 
-  // Standard install: files are copied directly into ~/.gemini/
-  if (fs.existsSync(path.join(claudeDir, probe))) {
-    return claudeDir;
-  }
-
-  // Exact legacy plugin install locations. These preserve backwards
-  // compatibility without scanning arbitrary plugin trees.
-  for (const segments of PLUGIN_ROOT_SEGMENTS) {
-    const candidate = path.join(claudeDir, 'plugins', ...segments);
-    if (fs.existsSync(path.join(candidate, probe))) return candidate;
-  }
-
-  // Plugin cache: Claude Code stores marketplace plugins under
-  // ~/.gemini/plugins/cache/<plugin-name>/<org>/<version>/
-  const cacheFound = findInPluginCache(claudeDir, probe);
-  if (cacheFound) return cacheFound;
-
-  return claudeDir;
+  return firstWithProbe([
+    env.CLAUDE_PLUGIN_ROOT?.trim(),
+    env.EGC_DIR,
+    resolveHarnessDirFromEnv(env, homeDir),
+    ...PLUGIN_ROOT_SEGMENTS.map(segments => path.join(pluginsDir, ...segments)),
+  ])
+    || findInPluginCache(pluginsDir, probe)
+    || findPackageOnPath(env.PATH || env.Path, probe)
+    || firstWithProbe(TOOL_SCRIPT_DIRS.map(segments => path.join(homeDir, ...segments)))
+    || path.join(homeDir, '.egc');
 }
 
 /**
@@ -111,24 +127,25 @@ function resolveEccRoot(options) {
 }
 
 /**
- * Compact inline version for embedding in command .md code blocks.
+ * Inline form of resolveEGCRoot() for `node -e "..."` code in commands and
+ * hooks/hooks.json, where require() is not available before the root is
+ * known. Call it with the probe: `${INLINE_RESOLVE_FN}('scripts/skills-health.js')`.
+ * It holds no double quote, dollar sign, backtick, exclamation mark, percent
+ * sign or backslash, so it embeds unchanged in a double-quoted shell string
+ * and in JSON.
  *
- * This is the minified form of resolveEGCRoot() suitable for use in
- * node -e "..." scripts where require() is not available before the
- * root is known.
- *
- * Usage in commands:
- *   const _r = <paste INLINE_RESOLVE>;
- *   const sm = require(_r + '/scripts/lib/session-manager');
- *
- * MAINTENANCE: The plugin path arrays inside this string are the serialised
- * forms of PLUGIN_ROOT_SEGMENTS and PLUGIN_CACHE_SLUGS defined above.
- * If those constants change, update the corresponding literals here too.
+ * MAINTENANCE: it mirrors resolveEGCRoot() step by step, including
+ * resolveHarnessDirFromEnv() from utils.js; tests/lib/resolve-egc-root.test.js
+ * runs both over the same layouts, and tests/lib/command-plugin-root.test.js
+ * checks every embedded copy against this string.
  */
-const INLINE_RESOLVE = '(()=>{var e=process.env.EGC_PLUGIN_ROOT||process.env.ECC_PLUGIN_ROOT||process.env.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var p=require(\'path\'),f=require(\'fs\'),h=require(\'os\').homedir(),d=p.join(h,\'.gemini\'),q=p.join(\'scripts\',\'lib\',\'utils.js\');if(f.existsSync(p.join(d,q)))return d;for(var s of [["egc"],["egc@egc"],["marketplace","egc"],["everything-gemini"],["everything-gemini@everything-gemini"],["marketplace","everything-gemini"]]){var l=p.join(d,\'plugins\',...s);if(f.existsSync(p.join(l,q)))return l}try{for(var g of ["egc","everything-gemini"]){var b=p.join(d,\'plugins\',\'cache\',g);for(var o of f.readdirSync(b,{withFileTypes:true})){if(!o.isDirectory())continue;for(var v of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){if(!v.isDirectory())continue;var c=p.join(b,o.name,v.name);if(f.existsSync(p.join(c,q)))return c}}}}catch(x){}return d})()';
+const INLINE_RESOLVE_FN = "((q)=>{var v=process.env,p=require('path'),f=require('fs'),h=require('os').homedir(),x=function(d){return d&&f.existsSync(p.join(d,q))},e=v.EGC_PLUGIN_ROOT||v.ECC_PLUGIN_ROOT||v.GEMINI_PLUGIN_ROOT;if(e&&e.trim())return e.trim();var t=v.GEMINI_PROJECT_DIR||v.GEMINI_PLUGIN_ROOT?'.gemini':v.CLAUDECODE||v.CLAUDE_PROJECT_DIR||v.CLAUDE_PLUGIN_ROOT?'.claude':v.CODEBUDDY_PROJECT_DIR||v.CODEBUDDY_PLUGIN_ROOT?'.codebuddy':v.VSCODE_AGENT||v.GITHUB_COPILOT_API_TOKEN?'.github':v.KIRO_HOOK_FILE||v.KIRO_FILE_PATH?'.kiro':v.TRAE_ENV?(v.TRAE_ENV==='cn'?'.trae-cn':'.trae'):'',k=p.join(h,'.claude','plugins');for(var d of [(v.CLAUDE_PLUGIN_ROOT||'').trim(),v.EGC_DIR,t&&p.join(h,t),p.join(k,'egc'),p.join(k,'egc@egc'),p.join(k,'marketplace','egc'),p.join(k,'everything-gemini'),p.join(k,'everything-gemini@everything-gemini'),p.join(k,'marketplace','everything-gemini')]){if(x(d))return d}for(var g of ['egc','everything-gemini']){var b=p.join(k,'cache',g);try{for(var o of f.readdirSync(b,{withFileTypes:true})){if(o.isDirectory()){for(var w of f.readdirSync(p.join(b,o.name),{withFileTypes:true})){var c=p.join(b,o.name,w.name);if(w.isDirectory()&&x(c))return c}}}}catch(z){}}for(var s of (v.PATH||'').split(p.delimiter)){if(s){try{var g=p.join(s,'egc');if(f.existsSync(g)){var r=p.resolve(p.dirname(f.realpathSync(g)),'..');if(x(r))return r}}catch(z){}var n=p.join(s,'node_modules','@egchq','egc');if(x(n))return n}}for(var u of [['.claude'],['.gemini'],['.codeium','windsurf'],['.config','opencode'],['.cursor'],['.codebuddy'],['.egc']]){var m=p.join(h,...u);if(x(m))return m}return p.join(h,'.egc')})";
+
+const INLINE_RESOLVE = `${INLINE_RESOLVE_FN}('scripts/lib/utils.js')`;
 
 module.exports = {
   resolveEGCRoot,
   resolveEccRoot, // NOSONAR: deprecated ECC-era alias kept as a public export for backward compatibility
   INLINE_RESOLVE,
+  INLINE_RESOLVE_FN,
 };

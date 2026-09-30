@@ -1937,8 +1937,8 @@ async function runTests() {
       const bootstrapSrc = fs.readFileSync(bootstrapPath, 'utf8');
       assert.ok(bootstrapSrc.includes('session:start'), 'Bootstrap should invoke the session:start profile');
       assert.ok(bootstrapSrc.includes('run-with-flags.js'), 'Bootstrap should resolve the runner script');
-      assert.ok(bootstrapSrc.includes('GEMINI_PLUGIN_ROOT'), 'Bootstrap should consult GEMINI_PLUGIN_ROOT');
-      assert.ok(bootstrapSrc.includes('plugins'), 'Bootstrap should probe known plugin roots');
+      assert.ok(bootstrapSrc.includes("path.resolve(__dirname, '..', '..')"), 'Bootstrap should run the runner of the EGC root it lives in');
+      assert.ok(!bootstrapSrc.includes("'.gemini'"), 'Bootstrap should not search the retired Gemini CLI home');
     }));
   tally(test('Stop and SessionEnd hooks use the safe inline resolver when plugin root may be unset', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');

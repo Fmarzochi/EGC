@@ -17,12 +17,12 @@
  *
  * How it works:
  *   1. Reads the raw JSON event from stdin (passed by Claude Code).
- *   2. Resolves the EGC plugin root directory (via GEMINI_PLUGIN_ROOT env var
- *      or a set of well-known fallback paths).
+ *   2. Takes the EGC root it lives in: the hook command already found it
+ *      with the shared resolver.
  *   3. Delegates to `scripts/hooks/run-with-flags.js` with the `session:start`
  *      event, which applies hook-profile gating and then runs session-start.js.
  *   4. Passes stdout/stderr through and forwards the child exit code.
- *   5. If the plugin root cannot be found, emits a warning and passes stdin
+ *   5. If the runner is missing from that root, emits a warning and passes stdin
  *      through unchanged so Claude Code can continue normally.
  */
 
@@ -30,103 +30,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const CURRENT_PLUGIN_SLUG = 'egc';
-const LEGACY_PLUGIN_SLUG = 'everything-gemini';
-const KNOWN_PLUGIN_PATHS = [
-  [CURRENT_PLUGIN_SLUG],
-  [`${CURRENT_PLUGIN_SLUG}@${CURRENT_PLUGIN_SLUG}`],
-  ['marketplace', CURRENT_PLUGIN_SLUG],
-  [LEGACY_PLUGIN_SLUG],
-  [`${LEGACY_PLUGIN_SLUG}@${LEGACY_PLUGIN_SLUG}`],
-  ['marketplace', LEGACY_PLUGIN_SLUG],
-];
-const CACHE_PLUGIN_SLUGS = [CURRENT_PLUGIN_SLUG, LEGACY_PLUGIN_SLUG];
-
 const raw = fs.readFileSync(0, 'utf8');
 
 // Path (relative to plugin root) to the hook runner
 const rel = path.join('scripts', 'hooks', 'run-with-flags.js');
 
-/**
- * Returns true when `candidate` looks like a valid EGC plugin root, i.e. the
- * run-with-flags.js runner exists inside it.
- *
- * @param {unknown} candidate
- * @returns {boolean}
- */
-function hasRunnerRoot(candidate) {
-  const value = typeof candidate === 'string' ? candidate.trim() : '';
-  return value.length > 0 && fs.existsSync(path.join(path.resolve(value), rel));
-}
-
-/**
- * Resolves the EGC plugin root using the following priority order:
- *   1. GEMINI_PLUGIN_ROOT environment variable
- *   2. ~/.gemini (direct install)
- *   3. Several well-known plugin sub-paths under ~/.gemini/plugins/ (current + legacy)
- *   4. Versioned cache directories under ~/.gemini/plugins/cache/{egc,everything-gemini}/
- *   5. Falls back to ~/.gemini if nothing else matches
- *
- * @returns {string}
- */
-function findRunnerRootInCacheBase(cacheBase) {
-  for (const org of fs.readdirSync(cacheBase, { withFileTypes: true })) {
-    if (!org.isDirectory()) continue;
-    for (const version of fs.readdirSync(path.join(cacheBase, org.name), { withFileTypes: true })) {
-      if (!version.isDirectory()) continue;
-      const candidate = path.join(cacheBase, org.name, version.name);
-      if (hasRunnerRoot(candidate)) {
-        return candidate;
-      }
-    }
-  }
-  return null;
-}
-
-function resolveFromCache(claudeDir) {
-  try {
-    for (const slug of CACHE_PLUGIN_SLUGS) {
-      const found = findRunnerRootInCacheBase(path.join(claudeDir, 'plugins', 'cache', slug));
-      if (found) {
-        return found;
-      }
-    }
-  } catch {
-    // cache directory may not exist; that's fine
-  }
-  return null;
-}
-
-function resolvePluginRoot() {
-  const envRoot = process.env.GEMINI_PLUGIN_ROOT || '';
-  if (hasRunnerRoot(envRoot)) {
-    return path.resolve(envRoot.trim());
-  }
-
-  const home = require('node:os').homedir();
-  const claudeDir = path.join(home, '.gemini');
-
-  if (hasRunnerRoot(claudeDir)) {
-    return claudeDir;
-  }
-
-  const knownPaths = KNOWN_PLUGIN_PATHS.map((segments) =>
-    path.join(claudeDir, 'plugins', ...segments)
-  );
-
-  for (const candidate of knownPaths) {
-    if (hasRunnerRoot(candidate)) {
-      return candidate;
-    }
-  }
-
-  const cachedRoot = resolveFromCache(claudeDir);
-  if (cachedRoot) return cachedRoot;
-
-  return claudeDir;
-}
-
-const root = resolvePluginRoot();
+// The hook command found this file under the EGC root with the shared
+// resolver (scripts/lib/resolve-egc-root.js); the runner sits in that root.
+const root = path.resolve(__dirname, '..', '..');
 const script = path.join(root, rel);
 
 if (fs.existsSync(script)) {
