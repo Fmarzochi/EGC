@@ -3,7 +3,9 @@ getEGCDir() does outside a hook (scripts/lib/utils.js): EGC_DIR, the
 tool's own environment variable, ~/.egc when it exists, the first tool
 directory that exists, then ~/.egc. It used to fix ~/.gemini, which is
 Antigravity's directory, so Python sessions, state, cache, logs and learned
-skills landed apart from the Node side."""
+skills landed apart from the Node side. Both runtimes run here from the
+package, the way `egc prompt` (scripts/gemini.js) starts the Python one, so
+Node's install-path step matches neither."""
 from __future__ import annotations
 
 import os
