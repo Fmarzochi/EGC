@@ -22,8 +22,8 @@ Look for:
 
 3. **Determine save location:**
    - Ask: "Would this pattern be useful in a different project?"
-   - **Global** (`~/.gemini/skills/learned/`): Generic patterns usable across 2+ projects (bash compatibility, LLM API behavior, debugging techniques, etc.)
-   - **Project** (`.gemini/skills/learned/` in current project): Project-specific knowledge (quirks of a particular config file, project-specific architecture decisions, etc.)
+   - **Global** (`<EGC dir>/skills/learned/`, the EGC directory of the tool in use: `~/.claude` in Claude Code, `~/.gemini` in Antigravity, `~/.egc` when no tool is detected): Generic patterns usable across 2+ projects (bash compatibility, LLM API behavior, debugging techniques, etc.)
+   - **Project** (the tool's own directory in the current project, such as `.claude/skills/learned/` or `.gemini/skills/learned/`): Project-specific knowledge (quirks of a particular config file, project-specific architecture decisions, etc.)
    - When in doubt, choose Global (moving Global → Project is easier than the reverse)
 
 4. Draft the skill file using this format:

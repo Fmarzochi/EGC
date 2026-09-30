@@ -7,11 +7,11 @@ This document defines where generated, imported, and curated skills belong, how 
 | Type | Root Path | Shipped | Provenance |
 |------|-----------|---------|------------|
 | Curated | `skills/` (repo) | Yes | Not required |
-| Learned | `~/.gemini/skills/learned/` | No | Required |
-| Imported | `~/.gemini/skills/imported/` | No | Required |
-| Evolved | `~/.gemini/homunculus/evolved/skills/` (global) or `projects/<hash>/evolved/skills/` (per-project) | No | Inherits from instinct source |
+| Learned | `<EGC dir>/skills/learned/` | No | Required |
+| Imported | `<EGC dir>/skills/imported/` | No | Required |
+| Evolved | `<EGC dir>/homunculus/evolved/skills/` (global) or `projects/<hash>/evolved/skills/` (per-project) | No | Inherits from instinct source |
 
-Curated skills live in the repo under `skills/`. Install manifests reference only curated paths. Generated and imported skills live under the user home directory and are never shipped.
+`<EGC dir>` is the EGC directory of the tool in use, resolved by `getEGCDir()` in `scripts/lib/utils.js`: `~/.claude` in Claude Code, `~/.gemini` in Antigravity, `~/.cursor` in Cursor and so on; `~/.egc` when no tool is detected; `EGC_DIR` overrides it. Curated skills live in the repo under `skills/`. Install manifests reference only curated paths. Generated and imported skills live under the user home directory and are never shipped.
 
 ## Curated Skills
 
@@ -23,7 +23,7 @@ Location: `skills/<skill-name>/` with `SKILL.md` at root.
 
 ## Learned Skills
 
-Location: `~/.gemini/skills/learned/<skill-name>/`.
+Location: `<EGC dir>/skills/learned/<skill-name>/`.
 
 Created by continuous-learning (evaluate-session hook, /learn command). Default path is configurable via `skills/continuous-learning/config.json` → `learned_skills_path`.
 
@@ -81,15 +81,15 @@ Scope: Curated paths only. All `paths` in modules must exist in the repo.
 
 ### Scripts That Use Generated Roots
 
-`scripts/skills-health.js`, `scripts/lib/skill-evolution/health.js`, session hooks: they probe `~/.gemini/skills/learned` and `~/.gemini/skills/imported`. Missing directories are treated as empty; no errors.
+`scripts/skills-health.js`, `scripts/lib/skill-evolution/health.js`, session hooks: they probe `<EGC dir>/skills/learned` and `<EGC dir>/skills/imported`, the same directory the hooks write to (`--home`, `--learned-root` and `--imported-root` override it). Missing directories are treated as empty; no errors.
 
 ## Publishable vs Local-Only
 
 | Publishable | Local-Only |
 |-------------|------------|
-| `skills/*` (curated) | `~/.gemini/skills/learned/*` |
-| | `~/.gemini/skills/imported/*` |
-| | `~/.gemini/homunculus/**/evolved/**` |
+| `skills/*` (curated) | `<EGC dir>/skills/learned/*` |
+| | `<EGC dir>/skills/imported/*` |
+| | `<EGC dir>/homunculus/**/evolved/**` |
 
 Only curated skills appear in install manifests and get copied during install.
 

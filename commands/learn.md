@@ -37,7 +37,7 @@ Look for:
 
 ## Output Format
 
-Create a skill file at `~/.gemini/skills/learned/[pattern-name].md`:
+Create a skill file at `<EGC dir>/skills/learned/[pattern-name].md`, where `<EGC dir>` is the EGC directory of the tool in use (`~/.claude` in Claude Code, `~/.gemini` in Antigravity, `~/.egc` when no tool is detected; `EGC_DIR` overrides it):
 
 ```markdown
 # [Descriptive Pattern Name]
@@ -64,7 +64,7 @@ Create a skill file at `~/.gemini/skills/learned/[pattern-name].md`:
 2. Identify the most valuable/reusable insight
 3. Draft the skill file
 4. Ask user to confirm before saving
-5. Save to `~/.gemini/skills/learned/`
+5. Save to `<EGC dir>/skills/learned/`
 
 ## Notes
 

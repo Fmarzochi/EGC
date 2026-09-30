@@ -167,6 +167,35 @@ function runTests() {
     }
   }));
 
+  tally(test('resolveEGCDir(home) applies the same tiers as getEGCDir() to an explicit home, without touching the process home', () => {
+    const harnessVariables = ['GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN', 'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV'];
+    const saved = new Map(harnessVariables.map(name => [name, process.env[name]]));
+    const originalHome = process.env.HOME;
+    const os = require('os');
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-resolveegcdir-test-'));
+    try {
+      for (const name of harnessVariables) delete process.env[name];
+
+      assert.strictEqual(utils.resolveEGCDir(fakeHome), path.join(fakeHome, '.egc'), 'an empty home resolves to its own ~/.egc');
+
+      fs.mkdirSync(path.join(fakeHome, '.cursor'), { recursive: true });
+      assert.strictEqual(utils.resolveEGCDir(fakeHome), path.join(fakeHome, '.cursor'), 'the first installed harness dir under that home wins while ~/.egc does not exist');
+
+      fs.mkdirSync(path.join(fakeHome, '.egc'), { recursive: true });
+      assert.strictEqual(utils.resolveEGCDir(fakeHome), path.join(fakeHome, '.egc'), '~/.egc wins once it exists (BUG-08)');
+
+      process.env.GEMINI_PROJECT_DIR = '/somewhere';
+      assert.strictEqual(utils.resolveEGCDir(fakeHome), path.join(fakeHome, '.gemini'), 'a harness variable pins the tool, under the given home');
+
+      assert.strictEqual(process.env.HOME, originalHome, 'the process home is never rewritten');
+    } finally {
+      for (const [name, value] of saved) {
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
+      fs.rmSync(fakeHome, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('getSessionsDir returns path under EGC dir', () => {
     const sessionsDir = utils.getSessionsDir();
     const egcDir = utils.getEGCDir();
