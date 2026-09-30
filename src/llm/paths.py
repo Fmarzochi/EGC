@@ -87,17 +87,19 @@ def project_id() -> str:
     return hashlib.sha256(hash_input.encode("utf-8")).hexdigest()[:12]
 
 
+_ANTIGRAVITY_DIR = ".gemini"
+
 # The tool directories getEGCDir() knows, in its order (longest prefix first).
 _TOOL_DIRS = (
     (".codeium", "windsurf"), (".config", "opencode"), (".config", "zed"),
-    (".gemini",), (".claude",), (".cursor",), (".agents",), (".amp",),
+    (_ANTIGRAVITY_DIR,), (".claude",), (".cursor",), (".agents",), (".amp",),
     (".continue",), (".github",), (".kiro",), (".trae",), (".trae-cn",), (".codebuddy",),
 )
 
 # The variables each tool sets for its hooks, in getEGCDir()'s order: the
 # Gemini ones first, because the retired Gemini CLI also set the Claude ones.
 _TOOL_ENV = (
-    (("GEMINI_PROJECT_DIR", "GEMINI_PLUGIN_ROOT"), ".gemini"),
+    (("GEMINI_PROJECT_DIR", "GEMINI_PLUGIN_ROOT"), _ANTIGRAVITY_DIR),
     (("CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT"), ".claude"),
     (("CODEBUDDY_PROJECT_DIR", "CODEBUDDY_PLUGIN_ROOT"), ".codebuddy"),
     (("VSCODE_AGENT", "GITHUB_COPILOT_API_TOKEN"), ".github"),
@@ -148,7 +150,7 @@ def egc_homunculus_dir() -> Path:
     observations and instincts there whatever the tool, so the recorder keeps
     writing beside them until that store moves with all of its writers.
     """
-    return home_dir() / ".gemini" / "homunculus"
+    return home_dir() / _ANTIGRAVITY_DIR / "homunculus"
 
 
 def egc_project_dir() -> Path:
