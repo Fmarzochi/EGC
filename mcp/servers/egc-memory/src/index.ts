@@ -225,7 +225,7 @@ async function acquireMigrationLock(lockFile: string): Promise<void> {
       locked = true;
     } catch { // NOSONAR: lock contention is handled by the retry loop below
       retries--;
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, 100)); // NOSONAR: the retries wait one after the other on purpose (S9382)
     }
   }
   if (!locked) throw new Error('Timeout acquiring migration lock');

@@ -69,7 +69,7 @@ async function animateProgress(label, steps, callback) {
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
     process.stdout.write(`   ${chalk.gray(SPINNER[i % SPINNER.length])} ${step.name}`);
-    await sleep(step.duration || 500);
+    await sleep(step.duration || 500); // NOSONAR: the animation shows the steps one after the other on purpose (S9382)
     process.stdout.clearLine?.(0) || process.stdout.write('\r');
     process.stdout.cursorTo?.(0) || process.stdout.write('\r');
     process.stdout.write(`   ${chalk.green('[DONE]')} ${step.name}\n`);

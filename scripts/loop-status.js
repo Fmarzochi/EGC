@@ -807,7 +807,7 @@ async function runWatch(options) {
       break;
     }
 
-    await sleep(normalizedOptions.watchIntervalSeconds * 1000);
+    await sleep(normalizedOptions.watchIntervalSeconds * 1000); // NOSONAR: each watch reading waits for the interval before the next one on purpose (S9382)
   }
 
   return exitCode;
