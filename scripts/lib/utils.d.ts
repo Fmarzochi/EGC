@@ -21,10 +21,10 @@ export function getEGCDir(): string;
 /** The EGC directory under a given home, by the same tiers getEGCDir() applies (EGC_DIR excepted) */
 export function resolveEGCDir(home: string): string;
 
-/** Get the canonical EGC sessions directory (~/.gemini/session-data) */
+/** Get the canonical EGC sessions directory (<EGC dir>/session-data) */
 export function getSessionsDir(): string;
 
-/** Get the legacy Gemini-managed sessions directory (~/.gemini/sessions) */
+/** Get the legacy EGC sessions directory (<EGC dir>/sessions) */
 export function getLegacySessionsDir(): string;
 
 /** Get session directories to search, with canonical storage first and legacy fallback second */

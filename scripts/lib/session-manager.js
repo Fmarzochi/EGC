@@ -2,8 +2,8 @@
  * Session Manager Library for EGC
  * Provides core session CRUD operations for listing, loading, and managing sessions
  *
- * Sessions are stored as markdown files in ~/.gemini/session-data/ with
- * legacy read compatibility for ~/.gemini/sessions/:
+ * Sessions are stored as markdown files in <EGC dir>/session-data/ with
+ * legacy read compatibility for <EGC dir>/sessions/:
  * - YYYY-MM-DD-session.tmp (old format)
  * - YYYY-MM-DD-<short-id>-session.tmp (new format)
  */

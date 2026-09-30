@@ -1,6 +1,6 @@
 /**
  * Session Aliases Library for EGC.
- * Manages named aliases for session files, stored in ~/.gemini/session-aliases.json.
+ * Manages named aliases for session files, stored in <EGC dir>/session-aliases.json.
  */
 
 /** Internal alias storage entry */
