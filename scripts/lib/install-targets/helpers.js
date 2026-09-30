@@ -591,7 +591,8 @@ function isRetirementCandidate(resolved, { managedRoots, seen, siblingOwned, cov
 // nowhere and the file is left in place, never deleted on the strength of the
 // state entry alone.
 // The states whose managed copies the diff reads: the current one and any
-// legacy one the adapter still answers for. One unreadable state makes the
+// legacy one the adapter still answers for. Trusted only when at least one
+// state was read and none was unreadable: one unreadable state makes the
 // whole set untrusted, the same conservative answer as for a single one.
 function readRecordedStates(adapter, input) {
   const statePaths = [adapter.getInstallStatePath(input), ...adapter.resolveLegacyInstallStatePaths(input)];
@@ -599,12 +600,12 @@ function readRecordedStates(adapter, input) {
   let found = false;
   for (const statePath of statePaths) {
     const state = readInstallStateOrNull(statePath);
-    if (state === UNREADABLE_STATE) return UNREADABLE_STATE;
+    if (state === UNREADABLE_STATE) return { trusted: false, operations: [] };
     if (!state) continue;
     found = true;
     operations.push(...(Array.isArray(state.operations) ? state.operations : []));
   }
-  return found ? { operations } : null;
+  return { trusted: found, operations };
 }
 
 function planGenericRetirements(input, adapter) {
@@ -612,8 +613,9 @@ function planGenericRetirements(input, adapter) {
   // root; without it identities cannot be compared, so the conservative
   // answer is to retire nothing rather than to guess a directory.
   const repoRoot = typeof input.repoRoot === 'string' && input.repoRoot.length > 0 ? input.repoRoot : null;
-  const previous = repoRoot ? readRecordedStates(adapter, input) : null;
-  if (!previous || previous === UNREADABLE_STATE) return [];
+  if (!repoRoot) return [];
+  const previous = readRecordedStates(adapter, input);
+  if (!previous.trusted) return [];
 
   // Destinations another adapter sharing this root still manages: never a
   // retirement candidate here, whatever this adapter's own coverage says. A
