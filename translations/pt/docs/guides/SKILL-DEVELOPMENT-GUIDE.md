@@ -19,20 +19,20 @@ Um guia abrangente para criar skills eficazes para o EGC - Extended Global Conte
 
 ## O que Sao Skills?
 
-Skills sao **modulos de conhecimento** que o Gemini Code carrega com base no contexto. Elas fornecem:
+Skills sao **modulos de conhecimento** que a sua ferramenta de IA carrega com base no contexto. Elas fornecem:
 
 - **Expertise de dominio**: Padroes de framework, idiomas de linguagem, boas praticas
 - **Definicoes de fluxo de trabalho**: Processos passo a passo para tarefas comuns
 - **Material de referencia**: Trechos de codigo, checklists, arvores de decisao
 - **Injecao de contexto**: Ativam quando condicoes especificas sao atendidas
 
-Ao contrario de **agentes** (subassistentes especializados) ou **comandos** (acoes disparadas pelo usuario), skills sao conhecimento passivo que o Gemini Code referencia quando relevante.
+Ao contrario de **agentes** (subassistentes especializados) ou **comandos** (acoes disparadas pelo usuario), skills sao conhecimento passivo que a sua ferramenta de IA referencia quando relevante.
 
 ### Quando as Skills Ativam
 
 Skills ativam quando:
 - A tarefa do usuario corresponde ao dominio da skill
-- O Gemini Code detecta contexto relevante
+- A ferramenta detecta contexto relevante
 - Um comando referencia uma skill
 - Um agente precisa de conhecimento de dominio
 
@@ -526,12 +526,12 @@ description: Referencia rapida para [API/Biblioteca].
 
 ### Teste Local
 
-1. **Copie para o diretorio de skills do Gemini Code**:
+1. **Copie para o diretorio de skills da sua ferramenta de IA**:
    ```bash
    cp -r skills/nome-da-sua-skill ~/.gemini/skills/
    ```
 
-2. **Teste com o Gemini Code**:
+2. **Teste com a sua ferramenta de IA**:
    ```
    Voce: "Preciso fazer [tarefa que deveria ativar sua skill]"
 

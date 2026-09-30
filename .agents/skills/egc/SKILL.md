@@ -89,7 +89,7 @@ Add Kiro IDE support (.kiro/) (#548)
 *Commit message example*
 
 ```text
-feat: add block-no-verify hook for Gemini Code and Cursor (#649)
+feat: add block-no-verify hook for Claude Code and Cursor (#649)
 ```
 
 ## Architecture

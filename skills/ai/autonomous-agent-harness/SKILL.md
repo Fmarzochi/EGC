@@ -1,12 +1,12 @@
 ---
 name: autonomous-agent-harness
-description: Transform Gemini Code into a fully autonomous agent system with persistent memory, scheduled operations, computer use, and task queuing. Replaces standalone agent frameworks (Hermes, AutoGPT) by leveraging Gemini Code's native crons, dispatch, MCP tools, and memory. Use when the user wants continuous autonomous operation, scheduled tasks, or a self-directing agent loop.
+description: Transform Claude Code into a fully autonomous agent system with persistent memory, scheduled operations, computer use, and task queuing. Replaces standalone agent frameworks (Hermes, AutoGPT) by leveraging Claude Code's native crons, dispatch, MCP tools, and memory. Use when the user wants continuous autonomous operation, scheduled tasks, or a self-directing agent loop.
 origin: EGC
 ---
 
 # Autonomous Agent Harness
 
-Turn Gemini Code into a persistent, self-directing agent system using only native features and MCP servers.
+Turn Claude Code into a persistent, self-directing agent system using only native features and MCP servers.
 
 ## Consent and Safety Boundaries
 
@@ -27,7 +27,7 @@ Prefer dry-run plans and local queue files before enabling recurring or event-dr
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    Gemini Code Runtime                        │
+│                    AI coding tool runtime                     │
 │                                                              │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐ │
 │  │  Crons   │  │ Dispatch │  │ Memory   │  │ Computer    │ │
@@ -55,7 +55,7 @@ Prefer dry-run plans and local queue files before enabling recurring or event-dr
 
 ### 1. Persistent Memory
 
-Use Gemini Code's built-in memory system enhanced with MCP memory server for structured data.
+Use Claude Code's built-in memory system enhanced with MCP memory server for structured data.
 
 **Built-in memory** (`~/.gemini/projects/*/memory/`):
 - User preferences, feedback, project context
@@ -84,7 +84,7 @@ Use mcp__memory__add_observations for new facts about known entities
 
 ### 2. Scheduled Operations (Crons)
 
-Use Gemini Code's scheduled tasks to create recurring agent operations.
+Use Claude Code's scheduled tasks to create recurring agent operations.
 
 **Setting up a cron:**
 
@@ -113,7 +113,7 @@ echo "Review open PRs and summarize" | egc -p --project /path/to/repo
 
 ### 3. Dispatch / Remote Agents
 
-Trigger Gemini Code agents remotely for event-driven workflows.
+Trigger Claude Code agents remotely for event-driven workflows.
 
 **Dispatch patterns:**
 
@@ -175,7 +175,7 @@ description: Persistent task queue for autonomous operation
 
 | Hermes Component | EGC Equivalent | How |
 |------------------|---------------|-----|
-| Gateway/Router | Gemini Code dispatch + crons | Scheduled tasks trigger agent sessions |
+| Gateway/Router | Claude Code dispatch + crons | Scheduled tasks trigger agent sessions |
 | Memory System | Gemini memory + MCP memory server | Built-in persistence + knowledge graph |
 | Tool Registry | MCP servers | Dynamically loaded tool providers |
 | Orchestration | EGC skills + agents | Skill definitions direct agent behavior |

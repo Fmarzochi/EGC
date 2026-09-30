@@ -16,7 +16,7 @@ Use manual adaptation when the target harness:
 
 Prefer a first-class egc target whenever one exists:
 
-- gemini Code
+- Claude Code
 - Codex
 - Cursor
 - OpenCode

@@ -94,7 +94,7 @@ function resolveEGCRoot(options = {}) {
     if (fs.existsSync(path.join(candidate, probe))) return candidate;
   }
 
-  // Plugin cache: Gemini Code stores marketplace plugins under
+  // Plugin cache: Claude Code stores marketplace plugins under
   // ~/.gemini/plugins/cache/<plugin-name>/<org>/<version>/
   const cacheFound = findInPluginCache(claudeDir, probe);
   if (cacheFound) return cacheFound;

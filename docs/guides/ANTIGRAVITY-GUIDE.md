@@ -26,9 +26,9 @@ egc remaps its component structure to match Antigravity's expected layout:
 
 > **Note on `.agents/` vs `.agent/` vs `agents/`**: The installer only handles three source paths explicitly: `rules` → `.agent/rules/`, `commands` → `.agent/workflows/`, and `agents` (no dot prefix) → `.agent/skills/`. The dot-prefixed `.agents/` directory in the egc repo is a **static layout** for Codex/Antigravity skill definitions and `openai.yaml` configs: it is not directly mapped by the installer. Any `.agents/` path falls through to the default scaffold operation. If you want `.agents/skills/` content available in the Antigravity runtime, you must manually copy it to `.agent/skills/`.
 
-### Key Differences from gemini Code
+### Key differences from the home install (`egc` target)
 
-- **Rules are flattened**: gemini Code nests rules under subdirectories (`rules/common/`, `rules/typescript/`). Antigravity expects a flat `rules/` directory: the installer handles this automatically.
+- **Rules are flattened**: the home install (`egc` target) nests rules under subdirectories (`rules/common/`, `rules/typescript/`). Antigravity expects a flat `rules/` directory: the installer handles this automatically.
 - **Commands become workflows**: egc's `/command` files land in `.agent/workflows/`, which is Antigravity's equivalent of slash commands.
 - **Agents become skills**: egc agent definitions map to `.agent/skills/`, where Antigravity looks for skill configurations.
 
@@ -121,9 +121,9 @@ See [CONTRIBUTING.md](../../.github/CONTRIBUTING.md) for the full contribution g
 
 ## Comparison with Other Targets
 
-| Feature | gemini Code | Cursor | Codex | Antigravity |
+| Feature | Home install (`egc`) | Cursor | Codex | Antigravity |
 |---------|-------------|--------|-------|-------------|
-| Install target | `gemini-home` | `cursor-project` | `codex-home` | `antigravity` |
+| Install target | `egc` | `cursor-project` | `codex-home` | `antigravity` |
 | Config root | `~/.gemini/` | `.cursor/` | `~/.codex/` | `.agent/` |
 | Scope | User-level | Project-level | User-level | Project-level |
 | Rules format | Nested dirs | Flat | Flat | Flat |

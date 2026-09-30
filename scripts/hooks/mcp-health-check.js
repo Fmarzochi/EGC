@@ -4,7 +4,7 @@
 /**
  * MCP health-check hook.
  *
- * Compatible with Gemini Code's existing hook events:
+ * Compatible with Claude Code's existing hook events:
  * - PreToolUse: probe MCP server health before MCP tool execution
  * - PostToolUseFailure: mark unhealthy servers, attempt reconnect, and re-probe
  *
@@ -27,7 +27,7 @@ const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_BACKOFF_MS = 30 * 1000;
 const MAX_BACKOFF_MS = 10 * 60 * 1000;
 // The preflight HTTP probe only checks reachability; it does not have access to
-// Gemini Code's stored OAuth bearer token. Treat auth-gated responses as
+// Claude Code's stored OAuth bearer token. Treat auth-gated responses as
 // reachable so the real MCP client can attempt the authenticated call.
 const HEALTHY_HTTP_CODES = new Set([200, 201, 202, 204, 301, 302, 303, 304, 307, 308, 400, 401, 403, 405]);
 const RECONNECT_STATUS_CODES = new Set([401, 403, 429, 503]);

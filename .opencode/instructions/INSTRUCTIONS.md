@@ -1,6 +1,6 @@
 # EGC - Extended Global Context - OpenCode Instructions
 
-This document consolidates the core rules and guidelines from the Gemini Code configuration for use with OpenCode.
+This document consolidates the core rules and guidelines from the Claude Code configuration for use with OpenCode.
 
 ## EGC Guardian Protocol — MANDATORY
 
@@ -311,7 +311,7 @@ interface Repository<T> {
 
 ## OpenCode-Specific Notes
 
-Since OpenCode does not support hooks, the following actions that were automated in Gemini Code must be done manually:
+Since OpenCode does not support hooks, the following actions that were automated in Claude Code must be done manually:
 
 ### After Writing/Editing Code
 - Run `prettier --write <file>` to format JS/TS files

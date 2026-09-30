@@ -1,12 +1,12 @@
 /**
  * Tests for plugin manifests:
- *   - .gemini-plugin/plugin.json (Gemini Code plugin)
+ *   - .gemini-plugin/plugin.json (Claude Code plugin)
  *   - .codex-plugin/plugin.json (Codex native plugin)
  *   - .mcp.json (MCP server config at plugin root)
  *   - .agents/plugins/marketplace.json (Codex marketplace discovery)
  *
  * Enforces rules from:
- *   - .gemini-plugin/PLUGIN_SCHEMA_NOTES.md (Gemini Code validator rules)
+ *   - .gemini-plugin/PLUGIN_SCHEMA_NOTES.md (Claude Code validator rules)
  *   - https://platform.openai.com/docs/codex/plugins (Codex official docs)
  *
  * Run with: node tests/run-all.js
@@ -198,10 +198,10 @@ test('egc plugin.json uses published plugin name', () => {
   assert.strictEqual(claudePlugin.name, 'egc');
 });
 
-test('egc plugin.json does NOT have agents field (unsupported by Gemini Code validator)', () => {
+test('egc plugin.json does NOT have agents field (unsupported by Claude Code validator)', () => {
   assert.ok(
     !('agents' in claudePlugin),
-    'agents field must NOT be declared: Gemini Code plugin validator rejects it',
+    'agents field must NOT be declared: Claude Code plugin validator rejects it',
   );
 });
 
@@ -216,7 +216,7 @@ test('egc plugin.json commands is an array', () => {
 test('egc plugin.json disables bundled MCP servers for provider tool-name compatibility', () => {
   assert.ok(
     Object.prototype.hasOwnProperty.call(claudePlugin, 'mcpServers'),
-    'Expected mcpServers to be explicitly declared so Gemini Code does not auto-load root .mcp.json',
+    'Expected mcpServers to be explicitly declared so Claude Code does not auto-load root .mcp.json',
   );
   assert.deepStrictEqual(
     claudePlugin.mcpServers,
@@ -228,7 +228,7 @@ test('egc plugin.json disables bundled MCP servers for provider tool-name compat
 test('egc plugin.json does NOT have explicit hooks declaration', () => {
   assert.ok(
     !('hooks' in claudePlugin),
-    'hooks field must NOT be declared: Gemini Code v2.1+ auto-loads hooks/hooks.json by convention',
+    'hooks field must NOT be declared: Claude Code v2.1+ auto-loads hooks/hooks.json by convention',
   );
 });
 

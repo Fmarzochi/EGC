@@ -1,5 +1,5 @@
 /**
- * Session Manager Library for Gemini Code
+ * Session Manager Library for EGC
  * Provides core session CRUD operations for listing, loading, and managing sessions
  *
  * Sessions are stored as markdown files in ~/.gemini/session-data/ with

@@ -66,7 +66,7 @@ function runTests() {
     assert.ok(result.stdout.includes('Usage:'));
   })) passed++; else failed++;
 
-  if (test('adapts Gemini Code tool names and strips unsupported color metadata', () => {
+  if (test('adapts Claude Code tool names and strips unsupported color metadata', () => {
     const tempDir = createTempDir();
     const agentsDir = path.join(tempDir, '.gemini', 'agents');
 

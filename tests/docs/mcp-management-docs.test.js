@@ -34,12 +34,12 @@ test('token optimization guide separates Gemini MCP disables from EGC config fil
   const source = read('docs/guides/token-optimization.md');
 
   assert.ok(
-    source.includes('Use `/mcp` to disable Gemini Code MCP servers'),
-    'Token guide should direct Gemini Code users to /mcp for runtime MCP disables'
+    source.includes('Use `/mcp` to disable Claude Code MCP servers'),
+    'Token guide should direct Claude Code users to /mcp for runtime MCP disables'
   );
   assert.ok(
-    source.includes('Gemini Code persists those runtime disables in `~/.gemini.json`'),
-    'Token guide should name ~/.gemini.json as the observed runtime disable store'
+    source.includes('Claude Code persists those runtime disables in `~/.claude.json`'),
+    'Token guide should name ~/.claude.json as the observed runtime disable store'
   );
   assert.ok(
     source.includes('`EGC_DISABLED_MCPS` only affects EGC-generated MCP config output'),

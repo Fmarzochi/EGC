@@ -1,8 +1,8 @@
 # Solucoes de Contorno para Bugs de Hook
 
-Solucoes de contorno testadas pela comunidade para bugs atuais do Gemini Code que podem afetar configuracoes pesadas de hooks do egc.
+Solucoes de contorno testadas pela comunidade para bugs atuais do Claude Code que podem afetar configuracoes pesadas de hooks do egc.
 
-Esta pagina e intencionalmente restrita: coleta as correcoes operacionais de maior sinal da superficie mais ampla de solucao de problemas sem repetir conselhos de configuracao especulativos ou sem suporte. Esses sao comportamentos do Gemini Code upstream, nao bugs do egc.
+Esta pagina e intencionalmente restrita: coleta as correcoes operacionais de maior sinal da superficie mais ampla de solucao de problemas sem repetir conselhos de configuracao especulativos ou sem suporte. Esses sao comportamentos do Claude Code upstream, nao bugs do egc.
 
 ## Quando Usar Esta Pagina
 
@@ -46,14 +46,14 @@ O que ajuda:
 O que ajuda:
 
 - Desative e reative o conector afetado apos a compactacao.
-- Se sua versao do Gemini Code suportar, adicione um hook leve de lembrete `PostCompact` que avisa para verificar a autenticacao do conector.
+- Se sua versao do Claude Code suportar, adicione um hook leve de lembrete `PostCompact` que avisa para verificar a autenticacao do conector.
 - Trate isso como um lembrete de recuperacao, nao uma correcao permanente.
 
 ### Edicoes de hook nao recarregam automaticamente
 
 O que ajuda:
 
-- Reinicie a sessao do Gemini Code apos alterar hooks.
+- Reinicie a sessao do Claude Code apos alterar hooks.
 - Usuarios avancados as vezes usam helpers de reload locais em shell, mas o egc nao inclui um porque essas abordagens sao dependentes de shell e plataforma.
 
 ### `529 Overloaded` repetido

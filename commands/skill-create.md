@@ -21,7 +21,7 @@ Analyze your repository's git history to extract coding patterns and generate SK
 
 1. **Parses Git History** - Analyzes commits, file changes, and patterns
 2. **Detects Patterns** - Identifies recurring workflows and conventions
-3. **Generates SKILL.md** - Creates valid Gemini Code skill files
+3. **Generates SKILL.md** - Creates valid skill files for your AI coding tool
 4. **Optionally Creates Instincts** - For the continuous-learning-v2 system
 
 ## Analysis Steps

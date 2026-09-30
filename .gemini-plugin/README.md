@@ -6,9 +6,9 @@ These constraints are not obvious from public examples and have caused repeated 
 
 ### Custom Endpoints and Gateways
 
-EGC does not override Gemini Code transport settings. If Gemini Code is configured to run through an official LLM gateway or a compatible custom endpoint, the plugin continues to work because hooks, skills, and any retained legacy command shims execute locally after the CLI starts successfully.
+EGC does not override Claude Code transport settings. If Claude Code is configured to run through an official LLM gateway or a compatible custom endpoint, the plugin continues to work because hooks, skills, and any retained legacy command shims execute locally after the CLI starts successfully.
 
-Use Gemini Code's own environment/configuration for transport selection, for example:
+Use Claude Code's own environment/configuration for transport selection, for example:
 
 ```bash
 export ANTHROPIC_BASE_URL=https://your-gateway.example.com

@@ -11,7 +11,7 @@ O objetivo e manter as partes duraveis do trabalho agentivo em um unico reposito
 - manifestos de instalacao
 - padroes de sessao e orquestracao
 
-Gemini Code, Codex, OpenCode, Cursor, Gemini e futuros harnesses devem adaptar esses ativos na borda em vez de exigir um novo modelo de fluxo de trabalho para cada ferramenta.
+Claude Code, Codex, OpenCode, Cursor, Gemini e futuros harnesses devem adaptar esses ativos na borda em vez de exigir um novo modelo de fluxo de trabalho para cada ferramenta.
 
 ## Modelo de Portabilidade
 
@@ -42,7 +42,7 @@ A mesma skill de origem pode ser instalada em multiplos harnesses porque e princ
 
 Cada harness tem comportamento diferente de carregamento e aplicacao:
 
-- Gemini Code carrega ativos de plugin e tem execucao nativa de hooks.
+- Claude Code carrega ativos de plugin e tem execucao nativa de hooks.
 - Codex le `AGENTS.md`, metadados de plugin, skills e configuracao MCP de referencia, mas a paridade de hooks e respaldada por instrucoes.
 - OpenCode tem um sistema de plugin/evento que pode reutilizar logica de hook do egc por meio de uma camada de adaptador.
 - Cursor usa seu proprio layout de regras e hooks, entao o egc mantem superficies traduzidas em `.cursor/`.
@@ -89,7 +89,7 @@ O fluxo de trabalho e:
 3. Deixe cada harness adaptar como a skill e carregada.
 4. Teste a skill de origem e os metadados voltados para o harness separadamente.
 
-Gemini Code recebe a skill pela superficie de plugin gemini e pode aplicar hooks relacionados nativamente.
+Claude Code recebe a skill pela sua superficie de plugin e pode aplicar hooks relacionados nativamente.
 
 Codex le as instrucoes do repositorio, `.codex-plugin/plugin.json` e a configuracao MCP de referencia. A mesma skill de origem ainda descreve o fluxo de trabalho, mas a paridade de hooks e respaldada por instrucoes, a menos que Codex adicione uma superficie nativa de hooks.
 
@@ -102,7 +102,7 @@ Se uma mudanca requer editar tres copias do mesmo fluxo de trabalho em diferente
 Suportado hoje:
 
 - fonte de skill compartilhada em `skills/`
-- empacotamento de plugin Gemini Code
+- empacotamento de plugin Claude Code
 - metadados de plugin Codex e configuracao MCP de referencia
 - superficie de pacote/plugin OpenCode
 - regras, hooks e skills adaptados para Cursor

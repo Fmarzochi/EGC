@@ -2,7 +2,7 @@
 # Continuous Learning v2 - Observation Hook
 #
 # Captures tool use events for pattern analysis.
-# Gemini Code passes hook data via stdin as JSON.
+# Claude Code passes hook data via stdin as JSON.
 #
 # v2.1: Project-scoped observations: detects current project context
 #       and writes observations to project-specific directory.
@@ -186,7 +186,7 @@ if [ ! -f "$PURGE_MARKER" ] || [ "$(find "$PURGE_MARKER" -mtime +1 2>/dev/null)"
 fi
 
 # Parse using Python via stdin pipe (safe for all JSON payloads)
-# Pass HOOK_PHASE via env var since Gemini Code does not include hook type in stdin JSON
+# Pass HOOK_PHASE via env var since Claude Code does not include hook type in stdin JSON
 PARSED=$(echo "$INPUT_JSON" | HOOK_PHASE="$HOOK_PHASE" "$PYTHON_CMD" -c '
 import json
 import sys
@@ -196,7 +196,7 @@ try:
     data = json.load(sys.stdin)
 
     # Determine event type from CLI argument passed via env var.
-    # Gemini Code does NOT include a "hook_type" field in the stdin JSON,
+    # Claude Code does NOT include a "hook_type" field in the stdin JSON,
     # so we rely on the shell argument ("pre" or "post") instead.
     hook_phase = os.environ.get("HOOK_PHASE", "post")
     event = "tool_start" if hook_phase == "pre" else "tool_complete"

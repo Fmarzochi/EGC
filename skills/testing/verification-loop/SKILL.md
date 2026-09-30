@@ -1,12 +1,12 @@
 ---
 name: verification-loop
-description: "A comprehensive verification system for Gemini Code sessions."
+description: "A comprehensive verification system for AI coding sessions."
 origin: EGC
 ---
 
 # Verification Loop Skill
 
-A comprehensive verification system for Gemini Code sessions.
+A comprehensive verification system for AI coding sessions.
 
 ## When to Use
 

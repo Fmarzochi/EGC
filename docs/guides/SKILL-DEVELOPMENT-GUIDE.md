@@ -19,20 +19,20 @@ A comprehensive guide to creating effective skills for EGC - Extended Global Con
 
 ## What Are Skills?
 
-Skills are **knowledge modules** that gemini Code loads based on context. They provide:
+Skills are **knowledge modules** that your AI coding tool loads based on context. They provide:
 
 - **Domain expertise**: Framework patterns, language idioms, best practices
 - **Workflow definitions**: Step-by-step processes for common tasks
 - **Reference material**: Code snippets, checklists, decision trees
 - **Context injection**: Activate when specific conditions are met
 
-Unlike **agents** (specialized subassistants) or **commands** (user-triggered actions), skills are passive knowledge that gemini Code references when relevant.
+Unlike **agents** (specialized subassistants) or **commands** (user-triggered actions), skills are passive knowledge that your AI coding tool references when relevant.
 
 ### When Skills Activate
 
 Skills activate when:
 - The user's task matches the skill's domain
-- gemini Code detects relevant context
+- The tool detects relevant context
 - A command references a skill
 - An agent needs domain knowledge
 
@@ -575,12 +575,12 @@ description: Quick reference for [API/Library].
 
 ### Local Testing
 
-1. **Copy to gemini Code skills directory**:
+1. **Copy to the skills directory of your AI coding tool**:
    ```bash
    cp -r skills/your-skill-name ~/.gemini/skills/
    ```
 
-2. **Test with gemini Code**:
+2. **Test with your AI coding tool**:
    ```
    You: "I need to [task that should trigger your skill]"
 

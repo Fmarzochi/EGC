@@ -6,7 +6,7 @@ O EGC possui um runtime de producao alem de uma direcao exploratoria de kernel m
 
 ### Runtime Node.js + MCP (coberto pelo CI)
 
-A superficie de producao que alimenta os harnesses Gemini Code, Codex, Cursor, Antigravity, OpenCode, Kiro, Trae e Codebuddy.
+A superficie de producao que alimenta os harnesses Claude Code, Codex, Cursor, Antigravity, OpenCode, Kiro, Trae e Codebuddy.
 
 | Camada | Caminho | Funcao |
 |---|---|---|
@@ -43,4 +43,4 @@ O scaffold Rust em `egc/` esta reservado para essa exploracao. Ele nao substitui
 | `SELECTIVE-INSTALL-DESIGN.md` | Justificativa de design de instalacao seletiva e regras por alvo |
 | `SINGLE-AGENT-OPERATIONAL-MODEL.md` | Modelo de execucao autoritativo de agente unico |
 | `continuous-learning-v2-spec.md` | Especificacao de skill de aprendizado continuo v2 |
-| `cross-harness.md` | Como uma unica fonte de skill e exposta em Gemini Code, Codex, Cursor, OpenCode |
+| `cross-harness.md` | Como uma unica fonte de skill e exposta em Claude Code, Codex, Cursor, OpenCode |

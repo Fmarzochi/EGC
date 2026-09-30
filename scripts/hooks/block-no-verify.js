@@ -473,7 +473,7 @@ function extractCommand(rawInput) {
     const parsed = JSON.parse(trimmed);
     if (typeof parsed !== 'object' || parsed === null) return trimmed;
 
-    // Gemini Code format: { tool_input: { command: "..." } }
+    // Claude Code format: { tool_input: { command: "..." } }
     const cmd = parsed.tool_input?.command;
     if (typeof cmd === 'string') return cmd;
 

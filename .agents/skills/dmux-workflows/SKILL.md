@@ -1,6 +1,6 @@
 ---
 name: dmux-workflows
-description: Multi-agent orchestration using dmux (tmux pane manager for AI agents). Patterns for parallel agent workflows across Gemini Code, Codex, OpenCode, and other harnesses. Use when running multiple agent sessions in parallel or coordinating multi-agent development workflows.
+description: Multi-agent orchestration using dmux (tmux pane manager for AI agents). Patterns for parallel agent workflows across Claude Code, Codex, OpenCode, and other harnesses. Use when running multiple agent sessions in parallel or coordinating multi-agent development workflows.
 ---
 
 # dmux Workflows
@@ -10,7 +10,7 @@ Orchestrate parallel AI agent sessions using dmux, a tmux pane manager for agent
 ## When to Activate
 
 - Running multiple agent sessions in parallel
-- Coordinating work across Gemini Code, Codex, and other harnesses
+- Coordinating work across Claude Code, Codex, and other harnesses
 - Complex tasks that benefit from divide-and-conquer parallelism
 - User says "run in parallel", "split this work", "use dmux", or "multi-agent"
 
@@ -19,7 +19,7 @@ Orchestrate parallel AI agent sessions using dmux, a tmux pane manager for agent
 dmux is a tmux-based orchestration tool that manages AI agent panes:
 - Press `n` to create a new pane with a prompt
 - Press `m` to merge pane output back to the main session
-- Supports: Gemini Code, Codex, OpenCode, Cline, Gemini, Qwen
+- Supports: Claude Code, Codex, OpenCode, Cline, Gemini, Qwen
 
 **Install:** Install dmux from its repository after reviewing the package. See [github.com/standardagents/dmux](https://github.com/standardagents/dmux)
 
@@ -83,9 +83,9 @@ Pane 2 (Fixer): "Fix failing tests based on the error output from pane 1"
 Use different AI tools for different tasks:
 
 ```
-Pane 1 (Gemini Code): "Review the security of the auth module"
+Pane 1 (Claude Code): "Review the security of the auth module"
 Pane 2 (Codex): "Refactor the utility functions for performance"
-Pane 3 (Gemini Code): "Write E2E tests for the checkout flow"
+Pane 3 (Claude Code): "Write E2E tests for the checkout flow"
 ```
 
 ### Pattern 5: Code Review Pipeline
@@ -132,7 +132,7 @@ git merge feat/billing
 |------|-------------|-------------|
 | **dmux** | tmux pane management for agents | Parallel agent sessions |
 | **Superset** | Terminal IDE for 10+ parallel agents | Large-scale orchestration |
-| **Gemini Code Task tool** | In-process subagent spawning | Programmatic parallelism within a session |
+| **Claude Code's Task tool** | In-process subagent spawning | Programmatic parallelism within a session |
 | **Codex multi-agent** | Built-in agent roles | Codex-specific parallel work |
 
 ## EGC Helper

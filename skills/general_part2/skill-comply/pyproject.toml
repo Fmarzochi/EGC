@@ -1,7 +1,7 @@
 [project]
 name = "skill-comply"
 version = "0.1.0"
-description = "Automated skill compliance measurement for Gemini Code"
+description = "Automated skill compliance measurement for AI coding tools"
 requires-python = ">=3.11"
 dependencies = ["pyyaml>=6.0"]
 

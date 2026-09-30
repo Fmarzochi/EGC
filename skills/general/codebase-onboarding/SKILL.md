@@ -1,16 +1,16 @@
 ---
 name: codebase-onboarding
-description: Analyze an unfamiliar codebase and generate a structured onboarding guide with architecture map, key entry points, conventions, and a starter GEMINI.md. Use when joining a new project or setting up Gemini Code for the first time in a repo.
+description: Analyze an unfamiliar codebase and generate a structured onboarding guide with architecture map, key entry points, conventions, and a starter GEMINI.md. Use when joining a new project or setting up your AI coding tool for the first time in a repo.
 origin: EGC
 ---
 
 # Codebase Onboarding
 
-Systematically analyze an unfamiliar codebase and produce a structured onboarding guide. Designed for developers joining a new project or setting up Gemini Code in an existing repo for the first time.
+Systematically analyze an unfamiliar codebase and produce a structured onboarding guide. Designed for developers joining a new project or setting up your AI coding tool in an existing repo for the first time.
 
 ## When to Use
 
-- First time opening a project with Gemini Code
+- First time opening a project with your AI coding tool
 - Joining a new team or repository
 - User asks "help me understand this codebase"
 - User asks to generate a GEMINI.md for a project

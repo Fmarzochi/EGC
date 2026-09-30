@@ -1,6 +1,6 @@
 # Plugin Manifest Schema Notes
 
-This document captures **undocumented but enforced constraints** of the Gemini Code plugin manifest validator.
+This document captures **undocumented but enforced constraints** of the Claude Code plugin manifest validator.
 
 These rules are based on real installation failures, validator behavior, and comparison with known working plugins.
 They exist to prevent silent breakage and repeated regressions.
@@ -57,11 +57,11 @@ This applies consistently across all component path fields.
 
 ## The `agents` Field: DO NOT ADD
 
-> WARNING: **CRITICAL:** Do NOT add an `"agents"` field to `plugin.json`. The Gemini Code plugin validator rejects it entirely.
+> WARNING: **CRITICAL:** Do NOT add an `"agents"` field to `plugin.json`. The Claude Code plugin validator rejects it entirely.
 
 ### Why This Matters
 
-The `agents` field is not part of the Gemini Code plugin manifest schema. Any form of it -- string path, array of paths, or array of directories -- causes a validation error:
+The `agents` field is not part of the Claude Code plugin manifest schema. Any form of it -- string path, array of paths, or array of directories -- causes a validation error:
 
 ```
 agents: Invalid input
@@ -71,7 +71,7 @@ Agent `.md` files under `agents/` are discovered automatically by convention (si
 
 ### History
 
-Previously this repo listed agents explicitly in `plugin.json` as an array of file paths. This passed the repo's own schema but failed Gemini Code's actual validator, which does not recognize the field. Removed in #1459.
+Previously this repo listed agents explicitly in `plugin.json` as an array of file paths. This passed the repo's own schema but failed Claude Code's actual validator, which does not recognize the field. Removed in #1459.
 
 ---
 
@@ -101,7 +101,7 @@ Assume the validator is hostile and literal.
 
 ### Why This Matters
 
-Gemini Code v2.1+ **automatically loads** `hooks/hooks.json` from any installed plugin by convention. If you also declare it in `plugin.json`, you get:
+Claude Code v2.1+ **automatically loads** `hooks/hooks.json` from any installed plugin by convention. If you also declare it in `plugin.json`, you get:
 
 ```
 Duplicate hooks file detected: ./hooks/hooks.json resolves to already-loaded file.
@@ -120,7 +120,7 @@ This has caused repeated fix/revert cycles in this repo:
 | `779085e` | ADD hooks | Users reported "agents not loading" (#88) |
 | `e3a1306` | REMOVE hooks | Users reported "duplicate hooks error" (#103) |
 
-**Root cause:** Gemini Code CLI changed behavior between versions:
+**Root cause:** Claude Code CLI changed behavior between versions:
 - Pre-v2.1: Required explicit `hooks` declaration
 - v2.1+: Auto-loads by convention, errors on duplicate
 
@@ -135,7 +135,7 @@ The test `plugin.json does NOT have explicit hooks declaration` in `tests/hooks/
 ## The `mcpServers` Field: Keep the Empty Opt-Out
 
 EGC keeps `.mcp.json` at the repository root for Codex plugin installs and manual MCP setup.
-Gemini Code also auto-discovers plugin-root `.mcp.json` files by convention, which would bundle the same MCP servers into Gemini plugin installs.
+Claude Code also auto-discovers plugin-root `.mcp.json` files by convention, which would bundle the same MCP servers into plugin installs.
 
 Keep this field in `.gemini-plugin/plugin.json`:
 

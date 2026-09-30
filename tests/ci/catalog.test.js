@@ -44,7 +44,7 @@ function writeEnglishReadme(root, counts, options = {}) {
   const unrelatedSkillsCount = options.unrelatedSkillsCount || 16;
 
   fs.writeFileSync(path.join(root, 'README.md'), `Access to ${counts.agents} agents, ${counts.skills} skills, and ${counts.commands} commands, plus ${counts.rules} rules.
-| Feature | Gemini Code | Cursor IDE | Codex CLI | OpenCode |
+| Feature | Claude Code | Cursor IDE | Codex CLI | OpenCode |
 | --- | --- | --- | --- | --- |
 | Agents | PASS: ${tableCounts.agents} agents |
 | Commands | PASS: ${tableCounts.commands} commands |
@@ -56,7 +56,7 @@ function writeEnglishReadme(root, counts, options = {}) {
 
 ## Cross-Tool Feature Parity
 
-| Feature | Gemini Code | Cursor IDE | Codex CLI | OpenCode |
+| Feature | Claude Code | Cursor IDE | Codex CLI | OpenCode |
 | --- | --- | --- | --- | --- |
 | **Agents** | ${parityCounts.agents} | Shared (AGENTS.md) | Shared (AGENTS.md) | 12 |
 | **Commands** | ${parityCounts.commands} | Shared | Instruction-based | 31 |
@@ -89,7 +89,7 @@ function writeZhDocsReadme(root, counts, options = {}) {
   fs.mkdirSync(dir, { recursive: true });
 
   fs.writeFileSync(path.join(dir, 'README.md'), `你现在可以使用 ${counts.agents} 个智能体、${counts.skills} 项技能和 ${counts.commands} 个命令了。
-| 功能特性 | Gemini Code | OpenCode | 状态 |
+| 功能特性 | Claude Code | OpenCode | 状态 |
 | --- | --- | --- | --- |
 | 智能体 | PASS: ${tableCounts.agents} 个 |
 | 命令 | PASS: ${tableCounts.commands} 个 |
@@ -101,7 +101,7 @@ function writeZhDocsReadme(root, counts, options = {}) {
 
 ## 跨工具功能对等
 
-| 功能特性 | Gemini Code | Cursor IDE | Codex CLI | OpenCode |
+| 功能特性 | Claude Code | Cursor IDE | Codex CLI | OpenCode |
 | --- | --- | --- | --- | --- |
 | **智能体** | ${parityCounts.agents} | 共享 (AGENTS.md) | 共享 (AGENTS.md) | 12 |
 | **命令** | ${parityCounts.commands} | 共享 | 基于指令 | 31 |

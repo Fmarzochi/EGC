@@ -70,7 +70,7 @@ if (fs.existsSync(releaseDir)) {
 
 test('cross-harness architecture doc exists and names core harnesses', () => {
   const source = read('docs/architecture/cross-harness.md');
-  for (const harness of ['Gemini Code', 'Codex', 'OpenCode', 'Cursor', 'Gemini', 'Hermes']) {
+  for (const harness of ['Claude Code', 'Codex', 'OpenCode', 'Cursor', 'Gemini', 'Hermes']) {
     assert.ok(source.includes(harness), `Expected cross-harness doc to mention ${harness}`);
   }
 });
@@ -160,7 +160,7 @@ test('cross-harness doc includes a worked skill portability example', () => {
   const source = read('docs/architecture/cross-harness.md');
   assert.ok(source.includes('## Worked Example'));
   assert.ok(source.includes('same skill source'));
-  for (const harness of ['Gemini Code', 'Codex', 'OpenCode']) {
+  for (const harness of ['Claude Code', 'Codex', 'OpenCode']) {
     assert.ok(source.includes(harness), `Expected worked example to mention ${harness}`);
   }
 });

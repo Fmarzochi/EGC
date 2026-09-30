@@ -1,19 +1,19 @@
 ---
 name: security-scan
-description: Scan your Gemini Code configuration (.gemini/ directory) for security vulnerabilities, misconfigurations, and injection risks using AgentShield. Checks GEMINI.md, settings.json, MCP servers, hooks, and agent definitions.
+description: Scan your Claude Code configuration (.claude/ directory) for security vulnerabilities, misconfigurations, and injection risks using AgentShield. Checks CLAUDE.md, settings.json, MCP servers, hooks, and agent definitions.
 origin: EGC
 ---
 
 # Security Scan Skill
 
-Audit your Gemini Code configuration for security issues using [AgentShield](https://github.com/Fmarzochi/agentshield).
+Audit your Claude Code configuration for security issues using [AgentShield](https://github.com/Fmarzochi/agentshield).
 
 ## When to Activate
 
-- Setting up a new Gemini Code project
-- After modifying `.gemini/settings.json`, `GEMINI.md`, or MCP configs
+- Setting up a new project with your AI coding tool
+- After modifying `.claude/settings.json`, `CLAUDE.md`, or MCP configs
 - Before committing configuration changes
-- When onboarding to a new repository with existing Gemini Code configs
+- When onboarding to a new repository with existing Claude Code configs
 - Periodic security hygiene checks
 
 ## What It Scans

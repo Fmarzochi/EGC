@@ -8,7 +8,7 @@ origin: community
 
 ## When to Use
 
-Use this skill when you need to dispatch multiple Gemini Code agents to work on coding tasks in parallel. Each agent runs in an isolated git worktree with full tooling.
+Use this skill when you need to dispatch multiple Claude Code agents to work on coding tasks in parallel. Each agent runs in an isolated git worktree with full tooling.
 
 Requires a running Gemini DevFleet instance connected via MCP:
 ```bash

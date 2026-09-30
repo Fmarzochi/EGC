@@ -21,7 +21,7 @@ GAN_MAX_ITERATIONS=5 GAN_PASS_THRESHOLD=6.5 ./scripts/gan-harness.sh "Build a to
 ## Example: Using the Command
 
 ```bash
-# In Gemini Code interactive mode:
+# In your AI coding tool's interactive session:
 /project:gan-build "Build a music streaming dashboard with playlists, visualizer, and social features"
 
 # With options:

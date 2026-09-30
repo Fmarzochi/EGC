@@ -62,7 +62,7 @@ Use MCP when the capability benefits from:
 - structured tool inputs/outputs
 - reusable resources or prompts
 - repeated cross-client usage
-- a stable interface that should work across gemini Code, Codex, Cursor, OpenCode, and related harnesses
+- a stable interface that should work across Claude Code, Codex, Cursor, OpenCode, and related harnesses
 - a long-lived server process being worth the operational overhead
 
 Avoid MCP when:

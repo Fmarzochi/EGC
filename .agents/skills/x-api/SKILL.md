@@ -76,7 +76,7 @@ oauth = OAuth1Session(
 ```python
 resp = oauth.post(
     "https://api.x.com/2/tweets",
-    json={"text": "Hello from Gemini Code"}
+    json={"text": "Hello from EGC"}
 )
 resp.raise_for_status()
 tweet_id = resp.json()["data"]["id"]

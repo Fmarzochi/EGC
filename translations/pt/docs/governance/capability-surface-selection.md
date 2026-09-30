@@ -51,7 +51,7 @@ Use MCP quando a capacidade se beneficia de:
 - entradas/saidas estruturadas de ferramentas
 - recursos ou prompts reutilizaveis
 - uso repetido entre clientes
-- uma interface estavel que deve funcionar em Gemini Code, Codex, Cursor, OpenCode e harnesses relacionados
+- uma interface estavel que deve funcionar em Claude Code, Codex, Cursor, OpenCode e harnesses relacionados
 
 ### CLI / Scripts de Repositorio
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-InsAIts Security Monitor -- PreToolUse Hook for Gemini Code
+InsAIts Security Monitor: PreToolUse hook for AI coding tools
 ============================================================
 
-Real-time security monitoring for Gemini Code tool inputs.
+Real-time security monitoring for AI coding tool inputs.
 Detects credential exposure, prompt injection, behavioral anomalies,
 hallucination chains, and 20+ other anomaly types -- runs 100% locally.
 
@@ -31,7 +31,7 @@ Setup:
   }
 
 How it works:
-  Gemini Code passes tool input as JSON on stdin.
+  The host passes tool input as JSON on stdin.
   This script runs InsAIts anomaly detection on the content.
   Exit code 0 = clean (pass through).
   Exit code 2 = critical issue found (blocks tool execution).
@@ -92,7 +92,7 @@ BLOCKING_SEVERITIES: frozenset = frozenset({"CRITICAL"})
 
 
 def extract_content(data: Dict[str, Any]) -> Tuple[str, str]:
-    """Extract inspectable text from a Gemini Code tool input payload.
+    """Extract inspectable text from a hook tool input payload.
 
     Returns:
         A (text, context) tuple where *text* is the content to scan and
@@ -157,7 +157,7 @@ def get_anomaly_attr(anomaly: Any, key: str, default: str = "") -> str:
 
 
 def format_feedback(anomalies: List[Any]) -> str:
-    """Format detected anomalies as feedback for Gemini Code.
+    """Format detected anomalies as feedback for the AI coding tool.
 
     Returns:
         A human-readable multi-line string describing each finding.
@@ -184,7 +184,7 @@ def format_feedback(anomalies: List[Any]) -> str:
 
 
 def main() -> None:
-    """Entry point for the Gemini Code PreToolUse hook."""
+    """Entry point for the PreToolUse hook."""
     raw: str = sys.stdin.read().strip()
     if not raw:
         sys.exit(0)
@@ -271,7 +271,7 @@ def main() -> None:
     feedback: str = format_feedback(anomalies)
 
     if has_critical:
-        # stdout feedback -> Gemini Code shows to the model
+        # stdout feedback -> the host shows it to the model
         sys.stdout.write(feedback + "\n")
         sys.exit(2)  # PreToolUse exit 2 = block tool execution
     else:

@@ -6,7 +6,7 @@ model: haiku
 
 # Observer Agent
 
-A background agent that analyzes observations from Gemini Code sessions to detect patterns and create instincts.
+A background agent that analyzes observations from AI coding sessions to detect patterns and create instincts.
 
 ## When to Run
 

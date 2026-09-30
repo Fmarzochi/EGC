@@ -2,7 +2,7 @@
   "version": 1,
   "profiles": {
     "minimal": {
-      "description": "Low-context Gemini Code setup with rules, agents, commands, platform configs, and quality workflow support, but no hook runtime.",
+      "description": "Low-context setup with rules, agents, commands, platform configs, and quality workflow support, but no hook runtime.",
       "modules": [
         "rules-core",
         "agents-core",

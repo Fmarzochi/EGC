@@ -44,7 +44,7 @@ Output: raw files ready for organization.
 
 ## Layer 2: Organization (Gemini / Codex)
 
-Use Gemini Code or Codex to:
+Use Claude Code or Codex to:
 - **Transcribe and label**: generate transcript, identify topics and themes
 - **Plan structure**: decide what stays, what gets cut, what order works
 - **Identify dead sections**: find pauses, tangents, repeated takes

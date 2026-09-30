@@ -69,7 +69,7 @@ CLI writes:
 - `<session-id>.json` with the full status payload for that session.
 
 These files are snapshots of local transcript analysis. They do not control or
-timeout Gemini Code runtime tool calls.
+timeout the runtime tool calls of your AI coding tool.
 
 ## Arguments
 

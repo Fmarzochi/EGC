@@ -18,7 +18,7 @@
 const { spawnSync } = require('node:child_process');
 const { isMacOS, log } = require('../lib/utils');
 
-const TITLE = 'Gemini Code';
+const TITLE = 'EGC';
 const MAX_BODY_LENGTH = 100;
 
 /**

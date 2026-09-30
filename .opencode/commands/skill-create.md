@@ -5,7 +5,7 @@ agent: egc:build
 
 # Skill Create Command
 
-Analyze git history to generate Gemini Code skills: $ARGUMENTS
+Analyze git history to generate skills for your AI coding tool: $ARGUMENTS
 
 ## Your Task
 

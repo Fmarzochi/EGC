@@ -11,7 +11,7 @@ The goal is to keep the durable parts of agentic work in one repo:
 - install manifests
 - session and orchestration patterns
 
-Gemini Code, Codex, OpenCode, Cursor, Gemini, and future harnesses should adapt those assets at the edge instead of requiring a new workflow model for every tool.
+Claude Code, Codex, OpenCode, Cursor, Gemini, and future harnesses should adapt those assets at the edge instead of requiring a new workflow model for every tool.
 
 ## Portability Model
 
@@ -42,7 +42,7 @@ The same source skill can be installed into multiple harnesses because it is mos
 
 Each harness has different loading and enforcement behavior:
 
-- Gemini Code loads plugin assets and has native hook execution.
+- Claude Code loads plugin assets and has native hook execution.
 - Codex reads `AGENTS.md`, plugin metadata, skills, and MCP config, but hook parity is instruction-driven.
 - OpenCode has a plugin/event system that can reuse egc hook logic through an adapter layer.
 - Cursor uses its own rule and hook layout, so egc maintains translated surfaces under `.cursor/`.
@@ -89,7 +89,7 @@ The workflow is:
 3. Let each harness adapt how the skill is loaded.
 4. Test the source skill and the harness-facing metadata separately.
 
-Gemini Code gets the skill through the gemini plugin surface and can enforce related hooks natively.
+Claude Code gets the skill through its plugin surface and can enforce related hooks natively.
 
 Codex reads the repo instructions, `.codex-plugin/plugin.json`, and the MCP reference config. The same skill source still describes the workflow, but hook parity is instruction-backed unless Codex adds a native hook surface.
 
@@ -102,7 +102,7 @@ If a change requires editing three harness copies of the same workflow, the shar
 Supported today:
 
 - shared skill source in `skills/`
-- Gemini Code plugin packaging
+- Claude Code plugin packaging
 - Codex plugin metadata and MCP reference config
 - OpenCode package/plugin surface
 - Cursor-adapted rules, hooks, and skills

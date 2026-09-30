@@ -8,7 +8,7 @@ stack: ["*"]
 
 # Conversation Analyzer Agent
 
-You analyze conversation history to identify problematic Gemini Code behaviors that should be prevented with hooks.
+You analyze conversation history to identify problematic AI coding tool behaviors that should be prevented with hooks.
 
 ## What to Look For
 

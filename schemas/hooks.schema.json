@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Gemini Code Hooks Configuration",
-  "description": "Configuration for Gemini Code hooks. Supports current Gemini Code hook events and hook action types. Four shapes are read, as scripts/ci/validate-hooks.js reads them: an event map or a matcher list, each under a hooks key or bare.",
+  "title": "Claude Code Hooks Configuration",
+  "description": "Configuration for Claude Code hooks. Supports current Claude Code hook events and hook action types. Four shapes are read, as scripts/ci/validate-hooks.js reads them: an event map or a matcher list, each under a hooks key or bare.",
   "$defs": {
     "stringArray": {
       "type": "array",

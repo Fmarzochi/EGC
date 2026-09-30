@@ -29,7 +29,7 @@ Agents hold their own keys via ERC-4337 smart accounts. The orchestrator sets po
 
 ## MCP Integration
 
-The payment layer exposes standard MCP tools that slot into any Gemini Code or agent harness setup.
+The payment layer exposes standard MCP tools that slot into any AI coding tool or agent harness setup.
 
 > **Security note**: Always pin the package version. This tool manages private keys: unpinned `npx` installs introduce supply-chain risk.
 

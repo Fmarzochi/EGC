@@ -1,5 +1,5 @@
 /**
- * Session Aliases Library for Gemini Code
+ * Session Aliases Library for EGC
  * Manages session aliases stored in ~/.gemini/session-aliases.json
  */
 

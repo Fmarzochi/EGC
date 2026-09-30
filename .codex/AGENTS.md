@@ -36,7 +36,7 @@ Available skills:
 - verification-loop: Build, test, lint, typecheck, security
 - deep-research: Multi-source research with firecrawl and exa MCPs
 - exa-search: Neural search via Exa MCP for web, code, and companies
-- egc-api: Gemini Code API patterns and SDKs
+- egc-api: Claude API patterns and SDKs
 - x-api: X/Twitter API integration for posting, threads, and analytics
 - crosspost: Multi-platform content distribution
 - fal-ai-media: AI image/video/audio generation via fal.ai
@@ -80,9 +80,9 @@ Sample role configs in this repo:
 - `.codex/agents/reviewer.toml`: correctness/security review
 - `.codex/agents/docs-researcher.toml`: API and release-note verification
 
-## Key Differences from Gemini Code
+## Key Differences from Claude Code
 
-| Feature | Gemini Code | Codex CLI |
+| Feature | Claude Code | Codex CLI |
 |---------|------------|-----------|
 | Hooks | 8+ event types | Not yet supported |
 | Context file | GEMINI.md + AGENTS.md | AGENTS.md only |

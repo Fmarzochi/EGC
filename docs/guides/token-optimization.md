@@ -10,14 +10,14 @@ Practical settings and habits to reduce token consumption, extend session qualit
 
 These are recommended defaults for most users. Power users can tune values further based on their workload: for example, setting `MAX_THINKING_TOKENS` lower for simple tasks or higher for complex architectural work.
 
-Add to your `~/.gemini/settings.json`:
+Add to your `~/.claude/settings.json`:
 
 ```json
 {
   "model": "sonnet",
   "env": {
     "MAX_THINKING_TOKENS": "10000",
-    "gemini_CODE_SUBAGENT_MODEL": "haiku"
+    "CLAUDE_CODE_SUBAGENT_MODEL": "haiku"
   }
 }
 ```
@@ -26,13 +26,13 @@ Add to your `~/.gemini/settings.json`:
 
 | Setting | Default | Recommended | Effect |
 |---------|---------|-------------|--------|
-| `model` | gemini-2.5-pro | **sonnet** | Sonnet handles ~80% of coding tasks well. Switch to gemini-2.5-pro with `/model gemini-2.5-pro` for complex reasoning. ~60% cost reduction. |
+| `model` | opus | **sonnet** | Sonnet handles ~80% of coding tasks well. Switch to opus with `/model opus` for complex reasoning. ~60% cost reduction. |
 | `MAX_THINKING_TOKENS` | 31,999 | **10,000** | Extended thinking reserves up to 31,999 output tokens per request for internal reasoning. Reducing this cuts hidden cost by ~70%. Set to `0` to disable for trivial tasks. |
-| `gemini_CODE_SUBAGENT_MODEL` | _(inherits main)_ | **haiku** | Subagents (Task tool) run on this model. Haiku is ~80% cheaper and sufficient for exploration, file reading, and test running. |
+| `CLAUDE_CODE_SUBAGENT_MODEL` | _(inherits main)_ | **haiku** | Subagents (Task tool) run on this model. Haiku is ~80% cheaper and sufficient for exploration, file reading, and test running. |
 
 ### Community note on auto-compaction overrides
 
-Some recent Gemini Code builds have community reports that `gemini_AUTOCOMPACT_PCT_OVERRIDE` can only lower the compaction threshold, which means values below the default may compact earlier instead of later. If that happens in your setup, remove the override and rely on manual `/compact` plus egc's `strategic-compact` guidance. See [Troubleshooting](./TROUBLESHOOTING.md).
+Some recent Claude Code builds have community reports that `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` can only lower the compaction threshold, which means values below the default may compact earlier instead of later. If that happens in your setup, remove the override and rely on manual `/compact` plus egc's `strategic-compact` guidance. See [Troubleshooting](./TROUBLESHOOTING.md).
 
 ### Toggling extended thinking
 
@@ -49,13 +49,13 @@ Use the right model for the task:
 |-------|----------|------|
 | **Haiku** | Subagent exploration, file reading, simple lookups | Lowest |
 | **Sonnet** | Day-to-day coding, reviews, test writing, implementation | Medium |
-| **gemini-2.5-pro** | Complex architecture, multi-step reasoning, debugging subtle issues | Highest |
+| **opus** | Complex architecture, multi-step reasoning, debugging subtle issues | Highest |
 
 Switch models mid-session:
 
 ```
 /model sonnet     # default for most work
-/model gemini-2.5-pro       # complex reasoning
+/model opus       # complex reasoning
 /model haiku      # quick lookups
 ```
 
@@ -122,21 +122,21 @@ Each enabled MCP server adds tool definitions to your context window. The README
 
 Tips:
 - Run `/mcp` to see active servers and their context cost
-- Use `/mcp` to disable Gemini Code MCP servers when you want a live runtime change. Gemini Code persists those runtime disables in `~/.gemini.json`.
+- Use `/mcp` to disable Claude Code MCP servers when you want a live runtime change. Claude Code persists those runtime disables in `~/.claude.json`.
 - Prefer CLI tools when available (`gh` instead of GitHub MCP, `aws` instead of AWS MCP)
-- Do not rely on `.gemini/settings.json` or `.gemini/settings.local.json` to disable already-loaded Gemini Code MCP servers; use `/mcp` for that.
-- `EGC_DISABLED_MCPS` only affects EGC-generated MCP config output during install/sync flows, such as `install.sh`, `npx egc-install`, and Codex MCP merging. It is not a live Gemini Code toggle.
+- Do not rely on `.claude/settings.json` or `.claude/settings.local.json` to disable already-loaded Claude Code MCP servers; use `/mcp` for that.
+- `EGC_DISABLED_MCPS` only affects EGC-generated MCP config output during install/sync flows, such as `install.sh`, `npx egc-install`, and Codex MCP merging. It is not a live Claude Code toggle.
 - The `memory` MCP server is configured by default but not used by any skill, agent, or hook: consider disabling it
 
 ---
 
 ## Agent Teams Cost Warning
 
-[Agent Teams](https://code.gemini.com/docs/en/agent-teams) (experimental) spawns multiple independent context windows. Each teammate consumes tokens separately.
+[Agent Teams](https://code.claude.com/docs/en/agent-teams) (experimental) spawns multiple independent context windows. Each teammate consumes tokens separately.
 
 - Only use for tasks where parallelism adds clear value (multi-module work, parallel reviews)
 - For simple sequential tasks, subagents (Task tool) are more token-efficient
-- Enable with: `gemini_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in settings
+- Enable with: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in settings
 
 ---
 
@@ -151,13 +151,13 @@ The `configure-egc` install wizard could offer to set these environment variable
 ```bash
 # Daily workflow
 /model sonnet              # Start here
-/model gemini-2.5-pro                # Only for complex reasoning
+/model opus                # Only for complex reasoning
 /clear                     # Between unrelated tasks
 /compact                   # At logical breakpoints
 /cost                      # Check spending
 
-# Environment variables (add to ~/.gemini/settings.json "env" block)
+# Environment variables (add to ~/.claude/settings.json "env" block)
 MAX_THINKING_TOKENS=10000
-gemini_CODE_SUBAGENT_MODEL=haiku
-gemini_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+CLAUDE_CODE_SUBAGENT_MODEL=haiku
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 ```

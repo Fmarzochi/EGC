@@ -8,7 +8,7 @@ Capture everything that happened in this session: what was built, what worked, w
 
 ## When to Use
 
-- End of a work session before closing Gemini Code
+- End of a work session before closing your AI coding tool
 - Before hitting context limits (run this first, then start a fresh session)
 - After solving a complex problem you want to remember
 - Any time you need to hand off context to a future session

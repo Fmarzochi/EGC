@@ -1,14 +1,14 @@
 # Solucao de Problemas
 
-Solucoes de contorno relatadas pela comunidade para bugs atuais do Gemini Code que podem afetar usuarios do egc.
+Solucoes de contorno relatadas pela comunidade para bugs atuais do Claude Code que podem afetar usuarios do egc.
 
-Esses sao comportamentos do Gemini Code upstream, nao bugs do egc. As entradas abaixo resumem as solucoes testadas em producao coletadas na [issue #644](https://github.com/Fmarzochi/EGC-code/issues/644) no Gemini Code `v2.1.79` (macOS, uso intenso de hooks, conectores MCP habilitados). Trate-as como solucoes temporarias pragmaticas ate que as correcoes upstream cheguem.
+Esses sao comportamentos do Claude Code upstream, nao bugs do egc. As entradas abaixo resumem as solucoes testadas em producao coletadas na [issue #644](https://github.com/Fmarzochi/EGC-code/issues/644) no Claude Code `v2.1.79` (macOS, uso intenso de hooks, conectores MCP habilitados). Trate-as como solucoes temporarias pragmaticas ate que as correcoes upstream cheguem.
 
-## Solucoes de Contorno da Comunidade para Bugs Abertos do Gemini Code
+## Solucoes de Contorno da Comunidade para Bugs Abertos do Claude Code
 
 ### Rotulos falsos de "Hook Error" em hooks que funcionaram com sucesso
 
-**Sintomas:** O hook e executado com sucesso, mas o Gemini Code ainda mostra `Hook Error` no transcript.
+**Sintomas:** O hook e executado com sucesso, mas o Claude Code ainda mostra `Hook Error` no transcript.
 
 **O que ajuda:**
 
@@ -32,7 +32,7 @@ exit 2
 
 **O que ajuda:**
 
-- Em algumas versoes atuais do Gemini Code, valores menores podem reduzir o limite de compactacao em vez de extende-lo.
+- Em algumas versoes atuais do Claude Code, valores menores podem reduzir o limite de compactacao em vez de extende-lo.
 - Se voce quer mais espaco de trabalho, remova `gemini_AUTOCOMPACT_PCT_OVERRIDE` e prefira `/compact` manual em limites logicos de tarefas.
 - Use o guia `strategic-compact` do egc em vez de forcar um limite menor de auto-compactacao.
 
@@ -43,7 +43,7 @@ exit 2
 **O que ajuda:**
 
 - Desative e reative o conector afetado apos a compactacao.
-- Se sua versao do Gemini Code suportar, adicione um hook de lembrete `PostCompact` que avisa para verificar a autenticacao do conector apos a compactacao.
+- Se sua versao do Claude Code suportar, adicione um hook de lembrete `PostCompact` que avisa para verificar a autenticacao do conector apos a compactacao.
 - Trate isso como uma etapa de recuperacao de estado de autenticacao, nao uma correcao permanente.
 
 ### Edicoes de hook nao recarregam automaticamente
@@ -52,12 +52,12 @@ exit 2
 
 **O que ajuda:**
 
-- Reinicie a sessao do Gemini Code apos alterar hooks.
+- Reinicie a sessao do Claude Code apos alterar hooks.
 - Usuarios avancados as vezes criam um comando local `/reload` em torno de `kill -HUP $PPID`, mas o egc nao o inclui porque e dependente de shell e nao universalmente confiavel.
 
 ### Respostas `529 Overloaded` repetidas
 
-**Sintomas:** O Gemini Code comeca a falhar sob alta pressao de hook/ferramenta/contexto.
+**Sintomas:** O Claude Code comeca a falhar sob alta pressao de hook/ferramenta/contexto.
 
 **O que ajuda:**
 

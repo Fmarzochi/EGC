@@ -6,7 +6,7 @@ origin: community
 
 # Plankton Code Quality Skill
 
-Integration reference for Plankton, a write-time code quality enforcement system for Gemini Code. Plankton runs formatters and linters on every file edit via PostToolUse hooks, then spawns Gemini subprocesses to fix violations the agent didn't catch.
+Integration reference for Plankton, a write-time code quality enforcement system for Claude Code. Plankton runs formatters and linters on every file edit via PostToolUse hooks, then spawns Gemini subprocesses to fix violations the agent didn't catch.
 
 ## When to Use
 
@@ -19,7 +19,7 @@ Integration reference for Plankton, a write-time code quality enforcement system
 
 ### Three-Phase Architecture
 
-Every time Gemini Code edits or writes a file, Plankton's `multi_linter.sh` PostToolUse hook runs:
+Every time Claude Code edits or writes a file, Plankton's `multi_linter.sh` PostToolUse hook runs:
 
 ```
 Phase 1: Auto-Format (Silent)
@@ -81,11 +81,11 @@ brew install jaq ruff uv
 # Install Python linters
 uv sync --all-extras
 
-# Start Gemini Code: hooks activate automatically
-egc
+# Start Claude Code: hooks activate automatically
+claude
 ```
 
-No install command, no plugin config. The hooks in `.gemini/settings.json` are picked up automatically when you run Gemini Code in the Plankton directory.
+No install command, no plugin config. The hooks in `.claude/settings.json` are picked up automatically when you run Claude Code in the Plankton directory.
 
 ### Per-Project Integration
 

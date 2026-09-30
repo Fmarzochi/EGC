@@ -23,7 +23,7 @@ class Color(str, Enum):
 def print_banner() -> None:
     banner = f"""{Color.CYAN}
 ╔════════════════════════════════════════════════════════════╗
-║   EGC — Everything Gemini Code                             ║
+║   EGC: Extended Global Context                             ║
 ║   Desenvolvido por Felipe Marzochi  -  @FEMARZOCHI         ║
 ║   https://github.com/Fmarzochi/EGC                         ║
 ║   © Todos os direitos reservados                           ║

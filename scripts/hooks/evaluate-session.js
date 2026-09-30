@@ -4,8 +4,8 @@
  *
  * Cross-platform (Windows, macOS, Linux)
  *
- * Runs on Stop hook to extract reusable patterns from Gemini Code sessions.
- * Reads transcript_path from stdin JSON (Gemini Code hook input).
+ * Runs on Stop hook to extract reusable patterns from AI coding sessions.
+ * Reads transcript_path from stdin JSON (the hook input).
  *
  * Why Stop hook instead of UserPromptSubmit:
  * - Stop runs once at session end (lightweight)

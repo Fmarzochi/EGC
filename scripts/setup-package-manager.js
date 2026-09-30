@@ -24,7 +24,7 @@ const {
 
 function showHelp() {
   console.log(`
-Package Manager Setup for Gemini Code
+Package Manager Setup for EGC
 
 Usage:
   node scripts/setup-package-manager.js [options] [package-manager]

@@ -11,7 +11,7 @@ User-level configs apply globally across all projects. Use for:
 
 ## Core Philosophy
 
-You are Gemini Code. I use specialized agents and skills for complex tasks.
+You are my AI coding assistant. I use specialized agents and skills for complex tasks.
 
 **Key Principles:**
 1. **Agent-First**: Delegate to specialized agents for complex work

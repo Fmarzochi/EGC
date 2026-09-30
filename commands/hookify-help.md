@@ -6,7 +6,7 @@ Display comprehensive hookify documentation.
 
 ## Hook System Overview
 
-Hookify creates rule files that integrate with Gemini Code's hook system to prevent unwanted behaviors.
+Hookify creates rule files that integrate with your AI coding tool's hook system to prevent unwanted behaviors.
 
 ### Event Types
 

@@ -1,16 +1,16 @@
 ---
 name: eval-harness
-description: Formal evaluation framework for Gemini Code sessions implementing eval-driven development (EDD) principles
+description: Formal evaluation framework for AI coding sessions implementing eval-driven development (EDD) principles
 ---
 
 # Eval Harness Skill
 
-A formal evaluation framework for Gemini Code sessions, implementing eval-driven development (EDD) principles.
+A formal evaluation framework for AI coding sessions, implementing eval-driven development (EDD) principles.
 
 ## When to Activate
 
 - Setting up eval-driven development (EDD) for AI-assisted workflows
-- Defining pass/fail criteria for Gemini Code task completion
+- Defining pass/fail criteria for AI coding task completion
 - Measuring agent reliability with pass@k metrics
 - Creating regression test suites for prompt or agent changes
 - Benchmarking agent performance across model versions

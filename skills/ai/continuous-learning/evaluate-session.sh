@@ -1,6 +1,6 @@
 #!/bin/bash
 # Continuous Learning - Session Evaluator
-# Runs on Stop hook to extract reusable patterns from Gemini Code sessions
+# Runs on Stop hook to extract reusable patterns from AI coding sessions
 #
 # Why Stop hook instead of UserPromptSubmit:
 # - Stop runs once at session end (lightweight)

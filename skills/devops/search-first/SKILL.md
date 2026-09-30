@@ -77,7 +77,7 @@ Task(subagent_type="general-purpose", prompt="
   Language/framework: [LANG]
   Constraints: [ANY]
 
-  Search: npm/PyPI, MCP servers, Gemini Code skills, GitHub
+  Search: npm/PyPI, MCP servers, AI coding tool skills, GitHub
   Return: Structured comparison with recommendation
 ")
 ```

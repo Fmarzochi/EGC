@@ -10,14 +10,14 @@ Configuracoes e habitos praticos para reduzir o consumo de tokens, estender a qu
 
 Essas sao as configuracoes padrao recomendadas para a maioria dos usuarios. Usuarios avancados podem ajustar os valores com base em sua carga de trabalho: por exemplo, definindo `MAX_THINKING_TOKENS` menor para tarefas simples ou maior para trabalho arquitetural complexo.
 
-Adicione ao seu `~/.gemini/settings.json`:
+Adicione ao seu `~/.claude/settings.json`:
 
 ```json
 {
   "model": "sonnet",
   "env": {
     "MAX_THINKING_TOKENS": "10000",
-    "gemini_CODE_SUBAGENT_MODEL": "haiku"
+    "CLAUDE_CODE_SUBAGENT_MODEL": "haiku"
   }
 }
 ```
@@ -26,13 +26,13 @@ Adicione ao seu `~/.gemini/settings.json`:
 
 | Configuracao | Padrao | Recomendado | Efeito |
 |--------------|--------|-------------|--------|
-| `model` | gemini-2.5-pro | **sonnet** | Sonnet lida bem com ~80% das tarefas de codificacao. Mude para gemini-2.5-pro com `/model gemini-2.5-pro` para raciocinio complexo. Reducao de custo de ~60%. |
+| `model` | opus | **sonnet** | Sonnet lida bem com ~80% das tarefas de codificacao. Mude para opus com `/model opus` para raciocinio complexo. Reducao de custo de ~60%. |
 | `MAX_THINKING_TOKENS` | 31.999 | **10.000** | O pensamento estendido reserva ate 31.999 tokens de saida por requisicao para raciocinio interno. Reduzir isso corta o custo oculto em ~70%. Defina como `0` para desabilitar em tarefas triviais. |
-| `gemini_CODE_SUBAGENT_MODEL` | _(herda principal)_ | **haiku** | Subagentes (ferramenta Task) rodam neste modelo. Haiku e ~80% mais barato e suficiente para exploracao, leitura de arquivos e execucao de testes. |
+| `CLAUDE_CODE_SUBAGENT_MODEL` | _(herda principal)_ | **haiku** | Subagentes (ferramenta Task) rodam neste modelo. Haiku e ~80% mais barato e suficiente para exploracao, leitura de arquivos e execucao de testes. |
 
 ### Nota da comunidade sobre substituicoes de auto-compactacao
 
-Algumas versoes recentes do Gemini Code tem relatos da comunidade de que `gemini_AUTOCOMPACT_PCT_OVERRIDE` pode somente diminuir o limite de compactacao, o que significa que valores abaixo do padrao podem compactar mais cedo em vez de mais tarde. Se isso acontecer na sua configuracao, remova a substituicao e confie no `/compact` manual mais o guia `strategic-compact` do egc. Veja [Solucao de Problemas](./TROUBLESHOOTING.md).
+Algumas versoes recentes do Claude Code tem relatos da comunidade de que `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` pode somente diminuir o limite de compactacao, o que significa que valores abaixo do padrao podem compactar mais cedo em vez de mais tarde. Se isso acontecer na sua configuracao, remova a substituicao e confie no `/compact` manual mais o guia `strategic-compact` do egc. Veja [Solucao de Problemas](./TROUBLESHOOTING.md).
 
 ### Alternando pensamento estendido
 
@@ -49,13 +49,13 @@ Use o modelo certo para a tarefa:
 |--------|-------------|-------|
 | **Haiku** | Exploracao com subagente, leitura de arquivos, buscas simples | Menor |
 | **Sonnet** | Codificacao diaria, revisoes, escrita de testes, implementacao | Medio |
-| **gemini-2.5-pro** | Arquitetura complexa, raciocinio em multiplos passos, depuracao de problemas sutis | Maior |
+| **opus** | Arquitetura complexa, raciocinio em multiplos passos, depuracao de problemas sutis | Maior |
 
 Mude de modelo durante a sessao:
 
 ```
 /model sonnet     # padrao para a maioria dos trabalhos
-/model gemini-2.5-pro       # raciocinio complexo
+/model opus       # raciocinio complexo
 /model haiku      # buscas rapidas
 ```
 
@@ -110,21 +110,21 @@ Cada servidor MCP habilitado adiciona definicoes de ferramentas a sua janela de 
 
 Dicas:
 - Execute `/mcp` para ver servidores ativos e seu custo de contexto
-- Use `/mcp` para desabilitar servidores MCP do Gemini Code quando quiser uma mudanca ao vivo. O Gemini Code persiste essas desativacoes de runtime em `~/.gemini.json`.
+- Use `/mcp` para desabilitar servidores MCP do Claude Code quando quiser uma mudanca ao vivo. O Claude Code persiste essas desativacoes de runtime em `~/.claude.json`.
 - Prefira ferramentas CLI quando disponiveis (`gh` em vez de GitHub MCP, `aws` em vez de AWS MCP)
-- Nao confie em `.gemini/settings.json` ou `.gemini/settings.local.json` para desabilitar servidores MCP do Gemini Code ja carregados; use `/mcp` para isso.
-- `EGC_DISABLED_MCPS` afeta apenas a saida de configuracao MCP gerada pelo EGC durante fluxos de instalacao/sincronizacao. Nao e uma alternancia ao vivo do Gemini Code.
+- Nao confie em `.claude/settings.json` ou `.claude/settings.local.json` para desabilitar servidores MCP do Claude Code ja carregados; use `/mcp` para isso.
+- `EGC_DISABLED_MCPS` afeta apenas a saida de configuracao MCP gerada pelo EGC durante fluxos de instalacao/sincronizacao. Nao e uma alternancia ao vivo do Claude Code.
 - O servidor MCP `memory` e configurado por padrao mas nao e usado por nenhuma skill, agente ou hook: considere desabilitá-lo.
 
 ---
 
 ## Aviso de Custo de Equipes de Agentes
 
-[Equipes de Agentes](https://code.gemini.com/docs/en/agent-teams) (experimental) cria multiplas janelas de contexto independentes. Cada membro consome tokens separadamente.
+[Equipes de Agentes](https://code.claude.com/docs/en/agent-teams) (experimental) cria multiplas janelas de contexto independentes. Cada membro consome tokens separadamente.
 
 - Use apenas para tarefas onde o paralelismo agrega valor claro (trabalho em multiplos modulos, revisoes paralelas)
 - Para tarefas sequenciais simples, subagentes (ferramenta Task) sao mais eficientes em tokens
-- Habilite com: `gemini_CODE_EXPERIMENTAL_AGENT_TEAMS=1` nas configuracoes
+- Habilite com: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` nas configuracoes
 
 ---
 
@@ -139,13 +139,13 @@ O assistente de instalacao `configure-egc` poderia oferecer a configuracao dessa
 ```bash
 # Fluxo de trabalho diario
 /model sonnet              # Comece aqui
-/model gemini-2.5-pro      # Somente para raciocinio complexo
+/model opus      # Somente para raciocinio complexo
 /clear                     # Entre tarefas nao relacionadas
 /compact                   # Em pontos logicos
 /cost                      # Verificar gasto
 
-# Variaveis de ambiente (adicionar ao bloco "env" de ~/.gemini/settings.json)
+# Variaveis de ambiente (adicionar ao bloco "env" de ~/.claude/settings.json)
 MAX_THINKING_TOKENS=10000
-gemini_CODE_SUBAGENT_MODEL=haiku
-gemini_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+CLAUDE_CODE_SUBAGENT_MODEL=haiku
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 ```

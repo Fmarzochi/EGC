@@ -1,8 +1,8 @@
 # Hook Bug Workarounds
 
-Community-tested workarounds for current gemini Code bugs that can affect egc hook-heavy setups.
+Community-tested workarounds for current Claude Code bugs that can affect egc hook-heavy setups.
 
-This page is intentionally narrow: it collects the highest-signal operational fixes from the longer troubleshooting surface without repeating speculative or unsupported configuration advice. These are upstream gemini Code behaviors, not egc bugs.
+This page is intentionally narrow: it collects the highest-signal operational fixes from the longer troubleshooting surface without repeating speculative or unsupported configuration advice. These are upstream Claude Code behaviors, not egc bugs.
 
 ## When To Use This Page
 
@@ -46,14 +46,14 @@ What helps:
 What helps:
 
 - Toggle the affected connector off and back on after compaction.
-- If your gemini Code build supports it, add a lightweight `PostCompact` reminder hook that tells you to re-check connector auth.
+- If your Claude Code build supports it, add a lightweight `PostCompact` reminder hook that tells you to re-check connector auth.
 - Treat this as a recovery reminder, not a permanent fix.
 
 ### Hook edits do not hot-reload
 
 What helps:
 
-- Restart the gemini Code session after changing hooks.
+- Restart the Claude Code session after changing hooks.
 - Advanced users sometimes use shell-local reload helpers, but egc does not ship one because those approaches are shell- and platform-dependent.
 
 ### Repeated `529 Overloaded`

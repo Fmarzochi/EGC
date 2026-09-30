@@ -9,7 +9,7 @@ then drill into the specific documents below.
 
 ### Node.js + MCP runtime (CI-covered)
 
-The production surface that powers the Gemini Code, Codex, Cursor,
+The production surface that powers the Claude Code, Codex, Cursor,
 Antigravity, OpenCode, Kiro, Trae, and Codebuddy harnesses.
 
 | Layer | Path | Role |
@@ -57,4 +57,4 @@ not displace the current production runtimes.
 | `SELECTIVE-INSTALL-DESIGN.md` | Selective install design rationale and per-target rules |
 | `SINGLE-AGENT-OPERATIONAL-MODEL.md` | Authoritative single-agent execution model |
 | `continuous-learning-v2-spec.md` | Continuous-learning v2 skill specification |
-| `cross-harness.md` | How a single skill source surfaces across Gemini Code, Codex, Cursor, OpenCode |
+| `cross-harness.md` | How a single skill source surfaces across Claude Code, Codex, Cursor, OpenCode |

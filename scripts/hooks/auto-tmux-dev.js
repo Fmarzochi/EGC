@@ -10,7 +10,7 @@
  * transforms it to run in a detached session.
  *
  * Benefits:
- * - Dev server runs detached (doesn't block Gemini Code)
+ * - Dev server runs detached (doesn't block the AI coding tool)
  * - Session persists (can run `tmux capture-pane -t <session> -p` to see logs on Unix)
  * - Session name matches project directory (allows multiple projects simultaneously)
  *

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Cursor-to-Gemini Code Hook Adapter
- * Transforms Cursor stdin JSON to Gemini Code hook format,
+ * Cursor-to-Claude Code Hook Adapter
+ * Transforms Cursor stdin JSON to Claude Code hook format,
  * then delegates to existing scripts/hooks/*.js
  */
 

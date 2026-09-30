@@ -1,5 +1,5 @@
 /**
- * Cross-platform utility functions for Gemini Code hooks and scripts.
+ * Cross-platform utility functions for EGC hooks and scripts.
  * Works on Windows, macOS, and Linux.
  */
 
@@ -161,7 +161,7 @@ export interface ReadStdinJsonOptions {
  */
 export function readStdinJson(options?: ReadStdinJsonOptions): Promise<Record<string, unknown>>;
 
-/** Log a message to stderr (visible to user in Gemini Code terminal) */
+/** Log a message to stderr (visible to the user in the terminal) */
 export function log(message: string): void;
 
 /** Output data to stdout (returned to Gemini's context) */

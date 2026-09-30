@@ -1,16 +1,16 @@
 ---
 name: continuous-learning
-description: Automatically extract reusable patterns from Gemini Code sessions and save them as learned skills for future use.
+description: Automatically extract reusable patterns from AI coding sessions and save them as learned skills for future use.
 origin: EGC
 ---
 
 # Continuous Learning Skill
 
-Automatically evaluates Gemini Code sessions on end to extract reusable patterns that can be saved as learned skills.
+Automatically evaluates AI coding sessions on end to extract reusable patterns that can be saved as learned skills.
 
 ## When to Activate
 
-- Setting up automatic pattern extraction from Gemini Code sessions
+- Setting up automatic pattern extraction from AI coding sessions
 - Configuring the Stop hook for session evaluation
 - Reviewing or curating learned skills in `~/.gemini/skills/learned/`
 - Adjusting extraction thresholds or pattern categories

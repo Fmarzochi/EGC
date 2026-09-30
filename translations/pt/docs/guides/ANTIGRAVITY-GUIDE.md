@@ -26,9 +26,9 @@ O egc remapeia sua estrutura de componentes para corresponder ao layout esperado
 
 > **Nota sobre `.agents/` vs `.agent/` vs `agents/`**: O instalador lida com apenas tres caminhos de origem explicitamente: `rules` -> `.agent/rules/`, `commands` -> `.agent/workflows/`, e `agents` (sem prefixo ponto) -> `.agent/skills/`. O diretorio `.agents/` (com prefixo ponto) no repositorio egc e um **layout estatico** para definicoes de skills Codex/Antigravity e configuracoes `openai.yaml`: ele nao e mapeado diretamente pelo instalador. Qualquer caminho `.agents/` passa para a operacao de scaffold padrao. Se voce quer conteudo de `.agents/skills/` disponivel no runtime do Antigravity, deve copiar manualmente para `.agent/skills/`.
 
-### Principais Diferencas do Gemini Code
+### Principais diferencas da instalacao na home (alvo `egc`)
 
-- **Regras sao niveladas**: O Gemini Code aninha regras em subdiretorios (`rules/common/`, `rules/typescript/`). O Antigravity espera um diretorio `rules/` plano: o instalador cuida disso automaticamente.
+- **Regras sao niveladas**: A instalacao na home (alvo `egc`) aninha regras em subdiretorios (`rules/common/`, `rules/typescript/`). O Antigravity espera um diretorio `rules/` plano: o instalador cuida disso automaticamente.
 - **Comandos tornam-se workflows**: Os arquivos `/command` do egc ficam em `.agent/workflows/`, que e o equivalente do Antigravity para slash commands.
 - **Agentes tornam-se skills**: Definicoes de agentes egc mapeiam para `.agent/skills/`, onde o Antigravity procura configuracoes de skills.
 
@@ -121,9 +121,9 @@ Veja [CONTRIBUTING.md](../../.github/CONTRIBUTING.md) para o guia completo de co
 
 ## Comparacao com Outros Targets
 
-| Feature | Gemini Code | Cursor | Codex | Antigravity |
+| Feature | Instalacao na home (`egc`) | Cursor | Codex | Antigravity |
 |---------|-------------|--------|-------|-------------|
-| Target de instalacao | `gemini-home` | `cursor-project` | `codex-home` | `antigravity` |
+| Target de instalacao | `egc` | `cursor-project` | `codex-home` | `antigravity` |
 | Raiz de configuracao | `~/.gemini/` | `.cursor/` | `~/.codex/` | `.agent/` |
 | Escopo | Nivel de usuario | Nivel de projeto | Nivel de usuario | Nivel de projeto |
 | Formato de regras | Diretorios aninhados | Plano | Plano | Plano |

@@ -1,10 +1,10 @@
 ---
-description: Manage Gemini Code session history, aliases, and session metadata.
+description: Manage the session history of your AI coding tool, aliases, and session metadata.
 ---
 
 # Sessions Command
 
-Manage Gemini Code session history - list, load, alias, and edit sessions stored in `~/.gemini/session-data/` with legacy reads from `~/.gemini/sessions/`.
+Manage the session history of your AI coding tool - list, load, alias, and edit sessions stored in `~/.gemini/session-data/` with legacy reads from `~/.gemini/sessions/`.
 
 ## Usage
 

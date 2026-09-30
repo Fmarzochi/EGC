@@ -285,7 +285,7 @@ chmod +x .kiro/scripts/*.sh
 
 - **Longform Guide**: `docs/longform-guide.md` - Deep dive on agentic workflows
 - **Security Guide**: `docs/security-guide.md` - Security best practices
-- **Migration Guide**: `docs/migration-from-egc.md` - For Gemini Code users
+- **Migration Guide**: `docs/migration-from-egc.md` - For Claude Code users
 - **GitHub Issues**: Report bugs and request features
 - **Kiro Documentation**: https://kiro.dev/docs
 

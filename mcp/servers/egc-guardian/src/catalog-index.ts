@@ -3,9 +3,9 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "agent-eval",
-    "description": "Head-to-head comparison of coding agents (Gemini Code, Aider, Codex, etc.) on custom tasks with pass rate, cost, time, and consistency metrics",
+    "description": "Head-to-head comparison of coding agents (Claude Code, Aider, Codex, etc.) on custom tasks with pass rate, cost, time, and consistency metrics",
     "source": "skills/ai/agent-eval/SKILL.md",
-    "triggers": "Comparing coding agents (Gemini Code, Aider, Codex, etc.) on your own codebase Measuring agent performance before adopting a new tool or model Running regression checks when an agent updates its model"
+    "triggers": "Comparing coding agents (Claude Code, Aider, Codex, etc.) on your own codebase Measuring agent performance before adopting a new tool or model Running regression checks when an agent updates its model"
   },
   {
     "kind": "skill",
@@ -42,7 +42,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "autonomous-agent-harness",
-    "description": "Transform Gemini Code into a fully autonomous agent system with persistent memory, scheduled operations, computer use, and task queuing. Replaces standalone agent frameworks (Hermes, AutoGPT) by leveraging Gemini Code's native crons, dispatch, MCP tools, and memory. Use when the user wants continuous autonomous operation, scheduled tasks, or a self-directing agent loop.",
+    "description": "Transform Claude Code into a fully autonomous agent system with persistent memory, scheduled operations, computer use, and task queuing. Replaces standalone agent frameworks (Hermes, AutoGPT) by leveraging Claude Code's native crons, dispatch, MCP tools, and memory. Use when the user wants continuous autonomous operation, scheduled tasks, or a self-directing agent loop.",
     "source": "skills/ai/autonomous-agent-harness/SKILL.md",
     "triggers": "User wants an agent that runs continuously or on a schedule Setting up automated workflows that trigger periodically Building a personal AI assistant that remembers context across sessions User says \""
   },
@@ -56,23 +56,23 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "autonomous-loops",
-    "description": "Patterns and architectures for autonomous Gemini Code loops: from simple sequential pipelines to RFC-driven multi-agent DAG systems.",
+    "description": "Patterns and architectures for autonomous AI coding loops: from simple sequential pipelines to RFC-driven multi-agent DAG systems.",
     "source": "skills/ai/autonomous-loops/SKILL.md",
     "triggers": "Setting up autonomous development workflows that run without human intervention Choosing the right loop architecture for your problem (simple vs complex) Building CI/CD style continuous development pi"
   },
   {
     "kind": "skill",
     "name": "continuous-learning",
-    "description": "Automatically extract reusable patterns from Gemini Code sessions and save them as learned skills for future use.",
+    "description": "Automatically extract reusable patterns from AI coding sessions and save them as learned skills for future use.",
     "source": "skills/ai/continuous-learning/SKILL.md",
-    "triggers": "Setting up automatic pattern extraction from Gemini Code sessions Configuring the Stop hook for session evaluation Reviewing or curating learned skills in ~/.gemini/skills/learned/ Adjusting extractio"
+    "triggers": "Setting up automatic pattern extraction from AI coding sessions Configuring the Stop hook for session evaluation Reviewing or curating learned skills in ~/.gemini/skills/learned/ Adjusting extraction "
   },
   {
     "kind": "skill",
     "name": "continuous-learning-v2",
     "description": "Instinct-based learning system that observes sessions via hooks, creates atomic instincts with confidence scoring, and evolves them into skills/commands/agents. v2.1 adds project-scoped instincts to prevent cross-project contamination.",
     "source": "skills/ai/continuous-learning-v2/SKILL.md",
-    "triggers": "Setting up automatic learning from Gemini Code sessions Configuring instinct based behavior extraction via hooks Tuning confidence thresholds for learned behaviors Reviewing, exporting, or importing i"
+    "triggers": "Setting up automatic learning from AI coding sessions Configuring instinct based behavior extraction via hooks Tuning confidence thresholds for learned behaviors Reviewing, exporting, or importing ins"
   },
   {
     "kind": "skill",
@@ -107,7 +107,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
     "name": "prompt-optimizer",
     "description": "Analyze raw prompts, identify intent and gaps, match EGC components (skills/commands/agents/hooks), and output a ready-to-paste optimized prompt. Advisory role only: never executes the task itself. TRIGGER when: user says \"optimize prompt\", \"improve my prompt\", \"how to write a prompt for\", \"help me prompt\", \"rewrite this prompt\", or explicitly asks to enhance prompt quality. Also triggers on Chinese equivalents: \"优化prompt\", \"改进prompt\", \"怎么写prompt\", \"帮我优化这个指令\". DO NOT TRIGGER when: user wants the task executed directly, or says \"just do it\" / \"直接做\". DO NOT TRIGGER when user says \"优化代码\", \"优化性能\", \"optimize performance\", \"optimize this code\": those are refactoring/performance tasks, not prompt optimization.",
     "source": "skills/ai/prompt-optimizer/SKILL.md",
-    "triggers": "User says \"optimize this prompt\", \"improve my prompt\", \"rewrite this prompt\" User says \"help me write a better prompt for...\" User says \"what's the best way to ask Gemini Code to...\" User says \"优化prom"
+    "triggers": "User says \"optimize this prompt\", \"improve my prompt\", \"rewrite this prompt\" User says \"help me write a better prompt for...\" User says \"what's the best way to ask your AI coding tool to...\" User says"
   },
   {
     "kind": "skill",
@@ -147,7 +147,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "architecture-decision-records",
-    "description": "Capture architectural decisions made during Gemini Code sessions as structured ADRs. Auto-detects decision moments, records context, alternatives considered, and rationale. Maintains an ADR log so future developers understand why the codebase is shaped the way it is.",
+    "description": "Capture architectural decisions made during AI coding sessions as structured ADRs. Auto-detects decision moments, records context, alternatives considered, and rationale. Maintains an ADR log so future developers understand why the codebase is shaped the way it is.",
     "source": "skills/architecture/architecture-decision-records/SKILL.md",
     "triggers": "User explicitly says \"let's record this decision\" or \"ADR this\" User chooses between significant alternatives (framework, library, pattern, database, API design) User says \"we decided to...\" or \"the r"
   },
@@ -490,7 +490,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "context-budget",
-    "description": "Audits Gemini Code context window consumption across agents, skills, MCP servers, and rules. Identifies bloat, redundant components, and produces prioritized token-savings recommendations.",
+    "description": "Audits AI coding tool context window consumption across agents, skills, MCP servers, and rules. Identifies bloat, redundant components, and produces prioritized token-savings recommendations.",
     "source": "skills/devops/context-budget/SKILL.md",
     "triggers": "Session performance feels sluggish or output quality is degrading You've recently added many skills, agents, or MCP servers You want to know how much context headroom you actually have Planning to add"
   },
@@ -838,7 +838,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "ck",
-    "description": "Persistent per-project memory for Gemini Code. Auto-loads project context on session start, tracks sessions with git activity, and writes to native memory. Commands run deterministic Node.js scripts: behavior is consistent across model versions.",
+    "description": "Persistent per-project memory for Claude Code. Auto-loads project context on session start, tracks sessions with git activity, and writes to native memory. Commands run deterministic Node.js scripts: behavior is consistent across model versions.",
     "source": "skills/general/ck/SKILL.md"
   },
   {
@@ -858,9 +858,9 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "codebase-onboarding",
-    "description": "Analyze an unfamiliar codebase and generate a structured onboarding guide with architecture map, key entry points, conventions, and a starter GEMINI.md. Use when joining a new project or setting up Gemini Code for the first time in a repo.",
+    "description": "Analyze an unfamiliar codebase and generate a structured onboarding guide with architecture map, key entry points, conventions, and a starter GEMINI.md. Use when joining a new project or setting up your AI coding tool for the first time in a repo.",
     "source": "skills/general/codebase-onboarding/SKILL.md",
-    "triggers": "First time opening a project with Gemini Code Joining a new team or repository User asks \"help me understand this codebase\" User asks to generate a GEMINI.md for a project User says \"onboard me\" or \"w"
+    "triggers": "First time opening a project with your AI coding tool Joining a new team or repository User asks \"help me understand this codebase\" User asks to generate a GEMINI.md for a project User says \"onboard m"
   },
   {
     "kind": "skill",
@@ -930,7 +930,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
     "name": "egc-devfleet",
     "description": "Orchestrate multi-agent coding tasks via Gemini DevFleet: plan projects, dispatch parallel agents in isolated worktrees, monitor progress, and read structured reports.",
     "source": "skills/general/egc-devfleet/SKILL.md",
-    "triggers": "Use this skill when you need to dispatch multiple Gemini Code agents to work on coding tasks in parallel. Each agent runs in an isolated git worktree with full tooling. Requires a running Gemini DevFl"
+    "triggers": "Use this skill when you need to dispatch multiple Claude Code agents to work on coding tasks in parallel. Each agent runs in an isolated git worktree with full tooling. Requires a running Gemini DevFl"
   },
   {
     "kind": "skill",
@@ -1154,9 +1154,9 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "workspace-surface-audit",
-    "description": "Audit the active repo, MCP servers, plugins, connectors, env surfaces, and harness setup, then recommend the highest-value EGC-native skills, hooks, agents, and operator workflows. Use when the user wants help setting up Gemini Code or understanding what capabilities are actually available in their environment.",
+    "description": "Audit the active repo, MCP servers, plugins, connectors, env surfaces, and harness setup, then recommend the highest-value EGC-native skills, hooks, agents, and operator workflows. Use when the user wants help setting up your AI coding tool or understanding what capabilities are actually available in their environment.",
     "source": "skills/general_part2/workspace-surface-audit/SKILL.md",
-    "triggers": "User says \"set up Gemini Code\", \"recommend automations\", \"what plugins or MCPs should I use?\", or \"what am I missing?\" Auditing a machine or repo before installing more skills, hooks, or connectors Co"
+    "triggers": "User says \"set up my AI coding tool\", \"recommend automations\", \"what plugins or MCPs should I use?\", or \"what am I missing?\" Auditing a machine or repo before installing more skills, hooks, or connect"
   },
   {
     "kind": "skill",
@@ -1398,9 +1398,9 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "security-scan",
-    "description": "Scan your Gemini Code configuration (.gemini/ directory) for security vulnerabilities, misconfigurations, and injection risks using AgentShield. Checks GEMINI.md, settings.json, MCP servers, hooks, and agent definitions.",
+    "description": "Scan your Claude Code configuration (.claude/ directory) for security vulnerabilities, misconfigurations, and injection risks using AgentShield. Checks CLAUDE.md, settings.json, MCP servers, hooks, and agent definitions.",
     "source": "skills/security/security-scan/SKILL.md",
-    "triggers": "Setting up a new Gemini Code project After modifying .gemini/settings.json , GEMINI.md , or MCP configs Before committing configuration changes When onboarding to a new repository with existing Gemini"
+    "triggers": "Setting up a new project with your AI coding tool After modifying .claude/settings.json , CLAUDE.md , or MCP configs Before committing configuration changes When onboarding to a new repository with ex"
   },
   {
     "kind": "skill",
@@ -1413,7 +1413,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
     "name": "ai-regression-testing",
     "description": "Regression testing strategies for AI-assisted development. Sandbox-mode API testing without database dependencies, automated bug-check workflows, and patterns to catch AI blind spots where the same model writes and reviews code.",
     "source": "skills/testing/ai-regression-testing/SKILL.md",
-    "triggers": "AI agent (Gemini Code, Cursor, Codex) has modified API routes or backend logic A bug was found and fixed: need to prevent re introduction Project has a sandbox/mock mode that can be leveraged for DB f"
+    "triggers": "AI agent (Claude Code, Cursor, Codex) has modified API routes or backend logic A bug was found and fixed: need to prevent re introduction Project has a sandbox/mock mode that can be leveraged for DB f"
   },
   {
     "kind": "skill",
@@ -1452,9 +1452,9 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "eval-harness",
-    "description": "Formal evaluation framework for Gemini Code sessions implementing eval-driven development (EDD) principles",
+    "description": "Formal evaluation framework for AI coding sessions implementing eval-driven development (EDD) principles",
     "source": "skills/testing/eval-harness/SKILL.md",
-    "triggers": "Setting up eval driven development (EDD) for AI assisted workflows Defining pass/fail criteria for Gemini Code task completion Measuring agent reliability with pass@k metrics Creating regression test "
+    "triggers": "Setting up eval driven development (EDD) for AI assisted workflows Defining pass/fail criteria for AI coding task completion Measuring agent reliability with pass@k metrics Creating regression test su"
   },
   {
     "kind": "skill",
@@ -1536,7 +1536,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "verification-loop",
-    "description": "A comprehensive verification system for Gemini Code sessions.",
+    "description": "A comprehensive verification system for AI coding sessions.",
     "source": "skills/testing/verification-loop/SKILL.md",
     "triggers": "Invoke this skill: After completing a feature or significant code change Before creating a PR When you want to ensure quality gates pass After refactoring"
   },
@@ -1550,9 +1550,9 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "dmux-workflows",
-    "description": "Multi-agent orchestration using dmux (tmux pane manager for AI agents). Patterns for parallel agent workflows across Gemini Code, Codex, OpenCode, and other harnesses. Use when running multiple agent sessions in parallel or coordinating multi-agent development workflows.",
+    "description": "Multi-agent orchestration using dmux (tmux pane manager for AI agents). Patterns for parallel agent workflows across Claude Code, Codex, OpenCode, and other harnesses. Use when running multiple agent sessions in parallel or coordinating multi-agent development workflows.",
     "source": "skills/workflows/dmux-workflows/SKILL.md",
-    "triggers": "Running multiple agent sessions in parallel Coordinating work across Gemini Code, Codex, and other harnesses Complex tasks that benefit from divide and conquer parallelism User says \"run in parallel\","
+    "triggers": "Running multiple agent sessions in parallel Coordinating work across Claude Code, Codex, and other harnesses Complex tasks that benefit from divide and conquer parallelism User says \"run in parallel\","
   },
   {
     "kind": "skill",
@@ -1869,7 +1869,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "agent",
     "name": "opensource-packager",
-    "description": "Generate complete open-source packaging for a sanitized project. Produces GEMINI.md, setup.sh, README.md, LICENSE, CONTRIBUTING.md, and GitHub issue templates. Makes any repo immediately usable with Gemini Code. Third stage of the opensource-pipeline skill.",
+    "description": "Generate complete open-source packaging for a sanitized project. Produces GEMINI.md, setup.sh, README.md, LICENSE, CONTRIBUTING.md, and GitHub issue templates. Makes any repo immediately usable with your AI coding tool. Third stage of the opensource-pipeline skill.",
     "source": "agents/opensource-packager.md"
   },
   {

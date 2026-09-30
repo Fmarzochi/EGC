@@ -1,5 +1,5 @@
 /**
- * Cross-platform utility functions for Gemini Code hooks and scripts
+ * Cross-platform utility functions for EGC hooks and scripts
  * Works on Windows, macOS, and Linux
  */
 
@@ -443,7 +443,7 @@ async function readStdinJson(options = {}) {
 }
 
 /**
- * Log to stderr (visible to user in Gemini Code)
+ * Log to stderr (visible to the user in the terminal)
  */
 function log(message) {
   console.error(message);

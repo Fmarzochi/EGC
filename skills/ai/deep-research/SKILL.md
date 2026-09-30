@@ -124,7 +124,7 @@ Sub-questions investigated: [list]
 
 ## Parallel Research with Subagents
 
-For broad topics, use Gemini Code's Task tool to parallelize:
+For broad topics, use Claude Code's Task tool to parallelize:
 
 ```
 Launch 3 research agents in parallel:

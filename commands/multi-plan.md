@@ -103,7 +103,7 @@ mcp__ace-tool__search_context({
 - Build semantic query using natural language (Where/What/How)
 - **NEVER answer based on assumptions**
 
-**If ace-tool MCP is NOT available**, use Gemini Code built-in tools as fallback:
+**If ace-tool MCP is NOT available**, use the built-in tools of your AI coding tool as fallback:
 1. **Glob**: Find relevant files by pattern (e.g., `Glob("**/*.ts")`, `Glob("src/**/*.py")`)
 2. **Grep**: Search for key symbols, function names, class definitions (e.g., `Grep("className|functionName")`)
 3. **Read**: Read the discovered files to gather complete context

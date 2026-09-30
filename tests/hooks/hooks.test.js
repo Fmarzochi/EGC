@@ -1750,11 +1750,11 @@ async function runTests() {
       cleanupTestDir(testDir);
     }));
 
-  tally(await asyncTest('parses Gemini Code JSONL format (entry.message.content)', async () => {
+  tally(await asyncTest('parses Claude Code JSONL format (entry.message.content)', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
-      // Gemini Code v2.1.41+ JSONL format: user messages nested in entry.message
+      // Claude Code v2.1.41+ JSONL format: user messages nested in entry.message
       const lines = ['{"type":"user","message":{"role":"user","content":"Fix the build error"}}', '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Also update tests"}]}}'];
       fs.writeFileSync(transcriptPath, lines.join('\n'));
 
@@ -1780,7 +1780,7 @@ async function runTests() {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
 
-      // Gemini Code JSONL: tool uses nested in assistant message content array
+      // Claude Code JSONL: tool uses nested in assistant message content array
       const lines = [
         '{"type":"user","content":"Edit the config"}',
         JSON.stringify({
@@ -1871,7 +1871,7 @@ async function runTests() {
       assert.ok(Number.isInteger(markerHook.timeout) && markerHook.timeout > 0, 'SessionEnd marker hook should define a timeout');
     }));
 
-  tally(test('all hook commands use string form for Gemini Code schema compatibility', () => {
+  tally(test('all hook commands use string form for Claude Code schema compatibility', () => {
       const hooksPath = path.join(__dirname, '..', '..', 'hooks', 'hooks.json');
       const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
 
@@ -1922,7 +1922,7 @@ async function runTests() {
 
       assert.ok(sessionStartHook, 'Should define a SessionStart hook');
       const commandText = sessionStartHook.command;
-      assert.strictEqual(typeof sessionStartHook.command, 'string', 'SessionStart should use string command form for Gemini Code compatibility');
+      assert.strictEqual(typeof sessionStartHook.command, 'string', 'SessionStart should use string command form for Claude Code compatibility');
       assert.ok(
         commandText.includes('session-start-bootstrap.js'),
         'SessionStart should delegate to the extracted bootstrap script'
@@ -1993,13 +1993,13 @@ async function runTests() {
   console.log('\nplugin.json Validation:');
 
   tally(test('plugin.json does NOT have explicit hooks declaration', () => {
-      // Gemini Code automatically loads hooks/hooks.json by convention.
+      // Claude Code automatically loads hooks/hooks.json by convention.
       // Explicitly declaring it in plugin.json causes a duplicate detection error.
       // See: https://github.com/Fmarzochi/EGC/issues/103
       const pluginPath = path.join(__dirname, '..', '..', '.gemini-plugin', 'plugin.json');
       const plugin = JSON.parse(fs.readFileSync(pluginPath, 'utf8'));
 
-      assert.ok(!plugin.hooks, 'plugin.json should NOT have "hooks" field - Gemini Code auto-loads hooks/hooks.json');
+      assert.ok(!plugin.hooks, 'plugin.json should NOT have "hooks" field - Claude Code auto-loads hooks/hooks.json');
     }));
 
   // ─── evaluate-session.js tests ───
@@ -2875,7 +2875,7 @@ async function runTests() {
   tally(await asyncTest('extracts tool_use from assistant message content blocks', async () => {
       const testDir = createTestDir();
       const transcriptPath = path.join(testDir, 'transcript.jsonl');
-      // Gemini Code JSONL format: tool_use blocks inside assistant message content array
+      // Claude Code JSONL format: tool_use blocks inside assistant message content array
       const lines = [
         '{"type":"user","content":"Edit config"}',
         JSON.stringify({

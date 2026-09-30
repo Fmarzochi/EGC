@@ -2,7 +2,7 @@
 description: Create hooks to prevent unwanted behaviors from conversation analysis or explicit instructions
 ---
 
-Create hook rules to prevent unwanted Gemini Code behaviors by analyzing conversation patterns or explicit user instructions.
+Create hook rules to prevent unwanted AI coding tool behaviors by analyzing conversation patterns or explicit user instructions.
 
 ## Usage
 

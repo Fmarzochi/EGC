@@ -148,9 +148,9 @@ opencode
 
 ## Hook Event Mapping
 
-OpenCode's plugin system maps to Gemini Code hooks:
+OpenCode's plugin system maps to Claude Code hooks:
 
-| Gemini Code | OpenCode |
+| Claude Code | OpenCode |
 |-------------|----------|
 | PreToolUse | `tool.execute.before` |
 | PostToolUse | `tool.execute.after` |
@@ -158,11 +158,11 @@ OpenCode's plugin system maps to Gemini Code hooks:
 | SessionStart | `session.created` |
 | SessionEnd | `session.deleted` |
 
-OpenCode has 20+ additional events not available in Gemini Code.
+OpenCode has 20+ additional events not available in Claude Code.
 
 ### Hook Runtime Controls
 
-OpenCode plugin hooks honor the same runtime controls used by Gemini Code/Cursor:
+OpenCode plugin hooks honor the same runtime controls used by Claude Code/Cursor:
 
 ```bash
 export EGC_HOOK_PROFILE=standard

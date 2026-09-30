@@ -172,7 +172,7 @@ GAN_EVAL_CRITERIA="functionality,performance,security" \
 ./scripts/gan-harness.sh "Build a REST API for task management"
 ```
 
-### Via Gemini Code (Manual)
+### Via your AI coding tool (manual)
 
 ```bash
 # Step 1: Plan

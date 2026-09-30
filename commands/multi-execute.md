@@ -156,7 +156,7 @@ mcp__ace-tool__search_context({
 - Build semantic query covering: entry files, dependency modules, related type definitions
 - If results insufficient, add 1-2 recursive retrievals
 
-**If ace-tool MCP is NOT available**, use Gemini Code built-in tools as fallback:
+**If ace-tool MCP is NOT available**, use the built-in tools of your AI coding tool as fallback:
 1. **Glob**: Find target files from plan's "Key Files" table (e.g., `Glob("src/components/**/*.tsx")`)
 2. **Grep**: Search for key symbols, function names, type definitions across the codebase
 3. **Read**: Read the discovered files to gather complete context

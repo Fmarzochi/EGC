@@ -1,9 +1,9 @@
 /**
  * EGC - Extended Global Context plugin hooks for OpenCode
  *
- * This plugin translates Gemini Code hooks to OpenCode's plugin system.
- * OpenCode's plugin system is MORE sophisticated than Gemini Code with 20+ events
- * compared to Gemini Code's 3 phases (PreToolUse, PostToolUse, Stop).
+ * This plugin translates Claude Code hooks to OpenCode's plugin system.
+ * OpenCode's plugin system is MORE sophisticated than Claude Code with 20+ events
+ * compared to Claude Code's 3 phases (PreToolUse, PostToolUse, Stop).
  *
  * Hook Event Mapping:
  * - PreToolUse → tool.execute.before
@@ -254,7 +254,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
   return {
     /**
      * Prettier Auto-Format Hook
-     * Equivalent to Gemini Code PostToolUse hook for prettier
+     * Equivalent to Claude Code PostToolUse hook for prettier
      *
      * Triggers: After any JS/TS/JSX/TSX file is edited
      * Action: Runs prettier --write on the file
@@ -292,7 +292,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
 
     /**
      * TypeScript Check Hook
-     * Equivalent to Gemini Code PostToolUse hook for tsc
+     * Equivalent to Claude Code PostToolUse hook for tsc
      *
      * Triggers: After edit tool completes on .ts/.tsx files
      * Action: Runs tsc --noEmit to check for type errors
@@ -358,7 +358,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
 
     /**
      * Pre-Tool Security Check
-     * Equivalent to Gemini Code PreToolUse hook
+     * Equivalent to Claude Code PreToolUse hook
      *
      * Triggers: Before tool execution
      * Action: Warns about potential security issues
@@ -471,7 +471,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
 
     /**
      * Session Created Hook
-     * Equivalent to Gemini Code SessionStart hook
+     * Equivalent to Claude Code SessionStart hook
      *
      * Triggers: When a new session starts
      * Action: Loads context and displays welcome message
@@ -489,7 +489,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
 
     /**
      * Session Idle Hook
-     * Equivalent to Gemini Code Stop hook
+     * Equivalent to Claude Code Stop hook
      *
      * Triggers: When session becomes idle (task completed)
      * Action: Runs console.log audit on all edited files
@@ -544,7 +544,7 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
 
     /**
      * Session Deleted Hook
-     * Equivalent to Gemini Code SessionEnd hook
+     * Equivalent to Claude Code SessionEnd hook
      *
      * Triggers: When session ends
      * Action: Final cleanup and state saving

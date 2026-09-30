@@ -36,7 +36,7 @@ function runTests() {
   // carrying the text asserts nothing, so it was removed rather than left skipping.
   if (test('hooks/README mirrors supported manual install guidance', () => {
     assert.ok(
-      hooksReadme.includes('do not paste the raw repo `hooks.json` into `~/.gemini/settings.json` or copy it directly into `~/.gemini/hooks/hooks.json`'),
+      hooksReadme.includes('do not paste the raw repo `hooks.json` into `~/.claude/settings.json` or copy it directly into `~/.claude/hooks/hooks.json`'),
       'hooks/README should warn against unsupported raw hook copying'
     );
     assert.ok(

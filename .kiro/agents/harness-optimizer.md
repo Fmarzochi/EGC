@@ -24,7 +24,7 @@ Raise agent completion quality by improving harness configuration, not by rewrit
 - Prefer small changes with measurable effect.
 - Preserve cross-platform behavior.
 - Avoid introducing fragile shell quoting.
-- Keep compatibility across Gemini Code, Cursor, OpenCode, and Codex.
+- Keep compatibility across Claude Code, Cursor, OpenCode, and Codex.
 
 ## Output
 

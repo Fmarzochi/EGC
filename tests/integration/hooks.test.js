@@ -43,7 +43,7 @@ async function asyncTest(name, fn) {
 }
 
 /**
- * Run a hook script with simulated Gemini Code input
+ * Run a hook script with simulated Claude Code input
  * @param {string} scriptPath - Path to the hook script
  * @param {object} input - Hook input object (will be JSON stringified)
  * @param {object} env - Environment variables
@@ -779,7 +779,7 @@ async function runTests() {
     const testDir = createTestDir();
     const transcriptPath = path.join(testDir, 'nested-transcript.jsonl');
 
-    // Gemini Code JSONL format uses nested message.content arrays
+    // Claude Code JSONL format uses nested message.content arrays
     const lines = [
       JSON.stringify({ type: 'user', message: { role: 'user', content: [
         { type: 'text', text: 'Refactor the utils module' }

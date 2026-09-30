@@ -18,7 +18,7 @@ User request → Gemini picks a tool → PreToolUse hook runs → Tool executes 
 
 ## Installing These Hooks Manually
 
-For Gemini Code manual installs, do not paste the raw repo `hooks.json` into `~/.gemini/settings.json` or copy it directly into `~/.gemini/hooks/hooks.json`. The checked-in file is plugin/repo-oriented and is meant to be installed through the EGC installer or loaded as a plugin.
+For Claude Code manual installs, do not paste the raw repo `hooks.json` into `~/.claude/settings.json` or copy it directly into `~/.claude/hooks/hooks.json`. The checked-in file is plugin/repo-oriented and is meant to be installed through the EGC installer or loaded as a plugin.
 
 Use the installer instead so hook commands are rewritten against your actual Gemini root:
 

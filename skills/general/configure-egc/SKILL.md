@@ -17,7 +17,7 @@ An interactive, step-by-step installation wizard for the EGC project. Uses `AskU
 
 ## Prerequisites
 
-This skill must be accessible to Gemini Code before activation. Two ways to bootstrap:
+This skill must be accessible to your AI coding tool before activation. Two ways to bootstrap:
 1. **Via Plugin**: `/plugin install egc`: the plugin loads this skill automatically
 2. **Manual**: Copy only this skill to `~/.gemini/skills/configure-egc/SKILL.md`, then activate by saying "configure egc"
 
@@ -45,7 +45,7 @@ Use `AskUserQuestion` to ask the user where to install:
 ```
 Question: "Where should EGC components be installed?"
 Options:
-  - "User-level (~/.gemini/)": "Applies to all your Gemini Code projects"
+  - "User-level (~/.gemini/)": "Applies to all your projects"
   - "Project-level (.gemini/)": "Applies only to the current project"
   - "Both": "Common/shared items user-level, project-specific items project-level"
 ```
@@ -364,14 +364,14 @@ Then print a summary report:
 
 ## Troubleshooting
 
-### "Skills not being picked up by Gemini Code"
+### "Skills not being picked up by my AI coding tool"
 - Verify the skill directory contains a `SKILL.md` file (not just loose .md files)
 - For user-level: check `~/.gemini/skills/<skill-name>/SKILL.md` exists
 - For project-level: check `.gemini/skills/<skill-name>/SKILL.md` exists
 
 ### "Rules not working"
 - Rules are flat files, not in subdirectories: `$TARGET/rules/coding-style.md` (correct) vs `$TARGET/rules/common/coding-style.md` (incorrect for flat install)
-- Restart Gemini Code after installing rules
+- Restart your AI coding tool after installing rules
 
 ### "Path reference errors after project-level install"
 - Some skills assume `~/.gemini/` paths. Run Step 4 verification to find and fix these.
