@@ -418,7 +418,7 @@ async function handleReduceContext(toolArgs: unknown) {
 
   let totalBytesLoaded = 0;
   for (const filepath of filepaths) {
-    const loaded = await loadContextFileChunks(filepath, totalBytesLoaded);
+    const loaded = await loadContextFileChunks(filepath, totalBytesLoaded); // NOSONAR: sequential by design, each call needs the running totalBytesLoaded to enforce the 50MB aggregate limit across files
     if (!loaded) continue;
     rawPayloads.push(...loaded.chunks);
     totalBytesLoaded += loaded.bytes;
@@ -485,7 +485,7 @@ async function handleOrchestrateTask(toolArgs: unknown) {
   let totalBytesLoaded = 0;
   let filesLoaded = 0;
   for (const filePath of files) {
-    const loaded = await loadContextFileChunks(filePath, totalBytesLoaded);
+    const loaded = await loadContextFileChunks(filePath, totalBytesLoaded); // NOSONAR: sequential by design, each call needs the running totalBytesLoaded to enforce the 50MB aggregate limit across files
     if (!loaded) continue;
     rawPayloads.push(...loaded.chunks);
     totalBytesLoaded += loaded.bytes;

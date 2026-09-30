@@ -28,7 +28,7 @@ const { run: runGuardian } = require('../scripts/hooks/pre-bash-guardian-validat
 const { run: runCrusherRewrite } = require('../scripts/hooks/pre-bash-crusher-rewrite');
 
 export default function egcGuardianCrusherPlugin(amp: any) {
-  amp.on('tool.call', async (event: any) => {
+  amp.on('tool.call', (event: any) => {
     const shellCommand = amp.helpers.shellCommandFromToolCall(event);
     if (!shellCommand || typeof shellCommand.command !== 'string') {
       return { action: 'allow' };

@@ -93,7 +93,7 @@ export async function waitForBusEvents(params: BusWaitParams): Promise<BusWaitRe
     const reason = await params.transport.waitForChange(Math.min(remaining, ceiling));
     if (reason === 'closed') break;
     rounds += 1;
-    events = await params.readQuiet();
+    events = await params.readQuiet(); // NOSONAR: poll loop by design, each round waits on the previous one's result before deciding whether to try again
   }
   return { events, waitedMs: Date.now() - startedAt, rounds };
 }

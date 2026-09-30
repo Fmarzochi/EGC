@@ -246,7 +246,7 @@ async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false, keepSo
 
   const reports = [];
   const commit = canonicalDb.transaction(() => {});
-  for (const src of sourcePaths) reports.push(await mergeOneSource(canonicalDb, src, apply, resolvedCanonicalPath));
+  for (const src of sourcePaths) reports.push(await mergeOneSource(canonicalDb, src, apply, resolvedCanonicalPath)); // NOSONAR: sequential by design, every source merges into the same canonicalDb handle, committed together below
   if (apply) commit(); // no-op body; forces a single persist after all inserts above
 
   if (apply) await canonicalDb.flush();

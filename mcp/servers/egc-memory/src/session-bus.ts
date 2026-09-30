@@ -162,9 +162,9 @@ async function overlappingLocks(db: BusDb, key: string, sessionId: string): Prom
   for (const row of rows) {
     const held = rowText(row.path);
     if (held === key || !claimsOverlap(held, key)) continue;
-    const holder = await db.get('SELECT id, territory FROM bus_sessions WHERE id = ?', row.session_id);
+    const holder = await db.get('SELECT id, territory FROM bus_sessions WHERE id = ?', row.session_id); // NOSONAR: sequential by design, one shared db handle; a stale-lock delete must not race a concurrent read of the same row
     if (holder) live.push({ ...row, territory: holder.territory });
-    else await db.run('DELETE FROM bus_locks WHERE path = ? AND session_id = ?', held, row.session_id);
+    else await db.run('DELETE FROM bus_locks WHERE path = ? AND session_id = ?', held, row.session_id); // NOSONAR: see above
   }
   return live;
 }

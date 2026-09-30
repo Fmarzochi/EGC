@@ -157,8 +157,9 @@ export class GitBackend extends SyncBackend {
     };
   }
 
-  async destroy(): Promise<void> {
+  destroy(): Promise<void> {
     this.config = null;
+    return Promise.resolve();
   }
 
   private async ensureGitIdentity(): Promise<void> {

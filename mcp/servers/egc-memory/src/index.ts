@@ -150,7 +150,7 @@ async function countFtsTriggers(db: Database, prefix: string): Promise<number> {
 async function dropFtsTriggers(db: Database, prefix: string): Promise<void> {
   for (const suffix of ['insert', 'delete', 'update']) {
     try {
-      await db.exec(`DROP TRIGGER IF EXISTS ${prefix}${suffix}`);
+      await db.exec(`DROP TRIGGER IF EXISTS ${prefix}${suffix}`); // NOSONAR: sequential by design, DDL statements on the same sqlite handle, run one at a time to avoid lock contention
     } catch (error) {
       log('WARN', 'Could not drop an FTS5 sync trigger', { trigger: `${prefix}${suffix}`, error: String(error) });
     }
@@ -234,7 +234,7 @@ async function acquireMigrationLock(lockFile: string): Promise<void> {
 // Cross-process mutex for state-file merges: update_state does a
 // read-merge-write on the encrypted file, so two server processes writing
 // concurrently would silently drop the loser's merge without this.
-async function withStateMergeLock<T>(stateFile: string, fn: () => Promise<T>): Promise<T> {
+async function withStateMergeLock<T>(stateFile: string, fn: () => T | Promise<T>): Promise<T> {
   const lockFile = `${stateFile}.merge.lock`;
   fs.mkdirSync(path.dirname(lockFile), { recursive: true });
   clearStaleMigrationLock(lockFile);
@@ -703,7 +703,7 @@ async function runLessonDecaySweep(db: Database): Promise<number> {
       continue;
     }
     const archived = decayed < LESSON_ARCHIVE_THRESHOLD ? 1 : 0;
-    await db.run('UPDATE lessons SET confidence = ?, archived = ? WHERE id = ?', [decayed, archived, row.id]);
+    await db.run('UPDATE lessons SET confidence = ?, archived = ? WHERE id = ?', [decayed, archived, row.id]); // NOSONAR: sequential by design, one shared db handle, writes serialized to avoid lock contention
     affected++;
   }
   return affected;
@@ -852,7 +852,7 @@ const TeamInitSchema = z.object({
   team_key: z.string().regex(/^[0-9a-f]{64}$/i, 'team_key must be 64 hexadecimal characters').optional()
 });
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
+server.setRequestHandler(ListToolsRequestSchema, () => {
   return {
     tools: [
       { name: "get_project_state", description: "Returns server health metadata for the active project: storage engine (sqlite-wal, or sqlite-wasm when the portable engine is in use) and write arbitration mode (MessageQueue). Use this to verify the egc-memory server is running and responsive before calling get_state or update_state.", inputSchema: { type: "object", properties: {} } },
@@ -1216,7 +1216,7 @@ async function handleLessonRecall(db: Database, args: unknown) {
   if (matched.length > 0) {
     await writeArbitrator.enqueue(async () => {
       for (const lesson of matched) {
-        await db.run('UPDATE lessons SET last_recalled = ? WHERE id = ?', [now, lesson.id]);
+        await db.run('UPDATE lessons SET last_recalled = ? WHERE id = ?', [now, lesson.id]); // NOSONAR: sequential by design, one shared db handle, writes serialized to avoid lock contention
       }
     });
   }
@@ -1413,7 +1413,7 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
 
   if (args.scope === 'global') {
     const globalFile = getGlobalStateFile();
-    return withStateMergeLock(globalFile, async () => {
+    return withStateMergeLock(globalFile, () => {
       const existingGlobal = readExistingStateOrRecover(globalFile, args.force, 'global');
       writeStateDoc(globalFile, 'global', args, existingGlobal, null);
       const writtenGlobal = readStateFile(globalFile, getEncKey());
@@ -1429,7 +1429,7 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
   // branch-scoped write inherits the pre-existing flat state. The read
   // happens inside the merge lock: reading before acquiring it would
   // reintroduce the lost-update race between concurrent sessions.
-  await withStateMergeLock(filePath, async () => {
+  await withStateMergeLock(filePath, () => {
     const resolved = resolveStateRead(getStateDir(), projPath, branch);
     const existing = readExistingStateOrRecover(resolved.filePath, args.force, 'project');
 
@@ -1780,7 +1780,7 @@ async function handleDetectPatterns(db: Database, toolArgs: unknown) {
       try {
         for (const p of detected) {
     const entry = patternToStoreEntry(p, window_days);
-    await ssDb.run(upsertSql, [
+    await ssDb.run(upsertSql, [ // NOSONAR: sequential by design, every insert belongs to the same BEGIN/COMMIT transaction on one db handle
       entry.id,
       entry.patternType,
       entry.key,
@@ -1839,26 +1839,30 @@ async function handleCompressObservations(db: Database, toolArgs: unknown) {
     };
   }
 
-  // Use llmCompress (with ruleBasedCompress as its internal fallback) as the primary path
-  // Sequential loop avoids race condition: replaceObservation rewrites the entire JSONL file each call
-  const compressed: import('./compress.js').CompressedObservation[] = [];
-  for (const raw of rawObservations) {
+  // Use llmCompress (with ruleBasedCompress as its internal fallback) as the primary path.
+  // Each observation compresses independently, so the calls run in parallel; the array keeps
+  // rawObservations' index (null on failure) so a mid-list failure cannot shift ids onto the
+  // wrong compressed entry below.
+  const compressResults = await Promise.all(rawObservations.map(async raw => {
     // llmCompress falls back to ruleBasedCompress automatically when no LLM client is wired.
     // A real llmCall goes here once the EGC dispatcher is connected to this server.
     try {
-      const result = await llmCompress(raw, () => Promise.reject(new Error('LLM not configured')));
-      compressed.push(result);
+      return await llmCompress(raw, () => Promise.reject(new Error('LLM not configured')));
     } catch (e) {
       log('ERROR', 'LLM compression failed, skipping', { error: String(e) });
+      return null;
     }
-  }
+  }));
 
   // Write replacements sequentially to prevent JSONL file corruption from concurrent writes
-  for (let i = 0; i < compressed.length; i++) {
+  for (let i = 0; i < compressResults.length; i++) {
+    const result = compressResults[i];
+    if (result === null) continue;
     const id = rawObservations[i].id;
-    if (id !== undefined) await replaceObservation(projPath, id, compressed[i]);
+    if (id !== undefined) await replaceObservation(projPath, id, result); // NOSONAR: sequential by design, replaceObservation rewrites the whole JSONL file, so concurrent calls would corrupt it
   }
 
+  const compressed = compressResults.filter((c): c is import('./compress.js').CompressedObservation => c !== null);
   const summary = compressed.map((c) => ({
     title:      c.title,
     type:       c.type,
@@ -1907,8 +1911,8 @@ async function handleSearchHistoryTool(db: Database, toolArgs: unknown) {
   return handleSearchHistory(db, query, limit, min_score);
 }
 
-async function handleGetProjectState() {
-  return { content: [{ type: "text", text: JSON.stringify({ status: "active", engine: selectedEngine() === 'wasm' ? 'sqlite-wasm' : 'sqlite-wal', arbitration: "MessageQueue" }) }] };
+function handleGetProjectState() {
+  return Promise.resolve({ content: [{ type: "text", text: JSON.stringify({ status: "active", engine: selectedEngine() === 'wasm' ? 'sqlite-wasm' : 'sqlite-wal', arbitration: "MessageQueue" }) }] });
 }
 
 async function handleWorkingMemorySet(db: Database, toolArgs: unknown) {

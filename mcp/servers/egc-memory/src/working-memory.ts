@@ -76,7 +76,7 @@ export async function getWorkingMemory(
   return row ?? null;
 }
 
-export async function listWorkingMemory(
+export function listWorkingMemory(
   db: Database,
   projectPath: string
 ): Promise<WorkingMemoryEntry[]> {

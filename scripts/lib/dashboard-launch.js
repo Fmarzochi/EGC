@@ -20,13 +20,15 @@ function pingDashboard() {
   });
 }
 
-function waitForDashboard(timeoutMs) {
+async function waitForDashboard(timeoutMs) {
   const deadline = Date.now() + timeoutMs;
-  const poll = () => pingDashboard().then(up => {
+  async function poll() {
+    const up = await pingDashboard();
     if (up) return true;
     if (Date.now() >= deadline) return false;
-    return new Promise(resolve => setTimeout(resolve, 250)).then(poll);
-  });
+    await new Promise(resolve => setTimeout(resolve, 250));
+    return poll();
+  }
   return poll();
 }
 
