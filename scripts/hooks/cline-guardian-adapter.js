@@ -50,30 +50,34 @@ function shellQuote(word) {
   return SHELL_SAFE_WORD.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
 }
 
-// One command as the Guardian reads it, or null when it cannot be read.
-// {command} is either shell text or an executable (the schema accepts both),
-// so the command part is never quoted: the Guardian judges the worse reading.
-function commandText(entry) {
-  if (typeof entry === 'string') return entry;
+// The readings of one command the Guardian judges, or null when it cannot be
+// read. {command} is either shell text or an executable (the schema accepts
+// both), so the command part is never quoted. A {command, args} call runs
+// without a shell: its argv is read with the args quoted, and read again as
+// plain words, so the script of an interpreter (bash -c ...) is seen too.
+function commandReadings(entry) {
+  if (typeof entry === 'string') return [entry];
   if (!isPlainObject(entry) || typeof entry.command !== 'string' || !entry.command) return null;
   const args = entry.args === undefined ? [] : entry.args;
   if (!Array.isArray(args) || !args.every(arg => typeof arg === 'string')) return null;
-  return [entry.command, ...args.map(shellQuote)].join(' ');
+  const quoted = [entry.command, ...args.map(shellQuote)].join(' ');
+  const plain = [entry.command, ...args].join(' ');
+  return quoted === plain ? [quoted] : [quoted, plain];
 }
 
 function commandList(value) {
   const entries = Array.isArray(value) ? value : [value];
-  const commands = entries.map(commandText);
-  return commands.includes(null) ? null : commands.filter(command => command.trim().length > 0);
+  const readings = entries.map(commandReadings);
+  return readings.includes(null) ? null : readings.flat().filter(command => command.trim().length > 0);
 }
 
 // Every command a run_commands input asks for, or null when unreadable.
+// Every key the schema knows is read, so no command hides behind another.
 function runCommandsOf(input) {
   if (!isPlainObject(input)) return commandList(input);
-  for (const key of ['commands', 'cmd']) {
-    if (input[key] !== undefined) return commandList(input[key]);
-  }
-  return commandList(input);
+  const parts = ['commands', 'cmd'].filter(key => input[key] !== undefined).map(key => commandList(input[key]));
+  if (input.command !== undefined || parts.length === 0) parts.push(commandList(input));
+  return parts.includes(null) ? null : parts.flat();
 }
 
 // preToolUse.parameters holds JSON text for every value that was not a
@@ -104,7 +108,9 @@ function buildGuardianInput(event) {
     if (commands === null) return { tool_name: UNREADABLE_TOOL };
     return commands.length > 0 ? { tool_name: 'Bash', commands } : null;
   }
-  const command = toolName === 'execute_command' ? event.preToolUse?.parameters?.command : undefined;
+  const command = toolName === 'execute_command'
+    ? event.preToolUse?.parameters?.command ?? event.tool_call?.input?.command
+    : undefined;
   if (!command || typeof command !== 'string') {
     return null;
   }
