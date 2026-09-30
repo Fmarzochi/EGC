@@ -80,14 +80,20 @@ function runTests() {
   let passed = 0;
   let failed = 0;
 
-  if (test('reports when no install-state files are present', () => {
+  if (test('lists every target as not installed when no install-state file is present', () => {
     const homeDir = createTempDir('list-installed-home-');
     const projectRoot = createTempDir('list-installed-project-');
 
     try {
       const result = run([], { cwd: projectRoot, homeDir });
-      assert.strictEqual(result.code, 0);
-      assert.ok(result.stdout.includes('No EGC install-state files found'));
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(result.stdout.includes('Status: not installed'), `expected every target reported as not installed, got:\n${result.stdout}`);
+      assert.ok(!/Status: (installed|healthy)/.test(result.stdout), 'nothing may be reported as installed in an empty home and project');
+      assert.ok(result.stdout.includes(homeDir), 'the install-state paths must be looked up under the given home');
+
+      const json = run(['--json'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(json.code, 0, json.stderr);
+      assert.deepStrictEqual(JSON.parse(json.stdout).records, [], 'no record may be discovered in an empty home and project');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

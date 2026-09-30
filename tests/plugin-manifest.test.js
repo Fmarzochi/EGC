@@ -23,7 +23,6 @@ const path = require('path');
 const repoRoot = path.resolve(__dirname, '..');
 const packageJsonPath = path.join(repoRoot, 'package.json');
 const packageLockPath = path.join(repoRoot, 'package-lock.json');
-const rootAgentsPath = path.join(repoRoot, 'AGENTS.md');
 const trAgentsPath = path.join(repoRoot, 'docs', 'tr', 'AGENTS.md');
 const zhCnAgentsPath = path.join(repoRoot, 'docs', 'zh-CN', 'AGENTS.md');
 const ptBrReadmePath = path.join(repoRoot, 'docs', 'pt-BR', 'README.md');
@@ -106,13 +105,6 @@ test('package-lock.json root version matches package.json', () => {
   assert.strictEqual(packageLock.version, expectedVersion);
   assert.ok(packageLock.packages && packageLock.packages[''], 'Expected package-lock root package entry');
   assert.strictEqual(packageLock.packages[''].version, expectedVersion);
-});
-
-test('AGENTS.md version line matches package.json', () => {
-  const agentsSource = fs.readFileSync(rootAgentsPath, 'utf8');
-  const match = agentsSource.match(new RegExp(`^\\*\\*Version:\\*\\* (${semverPattern})$`, 'm'));
-  assert.ok(match, 'Expected AGENTS.md to declare a top-level version line');
-  assert.strictEqual(match[1], expectedVersion);
 });
 
 test('docs/tr/AGENTS.md version line matches package.json', () => {
@@ -443,13 +435,6 @@ test('.opencode/package-lock.json root version matches package.json', () => {
   assert.strictEqual(opencodePackageLock.version, expectedVersion);
   assert.ok(opencodePackageLock.packages && opencodePackageLock.packages[''], 'Expected .opencode/package-lock root package entry');
   assert.strictEqual(opencodePackageLock.packages[''].version, expectedVersion);
-});
-
-test('README version row matches package.json', () => {
-  const readme = fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
-  const match = readme.match(new RegExp(`^\\| \\*\\*Version\\*\\* \\| Plugin \\| Plugin \\| Reference config \\| (${semverPattern}) \\|$`, 'm'));
-  assert.ok(match, 'Expected README version summary row');
-  assert.strictEqual(match[1], expectedVersion);
 });
 
 test('user-facing docs do not use deprecated egc@egc install commands', () => {

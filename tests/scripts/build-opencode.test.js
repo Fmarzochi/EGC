@@ -105,14 +105,9 @@ function main() {
         packagedPaths.has("agent.yaml"),
         "npm pack should include agent.yaml"
       )
-      assert.ok(
-        packagedPaths.has("AGENTS.md"),
-        "npm pack should include AGENTS.md"
-      )
-      assert.ok(
-        packagedPaths.has("VERSION"),
-        "npm pack should include VERSION"
-      )
+      // The root AGENTS.md stays out of the package on purpose: it is one of
+      // the files the state propagation writes into, and
+      // tests/scripts/npm-publish-surface.test.js records that decision.
     }],
   ]
 

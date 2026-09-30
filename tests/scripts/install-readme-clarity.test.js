@@ -1,23 +1,25 @@
 /**
- * Regression coverage for install/uninstall clarity in README.md.
+ * Regression coverage for install and removal clarity: the README carries
+ * the one install command and hands off to the installation guide, and the
+ * guide is where removal, dry runs and component discovery are documented.
  */
 
 const assert = require('assert');
-const { maybeSkipBaselineAbsent } = require('../lib/baseline-absent');
 
 const fs = require('fs');
 const path = require('path');
 
-const README = path.join(__dirname, '..', '..', 'README.md');
+const REPO_ROOT = path.join(__dirname, '..', '..');
+const README = path.join(REPO_ROOT, 'README.md');
+const GUIDE = path.join(REPO_ROOT, 'docs', 'installation.md');
 
 function test(name, fn) {
   try {
     fn();
-    console.log(`  \u2713 ${name}`);
+    console.log(`  ✓ ${name}`);
     return true;
   } catch (error) {
-    if (maybeSkipBaselineAbsent(error, name)) return true;
-    console.log(`  \u2717 ${name}`);
+    console.log(`  ✗ ${name}`);
     console.log(`    Error: ${error.message}`);
     return false;
   }
@@ -30,114 +32,50 @@ function runTests() {
   let failed = 0;
 
   const readme = fs.readFileSync(README, 'utf8');
+  const guide = fs.readFileSync(GUIDE, 'utf8');
 
-  if (test('README marks one default path and warns against stacked installs', () => {
+  if (test('README gives the one install command and points at the installation guide', () => {
     assert.ok(
-      readme.includes('### Pick one path only'),
-      'README should surface a top-level install decision section'
+      readme.includes('npm install -g @egchq/egc && egc install'),
+      'README should show the single npm install command'
     );
     assert.ok(
-      readme.includes('**Recommended default:** install the Gemini Code plugin'),
-      'README should name the recommended default install path'
-    );
-    assert.ok(
-      readme.includes('**Do not stack install methods.**'),
-      'README should explicitly warn against stacking install methods'
-    );
-    assert.ok(
-      readme.includes('If you choose this path, stop there. Do not also run `/plugin install`.'),
-      'README should tell manual-install users not to continue layering installs'
+      readme.includes('docs/installation.md'),
+      'README should hand off to the installation guide for every other command'
     );
   })) passed++; else failed++;
 
-  if (test('README documents reset and uninstall flow', () => {
+  if (test('installation guide documents removal, its dry run and the package uninstall', () => {
     assert.ok(
-      readme.includes('### Reset / Uninstall EGC'),
-      'README should have a visible reset/uninstall section'
+      guide.includes('### Removing EGC'),
+      'guide should have a visible removal section'
     );
     assert.ok(
-      readme.includes('node scripts/uninstall.js --dry-run'),
-      'README should document dry-run uninstall'
+      guide.includes('`egc uninstall --target <target>`'),
+      'guide should document uninstall per target'
     );
     assert.ok(
-      readme.includes('node scripts/egc.js list-installed'),
-      'README should document install-state inspection before reinstalling'
+      guide.includes('`--dry-run` lists the paths first'),
+      'guide should document the dry run before a removal'
     );
     assert.ok(
-      readme.includes('node scripts/egc.js doctor'),
-      'README should document doctor before reinstalling'
+      guide.includes('npm uninstall -g @egchq/egc'),
+      'guide should document removing the package itself'
     );
     assert.ok(
-      readme.includes('EGC only removes files recorded in its install-state.'),
-      'README should explain uninstall safety boundaries'
-    );
-  })) passed++; else failed++;
-
-  if (test('README documents low-context no-hooks install path', () => {
-    assert.ok(
-      readme.includes('### Low-context / no-hooks path'),
-      'README should surface a low-context no-hooks install option near Quick Start'
-    );
-    assert.ok(
-      readme.includes('./install.sh --profile minimal --target egc'),
-      'README should document the shell minimal profile command'
-    );
-    assert.ok(
-      readme.includes('npx egc-install --profile minimal --target egc'),
-      'README should document the npx minimal profile command'
-    );
-    assert.ok(
-      readme.includes('--profile core --without baseline:hooks --target egc'),
-      'README should document the hook opt-out path for the core profile'
-    );
-    assert.ok(
-      readme.includes('This profile intentionally excludes `hooks-runtime`.'),
-      'README should state that the minimal profile excludes hooks'
+      guide.includes('removes every managed file that target\'s install-state recorded'),
+      'guide should explain that uninstall touches only files recorded in the install-state'
     );
   })) passed++; else failed++;
 
-  if (test('README documents consult-based component discovery', () => {
+  if (test('installation guide lists consult and uninstall in the command reference', () => {
     assert.ok(
-      readme.includes('### Find the right components first'),
-      'README should surface component discovery before install steps'
+      guide.includes('| `egc consult` |'),
+      'guide should list consult as the component discovery command'
     );
     assert.ok(
-      readme.includes('npx egc consult "security reviews" --target egc'),
-      'README should document the packaged consult command'
-    );
-    assert.ok(
-      readme.includes('It returns matching components, related profiles, and preview/install commands.'),
-      'README should explain what consult returns'
-    );
-  })) passed++; else failed++;
-
-  if (test('README documents Cursor agent namespace and loading caveat', () => {
-    assert.ok(
-      readme.includes('`.cursor/agents/egc-*.md`'),
-      'README should document the Cursor agent namespace'
-    );
-    assert.ok(
-      readme.includes('Cursor-native loading behavior can vary by Cursor build.'),
-      'README should avoid overclaiming Cursor agent loading semantics'
-    );
-    assert.ok(
-      readme.includes('EGC does not install root `AGENTS.md` into `.cursor/`.'),
-      'README should explain why root AGENTS.md is not copied into Cursor context'
-    );
-  })) passed++; else failed++;
-
-  if (test('README explains plugin-path cleanup and rules scoping', () => {
-    assert.ok(
-      readme.includes('remove the plugin from Gemini Code'),
-      'README should tell plugin users how to start cleanup'
-    );
-    assert.ok(
-      readme.includes('Start with `rules/common` plus one language or framework pack you actually use.'),
-      'README should steer users away from copying every rules directory'
-    );
-    assert.ok(
-      readme.includes('~/.gemini/rules/egc/'),
-      'README should steer plugin-path rules into an EGC-owned namespace'
+      guide.includes('| `egc uninstall` |'),
+      'guide should list uninstall in the command reference'
     );
   })) passed++; else failed++;
 

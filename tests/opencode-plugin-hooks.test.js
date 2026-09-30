@@ -112,7 +112,11 @@ async function main() {
   try {
     ({ EGCHooksPlugin } = await loadPlugin())
   } catch (error) {
-    if (maybeSkipBaselineAbsent(error, "OpenCode plugin hook suite")) {
+    // The build declines when the optional peer @opencode-ai/plugin is not
+    // installed; that is an environment without OpenCode, not a failure of
+    // the plugin under test.
+    if (/SKIP: build-opencode/.test(error.message) || maybeSkipBaselineAbsent(error, "OpenCode plugin hook suite")) {
+      console.log(`SKIP: OpenCode plugin hook suite (${error.message.split("\n")[0]})`)
       console.log("\nPassed: 0\nFailed: 0")
       process.exit(0)
     }

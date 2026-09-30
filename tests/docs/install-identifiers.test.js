@@ -43,66 +43,6 @@ for (const relativePath of publicInstallDocs) {
   test(`${relativePath} does not use the stale egc@egc plugin identifier`, () => {
     assert.ok(!content.includes('egc@egc'));
   });
-
-  test(`${relativePath} documents the canonical marketplace plugin identifier`, () => {
-    assert.ok(content.includes('egc@egc'));
-  });
-}
-
-const pluginAndManualInstallDocs = [
-  'README.md',
-  'README.zh-CN.md',
-  'README.zh-CN.md',
-];
-
-const publicCommandNamespaceDocs = [
-  'README.md',
-  'README.zh-CN.md',
-  'docs/pt-BR/README.md',
-  'docs/tr/README.md',
-  'docs/ko-KR/README.md',
-  'docs/ja-JP/README.md',
-  'README.zh-CN.md',
-  'docs/zh-TW/README.md',
-];
-
-for (const relativePath of pluginAndManualInstallDocs) {
-  const absolute2 = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(absolute2)) { console.log(`SKIP: ${relativePath} (baseline-absent)`); continue; }
-  const content = fs.readFileSync(absolute2, 'utf8');
-
-  test(`${relativePath} warns not to run the full installer after plugin install`, () => {
-    assert.ok(
-      content.includes('--profile full'),
-      'Expected docs to mention the full installer explicitly'
-    );
-    assert.ok(
-      content.includes('/plugin install'),
-      'Expected docs to mention plugin install explicitly'
-    );
-    assert.ok(
-      content.includes('不要再运行')
-      || content.includes('do not run'),
-      'Expected docs to warn that plugin install and full install are not sequential'
-    );
-  });
-}
-
-for (const relativePath of publicCommandNamespaceDocs) {
-  const absolute3 = path.join(repoRoot, relativePath);
-  if (!fs.existsSync(absolute3)) { console.log(`SKIP: ${relativePath} (baseline-absent)`); continue; }
-  const content = fs.readFileSync(absolute3, 'utf8');
-
-  test(`${relativePath} uses the canonical plugin command namespace`, () => {
-    assert.ok(
-      !content.includes('/egc:'),
-      'Expected docs not to advertise the unsupported /egc: plugin alias'
-    );
-    assert.ok(
-      content.includes('/egc:plan'),
-      'Expected docs to show the canonical plugin command namespace'
-    );
-  });
 }
 
 if (failed > 0) {
