@@ -30,7 +30,9 @@ if (!fs.existsSync(buildPath)) {
   process.exit(0);
 }
 
-const { ruleBasedCompress } = require(buildPath);
+const { ruleBasedCompress, pairCompressedWithId } = require(buildPath);
+
+const COMPRESSED = { title: 'compressed', type: 'tool_success', facts: [], importance: 0.1 };
 
 if (
   test('detects tool_failure with exact patterns', () => {
@@ -97,6 +99,40 @@ if (
   })
 ) passed++; else failed++;
 
+if (
+  test('pairCompressedWithId pairs every id with its own result when nothing fails', () => {
+    const raw = [{ id: 'o1' }, { id: 'o2' }, { id: 'o3' }];
+    const results = [{ ...COMPRESSED, title: 'c1' }, { ...COMPRESSED, title: 'c2' }, { ...COMPRESSED, title: 'c3' }];
+    const pairs = pairCompressedWithId(raw, results);
+    assert.deepStrictEqual(pairs.map(p => p.id), ['o1', 'o2', 'o3']);
+    assert.deepStrictEqual(pairs.map(p => p.result.title), ['c1', 'c2', 'c3']);
+  })
+) passed++; else failed++;
+
+if (
+  test('pairCompressedWithId skips a mid-list failure instead of shifting the ids after it onto the wrong result', () => {
+    // A regression test for a real bug: pushing successes only into an array
+    // and then zipping it against rawObservations by index desyncs the two
+    // arrays as soon as one compression in the middle fails (returns null).
+    const raw = [{ id: 'o1' }, { id: 'o2' }, { id: 'o3' }];
+    const results = [{ ...COMPRESSED, title: 'c1' }, null, { ...COMPRESSED, title: 'c3' }];
+    const pairs = pairCompressedWithId(raw, results);
+    assert.deepStrictEqual(pairs, [
+      { id: 'o1', result: { ...COMPRESSED, title: 'c1' } },
+      { id: 'o3', result: { ...COMPRESSED, title: 'c3' } },
+    ]);
+  })
+) passed++; else failed++;
+
+if (
+  test('pairCompressedWithId skips an observation with no id even when its compression succeeded', () => {
+    const raw = [{ id: 'o1' }, {}];
+    const results = [{ ...COMPRESSED, title: 'c1' }, { ...COMPRESSED, title: 'c2' }];
+    const pairs = pairCompressedWithId(raw, results);
+    assert.deepStrictEqual(pairs.map(p => p.id), ['o1']);
+  })
+) passed++; else failed++;
+
 async function asyncTest(name, fn) {
   try {
     await fn();
@@ -136,8 +172,6 @@ async function withObservationFile(run) {
     fs.rmSync(project, { recursive: true, force: true });
   }
 }
-
-const COMPRESSED = { title: 'compressed', type: 'tool_success', facts: [], importance: 0.1 };
 
 // The observation file holds tool output, secrets included: its rewrite goes
 // through a temp file created private and exclusive, under a name of its

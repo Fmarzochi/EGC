@@ -42,6 +42,23 @@ export interface CompressedObservation {
   original_id: string | null;
 }
 
+// Zips compressResults[i] back to rawObservations[i].id, keeping the original
+// index intact instead of pushing successes only: a mid-list null (a failed
+// compression) must not shift every id after it onto the wrong result.
+export function pairCompressedWithId(
+  rawObservations: RawObservation[],
+  compressResults: (CompressedObservation | null)[]
+): Array<{ id: string; result: CompressedObservation }> {
+  const pairs: Array<{ id: string; result: CompressedObservation }> = [];
+  for (let i = 0; i < compressResults.length; i++) {
+    const result = compressResults[i];
+    if (result === null) continue;
+    const id = rawObservations[i]?.id;
+    if (id !== undefined) pairs.push({ id, result });
+  }
+  return pairs;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // Set-based word list avoids long alternation regex (keeps cognitive complexity low)

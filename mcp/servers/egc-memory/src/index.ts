@@ -44,7 +44,7 @@ import {
   listWorkingMemory,
 } from './working-memory';
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
-import { llmCompress, loadRawObservations, replaceObservation } from './compress.js';
+import { llmCompress, loadRawObservations, pairCompressedWithId, replaceObservation } from './compress.js';
 import { sanitize, sanitizeStrings, sanitizeStateFields, scrubPresentedLines, scrubStateFields } from './sanitize.js';
 import { teamInit, teamSync, teamStatus } from './sync/TeamSync.js';
 import { resolveStateStoreDbPath } from './state-store-path.js';
@@ -1854,15 +1854,13 @@ async function handleCompressObservations(db: Database, toolArgs: unknown) {
     }
   }));
 
+  const pairs = pairCompressedWithId(rawObservations, compressResults);
   // Write replacements sequentially to prevent JSONL file corruption from concurrent writes
-  for (let i = 0; i < compressResults.length; i++) {
-    const result = compressResults[i];
-    if (result === null) continue;
-    const id = rawObservations[i].id;
-    if (id !== undefined) await replaceObservation(projPath, id, result); // NOSONAR: sequential by design, replaceObservation rewrites the whole JSONL file, so concurrent calls would corrupt it
+  for (const { id, result } of pairs) {
+    await replaceObservation(projPath, id, result); // NOSONAR: sequential by design, replaceObservation rewrites the whole JSONL file, so concurrent calls would corrupt it
   }
 
-  const compressed = compressResults.filter((c): c is import('./compress.js').CompressedObservation => c !== null);
+  const compressed = pairs.map(p => p.result);
   const summary = compressed.map((c) => ({
     title:      c.title,
     type:       c.type,
