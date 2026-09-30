@@ -11,6 +11,7 @@
 
 const path = require('node:path');
 const fs = require('node:fs');
+const { execFileSync } = require('node:child_process');
 const {
   getSessionsDir,
   getDateString,
@@ -158,6 +159,7 @@ function buildSessionHeader(today, currentTime, metadata, existingContent = '') 
   const heading = headingMatch ? headingMatch[0] : `# Session: ${today}`;
   const date = extractHeaderField(existingContent, 'Date') || today;
   const started = extractHeaderField(existingContent, 'Started') || currentTime;
+  const commits = Array.isArray(metadata.commits) ? metadata.commits : [];
 
   return [
     heading,
@@ -167,8 +169,50 @@ function buildSessionHeader(today, currentTime, metadata, existingContent = '') 
     `**Project:** ${metadata.project}`,
     `**Branch:** ${metadata.branch}`,
     `**Worktree:** ${metadata.worktree}`,
+    ...(commits.length > 0 ? ['**Commits:**', ...commits.map(line => `- ${line}`)] : []),
     ''
   ].join('\n');
+}
+
+const MAX_SESSION_COMMITS = 30;
+const SESSION_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const SESSION_TIME_PATTERN = /^\d{2}:\d{2}$/;
+
+// The session start recorded in an existing header, or null when it is
+// missing or not in the shape this hook writes.
+function sessionStartOf(content) {
+  const date = extractHeaderField(content, 'Date');
+  const started = extractHeaderField(content, 'Started');
+  return date && started && SESSION_DATE_PATTERN.test(date) && SESSION_TIME_PATTERN.test(started)
+    ? { date, started }
+    : null;
+}
+
+// The commits the person made in this repository since the session started
+// (the header's Date and Started, local time), on every branch, without
+// merges or other authors, so the next session knows what was delivered.
+// git runs with separate arguments and the email as a fixed string; any
+// failure (no git, not a repository) leaves the list empty.
+function getSessionCommits(start) {
+  const git = args => execFileSync('git', args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: 5000
+  }).trim();
+  try {
+    const email = git(['config', 'user.email']);
+    if (!email) return [];
+    const output = git([
+      'log', '--all', '--no-merges', '--fixed-strings',
+      `--since=${start.date} ${start.started}`,
+      `--author=<${email}>`,
+      '-n', String(MAX_SESSION_COMMITS),
+      '--format=%h %s'
+    ]);
+    return output ? output.split('\n') : [];
+  } catch {
+    return [];
+  }
 }
 
 function mergeSessionHeader(content, today, currentTime, metadata) {
@@ -237,7 +281,9 @@ function updateExistingSession(sessionFile, today, currentTime, sessionMetadata,
   let updatedContent = existing;
 
   if (existing) {
-    const merged = mergeSessionHeader(existing, today, currentTime, sessionMetadata);
+    const start = sessionStartOf(existing);
+    const metadata = start ? { ...sessionMetadata, commits: getSessionCommits(start) } : sessionMetadata;
+    const merged = mergeSessionHeader(existing, today, currentTime, metadata);
     if (merged) {
       updatedContent = merged;
     } else {
