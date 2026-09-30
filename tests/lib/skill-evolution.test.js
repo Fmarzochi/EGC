@@ -15,6 +15,9 @@ const versioning = require('../../scripts/lib/skill-evolution/versioning');
 const tracker = require('../../scripts/lib/skill-evolution/tracker');
 const health = require('../../scripts/lib/skill-evolution/health');
 const skillEvolution = require('../../scripts/lib/skill-evolution');
+// The tier-1 harness variables would pin the EGC directory to one tool
+// whatever the home holds; a check about the home alone runs without them.
+const { runWithoutHarnessVariables } = require('../fixtures/harness-variables');
 
 const HEALTH_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'skills-health.js');
 
@@ -65,23 +68,6 @@ function runCli(args, options = {}) {
   });
 }
 
-// The tier-1 harness variables would pin the EGC directory to one tool
-// whatever the home holds; the check is about the home alone, so they are
-// cleared for its duration and restored afterwards.
-const HARNESS_VARIABLES = ['GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN', 'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV', 'EGC_DIR'];
-
-function withoutHarnessVariables(fn) {
-  const saved = new Map(HARNESS_VARIABLES.map(name => [name, process.env[name]]));
-  try {
-    for (const name of HARNESS_VARIABLES) delete process.env[name];
-    return fn();
-  } finally {
-    for (const [name, value] of saved) {
-      if (value === undefined) delete process.env[name]; else process.env[name] = value;
-    }
-  }
-}
-
 // One test's outcome as counters, so runTests (already at the analyzer's
 // cognitive-complexity limit) adds a case without another if/else pair.
 function tallied(name, fn) {
@@ -97,7 +83,7 @@ function assertSkillRootsFollowEgcDir(repoRoot) {
     fs.mkdirSync(path.join(egcHome, '.egc'), { recursive: true });
     fs.mkdirSync(path.join(egcHome, '.gemini'), { recursive: true });
 
-    withoutHarnessVariables(() => {
+    runWithoutHarnessVariables(() => {
       const claudeRoots = provenance.getSkillRoots({ repoRoot, homeDir: claudeHome });
       assert.strictEqual(claudeRoots.learned, path.join(claudeHome, '.claude', 'skills', 'learned'), 'a home with only Claude Code keeps its learned skills under ~/.claude, where evaluate-session writes them');
       assert.strictEqual(claudeRoots.imported, path.join(claudeHome, '.claude', 'skills', 'imported'));

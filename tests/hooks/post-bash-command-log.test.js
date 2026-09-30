@@ -12,6 +12,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { withoutHarnessVariables } = require('../fixtures/harness-variables');
 
 const HOOK = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'post-bash-command-log.js');
 const { sanitizeCommand } = require(HOOK);
@@ -23,17 +24,13 @@ function permissionBitsEnforced() {
 
 // The harness variables and EGC_DIR would pin the log's directory whatever
 // the synthetic home holds; the hook is exercised on the home alone.
-const HARNESS_VARIABLES = ['EGC_DIR', 'GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN', 'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV'];
-
 function runHook(home, command, mode = 'audit') {
   const input = JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
-  const env = { ...process.env, HOME: home, USERPROFILE: home };
-  for (const name of HARNESS_VARIABLES) delete env[name];
   return spawnSync(process.execPath, [HOOK, mode], {
     input,
     encoding: 'utf8',
     timeout: CLI_TIMEOUT_MS,
-    env,
+    env: withoutHarnessVariables({ ...process.env, HOME: home, USERPROFILE: home }),
   });
 }
 

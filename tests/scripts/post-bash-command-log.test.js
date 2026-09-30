@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { withoutHarnessVariables } = require('../fixtures/harness-variables');
 
 const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'post-bash-command-log.js');
 const { sanitizeCommand } = require(scriptPath);
@@ -21,15 +22,11 @@ function test(name, fn) {
 
 // The harness variables and EGC_DIR would pin the logs' directory whatever
 // the synthetic home holds; the hook is exercised on the home alone.
-const HARNESS_VARIABLES = ['EGC_DIR', 'GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN', 'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV'];
-
 function runHook(mode, payload, homeDir) {
-  const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir };
-  for (const name of HARNESS_VARIABLES) delete env[name];
   return spawnSync('node', [scriptPath, mode], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
-    env,
+    env: withoutHarnessVariables({ ...process.env, HOME: homeDir, USERPROFILE: homeDir }),
   });
 }
 

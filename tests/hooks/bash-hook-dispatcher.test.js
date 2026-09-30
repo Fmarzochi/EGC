@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { HARNESS_VARIABLES } = require('../fixtures/harness-variables');
 
 const preDispatcher = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'pre-bash-dispatcher.js');
 const postDispatcher = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'post-bash-dispatcher.js');
@@ -92,11 +93,7 @@ function runTests() {
       const result = runScript(postDispatcher, payload, {
         HOME: homeDir,
         USERPROFILE: homeDir,
-        EGC_DIR: '',
-        GEMINI_PROJECT_DIR: '',
-        GEMINI_PLUGIN_ROOT: '',
-        CLAUDE_PROJECT_DIR: '',
-        CLAUDE_PLUGIN_ROOT: '',
+        ...Object.fromEntries(HARNESS_VARIABLES.map(name => [name, ''])),
       });
       assert.strictEqual(result.status, 0);
       assert.strictEqual(result.stdout, JSON.stringify(payload));
