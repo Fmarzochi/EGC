@@ -27,9 +27,9 @@ async function waitForDashboard(timeoutMs) {
     if (up) return true;
     if (Date.now() >= deadline) return false;
     await new Promise(resolve => setTimeout(resolve, 250));
-    return await poll(); // NOSONAR: every branch of this function resolves to a boolean; spelling out the await keeps that explicit for static analysis
+    return poll();
   }
-  return await poll();
+  return poll();
 }
 
 function openBrowser() {
@@ -46,7 +46,7 @@ function openBrowser() {
 
 // log(msg) receives already-formatted lines so each caller keeps its own
 // styling. Resolves once the launch decision is made, never rejects.
-function launchDashboard({ log = () => {} } = {}) {
+async function launchDashboard({ log = () => {} } = {}) {
   // The script to run is derived from this file's own location, never from
   // a caller-supplied root. Every caller (init.js, install-apply.js, the
   // shell wrapper) already resolved the same package root, so nothing
@@ -54,9 +54,10 @@ function launchDashboard({ log = () => {} } = {}) {
   // spawn() is a command-injection shape no matter how it is escaped, and
   // there is no path left to validate once it cannot arrive at all.
   const dashboardScript = path.join(__dirname, '..', 'dashboard.js');
-  if (!fs.existsSync(dashboardScript)) return Promise.resolve(false);
+  if (!fs.existsSync(dashboardScript)) return false;
 
-  return pingDashboard().then(already => {
+  try {
+    const already = await pingDashboard();
     if (already) {
       log(`Dashboard already running at ${DASHBOARD_URL}`);
       openBrowser();
@@ -92,20 +93,19 @@ function launchDashboard({ log = () => {} } = {}) {
     const installAhead = depsReport.missing.length > 0 && depsReport.writable && depsReport.manifestError === null;
     if (installAhead) log('First launch may install dashboard dependencies; giving it up to a minute.');
     const budgetMs = installAhead ? 60000 : 4000;
-    return waitForDashboard(budgetMs).then(ready => {
-      if (ready) {
-        log('Minimize it to keep working. Run `egc dashboard stop` to close.');
-        openBrowser();
-        return true;
-      }
-      log(`EGC Dashboard did not respond within ${Math.round(budgetMs / 1000)}s.`);
-      log(`See the startup error with: node "${dashboardScript}" start`);
-      return false;
-    });
-  }).catch(err => {
+    const ready = await waitForDashboard(budgetMs);
+    if (ready) {
+      log('Minimize it to keep working. Run `egc dashboard stop` to close.');
+      openBrowser();
+      return true;
+    }
+    log(`EGC Dashboard did not respond within ${Math.round(budgetMs / 1000)}s.`);
+    log(`See the startup error with: node "${dashboardScript}" start`);
+    return false;
+  } catch (err) {
     log(`Dashboard startup skipped: ${err.message}`);
     return false;
-  });
+  }
 }
 
 // The dashboard is only worth spawning for a human at an interactive
