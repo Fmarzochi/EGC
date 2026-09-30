@@ -61,7 +61,8 @@ function parseInput(inputOrRaw) {
 }
 
 // Harnesses name the write target differently: file_path (Claude Code),
-// path (Gemini CLI), TargetFile (Antigravity), and a MultiEdit may carry a
+// path (the retired Gemini CLI's name, kept by the hook loop the Antigravity
+// CLI inherited), TargetFile (Antigravity), and a MultiEdit may carry a
 // path per edit. Every distinct target is validated.
 function targetOf(tool) {
   const filePath = tool?.file_path || tool?.file || tool?.path || tool?.TargetFile || '';

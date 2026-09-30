@@ -65,6 +65,52 @@ function runCli(args, options = {}) {
   });
 }
 
+// The tier-1 harness variables would pin the EGC directory to one tool
+// whatever the home holds; the check is about the home alone, so they are
+// cleared for its duration and restored afterwards.
+const HARNESS_VARIABLES = ['GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN', 'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV', 'EGC_DIR'];
+
+function withoutHarnessVariables(fn) {
+  const saved = new Map(HARNESS_VARIABLES.map(name => [name, process.env[name]]));
+  try {
+    for (const name of HARNESS_VARIABLES) delete process.env[name];
+    return fn();
+  } finally {
+    for (const [name, value] of saved) {
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    }
+  }
+}
+
+// One test's outcome as counters, so runTests (already at the analyzer's
+// cognitive-complexity limit) adds a case without another if/else pair.
+function tallied(name, fn) {
+  const ok = test(name, fn);
+  return { passed: ok ? 1 : 0, failed: ok ? 0 : 1 };
+}
+
+function assertSkillRootsFollowEgcDir(repoRoot) {
+  const claudeHome = createTempDir('skill-evolution-claude-home-');
+  const egcHome = createTempDir('skill-evolution-egc-home-');
+  try {
+    fs.mkdirSync(path.join(claudeHome, '.claude'), { recursive: true });
+    fs.mkdirSync(path.join(egcHome, '.egc'), { recursive: true });
+    fs.mkdirSync(path.join(egcHome, '.gemini'), { recursive: true });
+
+    withoutHarnessVariables(() => {
+      const claudeRoots = provenance.getSkillRoots({ repoRoot, homeDir: claudeHome });
+      assert.strictEqual(claudeRoots.learned, path.join(claudeHome, '.claude', 'skills', 'learned'), 'a home with only Claude Code keeps its learned skills under ~/.claude, where evaluate-session writes them');
+      assert.strictEqual(claudeRoots.imported, path.join(claudeHome, '.claude', 'skills', 'imported'));
+
+      const egcRoots = provenance.getSkillRoots({ repoRoot, homeDir: egcHome });
+      assert.strictEqual(egcRoots.learned, path.join(egcHome, '.egc', 'skills', 'learned'), '~/.egc wins over an installed harness dir once it exists, like getEGCDir()');
+    });
+  } finally {
+    cleanupTempDir(claudeHome);
+    cleanupTempDir(egcHome);
+  }
+}
+
 function runTests() {
   console.log('\n=== Testing skill evolution ===\n');
 
@@ -86,33 +132,11 @@ function runTests() {
   try {
     console.log('Provenance:');
 
-    if (test('getSkillRoots follows the EGC directory of the home, where the hooks write learned skills, not a fixed ~/.gemini', () => {
-      // The tier-1 harness variables would pin the EGC directory to one
-      // tool whatever the home holds; the test is about the home alone.
-      const harnessVariables = ['GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN', 'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV', 'EGC_DIR'];
-      const saved = new Map(harnessVariables.map(name => [name, process.env[name]]));
-      const claudeHome = createTempDir('skill-evolution-claude-home-');
-      const egcHome = createTempDir('skill-evolution-egc-home-');
-      try {
-        for (const name of harnessVariables) delete process.env[name];
-        fs.mkdirSync(path.join(claudeHome, '.claude'), { recursive: true });
-        fs.mkdirSync(path.join(egcHome, '.egc'), { recursive: true });
-        fs.mkdirSync(path.join(egcHome, '.gemini'), { recursive: true });
-
-        const claudeRoots = provenance.getSkillRoots({ repoRoot, homeDir: claudeHome });
-        assert.strictEqual(claudeRoots.learned, path.join(claudeHome, '.claude', 'skills', 'learned'), 'a home with only Claude Code keeps its learned skills under ~/.claude, where evaluate-session writes them');
-        assert.strictEqual(claudeRoots.imported, path.join(claudeHome, '.claude', 'skills', 'imported'));
-
-        const egcRoots = provenance.getSkillRoots({ repoRoot, homeDir: egcHome });
-        assert.strictEqual(egcRoots.learned, path.join(egcHome, '.egc', 'skills', 'learned'), '~/.egc wins over an installed harness dir once it exists, like getEGCDir()');
-      } finally {
-        for (const [name, value] of saved) {
-          if (value === undefined) delete process.env[name]; else process.env[name] = value;
-        }
-        cleanupTempDir(claudeHome);
-        cleanupTempDir(egcHome);
-      }
-    })) passed++; else failed++;
+    const skillRootsOutcome = tallied('getSkillRoots follows the EGC directory of the home, where the hooks write learned skills, not a fixed ~/.gemini', () => {
+      assertSkillRootsFollowEgcDir(repoRoot);
+    });
+    passed += skillRootsOutcome.passed;
+    failed += skillRootsOutcome.failed;
 
     if (test('classifies curated, learned, and imported skill directories', () => {
       const curatedSkillDir = createSkill(skillsRoot, 'curated-alpha', '# Curated\n');

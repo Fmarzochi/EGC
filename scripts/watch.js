@@ -40,7 +40,7 @@ Options:
   --help, -h            Show this help
 
 Supported tools:
-  Cursor, Copilot, Gemini CLI, Windsurf, Trae, Zed, Cline, Aider,
+  Cursor, Copilot, Antigravity (GEMINI.md), Windsurf, Trae, Zed, Cline, Aider,
   .cursorrules (legacy Cursor), AGENTS.md, llms.txt
 
 Exit: Ctrl+C

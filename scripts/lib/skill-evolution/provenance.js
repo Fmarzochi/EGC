@@ -1,10 +1,9 @@
 'use strict';
 
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 
-const { ensureDir } = require('../utils');
+const { ensureDir, getEGCDir, resolveEGCDir } = require('../utils');
 
 const PROVENANCE_FILE_NAME = '.provenance.json';
 const SKILL_TYPES = Object.freeze({
@@ -22,8 +21,20 @@ function resolveRepoRoot(repoRoot) {
   return path.resolve(__dirname, '..', '..', '..');
 }
 
-function resolveHomeDir(homeDir) {
-  return homeDir ? path.resolve(homeDir) : os.homedir();
+// The learned and imported roots live under the EGC directory, the same one
+// evaluate-session writes to (getLearnedSkillsDir in utils.js): the active
+// tool's own directory, or ~/.egc. A caller inspecting another home gets
+// that home resolved by the same tiers; an explicit egcDir wins over both.
+function resolveEgcDir(options) {
+  if (options.egcDir) {
+    return path.resolve(options.egcDir);
+  }
+
+  if (options.homeDir) {
+    return resolveEGCDir(path.resolve(options.homeDir));
+  }
+
+  return getEGCDir();
 }
 
 function normalizeSkillDir(skillPath) {
@@ -49,12 +60,12 @@ function isWithinRoot(targetPath, rootPath) {
 
 function getSkillRoots(options = {}) {
   const repoRoot = resolveRepoRoot(options.repoRoot);
-  const homeDir = resolveHomeDir(options.homeDir);
+  const egcDir = resolveEgcDir(options);
 
   return {
     curated: path.join(repoRoot, 'skills'),
-    learned: path.join(homeDir, '.gemini', 'skills', 'learned'),
-    imported: path.join(homeDir, '.gemini', 'skills', 'imported'),
+    learned: path.join(egcDir, 'skills', 'learned'),
+    imported: path.join(egcDir, 'skills', 'imported'),
   };
 }
 

@@ -15,8 +15,11 @@ export const isLinux: boolean;
 /** Get the user's home directory (cross-platform) */
 export function getHomeDir(): string;
 
-/** Get the Gemini config directory (~/.gemini) */
+/** Get the EGC directory of the active harness (~/.claude, ~/.gemini, ..., or ~/.egc; EGC_DIR overrides) */
 export function getEGCDir(): string;
+
+/** The EGC directory under a given home, by the same tiers getEGCDir() applies (EGC_DIR excepted) */
+export function resolveEGCDir(home: string): string;
 
 /** Get the canonical EGC sessions directory (~/.gemini/session-data) */
 export function getSessionsDir(): string;
@@ -27,7 +30,7 @@ export function getLegacySessionsDir(): string;
 /** Get session directories to search, with canonical storage first and legacy fallback second */
 export function getSessionSearchDirs(): string[];
 
-/** Get the learned skills directory (~/.gemini/skills/learned) */
+/** Get the learned skills directory (<EGC dir>/skills/learned) */
 export function getLearnedSkillsDir(): string;
 
 /** Get the temp directory (cross-platform) */

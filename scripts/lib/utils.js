@@ -40,8 +40,10 @@ function getClaudeDir() {
   return getEGCDir();
 }
 
-// Tier 1: harness-specific env vars injected at hook time (see docs/spec/harness-env-vars.md).
-// Gemini CLI is checked before Claude Code because Gemini CLI sets both as a compat alias.
+// Tier 1: harness-specific env vars injected at hook time. The Gemini
+// variables come first: the retired Gemini CLI set the Claude ones too as a
+// compat alias, and Antigravity inherited its hook loop and its variables
+// (see antigravity-settings-hooks.js).
 function resolveHarnessDirFromEnv(env, home) {
   if (env.GEMINI_PROJECT_DIR || env.GEMINI_PLUGIN_ROOT) return path.join(home, '.gemini');
   if (env.CLAUDE_PROJECT_DIR || env.CLAUDE_PLUGIN_ROOT) return path.join(home, '.claude');
@@ -92,6 +94,27 @@ function resolveFirstExistingHarnessDir(harnessDirs) {
 }
 
 /**
+ * The EGC directory under a given home, by the tiers 2 to 5 below. A caller
+ * that inspects another home (skills-health --home, a test fixture) gets the
+ * same answer the hooks got when they wrote there, instead of a fixed tool
+ * directory of its own. EGC_DIR is the caller's business: getEGCDir()
+ * applies it, this function does not.
+ */
+function resolveEGCDir(home) {
+  const envMatch = resolveHarnessDirFromEnv(process.env, home);
+  if (envMatch) return envMatch;
+
+  const harnessDirs = getKnownHarnessDirs(home);
+  const dirnameMatch = resolveHarnessDirFromDirname(harnessDirs);
+  if (dirnameMatch) return dirnameMatch;
+
+  const egcDir = path.join(home, '.egc');
+  if (fs.existsSync(egcDir)) return egcDir;
+
+  return resolveFirstExistingHarnessDir(harnessDirs) || egcDir;
+}
+
+/**
  * Get the EGC config directory for the active harness.
  *
  * Resolution order:
@@ -105,19 +128,7 @@ function resolveFirstExistingHarnessDir(harnessDirs) {
  */
 function getEGCDir() {
   if (process.env.EGC_DIR) return process.env.EGC_DIR;
-
-  const home = getHomeDir();
-  const envMatch = resolveHarnessDirFromEnv(process.env, home);
-  if (envMatch) return envMatch;
-
-  const harnessDirs = getKnownHarnessDirs(home);
-  const dirnameMatch = resolveHarnessDirFromDirname(harnessDirs);
-  if (dirnameMatch) return dirnameMatch;
-
-  const egcDir = path.join(home, '.egc');
-  if (fs.existsSync(egcDir)) return egcDir;
-
-  return resolveFirstExistingHarnessDir(harnessDirs) || egcDir;
+  return resolveEGCDir(getHomeDir());
 }
 
 /**
@@ -840,6 +851,7 @@ module.exports = {
   // Directories
   getHomeDir,
   getEGCDir,
+  resolveEGCDir,
   getKnownHarnessDirs,
   resolveHarnessDirFromEnv,
   getClaudeDir, // NOSONAR: deprecated alias kept as a public export for backward compatibility

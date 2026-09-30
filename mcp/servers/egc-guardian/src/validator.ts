@@ -1252,8 +1252,8 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // it). settings.json, skills, agents, and projects/*/memory/ are functional.
   /\.claude[\\/]\.credentials\.json$/,
   /(^|[\\/])\.claude\.json$/,
-  // Gemini CLI + Antigravity (share ~/.gemini). settings.json, GEMINI.md,
-  // skills/, extensions/, and antigravity/brain (native memory) are functional.
+  // Antigravity, on the ~/.gemini root the retired Gemini CLI used to share.
+  // GEMINI.md, config/, skills/ and antigravity-cli/ (native memory) are functional.
   /\.gemini[\\/]oauth_creds\.json$/,
   /\.gemini[\\/]google_accounts\.json$/,
   /\.gemini[\\/].*mcp-oauth-tokens\.json$/,

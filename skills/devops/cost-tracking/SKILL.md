@@ -1,12 +1,12 @@
 ---
 name: cost-tracking
-description: Track and report Gemini CLI token usage, spending, and budgets from a local cost-tracking database. Use when the user asks about costs, spending, usage, tokens, budgets, or cost breakdowns by project, tool, session, or date.
+description: Track and report your AI coding tool's token usage, spending, and budgets from a local cost-tracking database. Use when the user asks about costs, spending, usage, tokens, budgets, or cost breakdowns by project, tool, session, or date.
 origin: community
 ---
 
 # Cost Tracking
 
-Use this skill to analyze Gemini CLI cost and usage history from a local SQLite
+Use this skill to analyze your AI coding tool's cost and usage history from a local SQLite
 database. It is intended for users who already have a cost-tracking hook or
 plugin writing usage rows to `~/.Gemini-cost-tracker/usage.db`.
 
@@ -45,7 +45,7 @@ interaction. Column names vary by tracker, but the examples below assume:
 | `input_tokens` | Input token count, when recorded |
 | `output_tokens` | Output token count, when recorded |
 | `cost_usd` | Precomputed cost in USD |
-| `session_id` | Gemini CLI session identifier |
+| `session_id` | Session identifier of the coding tool |
 | `model` | Model used for the event |
 
 Prefer `cost_usd` over hand-calculating pricing. Model prices and cache pricing

@@ -1,17 +1,17 @@
 ---
 name: agentic-os
-description: Build persistent multi-agent operating systems on Gemini CLI. Covers kernel architecture, specialist agents, slash commands, file-based memory, scheduled automation, and state management without external databases.
+description: Build persistent multi-agent operating systems on your AI coding tool. Covers kernel architecture, specialist agents, slash commands, file-based memory, scheduled automation, and state management without external databases.
 origin: EGC
 ---
 
 # Agentic OS
 
-Treat Gemini CLI as a persistent runtime / operating system rather than a chat session. This skill codifies the architecture used by production agentic setups: a kernel config that routes tasks to specialist agents, persistent file-based memory, scheduled automation, and a JSON/markdown data layer.
+Treat your AI coding tool as a persistent runtime / operating system rather than a chat session. This skill codifies the architecture used by production agentic setups: a kernel config that routes tasks to specialist agents, persistent file-based memory, scheduled automation, and a JSON/markdown data layer.
 
 ## When to Activate
 
-- Building a multi-agent workflow inside Gemini CLI
-- Setting up persistent Gemini CLI automation that survives session restarts
+- Building a multi-agent workflow inside your AI coding tool
+- Setting up persistent automation that survives session restarts
 - Creating a "personal OS" or "agentic OS" for recurring tasks
 - User says "agentic OS", "personal OS", "multi-agent", "agent coordinator", "persistent agent"
 - Structuring long-running projects where context must survive across sessions
@@ -123,7 +123,7 @@ Kernel routing:
 3. Kernel synthesizes both outputs into a unified response
 ```
 
-For parallel execution, use Gemini CLI's background task capability or shell scripts that invoke Gemini CLI with specific agent contexts.
+For parallel execution, use your tool's background task capability or shell scripts that invoke it with specific agent contexts.
 
 ## Commands and Daily Workflows
 
@@ -157,7 +157,7 @@ Run the morning briefing:
 
 ### Activating Commands
 
-Place command files in `.Gemini/commands/<command-name>.md`. Gemini CLI auto-discovers them. Users invoke them with `/<command-name>`.
+Place command files in your tool's commands directory (`.claude/commands/<command-name>.md` in Claude Code). The tool auto-discovers them. Users invoke them with `/<command-name>`.
 
 ## Persistent Memory
 
@@ -210,7 +210,7 @@ This creates a feedback loop that improves the system over time without code cha
 
 ## Scheduled Automation
 
-Agentic OS tasks run on a schedule using external cron, not Gemini CLI's built-in cron (which dies when the session ends).
+Agentic OS tasks run on a schedule using external cron, not the coding tool's built-in cron (which dies when the session ends).
 
 ### macOS: LaunchAgent
 
@@ -342,7 +342,7 @@ Split into specialist agents. The kernel handles routing.
 
 ```markdown
 # BAD - No memory between sessions
-Starting fresh every time Gemini CLI opens.
+Starting fresh every time the coding tool opens.
 ```
 
 Always read `data/` at session start and write back at session end.
@@ -382,6 +382,6 @@ Keep routing declarative in `Gemini.md` markdown tables. It is inspectable, edit
 - [ ] Logs are append-only; never edit past daily logs
 - [ ] Every agent has a `Memory Scope` section defining what files it reads
 - [ ] Reflections are written at the end of every session
-- [ ] Scheduled tasks use external cron (LaunchAgent, systemd, pm2), not Gemini CLI's session cron
+- [ ] Scheduled tasks use external cron (LaunchAgent, systemd, pm2), not the coding tool's session cron
 - [ ] Cost tracking: log API spend per session in `data/logs/<date>-costs.json`
 - [ ] One project = one Agentic OS. Do not share a single `Gemini.md` across unrelated projects.

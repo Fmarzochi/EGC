@@ -7,7 +7,7 @@
 // the registration list, and the three copies had already drifted: the
 // shells never registered Continue.dev or Zed, install.ps1 pointed OpenCode
 // at a different directory than everything else, and only the shells gated
-// Gemini CLI on Antigravity being absent. Whoever installed through the
+// the Gemini CLI (retired since, #1279) on Antigravity being absent. Whoever installed through the
 // shell silently got fewer tools wired up than whoever ran `egc init`.
 // There is one list now, and all three paths read it from here.
 //

@@ -661,9 +661,12 @@ function normalizeForMatch(value) {
 }
 
 // The settings file of the harness the gate runs under, Claude Code's or
-// Gemini CLI's (`.claude/settings.json`, `.gemini/settings.local.json`,
-// ...): an edit there is how the hook itself is configured or disabled, so
-// it is never gated. Nothing else under those directories is exempt.
+// the retired Gemini CLI's (`.claude/settings.json`,
+// `.gemini/settings.local.json`, ...): an edit there is how the hook itself
+// is configured or disabled, so it is never gated. Antigravity's own hooks
+// files (`.gemini/config/hooks.json`, `.gemini/antigravity-cli/hooks.json`)
+// are not exempt yet; they join when the gate is wired in Antigravity's
+// format. Nothing else under those directories is exempt.
 function isClaudeSettingsPath(filePath) {
   const normalized = normalizeForMatch(filePath);
   return /(^|\/)\.(?:claude|gemini)\/settings(?:\.[^/]+)?\.json$/.test(normalized);

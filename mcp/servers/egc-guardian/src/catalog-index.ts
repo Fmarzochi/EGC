@@ -133,9 +133,9 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "agentic-os",
-    "description": "Build persistent multi-agent operating systems on Gemini CLI. Covers kernel architecture, specialist agents, slash commands, file-based memory, scheduled automation, and state management without external databases.",
+    "description": "Build persistent multi-agent operating systems on your AI coding tool. Covers kernel architecture, specialist agents, slash commands, file-based memory, scheduled automation, and state management without external databases.",
     "source": "skills/architecture/agentic-os/SKILL.md",
-    "triggers": "Building a multi agent workflow inside Gemini CLI Setting up persistent Gemini CLI automation that survives session restarts Creating a \"personal OS\" or \"agentic OS\" for recurring tasks User says \"age"
+    "triggers": "Building a multi agent workflow inside your AI coding tool Setting up persistent automation that survives session restarts Creating a \"personal OS\" or \"agentic OS\" for recurring tasks User says \"agent"
   },
   {
     "kind": "skill",
@@ -503,7 +503,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
   {
     "kind": "skill",
     "name": "cost-tracking",
-    "description": "Track and report Gemini CLI token usage, spending, and budgets from a local cost-tracking database. Use when the user asks about costs, spending, usage, tokens, budgets, or cost breakdowns by project, tool, session, or date.",
+    "description": "Track and report your AI coding tool's token usage, spending, and budgets from a local cost-tracking database. Use when the user asks about costs, spending, usage, tokens, budgets, or cost breakdowns by project, tool, session, or date.",
     "source": "skills/devops/cost-tracking/SKILL.md",
     "triggers": "The user asks \"how much have I spent?\", \"what did this session cost?\", or \"what is my token usage?\" The user mentions budgets, spending limits, overruns, or cost controls. The user wants a cost breakd"
   },
