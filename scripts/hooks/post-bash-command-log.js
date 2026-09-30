@@ -2,8 +2,9 @@
 'use strict';
 
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
+
+const { getEGCDir } = require('../lib/utils');
 
 const MAX_STDIN = 1024 * 1024;
 let raw = '';
@@ -607,7 +608,10 @@ function run(rawInput, mode = 'audit') {
     if (config) {
       const input = String(rawInput || '').trim() ? JSON.parse(String(rawInput)) : {};
       const command = sanitizeCommand(input.tool_input?.command || '?');
-      appendLine(path.join(os.homedir(), '.gemini', config.fileName), config.format(command));
+      // The log lives in the EGC directory of the tool in use (~/.claude,
+      // ~/.gemini, ..., or ~/.egc), where the other EGC files of that tool
+      // are, not in a fixed ~/.gemini that only the retired Gemini CLI owned.
+      appendLine(path.join(getEGCDir(), config.fileName), config.format(command));
     }
   } catch {
     // Logging must never block the calling hook.

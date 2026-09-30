@@ -6,9 +6,15 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
-_STATE_DB_RELATIVE = os.path.join('.gemini', 'egc', 'state.db')
+# The CLI state store has one home, <EGC dir>/egc/state.db: ~/.egc by
+# default, EGC_DIR when set (scripts/lib/state-store/path.js keeps the same
+# rule for the Node side).
+_STATE_DB_RELATIVE = os.path.join('.egc', 'egc', 'state.db')
 
 def _resolve_state_db_path() -> str:
+    egc_dir = os.environ.get('EGC_DIR')
+    if egc_dir:
+        return os.path.join(egc_dir, 'egc', 'state.db')
     home = os.environ.get('HOME') or os.path.expanduser('~')
     return os.path.join(home, _STATE_DB_RELATIVE)
 

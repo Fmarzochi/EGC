@@ -87,15 +87,24 @@ function runTests() {
     const payload = { tool_input: { command: 'npm publish --token=$PUBLISH_TOKEN' } };
 
     try {
+      // The harness variables and EGC_DIR would pin the logs' directory
+      // whatever the synthetic home holds; only the home decides here.
       const result = runScript(postDispatcher, payload, {
         HOME: homeDir,
         USERPROFILE: homeDir,
+        EGC_DIR: '',
+        GEMINI_PROJECT_DIR: '',
+        GEMINI_PLUGIN_ROOT: '',
+        CLAUDE_PROJECT_DIR: '',
+        CLAUDE_PLUGIN_ROOT: '',
       });
       assert.strictEqual(result.status, 0);
       assert.strictEqual(result.stdout, JSON.stringify(payload));
 
-      const auditLog = fs.readFileSync(path.join(homeDir, '.gemini', 'bash-commands.log'), 'utf8');
-      const costLog = fs.readFileSync(path.join(homeDir, '.gemini', 'cost-tracker.log'), 'utf8');
+      // The logs land in the EGC directory of the tool in use: ~/.egc on a
+      // home where no tool is installed.
+      const auditLog = fs.readFileSync(path.join(homeDir, '.egc', 'bash-commands.log'), 'utf8');
+      const costLog = fs.readFileSync(path.join(homeDir, '.egc', 'cost-tracker.log'), 'utf8');
 
       assert.ok(auditLog.includes('--token=<REDACTED>'));
       assert.ok(costLog.includes('tool=Bash command=npm publish --token=<REDACTED>'));

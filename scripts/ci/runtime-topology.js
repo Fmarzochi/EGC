@@ -172,8 +172,8 @@ const NODES = [
         id: 'state:sqlite',
         class: 'ACTIVE',
         kind: 'registry',
-        path: '~/.gemini/egc/state.db',
-        summary: 'Shared SQLite state database for instincts and runtime metadata.'
+        path: '~/.egc/egc/state.db',
+        summary: 'Shared SQLite state database for instincts and runtime metadata (EGC_DIR overrides the home).'
     },
 ];
 
@@ -242,7 +242,7 @@ const STATIC_EDGES = [
         from: 'memory:persistent_memory',
         to: 'state:sqlite',
         relation: 'writes',
-        evidence: 'scripts/memory/persistent_memory.py: sqlite3.connect(~/.gemini/egc/state.db)'
+        evidence: 'scripts/memory/persistent_memory.py: sqlite3.connect(~/.egc/egc/state.db, or $EGC_DIR/egc/state.db)'
     },
     {
         from: 'node:install-apply',

@@ -19,15 +19,17 @@ function test(name, fn) {
   }
 }
 
+// The harness variables and EGC_DIR would pin the logs' directory whatever
+// the synthetic home holds; the hook is exercised on the home alone.
+const HARNESS_VARIABLES = ['EGC_DIR', 'GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN', 'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV'];
+
 function runHook(mode, payload, homeDir) {
+  const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir };
+  for (const name of HARNESS_VARIABLES) delete env[name];
   return spawnSync('node', [scriptPath, mode], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      HOME: homeDir,
-      USERPROFILE: homeDir,
-    },
+    env,
   });
 }
 
@@ -66,7 +68,8 @@ if (
       assert.strictEqual(result.status, 0, result.stdout + result.stderr);
       assert.strictEqual(result.stdout, JSON.stringify(payload));
 
-      const logFile = path.join(homeDir, '.gemini', 'bash-commands.log');
+      // The EGC directory of a home where no tool is installed: ~/.egc.
+      const logFile = path.join(homeDir, '.egc', 'bash-commands.log');
       const logContent = fs.readFileSync(logFile, 'utf8');
       assert.ok(logContent.includes('--token <REDACTED>'));
       assert.ok(!logContent.includes('abc123'));
@@ -91,7 +94,7 @@ if (
       const result = runHook('cost', payload, homeDir);
       assert.strictEqual(result.status, 0, result.stdout + result.stderr);
 
-      const logFile = path.join(homeDir, '.gemini', 'cost-tracker.log');
+      const logFile = path.join(homeDir, '.egc', 'cost-tracker.log');
       const logContent = fs.readFileSync(logFile, 'utf8');
       assert.match(logContent, /tool=Bash command=npm publish/);
     } finally {

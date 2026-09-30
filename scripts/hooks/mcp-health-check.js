@@ -19,6 +19,8 @@ const http = require('node:http');
 const https = require('node:https');
 const { spawn, spawnSync } = require('node:child_process');
 
+const { getEGCDir } = require('../lib/utils');
+
 const MAX_STDIN = 1024 * 1024;
 const DEFAULT_TTL_MS = 2 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -61,9 +63,15 @@ function stateFilePath() {
   if (explicit) {
     return path.resolve(explicit);
   }
-  return path.join(os.homedir(), '.gemini', 'mcp-health-cache.json');
+  // The cache lives in the EGC directory of the tool in use, next to that
+  // tool's other EGC files, not in a fixed ~/.gemini.
+  return path.join(getEGCDir(), 'mcp-health-cache.json');
 }
 
+// The MCP registration files of the tools that read this hook: the project
+// and user files of Claude Code (.mcp.json, ~/.claude.json) and of
+// Antigravity (.agents/mcp_config.json, ~/.gemini/config/mcp_config.json).
+// The retired Gemini CLI's settings.json is no longer consulted.
 function configPaths() {
   const explicit = envValue('EGC_MCP_CONFIG_PATH');
   if (explicit) {
@@ -78,10 +86,10 @@ function configPaths() {
   const home = os.homedir();
 
   return [
-    path.join(cwd, '.gemini.json'),
-    path.join(cwd, '.gemini', 'settings.json'),
-    path.join(home, '.gemini.json'),
-    path.join(home, '.gemini', 'settings.json')
+    path.join(cwd, '.mcp.json'),
+    path.join(cwd, '.agents', 'mcp_config.json'),
+    path.join(home, '.claude.json'),
+    path.join(home, '.gemini', 'config', 'mcp_config.json')
   ];
 }
 

@@ -223,15 +223,16 @@ async function runTests() {
   }));
 
   tally(await asyncTest('uses default cwd config path and default home state path', async () => {
+    // The project file Claude Code reads (.mcp.json) is one of the default
+    // config paths; the cache lands in the EGC directory of the tool in use,
+    // ~/.egc on a home where no tool is installed.
     const tempDir = createTempDir();
     const homeDir = path.join(tempDir, 'home');
-    const configDir = path.join(tempDir, '.gemini');
-    const configPath = path.join(configDir, 'settings.json');
-    const expectedStatePath = path.join(homeDir, '.gemini', 'mcp-health-cache.json');
+    const configPath = path.join(tempDir, '.mcp.json');
+    const expectedStatePath = path.join(homeDir, '.egc', 'mcp-health-cache.json');
     const serverScript = path.join(tempDir, 'default-path-server.js');
 
     try {
-      fs.mkdirSync(configDir, { recursive: true });
       fs.mkdirSync(homeDir, { recursive: true });
       fs.writeFileSync(serverScript, "setInterval(() => {}, 1000);\n");
       writeConfig(configPath, {
@@ -262,7 +263,7 @@ async function runTests() {
       assert.strictEqual(
         fs.realpathSync(state.servers.cwddefault.source),
         fs.realpathSync(configPath),
-        'Expected cwd .gemini/settings.json config source'
+        'Expected cwd .mcp.json config source'
       );
     } finally {
       cleanupTempDir(tempDir);
