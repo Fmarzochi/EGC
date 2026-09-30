@@ -713,7 +713,7 @@ function planHookRetirements(input, adapter) {
   if (!siblingKeys) return [];
 
   const operations = Array.isArray(input.operations) ? input.operations : adapter.planOperations(input);
-  const planned = new Set(operations.filter(operation => operation && operation.kind === HOOK_OPERATION_KIND).map(hookEntryIdentity));
+  const planned = new Set(operations.filter(operation => operation?.kind === HOOK_OPERATION_KIND).map(hookEntryIdentity));
   const activeModuleIds = collectActiveModuleIds(input, operations);
   const managedRoots = resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root));
   const seen = new Set();
