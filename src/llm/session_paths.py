@@ -1,7 +1,7 @@
 """Unified session-storage path resolution + a safe legacy migrator.
 
 Goal: the Python runtime records sessions into the *same logical store* the
-Node runtime uses (``~/.gemini/session-data``) instead of a separate
+Node runtime uses (``<EGC dir>/session-data``) instead of a separate
 project-local ``.sessions/`` directory, WITHOUT breaking projects that are
 already recording into ``.sessions/`` and WITHOUT touching old session files.
 
@@ -12,8 +12,12 @@ Resolution order for the active session root:
      pre-existing variable used by SessionRecorder - kept for backward compat)
   3. ``./.sessions/`` IF it already exists in the current project (so a project
      that has been recording there keeps doing so - no break)
-  4. ``<EGC state root>/session-data`` i.e. ``~/.gemini/session-data`` (the
-     unified default, matching the Node side's ``getSessionsDir()``)
+  4. ``<EGC state root>/session-data``, the directory ``getEGCDir()`` gives
+     the Node side (``~/.claude`` in Claude Code, ``~/.gemini`` in Antigravity,
+     ``~/.egc`` otherwise), matching its ``getSessionsDir()``
+
+Recordings made while the Python default was fixed at ``~/.gemini`` are a
+migration source too.
 
 Migration (``migrate_legacy_sessions``) is dry-run by default, idempotent, and
 never overwrites an existing destination file.
@@ -26,7 +30,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, List
 
-from llm.paths import _first_env, egc_canonical_sessions_dir, egc_legacy_sessions_dir, project_root
+from llm.paths import _first_env, egc_canonical_sessions_dir, egc_legacy_sessions_dir, home_dir, project_root
 
 
 _LOCAL_SESSIONS_DIRNAME = ".sessions"
@@ -47,7 +51,8 @@ def session_root() -> Path:
 def legacy_session_dirs() -> List[Path]:
     """Directories that may hold sessions from older layouts (read-only sources for migration)."""
     out: List[Path] = []
-    for p in (project_root() / _LOCAL_SESSIONS_DIRNAME, egc_legacy_sessions_dir()):
+    old_python_default = home_dir() / ".gemini" / "session-data"
+    for p in (project_root() / _LOCAL_SESSIONS_DIRNAME, egc_legacy_sessions_dir(), old_python_default):
         if p.is_dir() and p.resolve() != session_root().resolve():
             out.append(p)
     return out

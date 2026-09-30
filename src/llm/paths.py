@@ -5,10 +5,10 @@ that no Python code hardcodes an absolute path or assumes a username. Every
 location is environment-overridable; ``EGC_*`` names are canonical and the
 legacy ``ECC_*`` names remain valid as a permanent compatibility bridge.
 
-Defaults are intentionally aligned with the Node side (``scripts/lib/utils.js``,
-which uses ``~/.gemini`` as the EGC home / state root) so the two runtimes do
-not fragment. ``HOME`` / ``USERPROFILE`` are honored before falling back to
-``Path.home()``.
+Defaults are intentionally aligned with the Node side (``getEGCDir()`` in
+``scripts/lib/utils.js``: the EGC directory of the tool in use) so the two
+runtimes do not fragment. ``HOME`` / ``USERPROFILE`` are honored before falling
+back to ``Path.home()``.
 
 This module never hardcodes ``/home/<user>``, ``/Users/<user>`` or similar.
 """
@@ -87,20 +87,68 @@ def project_id() -> str:
     return hashlib.sha256(hash_input.encode("utf-8")).hexdigest()[:12]
 
 
-def egc_home() -> Path:
-    """EGC home / state root. Default: ``~/.gemini`` (matches the Node runtime).
+# The tool directories getEGCDir() knows, in its order (longest prefix first).
+_TOOL_DIRS = (
+    (".codeium", "windsurf"), (".config", "opencode"), (".config", "zed"),
+    (".gemini",), (".claude",), (".cursor",), (".agents",), (".amp",),
+    (".continue",), (".github",), (".kiro",), (".trae",), (".trae-cn",), (".codebuddy",),
+)
 
-    Override with ``EGC_HOME`` (canonical) or ``ECC_HOME`` (legacy).
+# The variables each tool sets for its hooks, in getEGCDir()'s order: the
+# Gemini ones first, because the retired Gemini CLI also set the Claude ones.
+_TOOL_ENV = (
+    (("GEMINI_PROJECT_DIR", "GEMINI_PLUGIN_ROOT"), ".gemini"),
+    (("CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT"), ".claude"),
+    (("CODEBUDDY_PROJECT_DIR", "CODEBUDDY_PLUGIN_ROOT"), ".codebuddy"),
+    (("VSCODE_AGENT", "GITHUB_COPILOT_API_TOKEN"), ".github"),
+    (("KIRO_HOOK_FILE", "KIRO_FILE_PATH"), ".kiro"),
+)
+
+
+def _tool_dir_from_env(home: Path) -> Optional[Path]:
+    for names, dirname in _TOOL_ENV:
+        if any(os.environ.get(n) for n in names):
+            return home / dirname
+    trae = os.environ.get("TRAE_ENV")
+    if trae:
+        return home / (".trae-cn" if trae == "cn" else ".trae")
+    return None
+
+
+def egc_home() -> Path:
+    """EGC home / state root: the directory ``getEGCDir()`` gives the Node runtime.
+
+    Resolution: ``EGC_HOME`` / ``ECC_HOME`` / ``EGC_STATE_ROOT`` (Python only),
+    ``EGC_DIR`` (shared with Node), the directory of the tool whose hook
+    variables are set, ``~/.egc`` when it exists, the first tool directory that
+    exists, else ``~/.egc``. Node's install-path step does not apply: the Python
+    runtime runs from the package, never from a tool's directory.
     """
-    v = _first_env("EGC_HOME", "ECC_HOME", "EGC_STATE_ROOT")
+    v = _first_env("EGC_HOME", "ECC_HOME", "EGC_STATE_ROOT", "EGC_DIR")
     if v:
         return Path(v).expanduser().resolve()
-    return (home_dir() / ".gemini").resolve()
+    home = home_dir()
+    from_env = _tool_dir_from_env(home)
+    if from_env is not None:
+        return from_env.resolve()
+    egc = home / ".egc"
+    if egc.exists():
+        return egc.resolve()
+    for parts in _TOOL_DIRS:
+        candidate = home.joinpath(*parts)
+        if candidate.exists():
+            return candidate.resolve()
+    return egc.resolve()
 
 
 def egc_homunculus_dir() -> Path:
-    """Legacy state root used by continuous-learning-v2."""
-    return egc_home() / "homunculus"
+    """State root of continuous-learning-v2: ``~/.gemini/homunculus``.
+
+    observe.sh, start-observer.sh, detect-project.sh and instinct-cli.py write
+    observations and instincts there whatever the tool, so the recorder keeps
+    writing beside them until that store moves with all of its writers.
+    """
+    return home_dir() / ".gemini" / "homunculus"
 
 
 def egc_project_dir() -> Path:

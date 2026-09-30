@@ -50,7 +50,7 @@ class SessionRecorder:
     Registrador de sessoes minimalista e deterministico (JSONL).
     Garante persistencia atomica de eventos de orquestracao.
 
-    Session files land in the unified session store (`~/.gemini/session-data`
+    Session files land in the unified session store (`<EGC dir>/session-data`,
     by default; `.sessions/` is kept if a project already uses it; fully
     env-overridable via `EGC_SESSION_ROOT` / `ECC_SESSION_ROOT` /
     `EGC_SESSION_RECORDING_DIR`). "Interesting" events are also teed (best
