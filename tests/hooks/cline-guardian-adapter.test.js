@@ -44,6 +44,96 @@ function runAdapterCli(input, env = {}) {
   };
 }
 
+// The Cline SDK and CLI read the same .clinerules/hooks/PreToolUse, but their
+// shell tool is run_commands (cline/cline sdk/packages/core/src/runtime/
+// orchestration/runtime-builder.ts maps execute_command and bash to it), and
+// its input takes several shapes (RunCommandsInputUnionSchema in
+// extensions/tools/schemas.ts). The hook payload carries the raw input in
+// tool_call.input and a string-valued copy in preToolUse.parameters
+// (sdk/packages/core/src/hooks/hook-file-hooks.ts).
+function sdkCall(input) {
+  return {
+    hookName: 'tool_call',
+    tool_call: { id: 'call-1', name: 'run_commands', input },
+    preToolUse: {
+      toolName: 'run_commands',
+      parameters: Object.fromEntries(Object.entries(input && typeof input === 'object' && !Array.isArray(input) ? input : {})
+        .map(([key, value]) => [key, typeof value === 'string' ? value : JSON.stringify(value)])),
+    },
+  };
+}
+
+function responseOf(payload) {
+  const result = runAdapterCli(payload);
+  assert.strictEqual(result.code, 0, 'Cline honors the JSON body regardless of exit code');
+  return JSON.parse(result.stdout);
+}
+
+function runRunCommandsCases() {
+  return [
+    test('CLI: run_commands blocks when any of its commands is destructive', () => {
+      const response = responseOf(sdkCall({ commands: ['git status', 'rm -rf /'] }));
+      assert.strictEqual(response.cancel, true);
+      assert.ok(response.errorMessage && response.errorMessage.length > 0);
+    }),
+
+    test('CLI: run_commands allows when every command is safe', () => {
+      assert.deepStrictEqual(responseOf(sdkCall({ commands: ['git status', 'git log -1'] })), { cancel: false });
+    }),
+
+    test('CLI: run_commands judges every input shape the SDK accepts', () => {
+      for (const input of [
+        'rm -rf /',
+        ['git status', 'rm -rf /'],
+        { command: 'rm -rf /' },
+        { cmd: 'rm -rf /' },
+        { commands: 'rm -rf /' },
+        [{ command: 'rm', args: ['-rf', '/'] }],
+        { commands: [{ command: 'rm', args: ['-rf', '/'] }] },
+        { command: 'rm', args: ['-rf', '/'] },
+      ]) {
+        assert.strictEqual(responseOf(sdkCall(input)).cancel, true, `blocked: ${JSON.stringify(input)}`);
+      }
+    }),
+
+    test('CLI: run_commands is judged from preToolUse.parameters when tool_call is absent', () => {
+      const payload = sdkCall({ commands: ['rm -rf /'] });
+      delete payload.tool_call;
+      assert.strictEqual(responseOf(payload).cancel, true);
+    }),
+
+    test('CLI: a run_commands input the Guardian cannot read is refused, not waved through', () => {
+      const response = responseOf(sdkCall({ commands: [42] }));
+      assert.strictEqual(response.cancel, true);
+      assert.ok(/could not be read/i.test(response.errorMessage), response.errorMessage);
+    }),
+
+    test('CLI: an empty run_commands runs nothing and allows', () => {
+      assert.deepStrictEqual(responseOf(sdkCall({ commands: [] })), { cancel: false });
+    }),
+
+    test('CLI: run_commands judges every key it carries, so no command hides behind another', () => {
+      for (const input of [
+        { commands: 'echo ok', command: 'rm -rf /' },
+        { cmd: 'echo ok', commands: ['rm -rf /'] },
+        { commands: [], cmd: 'rm -rf /' },
+      ]) {
+        assert.strictEqual(responseOf(sdkCall(input)).cancel, true, `blocked: ${JSON.stringify(input)}`);
+      }
+    }),
+
+    test('CLI: a structured command is judged both as its argv and as plain words, so an interpreter script is seen', () => {
+      assert.strictEqual(responseOf(sdkCall({ commands: [{ command: 'bash', args: ['-c', 'rm -rf /'] }] })).cancel, true);
+      assert.deepStrictEqual(responseOf(sdkCall({ commands: [{ command: 'git', args: ['status'] }] })), { cancel: false });
+    }),
+
+    test('CLI: an execute_command that only carries tool_call is still judged', () => {
+      const response = responseOf({ tool_call: { id: 'call-1', name: 'execute_command', input: { command: 'rm -rf /' } } });
+      assert.strictEqual(response.cancel, true);
+    }),
+  ];
+}
+
 function runTests() {
   console.log('\n=== Testing cline-guardian-adapter ===\n');
 
@@ -100,6 +190,10 @@ function runTests() {
       assert.doesNotThrow(() => JSON.parse(result.stdout), `Run ${i}: stdout was not valid JSON: ${JSON.stringify(result.stdout)}`);
     }
   })) passed++; else failed++;
+
+  const runCommandsResults = runRunCommandsCases();
+  passed += runCommandsResults.filter(Boolean).length;
+  failed += runCommandsResults.filter(ok => !ok).length;
 
   console.log(`\n  ${passed} passed, ${failed} failed\n`);
   process.exit(failed > 0 ? 1 : 0);
