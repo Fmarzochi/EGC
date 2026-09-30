@@ -146,8 +146,6 @@ All notable changes to EGC are documented here.
 
 ### Fixed
 
-- **simple-git 4 lands with the named import the new major exports** (#1647): the new major removed the default export the memory server's GitBackend consumed, and the root-only Dependabot bump would have shipped a runtime crash in the team memory sync behind a green CI; both trees move to ^4.0.2 together and the import follows the named export 3.x also ships.
-
 - **The OpenCode plugin index reports the release version** (#1461): `.opencode/index.ts` exported `VERSION` 1.1.13 since that release, because the release script rewrote the line but never committed the file, so every later bump found no match; the file now ships at 1.1.22 and the script commits it with the other propagation files.
 - **Routing never points at a component the tool does not have, and needs no API key** (#1453): the prompt router and `orchestrate_task` suggested skills and agents from the whole catalog whether or not the prompt library was installed, so an engine-only install saw names its tool could not invoke and failed silently; the local scorer counted raw token hits, so a word half the catalog shares (`egc`, `flow`, `site`) filled the list with unrelated entries, and the only better mode advertised was a paid provider key. The catalog index now records where each component comes from; the router reads the install state of the active tool (its home state and its project state) and lists installed candidates apart from a named `Not installed for this tool` line with the command that adds them; `orchestrate_task` returns the same split under `not_installed` with `install_hint`. Both scorers weigh tokens by rarity across the catalog, name hits above description hits, read the situations a skill names in its activation section, stem plurals, drop Portuguese and Spanish function words, and require a discriminating match, so a generic prompt stays silent. The model of the tool decides by intent, in the prompt's own language; the provider path stays an explicit opt-in.
 - **The Fact-Forcing Gate no longer refuses a retry whose facts it cannot see** (#1452): the gate judged the assistant text written since the last user entry of the transcript, but a tool result is recorded as a user entry too, so the facts written before its own denial were discarded, and Claude Code appends the entries of an assistant message only once its first tool call completes, so the message carrying the retry was never in the file at PreToolUse time; every Edit or Write retry in the same turn was refused with "missing: <file>" even when the message named the file. The gate now anchors on its own denial (the tool result that carries the gate marker and the target), judges the assistant text written after it, and applies the identical-retry rule when no assistant text follows the denial yet. Transcripts that do not record the denial keep the earlier rule.
@@ -202,8 +200,6 @@ All notable changes to EGC are documented here.
 
 ### Fixed
 
-- **simple-git 4 lands with the named import the new major exports** (#1647): the new major removed the default export the memory server's GitBackend consumed, and the root-only Dependabot bump would have shipped a runtime crash in the team memory sync behind a green CI; both trees move to ^4.0.2 together and the import follows the named export 3.x also ships.
-
 - **`egc install` survives a root-owned global npm prefix** (#1348): `sudo npm install -g @egchq/egc` followed by `egc install` as the regular user ended with a bare exit 243 (npm's EACCES) and no message, because the installer ran `npm ci --silent` inside the root-owned MCP server directories. A read-only server directory now confirms its dependencies are present in the package root and continues with a note; an `npm ci` failure elsewhere is reported with the directory and exit code; the `.mcp.egc.json` convenience copy and the topology cache are skipped with a note when the install directory is read-only. Found by running the documented sequence end to end in a Debian 12 container.
 - **The MCP servers fall back to the portable sql.js engine when native sqlite3 cannot load** (#1350): the sqlite3 6.x prebuilt binary needs glibc 2.38, so on Debian 12, Ubuntu 22.04 and similar hosts both servers died at startup with `GLIBC_2.38 not found` while the CLI kept working through its own fallback. Each server now opens its database through `sqlite-compat`: native first, sql.js behind the same async API on a native load failure, persisted to the same file, with a one-line notice. `EGC_SQLITE_ENGINE=native|wasm` pins either engine.
 - **`egc help` exits 0 for `crusher-shim`, `session-inspect`, `prompt` and `claw`** (#1349): the first two printed their usage and exited 1, `prompt` died on a spawn ENOENT when the Python bridge's virtualenv was missing, and `claw` opened the REPL. A missing virtualenv is now reported by name.
@@ -229,8 +225,6 @@ All notable changes to EGC are documented here.
 
 ### Fixed
 
-- **simple-git 4 lands with the named import the new major exports** (#1647): the new major removed the default export the memory server's GitBackend consumed, and the root-only Dependabot bump would have shipped a runtime crash in the team memory sync behind a green CI; both trees move to ^4.0.2 together and the import follows the named export 3.x also ships.
-
 - **PowerShell install suite adopts the shared Windows subprocess budgets** (#1286): the dry-run delegation case ran the full Node planning pipeline under a hardcoded 30s cap, which starved a slow cold runner during the v1.1.19 tag validation; the shared 90s win32 full-install budget now applies, and the detection probe uses the shared CLI budget.
 - **Chaos harness cleanup guarantees** (#1284, @Tyr1onX): workers exit when the parent dies and the temp directory is removed on every failure path.
 
@@ -251,8 +245,6 @@ All notable changes to EGC are documented here.
 - **Gemini CLI, Continue.dev, and Roo Code retired from the install package** after their vendors discontinued them: 20 supported tools, with the adapters kept in the tree for rollback, the public counts moved together behind the parity test, and the registry explaining a retirement instead of calling a formerly valid id unknown. Antigravity succeeds Gemini CLI on the same `~/.gemini` home (#1279).
 
 ### Fixed
-
-- **simple-git 4 lands with the named import the new major exports** (#1647): the new major removed the default export the memory server's GitBackend consumed, and the root-only Dependabot bump would have shipped a runtime crash in the team memory sync behind a green CI; both trees move to ^4.0.2 together and the import follows the named export 3.x also ships.
 
 - **Session event delivery is exactly-once across overlapping readers**: a real double-delivery race surfaced by the chaos harness, closed with a compare-and-swap on the event cursor so a losing reader safely re-reads (#1271, @Tyr1onX).
 - **`egc auto-update` skips retired or unknown targets** with an honest notice instead of crashing the whole run (#1279).
