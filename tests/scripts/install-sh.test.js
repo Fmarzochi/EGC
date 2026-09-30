@@ -6,7 +6,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.sh');
@@ -17,6 +17,55 @@ function createTempDir(prefix) {
 
 function cleanup(dirPath) {
   fs.rmSync(dirPath, { recursive: true, force: true });
+}
+
+function writeExecutable(filePath, content) {
+  fs.writeFileSync(filePath, content, { mode: 0o755 });
+}
+
+function runIsolatedInstaller(rootDir, npmRoot, linkLog, homeDir) {
+  const scriptPath = path.join(rootDir, 'scripts', 'install.sh');
+  const binDir = path.join(homeDir, 'bin');
+
+  fs.mkdirSync(path.dirname(scriptPath), { recursive: true });
+  fs.copyFileSync(SCRIPT, scriptPath);
+  fs.chmodSync(scriptPath, 0o755);
+
+  for (const server of ['egc-guardian', 'egc-memory']) {
+    const buildDir = path.join(rootDir, 'mcp', 'servers', server, 'build');
+    fs.mkdirSync(buildDir, { recursive: true });
+    fs.writeFileSync(path.join(buildDir, 'index.js'), '');
+  }
+
+  fs.mkdirSync(binDir, { recursive: true });
+  writeExecutable(path.join(binDir, 'node'), `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "v20.18.0"; fi
+exit 0
+`);
+  writeExecutable(path.join(binDir, 'npm'), `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "10.8.2"; exit 0; fi
+if [ "$1" = "root" ] && [ "$2" = "-g" ]; then printf '%s\\n' "$FAKE_NPM_ROOT"; exit 0; fi
+if [ "$1" = "link" ]; then printf 'link\\n' >> "$FAKE_NPM_LINK_LOG"; exit 0; fi
+exit 0
+`);
+  writeExecutable(path.join(binDir, 'npx'), '#!/bin/sh\nexit 0\n');
+
+  const result = spawnSync('bash', [scriptPath, '--no-prompt-library'], {
+    cwd: homeDir,
+    env: {
+      ...process.env,
+      HOME: homeDir,
+      CI: '1',
+      PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
+      FAKE_NPM_ROOT: npmRoot,
+      FAKE_NPM_LINK_LOG: linkLog,
+    },
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    timeout: CLI_TIMEOUT_MS,
+  });
+
+  return { code: result.status, stdout: result.stdout || '', stderr: result.stderr || '' };
 }
 
 function run(args = [], options = {}) {
@@ -295,35 +344,67 @@ function runTests() {
     );
   })) passed++; else failed++;
 
-  if (test('skips npm link when running from the global npm install (#1218)', () => {
-    const script = fs.readFileSync(SCRIPT, 'utf8');
+  if (test('custom-prefix npm install never links into the active npm prefix (#1464)', () => {
+    const sandbox = createTempDir('egc-custom-prefix-');
+    const homeDir = path.join(sandbox, 'home');
+    const npmRoot = path.join(sandbox, 'active-prefix', 'lib', 'node_modules');
+    const installedRoot = path.join(sandbox, 'install-prefix', 'lib', 'node_modules', '@egchq', 'egc');
+    const sourceRoot = path.join(sandbox, 'source-tree');
+    const checkoutRoot = path.join(sandbox, 'checkout-prefix', 'node_modules', '@egchq', 'egc');
+    const linkLog = path.join(sandbox, 'npm-link.log');
 
-    // `egc install` after `npm install -g @egchq/egc` runs this script from
-    // inside the global npm prefix: the egc bin on PATH already points at
-    // this tree, so npm link is redundant there, and with a root-owned
-    // prefix (distro Node) it fails and prints a note about a checkout the
-    // person does not have. The guard must compare the resolved global
-    // package dir against ROOT_DIR before ever attempting the link.
+    fs.mkdirSync(homeDir, { recursive: true });
+
+    try {
+      const installed = runIsolatedInstaller(installedRoot, npmRoot, linkLog, homeDir);
+      assert.strictEqual(installed.code, 0, installed.stderr);
+      assert.ok(
+        installed.stdout.includes('egc command already provided by this npm install'),
+        installed.stdout
+      );
+      assert.ok(
+        !fs.existsSync(linkLog),
+        'an npm-installed package must not call npm link when the active prefix differs'
+      );
+
+      const source = runIsolatedInstaller(sourceRoot, npmRoot, linkLog, homeDir);
+      assert.strictEqual(source.code, 0, source.stderr);
+      assert.ok(
+        source.stdout.includes('linking the egc command to this checkout'),
+        source.stdout
+      );
+      assert.strictEqual(
+        fs.readFileSync(linkLog, 'utf8'),
+        'link\n',
+        'a source tree outside node_modules must keep the existing npm link behavior'
+      );
+
+      fs.mkdirSync(checkoutRoot, { recursive: true });
+      fs.writeFileSync(path.join(checkoutRoot, '.git'), 'gitdir: /tmp/egc-worktree-meta\n');
+      const checkout = runIsolatedInstaller(checkoutRoot, npmRoot, linkLog, homeDir);
+      assert.strictEqual(checkout.code, 0, checkout.stderr);
+      assert.strictEqual(
+        fs.readFileSync(linkLog, 'utf8'),
+        'link\nlink\n',
+        'a git checkout must still link even when its path looks like an npm package'
+      );
+    } finally {
+      cleanup(sandbox);
+    }
+  })) passed++; else failed++;
+
+  if (test('npm-link guard follows package layout instead of the active npm prefix', () => {
+    const script = fs.readFileSync(SCRIPT, 'utf8');
     assert.ok(
-      /npm root -g/.test(script),
-      'install.sh must locate the global npm package root for the guard'
+      script.includes('"$ROOT_DIR" == */node_modules/@egchq/egc'),
+      'install.sh must recognize the published package by its npm layout'
     );
     assert.ok(
-      script.includes('@egchq/egc'),
-      'the guard must target the published package directory'
+      !script.includes('GLOBAL_PKG_DIR="$(npm root -g'),
+      'the guard must not compare against whichever npm prefix happens to be active now'
     );
-    assert.ok(
-      script.indexOf('npm root -g') < script.indexOf('npm link --silent'),
-      'the global-install guard must run before npm link'
-    );
-    assert.ok(
-      /npm link --silent/.test(script),
-      'the git-checkout path must still link the egc command'
-    );
-    assert.ok(
-      script.includes('already provided by the global npm install'),
-      'the skip must be announced, not silent'
-    );
+    assert.ok(script.includes('! -e "$ROOT_DIR/.git"'), 'a checkout (.git file or directory) must take precedence over an npm-looking path');
+    assert.ok(/npm link --silent/.test(script), 'source trees must still be able to link the egc command');
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

@@ -167,18 +167,15 @@ if [[ "$DRY_RUN" = false ]]; then
   # at the end of this script tells the user to run (and anything else they
   # type afterward) targets the code that was just installed rather than a
   # stale prior global install left on PATH from an earlier npm publish.
-  # Skipped when this tree IS the global npm install (`egc install` right
-  # after `npm install -g @egchq/egc`): the egc bin on PATH already points
-  # here, so there is nothing stale to outrank, and with a root-owned global
-  # prefix (distro Node) the link can only fail and print a note about a
-  # checkout the person does not have (#1218 Linux report). Both sides
-  # resolve symlinks (pwd -P, matching ROOT_DIR above), so an nvm/mise-style
-  # symlinked prefix still compares equal. Best-effort: some environments
-  # lack permission to the global npm prefix, and that must not abort the
-  # rest of the install.
-  GLOBAL_PKG_DIR="$(npm root -g 2>/dev/null || true)/@egchq/egc"
-  if [[ -d "$GLOBAL_PKG_DIR" && "$(cd "$GLOBAL_PKG_DIR" && pwd -P)" == "$ROOT_DIR" ]]; then
-    echo "  egc command already provided by the global npm install"
+  #
+  # A tree already installed by npm must never be linked again just because
+  # the active npm prefix changed after it was installed (#1464). The package
+  # layout is the stable fact: npm installs @egchq/egc under
+  # node_modules/@egchq/egc whatever prefix owns that node_modules tree.
+  # A checkout or unpacked source tree stays on the link path so it can
+  # outrank a stale egc command left on PATH.
+  if [[ ! -e "$ROOT_DIR/.git" && "$ROOT_DIR" == */node_modules/@egchq/egc ]]; then
+    echo "  egc command already provided by this npm install"
   else
     echo "  linking the egc command to this checkout..."
     npm link --silent 2>/dev/null || echo "  note: npm link failed (no permission to the global npm prefix?). Run 'npm link' manually, or use 'node scripts/egc.js <command>' from this checkout."

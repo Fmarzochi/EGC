@@ -214,24 +214,22 @@ if (-not $DryRun) {
     # message at the end of this script tells the user to run (and anything
     # else they type afterward) targets the code that was just installed
     # rather than a stale prior global install left on PATH from an earlier
-    # npm publish. Skipped when this tree IS the global npm install
-    # (`egc install` right after `npm install -g @egchq/egc`): the egc
-    # command on PATH already points here, so there is nothing stale to
-    # outrank, and without permission to the global prefix the link can only
-    # fail and print a note about a checkout the person does not have
-    # (#1218 Linux report). Best-effort: some environments lack permission
-    # to the global npm prefix, and that must not abort the rest of the
-    # install.
-    $GlobalNpmRoot = (& npm root -g 2>$null)
-    $IsGlobalNpmInstall = $false
-    if ($GlobalNpmRoot) {
-        $GlobalPkgDir = Join-Path (Join-Path $GlobalNpmRoot "@egchq") "egc"
-        if (Test-Path $GlobalPkgDir) {
-            $IsGlobalNpmInstall = ((Resolve-Path $GlobalPkgDir).Path -eq (Resolve-Path $RootDir).Path)
-        }
-    }
-    if ($IsGlobalNpmInstall) {
-        Write-Host "  egc command already provided by the global npm install"
+    # npm publish.
+    #
+    # Do not infer "npm install" from the currently active npm prefix: a
+    # package installed with --prefix (or under a version manager that was
+    # switched later) legitimately lives outside `npm root -g` (#1464).
+    # The installed package layout itself is stable across prefixes.
+    $ScopeDir = Split-Path -Parent $RootDir
+    $NodeModulesDir = Split-Path -Parent $ScopeDir
+    $IsNpmInstall = (
+        -not (Test-Path (Join-Path $RootDir ".git")) -and
+        (Split-Path -Leaf $RootDir) -eq "egc" -and
+        (Split-Path -Leaf $ScopeDir) -eq "@egchq" -and
+        (Split-Path -Leaf $NodeModulesDir) -eq "node_modules"
+    )
+    if ($IsNpmInstall) {
+        Write-Host "  egc command already provided by this npm install"
     } else {
         Write-Host "  linking the egc command to this checkout..."
         # PowerShell does not treat a non-zero exit code from a native command as
