@@ -8,12 +8,28 @@ const fs = require("fs")
 const path = require("path")
 const { spawnSync } = require("child_process")
 
+// The OpenCode build is optional tooling: without the peer
+// @opencode-ai/plugin, scripts/build-opencode.js declines with a SKIP marker
+// and produces no dist. The two tests that need the dist skip on that
+// marker alone; a build that fails for any other reason still fails them.
+let buildDeclined = false
+
+function skip(reason) {
+  const error = new Error(reason)
+  error.skip = true
+  return error
+}
+
 function runTest(name, fn) {
   try {
     fn()
     console.log(`  ✓ ${name}`)
     return true
   } catch (error) {
+    if (error.skip) {
+      console.log(`SKIP: ${name} (${error.message})`)
+      return true
+    }
     if (maybeSkipBaselineAbsent(error, name)) return true;
     console.log(`  ✗ ${name}`)
     console.error(`    ${error.message}`)
@@ -48,9 +64,16 @@ function main() {
         encoding: "utf8",
       })
       assert.strictEqual(result.status, 0, result.stderr)
+      if (/SKIP: build-opencode/.test(result.stderr || "") && !fs.existsSync(distEntry)) {
+        buildDeclined = true
+        throw skip("@opencode-ai/plugin not installed, so the build declined and left no dist")
+      }
       assert.ok(fs.existsSync(distEntry), ".opencode/dist/index.js should exist after build")
     }],
     ["npm pack includes the compiled OpenCode dist payload", () => {
+      if (buildDeclined && !fs.existsSync(distEntry)) {
+        throw skip("no OpenCode dist to pack: the build declined without @opencode-ai/plugin")
+      }
       // --ignore-scripts: the assertion is about the files whitelist picking
       // up an existing compiled dist, not about running the prepack pipeline
       // (which refuses to pack while local propagation files hold populated
