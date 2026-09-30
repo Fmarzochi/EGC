@@ -18,7 +18,7 @@
 
 ---
 
-EGC 是 AI 编码工具的本地第一个运行时间。安装一次，Cursor, Claude Codex, Codex, Copilot, 艾德和它支持的20个AI 编码工具的其余部分共享您项目的一个加密记忆。 每个命令前面的一个安全层，一个能使噪音输出远离模型的滤镜。 和一辆实时客车，让您打开的会话能够相互看到。原生支持 Claude、GPT-4o、Gemini、DeepSeek、Mistral、Groq、Cohere 和 Vertex AI，还可通过 OpenRouter 接入 Qwen3、Llama 4 等更多模型。
+EGC 是 AI 编码工具的本地第一个运行时间。安装一次，Cursor, Claude Codex, Codex, Copilot, 艾德和它支持的19个AI 编码工具的其余部分共享您项目的一个加密记忆。 每个命令前面的一个安全层，一个能使噪音输出远离模型的滤镜。 和一辆实时客车，让您打开的会话能够相互看到。原生支持 Claude、GPT-4o、Gemini、DeepSeek、Mistral、Groq、Cohere 和 Vertex AI，还可通过 OpenRouter 接入 Qwen3、Llama 4 等更多模型。
 
 没有你的机器留下任何东西。内存生活在"~/.egc"中，使用AES-256-GCM加密，每个项目和分支保存，永远不承诺git。
 
@@ -33,7 +33,7 @@ npm install -g @egchq/egc && egc install
 这就是整个引擎。 `egc install` 检测到您拥有的工具，在其中每个工具中注册两个本地 MCP 服务器。 写下每个代理读取的内存协议，并设置令牌碎纸器。它提出了一个问题，您是否也想要可选的提示库，默认是否。
 
 <div align="center">
-  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 19 AI coding tools" width="800" />
 </div>
 
 [完整安装指南](../../docs/installation.md)
