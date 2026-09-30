@@ -162,11 +162,16 @@ run('a wget is flagged past a | or > in a quoted option and a URL of any length'
   assert.ok(!scanForInjection("wget --header='X: a|b' https://x.example/p -O out").some(f => f.reason === 'remote download payload'));
 });
 
+// A regex that backtracks on these inputs takes minutes, so the budget only
+// has to stay far below that while surviving a slow shared runner: the
+// 500k-character line has crossed 1000 ms on a macOS runner.
+const LINEAR_SCAN_BUDGET_MS = 5000;
+
 run('the fetch checks stay linear on long lines full of fetches and pipes', () => {
   for (const text of [`curl ${'| '.repeat(200000)}`, 'curl wget '.repeat(100000), `wget https://x ${'|x '.repeat(200000)}`, `curl ${'| sudo -u '.repeat(50000)}`]) {
     const start = Date.now();
     scanForInjection(text);
-    assert.ok(Date.now() - start < 1000, `${text.slice(0, 40)} took ${Date.now() - start}ms`);
+    assert.ok(Date.now() - start < LINEAR_SCAN_BUDGET_MS, `${text.slice(0, 40)} took ${Date.now() - start}ms`);
   }
 });
 
@@ -227,7 +232,7 @@ run('bounded HTML comment does not runaway on long content', () => {
   const long = 'x'.repeat(5000);
   const start = Date.now();
   scanForInjection(`<!-- ignore ${long}`);
-  assert.ok(Date.now() - start < 1000, 'scan must stay fast even on unterminated long comments');
+  assert.ok(Date.now() - start < LINEAR_SCAN_BUDGET_MS, 'scan must stay fast even on unterminated long comments');
 });
 
 run('zero-width characters near an injection keyword are flagged', () => {
