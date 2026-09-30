@@ -22,6 +22,13 @@ const GIT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-n33-gitconfig-'));
 const EMPTY_GIT_CONFIG = path.join(GIT_HOME, '.gitconfig');
 fs.writeFileSync(EMPTY_GIT_CONFIG, '');
 const GIT_ISOLATION = { GIT_CONFIG_GLOBAL: EMPTY_GIT_CONFIG, GIT_CONFIG_NOSYSTEM: '1' };
+// Fixed git locations before a PATH lookup, as the hook itself does.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  '/opt/homebrew/bin/git',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
+].find(candidate => fs.existsSync(candidate)) || 'git';
 
 function test(name, fn) {
   try {
@@ -40,8 +47,8 @@ function today() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
-function git(repo, args, author = ME, date = '2026-01-15T11:00:00') {
-  return execFileSync('git', args, {
+function git(repo, args, author = ME, date = '2026-01-15T11:00:00', committedAt = date) {
+  return execFileSync(GIT_BIN, args, {
     cwd: repo,
     encoding: 'utf8',
     env: {
@@ -52,16 +59,16 @@ function git(repo, args, author = ME, date = '2026-01-15T11:00:00') {
       GIT_AUTHOR_DATE: date,
       GIT_COMMITTER_NAME: author.name,
       GIT_COMMITTER_EMAIL: author.email,
-      GIT_COMMITTER_DATE: date,
+      GIT_COMMITTER_DATE: committedAt,
     },
   }).trim();
 }
 
-function commit(repo, message, author, date) {
+function commit(repo, message, author, date, committedAt = date) {
   fs.writeFileSync(path.join(repo, `${message.replaceAll(' ', '-')}.txt`), message);
-  git(repo, ['add', '-A'], author, date);
-  git(repo, ['commit', '-q', '-m', message], author, date);
-  return git(repo, ['rev-parse', '--short', 'HEAD'], author, date);
+  git(repo, ['add', '-A'], author, date, committedAt);
+  git(repo, ['commit', '-q', '-m', message], author, date, committedAt);
+  return git(repo, ['rev-parse', '--short', 'HEAD'], author, date, committedAt);
 }
 
 function setup() {
@@ -89,16 +96,20 @@ function setup() {
   return { home, repo, sessionFile };
 }
 
-function runHook(home, cwd) {
-  const result = spawnSync('node', [hookScript], {
+function runHook(home, cwd, extraEnv = {}) {
+  const result = spawnSync(process.execPath, [hookScript], {
     cwd,
     input: JSON.stringify({ transcript_path: TRANSCRIPT }),
     encoding: 'utf8',
-    env: { ...process.env, HOME: home, USERPROFILE: home, ...GIT_ISOLATION },
+    env: { ...process.env, HOME: home, USERPROFILE: home, ...GIT_ISOLATION, ...extraEnv },
     timeout: 30000,
   });
   assert.strictEqual(result.status, 0, result.stderr);
 }
+
+// A configured email outside any repository, the way a real machine has one
+// in its global config, so the hook reaches git log and it fails there.
+const EMAIL_FROM_ENV = { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'user.email', GIT_CONFIG_VALUE_0: ME.email };
 
 function headerOf(sessionFile) {
   return fs.readFileSync(sessionFile, 'utf8').split('\n---\n')[0];
@@ -118,20 +129,39 @@ function runTests() {
         commit(repo, 'before the session', ME, '2026-01-15T09:00:00');
         const first = commit(repo, 'first change', ME, '2026-01-15T10:30:00');
         commit(repo, 'their change', OTHER, '2026-01-15T10:45:00');
+        // Left unmerged: only --all reaches it from main.
         git(repo, ['checkout', '-q', '-b', 'feature'], ME, '2026-01-15T11:00:00');
         const onBranch = commit(repo, 'branch change', ME, '2026-01-15T11:00:00');
+        git(repo, ['checkout', '-q', 'main'], ME, '2026-01-15T11:05:00');
+        git(repo, ['checkout', '-q', '-b', 'side'], ME, '2026-01-15T11:05:00');
+        const onSide = commit(repo, 'side change', ME, '2026-01-15T11:06:00');
         git(repo, ['checkout', '-q', 'main'], ME, '2026-01-15T11:10:00');
-        git(repo, ['merge', '-q', '--no-ff', '-m', 'merge feature', 'feature'], ME, '2026-01-15T11:10:00');
+        git(repo, ['merge', '-q', '--no-ff', '-m', 'merge side', 'side'], ME, '2026-01-15T11:10:00');
 
         runHook(home, repo);
         const header = headerOf(sessionFile);
         assert.ok(header.includes('**Commits:**'), header);
         assert.ok(header.includes(`- ${first} first change`), header);
-        assert.ok(header.includes(`- ${onBranch} branch change`), header);
-        for (const absent of ['before the session', 'their change', 'merge feature']) {
+        assert.ok(header.includes(`- ${onBranch} branch change`), `a commit on an unmerged branch is listed:\n${header}`);
+        assert.ok(header.includes(`- ${onSide} side change`), header);
+        for (const absent of ['before the session', 'their change', 'merge side']) {
           assert.ok(!header.includes(absent), `${absent} is not listed:\n${header}`);
         }
         assert.ok(header.includes('**Started:** 10:00'), 'the session start is kept');
+      } finally {
+        cleanup(home, repo);
+      }
+    }),
+
+    test('work written before the session and only rewritten during it (rebase, amend) is not listed', () => {
+      const { home, repo, sessionFile } = setup();
+      try {
+        commit(repo, 'rebased old work', ME, '2026-01-15T09:00:00', '2026-01-15T10:30:00');
+        const fresh = commit(repo, 'fresh work', ME, '2026-01-15T10:40:00');
+        runHook(home, repo);
+        const header = headerOf(sessionFile);
+        assert.ok(header.includes(`- ${fresh} fresh work`), header);
+        assert.ok(!header.includes('rebased old work'), header);
       } finally {
         cleanup(home, repo);
       }
@@ -166,7 +196,7 @@ function runTests() {
       const { home, repo, sessionFile } = setup();
       const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-n33-plain-'));
       try {
-        runHook(home, plain);
+        runHook(home, plain, EMAIL_FROM_ENV);
         const header = headerOf(sessionFile);
         assert.ok(header.includes('**Last Updated:**'));
         assert.ok(!header.includes('**Commits:**'));

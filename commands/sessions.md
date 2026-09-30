@@ -4,7 +4,7 @@ description: Manage the session history of your AI coding tool, aliases, and ses
 
 # Sessions Command
 
-Manage the session history of your AI coding tool - list, load, alias, and edit sessions stored in `~/.gemini/session-data/` with legacy reads from `~/.gemini/sessions/`.
+Manage the session history of your AI coding tool - list, load, alias, and edit sessions stored in `<EGC dir>/session-data/` with legacy reads from `<EGC dir>/sessions/`. `<EGC dir>` is the EGC directory of the tool in use (`~/.claude` in Claude Code, `~/.gemini` in Antigravity, `~/.egc` when no tool is detected; `EGC_DIR` overrides it).
 
 ## Usage
 
@@ -333,7 +333,7 @@ $ARGUMENTS:
 
 ## Notes
 
-- Sessions are stored as markdown files in `~/.gemini/session-data/` with legacy reads from `~/.gemini/sessions/`
-- Aliases are stored in `~/.gemini/session-aliases.json`
+- Sessions are stored as markdown files in `<EGC dir>/session-data/` with legacy reads from `<EGC dir>/sessions/`
+- Aliases are stored in `<EGC dir>/session-aliases.json`
 - Session IDs can be shortened (first 4-8 characters usually unique enough)
 - Use aliases for frequently referenced sessions

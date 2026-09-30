@@ -1,7 +1,7 @@
 /**
  * Session Manager Library for EGC.
  * Provides CRUD operations for session files stored as markdown in
- * ~/.gemini/session-data/ with legacy read compatibility for ~/.gemini/sessions/.
+ * <EGC dir>/session-data/ with legacy read compatibility for <EGC dir>/sessions/.
  */
 
 /** Parsed metadata from a session filename */

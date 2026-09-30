@@ -1,6 +1,6 @@
 /**
  * Session Aliases Library for EGC
- * Manages session aliases stored in ~/.gemini/session-aliases.json
+ * Manages session aliases stored in <EGC dir>/session-aliases.json
  */
 
 const fs = require('node:fs');

@@ -175,6 +175,14 @@ function buildSessionHeader(today, currentTime, metadata, existingContent = '') 
 }
 
 const MAX_SESSION_COMMITS = 30;
+// S4036: prefer fixed git locations over a PATH lookup, as check-state-leak.js
+// does; the bare name is the last resort for layouts like nix or portable Git.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  '/opt/homebrew/bin/git',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
+].find(candidate => fs.existsSync(candidate)) || 'git';
 const SESSION_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const SESSION_TIME_PATTERN = /^\d{2}:\d{2}$/;
 
@@ -191,14 +199,17 @@ function sessionStartOf(content) {
 // The commits the person made in this repository since the session started
 // (the header's Date and Started, local time), on every branch, without
 // merges or other authors, so the next session knows what was delivered.
-// git runs with separate arguments and the email as a fixed string; any
-// failure (no git, not a repository) leaves the list empty.
+// --since reads the commit date, which a rebase or an amend renews, so work
+// authored before the session is dropped by its author date as well. git
+// runs with separate arguments and the email as a fixed string; any failure
+// (no git, not a repository) leaves the list empty.
 function getSessionCommits(start) {
-  const git = args => execFileSync('git', args, {
+  const git = args => execFileSync(GIT_BIN, args, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
     timeout: 5000
   }).trim();
+  const startSeconds = new Date(`${start.date}T${start.started}:00`).getTime() / 1000;
   try {
     const email = git(['config', 'user.email']);
     if (!email) return [];
@@ -207,9 +218,13 @@ function getSessionCommits(start) {
       `--since=${start.date} ${start.started}`,
       `--author=<${email}>`,
       '-n', String(MAX_SESSION_COMMITS),
-      '--format=%h %s'
+      '--format=%at %h %s'
     ]);
-    return output ? output.split('\n') : [];
+    return output
+      .split('\n')
+      .map(line => /^(\d+) (.+)$/.exec(line))
+      .filter(match => match && Number(match[1]) >= startSeconds)
+      .map(match => match[2]);
   } catch {
     return [];
   }

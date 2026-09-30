@@ -1,5 +1,5 @@
 ---
-description: Save current session state to a dated file in ~/.gemini/session-data/ so work can be resumed in a future session with full context.
+description: Save current session state to a dated file in <EGC dir>/session-data/ so work can be resumed in a future session with full context.
 ---
 
 # Save Session Command
@@ -26,15 +26,15 @@ Before writing the file, collect:
 
 ### Step 2: Create the sessions folder if it doesn't exist
 
-Create the canonical sessions folder in the user's Gemini home directory:
+Create the canonical sessions folder in `<EGC dir>`, the EGC directory of the tool in use (`~/.claude` in Claude Code, `~/.gemini` in Antigravity, `~/.egc` when no tool is detected; `EGC_DIR` overrides it):
 
 ```bash
-mkdir -p ~/.gemini/session-data
+mkdir -p ~/.claude/session-data   # Claude Code; in another tool, its <EGC dir>/session-data
 ```
 
 ### Step 3: Write the session file
 
-Create `~/.gemini/session-data/YYYY-MM-DD-<short-id>-session.tmp`, using today's actual date and a short-id that satisfies the rules enforced by `SESSION_FILENAME_REGEX` in `session-manager.js`:
+Create `<EGC dir>/session-data/YYYY-MM-DD-<short-id>-session.tmp`, using today's actual date and a short-id that satisfies the rules enforced by `SESSION_FILENAME_REGEX` in `session-manager.js`:
 
 - Compatibility characters: letters `a-z` / `A-Z`, digits `0-9`, hyphens `-`, underscores `_`
 - Compatibility minimum length: 1 character
@@ -270,6 +270,6 @@ Then test with Postman: the response should include a `Set-Cookie` header.
 - Each session gets its own file: never append to a previous session's file
 - The "What Did NOT Work" section is the most critical: future sessions will blindly retry failed approaches without it
 - If the user asks to save mid-session (not just at the end), save what's known so far and mark in-progress items clearly
-- The file is meant to be read by Gemini at the start of the next session via `/resume-session`
-- Use the canonical global session store: `~/.gemini/session-data/`
+- The file is meant to be read by your AI coding tool at the start of the next session via `/resume-session`
+- Use the canonical global session store: `<EGC dir>/session-data/`
 - Prefer the short-id filename form (`YYYY-MM-DD-<short-id>-session.tmp`) for any new session file
