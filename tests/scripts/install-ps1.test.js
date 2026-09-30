@@ -254,27 +254,33 @@ function runTests() {
     );
   })) passed++; else failed++;
 
-  if (test('skips npm link from the global npm install, matching install.sh (#1218)', () => {
-    // Same guard as install.sh: running `egc install` from the globally
-    // installed package must not attempt npm link (redundant there, and it
-    // fails with a note about a nonexistent checkout when the prefix is not
-    // writable). Parity-checked so the two installers cannot drift.
-    for (const [label, source] of [['install.ps1', scriptSource], ['install.sh', bashSource]]) {
-      assert.ok(/npm root -g/.test(source), `${label} must locate the global npm package root`);
-      assert.ok(
-        source.includes('already provided by the global npm install'),
-        `${label} must announce the skip instead of linking`
-      );
-      assert.ok(
-        source.indexOf('npm root -g') < source.indexOf('npm link --silent'),
-        `${label} must guard before attempting npm link`
-      );
-      assert.ok(/npm link --silent/.test(source), `${label} must still link on the checkout path`);
-    }
+  if (test('npm-link guard follows package layout in both installers (#1218, #1464)', () => {
     assert.ok(
-      scriptSource.includes('(Resolve-Path $GlobalPkgDir).Path -eq (Resolve-Path $RootDir).Path'),
-      'install.ps1 must compare resolved paths, not raw strings'
+      bashSource.includes('"$ROOT_DIR" == */node_modules/@egchq/egc'),
+      'install.sh must classify the npm package from its node_modules path'
     );
+    assert.ok(
+      scriptSource.includes('-not (Test-Path (Join-Path $RootDir ".git"))') &&
+      scriptSource.includes('(Split-Path -Leaf $RootDir) -eq "egc"') &&
+      scriptSource.includes('(Split-Path -Leaf $ScopeDir) -eq "@egchq"') &&
+      scriptSource.includes('(Split-Path -Leaf $NodeModulesDir) -eq "node_modules"'),
+      'install.ps1 must classify the same @egchq/egc package layout while preserving checkouts'
+    );
+    assert.ok(
+      !bashSource.includes('GLOBAL_PKG_DIR="$(npm root -g'),
+      'install.sh must not use the active global prefix to identify the running package'
+    );
+    assert.ok(
+      !scriptSource.includes('$GlobalNpmRoot = (& npm root -g'),
+      'install.ps1 must not use the active global prefix to identify the running package'
+    );
+    for (const [label, source] of [['install.ps1', scriptSource], ['install.sh', bashSource]]) {
+      assert.ok(
+        source.includes('already provided by this npm install'),
+        `${label} must announce why npm link was skipped`
+      );
+      assert.ok(/npm link --silent/.test(source), `${label} must still link source trees`);
+    }
   })) passed++; else failed++;
 
   if (test('correctly classifies timeouts, signals, and exit codes in describeFailure', () => {
