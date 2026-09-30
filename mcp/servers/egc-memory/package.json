@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.4.1",
-    "simple-git": "^3.36.0",
+    "simple-git": "^4.0.2",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
     "zod": "^4.4.3"
