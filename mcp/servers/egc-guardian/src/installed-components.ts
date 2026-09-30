@@ -11,7 +11,7 @@ const KNOWN_HARNESS_DIRS: ReadonlyArray<ReadonlyArray<string>> = [
   ['.gemini'], ['.claude'], ['.cursor'], ['.agents'], ['.amp'], ['.continue'],
   ['.github'], ['.kiro'], ['.trae'], ['.trae-cn'], ['.codebuddy'],
 ];
-const PROJECT_STATE_DIRS = ['.claude', '.gemini', '.cursor', '.agents', '.codex', '.github', '.kiro', '.trae', '.trae-cn', '.codebuddy', '.windsurf', '.opencode', '.zed', '.amp', '.continue'];
+const PROJECT_STATE_DIRS = ['.claude', '.gemini', '.cursor', '.agents', '.codex', '.github', '.kiro', '.trae', '.trae-cn', '.codebuddy', '.devin', '.windsurf', '.opencode', '.zed', '.amp', '.continue'];
 // Home targets write <root>/egc/install-state.json; the targets that share the .agents
 // root (Codex, Goose, OpenHands) write <root>/egc/<tool>-install-state.json, so every
 // state file in that directory counts.
@@ -57,7 +57,7 @@ const CLIENT_NAME_HARNESSES: ReadonlyArray<readonly [RegExp, ReadonlyArray<strin
   // The VS Code forks name themselves before the generic VS Code rule
   // catches them.
   [/cursor/i, null, ['.cursor']],
-  [/windsurf|codeium|devin/i, ['.codeium', 'windsurf'], ['.windsurf']],
+  [/windsurf|codeium|devin/i, ['.codeium', 'windsurf'], ['.devin', '.windsurf']],
   [/copilot|vscode|visual studio/i, ['.github'], ['.github']],
   [/kiro/i, ['.kiro'], ['.kiro']],
   [/trae/i, ['.trae'], ['.trae', '.trae-cn']],

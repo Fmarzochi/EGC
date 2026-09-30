@@ -22,6 +22,7 @@ const {
   UNREADABLE_STATE,
   collectSiblingOwnedDestinations,
   readInstallStateOrNull,
+  resolveAdapterManagedRoots,
 } = require('./install-targets/helpers');
 const {
   HOOK_OPERATION_KIND,
@@ -860,15 +861,37 @@ function summarizeManagedOperationHealth(repoRoot, operations) {
   });
 }
 
+function isInsideRoot(candidatePath, root) {
+  const relative = path.relative(root, candidatePath);
+  return relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+// The state a record describes: the current one when it is there; else the
+// first legacy state the adapter still answers for (written under a root it
+// no longer picks), reported with the root that state lives under so the
+// record stays consistent with its own file; else the current path, absent.
+function locateInstallState(adapter, input) {
+  const currentRoot = adapter.resolveRoot(input);
+  const currentStatePath = adapter.getInstallStatePath(input);
+  if (fs.existsSync(currentStatePath)) {
+    return { targetRoot: currentRoot, installStatePath: currentStatePath, exists: true };
+  }
+  const managedRoots = resolveAdapterManagedRoots(adapter, input);
+  for (const legacyStatePath of adapter.resolveLegacyInstallStatePaths(input)) {
+    if (!fs.existsSync(legacyStatePath)) continue;
+    const legacyRoot = managedRoots.find(root => isInsideRoot(legacyStatePath, root)) || currentRoot;
+    return { targetRoot: legacyRoot, installStatePath: legacyStatePath, exists: true };
+  }
+  return { targetRoot: currentRoot, installStatePath: currentStatePath, exists: false };
+}
+
 function buildDiscoveryRecord(adapter, context) {
   const installTargetInput = {
     homeDir: context.homeDir,
     projectRoot: context.projectRoot,
     repoRoot: context.projectRoot,
   };
-  const targetRoot = adapter.resolveRoot(installTargetInput);
-  const installStatePath = adapter.getInstallStatePath(installTargetInput);
-  const exists = fs.existsSync(installStatePath);
+  const { targetRoot, installStatePath, exists } = locateInstallState(adapter, installTargetInput);
 
   if (!exists) {
     return {

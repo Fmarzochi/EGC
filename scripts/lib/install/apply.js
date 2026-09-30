@@ -390,6 +390,20 @@ function handleLinkedProbe(probe, root, migrate, dryRun) {
   if (!dryRun) fs.unlinkSync(probe);
 }
 
+function legacyInstallStatePathsOf(plan) {
+  return Array.isArray(plan.legacyInstallStatePaths) ? plan.legacyInstallStatePaths : [];
+}
+
+// The states the adapter wrote under a root it no longer picks: replaced by
+// the state just written, so they leave (each is EGC's own file).
+function removeLegacyInstallStates(plan) {
+  const current = path.resolve(plan.installStatePath);
+  for (const statePath of legacyInstallStatePathsOf(plan)) {
+    if (path.resolve(statePath) === current) continue;
+    fs.rmSync(statePath, { force: true });
+  }
+}
+
 // Every path the apply checks for links: the state file and each
 // operation, in that order.
 function checkedDestinations(plan) {
@@ -497,11 +511,17 @@ function plannedWriteShapes(plan) {
 // is the honest answer when we cannot prove a file is ours.
 function previousStateManagedCopies(plan) {
   const recorded = new Map();
-  let operations;
-  try {
-    operations = readInstallState(plan.installStatePath).operations || [];
-  } catch {
-    return recorded;
+  // Legacy states first, so the current state wins on a destination both
+  // record; a state that is there but cannot be read explains nothing.
+  const statePaths = [...legacyInstallStatePathsOf(plan), plan.installStatePath];
+  const operations = [];
+  for (const statePath of statePaths) {
+    if (!fs.existsSync(statePath)) continue;
+    try {
+      operations.push(...(readInstallState(statePath).operations || []));
+    } catch {
+      return new Map();
+    }
   }
   for (const operation of operations) {
     if (operation.kind !== 'copy-file' || operation.ownership !== 'managed') continue;
@@ -908,7 +928,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   const retiredFiles = retirePlannedFiles(plan);
 
   writeInstallState(plan.installStatePath, plan.statePreview);
-
+  removeLegacyInstallStates(plan);
 
   writeGuardianCliMarker(onWarning, homeDir);
 

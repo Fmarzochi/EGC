@@ -1451,6 +1451,55 @@ function runTests() {
     }
   }));
 
+  tally(test('a Devin Desktop workspace still finds the install EGC recorded under .windsurf/ and uninstalls it', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const source = 'skills/ai/agent-eval/SKILL.md';
+      const legacyRoot = path.join(projectRoot, '.windsurf');
+      const legacyStatePath = path.join(legacyRoot, 'egc-install-state.json');
+      const destinationPath = path.join(legacyRoot, 'skills', 'agent-eval', 'SKILL.md');
+      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+      fs.copyFileSync(path.join(REPO_ROOT, source), destinationPath);
+      writeState(legacyStatePath, {
+        adapter: { id: 'windsurf-project', target: 'windsurf', kind: 'project' },
+        targetRoot: legacyRoot,
+        installStatePath: legacyStatePath,
+        request: { profile: 'developer', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['skills-extended'], skippedModules: [] },
+        operations: [{
+          kind: 'copy-file',
+          moduleId: 'skills-extended',
+          sourceRelativePath: source,
+          destinationPath,
+          strategy: 'preserve-relative-path',
+          ownership: 'managed',
+          scaffoldOnly: false,
+        }],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+      // The person moved the workspace to Devin's layout: from here on Devin
+      // reads .devin/ only, and EGC's state must still be found under the
+      // directory it was written to.
+      fs.mkdirSync(path.join(projectRoot, '.devin'));
+
+      const record = discoverInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] })
+        .find(entry => entry.adapter.id === 'windsurf-project');
+      assert.strictEqual(record.exists, true, 'the legacy state counts as installed');
+      assert.strictEqual(record.installStatePath, legacyStatePath);
+
+      const result = uninstallInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] });
+      const outcome = result.results.find(entry => entry.adapter.id === 'windsurf-project');
+      assert.strictEqual(outcome.status, 'uninstalled');
+      assert.ok(!fs.existsSync(destinationPath), 'the file EGC copied under .windsurf/ is removed');
+      assert.ok(!fs.existsSync(legacyStatePath), 'the legacy state is removed');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
   tally(test('uninstall restores JSON merged files from recorded previous content', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');

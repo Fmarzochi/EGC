@@ -189,7 +189,19 @@ const IDE_INSTALL_URLS = Object.freeze({
   zed:          { name: 'Zed',               url: 'https://zed.dev' },
 });
 
-function defaultValidateAdapterInput(config, input = {}) {
+// An adapter that picks its root by policy (config.resolveRoot) is detected
+// by the root it picked; the others by the tool's top directory.
+function resolveDetectionRootDir(config, adapter, input, baseRoot) {
+  if (typeof config.resolveRoot === 'function' && adapter) {
+    return adapter.resolveRoot(input);
+  }
+  if (baseRoot && config.rootSegments && config.rootSegments.length > 0) {
+    return path.join(baseRoot, config.rootSegments[0]);
+  }
+  return null;
+}
+
+function defaultValidateAdapterInput(config, input = {}, adapter = null) {
   if (config.kind === 'project' && !input.projectRoot && !input.repoRoot) {
     return [
       buildValidationIssue(
@@ -215,8 +227,8 @@ function defaultValidateAdapterInput(config, input = {}) {
     ? (input.homeDir || os.homedir())
     : (input.projectRoot || input.repoRoot);
 
-  if (baseRoot && config.rootSegments && config.rootSegments.length > 0) {
-    const rootDir = path.join(baseRoot, config.rootSegments[0]);
+  const rootDir = resolveDetectionRootDir(config, adapter, input, baseRoot);
+  if (rootDir) {
     if (!fs.existsSync(rootDir)) {
       const ide = IDE_INSTALL_URLS[config.target];
       if (ide) {
@@ -578,12 +590,29 @@ function isRetirementCandidate(resolved, { managedRoots, seen, siblingOwned, cov
 // match a file the plan copies today; otherwise the candidate is listed
 // nowhere and the file is left in place, never deleted on the strength of the
 // state entry alone.
+// The states whose managed copies the diff reads: the current one and any
+// legacy one the adapter still answers for. One unreadable state makes the
+// whole set untrusted, the same conservative answer as for a single one.
+function readRecordedStates(adapter, input) {
+  const statePaths = [adapter.getInstallStatePath(input), ...adapter.resolveLegacyInstallStatePaths(input)];
+  const operations = [];
+  let found = false;
+  for (const statePath of statePaths) {
+    const state = readInstallStateOrNull(statePath);
+    if (state === UNREADABLE_STATE) return UNREADABLE_STATE;
+    if (!state) continue;
+    found = true;
+    operations.push(...(Array.isArray(state.operations) ? state.operations : []));
+  }
+  return found ? { operations } : null;
+}
+
 function planGenericRetirements(input, adapter) {
   // The operations being diffed were planned against the package source
   // root; without it identities cannot be compared, so the conservative
   // answer is to retire nothing rather than to guess a directory.
   const repoRoot = typeof input.repoRoot === 'string' && input.repoRoot.length > 0 ? input.repoRoot : null;
-  const previous = repoRoot ? readInstallStateOrNull(adapter.getInstallStatePath(input)) : null;
+  const previous = repoRoot ? readRecordedStates(adapter, input) : null;
   if (!previous || previous === UNREADABLE_STATE) return [];
 
   // Destinations another adapter sharing this root still manages: never a
@@ -644,6 +673,9 @@ function createInstallTargetAdapter(config) {
       return target === config.target || target === config.id;
     },
     resolveRoot(input = {}) {
+      if (typeof config.resolveRoot === 'function') {
+        return config.resolveRoot(input, adapter);
+      }
       const baseRoot = resolveBaseRoot(config.kind, input);
       return path.join(baseRoot, ...config.rootSegments);
     },
@@ -663,6 +695,17 @@ function createInstallTargetAdapter(config) {
     getInstallStatePath(input = {}) {
       const root = adapter.resolveRoot(input);
       return path.join(root, ...config.installStatePathSegments);
+    },
+    // Install states this adapter wrote under a root it no longer picks
+    // (the workspace moved to a new layout), still read by doctor,
+    // uninstall and the retirement diff until the next install replaces
+    // them with the current state; none by default.
+    resolveLegacyInstallStatePaths(input = {}) {
+      if (typeof config.resolveLegacyInstallStatePaths !== 'function') return [];
+      const declared = config.resolveLegacyInstallStatePaths(input, adapter);
+      return Array.isArray(declared)
+        ? declared.filter(statePath => typeof statePath === 'string' && statePath.length > 0)
+        : [];
     },
     resolveDestinationPath(sourceRelativePath, input = {}) {
       const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
@@ -733,7 +776,7 @@ function createInstallTargetAdapter(config) {
         return config.validate(input, adapter);
       }
 
-      return defaultValidateAdapterInput(config, input);
+      return defaultValidateAdapterInput(config, input, adapter);
     },
   };
 
@@ -767,5 +810,6 @@ module.exports = {
   planGenericRetirements,
   readInstallStateOrNull,
   resolveAdapterManagedRoots,
+  resolveBaseRoot,
   resolveModulesPlan,
 };

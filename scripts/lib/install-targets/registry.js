@@ -160,6 +160,10 @@ function planInstallTargetScaffold(options = {}) {
     },
     targetRoot,
     installStatePath,
+    // States this adapter wrote under a root it no longer picks: the apply
+    // reads their copies for its retirement diff and removes them once the
+    // current state is written.
+    legacyInstallStatePaths: adapter.resolveLegacyInstallStatePaths(planningInput),
     validationIssues,
     operations,
     retirements,

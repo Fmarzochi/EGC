@@ -34,7 +34,16 @@ const TOOL_FILE_RESOLVERS = {
     return fs.existsSync(f) ? f : null;
   },
   windsurf: (p) => {
-    const f = path.join(p, '.windsurf', 'rules', 'egc-context.md');
+    // Devin Desktop reads .devin/ and ignores .windsurf/ entirely once the
+    // directory exists, so the watched mirror follows the directory, not
+    // whichever file happens to exist.
+    let dir = '.windsurf';
+    try {
+      if (fs.statSync(path.join(p, '.devin')).isDirectory()) dir = '.devin';
+    } catch {
+      dir = '.windsurf';
+    }
+    const f = path.join(p, dir, 'rules', 'egc-context.md');
     return fs.existsSync(f) ? f : null;
   },
   trae: (p) => {
@@ -309,4 +318,4 @@ class StateWatcher {
   }
 }
 
-module.exports = { StateWatcher, extractEgcBlock, parseBlockToStateContent, mergeBlockIntoStateFile, resolveStateFilePath };
+module.exports = { StateWatcher, TOOL_FILE_RESOLVERS, extractEgcBlock, parseBlockToStateContent, mergeBlockIntoStateFile, resolveStateFilePath };

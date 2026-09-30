@@ -687,6 +687,117 @@ function runTests() {
     assert.ok(!warning.message.includes('Windsurf'), 'the former product name is gone from the warning');
   }));
 
+  // Devin Desktop reads .devin/ and, once it exists, ignores .windsurf/
+  // (the two are never merged); .windsurf/ is read only while .devin/ is
+  // absent. Writing where Devin reads is what these three cases pin down.
+  tally(test('windsurf-project writes where Devin Desktop reads: .devin/ when it exists, .windsurf/ while it is the only one there, .devin/ on a fresh project', () => {
+    const fs = require('fs');
+    const adapter = getInstallTargetAdapter('windsurf-project');
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-devin-workspace-'));
+    try {
+      assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.devin'), 'a fresh project gets the current layout');
+      fs.mkdirSync(path.join(projectRoot, '.windsurf'));
+      assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.windsurf'), 'a project that only has .windsurf/ keeps it: Devin still reads it, and a new .devin/ beside it would hide everything in it');
+      assert.ok(!adapter.validate({ projectRoot, repoRoot: '/repo/egc' }).some(issue => issue.code === 'ide-not-detected'), 'the legacy directory counts as the tool being there');
+      fs.mkdirSync(path.join(projectRoot, '.devin'));
+      assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.devin'), 'once .devin/ exists Devin reads only it');
+      assert.strictEqual(adapter.getInstallStatePath({ projectRoot }), path.join(projectRoot, '.devin', 'egc-install-state.json'));
+      assert.deepStrictEqual(
+        adapter.resolveManagedRoots({ projectRoot }),
+        [path.join(projectRoot, '.devin'), path.join(projectRoot, '.windsurf')],
+        'retirement may clean both directories'
+      );
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  }));
+
+  tally(test('windsurf-project reports the install state it recorded under .windsurf/ once the root moved to .devin/', () => {
+    const fs = require('fs');
+    const adapter = getInstallTargetAdapter('windsurf-project');
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-devin-legacy-state-'));
+    try {
+      const legacyStatePath = path.join(projectRoot, '.windsurf', 'egc-install-state.json');
+      assert.deepStrictEqual(adapter.resolveLegacyInstallStatePaths({ projectRoot }), [], 'nothing legacy on a fresh project');
+      fs.mkdirSync(path.join(projectRoot, '.windsurf'));
+      fs.writeFileSync(legacyStatePath, '{}');
+      assert.deepStrictEqual(adapter.resolveLegacyInstallStatePaths({ projectRoot }), [], 'while .windsurf/ is the root, its state is the current one');
+      fs.mkdirSync(path.join(projectRoot, '.devin'));
+      assert.deepStrictEqual(adapter.resolveLegacyInstallStatePaths({ projectRoot }), [legacyStatePath]);
+      const plan = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot: path.join(__dirname, '..', '..'), projectRoot, modules: [] });
+      assert.deepStrictEqual(plan.legacyInstallStatePaths, [legacyStatePath], 'the plan carries it for the apply');
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  }));
+
+  tally(test('an install into .devin/ retires what EGC copied under .windsurf/ and drops the legacy state', () => {
+    const fs = require('fs');
+    const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+    const { applyInstallPlan } = require('../../scripts/lib/install/apply');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-devin-migration-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-devin-migration-home-'));
+    try {
+      const source = 'skills/ai/agent-eval/SKILL.md';
+      const legacyRoot = path.join(projectRoot, '.windsurf');
+      const legacyDestination = path.join(legacyRoot, 'skills', 'agent-eval', 'SKILL.md');
+      const legacyStatePath = path.join(legacyRoot, 'egc-install-state.json');
+      fs.mkdirSync(path.dirname(legacyDestination), { recursive: true });
+      fs.copyFileSync(path.join(repoRoot, source), legacyDestination);
+      const stateFields = {
+        request: { profile: 'developer', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['skills-extended'], skippedModules: [] },
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      };
+      writeInstallState(legacyStatePath, createInstallState({
+        ...stateFields,
+        adapter: { id: 'windsurf-project', target: 'windsurf', kind: 'project' },
+        targetRoot: legacyRoot,
+        installStatePath: legacyStatePath,
+        operations: [{
+          kind: 'copy-file',
+          moduleId: 'skills-extended',
+          sourceRelativePath: source,
+          destinationPath: legacyDestination,
+          strategy: 'preserve-relative-path',
+          ownership: 'managed',
+          scaffoldOnly: false,
+        }],
+      }));
+      fs.mkdirSync(path.join(projectRoot, '.devin'));
+
+      const modules = [{ id: 'skills-extended', paths: [source] }];
+      const plan = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot, projectRoot, modules });
+      assert.strictEqual(plan.targetRoot, path.join(projectRoot, '.devin'));
+      assert.ok(plan.retirements.some(entry => entry.destinationPath === legacyDestination), 'the .windsurf/ copy left the plan and is offered for retirement');
+
+      // Hydrated the way the install command materializes a scaffold plan
+      // before handing it to the apply.
+      const operations = plan.operations.map(operation => ({
+        ...operation,
+        kind: 'copy-file',
+        scaffoldOnly: false,
+        sourcePath: path.join(repoRoot, operation.sourceRelativePath),
+      }));
+      const statePreview = createInstallState({
+        ...stateFields,
+        adapter: plan.adapter,
+        targetRoot: plan.targetRoot,
+        installStatePath: plan.installStatePath,
+        operations,
+      });
+      applyInstallPlan({ ...plan, operations, statePreview }, { homeDir });
+      assert.ok(fs.existsSync(path.join(projectRoot, '.devin', 'skills', 'agent-eval', 'SKILL.md')), 'the skill now lives where Devin reads it');
+      assert.ok(fs.existsSync(plan.installStatePath), 'the state now lives under .devin/');
+      assert.ok(!fs.existsSync(legacyDestination), 'the byte-identical copy under .windsurf/ is gone');
+      assert.ok(!fs.existsSync(legacyStatePath), 'the legacy state is gone with it');
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('throws on unknown target adapter', () => {
     assert.throws(
       () => getInstallTargetAdapter('ghost-target'),
@@ -1238,7 +1349,7 @@ function runTests() {
 
   for (const [target, rootFn] of [
     ['windsurf', homeDir => path.join(homeDir, '.codeium', 'windsurf')],
-    ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.windsurf')],
+    ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.devin')],
   ]) {
     tally(test(`${target} adapter wires GateGuard into hooks.json via the Devin Desktop-contract adapter script (pre_write_code + pre_run_command)`, () => {
       const repoRoot = path.join(__dirname, '..', '..');
@@ -1288,7 +1399,7 @@ function runTests() {
   // not file writes, unlike GateGuard which also covers Edit/Write).
   for (const [target, rootFn] of [
     ['windsurf', homeDir => path.join(homeDir, '.codeium', 'windsurf')],
-    ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.windsurf')],
+    ['windsurf-project', (_homeDir, projectRoot) => path.join(projectRoot, '.devin')],
   ]) {
     tally(test(`${target} adapter wires the EGC Guardian into hooks.json via its own Devin Desktop-contract adapter script (pre_run_command only)`, () => {
       const repoRoot = path.join(__dirname, '..', '..');
@@ -2898,7 +3009,7 @@ function runTests() {
     for (const { label, target, targetRoot, extra, modules } of [
       { label: 'cursor', target: 'cursor', targetRoot: path.join(projectRoot, '.cursor'), extra: { projectRoot }, modules: [] },
       { label: 'windsurf-home', target: 'windsurf', targetRoot: path.join(homeDir, '.codeium', 'windsurf'), extra: { homeDir }, modules: [] },
-      { label: 'windsurf-project', target: 'windsurf-project', targetRoot: path.join(projectRoot, '.windsurf'), extra: { projectRoot }, modules: [] },
+      { label: 'windsurf-project', target: 'windsurf-project', targetRoot: path.join(projectRoot, '.devin'), extra: { projectRoot }, modules: [] },
       { label: 'kiro-home', target: 'kiro', targetRoot: path.join(homeDir, '.kiro'), extra: { homeDir }, modules: [] },
       { label: 'kiro-project', target: 'kiro-project', targetRoot: path.join(projectRoot, '.kiro'), extra: { projectRoot }, modules: [] },
     ]) {

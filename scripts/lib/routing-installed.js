@@ -7,7 +7,7 @@ const { getHomeDir, getKnownHarnessDirs, resolveHarnessDirFromEnv } = require('.
 
 // Project-scoped install targets keep their state at <project>/<dir>/egc-install-state.json,
 // home targets at <harness root>/egc/install-state.json (scripts/lib/install-executor.js).
-const PROJECT_STATE_DIRS = ['.claude', '.gemini', '.cursor', '.agents', '.codex', '.github', '.kiro', '.trae', '.trae-cn', '.codebuddy', '.windsurf', '.opencode', '.zed', '.amp', '.continue'];
+const PROJECT_STATE_DIRS = ['.claude', '.gemini', '.cursor', '.agents', '.codex', '.github', '.kiro', '.trae', '.trae-cn', '.codebuddy', '.devin', '.windsurf', '.opencode', '.zed', '.amp', '.continue'];
 // Home targets write <root>/egc/install-state.json; the targets that share the
 // .agents root (Codex, Goose, OpenHands) write <root>/egc/<tool>-install-state.json,
 // so every state file in that directory counts.

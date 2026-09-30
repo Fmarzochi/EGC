@@ -544,6 +544,23 @@ async function runLinkTests(args) {
     }));
   }
 
+  // Devin Desktop reads .devin/ and, once it exists, ignores .windsurf/
+  // (the two are never merged), so the context goes where the tool reads.
+  tally(await test('a workspace with .devin/ gets the context there, with the trigger frontmatter, and .windsurf/ stays untouched', () => {
+    const dir = mktemp();
+    try {
+      fs.mkdirSync(path.join(dir, '.devin'));
+      fs.mkdirSync(path.join(dir, '.windsurf'));
+      const result = propagateStateToTools({ projectPath: dir, ...args });
+      assert.ok(result.windsurf, 'the Devin Desktop mirror is reported');
+      assert.ok(result.windsurf.includes(path.join('.devin', 'rules', 'egc-context.md')), 'the context lands where Devin Desktop reads');
+      assert.ok(!fs.existsSync(path.join(dir, '.windsurf', 'rules', 'egc-context.md')), 'nothing is written where Devin Desktop no longer reads');
+      assert.ok(fs.readFileSync(result.windsurf, 'utf-8').startsWith('---\ntrigger: always_on\n---'), 'a fresh .devin rule file declares its activation mode');
+    } finally {
+      cleanup(dir);
+    }
+  }));
+
   // A junction needs no privilege on Windows and is an ordinary link
   // elsewhere, so the folder cases run on every runner.
   tally(await test('writes nothing into a tool folder that is a link', () => {

@@ -1077,6 +1077,12 @@ async function runTests() {
         fs.writeFileSync(windsurfProject, JSON.stringify({ operations: [{ kind: 'copy-file', sourceRelativePath: 'agents/planner.md' }] }));
         const withProject = installedModule.installedComponentSources({ environment: {}, cwd: emptyHome, homeDir, clientName: 'Devin Desktop' });
         assert.ok(withProject.sources.has('agents/planner.md'), 'the Devin Desktop project state under cwd counts');
+        // A workspace already on Devin's own .devin/ layout counts the same way.
+        const devinProject = path.join(emptyHome, '.devin', 'egc-install-state.json');
+        fs.mkdirSync(path.dirname(devinProject), { recursive: true });
+        fs.writeFileSync(devinProject, JSON.stringify({ operations: [{ kind: 'copy-file', sourceRelativePath: 'agents/reviewer.md' }] }));
+        const withDevinProject = installedModule.installedComponentSources({ environment: {}, cwd: emptyHome, homeDir, clientName: 'Devin Desktop' });
+        assert.ok(withDevinProject.sources.has('agents/reviewer.md'), 'the .devin project state under cwd counts');
         const cursorProject = path.join(emptyHome, '.cursor', 'egc-install-state.json');
         fs.mkdirSync(path.dirname(cursorProject), { recursive: true });
         fs.writeFileSync(cursorProject, JSON.stringify({ operations: [{ kind: 'copy-file', sourceRelativePath: 'agents/architect.md' }] }));

@@ -38,6 +38,7 @@ const PROPAGATION_FILES = [
   '.trae/rules/egc-context.md',
   '.github/copilot-instructions.md',
   '.windsurf/rules/egc-context.md',
+  '.devin/rules/egc-context.md',
   '.rules',
   '.clinerules',
   '.cursorrules',

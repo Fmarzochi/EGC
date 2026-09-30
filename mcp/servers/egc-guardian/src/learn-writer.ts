@@ -12,6 +12,7 @@ const PROPAGATION_TARGETS = [
   '.cursor/rules/egc-context.mdc',
   '.github/copilot-instructions.md',
   '.windsurf/rules/egc-context.md',
+  '.devin/rules/egc-context.md',
   '.trae/rules/egc-context.md',
   '.rules',
   '.clinerules',
