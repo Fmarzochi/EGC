@@ -314,7 +314,7 @@ function retirePlannedHooks(plan) {
   for (const retirement of Array.isArray(plan.hookRetirements) ? plan.hookRetirements : []) {
     refuseLinkedDestination(retirement.destinationPath, managedRootFor(plan, retirement.destinationPath));
     const outcome = resolveHookOperationHandlers(retirement.hookEvent).remove(retirement);
-    if (outcome && outcome.changed) retired.push(retirement);
+    if (outcome?.changed) retired.push(retirement);
   }
   const retiredKeys = new Set(retired.map(hookEntryKeyOf));
   for (const operation of plan.operations) {

@@ -1431,6 +1431,12 @@ function runTests() {
       assert.strictEqual(fs.readFileSync(userConfig, 'utf8'), commented, 'the file is untouched');
       fs.writeFileSync(userConfig, '{"theme_mode":"dark"}');
       assert.doesNotThrow(() => plan('windsurf'), 'plain JSON is fine');
+      fs.writeFileSync(userConfig, '  \n');
+      assert.doesNotThrow(() => plan('windsurf'), 'an empty file is written from scratch');
+      fs.rmSync(userConfig);
+      fs.mkdirSync(userConfig);
+      assert.throws(() => plan('windsurf'), error => error.message.includes(userConfig) && /cannot be read/.test(error.message), 'a config that cannot be read is refused with the reason');
+      fs.rmSync(userConfig, { recursive: true });
 
       const projectConfig = path.join(projectRoot, '.devin', 'config.local.json');
       fs.mkdirSync(path.dirname(projectConfig), { recursive: true });

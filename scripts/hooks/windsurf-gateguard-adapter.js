@@ -102,7 +102,7 @@ function buildFromDevinLocalCall(event) {
 }
 
 function buildGateGuardInput(windsurfEvent) {
-  if (windsurfEvent && windsurfEvent.hook_event_name === 'PreToolUse') {
+  if (windsurfEvent?.hook_event_name === 'PreToolUse') {
     return buildFromDevinLocalCall(windsurfEvent);
   }
   const actionName = windsurfEvent.agent_action_name || '';
