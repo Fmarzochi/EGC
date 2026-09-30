@@ -84,7 +84,7 @@ function runTests() {
     assert.strictEqual(statePath, path.join(homeDir, '.gemini', 'egc', 'install-state.json'));
   }));
 
-  tally(test('plans egc rules and skills under EGC-managed subdirectories', () => {
+  tally(test('plans egc skills only where the Antigravity CLI reads them, and rules under the managed rules/egc namespace', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -104,27 +104,55 @@ function runTests() {
       ],
     });
 
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'rules'
-        && operation.destinationPath === path.join(homeDir, '.gemini', 'rules', 'egc')
-      )),
-      'Should install bundled Gemini rules under rules/egc'
-    );
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'skills/tdd-workflow'
-        && operation.destinationPath === path.join(homeDir, '.gemini', 'skills', 'egc', 'tdd-workflow')
-      )),
-      'Should install bundled Gemini skills under skills/egc'
-    );
+    const destinations = plan.operations.map(operation => operation.destinationPath);
+    const under = prefix => destinations.some(destination => destination === prefix || destination.startsWith(prefix + path.sep));
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'skills/tdd-workflow'
         && operation.destinationPath === path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'tdd-workflow')
       )),
-      'Should also install bundled Gemini skills under antigravity-cli/skills for AGY'
+      'Should install bundled skills under antigravity-cli/skills, where the Antigravity CLI reads them'
     );
+    assert.ok(
+      !under(path.join(homeDir, '.gemini', 'skills')),
+      'skills/egc was the retired Gemini CLI layout: nothing is planned under ~/.gemini/skills'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'rules'
+        && operation.destinationPath === path.join(homeDir, '.gemini', 'rules', 'egc')
+      )),
+      'rules keep the managed rules/egc namespace until they move to config/rules, where Antigravity reads them'
+    );
+  }));
+
+  tally(test('the egc target plans nothing that only the retired Gemini CLI read', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const root = path.join(homeDir, '.gemini');
+
+    const plan = planInstallTargetScaffold({
+      target: 'egc',
+      repoRoot,
+      homeDir,
+      modules: [
+        { id: 'agents-core', paths: ['.agents', 'agents', 'AGENTS.md'] },
+        { id: 'commands-core', paths: ['commands'] },
+        { id: 'hooks-runtime', paths: ['hooks', 'scripts/hooks', 'scripts/lib'] },
+        { id: 'platform-configs', paths: ['.gemini-plugin', 'mcp-configs', 'scripts/setup-package-manager.js'] },
+      ],
+    });
+
+    const destinations = plan.operations.map(operation => operation.destinationPath);
+    const under = prefix => destinations.some(destination => destination === prefix || destination.startsWith(prefix + path.sep));
+    for (const kept of ['AGENTS.md', 'agents', 'commands', path.join('scripts', 'hooks'), path.join('scripts', 'lib'), path.join('scripts', 'setup-package-manager.js')]) {
+      assert.ok(destinations.includes(path.join(root, kept)), `${kept} is still written: Antigravity reads AGENTS.md, its hooks run from scripts/, and agents and commands keep their spot until they move to config/`);
+    }
+    for (const residue of ['.agents', 'hooks', 'mcp-configs']) {
+      assert.ok(!under(path.join(root, residue)), `${residue} was the retired Gemini CLI layout: nothing is planned there`);
+    }
+    assert.ok(!destinations.includes(root), 'the .gemini-plugin manifest is no longer spread over the root (plugin.json, marketplace.json, README.md)');
+    assert.ok(!destinations.some(destination => destination.includes('.gemini-plugin')), 'nor copied as a directory');
   }));
 
   tally(test('plans scaffold operations and flattens native target roots', () => {

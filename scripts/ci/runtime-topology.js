@@ -159,7 +159,7 @@ const NODES = [
         class: 'ACTIVE',
         kind: 'manifest',
         path: '.gemini-plugin/plugin.json',
-        summary: 'Gemini plugin manifest consumed by install-apply.'
+        summary: 'Plugin manifest of the marketplace layout, kept in step by scripts/release.sh and tests/plugin-manifest.test.js; the egc install target no longer copies it under ~/.gemini.'
     },
     {
         id: 'manifest:codex-plugin',
@@ -243,12 +243,6 @@ const STATIC_EDGES = [
         to: 'state:sqlite',
         relation: 'writes',
         evidence: 'scripts/memory/persistent_memory.py: sqlite3.connect(~/.egc/egc/state.db, or $EGC_DIR/egc/state.db)'
-    },
-    {
-        from: 'node:install-apply',
-        to: 'manifest:gemini-plugin',
-        relation: 'reads',
-        evidence: 'scripts/lib/install-targets/gemini-home.js: nativeRootRelativePath = .gemini-plugin'
     },
     {
         from: 'node:install-apply',

@@ -190,9 +190,9 @@ function areFilesEqual(leftPath, rightPath) {
 
 // A byte mismatch that disappears once CRLF/LF are normalized is a
 // line-ending artifact of the install pipeline (e.g. Windows core.autocrlf
-// rewriting the repo's LF source on checkout, or a rewrite step like
-// buildResolvedClaudeHooks() that always emits LF via JSON.stringify), not
-// a real edit to the managed file -- never flag it as drift.
+// rewriting the repo's LF source on checkout, or a JSON rewrite step that
+// always emits LF via JSON.stringify), not a real edit to the managed
+// file: never flag it as drift.
 function areBuffersEqual(left, right) {
   if (left.equals(right)) {
     return true;

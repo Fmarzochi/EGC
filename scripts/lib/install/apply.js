@@ -45,63 +45,6 @@ function formatJson(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-function replacePluginRootPlaceholders(value, pluginRoot) {
-  if (!pluginRoot) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    return value.split('${GEMINI_PLUGIN_ROOT}').join(pluginRoot);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(item => replacePluginRootPlaceholders(item, pluginRoot));
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [
-        key,
-        replacePluginRootPlaceholders(nestedValue, pluginRoot),
-      ])
-    );
-  }
-
-  return value;
-}
-
-function findHooksSourcePath(plan, hooksDestinationPath) {
-  const operation = plan.operations.find(item => item.destinationPath === hooksDestinationPath);
-  return operation ? operation.sourcePath : null;
-}
-
-function buildResolvedClaudeHooks(plan) {
-  if (plan.adapter?.target !== 'egc') {
-    return null;
-  }
-
-  const pluginRoot = plan.targetRoot;
-  const hooksDestinationPath = path.join(plan.targetRoot, 'hooks', 'hooks.json');
-  const hooksSourcePath = findHooksSourcePath(plan, hooksDestinationPath) || hooksDestinationPath;
-  if (!fs.existsSync(hooksSourcePath)) {
-    return null;
-  }
-
-  const hooksConfig = readJsonObject(hooksSourcePath, 'hooks config');
-  const resolvedHooks = replacePluginRootPlaceholders(hooksConfig.hooks, pluginRoot);
-  if (!resolvedHooks || typeof resolvedHooks !== 'object' || Array.isArray(resolvedHooks)) {
-    throw new Error(`Invalid hooks config at ${hooksSourcePath}: expected "hooks" to be a JSON object`);
-  }
-
-  return {
-    hooksDestinationPath,
-    resolvedHooksConfig: {
-      ...hooksConfig,
-      hooks: resolvedHooks,
-    },
-  };
-}
-
 function applyMergeJsonOperation(operation, disabledServers) {
   const payload = cloneJsonValue(operation.mergePayload);
   if (payload === undefined) {
@@ -447,12 +390,10 @@ function handleLinkedProbe(probe, root, migrate, dryRun) {
   if (!dryRun) fs.unlinkSync(probe);
 }
 
-// Every path the apply checks for links: the state file, the hooks file
-// and each operation, in that order.
+// Every path the apply checks for links: the state file and each
+// operation, in that order.
 function checkedDestinations(plan) {
-  const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
   const paths = [plan.installStatePath];
-  if (resolvedClaudeHooksPlan) paths.push(resolvedClaudeHooksPlan.hooksDestinationPath);
   for (const operation of plan.operations) paths.push(operation.destinationPath);
   return paths.filter(Boolean);
 }
@@ -887,8 +828,6 @@ function performDirToFile(transition) {
 }
 
 function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
-
-  const resolvedClaudeHooksPlan = buildResolvedClaudeHooks(plan);
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
 
   // Shape transitions are resolved before the first write: a refusal throws
@@ -932,7 +871,6 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   const migratedLegacyLinks = findLegacyLinks(plan, { strict: true });
   removeLegacyLinks(migratedLegacyLinks, plan.targetRoot);
   refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
-  if (resolvedClaudeHooksPlan) refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
   for (const operation of plan.operations) {
 
     refuseLinkedDestination(operation.destinationPath, managedRootFor(plan, operation.destinationPath));
@@ -966,13 +904,6 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   // still pending here could not have been reached by the loop and is
   // resolved so the report matches the disk.
   performShapeTransitions([...pendingTransitions.values()], plan);
-
-  if (resolvedClaudeHooksPlan) {
-    refuseLinkedDestination(resolvedClaudeHooksPlan.hooksDestinationPath, plan.targetRoot);
-    fs.mkdirSync(path.dirname(resolvedClaudeHooksPlan.hooksDestinationPath), { recursive: true });
-
-    writeManagedText(resolvedClaudeHooksPlan.hooksDestinationPath, `${JSON.stringify(resolvedClaudeHooksPlan.resolvedHooksConfig, null, 2)}\n`);
-  }
 
   const retiredFiles = retirePlannedFiles(plan);
 

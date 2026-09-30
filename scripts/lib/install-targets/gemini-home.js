@@ -25,6 +25,42 @@ const { resolveGlobalHooksJsonPath } = require('../antigravity-guardian-hooks');
 const GEMINI_EGC_NAMESPACE = 'egc';
 const AGY_SKILLS_SUBDIR = 'antigravity-cli/skills';
 
+// Source paths only the retired Gemini CLI read from this root and that no
+// family of the library counts on: Antigravity keeps its hooks in
+// config/hooks.json and antigravity-cli/hooks.json, its MCP servers in
+// config/mcp_config.json, and reads neither a plugin manifest nor a .agents
+// tree here. What an earlier install wrote for them is retired on the next
+// apply, file by file and only when byte-identical to what EGC copied
+// (helpers.js, planGenericRetirements); a file the person edited stays.
+// rules/, agents/ and commands/ keep their current spot until each family
+// moves to the directory Antigravity reads (config/rules with a trigger,
+// config/agents); the same retirement collects the old copies then.
+const GEMINI_CLI_ONLY_SOURCE_PREFIXES = new Set(['.agents', 'hooks', 'mcp-configs', '.gemini-plugin']);
+
+function isGeminiCliOnlySource(sourceRelativePath) {
+  return GEMINI_CLI_ONLY_SOURCE_PREFIXES.has(normalizeRelativePath(sourceRelativePath).split('/')[0]);
+}
+
+// Where a bundled source lands under ~/.gemini when it does not keep its
+// relative path: rules under rules/egc, the managed namespace next to the
+// person's own rules, and skills under antigravity-cli/skills, the one place
+// the Antigravity CLI reads them. The skills/egc namespace of the retired
+// Gemini CLI is not written any more.
+function getGeminiManagedDestinationPath(adapter, sourceRelativePath, input) {
+  const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
+  const targetRoot = adapter.resolveRoot(input);
+
+  if (normalizedSourcePath === 'rules') {
+    return path.join(targetRoot, 'rules', GEMINI_EGC_NAMESPACE);
+  }
+
+  if (normalizedSourcePath.startsWith('rules/')) {
+    return path.join(targetRoot, 'rules', GEMINI_EGC_NAMESPACE, normalizedSourcePath.slice('rules/'.length));
+  }
+
+  return getAGYManagedDestinationPath(adapter, sourceRelativePath, input);
+}
+
 // Antigravity shares this home root (~/.gemini) for skill discovery (see
 // AGY_SKILLS_SUBDIR above) but reads its own hooks.json at
 // ~/.gemini/antigravity-cli/hooks.json, distinct from Gemini CLI's
@@ -141,48 +177,16 @@ function dedupeCopyOperations(operations) {
   });
 }
 
-function getGeminiManagedDestinationPath(adapter, sourceRelativePath, input) {
-  const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
-  const targetRoot = adapter.resolveRoot(input);
-
-  if (normalizedSourcePath === 'rules') {
-    return path.join(targetRoot, 'rules', GEMINI_EGC_NAMESPACE);
-  }
-
-  if (normalizedSourcePath.startsWith('rules/')) {
-    return path.join(
-      targetRoot,
-      'rules',
-      GEMINI_EGC_NAMESPACE,
-      normalizedSourcePath.slice('rules/'.length)
-    );
-  }
-
-  if (normalizedSourcePath === 'skills') {
-    return path.join(targetRoot, 'skills', GEMINI_EGC_NAMESPACE);
-  }
-
-  if (normalizedSourcePath.startsWith('skills/')) {
-    // Source layout in the repo is `skills/<category>/<skillName>[/<file>]`.
-    // The Gemini-home install contract exposes a flat skill namespace
-    // (`skills/<namespace>/<skillName>[/<file>]`) so consumers don't depend
-    // on the repo's category taxonomy. Strip exactly the leading category
-    // segment when present; leave already-flat paths untouched.
-    const parts = normalizedSourcePath.slice('skills/'.length).split('/');
-    const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
-    return path.join(targetRoot, 'skills', GEMINI_EGC_NAMESPACE, flatRemainder);
-  }
-
-  return null;
-}
-
 function getAGYManagedDestinationPath(adapter, sourceRelativePath, input) {
   const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
   const targetRoot = adapter.resolveRoot(input);
 
   if (normalizedSourcePath.startsWith('skills/')) {
-    // AGY reads skills from ~/.gemini/antigravity-cli/skills/<skillName>/
-    // Mirror the same category-stripping logic as the egc namespace path.
+    // The Antigravity CLI reads skills from
+    // ~/.gemini/antigravity-cli/skills/<skillName>/. Source layout in the
+    // repo is `skills/<category>/<skillName>[/<file>]`: strip exactly the
+    // leading category segment when present, so the tool never depends on
+    // the repo's category taxonomy; leave already-flat paths untouched.
     const parts = normalizedSourcePath.slice('skills/'.length).split('/');
     const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
     return path.join(targetRoot, AGY_SKILLS_SUBDIR, flatRemainder);
@@ -197,7 +201,6 @@ module.exports = createInstallTargetAdapter({
   kind: 'home',
   rootSegments: ['.gemini'],
   installStatePathSegments: ['egc', 'install-state.json'],
-  nativeRootRelativePath: '.gemini-plugin',
   planOperations(input, adapter) {
     const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
     const homeDir = input.homeDir || os.homedir();
@@ -205,10 +208,8 @@ module.exports = createInstallTargetAdapter({
     const moduleOperations = modules.flatMap(module => {
       const paths = Array.isArray(module.paths) ? module.paths : [];
       return paths
-        .filter(p => !isForeignPlatformPath(p, adapter.target))
-        .flatMap(sourceRelativePath => {
-          const ops = [];
-
+        .filter(p => !isForeignPlatformPath(p, adapter.target) && !isGeminiCliOnlySource(p))
+        .map(sourceRelativePath => {
           const managedDestinationPath = getGeminiManagedDestinationPath(
             adapter,
             sourceRelativePath,
@@ -216,34 +217,16 @@ module.exports = createInstallTargetAdapter({
           );
 
           if (managedDestinationPath) {
-            ops.push(createRemappedOperation(
+            return createRemappedOperation(
               adapter,
               module.id,
               sourceRelativePath,
               managedDestinationPath,
               { strategy: 'preserve-relative-path' }
-            ));
-          } else {
-            ops.push(adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput));
+            );
           }
 
-          const agyDestinationPath = getAGYManagedDestinationPath(
-            adapter,
-            sourceRelativePath,
-            planningInput
-          );
-
-          if (agyDestinationPath) {
-            ops.push(createRemappedOperation(
-              adapter,
-              module.id,
-              sourceRelativePath,
-              agyDestinationPath,
-              { strategy: 'preserve-relative-path' }
-            ));
-          }
-
-          return ops;
+          return adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput);
         });
     });
 

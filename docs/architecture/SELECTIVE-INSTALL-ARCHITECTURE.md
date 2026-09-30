@@ -638,9 +638,9 @@ Suggested operation shape:
 ```json
 {
   "kind": "copy",
-  "moduleId": "rules-core",
-  "source": "rules/common/coding-style.md",
-  "destination": "/Users/example/.gemini/rules/egc/common/coding-style.md",
+  "moduleId": "workflow-quality",
+  "source": "skills/testing/tdd-workflow/SKILL.md",
+  "destination": "/Users/example/.gemini/antigravity-cli/skills/tdd-workflow/SKILL.md",
   "ownership": "managed",
   "overwritePolicy": "replace"
 }
@@ -710,8 +710,8 @@ Suggested payload:
   "operations": [
     {
       "kind": "copy",
-      "moduleId": "rules-core",
-      "destination": "/Users/example/.gemini/rules/egc/common/coding-style.md",
+      "moduleId": "workflow-quality",
+      "destination": "/Users/example/.gemini/antigravity-cli/skills/tdd-workflow/SKILL.md",
       "digest": "sha256:..."
     }
   ]

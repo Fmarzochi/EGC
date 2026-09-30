@@ -473,24 +473,21 @@ function runTests() {
       assert.ok(normalizedSources.includes('rules/common/coding-style.md'));
       assert.ok(normalizedSources.includes('skills/demo/SKILL.md'));
       assert.ok(normalizedSources.includes('standalone.txt'));
-      assert.ok(normalizedSources.includes('.gemini-plugin/plugin.json'));
+      assert.ok(!normalizedSources.includes('.gemini-plugin/plugin.json'), 'the plugin manifest only the retired Gemini CLI read is not planned');
       assert.ok(!normalizedSources.includes('missing.txt'));
       assert.ok(!normalizedSources.includes('runtime/egc/install-state.json'));
       assert.ok(!normalizedSources.includes('src/nested/egc-install-state.json'));
       assert.ok(!normalizedSources.some(source => source.includes('node_modules')));
       assert.ok(!normalizedSources.some(source => source.includes('.git')));
-      assert.ok(plan.operations.some(operation => (
-        operation.sourceRelativePath === path.join('.gemini-plugin', 'plugin.json')
-        && operation.destinationPath === path.join(homeDir, '.gemini', 'plugin.json')
-      )));
+      // The layout only the retired Gemini CLI read (plugin.json at the
+      // root, skills/egc) is not planned; rules keep the managed rules/egc
+      // namespace and the Antigravity CLI skills are planned.
+      assert.ok(!plan.operations.some(operation => operation.destinationPath === path.join(homeDir, '.gemini', 'plugin.json')));
       assert.ok(plan.operations.some(operation => (
         operation.sourceRelativePath === path.join('rules', 'common', 'coding-style.md')
         && operation.destinationPath === path.join(homeDir, '.gemini', 'rules', 'egc', 'common', 'coding-style.md')
       )));
-      assert.ok(plan.operations.some(operation => (
-        operation.sourceRelativePath === path.join('skills', 'demo', 'SKILL.md')
-        && operation.destinationPath === path.join(homeDir, '.gemini', 'skills', 'egc', 'demo', 'SKILL.md')
-      )));
+      assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(homeDir, '.gemini', 'skills') + path.sep)));
       assert.ok(plan.operations.some(operation => (
         operation.sourceRelativePath === path.join('skills', 'demo', 'SKILL.md')
         && operation.destinationPath === path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'demo', 'SKILL.md')
@@ -568,8 +565,10 @@ function runTests() {
         fs.writeFileSync(path.join(outside, 'SKILL.md'), 'theirs');
         fs.rmSync(path.join(cliSkills, 'demo'), { recursive: true, force: true });
         fs.symlinkSync(outside, path.join(cliSkills, 'demo'), 'dir');
-        const legacyAgain = path.join(homeDir, '.gemini', 'rules', 'egc');
-        fs.rmSync(legacyAgain, { recursive: true, force: true });
+        // A second legacy link into the old managed copy, planted where
+        // the plan writes: collected for migration, it must survive when
+        // the foreign link makes the apply refuse.
+        const legacyAgain = path.join(cliSkills, 'other');
         fs.mkdirSync(path.join(homeDir, '.gemini', 'skills', 'egc', 'rules-copy'), { recursive: true });
         fs.symlinkSync(path.join(homeDir, '.gemini', 'skills', 'egc', 'rules-copy'), legacyAgain, 'dir');
         const again = createManifestInstallPlan({ sourceRoot, homeDir, target: 'egc', profileId: 'minimal' });
@@ -602,11 +601,11 @@ function runTests() {
 
       assert.strictEqual(applied.applied, true);
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'rules', 'egc', 'common', 'coding-style.md')));
-      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'skills', 'egc', 'demo', 'SKILL.md')));
+      assert.ok(!fs.existsSync(path.join(homeDir, '.gemini', 'skills')), 'the skills/egc namespace of the retired Gemini CLI is not written');
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'demo', 'SKILL.md')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'src', 'app.js')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'standalone.txt')));
-      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'plugin.json')));
+      assert.ok(!fs.existsSync(path.join(homeDir, '.gemini', 'plugin.json')), 'the plugin manifest only the retired Gemini CLI read is not written');
       const state = JSON.parse(fs.readFileSync(path.join(homeDir, '.gemini', 'egc', 'install-state.json'), 'utf8'));
       assert.strictEqual(state.request.profile, 'minimal');
       assert.deepStrictEqual(state.resolution.selectedModules, ['fixture-core']);
