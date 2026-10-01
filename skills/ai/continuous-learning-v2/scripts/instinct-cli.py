@@ -38,7 +38,15 @@ except ImportError:
 # Configuration
 # ─────────────────────────────────────────────
 
-HOMUNCULUS_DIR = Path.home() / ".egc-learning"
+def _home_dir() -> Path:
+    """The home the Node hooks and src/llm/paths.py use: HOME, then USERPROFILE."""
+    explicit = os.environ.get("HOME") or os.environ.get("USERPROFILE")
+    if explicit and explicit.strip():
+        return Path(explicit).expanduser().resolve()
+    return Path.home()
+
+
+HOMUNCULUS_DIR = _home_dir() / ".egc-learning"
 PROJECTS_DIR = HOMUNCULUS_DIR / "projects"
 REGISTRY_FILE = HOMUNCULUS_DIR / "projects.json"
 

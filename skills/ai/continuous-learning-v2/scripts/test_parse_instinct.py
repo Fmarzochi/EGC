@@ -965,6 +965,15 @@ def test_validate_instinct_id():
     assert not _validate_instinct_id(".hidden")
 
 
+def test_store_follows_the_home_the_node_hooks_use(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "profile"))
+    assert _mod._home_dir() == (tmp_path / "home").resolve(), "HOME first, as getHomeDir() in scripts/lib/utils.js"
+
+    monkeypatch.delenv("HOME")
+    assert _mod._home_dir() == (tmp_path / "profile").resolve(), "then USERPROFILE"
+
+
 def test_update_registry_atomic_replaces_file(patch_globals):
     tree = patch_globals
     _update_registry("abc123", "demo", "/repo", "https://example.com/repo.git")

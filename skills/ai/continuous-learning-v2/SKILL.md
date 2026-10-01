@@ -322,7 +322,7 @@ Hooks fire **100% of the time**, deterministically. This means:
 ## Backward Compatibility
 
 v2.1 is fully compatible with v2.0 and v1:
-- Existing global instincts in `~/.egc-learning/instincts/` still work as global instincts
+- Global instincts kept in `~/.gemini/homunculus/instincts/` by earlier versions are copied into `~/.egc-learning/instincts/` at the first session start and still work as global instincts
 - Existing `~/.gemini/skills/learned/` skills from v1 still work
 - Stop hook still runs (but now also feeds into v2)
 - Gradual migration: run both in parallel

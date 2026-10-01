@@ -7,6 +7,7 @@ const { getHomeDir, getKnownHarnessDirs } = require('./utils');
 const LEARNING_DIR_NAME = '.egc-learning';
 const LEGACY_STORE_NAME = 'homunculus';
 const MIGRATION_MARKER = '.migrated-from.json';
+const REGISTRY_FILE = 'projects.json';
 
 function isDirectory(dirPath) {
   try {
@@ -14,6 +15,56 @@ function isDirectory(dirPath) {
   } catch {
     return false;
   }
+}
+
+// A link inside an old store could point anywhere; the store never needs one.
+function isNotSymlink(entryPath) {
+  try {
+    return !fs.lstatSync(entryPath).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+const COPY_OPTIONS = { recursive: true, force: false, errorOnExist: false, filter: isNotSymlink };
+
+// The first copy lands in a staging folder renamed into place, so a crash
+// mid-copy never leaves a half-written store that later copies would skip.
+// If another session created the store meanwhile, the copy merges into it.
+function copyStore(source, storeDir) {
+  if (!fs.existsSync(storeDir)) {
+    const staging = `${storeDir}.tmp-${process.pid}-${Date.now()}`;
+    try {
+      fs.cpSync(source, staging, COPY_OPTIONS);
+      fs.renameSync(staging, storeDir);
+      return;
+    } catch (error) {
+      fs.rmSync(staging, { recursive: true, force: true });
+      if (!fs.existsSync(storeDir)) throw error;
+    }
+  }
+  fs.cpSync(source, storeDir, COPY_OPTIONS);
+}
+
+function readRegistry(file) {
+  try {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+// The copy never overwrites, so a registry already in the store would hide
+// the projects only another store knew; their keys are added, the entry
+// already in the store winning.
+function mergeRegistry(source, storeDir) {
+  const incoming = readRegistry(path.join(source, REGISTRY_FILE));
+  if (!incoming) return;
+  const target = path.join(storeDir, REGISTRY_FILE);
+  const current = readRegistry(target) || {};
+  if (Object.keys(incoming).every(key => key in current)) return;
+  fs.writeFileSync(target, JSON.stringify({ ...incoming, ...current }, null, 2));
 }
 
 // Where earlier versions kept the store, in the order they are merged:
@@ -45,7 +96,8 @@ function migrateLegacyLearningStore({ homeDir = getHomeDir(), now = () => new Da
   const failed = [];
   for (const source of sources) {
     try {
-      fs.cpSync(source, storeDir, { recursive: true, force: false, errorOnExist: false });
+      copyStore(source, storeDir);
+      mergeRegistry(source, storeDir);
       migrated.push(source);
     } catch (error) {
       failed.push({ source, error: error.message });

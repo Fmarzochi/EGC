@@ -199,6 +199,10 @@ memory/**
 **/node_modules/
 **/dist/
 **/build/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
 **/*.log
 **/*.tmp
 **/*.bak

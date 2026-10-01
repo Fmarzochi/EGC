@@ -134,5 +134,42 @@ if (test('a source that is not a folder is skipped and the others are still copi
   assert.strictEqual(read(path.join(home, '.egc-learning', 'a.yaml')), 'a');
 }))) passed++; else failed++;
 
+if (test('the project registries of every store are merged, the first store winning on the same project', () => withHome(home => {
+  write(path.join(home, '.gemini', 'homunculus', 'projects.json'), JSON.stringify({ aaa111: { name: 'from-gemini' } }));
+  write(path.join(home, '.claude', 'homunculus', 'projects.json'), JSON.stringify({ aaa111: { name: 'from-claude' }, bbb222: { name: 'only-claude' } }));
+
+  migrateLegacyLearningStore({ homeDir: home });
+
+  const registry = JSON.parse(read(path.join(home, '.egc-learning', 'projects.json')));
+  assert.deepStrictEqual(registry, { aaa111: { name: 'from-gemini' }, bbb222: { name: 'only-claude' } });
+}))) passed++; else failed++;
+
+if (test('a symbolic link inside an old store is not copied', () => withHome(home => {
+  const legacy = path.join(home, '.gemini', 'homunculus');
+  write(path.join(legacy, 'instincts', 'personal', 'real.yaml'), 'real');
+  write(path.join(home, 'outside.txt'), 'outside');
+  try {
+    fs.symlinkSync(path.join(home, 'outside.txt'), path.join(legacy, 'instincts', 'personal', 'link.yaml'));
+  } catch {
+    return; // creating links needs a privilege Windows may not grant; nothing to check then
+  }
+
+  migrateLegacyLearningStore({ homeDir: home });
+
+  const personal = path.join(home, '.egc-learning', 'instincts', 'personal');
+  assert.strictEqual(read(path.join(personal, 'real.yaml')), 'real');
+  assert.ok(!fs.existsSync(path.join(personal, 'link.yaml')), 'the link is left behind');
+}))) passed++; else failed++;
+
+if (test('a first copy into an empty home leaves no temporary folder behind', () => withHome(home => {
+  write(path.join(home, '.gemini', 'homunculus', 'a.yaml'), 'a');
+
+  migrateLegacyLearningStore({ homeDir: home });
+
+  const leftovers = fs.readdirSync(home).filter(name => name.startsWith('.egc-learning') && name !== '.egc-learning');
+  assert.deepStrictEqual(leftovers, []);
+  assert.strictEqual(read(path.join(home, '.egc-learning', 'a.yaml')), 'a');
+}))) passed++; else failed++;
+
 console.log(`\nPassed: ${passed}, Failed: ${failed}\n`);
 process.exit(failed > 0 ? 1 : 0);
