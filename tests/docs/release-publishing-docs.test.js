@@ -70,7 +70,8 @@ if (test('release verification uses the published package and its tarball name',
 if (test('the maintainers guide explains how a broken version is handled', () => {
   const source = read('docs/MAINTAINERS.md');
   assert.ok(source.includes(`npm deprecate ${packageName}@`), 'shows the npm deprecate command');
-  assert.ok(source.includes('https://docs.npmjs.com/policies/unpublish'), 'links the npm unpublish policy');
+  const links = [...source.matchAll(/\]\((https:\/\/[^)\s]+)\)/g)].map(match => match[1]);
+  assert.ok(links.some(link => link === 'https://docs.npmjs.com/policies/unpublish'), 'links the npm unpublish policy');
 })) passed++; else failed++;
 
 console.log(`\nPassed: ${passed}, Failed: ${failed}\n`);
