@@ -45,21 +45,30 @@ function shouldCopyEntry(entryPath) {
 
 const COPY_OPTIONS = { recursive: true, force: false, errorOnExist: false, filter: shouldCopyEntry };
 
-// Moves every entry of a fully-populated staging copy into the live store,
-// one at a time: an entry already there wins and is left untouched, so two
-// sessions racing to migrate the same source merge instead of one clobbering
-// the other. Each move is a same-filesystem rename, atomic on its own, so a
-// crash mid-merge leaves only entries still in staging, never a partial file
-// where the store's own content must be complete.
+// Places every entry of a fully-populated staging copy into the live store,
+// one at a time. A file is placed with a hard link, which fails with EEXIST
+// instead of replacing a destination that is already there: an entry the
+// store already holds (an earlier source, or another session that got there
+// first) always wins, with no window between a check and the write where a
+// rename would clobber it. A link is atomic on its own, so a crash mid-merge
+// leaves only entries still in staging, never a partial file in the store.
+// A destination directory that is a link is refused, the store root
+// included: following it would place files outside the store.
 function moveNewEntries(stagingDir, storeDir) {
+  if (isSymlink(storeDir)) throw new Error(`refusing to write through the link at ${storeDir}`);
   for (const entry of fs.readdirSync(stagingDir, { withFileTypes: true })) {
     const fromPath = path.join(stagingDir, entry.name);
     const toPath = path.join(storeDir, entry.name);
     if (entry.isDirectory()) {
+      if (isSymlink(toPath)) throw new Error(`refusing to write through the link at ${toPath}`);
       fs.mkdirSync(toPath, { recursive: true });
       moveNewEntries(fromPath, toPath);
-    } else if (!fs.existsSync(toPath)) {
-      fs.renameSync(fromPath, toPath);
+      continue;
+    }
+    try {
+      fs.linkSync(fromPath, toPath);
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
     }
   }
 }

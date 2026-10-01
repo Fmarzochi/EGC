@@ -260,6 +260,67 @@ if (test('a first copy into an empty home leaves no temporary folder behind', ()
   assert.strictEqual(read(path.join(home, '.egc-learning', 'a.yaml')), 'a');
 }))) passed++; else failed++;
 
+if (test('a session that loses the race to place a file never clobbers the one that won', () => withHome(home => {
+  write(path.join(home, '.gemini', 'homunculus', 'a.yaml'), 'from this session');
+  write(path.join(home, '.gemini', 'homunculus', 'b.yaml'), 'b');
+  const store = path.join(home, '.egc-learning');
+
+  // Another session places a.yaml right before this session's own placement,
+  // whichever primitive places it: the window a check-then-rename loses in.
+  const originals = { linkSync: fs.linkSync, renameSync: fs.renameSync };
+  let intercepted = false;
+  for (const name of Object.keys(originals)) {
+    fs[name] = (src, dest) => {
+      if (!intercepted && path.basename(dest) === 'a.yaml') {
+        intercepted = true;
+        fs.writeFileSync(dest, 'from the other session');
+      }
+      return originals[name](src, dest);
+    };
+  }
+
+  let result;
+  try {
+    result = migrateLegacyLearningStore({ homeDir: home });
+  } finally {
+    Object.assign(fs, originals);
+  }
+
+  assert.deepStrictEqual(result.failed, []);
+  assert.strictEqual(read(path.join(store, 'a.yaml')), 'from the other session', 'the file the other session placed first is kept');
+  assert.strictEqual(read(path.join(store, 'b.yaml')), 'b', 'the rest of this session\'s copy still lands');
+}))) passed++; else failed++;
+
+if (!canCreateSymlinks()) {
+  console.log('  - skipped destination symlink test; this environment does not permit creating symbolic links');
+} else if (test('a linked directory already in the store is refused, so nothing is written outside it', () => withHome(home => {
+  write(path.join(home, '.gemini', 'homunculus', 'instincts', 'personal', 'a.yaml'), 'a');
+  const outside = path.join(home, 'outside');
+  fs.mkdirSync(outside, { recursive: true });
+  fs.mkdirSync(path.join(home, '.egc-learning'), { recursive: true });
+  fs.symlinkSync(outside, path.join(home, '.egc-learning', 'instincts'));
+
+  const result = migrateLegacyLearningStore({ homeDir: home });
+
+  assert.strictEqual(result.failed.length, 1);
+  assert.deepStrictEqual(fs.readdirSync(outside), [], 'nothing lands behind the link');
+  assert.ok(!fs.existsSync(path.join(home, '.egc-learning', MIGRATION_MARKER)), 'a refused migration never writes the marker');
+}))) passed++; else failed++;
+
+if (!canCreateSymlinks()) {
+  console.log('  - skipped store-root symlink test; this environment does not permit creating symbolic links');
+} else if (test('a store root that is itself a link is refused', () => withHome(home => {
+  write(path.join(home, '.gemini', 'homunculus', 'a.yaml'), 'a');
+  const outside = path.join(home, 'outside-root');
+  fs.mkdirSync(outside, { recursive: true });
+  fs.symlinkSync(outside, path.join(home, '.egc-learning'));
+
+  const result = migrateLegacyLearningStore({ homeDir: home });
+
+  assert.strictEqual(result.failed.length, 1);
+  assert.deepStrictEqual(fs.readdirSync(outside), [], 'nothing lands behind the linked store root');
+}))) passed++; else failed++;
+
 if (test('a retry after a crash completes the entries a previous run never reached', () => withHome(home => {
   write(path.join(home, '.gemini', 'homunculus', 'a.yaml'), 'a');
   write(path.join(home, '.gemini', 'homunculus', 'b.yaml'), 'b');

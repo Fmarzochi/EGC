@@ -267,6 +267,44 @@ function runTests() {
     }
   });
 
+  addCase('the installed hook migrates the store, so the install plan ships every dependency', () => {
+    const { planInstallTargetScaffold } = require('../../scripts/lib/install-targets/registry');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = createTempDir('claude-session-start-installed-');
+    try {
+      const plan = planInstallTargetScaffold({ target: 'claude', repoRoot, homeDir, modules: [] });
+      for (const operation of plan.operations) {
+        if (operation.kind !== 'copy-path') continue;
+        const source = path.join(repoRoot, operation.sourceRelativePath);
+        if (!fs.existsSync(source) || !fs.statSync(source).isFile()) continue;
+        fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
+        fs.copyFileSync(source, operation.destinationPath);
+      }
+      const installedHook = path.join(homeDir, '.claude', 'egc', 'hooks', 'claude-session-start.js');
+      assert.ok(fs.existsSync(installedHook), 'the install plan places the hook');
+
+      const legacy = path.join(homeDir, '.gemini', 'homunculus', 'instincts', 'personal');
+      fs.mkdirSync(legacy, { recursive: true });
+      fs.writeFileSync(path.join(legacy, 'a.yaml'), 'a');
+
+      const result = spawnSync(process.execPath, [installedHook], {
+        input: JSON.stringify({ cwd: '/workspace/empty' }),
+        encoding: 'utf8',
+        env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, CLAUDE_PROJECT_DIR: '', PWD: '' },
+        timeout: 10000,
+      });
+
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.strictEqual(
+        fs.readFileSync(path.join(homeDir, '.egc-learning', 'instincts', 'personal', 'a.yaml'), 'utf8'),
+        'a',
+        'a dependency missing from the install plan would make the adapter fall back to a silent no-op'
+      );
+    } finally {
+      cleanup(homeDir);
+    }
+  });
+
   addCase('prints decrypted state when the encryption key exists', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {

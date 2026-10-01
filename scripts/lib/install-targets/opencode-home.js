@@ -161,6 +161,11 @@ const SESSION_CONTEXT_LIB_SOURCES = [
   'scripts/lib/project-detect.js',
   'scripts/lib/propagate-state.js',
   'scripts/lib/state-crypto.js',
+  // The adapter runs the one-time continuous-learning store migration; without
+  // these two beside it, its require falls back to a no-op and a minimal
+  // native install never migrates.
+  'scripts/lib/learning-store.js',
+  'scripts/lib/utils.js',
   // propagate-state.js's commit-privacy guard shells out to this script as
   // the git clean-filter command -- must be present (this target preserves
   // the scripts/ prefix, so it lands one level up from propagate-state.js,
