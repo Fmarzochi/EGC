@@ -50,6 +50,10 @@ const PYTHON_CACHES = [
   'tests/hooks/__pycache__/x.cpython-313.pyc',
   'mcp/servers/egc-memory/__pycache__/x.pyc',
   'tests/.pytest_cache/v/cache/lastfailed',
+  'skills/ai/continuous-learning-v2/.venv/lib/x.py',
+  'skills/ai/continuous-learning-v2/venv/lib/x.py',
+  'tests/egc.egg-info/PKG-INFO',
+  'docs/.mypy_cache/3.13/x.data.json',
 ];
 
 if (test('Python caches stay ignored inside every whitelisted tree', () => {
@@ -65,4 +69,6 @@ if (test('the sources next to those caches are still tracked', () => {
 })) passed++; else failed++;
 
 console.log(`\nPassed: ${passed}, Failed: ${failed}\n`);
-process.exit(failed > 0 ? 1 : 0);
+// run-all.js reads this file's stdout through a pipe; process.exit() can
+// truncate it before it flushes, losing the summary line it parses.
+process.exitCode = failed > 0 ? 1 : 0;

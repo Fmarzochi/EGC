@@ -125,4 +125,5 @@ def test_observations_stay_beside_the_continuous_learning_writers(monkeypatch, t
 
     assert _python_egc_dir(monkeypatch, home) == (home / ".claude").resolve()
     assert paths.egc_homunculus_dir() == home.resolve() / ".egc-learning", "one store for every tool, where observe.sh and instinct-cli.py write"
-    assert paths.egc_homunculus_dir() == _node_egc_dir(home, fn="getLearningDir"), "the Node hooks resolve the same store"
+    if NODE:
+        assert paths.egc_homunculus_dir() == _node_egc_dir(home, fn="getLearningDir"), "the Node hooks resolve the same store"

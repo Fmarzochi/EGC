@@ -35,7 +35,7 @@ PYTHON_CMD="${CLV2_PYTHON_CMD:-}"
 # Configuration
 # ─────────────────────────────────────────────
 
-CONFIG_DIR="${HOME}/.egc-learning"
+CONFIG_DIR="${HOME:-$USERPROFILE}/.egc-learning"
 if [ -n "${CLV2_CONFIG:-}" ]; then
   CONFIG_FILE="$CLV2_CONFIG"
 else

@@ -16,6 +16,16 @@ try {
 } catch {
   // an older install without the helper: no token, no crash
 }
+// The plugin-hooks.json path (session-start.js) runs this first thing; a
+// native settings.json install (claude-session-start.js, opencode-session-start.js)
+// only ever runs this adapter, so without this call that install never gets
+// the one-time continuous-learning store migration.
+let migrateLegacyLearningStore = () => ({ migrated: [], failed: [] });
+try {
+  ({ migrateLegacyLearningStore } = require('./learning-store'));
+} catch {
+  // an older install without the helper: nothing to migrate, no crash
+}
 
 const DEFAULT_DASHBOARD_PORT = 7890;
 const DASHBOARD_TIMEOUT_MS = 200;
@@ -82,6 +92,12 @@ function postSessionStart(host, sessionId) {
 
 function runSessionStartAdapter({ host, projectEnv }) {
   const normalizedHost = typeof host === 'string' && host ? host : 'unknown';
+  try {
+    migrateLegacyLearningStore();
+  } catch {
+    // best-effort, like the rest of this adapter: a migration failure must
+    // never block session startup
+  }
   const input = readStdinJson();
   const projectPath = resolveProjectPath(input, projectEnv);
   const restored = restoreContext(projectPath, normalizedHost);

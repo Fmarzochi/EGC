@@ -112,10 +112,14 @@ fi
 # Sourcing detect-project.sh creates project-scoped directories and updates
 # projects.json, so automated sessions must return before that point.
 
-CONFIG_DIR="${HOME}/.egc-learning"
+CONFIG_DIR="${HOME:-$USERPROFILE}/.egc-learning"
+# The shell hooks always wrote to this path before the shared store existed;
+# a disable marker left there must still be honored until a session runs the
+# Node SessionStart hook that migrates it (see scripts/lib/learning-store.js).
+_LEGACY_CONFIG_DIR="${HOME:-$USERPROFILE}/.gemini/homunculus"
 
 # Skip if disabled (check both default and CLV2_CONFIG-derived locations)
-if [ -f "$CONFIG_DIR/disabled" ]; then
+if [ -f "$CONFIG_DIR/disabled" ] || [ -f "$_LEGACY_CONFIG_DIR/disabled" ]; then
   exit 0
 fi
 if [ -n "${CLV2_CONFIG:-}" ] && [ -f "$(dirname "$CLV2_CONFIG")/disabled" ]; then
@@ -335,7 +339,7 @@ _CHECK_OBSERVER_RUNNING() {
   return 1  # No PID file or process dead
 }
 
-if [ -f "${CONFIG_DIR}/disabled" ]; then
+if [ -f "${CONFIG_DIR}/disabled" ] || [ -f "${_LEGACY_CONFIG_DIR}/disabled" ]; then
   OBSERVER_ENABLED=false
 else
   OBSERVER_ENABLED=false

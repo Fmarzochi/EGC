@@ -203,6 +203,10 @@ memory/**
 **/*.pyc
 **/*.pyo
 **/.pytest_cache/
+**/.venv/
+**/venv/
+**/*.egg-info/
+**/.mypy_cache/
 **/*.log
 **/*.tmp
 **/*.bak

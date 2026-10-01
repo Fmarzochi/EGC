@@ -26,7 +26,7 @@ An advanced learning system that turns your AI coding sessions into reusable kno
 
 | Feature | v2.0 | v2.1 |
 |---------|------|------|
-| Storage | Global (~/.egc-learning/) | Project-scoped (projects/<hash>/) |
+| Storage | Global (~/.gemini/homunculus/) | Project-scoped (projects/<hash>/) |
 | Scope | All instincts apply everywhere | Project-scoped + global |
 | Detection | None | git remote URL / repo path |
 | Promotion | N/A | Project → global when seen in 2+ projects |
@@ -322,10 +322,10 @@ Hooks fire **100% of the time**, deterministically. This means:
 ## Backward Compatibility
 
 v2.1 is fully compatible with v2.0 and v1:
-- Global instincts kept in `~/.gemini/homunculus/instincts/` by earlier versions are copied into `~/.egc-learning/instincts/` at the first session start and still work as global instincts
+- Global instincts kept in `~/.gemini/homunculus/instincts/` (or any other tool's own `homunculus/` folder) by earlier versions are copied into `~/.egc-learning/instincts/` once, at the first session start after the upgrade, and still work as global instincts
+- The copy is one-time and marker-gated: anything written to the old folder after that first copy is never picked up again, so every tool should move to the new store rather than keep writing the old one
 - Existing `~/.gemini/skills/learned/` skills from v1 still work
 - Stop hook still runs (but now also feeds into v2)
-- Gradual migration: run both in parallel
 
 ## Privacy
 

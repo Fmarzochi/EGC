@@ -9,6 +9,18 @@ const LEGACY_STORE_NAME = 'homunculus';
 const MIGRATION_MARKER = '.migrated-from.json';
 const REGISTRY_FILE = 'projects.json';
 
+// Written by the observer process that is actively running out of a legacy
+// store. Copying a live one into the new store would make session start
+// think an observer is already running there and never spawn a fresh one,
+// so the running process keeps writing instincts to the old location
+// instead (see scripts/lib/observer-sessions.js and observe.sh).
+const OBSERVER_RUNTIME_ENTRIES = new Set([
+  '.observer.pid',
+  '.observer-signal-counter',
+  '.observer-last-activity',
+  '.observer-sessions',
+]);
+
 function isDirectory(dirPath) {
   try {
     return fs.statSync(dirPath).isDirectory();
@@ -17,33 +29,50 @@ function isDirectory(dirPath) {
   }
 }
 
-// A link inside an old store could point anywhere; the store never needs one.
-function isNotSymlink(entryPath) {
+// A link inside an old store could point anywhere; the store never needs
+// one. Only a confirmed symlink (or an entry that vanished, ENOENT) is
+// excluded: any other lstat failure is a real problem the caller must see,
+// not a file silently dropped from the migration.
+function shouldCopyEntry(entryPath) {
+  if (OBSERVER_RUNTIME_ENTRIES.has(path.basename(entryPath))) return false;
   try {
     return !fs.lstatSync(entryPath).isSymbolicLink();
-  } catch {
-    return false;
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
   }
 }
 
-const COPY_OPTIONS = { recursive: true, force: false, errorOnExist: false, filter: isNotSymlink };
+const COPY_OPTIONS = { recursive: true, force: false, errorOnExist: false, filter: shouldCopyEntry };
 
-// The first copy lands in a staging folder renamed into place, so a crash
-// mid-copy never leaves a half-written store that later copies would skip.
-// If another session created the store meanwhile, the copy merges into it.
-function copyStore(source, storeDir) {
-  if (!fs.existsSync(storeDir)) {
-    const staging = `${storeDir}.tmp-${process.pid}-${Date.now()}`;
-    try {
-      fs.cpSync(source, staging, COPY_OPTIONS);
-      fs.renameSync(staging, storeDir);
-      return;
-    } catch (error) {
-      fs.rmSync(staging, { recursive: true, force: true });
-      if (!fs.existsSync(storeDir)) throw error;
+// Moves every entry of a fully-populated staging copy into the live store,
+// one at a time: an entry already there wins and is left untouched, so two
+// sessions racing to migrate the same source merge instead of one clobbering
+// the other. Each move is a same-filesystem rename, atomic on its own, so a
+// crash mid-merge leaves only entries still in staging, never a partial file
+// where the store's own content must be complete.
+function moveNewEntries(stagingDir, storeDir) {
+  for (const entry of fs.readdirSync(stagingDir, { withFileTypes: true })) {
+    const fromPath = path.join(stagingDir, entry.name);
+    const toPath = path.join(storeDir, entry.name);
+    if (entry.isDirectory()) {
+      fs.mkdirSync(toPath, { recursive: true });
+      moveNewEntries(fromPath, toPath);
+    } else if (!fs.existsSync(toPath)) {
+      fs.renameSync(fromPath, toPath);
     }
   }
-  fs.cpSync(source, storeDir, COPY_OPTIONS);
+}
+
+function copyStore(source, storeDir) {
+  fs.mkdirSync(storeDir, { recursive: true });
+  const staging = `${storeDir}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    fs.cpSync(source, staging, COPY_OPTIONS);
+    moveNewEntries(staging, storeDir);
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
+  }
 }
 
 function readRegistry(file) {
@@ -55,11 +84,22 @@ function readRegistry(file) {
   }
 }
 
+function isSymlink(entryPath) {
+  try {
+    return fs.lstatSync(entryPath).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 // The copy never overwrites, so a registry already in the store would hide
 // the projects only another store knew; their keys are added, the entry
-// already in the store winning.
+// already in the store winning. A linked registry is skipped the same way
+// the rest of the store skips links: it could point anywhere.
 function mergeRegistry(source, storeDir) {
-  const incoming = readRegistry(path.join(source, REGISTRY_FILE));
+  const registryPath = path.join(source, REGISTRY_FILE);
+  if (isSymlink(registryPath)) return;
+  const incoming = readRegistry(registryPath);
   if (!incoming) return;
   const target = path.join(storeDir, REGISTRY_FILE);
   const current = readRegistry(target) || {};
@@ -69,13 +109,15 @@ function mergeRegistry(source, storeDir) {
 
 // Where earlier versions kept the store, in the order they are merged:
 // ~/.gemini first (the shell hooks and instinct-cli.py always wrote there),
-// then each tool folder the Node hooks resolved, then ~/.egc.
+// then each tool folder the Node hooks resolved, then ~/.egc, then EGC_DIR
+// when set (getEGCDir() put the old store there before this one existed).
 function legacyStoreDirs(homeDir) {
   const toolDirs = [
     path.join(homeDir, '.gemini'),
     ...getKnownHarnessDirs(homeDir),
     path.join(homeDir, '.egc'),
   ];
+  if (process.env.EGC_DIR) toolDirs.push(process.env.EGC_DIR);
   return [...new Set(toolDirs)].map(dir => path.join(dir, LEGACY_STORE_NAME));
 }
 

@@ -31,8 +31,8 @@ python3 ~/.gemini/skills/continuous-learning-v2/scripts/instinct-cli.py status
 ## What to Do
 
 1. Detect current project context (git remote/path hash)
-2. Read project instincts from `~/.egc-learning/projects/<project-id>/instincts/`
-3. Read global instincts from `~/.egc-learning/instincts/`
+2. Read project instincts from `~/.egc-learning/projects/<project-id>/instincts/personal/` and `.../instincts/inherited/`
+3. Read global instincts from `~/.egc-learning/instincts/personal/`
 4. Merge with precedence rules (project overrides global when IDs collide)
 5. Display grouped by domain with confidence bars and observation stats
 

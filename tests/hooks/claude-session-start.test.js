@@ -71,10 +71,12 @@ function encryptFixture(plaintext, key) {
 function runTests() {
   console.log('\n=== Testing claude-session-start.js hook ===\n');
 
-  let passed = 0;
-  let failed = 0;
+  const cases = [];
+  function addCase(name, fn) {
+    cases.push(() => test(name, fn));
+  }
 
-  if (test('prints the state file for the cwd received on stdin', () => {
+  addCase('prints the state file for the cwd received on stdin', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
       writeStateFile(homeDir, 'workspace--demo', '# Project State\n- resume feature X\n');
@@ -90,9 +92,9 @@ function runTests() {
     } finally {
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (test('uses the same slug sanitization as the egc-memory server', () => {
+  addCase('uses the same slug sanitization as the egc-memory server', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
       writeStateFile(homeDir, 'My_Projects--app_v2_0', 'sanitized slug state\n');
@@ -107,9 +109,9 @@ function runTests() {
     } finally {
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (test('exits silently with code 0 when no state file exists', () => {
+  addCase('exits silently with code 0 when no state file exists', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
       const result = runHook(homeDir, JSON.stringify({ cwd: '/workspace/empty' }));
@@ -119,9 +121,9 @@ function runTests() {
     } finally {
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (test('exits silently with code 0 when the state file is blank', () => {
+  addCase('exits silently with code 0 when the state file is blank', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
       writeStateFile(homeDir, 'workspace-blank', '   \n\n');
@@ -133,9 +135,9 @@ function runTests() {
     } finally {
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (test('tolerates invalid stdin and falls back to environment paths', () => {
+  addCase('tolerates invalid stdin and falls back to environment paths', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
       writeStateFile(homeDir, 'env--project', 'state from env fallback\n');
@@ -149,9 +151,9 @@ function runTests() {
     } finally {
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (test('emits stack briefing for detectable project (JavaScript)', () => {
+  addCase('emits stack briefing for detectable project (JavaScript)', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     const projectDir = createTempDir('claude-session-start-project-');
     try {
@@ -170,9 +172,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (test('briefing and state are both printed when state exists', () => {
+  addCase('briefing and state are both printed when state exists', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     const projectDir = createTempDir('claude-session-start-project-');
     try {
@@ -194,9 +196,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (test('no briefing emitted for unrecognized project type', () => {
+  addCase('no briefing emitted for unrecognized project type', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
       const result = runHook(homeDir, JSON.stringify({ cwd: '/workspace/empty' }));
@@ -206,9 +208,9 @@ function runTests() {
     } finally {
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (test('briefing shows install hint when agents directory is missing', () => {
+  addCase('briefing shows install hint when agents directory is missing', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     const projectDir = createTempDir('claude-session-start-project-');
     try {
@@ -229,9 +231,9 @@ function runTests() {
       cleanup(homeDir);
       cleanup(projectDir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (test('stays silent for encrypted state when no key exists', () => {
+  addCase('stays silent for encrypted state when no key exists', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
       const key = crypto.randomBytes(32);
@@ -244,9 +246,28 @@ function runTests() {
     } finally {
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (test('prints decrypted state when the encryption key exists', () => {
+  addCase('migrates the legacy continuous-learning store on its first run', () => {
+    const homeDir = createTempDir('claude-session-start-home-');
+    try {
+      fs.mkdirSync(path.join(homeDir, '.gemini', 'homunculus', 'instincts', 'personal'), { recursive: true });
+      fs.writeFileSync(path.join(homeDir, '.gemini', 'homunculus', 'instincts', 'personal', 'a.yaml'), 'a');
+
+      const result = runHook(homeDir, JSON.stringify({ cwd: '/workspace/empty' }));
+
+      assert.strictEqual(result.code, 0);
+      assert.strictEqual(
+        fs.readFileSync(path.join(homeDir, '.egc-learning', 'instincts', 'personal', 'a.yaml'), 'utf8'),
+        'a',
+        'the native settings.json install path must migrate the store too, not only the plugin hooks.json path'
+      );
+    } finally {
+      cleanup(homeDir);
+    }
+  });
+
+  addCase('prints decrypted state when the encryption key exists', () => {
     const homeDir = createTempDir('claude-session-start-home-');
     try {
       const key = crypto.randomBytes(32);
@@ -268,7 +289,13 @@ function runTests() {
     } finally {
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  });
+
+  let passed = 0;
+  let failed = 0;
+  for (const run of cases) {
+    if (run()) passed++; else failed++;
+  }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

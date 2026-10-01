@@ -257,14 +257,18 @@ function withPrependedPath(binDir, env = {}) {
 }
 
 function assertNoProjectDetectionSideEffects(homeDir, testName) {
-  const homunculusDir = path.join(homeDir, '.egc-learning');
-  const registryPath = path.join(homunculusDir, 'projects.json');
-  const projectsDir = path.join(homunculusDir, 'projects');
+  // Checked under both the shared store and the legacy per-tool path: a
+  // writer that regresses to ~/.gemini/homunculus (the exact split this
+  // store fixes) must fail here too, not just leave the new path empty.
+  for (const base of [path.join(homeDir, '.egc-learning'), path.join(homeDir, '.gemini', 'homunculus')]) {
+    const registryPath = path.join(base, 'projects.json');
+    const projectsDir = path.join(base, 'projects');
 
-  assert.ok(!fs.existsSync(registryPath), `${testName} should not create projects.json`);
+    assert.ok(!fs.existsSync(registryPath), `${testName} should not create ${registryPath}`);
 
-  const projectEntries = fs.existsSync(projectsDir) ? fs.readdirSync(projectsDir).filter(entry => fs.statSync(path.join(projectsDir, entry)).isDirectory()) : [];
-  assert.strictEqual(projectEntries.length, 0, `${testName} should not create project directories`);
+    const projectEntries = fs.existsSync(projectsDir) ? fs.readdirSync(projectsDir).filter(entry => fs.statSync(path.join(projectsDir, entry)).isDirectory()) : [];
+    assert.strictEqual(projectEntries.length, 0, `${testName} should not create project directories under ${projectsDir}`);
+  }
 }
 
 async function assertObserveSkipBeforeProjectDetection(testCase) {

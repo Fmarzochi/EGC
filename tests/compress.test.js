@@ -136,9 +136,14 @@ if (
 if (
   test('observations are read from the continuous-learning store every tool shares, ~/.egc-learning', () => {
     const { learningStoreDir } = require(buildPath);
+    const { getLearningDir } = require('../scripts/lib/utils');
     const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
     process.env.HOME = path.join(path.sep, 'tmp', 'egc-home');
     try {
+      // Cross-checked against getLearningDir(), the resolver the Node hooks
+      // actually read and write through: a formula that only matches itself
+      // would not catch the two drifting apart.
+      assert.strictEqual(learningStoreDir(), getLearningDir());
       assert.strictEqual(learningStoreDir(), path.join(path.resolve(process.env.HOME), '.egc-learning'));
     } finally {
       for (const [name, value] of Object.entries(saved)) {
