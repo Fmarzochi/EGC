@@ -42,10 +42,10 @@ def _env_for(home: Path, extra: Optional[Dict[str, str]]) -> Dict[str, str]:
     return env
 
 
-def _node_egc_dir(home: Path, extra: Optional[Dict[str, str]] = None) -> Path:
-    script = "process.stdout.write(require(process.argv[1]).getEGCDir())"
+def _node_egc_dir(home: Path, extra: Optional[Dict[str, str]] = None, fn: str = "getEGCDir") -> Path:
+    script = "process.stdout.write(require(process.argv[1])[process.argv[2]]())"
     result = subprocess.run(
-        [NODE, "-e", script, str(REPO / "scripts" / "lib" / "utils.js")],
+        [NODE, "-e", script, str(REPO / "scripts" / "lib" / "utils.js"), fn],
         env=_env_for(home, extra), capture_output=True, text=True, check=True,
     )
     return Path(result.stdout).resolve()
@@ -124,4 +124,5 @@ def test_observations_stay_beside_the_continuous_learning_writers(monkeypatch, t
     (home / ".claude").mkdir(parents=True)
 
     assert _python_egc_dir(monkeypatch, home) == (home / ".claude").resolve()
-    assert paths.egc_homunculus_dir() == home.resolve() / ".gemini" / "homunculus", "where observe.sh and instinct-cli.py write"
+    assert paths.egc_homunculus_dir() == home.resolve() / ".egc-learning", "one store for every tool, where observe.sh and instinct-cli.py write"
+    assert paths.egc_homunculus_dir() == _node_egc_dir(home, fn="getLearningDir"), "the Node hooks resolve the same store"

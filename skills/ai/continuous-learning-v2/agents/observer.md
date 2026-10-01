@@ -17,8 +17,8 @@ A background agent that analyzes observations from AI coding sessions to detect 
 ## Input
 
 Reads observations from the **project-scoped** observations file:
-- Project: `~/.gemini/homunculus/projects/<project-hash>/observations.jsonl`
-- Global fallback: `~/.gemini/homunculus/observations.jsonl`
+- Project: `~/.egc-learning/projects/<project-hash>/observations.jsonl`
+- Global fallback: `~/.egc-learning/observations.jsonl`
 
 ```jsonl
 {"timestamp":"2025-01-22T10:30:00Z","event":"tool_start","session":"abc123","tool":"Edit","input":"...","project_id":"a1b2c3d4e5f6","project_name":"my-react-app"}
@@ -66,8 +66,8 @@ When certain tools are consistently preferred:
 ## Output
 
 Creates/updates instincts in the **project-scoped** instincts directory:
-- Project: `~/.gemini/homunculus/projects/<project-hash>/instincts/personal/`
-- Global: `~/.gemini/homunculus/instincts/personal/` (for universal patterns)
+- Project: `~/.egc-learning/projects/<project-hash>/instincts/personal/`
+- Global: `~/.egc-learning/instincts/personal/` (for universal patterns)
 
 ### Project-Scoped Instinct (default)
 

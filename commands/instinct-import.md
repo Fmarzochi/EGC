@@ -38,8 +38,8 @@ Import instincts from local file paths or HTTP(S) URLs.
 3. Check for duplicates with existing instincts
 4. Merge or add new instincts
 5. Save to inherited instincts directory:
-   - Project scope: `~/.gemini/homunculus/projects/<project-id>/instincts/inherited/`
-   - Global scope: `~/.gemini/homunculus/instincts/inherited/`
+   - Project scope: `~/.egc-learning/projects/<project-id>/instincts/inherited/`
+   - Global scope: `~/.egc-learning/instincts/inherited/`
 
 ## Import Process
 
@@ -108,7 +108,7 @@ Added: 8 instincts
 Updated: 1 instinct
 Skipped: 3 instincts (equal/higher confidence already exists)
 
-New instincts saved to: ~/.gemini/homunculus/instincts/inherited/
+New instincts saved to: ~/.egc-learning/instincts/inherited/
 
 Run /instinct-status to see all instincts.
 ```

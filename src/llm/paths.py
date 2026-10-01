@@ -145,17 +145,17 @@ def egc_home() -> Path:
 
 
 def egc_homunculus_dir() -> Path:
-    """State root of continuous-learning-v2: ``~/.gemini/homunculus``.
+    """State root of continuous-learning-v2: ``~/.egc-learning``, one store for every tool.
 
-    observe.sh, start-observer.sh, detect-project.sh and instinct-cli.py write
-    observations and instincts there whatever the tool, so the recorder keeps
-    writing beside them until that store moves with all of its writers.
+    observe.sh, start-observer.sh, detect-project.sh, instinct-cli.py and the
+    Node ``getLearningDir()`` all resolve it. It stays outside ``~/.egc``
+    because the observer agent writes instincts there itself.
     """
-    return home_dir() / _ANTIGRAVITY_DIR / "homunculus"
+    return home_dir() / ".egc-learning"
 
 
 def egc_project_dir() -> Path:
-    """Project-scoped storage directory: ``~/.gemini/homunculus/projects/<id>``."""
+    """Project-scoped storage directory: ``~/.egc-learning/projects/<id>``."""
     pid = project_id()
     if pid == "global":
         return egc_homunculus_dir()
@@ -221,7 +221,7 @@ def egc_legacy_sessions_dir() -> Path:
 def egc_observations_path() -> Path:
     """Observations log consumed by the continuous-learning pipeline.
 
-    Default: ``~/.gemini/homunculus/projects/<id>/observations.jsonl`` - matches
+    Default: ``~/.egc-learning/projects/<id>/observations.jsonl`` - matches
     the location used by ``observe.sh`` and ``observer-loop.sh``. 
     Override with ``EGC_OBSERVATIONS_PATH`` / ``ECC_OBSERVATIONS_PATH``.
     """

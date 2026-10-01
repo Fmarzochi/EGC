@@ -5,7 +5,7 @@
 #
 # Config (env vars, all optional):
 #   OBSERVER_INTERVAL_SECONDS    default: 300   (per-project cooldown)
-#   OBSERVER_LAST_RUN_LOG        default: ~/.gemini/observer-last-run.log
+#   OBSERVER_LAST_RUN_LOG        default: ~/.egc-learning/observer-last-run.log
 #   OBSERVER_ACTIVE_HOURS_START  default: 800   (8:00 AM local, set to 0 to disable)
 #   OBSERVER_ACTIVE_HOURS_END    default: 2300  (11:00 PM local, set to 0 to disable)
 #   OBSERVER_MAX_IDLE_SECONDS    default: 1800  (30 min; set to 0 to disable)
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 INTERVAL="${OBSERVER_INTERVAL_SECONDS:-300}"
-LOG_PATH="${OBSERVER_LAST_RUN_LOG:-$HOME/.gemini/observer-last-run.log}"
+LOG_PATH="${OBSERVER_LAST_RUN_LOG:-$HOME/.egc-learning/observer-last-run.log}"
 ACTIVE_START="${OBSERVER_ACTIVE_HOURS_START:-800}"
 ACTIVE_END="${OBSERVER_ACTIVE_HOURS_END:-2300}"
 MAX_IDLE="${OBSERVER_MAX_IDLE_SECONDS:-1800}"

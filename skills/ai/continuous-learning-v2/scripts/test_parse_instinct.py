@@ -84,7 +84,7 @@ Validate all user input.
 @pytest.fixture
 def project_tree(tmp_path):
     """Create a realistic project directory tree for testing."""
-    homunculus = tmp_path / ".gemini" / "homunculus"
+    homunculus = tmp_path / ".egc-learning"
     projects_dir = homunculus / "projects"
     global_personal = homunculus / "instincts" / "personal"
     global_inherited = homunculus / "instincts" / "inherited"

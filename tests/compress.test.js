@@ -133,6 +133,22 @@ if (
   })
 ) passed++; else failed++;
 
+if (
+  test('observations are read from the continuous-learning store every tool shares, ~/.egc-learning', () => {
+    const { learningStoreDir } = require(buildPath);
+    const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+    process.env.HOME = path.join(path.sep, 'tmp', 'egc-home');
+    try {
+      assert.strictEqual(learningStoreDir(), path.join(path.resolve(process.env.HOME), '.egc-learning'));
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  })
+) passed++; else failed++;
+
 async function asyncTest(name, fn) {
   try {
     await fn();
@@ -157,7 +173,7 @@ async function withObservationFile(run) {
   const oldUmask = process.umask(0);
   try {
     const id = crypto.createHash('sha256').update(project, 'utf8').digest('hex').slice(0, 12);
-    const dir = path.join(home, '.gemini', 'homunculus', 'projects', id);
+    const dir = path.join(home, '.egc-learning', 'projects', id);
     fs.mkdirSync(dir, { recursive: true });
     const obsPath = path.join(dir, 'observations.jsonl');
     fs.writeFileSync(obsPath, `${JSON.stringify({ id: 'o1', tool: 'bash', output: 'token=abc' })}\n`, { mode: 0o644 });

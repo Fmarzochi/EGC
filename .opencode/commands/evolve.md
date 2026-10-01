@@ -32,5 +32,5 @@ python3 ~/.gemini/skills/continuous-learning-v2/scripts/instinct-cli.py evolve $
 - Shows skill/command/agent candidates from trigger and domain clustering.
 - Shows project -> global promotion candidates.
 - With `--generate`, output path is:
-  - project context: `~/.gemini/homunculus/projects/<project-id>/evolved/`
-  - global fallback: `~/.gemini/homunculus/evolved/`
+  - project context: `~/.egc-learning/projects/<project-id>/evolved/`
+  - global fallback: `~/.egc-learning/evolved/`

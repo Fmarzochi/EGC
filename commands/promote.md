@@ -38,4 +38,4 @@ python3 ~/.gemini/skills/continuous-learning-v2/scripts/instinct-cli.py promote 
 3. Otherwise, find cross-project candidates that:
    - Appear in at least 2 projects
    - Meet confidence threshold
-4. Write promoted instincts to `~/.gemini/homunculus/instincts/personal/` with `scope: global`
+4. Write promoted instincts to `~/.egc-learning/instincts/personal/` with `scope: global`

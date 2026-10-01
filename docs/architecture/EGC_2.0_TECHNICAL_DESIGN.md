@@ -56,7 +56,7 @@ The Kernel manages a single SQLite database in `~/.gemini/egc/egc.db`.
 
 ### 3.2 Namespace Migration
 - **Target:** `~/.gemini/egc/`
-- **Bridge:** During the transition, if `~/.gemini/egc/` is missing, the Kernel will attempt to symlink or migrate data from `~/.gemini/homunculus/`.
+- **Bridge:** During the transition, if `~/.gemini/egc/` is missing, the Kernel will attempt to symlink or migrate data from `~/.egc-learning/`.
 
 ---
 

@@ -257,7 +257,7 @@ function withPrependedPath(binDir, env = {}) {
 }
 
 function assertNoProjectDetectionSideEffects(homeDir, testName) {
-  const homunculusDir = path.join(homeDir, '.gemini', 'homunculus');
+  const homunculusDir = path.join(homeDir, '.egc-learning');
   const registryPath = path.join(homunculusDir, 'projects.json');
   const projectsDir = path.join(homunculusDir, 'projects');
 
@@ -2397,11 +2397,10 @@ async function runTests() {
 
         const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
         const [projectId, projectDir] = lines.slice(-2);
-        const registryPath = path.join(homeDir, '.gemini', 'homunculus', 'projects.json');
+        const registryPath = path.join(homeDir, '.egc-learning', 'projects.json');
         const expectedProjectDir = path.join(
           homeDir,
-          '.gemini',
-          'homunculus',
+          '.egc-learning',
           'projects',
           projectId
         );
@@ -2471,7 +2470,7 @@ async function runTests() {
 
         assert.strictEqual(result.code, 0, `observe.sh should exit successfully, stderr: ${result.stderr}`);
 
-        const projectsDir = path.join(homeDir, '.gemini', 'homunculus', 'projects');
+        const projectsDir = path.join(homeDir, '.egc-learning', 'projects');
         const projectIds = fs.readdirSync(projectsDir);
         assert.strictEqual(projectIds.length, 1, 'observe.sh should create one project-scoped observation directory');
 

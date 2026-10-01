@@ -111,7 +111,7 @@ function runObserve({ homeDir, cwd }) {
 }
 
 function readSingleProjectMetadata(homeDir) {
-  const projectsDir = path.join(homeDir, '.gemini', 'homunculus', 'projects');
+  const projectsDir = path.join(homeDir, '.egc-learning', 'projects');
   const projectIds = fs.readdirSync(projectsDir);
   assert.strictEqual(projectIds.length, 1, 'Expected exactly one project directory');
   const projectDir = path.join(projectsDir, projectIds[0]);

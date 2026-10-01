@@ -38,7 +38,7 @@ except ImportError:
 # Configuration
 # ─────────────────────────────────────────────
 
-HOMUNCULUS_DIR = Path.home() / ".gemini" / "homunculus"
+HOMUNCULUS_DIR = Path.home() / ".egc-learning"
 PROJECTS_DIR = HOMUNCULUS_DIR / "projects"
 REGISTRY_FILE = HOMUNCULUS_DIR / "projects.json"
 

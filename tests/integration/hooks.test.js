@@ -394,6 +394,25 @@ async function runTests() {
     assert.strictEqual(result.code, 0, 'Non-blocking hook should exit 0');
   }));
 
+  tally(await asyncTest('session-start copies an earlier continuous-learning store into ~/.egc-learning once', async () => {
+    const testDir = createTestDir();
+    const legacyDir = path.join(testDir, '.gemini', 'homunculus');
+    fs.mkdirSync(path.join(legacyDir, 'instincts', 'personal'), { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, 'instincts', 'personal', 'kept.yaml'), 'id: kept\n');
+
+    try {
+      const result = await runHookWithInput(path.join(scriptsDir, 'session-start.js'), {}, { HOME: testDir, USERPROFILE: testDir });
+
+      assert.strictEqual(result.code, 0, 'SessionStart should exit 0');
+      const storeDir = path.join(testDir, '.egc-learning');
+      assert.strictEqual(fs.readFileSync(path.join(storeDir, 'instincts', 'personal', 'kept.yaml'), 'utf8'), 'id: kept\n');
+      assert.ok(fs.existsSync(path.join(storeDir, '.migrated-from.json')), 'the copy is recorded so it never runs again');
+      assert.ok(fs.existsSync(path.join(legacyDir, 'instincts', 'personal', 'kept.yaml')), 'the earlier store is left in place');
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  }));
+
   tally(await asyncTest('session-start registers an observer lease for the active session', async () => {
     const testDir = createTestDir();
     const projectDir = path.join(testDir, 'project');
@@ -413,7 +432,7 @@ async function runTests() {
       );
 
       assert.strictEqual(result.code, 0, 'SessionStart should exit 0');
-      const homunculusDir = path.join(testDir, '.gemini', 'homunculus');
+      const homunculusDir = path.join(testDir, '.egc-learning');
       const projectsDir = path.join(homunculusDir, 'projects');
       const projectEntries = fs.existsSync(projectsDir) ? fs.readdirSync(projectsDir) : [];
       assert.ok(projectEntries.length > 0, 'SessionStart should create a homunculus project directory');
@@ -432,7 +451,7 @@ async function runTests() {
 
     try {
       const projectId = crypto.createHash('sha256').update(projectDir).digest('hex').slice(0, 12);
-      const homunculusDir = path.join(testDir, '.gemini', 'homunculus');
+      const homunculusDir = path.join(testDir, '.egc-learning');
       const projectInstinctDir = path.join(homunculusDir, 'projects', projectId, 'instincts', 'personal');
       const globalInstinctDir = path.join(homunculusDir, 'instincts', 'inherited');
 
@@ -508,7 +527,7 @@ async function runTests() {
         }
       );
 
-      const homunculusDir = path.join(testDir, '.gemini', 'homunculus');
+      const homunculusDir = path.join(testDir, '.egc-learning');
       const projectsDir = path.join(homunculusDir, 'projects');
       const projectEntries = fs.existsSync(projectsDir) ? fs.readdirSync(projectsDir) : [];
       assert.ok(projectEntries.length > 0, 'Expected SessionStart to create a homunculus project directory');

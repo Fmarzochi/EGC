@@ -9,7 +9,7 @@ This document defines where generated, imported, and curated skills belong, how 
 | Curated | `skills/` (repo) | Yes | Not required |
 | Learned | `<EGC dir>/skills/learned/` | No | Required |
 | Imported | `<EGC dir>/skills/imported/` | No | Required |
-| Evolved | `<EGC dir>/homunculus/evolved/skills/` (global) or `projects/<hash>/evolved/skills/` (per-project) | No | Inherits from instinct source |
+| Evolved | `~/.egc-learning/evolved/skills/` (global) or `~/.egc-learning/projects/<hash>/evolved/skills/` (per-project), one store for every tool | No | Inherits from instinct source |
 
 `<EGC dir>` is the EGC directory of the tool in use, resolved by `getEGCDir()` in `scripts/lib/utils.js`: `~/.claude` in Claude Code, `~/.gemini` in Antigravity, `~/.cursor` in Cursor and so on; `~/.egc` when no tool is detected; `EGC_DIR` overrides it. Curated skills live in the repo under `skills/`. Install manifests reference only curated paths. Generated and imported skills live under the user home directory and are never shipped.
 
@@ -42,7 +42,7 @@ User-installed skills from external sources (URL, file copy, etc.). No automated
 
 ## Evolved Skills (Continuous Learning v2)
 
-Location: `~/.gemini/homunculus/evolved/skills/` (global) or `~/.gemini/homunculus/projects/<hash>/evolved/skills/` (per-project).
+Location: `~/.egc-learning/evolved/skills/` (global) or `~/.egc-learning/projects/<hash>/evolved/skills/` (per-project).
 
 - Not in repo. Not shipped.
 - Provenance inherited from source instincts; no separate `.provenance.json` required.
@@ -89,7 +89,7 @@ Scope: Curated paths only. All `paths` in modules must exist in the repo.
 |-------------|------------|
 | `skills/*` (curated) | `<EGC dir>/skills/learned/*` |
 | | `<EGC dir>/skills/imported/*` |
-| | `<EGC dir>/homunculus/**/evolved/**` |
+| | `~/.egc-learning/**/evolved/**` |
 
 Only curated skills appear in install manifests and get copied during install.
 

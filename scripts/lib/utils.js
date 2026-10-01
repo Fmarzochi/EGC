@@ -133,6 +133,17 @@ function getEGCDir() {
 }
 
 /**
+ * The continuous-learning store (observations, instincts, evolved skills),
+ * one folder for every tool. It stays outside ~/.egc because the observer
+ * agent writes instincts itself and the Guardian refuses agent writes there;
+ * the shell hooks, instinct-cli.py, src/llm/paths.py and the memory server
+ * resolve the same folder.
+ */
+function getLearningDir() {
+  return path.join(getHomeDir(), '.egc-learning');
+}
+
+/**
  * Get the sessions directory
  */
 function getSessionsDir() {
@@ -852,6 +863,7 @@ module.exports = {
   // Directories
   getHomeDir,
   getEGCDir,
+  getLearningDir,
   resolveEGCDir,
   getKnownHarnessDirs,
   resolveHarnessDirFromEnv,

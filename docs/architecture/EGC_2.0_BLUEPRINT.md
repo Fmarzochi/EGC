@@ -32,7 +32,7 @@ The existing `egc/` Rust scaffold will be promoted to the primary **System Kerne
 ## 3. DETERMINISTIC MEMORY FABRIC
 
 ### 3.1 Namespace Unification
-Complete migration from `~/.gemini/homunculus` to `~/.gemini/egc`.
+Complete migration from `~/.egc-learning` to `~/.gemini/egc`.
 
 ### 3.2 Storage Tiering
 - **Hot Memory (RAM/SQLite):** Live session context, active instincts, and recent tool results.

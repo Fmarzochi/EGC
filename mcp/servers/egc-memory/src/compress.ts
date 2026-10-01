@@ -88,6 +88,15 @@ function buildTitle(type: ObservationType, tool: string, content: string): strin
 
 // ─── Project Hashing & Path Resolution ────────────────────────────────────────
 
+// The continuous-learning store, one folder for every tool. The home is read
+// the way the Node hooks' getLearningDir() reads it (HOME, then USERPROFILE),
+// so the server and the hooks open the same folder on every platform.
+export function learningStoreDir(): string {
+  const explicitHome = process.env.HOME || process.env.USERPROFILE;
+  const home = explicitHome && explicitHome.trim().length > 0 ? path.resolve(explicitHome) : os.homedir();
+  return path.join(home, ".egc-learning");
+}
+
 /**
  * Resolves the project root and generates a stable content-addressable ID
  * using direct fs reads instead of child_process spawns (no shell injection risk).
@@ -129,7 +138,7 @@ export function getProjectHash(projectPath: string): { projectId: string; projec
     projectId = crypto.createHash("sha256").update(hashInput, "utf8").digest("hex").slice(0, 12);
   }
 
-  const homunculusDir = path.join(os.homedir(), ".gemini", "homunculus");
+  const homunculusDir = learningStoreDir();
   const projectDir = projectId === "global" ? homunculusDir : path.join(homunculusDir, "projects", projectId);
 
   return { projectId, projectDir };
@@ -229,7 +238,7 @@ export async function loadRawObservations(
   const obsPath = path.join(projectDir, "observations.jsonl");
 
   if (!fs.existsSync(obsPath)) {
-    const globalObsPath = path.join(os.homedir(), ".gemini", "homunculus", "observations.jsonl");
+    const globalObsPath = path.join(learningStoreDir(), "observations.jsonl");
     if (!fs.existsSync(globalObsPath)) {
       return [];
     }
@@ -307,7 +316,7 @@ export async function replaceObservation(projectPath: string, id: string, compre
 
   let obsPath = path.join(projectDir, "observations.jsonl");
   if (!fs.existsSync(obsPath)) {
-    const globalObsPath = path.join(os.homedir(), ".gemini", "homunculus", "observations.jsonl");
+    const globalObsPath = path.join(learningStoreDir(), "observations.jsonl");
     if (fs.existsSync(globalObsPath)) {
       obsPath = globalObsPath;
     } else {

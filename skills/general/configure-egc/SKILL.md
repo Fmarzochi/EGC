@@ -275,7 +275,7 @@ Some skills reference others. Verify these dependencies:
 - `django-tdd` may reference `django-patterns`
 - `laravel-tdd` may reference `laravel-patterns`
 - `springboot-tdd` may reference `springboot-patterns`
-- `continuous-learning-v2` references `~/.gemini/homunculus/` directory
+- `continuous-learning-v2` references `~/.egc-learning/` directory
 - `python-testing` may reference `python-patterns`
 - `golang-testing` may reference `golang-patterns`
 - `crosspost` references `content-engine` and `x-api`
@@ -375,4 +375,4 @@ Then print a summary report:
 
 ### "Path reference errors after project-level install"
 - Some skills assume `~/.gemini/` paths. Run Step 4 verification to find and fix these.
-- For `continuous-learning-v2`, the `~/.gemini/homunculus/` directory is always user-level: this is expected and not an error.
+- For `continuous-learning-v2`, the `~/.egc-learning/` directory is always user-level: this is expected and not an error.

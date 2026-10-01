@@ -10,7 +10,7 @@
  */
 
 const {
-  getEGCDir,
+  getLearningDir,
   getSessionsDir,
   getSessionSearchDirs,
   getLearnedSkillsDir,
@@ -22,6 +22,7 @@ const {
   log
 } = require('../lib/utils');
 const { resolveProjectContext, writeSessionLease, resolveSessionId } = require('../lib/observer-sessions');
+const { migrateLegacyLearningStore } = require('../lib/learning-store');
 const { getPackageManager, getSelectionPrompt } = require('../lib/package-manager');
 const { listAliases } = require('../lib/session-aliases');
 const { detectProjectType } = require('../lib/project-detect');
@@ -334,7 +335,7 @@ function extractInstinctAction(content) {
 }
 
 function summarizeActiveInstincts(observerContext) {
-  const homunculusDir = path.join(getEGCDir(), 'homunculus');
+  const homunculusDir = getLearningDir();
   const globalDirs = [
     { dir: path.join(homunculusDir, 'instincts', 'personal'), scope: 'global' },
     { dir: path.join(homunculusDir, 'instincts', 'inherited'), scope: 'global' },
@@ -589,7 +590,18 @@ function buildAdditionalContext(opts) {
     : '';
 }
 
+function migrateLearningStore() {
+  try {
+    const { migrated, failed } = migrateLegacyLearningStore();
+    if (migrated.length > 0) log(`[SessionStart] Copied the continuous-learning store into ${getLearningDir()} from ${migrated.join(', ')}`);
+    for (const { source, error } of failed) log(`[SessionStart] Could not copy the continuous-learning store from ${source}: ${error}`);
+  } catch (error) {
+    log(`[SessionStart] Continuous-learning store migration skipped: ${error.message}`);
+  }
+}
+
 async function main() {
+  migrateLearningStore();
   const sessionsDir = getSessionsDir();
   const sessionSearchDirs = getSessionSearchDirs();
   const learnedDir = getLearnedSkillsDir();

@@ -2,10 +2,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const { getEGCDir, ensureDir, sanitizeSessionId } = require('./utils');
+const { getLearningDir, ensureDir, sanitizeSessionId } = require('./utils');
 
 function getHomunculusDir() {
-  return path.join(getEGCDir(), 'homunculus');
+  return getLearningDir();
 }
 
 function getProjectsDir() {

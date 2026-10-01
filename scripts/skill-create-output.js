@@ -228,7 +228,7 @@ async function demo() {
 
   output.output(
     '.gemini/skills/pmx-patterns/SKILL.md',
-    '.gemini/homunculus/instincts/inherited/pmx-instincts.yaml'
+    '.egc-learning/instincts/inherited/pmx-instincts.yaml'
   );
 
   output.nextSteps();
