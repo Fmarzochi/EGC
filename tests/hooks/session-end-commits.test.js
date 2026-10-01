@@ -77,8 +77,9 @@ function commit(repo, message, author, date, committedAt = date) {
 
 // The session file is named after today's date and the hook works out the
 // date again when it runs, so a case that crosses local midnight would leave
-// the hook looking for another file. Each case starts clear of midnight.
-function waitPastMidnightIfClose(marginMs = 30000) {
+// the hook looking for another file. Each case starts clear of midnight, with
+// a margin many times what a case takes (a few seconds, even on Windows).
+function waitPastMidnightIfClose(marginMs = 120000) {
   const now = new Date();
   const msLeft = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
   if (msLeft < marginMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, msLeft + 1000);

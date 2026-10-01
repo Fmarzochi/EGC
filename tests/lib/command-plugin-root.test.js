@@ -55,10 +55,10 @@ test('auto-update command resolves the root that holds auto-update.js', () => {
   assert.strictEqual(count(autoUpdateDoc, `${INLINE_RESOLVE_FN}('scripts/auto-update.js')`), 1);
 });
 
-test('every hook that resolves the root embeds the shared resolver', () => {
-  const resolving = hookCommands.filter(command => command.includes('PLUGIN_ROOT'));
-  assert.ok(resolving.length > 0, 'hooks.json should resolve the root');
-  for (const command of resolving) {
+test('every hook that runs an EGC script embeds the shared resolver', () => {
+  const runningScripts = hookCommands.filter(command => command.includes('scripts/'));
+  assert.ok(runningScripts.length > 0, 'hooks.json should run EGC scripts');
+  for (const command of runningScripts) {
     assert.ok(command.includes(INLINE_RESOLVE_FN), `not the shared resolver: ${command.slice(0, 100)}...`);
   }
 });

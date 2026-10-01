@@ -8,6 +8,7 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { withoutHarnessVariables } = require('./fixtures/harness-variables');
 
 const testsDir = __dirname;
 const repoRoot = path.resolve(testsDir, '..');
@@ -16,14 +17,7 @@ const TEST_GLOB = 'tests/**/*.test.js';
 // The variables a tool session sets tell getEGCDir() which tool is in use.
 // Tests set the ones they need themselves, so the suite gives the same result
 // inside a Claude Code or Antigravity session as in CI.
-const TOOL_SESSION_VARIABLES = [
-  'CLAUDECODE', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT',
-  'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN',
-  'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV', 'EGC_PLUGIN_ROOT', 'ECC_PLUGIN_ROOT', 'EGC_DIR',
-];
-const TEST_ENV = Object.fromEntries(
-  Object.entries(process.env).filter(([name]) => !TOOL_SESSION_VARIABLES.includes(name))
-);
+const TEST_ENV = withoutHarnessVariables(process.env);
 
 function matchesTestGlob(relativePath) {
   const normalized = relativePath.split(path.sep).join('/');

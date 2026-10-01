@@ -74,11 +74,20 @@ function resolvesTo(home, env, expected, probe = UTILS_PROBE) {
 
 function explicitRootCases() {
   return [
-    test('EGC_PLUGIN_ROOT is returned as given, trimmed', () => withTempDir(home => {
-      resolvesTo(home, { EGC_PLUGIN_ROOT: '  /custom/plugin/root  ' }, '/custom/plugin/root');
+    test('EGC_PLUGIN_ROOT counts when it holds EGC scripts, trimmed', () => withTempDir(home => {
+      const custom = withScripts(path.join(home, 'custom'));
+      withScripts(path.join(home, '.claude'));
+      resolvesTo(home, { EGC_PLUGIN_ROOT: `  ${custom}  `, CLAUDECODE: '1' }, custom);
     })),
-    test('GEMINI_PLUGIN_ROOT, which EGC runners set for their children, is returned as given', () => withTempDir(home => {
-      resolvesTo(home, { GEMINI_PLUGIN_ROOT: '/runner/root' }, '/runner/root');
+    test('GEMINI_PLUGIN_ROOT, which EGC runners set for their children, counts when it holds EGC scripts', () => withTempDir(home => {
+      const runner = withScripts(path.join(home, 'runner'));
+      resolvesTo(home, { GEMINI_PLUGIN_ROOT: runner }, runner);
+    })),
+    test('an explicit root without the requested script falls through to one that has it', () => withTempDir(home => {
+      const runner = withScripts(path.join(home, 'runner'));
+      const prefix = path.join(home, 'prefix');
+      const root = withScripts(path.join(prefix, 'node_modules', '@egchq', 'egc'), [UTILS_PROBE, HEALTH_PROBE]);
+      resolvesTo(home, { GEMINI_PLUGIN_ROOT: runner, PATH: prefix }, root, HEALTH_PROBE);
     })),
     test('an empty or blank explicit root is skipped', () => withTempDir(home => {
       const claude = withScripts(path.join(home, '.claude'));
@@ -183,6 +192,10 @@ function fallbackCases() {
     test('with nothing else, the first tool directory holding the scripts', () => withTempDir(home => {
       const windsurf = withScripts(path.join(home, '.codeium', 'windsurf'));
       resolvesTo(home, {}, windsurf);
+    })),
+    test('the tool directories scanned are every one getEGCDir() knows', () => withTempDir(home => {
+      const kiro = withScripts(path.join(home, '.kiro'));
+      resolvesTo(home, {}, kiro);
     })),
     test('with nothing at all, ~/.egc', () => withTempDir(home => {
       resolvesTo(home, {}, path.join(home, '.egc'));

@@ -3,15 +3,20 @@
 /**
  * The environment variables that pin the EGC directory to one tool: the
  * harness variables getEGCDir() reads first (scripts/lib/utils.js,
- * resolveHarnessDirFromEnv) and the explicit EGC_DIR override. A test about
- * where a file lands for a given home clears them, so the home alone
- * decides, whatever session the suite runs inside.
+ * resolveHarnessDirFromEnv), the explicit EGC_DIR override, and the explicit
+ * roots the EGC root resolver reads first (scripts/lib/resolve-egc-root.js).
+ * A test about where a file lands for a given home clears them, so the home
+ * alone decides, whatever session the suite runs inside; tests/run-all.js
+ * clears them for every test file.
  */
 
 const HARNESS_VARIABLES = Object.freeze([
   'EGC_DIR',
+  'EGC_PLUGIN_ROOT',
+  'ECC_PLUGIN_ROOT',
   'GEMINI_PROJECT_DIR',
   'GEMINI_PLUGIN_ROOT',
+  'CLAUDECODE',
   'CLAUDE_PROJECT_DIR',
   'CLAUDE_PLUGIN_ROOT',
   'CODEBUDDY_PROJECT_DIR',
