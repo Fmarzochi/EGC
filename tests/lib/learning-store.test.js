@@ -171,5 +171,37 @@ if (test('a first copy into an empty home leaves no temporary folder behind', ()
   assert.strictEqual(read(path.join(home, '.egc-learning', 'a.yaml')), 'a');
 }))) passed++; else failed++;
 
+if (test('a store another session creates mid-copy is merged into, not crashed on', () => withHome(home => {
+  write(path.join(home, '.gemini', 'homunculus', 'a.yaml'), 'a');
+  const store = path.join(home, '.egc-learning');
+
+  const originalRename = fs.renameSync;
+  let intercepted = false;
+  fs.renameSync = (src, dest) => {
+    if (!intercepted && dest === store) {
+      intercepted = true;
+      write(path.join(store, 'from-other-session.yaml'), 'other');
+      const error = new Error('ENOTEMPTY: directory not empty, rename');
+      error.code = 'ENOTEMPTY';
+      throw error;
+    }
+    return originalRename(src, dest);
+  };
+
+  let result;
+  try {
+    result = migrateLegacyLearningStore({ homeDir: home });
+  } finally {
+    fs.renameSync = originalRename;
+  }
+
+  assert.deepStrictEqual(result.failed, []);
+  assert.deepStrictEqual(result.migrated, [path.join(home, '.gemini', 'homunculus')]);
+  assert.strictEqual(read(path.join(store, 'from-other-session.yaml')), 'other', 'the concurrent write survives');
+  assert.strictEqual(read(path.join(store, 'a.yaml')), 'a', 'this session still lands its own copy');
+  const leftovers = fs.readdirSync(home).filter(name => name.startsWith('.egc-learning') && name !== '.egc-learning');
+  assert.deepStrictEqual(leftovers, [], 'the abandoned staging folder is cleaned up');
+}))) passed++; else failed++;
+
 console.log(`\nPassed: ${passed}, Failed: ${failed}\n`);
 process.exit(failed > 0 ? 1 : 0);
