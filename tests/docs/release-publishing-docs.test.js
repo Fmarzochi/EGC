@@ -10,6 +10,10 @@ const path = require('path');
 
 const repoRoot = path.join(__dirname, '..', '..');
 const workflowsDir = path.join(repoRoot, '.github', 'workflows');
+const workflows = fs.readdirSync(workflowsDir).filter(file => /\.ya?ml$/.test(file)).map(file => ({
+  file,
+  source: fs.readFileSync(path.join(workflowsDir, file), 'utf8').split('\n').filter(line => !line.trim().startsWith('#')).join('\n'),
+}));
 const packageName = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).name;
 const publishingDocs = ['docs/MAINTAINERS.md', '.github/SECURITY.md', 'docs/security/RELEASE-VERIFICATION.md'];
 
@@ -35,15 +39,14 @@ let passed = 0;
 let failed = 0;
 
 if (test('no workflow unpublishes a release from npm', () => {
-  for (const file of fs.readdirSync(workflowsDir)) {
-    const source = fs.readFileSync(path.join(workflowsDir, file), 'utf8');
+  assert.ok(workflows.length > 0, '.github/workflows lists at least one workflow');
+  for (const { file, source } of workflows) {
     assert.ok(!/npm\s+unpublish/.test(source), `.github/workflows/${file} runs npm unpublish`);
   }
 })) passed++; else failed++;
 
 if (test('no workflow reads an npm token secret', () => {
-  for (const file of fs.readdirSync(workflowsDir)) {
-    const source = fs.readFileSync(path.join(workflowsDir, file), 'utf8');
+  for (const { file, source } of workflows) {
     assert.ok(!/secrets\.(NPM_TOKEN|NODE_AUTH_TOKEN)\b/.test(source), `.github/workflows/${file} reads an npm token secret`);
   }
 })) passed++; else failed++;
@@ -60,7 +63,7 @@ if (test('release verification uses the published package and its tarball name',
   const source = read('docs/security/RELEASE-VERIFICATION.md');
   const tarball = `${packageName.replace(/^@/, '').replace('/', '-')}-<version>.tgz`;
   assert.ok(source.includes(`npm install ${packageName}`), `installs ${packageName} before npm audit signatures`);
-  assert.ok(!/npm audit signatures[ \t]+\S/.test(source), 'npm audit signatures takes no package name');
+  assert.ok(!/npm audit signatures[ \t]+[^\s-]/.test(source), 'npm audit signatures takes no package name');
   assert.ok(source.includes(`gh attestation verify ${tarball}`), `verifies ${tarball}`);
 })) passed++; else failed++;
 
