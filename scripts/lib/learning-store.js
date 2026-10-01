@@ -1,7 +1,7 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const { getHomeDir, getKnownHarnessDirs } = require('./utils');
 
 const LEARNING_DIR_NAME = '.egc-learning';
