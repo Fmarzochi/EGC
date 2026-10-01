@@ -4,35 +4,37 @@ Every EGC release is published with build provenance attestations that allow you
 
 ## Verifying npm Package Provenance
 
-EGC is published to npm with `--provenance`, which generates a signed provenance attestation linked to the GitHub Actions workflow that built it.
+EGC is published to npm as `@egchq/egc` with `--provenance`, through npm trusted publishing (OIDC), which generates a signed provenance attestation linked to the GitHub Actions workflow that built it.
 
-To verify:
+`npm audit signatures` checks the packages installed in a project, so verify from a project where EGC is installed (a throwaway one works):
 
 ```bash
-npm audit signatures egc-universal
+mkdir egc-verify && cd egc-verify
+npm init -y
+npm install @egchq/egc --ignore-scripts
+npm audit signatures
 ```
 
-Expected output:
+Expected output: every installed package reports a verified registry signature, and the packages published with provenance, `@egchq/egc` among them, report a verified attestation:
 
 ```
-audited 1 package in Xs
-1 package has a verified registry signature
-1 package has a verified attestation
+N packages have verified registry signatures
+
+M packages have verified attestations
 ```
 
 ## Verifying GitHub Release Assets
 
-Build provenance for release tarballs is attested via [GitHub Artifact Attestations](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds).
+Build provenance for the release tarball is attested via [GitHub Artifact Attestations](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds). The tarball is attached to every GitHub release as `egchq-egc-<version>.tgz`.
 
-To verify a release tarball:
+To verify it:
 
 ```bash
-gh attestation verify egc-universal-<version>.tgz \
-  --owner Fmarzochi \
-  --repo EGC
+gh release download v<version> --repo Fmarzochi/EGC --pattern 'egchq-egc-*.tgz'
+gh attestation verify egchq-egc-<version>.tgz --repo Fmarzochi/EGC
 ```
 
-Expected output confirms that the artifact was produced by the `release.yml` workflow in the `Fmarzochi/EGC` repository.
+The command exits with 0 and confirms that the artifact was produced by the `release.yml` workflow in the `Fmarzochi/EGC` repository.
 
 ## Verifying the Author Identity
 
@@ -47,7 +49,7 @@ This confirms that the release was built by the official GitHub Actions workflow
 
 | Asset | Attestation Type |
 |-------|-----------------|
-| npm tarball (`egc-universal-*.tgz`) | Build provenance (SLSA Level 2) |
+| Release tarball (`egchq-egc-<version>.tgz`) | Build provenance (SLSA Level 2) and SBOM |
 | npm package (published) | npm provenance (`--provenance` flag) |
 
 ## Cryptographic Verification
