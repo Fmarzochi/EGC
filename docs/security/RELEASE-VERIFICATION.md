@@ -27,11 +27,12 @@ M packages have verified attestations
 
 Build provenance for the release tarball is attested via [GitHub Artifact Attestations](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds). The tarball is attached to every GitHub release as `egchq-egc-<version>.tgz`.
 
-To verify it:
+To verify it, set `VERSION` to the release you want to check:
 
 ```bash
-gh release download v<version> --repo Fmarzochi/EGC --pattern 'egchq-egc-*.tgz'
-gh attestation verify egchq-egc-<version>.tgz --repo Fmarzochi/EGC
+VERSION=1.1.22
+gh release download "v$VERSION" --repo Fmarzochi/EGC --pattern "egchq-egc-$VERSION.tgz"
+gh attestation verify "egchq-egc-$VERSION.tgz" --repo Fmarzochi/EGC
 ```
 
 The command exits with 0 and confirms that the artifact was produced by the `release.yml` workflow in the `Fmarzochi/EGC` repository.

@@ -61,10 +61,11 @@ if (test('the publishing docs name neither a stored npm token nor a package that
 
 if (test('release verification uses the published package and its tarball name', () => {
   const source = read('docs/security/RELEASE-VERIFICATION.md');
-  const tarball = `${packageName.replace(/^@/, '').replace('/', '-')}-<version>.tgz`;
+  const tarball = `${packageName.replace(/^@/, '').replace('/', '-')}-$VERSION.tgz`;
   assert.ok(source.includes(`npm install ${packageName}`), `installs ${packageName} before npm audit signatures`);
   assert.ok(!/npm audit signatures[ \t]+[^\s-]/.test(source), 'npm audit signatures takes no package name');
-  assert.ok(source.includes(`gh attestation verify ${tarball}`), `verifies ${tarball}`);
+  assert.ok(source.includes(`gh attestation verify "${tarball}"`), `verifies ${tarball}`);
+  assert.ok(!/^gh .*<version>/m.test(source), 'no command carries a <version> placeholder, which the shell reads as a redirection');
 })) passed++; else failed++;
 
 if (test('the maintainers guide explains how a broken version is handled', () => {

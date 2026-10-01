@@ -50,7 +50,7 @@ The following are not treated as vulnerabilities under this policy:
 
 Secrets and credentials used by the project are managed as follows:
 
-- **Storage:** The secrets the workflows need are stored exclusively as GitHub Actions repository secrets. They are never committed to the repository or stored in plain text on disk. npm publishing uses trusted publishing (OIDC), so no npm token is stored at all.
+- **Storage:** The secrets the workflows need are stored exclusively as GitHub Actions repository secrets. They are never committed to the repository or stored in plain text on disk. The `GITHUB_TOKEN` is not stored at all: GitHub creates it for each workflow run. npm publishing uses trusted publishing (OIDC), so no npm token is stored either.
 - **Access:** Only the project owner has access to configure repository secrets. GitHub Actions workflows access secrets only via the `secrets.*` context, scoped to the specific job that needs them.
 - **Rotation:** Secrets are rotated immediately upon suspected or confirmed compromise.
 - **Scope:** Secrets are scoped to the minimum necessary permissions. The release job receives a short-lived OIDC token valid for that run only. The `GITHUB_TOKEN` is granted only the permissions declared in each workflow's `permissions:` block.
