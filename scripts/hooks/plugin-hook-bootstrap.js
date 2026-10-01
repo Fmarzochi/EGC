@@ -82,7 +82,6 @@ function spawnNode(rootDir, relPath, raw, args) {
     encoding: 'utf8',
     env: {
       ...process.env,
-      GEMINI_PLUGIN_ROOT: rootDir,
       EGC_PLUGIN_ROOT: rootDir,
       ECC_PLUGIN_ROOT: rootDir,
     },
@@ -110,7 +109,6 @@ function spawnShell(rootDir, relPath, raw, args) {
     encoding: 'utf8',
     env: {
       ...process.env,
-      GEMINI_PLUGIN_ROOT: rootDir,
       EGC_PLUGIN_ROOT: rootDir,
       ECC_PLUGIN_ROOT: rootDir,
     },

@@ -86,7 +86,7 @@ function writeFakeObserveScript(tempRoot) {
     [
       '#!/usr/bin/env bash',
       'input="$(cat)"',
-      'printf "phase=%s input=%s root=%s" "$1" "$input" "${GEMINI_PLUGIN_ROOT:-}"',
+      'printf "phase=%s input=%s root=%s gemini=%s" "$1" "$input" "${EGC_PLUGIN_ROOT:-}" "${GEMINI_PLUGIN_ROOT:-}"',
       ''
     ].join('\n'),
     'utf8'
@@ -154,10 +154,10 @@ function runTests() {
     assert.strictEqual(observeRunner.getPhaseFromHookId('unknown'), null);
   })) passed++; else failed++;
 
-  if (test('observe-runner invokes observe.sh with phase, stdin, and plugin root', () => {
+  if (test('observe-runner invokes observe.sh with phase, stdin, and plugin root, without posing as Antigravity', () => {
     withTempPluginRoot(tempRoot => {
       writeFakeObserveScript(tempRoot);
-      const env = fs.existsSync('/bin/sh') ? { BASH: '/bin/sh' } : {};
+      const env = { ...(fs.existsSync('/bin/sh') ? { BASH: '/bin/sh' } : {}), GEMINI_PLUGIN_ROOT: '' };
       withEnv(env, () => {
         const output = observeRunner.run('payload', {
           hookId: 'pre:observe',
@@ -165,7 +165,8 @@ function runTests() {
         });
 
         assert.strictEqual(output.exitCode, 0, output.stderr);
-        assert.strictEqual(output.stdout, `phase=pre input=payload root=${tempRoot}`);
+        // GEMINI_PLUGIN_ROOT tells getEGCDir() that Antigravity is the tool in use.
+        assert.strictEqual(output.stdout, `phase=pre input=payload root=${tempRoot} gemini=`);
       });
     });
   })) passed++; else failed++;

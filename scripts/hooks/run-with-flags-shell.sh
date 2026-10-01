@@ -5,7 +5,7 @@ HOOK_ID="${1:-}"
 REL_SCRIPT_PATH="${2:-}"
 PROFILES_CSV="${3:-standard,strict}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_ROOT="${GEMINI_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+PLUGIN_ROOT="${EGC_PLUGIN_ROOT:-${GEMINI_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}}"
 
 # Preserve stdin for passthrough or script execution
 INPUT="$(cat)"

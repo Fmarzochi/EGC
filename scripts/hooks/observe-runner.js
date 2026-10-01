@@ -200,7 +200,6 @@ function run(raw, options = {}) {
     encoding: 'utf8',
     env: {
       ...process.env,
-      GEMINI_PLUGIN_ROOT: pluginRoot,
       EGC_PLUGIN_ROOT: pluginRoot,
       ECC_PLUGIN_ROOT: pluginRoot
     },

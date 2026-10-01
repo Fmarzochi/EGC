@@ -153,7 +153,6 @@ async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) { // 
     encoding: 'utf8',
     env: {
       ...process.env,
-      GEMINI_PLUGIN_ROOT: pluginRoot,
       EGC_PLUGIN_ROOT: pluginRoot,
       ECC_PLUGIN_ROOT: pluginRoot,
       EGC_HOOK_ID: hookId,

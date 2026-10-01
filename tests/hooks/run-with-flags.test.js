@@ -83,6 +83,24 @@ function makeTempPluginRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-539-run-with-flags-'));
 }
 
+function legacyHookEnvCase() {
+  return test('a hook without run() gets the root through EGC_PLUGIN_ROOT and no Antigravity variable', () => {
+    const pluginRoot = makeTempPluginRoot();
+    try {
+      fs.writeFileSync(
+        path.join(pluginRoot, 'legacy-hook.js'),
+        "if (require.main === module) process.stdout.write(JSON.stringify({ egc: process.env.EGC_PLUGIN_ROOT || '', gemini: process.env.GEMINI_PLUGIN_ROOT || '' }));\n"
+      );
+      const result = runDispatcher({ pluginRoot, relScriptPath: 'legacy-hook.js', env: { GEMINI_PLUGIN_ROOT: '' } });
+      assert.strictEqual(result.code, 0, `Expected exit 0, got ${result.code}: ${result.stderr}`);
+      // GEMINI_PLUGIN_ROOT tells getEGCDir() that Antigravity is the tool in use.
+      assert.deepStrictEqual(JSON.parse(result.stdout), { egc: pluginRoot, gemini: '' });
+    } finally {
+      fs.rmSync(pluginRoot, { recursive: true, force: true });
+    }
+  });
+}
+
 function runTests() {
   console.log('\n=== Testing run-with-flags.js ===\n');
 
@@ -273,6 +291,10 @@ function runTests() {
     assert.strictEqual(result.status, 0);
     assert.strictEqual(result.stdout, 'stdin-passthrough');
   })) passed++; else failed++;
+
+  const childEnvCases = [legacyHookEnvCase()];
+  passed += childEnvCases.filter(Boolean).length;
+  failed += childEnvCases.filter(ok => !ok).length;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
