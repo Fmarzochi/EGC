@@ -6,13 +6,23 @@
 // The re-block section at the end of .gitignore must keep them out of every
 // whitelisted tree.
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
 const repoRoot = path.join(__dirname, '..', '..');
 
+// S4036: prefer fixed git locations over a PATH lookup, as session-end.js
+// does; the bare name is the last resort for layouts like nix or portable Git.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  '/opt/homebrew/bin/git',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
+].find(candidate => fs.existsSync(candidate)) || 'git';
+
 function isIgnored(relativePath) {
-  const result = spawnSync('git', ['check-ignore', '--no-index', '-q', relativePath], { cwd: repoRoot });
+  const result = spawnSync(GIT_BIN, ['check-ignore', '--no-index', '-q', relativePath], { cwd: repoRoot });
   return result.status === 0;
 }
 
