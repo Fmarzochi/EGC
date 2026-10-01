@@ -281,7 +281,7 @@ function runTests() {
         // shipping an install that only this test's last assertion would miss.
         assert.ok(fs.existsSync(source), `the install plan copies ${operation.sourceRelativePath}, which does not exist`);
         fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
-        fs.cpSync(source, operation.destinationPath, { recursive: true });
+        fs.cpSync(source, operation.destinationPath, { recursive: true, force: false, errorOnExist: true });
       }
       const installedHook = path.join(homeDir, '.claude', 'egc', 'hooks', 'claude-session-start.js');
       assert.ok(fs.existsSync(installedHook), 'the install plan places the hook');

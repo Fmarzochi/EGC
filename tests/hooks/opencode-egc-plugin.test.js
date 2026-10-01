@@ -32,7 +32,7 @@ function install(homeDir) {
     // installed layout silently short of a file a real install would need.
     assert.ok(fs.existsSync(source), `the install plan copies ${operation.sourceRelativePath}, which does not exist`);
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
-    fs.cpSync(source, operation.destinationPath, { recursive: true });
+    fs.cpSync(source, operation.destinationPath, { recursive: true, force: false, errorOnExist: true });
   }
   return path.join(homeDir, '.config', 'opencode');
 }
