@@ -321,6 +321,46 @@ if (!canCreateSymlinks()) {
   assert.deepStrictEqual(fs.readdirSync(outside), [], 'nothing lands behind the linked store root');
 }))) passed++; else failed++;
 
+if (test('a filesystem without hard links still migrates, with a copy that never replaces', () => withHome(home => {
+  write(path.join(home, '.gemini', 'homunculus', 'a.yaml'), 'a');
+  write(path.join(home, '.gemini', 'homunculus', 'b.yaml'), 'from the old store');
+  const store = path.join(home, '.egc-learning');
+  write(path.join(store, 'b.yaml'), 'already in the new store');
+
+  // FAT and exFAT refuse hard links.
+  const originalLink = fs.linkSync;
+  fs.linkSync = () => {
+    const error = new Error('EPERM: operation not permitted, link');
+    error.code = 'EPERM';
+    throw error;
+  };
+
+  let result;
+  try {
+    result = migrateLegacyLearningStore({ homeDir: home });
+  } finally {
+    fs.linkSync = originalLink;
+  }
+
+  assert.deepStrictEqual(result.failed, []);
+  assert.strictEqual(read(path.join(store, 'a.yaml')), 'a');
+  assert.strictEqual(read(path.join(store, 'b.yaml')), 'already in the new store', 'the fallback copy never replaces');
+}))) passed++; else failed++;
+
+if (!canCreateSymlinks()) {
+  console.log('  - skipped dangling destination test; this environment does not permit creating symbolic links');
+} else if (test('a dangling link where a file should land fails the source instead of counting as copied', () => withHome(home => {
+  write(path.join(home, '.gemini', 'homunculus', 'a.yaml'), 'a');
+  const store = path.join(home, '.egc-learning');
+  fs.mkdirSync(store, { recursive: true });
+  fs.symlinkSync(path.join(home, 'nowhere.yaml'), path.join(store, 'a.yaml'));
+
+  const result = migrateLegacyLearningStore({ homeDir: home });
+
+  assert.strictEqual(result.failed.length, 1);
+  assert.ok(!fs.existsSync(path.join(store, MIGRATION_MARKER)), 'the marker waits until the file can really be placed');
+}))) passed++; else failed++;
+
 if (test('a retry after a crash completes the entries a previous run never reached', () => withHome(home => {
   write(path.join(home, '.gemini', 'homunculus', 'a.yaml'), 'a');
   write(path.join(home, '.gemini', 'homunculus', 'b.yaml'), 'b');

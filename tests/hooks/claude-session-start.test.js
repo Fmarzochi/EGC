@@ -5,6 +5,7 @@
 const assert = require('assert');
 const crypto = require('crypto');
 const fs = require('fs');
+const http = require('http');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -276,9 +277,11 @@ function runTests() {
       for (const operation of plan.operations) {
         if (operation.kind !== 'copy-path') continue;
         const source = path.join(repoRoot, operation.sourceRelativePath);
-        if (!fs.existsSync(source) || !fs.statSync(source).isFile()) continue;
+        // A planned source that is gone fails here, loudly, instead of
+        // shipping an install that only this test's last assertion would miss.
+        assert.ok(fs.existsSync(source), `the install plan copies ${operation.sourceRelativePath}, which does not exist`);
         fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
-        fs.copyFileSync(source, operation.destinationPath);
+        fs.cpSync(source, operation.destinationPath, { recursive: true });
       }
       const installedHook = path.join(homeDir, '.claude', 'egc', 'hooks', 'claude-session-start.js');
       assert.ok(fs.existsSync(installedHook), 'the install plan places the hook');
@@ -294,7 +297,7 @@ function runTests() {
         timeout: 10000,
       });
 
-      assert.strictEqual(result.status, 0, result.stderr);
+      assert.strictEqual(result.status, 0, `status ${result.status}, signal ${result.signal}, error ${result.error}, stderr ${result.stderr}`);
       assert.strictEqual(
         fs.readFileSync(path.join(homeDir, '.egc-learning', 'instincts', 'personal', 'a.yaml'), 'utf8'),
         'a',
@@ -339,4 +342,14 @@ function runTests() {
   process.exit(failed > 0 ? 1 : 0);
 }
 
-runTests();
+// Every hook these cases run posts a session_start event to the Dashboard;
+// a listener owned by this run receives it, so a developer's running
+// Dashboard on the default port never sees test traffic.
+const dashboard = http.createServer((request, response) => {
+  request.resume();
+  response.writeHead(204).end();
+});
+dashboard.listen(0, '127.0.0.1', () => {
+  process.env.EGC_PORT = String(dashboard.address().port);
+  runTests();
+});

@@ -45,15 +45,44 @@ function shouldCopyEntry(entryPath) {
 
 const COPY_OPTIONS = { recursive: true, force: false, errorOnExist: false, filter: shouldCopyEntry };
 
+// EEXIST also answers for a dangling link or a folder at the destination;
+// only a regular file there is something another writer placed, so anything
+// else fails the source and keeps the marker from being written.
+function assertPlacedFile(entryPath) {
+  if (!fs.lstatSync(entryPath).isFile()) {
+    throw new Error(`refusing to count ${entryPath} as copied: it is not a regular file`);
+  }
+}
+
+// A file is placed with a hard link, which fails with EEXIST instead of
+// replacing a destination that is already there, and is atomic on its own.
+// A filesystem that refuses hard links (FAT, exFAT, some network shares)
+// gets an exclusive copy instead, which never replaces a destination either.
+function placeFile(fromPath, toPath) {
+  try {
+    fs.linkSync(fromPath, toPath);
+    return;
+  } catch (error) {
+    if (error.code === 'EEXIST') {
+      assertPlacedFile(toPath);
+      return;
+    }
+  }
+  try {
+    fs.copyFileSync(fromPath, toPath, fs.constants.COPYFILE_EXCL);
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    assertPlacedFile(toPath);
+  }
+}
+
 // Places every entry of a fully-populated staging copy into the live store,
-// one at a time. A file is placed with a hard link, which fails with EEXIST
-// instead of replacing a destination that is already there: an entry the
-// store already holds (an earlier source, or another session that got there
-// first) always wins, with no window between a check and the write where a
-// rename would clobber it. A link is atomic on its own, so a crash mid-merge
-// leaves only entries still in staging, never a partial file in the store.
-// A destination directory that is a link is refused, the store root
-// included: following it would place files outside the store.
+// one at a time: an entry the store already holds (an earlier source, or
+// another session that got there first) always wins, with no window between
+// a check and the write where a rename would clobber it, and a crash
+// mid-merge leaves only entries still in staging. A destination directory
+// that is a link is refused, the store root included: following it would
+// place files outside the store.
 function moveNewEntries(stagingDir, storeDir) {
   if (isSymlink(storeDir)) throw new Error(`refusing to write through the link at ${storeDir}`);
   for (const entry of fs.readdirSync(stagingDir, { withFileTypes: true })) {
@@ -63,12 +92,8 @@ function moveNewEntries(stagingDir, storeDir) {
       if (isSymlink(toPath)) throw new Error(`refusing to write through the link at ${toPath}`);
       fs.mkdirSync(toPath, { recursive: true });
       moveNewEntries(fromPath, toPath);
-      continue;
-    }
-    try {
-      fs.linkSync(fromPath, toPath);
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
+    } else {
+      placeFile(fromPath, toPath);
     }
   }
 }

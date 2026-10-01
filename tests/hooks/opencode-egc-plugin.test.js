@@ -26,10 +26,13 @@ const SESSION_FILES = [
 function install(homeDir) {
   const plan = planInstallTargetScaffold({ target: 'opencode', repoRoot: REPO_ROOT, homeDir, modules: [] });
   for (const operation of plan.operations) {
+    if (operation.kind !== 'copy-path') continue;
     const source = path.join(REPO_ROOT, operation.sourceRelativePath);
-    if (!fs.existsSync(source) || !fs.statSync(source).isFile()) continue;
+    // A planned source that is gone fails loudly instead of leaving the
+    // installed layout silently short of a file a real install would need.
+    assert.ok(fs.existsSync(source), `the install plan copies ${operation.sourceRelativePath}, which does not exist`);
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
-    fs.copyFileSync(source, operation.destinationPath);
+    fs.cpSync(source, operation.destinationPath, { recursive: true });
   }
   return path.join(homeDir, '.config', 'opencode');
 }
@@ -151,6 +154,9 @@ async function runTests() {
       // install plan forgot to copy turns this red instead of falling back to
       // a silent no-op.
       const freshHome = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-migrate-home-'));
+      // The bridge also posts session_start to the Dashboard: a listener owned
+      // by this case takes it, never a developer's running Dashboard.
+      const dashboard = await captureDashboard();
       try {
         const legacy = path.join(freshHome, '.gemini', 'homunculus', 'instincts', 'personal');
         fs.mkdirSync(legacy, { recursive: true });
@@ -159,16 +165,17 @@ async function runTests() {
         const result = spawnSync(process.execPath, [bridgePath], {
           input: JSON.stringify({ cwd: freshHome }),
           encoding: 'utf8',
-          env: { ...process.env, HOME: freshHome, USERPROFILE: freshHome },
+          env: { ...process.env, HOME: freshHome, USERPROFILE: freshHome, EGC_PORT: String(dashboard.port) },
           timeout: 10000,
         });
 
-        assert.strictEqual(result.status, 0, result.stderr);
+        assert.strictEqual(result.status, 0, `status ${result.status}, signal ${result.signal}, error ${result.error}, stderr ${result.stderr}`);
         assert.strictEqual(
           fs.readFileSync(path.join(freshHome, '.egc-learning', 'instincts', 'personal', 'a.yaml'), 'utf8'),
           'a'
         );
       } finally {
+        await dashboard.close();
         fs.rmSync(freshHome, { recursive: true, force: true });
       }
     });
