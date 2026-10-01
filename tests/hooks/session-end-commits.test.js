@@ -75,7 +75,17 @@ function commit(repo, message, author, date, committedAt = date) {
   return git(repo, ['rev-parse', '--short', 'HEAD'], author, date, committedAt);
 }
 
+// The session file is named after today's date and the hook works out the
+// date again when it runs, so a case that crosses local midnight would leave
+// the hook looking for another file. Each case starts clear of midnight.
+function waitPastMidnightIfClose(marginMs = 30000) {
+  const now = new Date();
+  const msLeft = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
+  if (msLeft < marginMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, msLeft + 1000);
+}
+
 function setup() {
+  waitPastMidnightIfClose();
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-n33-home-'));
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-n33-repo-'));
   git(repo, ['init', '-q', '-b', 'main']);
