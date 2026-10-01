@@ -2295,9 +2295,9 @@ async function runTests() {
 
   console.log('\nShell wrapper portability:');
 
-  tally(test('run-with-flags-shell resolves plugin root from EGC_PLUGIN_ROOT, then its own script path', () => {
+  tally(test('run-with-flags-shell resolves plugin root from EGC_PLUGIN_ROOT or ECC_PLUGIN_ROOT, then its own script path', () => {
       const wrapperSource = fs.readFileSync(path.join(scriptsDir, 'run-with-flags-shell.sh'), 'utf8');
-      assert.ok(wrapperSource.includes('PLUGIN_ROOT="${EGC_PLUGIN_ROOT:-${GEMINI_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}}"'), 'Shell wrapper should read the root EGC runners pass, then derive it from its own script path');
+      assert.ok(wrapperSource.includes('PLUGIN_ROOT="${EGC_PLUGIN_ROOT:-${ECC_PLUGIN_ROOT:-${GEMINI_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}}}"'),'Shell wrapper should read the root EGC runners pass, then derive it from its own script path');
     }));
 
   tally(test('continuous-learning shell scripts use resolved Python command instead of hardcoded python3 invocations', () => {

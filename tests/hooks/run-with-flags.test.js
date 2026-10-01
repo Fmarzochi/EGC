@@ -93,7 +93,7 @@ function legacyHookEnvCase() {
       );
       const result = runDispatcher({ pluginRoot, relScriptPath: 'legacy-hook.js', env: { GEMINI_PLUGIN_ROOT: '' } });
       assert.strictEqual(result.code, 0, `Expected exit 0, got ${result.code}: ${result.stderr}`);
-      // GEMINI_PLUGIN_ROOT tells getEGCDir() that Antigravity is the tool in use.
+      // The empty value shields the assertion from a GEMINI_PLUGIN_ROOT set in the caller's shell; the runner must not add one.
       assert.deepStrictEqual(JSON.parse(result.stdout), { egc: pluginRoot, gemini: '' });
     } finally {
       fs.rmSync(pluginRoot, { recursive: true, force: true });
