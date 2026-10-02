@@ -93,6 +93,19 @@ test('an indirect reference, a substring and a case change are read as the shell
   assertDenied('cat "${D:5}"', { D: ['junk/cert.pem'] });
   assertDenied('cat "${D,,}"', { D: ['CERT.PEM'] });
   assertDenied('cat "${D^}"', { D: ['cert.pem'] });
+  assertDenied('cat "${D: -8}"', { D: ['junk/cert.pem'] });
+});
+
+test('a literal pattern operator is applied the way the shell applies it', () => {
+  assertDenied('cat "${D/X/c}"', { D: ['Xert.pem'] });
+  assertDenied('cat "${D//X/e}"', { D: ['cXrt.pXm'] });
+  assertDenied('cat "${D#junk/}"', { D: ['junk/cert.pem'] });
+  assertDenied('cat "${D%.bak}"', { D: ['cert.pem.bak'] });
+  assertDenied('cat "${D##*/}"', { D: ['a/b/cert.pem'] });
+});
+
+test('a quoted brace inside the reference does not close it', () => {
+  assertDenied('cat ${D:-"}"}', { D: ['cert.pem'] });
 });
 
 test('many values and many references stay bounded in time and memory', () => {

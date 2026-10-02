@@ -3734,13 +3734,59 @@ function bracedReference(spelling: string, name: string, indirect: boolean, at: 
   return close === -1 ? null : { name, indirect, operator, word: spelling.slice(wordStart, close), end: close + 1 };
 }
 
-// `${NAME:offset}` and `${NAME:offset:length}` with literal non-negative
-// numbers; any other word leaves the value whole.
+// `${NAME:offset}` and `${NAME:offset:length}` with literal numbers, a
+// negative one counted from the end as the shell counts it; any other word
+// leaves the value whole.
 function substringOf(value: string, word: string): string {
-  const range = /^(\d+)(?::(\d+))?$/.exec(word.trim());
+  const range = /^\s*(-?\d+)\s*(?::\s*(-?\d+)\s*)?$/.exec(word);
   if (range === null) return value;
   const offset = Number(range[1]);
-  return range[2] === undefined ? value.slice(offset) : value.slice(offset, offset + Number(range[2]));
+  if (range[2] === undefined) return value.slice(offset);
+  const length = Number(range[2]);
+  const from = offset < 0 ? Math.max(value.length + offset, 0) : offset;
+  return length < 0 ? value.slice(from, length) : value.slice(from, from + length);
+}
+
+const GLOB_RE = /[*?[]/;
+
+// `${NAME/pattern/string}` and `${NAME//pattern/string}` with a literal
+// pattern; a pattern this check cannot read leaves the value whole.
+function replaced(value: string, body: string, every: boolean): string {
+  const split = body.indexOf('/');
+  const pattern = split === -1 ? body : body.slice(0, split);
+  const replacement = split === -1 ? '' : body.slice(split + 1);
+  if (pattern === '' || GLOB_RE.test(pattern)) return value;
+  return every ? value.split(pattern).join(replacement) : value.replace(pattern, replacement);
+}
+
+// `${NAME#pattern}` and `${NAME##pattern}`: the value without the prefix a
+// literal pattern names, a `*` at its start standing for anything before.
+function withoutPrefix(value: string, body: string, longest: boolean): string {
+  const anything = body.startsWith('*');
+  const literal = anything ? body.slice(1) : body;
+  if (literal === '' || GLOB_RE.test(literal)) return value;
+  if (!anything) return value.startsWith(literal) ? value.slice(literal.length) : value;
+  const at = longest ? value.lastIndexOf(literal) : value.indexOf(literal);
+  return at === -1 ? value : value.slice(at + literal.length);
+}
+
+// `${NAME%pattern}` and `${NAME%%pattern}`: the value without the suffix a
+// literal pattern names, a `*` at its end standing for anything after.
+function withoutSuffix(value: string, body: string, longest: boolean): string {
+  const anything = body.endsWith('*');
+  const literal = anything ? body.slice(0, -1) : body;
+  if (literal === '' || GLOB_RE.test(literal)) return value;
+  if (!anything) return value.endsWith(literal) ? value.slice(0, value.length - literal.length) : value;
+  const at = longest ? value.indexOf(literal) : value.lastIndexOf(literal);
+  return at === -1 ? value : value.slice(0, at);
+}
+
+// The pattern operators, in their single and doubled forms.
+function patternResult(value: string, operator: string, word: string): string {
+  const doubled = word.startsWith(operator);
+  const body = doubled ? word.slice(1) : word;
+  if (operator === '/') return replaced(value, body, doubled);
+  return operator === '#' ? withoutPrefix(value, body, doubled) : withoutSuffix(value, body, doubled);
 }
 
 // `${NAME,}`, `${NAME,,}`, `${NAME^}` and `${NAME^^}`: the first character
@@ -3758,6 +3804,7 @@ function operatorResult(values: readonly string[], operator: string, word: strin
   if (WORD_WHEN_SET.has(operator)) return [word];
   if (operator === ':') return values.map(value => substringOf(value, word));
   if (operator === ',' || operator === '^') return values.map(value => caseChanged(value, operator, word));
+  if (operator === '#' || operator === '%' || operator === '/') return values.map(value => patternResult(value, operator, word));
   return [...values];
 }
 
@@ -3770,12 +3817,18 @@ function boundValuesOf(reference: VariableReference): readonly string[] {
 }
 
 // The index of the `}` closing the brace open before `from`, braces nested
-// in between read whole and escapes skipped; -1 when it never closes.
+// in between read whole, quoted text and escapes skipped; -1 when it never
+// closes.
 function closingBrace(spelling: string, from: number): number {
   let depth = 1;
+  let quote: string | null = null;
   for (let i = from; i < spelling.length; i += 1) {
     const ch = spelling[i];
-    if (ch === '\\') i += 1;
+    if (quote !== null) {
+      if (ch === '\\' && quote === '"') i += 1;
+      else if (ch === quote) quote = null;
+    } else if (ch === '\\') i += 1;
+    else if (ch === '"' || ch === "'") quote = ch;
     else if (ch === '{') depth += 1;
     else if (ch === '}' && --depth === 0) return i;
   }
