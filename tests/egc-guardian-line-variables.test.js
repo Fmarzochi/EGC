@@ -87,6 +87,14 @@ test('an operator that yields its word when the variable is set or unset is read
   assertNotHardDenied('cat "${UNSET:+~/.ssh/id_rsa}"', { E: ['x'] });
 });
 
+test('an indirect reference, a substring and a case change are read as the shell yields them', () => {
+  assertDenied('cat "${!REF}"', { D: ['~/.ssh/id_rsa'], REF: ['D'] });
+  assertDenied('cat "${D:0:8}"', { D: ['cert.pemx'] });
+  assertDenied('cat "${D:5}"', { D: ['junk/cert.pem'] });
+  assertDenied('cat "${D,,}"', { D: ['CERT.PEM'] });
+  assertDenied('cat "${D^}"', { D: ['cert.pem'] });
+});
+
 test('many values and many references stay bounded in time and memory', () => {
   const values = Array.from({ length: 2000 }, (_, i) => `file${i}.txt`);
   const started = Date.now();

@@ -3708,28 +3708,65 @@ const WORD_WHEN_UNSET = new Set([':-', '-', ':=', '=']);
 const PARAMETER_OPERATORS = [':-', ':=', ':+', ':?', '-', '=', '+', '?'];
 const NAME_RE = /^[A-Za-z_]\w*/;
 
-interface VariableReference { name: string; operator: string | null; word: string; end: number }
+// `indirect` is `${!NAME}`: the value of NAME names the variable read.
+interface VariableReference { name: string; indirect: boolean; operator: string | null; word: string; end: number }
 
-// The reference the `$` at `at` opens: `$NAME`, `${NAME}` or
+// The reference the `$` at `at` opens: `$NAME`, `${NAME}`, `${!NAME}` or
 // `${NAME<operator>word}`, braces nested in the word read whole; null for
 // anything else (`$(`, `$1`, a lone `$`, a brace never closed).
 function variableReferenceAt(spelling: string, at: number): VariableReference | null {
   const braced = spelling[at + 1] === '{';
-  const nameStart = at + (braced ? 2 : 1);
+  const indirect = braced && spelling[at + 2] === '!';
+  const nameStart = at + (braced ? 2 : 1) + (indirect ? 1 : 0);
   const name = NAME_RE.exec(spelling.slice(nameStart))?.[0];
   if (name === undefined) return null;
   const afterName = nameStart + name.length;
-  return braced ? bracedReference(spelling, name, afterName) : { name, operator: null, word: '', end: afterName };
+  return braced ? bracedReference(spelling, name, indirect, afterName) : { name, indirect, operator: null, word: '', end: afterName };
 }
 
 // The rest of a `${NAME...}` reference from the character after the name.
-function bracedReference(spelling: string, name: string, at: number): VariableReference | null {
-  if (spelling[at] === '}') return { name, operator: '', word: '', end: at + 1 };
+function bracedReference(spelling: string, name: string, indirect: boolean, at: number): VariableReference | null {
+  if (spelling[at] === '}') return { name, indirect, operator: '', word: '', end: at + 1 };
   if (at >= spelling.length) return null;
   const operator = PARAMETER_OPERATORS.find(candidate => spelling.startsWith(candidate, at)) ?? spelling[at];
   const wordStart = at + operator.length;
   const close = closingBrace(spelling, wordStart);
-  return close === -1 ? null : { name, operator, word: spelling.slice(wordStart, close), end: close + 1 };
+  return close === -1 ? null : { name, indirect, operator, word: spelling.slice(wordStart, close), end: close + 1 };
+}
+
+// `${NAME:offset}` and `${NAME:offset:length}` with literal non-negative
+// numbers; any other word leaves the value whole.
+function substringOf(value: string, word: string): string {
+  const range = /^(\d+)(?::(\d+))?$/.exec(word.trim());
+  if (range === null) return value;
+  const offset = Number(range[1]);
+  return range[2] === undefined ? value.slice(offset) : value.slice(offset, offset + Number(range[2]));
+}
+
+// `${NAME,}`, `${NAME,,}`, `${NAME^}` and `${NAME^^}`: the first character
+// or the whole value in lower or upper case; a pattern after the operator
+// leaves the value whole.
+function caseChanged(value: string, operator: string, word: string): string {
+  const whole = word === operator;
+  if (word !== '' && !whole) return value;
+  const change = operator === ',' ? (text: string) => text.toLowerCase() : (text: string) => text.toUpperCase();
+  return whole ? change(value) : change(value.slice(0, 1)) + value.slice(1);
+}
+
+// What the values of a set variable become under an operator.
+function operatorResult(values: readonly string[], operator: string, word: string): string[] {
+  if (WORD_WHEN_SET.has(operator)) return [word];
+  if (operator === ':') return values.map(value => substringOf(value, word));
+  if (operator === ',' || operator === '^') return values.map(value => caseChanged(value, operator, word));
+  return [...values];
+}
+
+// The values the line gives the variable a reference reads: for `${!NAME}`,
+// those of every variable the values of NAME name.
+function boundValuesOf(reference: VariableReference): readonly string[] {
+  const own = lineBound.get(reference.name) ?? [];
+  if (!reference.indirect) return own;
+  return own.flatMap(name => lineBound.get(name) ?? []);
 }
 
 // The index of the `}` closing the brace open before `from`, braces nested
@@ -3747,11 +3784,9 @@ function closingBrace(spelling: string, from: number): number {
 
 // What a reference yields on this line, or null when it stays as written.
 function referenceValues(reference: VariableReference): string[] | null {
-  const { name, operator, word } = reference;
-  const values = lineBound.get(name);
-  if (values !== undefined && values.length > 0) {
-    return operator !== null && WORD_WHEN_SET.has(operator) ? [word] : values.slice(0, MAX_LINE_VALUES);
-  }
+  const { operator, word } = reference;
+  const values = boundValuesOf(reference).slice(0, MAX_LINE_VALUES);
+  if (values.length > 0) return operator === null || operator === '' ? values : operatorResult(values, operator, word);
   if (operator === null || operator === '') return null;
   if (WORD_WHEN_UNSET.has(operator)) return [word];
   return WORD_WHEN_SET.has(operator) ? [''] : null;
