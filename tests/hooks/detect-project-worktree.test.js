@@ -18,7 +18,7 @@ const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execFileSync, execSync, spawnSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 // Fixed git locations before a PATH lookup.
 const GIT_BIN = [
@@ -173,8 +173,8 @@ test('detect-project.sh sets PROJECT_NAME and non-global PROJECT_ID for worktree
   try {
     const mainRepo = path.join(testDir, 'main-repo');
     fs.mkdirSync(mainRepo, { recursive: true });
-    execSync('git init', { cwd: mainRepo, stdio: 'pipe' });
-    execSync('git -c maintenance.auto=false commit --allow-empty -m "init"', {
+    execFileSync(GIT_BIN, ['init'], { cwd: mainRepo, stdio: 'pipe' });
+    execFileSync(GIT_BIN, ['-c', 'maintenance.auto=false', 'commit', '--allow-empty', '-m', 'init'], {
       cwd: mainRepo,
       stdio: 'pipe',
       env: {
