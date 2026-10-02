@@ -91,7 +91,7 @@ test('many values and many references stay bounded in time and memory', () => {
   const values = Array.from({ length: 2000 }, (_, i) => `file${i}.txt`);
   const started = Date.now();
   assertNotHardDenied('cat "$B$B$B$B"', { B: values });
-  assertDenied('cat "$B$B$C"', { B: values, C: ['', '.env'] });
+  assertDenied('cat "$B$B$C"', { B: values, C: ['', '/.env'] });
   assert.ok(Date.now() - started < 2000, 'the resolution must stay fast');
 });
 

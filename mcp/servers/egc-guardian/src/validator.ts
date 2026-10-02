@@ -3718,25 +3718,31 @@ function variableReferenceAt(spelling: string, at: number): VariableReference | 
   const nameStart = at + (braced ? 2 : 1);
   const name = NAME_RE.exec(spelling.slice(nameStart))?.[0];
   if (name === undefined) return null;
-  let i = nameStart + name.length;
-  if (!braced) return { name, operator: null, word: '', end: i };
-  if (spelling[i] === '}') return { name, operator: '', word: '', end: i + 1 };
-  if (i >= spelling.length) return null;
-  const operator = PARAMETER_OPERATORS.find(candidate => spelling.startsWith(candidate, i)) ?? spelling[i];
-  i += operator.length;
-  const wordStart = i;
+  const afterName = nameStart + name.length;
+  return braced ? bracedReference(spelling, name, afterName) : { name, operator: null, word: '', end: afterName };
+}
+
+// The rest of a `${NAME...}` reference from the character after the name.
+function bracedReference(spelling: string, name: string, at: number): VariableReference | null {
+  if (spelling[at] === '}') return { name, operator: '', word: '', end: at + 1 };
+  if (at >= spelling.length) return null;
+  const operator = PARAMETER_OPERATORS.find(candidate => spelling.startsWith(candidate, at)) ?? spelling[at];
+  const wordStart = at + operator.length;
+  const close = closingBrace(spelling, wordStart);
+  return close === -1 ? null : { name, operator, word: spelling.slice(wordStart, close), end: close + 1 };
+}
+
+// The index of the `}` closing the brace open before `from`, braces nested
+// in between read whole and escapes skipped; -1 when it never closes.
+function closingBrace(spelling: string, from: number): number {
   let depth = 1;
-  while (i < spelling.length) {
+  for (let i = from; i < spelling.length; i += 1) {
     const ch = spelling[i];
-    if (ch === '\\') {
-      i += 2;
-      continue;
-    }
-    if (ch === '{') depth += 1;
-    else if (ch === '}' && --depth === 0) return { name, operator, word: spelling.slice(wordStart, i), end: i + 1 };
-    i += 1;
+    if (ch === '\\') i += 1;
+    else if (ch === '{') depth += 1;
+    else if (ch === '}' && --depth === 0) return i;
   }
-  return null;
+  return -1;
 }
 
 // What a reference yields on this line, or null when it stays as written.
@@ -3753,16 +3759,18 @@ function referenceValues(reference: VariableReference): string[] | null {
 
 // The combinations of the alternatives of the parts, up to the cap and never
 // built past it: first every alternative of every part with the other parts
-// at their first one, so no alternative is starved by the ones before it,
-// then the rest of the product in order.
+// at their first one, taken in rounds across the parts so no part is starved
+// by the ones before it, then the rest of the product in order.
 function combinations(parts: string[][]): string[] {
   const out = new Set<string>();
   const first = parts.map(alternatives => alternatives[0] ?? '');
   out.add(first.join(''));
-  for (const [index, alternatives] of parts.entries()) {
-    for (const alternative of alternatives.slice(1)) {
+  const width = Math.max(...parts.map(alternatives => alternatives.length));
+  for (let round = 1; round < width; round += 1) {
+    for (const [index, alternatives] of parts.entries()) {
+      if (round >= alternatives.length) continue;
       if (out.size >= MAX_LINE_VALUES) return [...out];
-      out.add([...first.slice(0, index), alternative, ...first.slice(index + 1)].join(''));
+      out.add([...first.slice(0, index), alternatives[round], ...first.slice(index + 1)].join(''));
     }
   }
   let combined = [''];
