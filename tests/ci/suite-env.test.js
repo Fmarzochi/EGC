@@ -3,6 +3,7 @@
 /**
  * The environment tests/run-all.js gives every test file: no variables of the
  * tool session the suite runs inside, and no git automatic maintenance.
+ * tests/hooks/hooks.test.js checks that run-all.js hands it to each file.
  *
  * Run with: node tests/ci/suite-env.test.js
  */
@@ -46,9 +47,13 @@ test('drops the variables a tool session sets and keeps the rest', () => {
   assert.strictEqual(env.PATH, '/bin');
 });
 
+test('turns git automatic maintenance off', () => {
+  assert.strictEqual(suiteEnv({}).GIT_CONFIG_PARAMETERS, "'maintenance.auto'='false'");
+});
+
 test('keeps the git config parameters already in the environment', () => {
   const env = suiteEnv({ GIT_CONFIG_PARAMETERS: "'user.name'='Someone'" });
-  assert.ok(env.GIT_CONFIG_PARAMETERS.startsWith("'user.name'='Someone' "), env.GIT_CONFIG_PARAMETERS);
+  assert.strictEqual(env.GIT_CONFIG_PARAMETERS, "'user.name'='Someone' 'maintenance.auto'='false'");
 });
 
 test('a commit under the suite environment starts no automatic maintenance', () => {
@@ -87,12 +92,6 @@ test('a commit under the suite environment starts no automatic maintenance', () 
   }
 });
 
-test('tests/run-all.js gives every test file the suite environment', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'run-all.js'), 'utf8');
-  assert.ok(source.includes("require('./fixtures/suite-env')"), 'run-all.js requires the suite environment');
-  assert.ok(source.includes('const TEST_ENV = suiteEnv(process.env);'), 'run-all.js builds TEST_ENV from it');
-});
-
 console.log(`\nPassed: ${passed}`);
 console.log(`Failed: ${failed}`);
-process.exit(failed > 0 ? 1 : 0);
+process.exitCode = failed > 0 ? 1 : 0;

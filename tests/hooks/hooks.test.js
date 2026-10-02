@@ -309,7 +309,7 @@ async function assertObserveSkipBeforeProjectDetection(testCase) {
   }
 }
 
-function runPatchedRunAll(tempRoot) {
+function runPatchedRunAll(tempRoot, env = process.env) {
   const wrapperPath = path.join(tempRoot, 'run-all-wrapper.js');
   const tempTestsDir = path.join(tempRoot, 'tests');
   let source = fs.readFileSync(path.join(__dirname, '..', 'run-all.js'), 'utf8');
@@ -319,6 +319,7 @@ function runPatchedRunAll(tempRoot) {
 
   const result = spawnSync('node', [wrapperPath], {
     encoding: 'utf8',
+    env,
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: 15000
   });
@@ -3317,6 +3318,28 @@ async function runTests() {
         assert.ok(result.stdout.includes('Running nested/deep.test.js'), 'Should run nested .test.js files');
         assert.ok(!result.stdout.includes('ignore.js'), 'Should ignore non-.test.js files');
         assert.ok(result.stdout.includes('Total Tests:    3'), `Should aggregate nested test totals, got: ${result.stdout}`);
+      } finally {
+        cleanupTestDir(testRoot);
+      }
+    }));
+
+  tally(await asyncTest('test runner hands every test file the suite environment', async () => {
+      const testRoot = createTestDir();
+      const testsDir = path.join(testRoot, 'tests');
+      fs.mkdirSync(testsDir, { recursive: true });
+      fs.writeFileSync(path.join(testsDir, 'probe.test.js'), [
+        "const ok = (process.env.GIT_CONFIG_PARAMETERS || '').includes(\"'maintenance.auto'='false'\") && process.env.CLAUDECODE === undefined;",
+        "console.log(ok ? 'Passed: 1\\nFailed: 0' : 'Passed: 0\\nFailed: 1');",
+        'process.exitCode = ok ? 0 : 1;',
+        ''
+      ].join('\n'));
+      const outside = { ...process.env, CLAUDECODE: '1' };
+      delete outside.GIT_CONFIG_PARAMETERS;
+
+      try {
+        const result = runPatchedRunAll(testRoot, outside);
+        assert.strictEqual(result.code, 0, `the probe should see the suite environment, got: ${result.stdout}`);
+        assert.ok(/Failed:\s+0\b/.test(result.stdout), result.stdout);
       } finally {
         cleanupTestDir(testRoot);
       }

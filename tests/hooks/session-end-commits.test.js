@@ -145,7 +145,7 @@ function runTests() {
     test('the fixture repositories start no automatic maintenance, which could still hold them during cleanup', () => {
       const { home, repo } = setup();
       try {
-        assert.strictEqual(git(repo, ['config', '--get', 'maintenance.auto']), 'false');
+        assert.strictEqual(git(repo, ['config', '--file', ISOLATED_GIT_CONFIG, '--get', 'maintenance.auto']), 'false');
       } finally {
         cleanup(home, repo);
       }
