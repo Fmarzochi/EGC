@@ -3695,31 +3695,46 @@ function pathSpellings(arg: string): string[] {
   return withLineValues(process.platform === 'win32' ? [arg, unquoteWord(arg)] : [arg]);
 }
 
-// `$NAME` or `${NAME}` anywhere in a spelling.
-const LINE_VARIABLE_RE = /\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/g;
+// `$NAME`, `${NAME}` or `${NAME<operator>...}` anywhere in a spelling: a
+// parameter operator (`${NAME:-word}`, `${NAME%suffix}`) is read as the
+// value itself, which is what it yields for a value the line sets.
+const LINE_VARIABLE_RE = /\$(?:\{([A-Za-z_]\w*)[^}]*\}|([A-Za-z_]\w*))/g;
 const MAX_LINE_VALUES = 64;
 const MAX_LINE_DEPTH = 4;
 
-// What a spelling names once the variables the command line sets are put
-// in: the first bound variable in it is replaced by each value the line
-// gives it, and every result is read again for the next one, since a value
-// may name another bound variable. A variable the line does not set, or
-// sets from a source this check cannot read, stays as written, where it
-// names no file. The spellings come after the original, so a reading that
-// picks the first ones (pathValue) still gets the word as handed over.
-function lineValuesOf(spelling: string, depth = 0): string[] {
-  if (depth >= MAX_LINE_DEPTH || !spelling.includes('$')) return [];
+// The spelling with every bound variable in it replaced by each value the
+// line gives it, one result per combination; empty when it carries none.
+function lineValuesOnce(spelling: string): string[] {
+  const parts: string[][] = [];
+  let last = 0;
   for (const match of spelling.matchAll(LINE_VARIABLE_RE)) {
     const values = lineBound.get(match[1] ?? match[2]);
     if (values === undefined) continue;
     const at = match.index ?? 0;
-    const resolved = values.flatMap(value => {
-      const next = spelling.slice(0, at) + value + spelling.slice(at + match[0].length);
-      return [next, ...lineValuesOf(next, depth + 1)];
-    });
-    return [...new Set(resolved)].slice(0, MAX_LINE_VALUES);
+    parts.push([spelling.slice(last, at)], [...values]);
+    last = at + match[0].length;
   }
-  return [];
+  if (parts.length === 0) return [];
+  parts.push([spelling.slice(last)]);
+  let combined = [''];
+  for (const alternatives of parts) {
+    combined = combined.flatMap(prefix => alternatives.map(alternative => prefix + alternative)).slice(0, MAX_LINE_VALUES);
+  }
+  return combined;
+}
+
+// What a spelling names once the variables the command line sets are put
+// in: every bound variable in it is replaced by each value the line gives
+// it, and every result is read again, since a value may name another bound
+// variable; the depth of that chain is capped, so a value that names itself
+// stops. A variable the line does not set, or sets from a source this check
+// cannot read, stays as written, where it names no file. The spellings come
+// after the original, so a reading that picks the first ones (pathValue)
+// still gets the word as handed over.
+function lineValuesOf(spelling: string, depth = 0): string[] {
+  if (depth >= MAX_LINE_DEPTH || !spelling.includes('$')) return [];
+  const resolved = lineValuesOnce(spelling).flatMap(next => [next, ...lineValuesOf(next, depth + 1)]);
+  return [...new Set(resolved)].slice(0, MAX_LINE_VALUES);
 }
 
 function withLineValues(spellings: string[]): string[] {

@@ -69,6 +69,19 @@ test('a value that names another bound variable is resolved through it', () => {
   assertDenied('cat "$T"', { D: ['~/.ssh'], T: ['$D/id_rsa'] });
 });
 
+test('a variable under a parameter operator is read by its value', () => {
+  assertDenied('cat ~/.ssh/${D:-foo}', { D: ['id_rsa'] });
+  assertDenied('cat "${D:=x}"', { D: ['~/.ssh/id_rsa'] });
+});
+
+test('every variable of a word is resolved, however many the word carries', () => {
+  assertDenied('cat $A$B$C$D$E', { A: ['c'], B: ['er'], C: ['t.'], D: ['pe'], E: ['m'] });
+});
+
+test('a value that names itself stops resolving instead of growing', () => {
+  assertNotHardDenied('cat "$D"', { D: ['$D/x'] });
+});
+
 test('every value a variable takes on the line is judged', () => {
   assertDenied('cat "$D"', { D: ['notes.txt', '~/.ssh/id_rsa'] });
 });
