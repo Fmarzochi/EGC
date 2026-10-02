@@ -3,7 +3,7 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
-- The worktree and session-end tests no longer race git's background maintenance (Git 2.54 prunes hand-built worktrees after a commit) and no longer depend on the tool the suite runs inside (#1722, closes #1718).
+- The worktree and session-end tests no longer race git's background maintenance (since Git 2.54 the maintenance a commit starts prunes a worktree whose `gitdir` file is missing, as the fixture's was) and no longer depend on the tool the suite runs inside (#1722, closes #1718).
 - The installation and troubleshooting guides drop the double hyphen as punctuation: six sentences read with a colon, parentheses or a new sentence, and a docs test keeps double-hyphen, en dash and em dash punctuation out of their prose (#1720 by @Akshayx07, closes #1660).
 - Antigravity finds the EGC servers again: `egc init` and the installers register egc-guardian and egc-memory in `~/.gemini/config/mcp_config.json`, the file the Antigravity CLI, IDE and 2.0 all read, whenever any Antigravity surface is installed, and keep the CLI's pre-migration file (#1611).
 - `egc status` lists only the installs that are still there: a repair records the install in the store of the home it ran for, the status counts an install only while its folder exists, and a sync drops the records of the temporary folders that are gone (#1619).
