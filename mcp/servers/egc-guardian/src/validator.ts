@@ -3697,8 +3697,10 @@ function pathSpellings(arg: string): string[] {
 
 // `$NAME`, `${NAME}` or `${NAME<operator>...}` anywhere in a spelling: a
 // parameter operator (`${NAME:-word}`, `${NAME%suffix}`) is read as the
-// value itself, which is what it yields for a value the line sets.
-const LINE_VARIABLE_RE = /\$(?:\{([A-Za-z_]\w*)[^}]*\}|([A-Za-z_]\w*))/g;
+// value itself, which is what it yields for a value the line sets. The
+// operator starts with a character the name cannot carry, so the name and
+// the rest never overlap and the pattern reads without backtracking.
+const LINE_VARIABLE_RE = /\$(?:\{([A-Za-z_]\w*)(?:[^\w}][^}]*)?\}|([A-Za-z_]\w*))/g;
 const MAX_LINE_VALUES = 64;
 const MAX_LINE_DEPTH = 4;
 
