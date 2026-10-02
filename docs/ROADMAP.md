@@ -3,6 +3,7 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
+- The installation and troubleshooting guides drop the double hyphen as punctuation: six sentences read with a colon, parentheses or a new sentence, and a docs test keeps double-hyphen, en dash and em dash punctuation out of their prose (#1720 by @Akshayx07, closes #1660).
 - Antigravity finds the EGC servers again: `egc init` and the installers register egc-guardian and egc-memory in `~/.gemini/config/mcp_config.json`, the file the Antigravity CLI, IDE and 2.0 all read, whenever any Antigravity surface is installed, and keep the CLI's pre-migration file (#1611).
 - `egc status` lists only the installs that are still there: a repair records the install in the store of the home it ran for, the status counts an install only while its folder exists, and a sync drops the records of the temporary folders that are gone (#1619).
 - The Guardian judges Antigravity's shell commands and file writes: it is installed as the `egc-guardian` named hook in Antigravity's own format, globally in `~/.gemini/config/hooks.json` and per project in `.agents/hooks.json`, and an adapter translates each call for the Guardian validators and answers deny with the reason, or ask to leave the call to the user's permission settings (#1612).
