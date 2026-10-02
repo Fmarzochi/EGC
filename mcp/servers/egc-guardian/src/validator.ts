@@ -3842,12 +3842,19 @@ function closingBrace(spelling: string, from: number): number {
 }
 
 // What a reference yields on this line, or null when it stays as written.
-function referenceValues(reference: VariableReference): string[] | null {
-  const { operator, word } = reference;
+// The word of an operator is read first, since it may carry a reference of
+// its own. An arithmetic offset or a pattern with a wildcard is beyond this
+// check and leaves the value whole, which only adds spellings.
+function referenceValues(reference: VariableReference, depth: number): string[] | null {
+  const { operator } = reference;
+  const words = reference.word.includes('$') ? [reference.word, ...lineValuesOf(reference.word, depth + 1)] : [reference.word];
   const values = boundValuesOf(reference).slice(0, MAX_LINE_VALUES);
-  if (values.length > 0) return operator === null || operator === '' ? values : operatorResult(values, operator, word);
+  if (values.length > 0) {
+    if (operator === null || operator === '') return values;
+    return [...new Set(words.flatMap(word => operatorResult(values, operator, word)))].slice(0, MAX_LINE_VALUES);
+  }
   if (operator === null || operator === '') return null;
-  if (WORD_WHEN_UNSET.has(operator)) return [word];
+  if (WORD_WHEN_UNSET.has(operator)) return words;
   return WORD_WHEN_SET.has(operator) ? [''] : null;
 }
 
@@ -3898,13 +3905,13 @@ function combinations(parts: string[][]): string[] {
 
 // The spelling with every reference the line resolves replaced by what it
 // yields, one result per combination; empty when nothing in it resolves.
-function lineValuesOnce(spelling: string): string[] {
+function lineValuesOnce(spelling: string, depth: number): string[] {
   const parts: string[][] = [];
   let literalFrom = 0;
   let i = 0;
   while (i < spelling.length) {
     const reference = spelling[i] === '$' ? variableReferenceAt(spelling, i) : null;
-    const values = reference === null ? null : referenceValues(reference);
+    const values = reference === null ? null : referenceValues(reference, depth);
     if (reference === null || values === null) {
       i += 1;
       continue;
@@ -3928,7 +3935,7 @@ function lineValuesOnce(spelling: string): string[] {
 // still gets the word as handed over.
 function lineValuesOf(spelling: string, depth = 0): string[] {
   if (depth >= MAX_LINE_DEPTH || !spelling.includes('$')) return [];
-  const resolved = lineValuesOnce(spelling).flatMap(next => [next, ...lineValuesOf(next, depth + 1)]);
+  const resolved = lineValuesOnce(spelling, depth).flatMap(next => [next, ...lineValuesOf(next, depth + 1)]);
   return [...new Set(resolved)].slice(0, MAX_LINE_VALUES);
 }
 

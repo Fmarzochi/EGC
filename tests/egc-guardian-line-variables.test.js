@@ -104,6 +104,11 @@ test('a literal pattern operator is applied the way the shell applies it', () =>
   assertDenied('cat "${D##*/}"', { D: ['a/b/cert.pem'] });
 });
 
+test('a variable inside the word of an operator is read first', () => {
+  assertDenied('cat "${D/${E}/}"', { D: ['Xcert.pem'], E: ['X'] });
+  assertDenied('cat "${UNSET:-${F}}"', { F: ['cert.pem'] });
+});
+
 test('a quoted brace inside the reference does not close it', () => {
   assertDenied('cat ${D:-"}"}', { D: ['cert.pem'] });
 });
