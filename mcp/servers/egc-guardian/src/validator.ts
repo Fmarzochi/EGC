@@ -3540,6 +3540,12 @@ function unquoteWord(token: string, keepBackslashes = false): string {
       const ansi = readAnsiC(token, i + 1);
       value += ansi.value;
       i = ansi.end;
+    } else if (ch === '$' && token[i + 1] === '{') {
+      // A parameter expansion is kept as written, quotes in its word
+      // included, the way readWord keeps it: the shell reads them there.
+      const end = skipText(token, i);
+      value += token.slice(i, end);
+      i = end;
     } else if (ch === '"' || ch === "'") {
       const quoted = readQuoted(token, i);
       value += quoted.value;
