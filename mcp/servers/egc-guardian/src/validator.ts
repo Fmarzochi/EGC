@@ -3757,22 +3757,28 @@ function referenceValues(reference: VariableReference): string[] | null {
   return WORD_WHEN_SET.has(operator) ? [''] : null;
 }
 
-// The combinations of the alternatives of the parts, up to the cap and never
-// built past it: first every alternative of every part with the other parts
-// at their first one, taken in rounds across the parts so no part is starved
-// by the ones before it, then the rest of the product in order.
-function combinations(parts: string[][]): string[] {
-  const out = new Set<string>();
-  const first = parts.map(alternatives => alternatives[0] ?? '');
-  out.add(first.join(''));
+// Adds values to `out` until the cap; whether the cap is reached.
+function addUpToCap(out: Set<string>, values: Iterable<string>): boolean {
+  for (const value of values) {
+    if (out.size >= MAX_LINE_VALUES) return true;
+    out.add(value);
+  }
+  return out.size >= MAX_LINE_VALUES;
+}
+
+// Every alternative of every part with the other parts at their first one,
+// in rounds across the parts, so no part is starved by the ones before it.
+function* oneByOne(parts: string[][], first: string[]): Generator<string> {
   const width = Math.max(...parts.map(alternatives => alternatives.length));
   for (let round = 1; round < width; round += 1) {
     for (const [index, alternatives] of parts.entries()) {
-      if (round >= alternatives.length) continue;
-      if (out.size >= MAX_LINE_VALUES) return [...out];
-      out.add([...first.slice(0, index), alternatives[round], ...first.slice(index + 1)].join(''));
+      if (round < alternatives.length) yield [...first.slice(0, index), alternatives[round], ...first.slice(index + 1)].join('');
     }
   }
+}
+
+// The product of the parts, in order, never built past the cap.
+function product(parts: string[][]): string[] {
   let combined = [''];
   for (const alternatives of parts) {
     const next: string[] = [];
@@ -3784,10 +3790,15 @@ function combinations(parts: string[][]): string[] {
     }
     combined = next;
   }
-  for (const value of combined) {
-    if (out.size >= MAX_LINE_VALUES) break;
-    out.add(value);
-  }
+  return combined;
+}
+
+// The combinations of the alternatives of the parts, up to the cap: the
+// ones that differ from the first in one part, then the rest of the product.
+function combinations(parts: string[][]): string[] {
+  const first = parts.map(alternatives => alternatives[0] ?? '');
+  const out = new Set<string>([first.join('')]);
+  if (!addUpToCap(out, oneByOne(parts, first))) addUpToCap(out, product(parts));
   return [...out];
 }
 
