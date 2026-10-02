@@ -247,7 +247,9 @@ test('core.hooksPath is read as git reads it: quoted, escaped, commented, after 
 test('a repository core.hooksPath outside its work tree protects the hooks there, for commands run in it', () => {
   withTempDir(outside => {
     const hooks = path.join(outside, 'shared-hooks');
-    withRepositoryHooksPath(hooks, dir => {
+    // A backslash escapes in a git config value, so a Windows path is
+    // written there with forward slashes (or doubled backslashes).
+    withRepositoryHooksPath(hooks.split(path.sep).join('/'), dir => {
       assert.strictEqual(validateWrite(path.join(hooks, 'pre-commit'), dir).allowed, false);
       assertHardDenied(`cp /tmp/x ${path.join(hooks, 'pre-push')}`, dir);
       assert.strictEqual(validateWrite(path.join(hooks, 'notes.txt'), dir).allowed, true);
