@@ -1550,7 +1550,7 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
   const own = [...words.segments, ...reread.segments];
   const mark = committedFile ? { bound: boundAssignments(nested.segments, context.callerSet) } : false;
   // The script's targets are judged by what the script and its caller set.
-  const scriptBound = mergedBound(context.bound ?? {}, boundAssignments(nested.segments, new Set()));
+  const scriptBound = mergedBound(context.bound ?? {}, lineBoundOf(nested.segments, ownBindings));
   // A script the wrapper moved into a directory runs its own children there.
   const ownWrites = writesOf(own, operands.base, false);
   const inner = scriptSegmentsOf(own, operands.bases ?? operands.base, depth + 1, seen, {
@@ -1592,6 +1592,19 @@ function assignedNames(segments) {
     }
   }
   return names;
+}
+
+// The variables these segments set, with every literal value each one takes,
+// for the targets the validator judges through them: the assignments as
+// written (a value may name another variable, which the validator follows)
+// and the values the shell bindings read out of loops and declarations.
+function lineBoundOf(segments, bindings) {
+  const bound = boundAssignments(segments, new Set());
+  for (const [name, entry] of bindings.names) {
+    const values = [...entry.values].filter(value => value !== '');
+    if (values.length > 0) bound[name] = [...new Set([...(bound[name] ?? []), ...values])];
+  }
+  return bound;
 }
 
 // What a committed script sets each variable to, for the ones neither the
@@ -2200,7 +2213,7 @@ function judgeCommand(inputOrRaw) {
   }
 
   const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
-  const lineBound = boundAssignments(extracted, new Set());
+  const lineBound = lineBoundOf(extracted, bindings);
   const scripts = scriptSegmentsOf(segments, cwd, 0, new Set(), commandContext(segments, cwd, bindings, lineBound));
   if (scripts.blocked) {
     return {

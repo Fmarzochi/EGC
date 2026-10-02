@@ -67,7 +67,12 @@ test('an exported variable and a chained one are followed to the file', () => {
 
 test('a variable under a parameter operator, and several in one word, are followed too', () => {
   assertBlocked('D=id_rsa; cat ~/.ssh/${D:-foo}');
+  assertBlocked('E=~/.ssh/id_rsa; cat "${UNSET:-$E}"');
   assertBlocked('A=c; B=er; C=t.; D=pe; E=m; cat $A$B$C$D$E');
+});
+
+test('the items a loop walks are values of its variable', () => {
+  assertBlocked('for D in notes.txt ~/.ssh/id_rsa; do cat "$D"; done', /protected/);
 });
 
 test('a script written through a variable the line sets is blocked', () => {

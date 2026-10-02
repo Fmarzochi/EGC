@@ -37,15 +37,19 @@ function test(name, fn) {
 
 const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-line-variables-'));
 
+function shown(bound) {
+  return JSON.stringify(bound ?? {}).slice(0, 160);
+}
+
 function assertDenied(command, bound, pattern) {
   const verdict = validateCommand(command, cwd, bound);
-  assert.ok(!verdict.allowed && !verdict.advisory, `${command} with ${JSON.stringify(bound)} must be refused, got ${JSON.stringify(verdict)}`);
+  assert.ok(!verdict.allowed && !verdict.advisory, `${command} with ${shown(bound)} must be refused, got ${JSON.stringify(verdict)}`);
   if (pattern) assert.match(verdict.reason, pattern);
 }
 
 function assertNotHardDenied(command, bound) {
   const verdict = validateCommand(command, cwd, bound);
-  assert.ok(verdict.allowed || verdict.advisory, `${command} with ${JSON.stringify(bound)} must not be refused, got ${JSON.stringify(verdict)}`);
+  assert.ok(verdict.allowed || verdict.advisory, `${command} with ${shown(bound)} must not be refused, got ${JSON.stringify(verdict)}`);
 }
 
 console.log('\n=== Testing targets spelled with variables the line sets ===\n');
@@ -72,6 +76,23 @@ test('a value that names another bound variable is resolved through it', () => {
 test('a variable under a parameter operator is read by its value', () => {
   assertDenied('cat ~/.ssh/${D:-foo}', { D: ['id_rsa'] });
   assertDenied('cat "${D:=x}"', { D: ['~/.ssh/id_rsa'] });
+  assertDenied('cat "${D%.bak}"', { D: ['~/.ssh/id_rsa.bak'] });
+});
+
+test('an operator that yields its word when the variable is set or unset is read that way', () => {
+  assertDenied('cat "${D:+~/.ssh/id_rsa}"', { D: ['notes.txt'] });
+  assertDenied('cat "${UNSET:-$E}"', { E: ['~/.ssh/id_rsa'] });
+  assertDenied('cat "${UNSET-~/.ssh/id_rsa}"', { E: ['x'] });
+  assertDenied('cat "${A:-${B}}"', { B: ['~/.ssh/id_rsa'] });
+  assertNotHardDenied('cat "${UNSET:+~/.ssh/id_rsa}"', { E: ['x'] });
+});
+
+test('many values and many references stay bounded in time and memory', () => {
+  const values = Array.from({ length: 2000 }, (_, i) => `file${i}.txt`);
+  const started = Date.now();
+  assertNotHardDenied('cat "$B$B$B$B"', { B: values });
+  assertDenied('cat "$B$B$C"', { B: values, C: ['', '.env'] });
+  assert.ok(Date.now() - started < 2000, 'the resolution must stay fast');
 });
 
 test('every variable of a word is resolved, however many the word carries', () => {

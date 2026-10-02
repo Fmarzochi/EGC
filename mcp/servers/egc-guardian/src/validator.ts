@@ -3695,34 +3695,114 @@ function pathSpellings(arg: string): string[] {
   return withLineValues(process.platform === 'win32' ? [arg, unquoteWord(arg)] : [arg]);
 }
 
-// `$NAME`, `${NAME}` or `${NAME<operator>...}` anywhere in a spelling: a
-// parameter operator (`${NAME:-word}`, `${NAME%suffix}`) is read as the
-// value itself, which is what it yields for a value the line sets. The
-// operator starts with a character the name cannot carry, so the name and
-// the rest never overlap and the pattern reads without backtracking.
-const LINE_VARIABLE_RE = /\$(?:\{([A-Za-z_]\w*)(?:[^\w}][^}]*)?\}|([A-Za-z_]\w*))/g;
 const MAX_LINE_VALUES = 64;
 const MAX_LINE_DEPTH = 4;
 
-// The spelling with every bound variable in it replaced by each value the
-// line gives it, one result per combination; empty when it carries none.
-function lineValuesOnce(spelling: string): string[] {
-  const parts: string[][] = [];
-  let last = 0;
-  for (const match of spelling.matchAll(LINE_VARIABLE_RE)) {
-    const values = lineBound.get(match[1] ?? match[2]);
-    if (values === undefined) continue;
-    const at = match.index ?? 0;
-    parts.push([spelling.slice(last, at)], [...values]);
-    last = at + match[0].length;
+// The parameter operators whose result the line decides. With the variable
+// set to a value, `:+` and `+` yield the word and the others the value (an
+// operator that edits the value, as `%` or `/`, is read as the value, an
+// approximation that only adds spellings). With it unset, `:-`, `-`, `:=`
+// and `=` yield the word, `:+` and `+` nothing, and the rest stay as written.
+const WORD_WHEN_SET = new Set([':+', '+']);
+const WORD_WHEN_UNSET = new Set([':-', '-', ':=', '=']);
+const PARAMETER_OPERATORS = [':-', ':=', ':+', ':?', '-', '=', '+', '?'];
+const NAME_RE = /^[A-Za-z_]\w*/;
+
+interface VariableReference { name: string; operator: string | null; word: string; end: number }
+
+// The reference the `$` at `at` opens: `$NAME`, `${NAME}` or
+// `${NAME<operator>word}`, braces nested in the word read whole; null for
+// anything else (`$(`, `$1`, a lone `$`, a brace never closed).
+function variableReferenceAt(spelling: string, at: number): VariableReference | null {
+  const braced = spelling[at + 1] === '{';
+  const nameStart = at + (braced ? 2 : 1);
+  const name = NAME_RE.exec(spelling.slice(nameStart))?.[0];
+  if (name === undefined) return null;
+  let i = nameStart + name.length;
+  if (!braced) return { name, operator: null, word: '', end: i };
+  if (spelling[i] === '}') return { name, operator: '', word: '', end: i + 1 };
+  if (i >= spelling.length) return null;
+  const operator = PARAMETER_OPERATORS.find(candidate => spelling.startsWith(candidate, i)) ?? spelling[i];
+  i += operator.length;
+  const wordStart = i;
+  let depth = 1;
+  while (i < spelling.length) {
+    const ch = spelling[i];
+    if (ch === '\\') {
+      i += 2;
+      continue;
+    }
+    if (ch === '{') depth += 1;
+    else if (ch === '}' && --depth === 0) return { name, operator, word: spelling.slice(wordStart, i), end: i + 1 };
+    i += 1;
   }
-  if (parts.length === 0) return [];
-  parts.push([spelling.slice(last)]);
+  return null;
+}
+
+// What a reference yields on this line, or null when it stays as written.
+function referenceValues(reference: VariableReference): string[] | null {
+  const { name, operator, word } = reference;
+  const values = lineBound.get(name);
+  if (values !== undefined && values.length > 0) {
+    return operator !== null && WORD_WHEN_SET.has(operator) ? [word] : values.slice(0, MAX_LINE_VALUES);
+  }
+  if (operator === null || operator === '') return null;
+  if (WORD_WHEN_UNSET.has(operator)) return [word];
+  return WORD_WHEN_SET.has(operator) ? [''] : null;
+}
+
+// The combinations of the alternatives of the parts, up to the cap and never
+// built past it: first every alternative of every part with the other parts
+// at their first one, so no alternative is starved by the ones before it,
+// then the rest of the product in order.
+function combinations(parts: string[][]): string[] {
+  const out = new Set<string>();
+  const first = parts.map(alternatives => alternatives[0] ?? '');
+  out.add(first.join(''));
+  for (const [index, alternatives] of parts.entries()) {
+    for (const alternative of alternatives.slice(1)) {
+      if (out.size >= MAX_LINE_VALUES) return [...out];
+      out.add([...first.slice(0, index), alternative, ...first.slice(index + 1)].join(''));
+    }
+  }
   let combined = [''];
   for (const alternatives of parts) {
-    combined = combined.flatMap(prefix => alternatives.map(alternative => prefix + alternative)).slice(0, MAX_LINE_VALUES);
+    const next: string[] = [];
+    for (const prefix of combined) {
+      for (const alternative of alternatives) {
+        if (next.length >= MAX_LINE_VALUES) break;
+        next.push(prefix + alternative);
+      }
+    }
+    combined = next;
   }
-  return combined;
+  for (const value of combined) {
+    if (out.size >= MAX_LINE_VALUES) break;
+    out.add(value);
+  }
+  return [...out];
+}
+
+// The spelling with every reference the line resolves replaced by what it
+// yields, one result per combination; empty when nothing in it resolves.
+function lineValuesOnce(spelling: string): string[] {
+  const parts: string[][] = [];
+  let literalFrom = 0;
+  let i = 0;
+  while (i < spelling.length) {
+    const reference = spelling[i] === '$' ? variableReferenceAt(spelling, i) : null;
+    const values = reference === null ? null : referenceValues(reference);
+    if (reference === null || values === null) {
+      i += 1;
+      continue;
+    }
+    parts.push([spelling.slice(literalFrom, i)], values);
+    literalFrom = reference.end;
+    i = reference.end;
+  }
+  if (parts.length === 0) return [];
+  parts.push([spelling.slice(literalFrom)]);
+  return combinations(parts);
 }
 
 // What a spelling names once the variables the command line sets are put
