@@ -46,6 +46,13 @@ function mktempFakeRepo() {
   const scriptsDir = path.join(repoDir, 'scripts');
   fs.mkdirSync(scriptsDir, { recursive: true });
   fs.copyFileSync(SCRIPT_PATH, path.join(scriptsDir, 'bootstrap-cognitive.js'));
+
+  const libSource = path.join(REPO_ROOT, 'scripts', 'lib');
+  const libTarget = path.join(scriptsDir, 'lib');
+  if (fs.existsSync(libSource)) {
+    fs.cpSync(libSource, libTarget, { recursive: true });
+  }
+
   return path.join(scriptsDir, 'bootstrap-cognitive.js');
 }
 
@@ -187,7 +194,6 @@ async function runClaudeCodeAndGeminiCliTests() {
     try {
       fs.mkdirSync(path.join(home, '.claude'));
       fs.mkdirSync(path.join(home, '.codex'));
-      fs.mkdirSync(path.join(home, '.opencode'));
       const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
       fs.mkdirSync(cursorSettingsDir, { recursive: true });
       fs.writeFileSync(path.join(cursorSettingsDir, 'settings.json'), JSON.stringify({ 'editor.fontSize': 14 }), 'utf8');
@@ -205,12 +211,6 @@ async function runClaudeCodeAndGeminiCliTests() {
       assert.ok(toml.includes('say the server is not registered and point at egc init'), 'and the same fallback');
       assert.ok(!toml.includes('State lives at'), 'the Codex line must no longer point at a state file path');
       assert.ok(toml.includes('review PR->review-pr agents when the prompt library is installed'), 'the Codex line must carry the same condition');
-
-      const standalone = fs.readFileSync(path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'), 'utf8');
-      assert.ok(standalone.includes('never read or write those files directly'), 'the standalone file must carry the same rule');
-      assert.ok(standalone.includes('say the server is not registered and point at `egc init`'), 'and the same fallback');
-      assert.ok(!standalone.includes('State lives at') && !standalone.includes('plain Markdown'), 'the standalone file must not carry the old wording');
-      assert.ok(standalone.includes('when the prompt library is installed for this tool'), 'the standalone file must carry the same condition');
 
       const cursorRules = JSON.parse(fs.readFileSync(path.join(cursorSettingsDir, 'settings.json'), 'utf8'))['cursor.rules'];
       assert.ok(cursorRules.includes('never read or write those files directly'), 'the Cursor rules must carry the same rule');
@@ -235,7 +235,6 @@ async function runClaudeCodeAndGeminiCliTests() {
 
       const markdownForms = [
         ['block', fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8')],
-        ['standalone file', fs.readFileSync(path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'), 'utf8')],
       ];
       for (const [label, text] of markdownForms) {
         assert.ok(text.includes(DECISION_ROUTE_LINE), `the ${label} must route a decision to update_state`);
@@ -596,12 +595,217 @@ async function runCursorAndCodexEdgeCaseTests() {
   return [passed, failed];
 }
 
+async function runOpenCodeTests() {
+  let passed = 0;
+  let failed = 0;
+
+  // Case 1: ~/.config/opencode exists with no config -> creates egc-memory.md and opencode.json with instructions
+  if (await test('OpenCode: creates egc-memory.md and opencode.json when dir exists', () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+
+      run(home);
+
+      const memoryFile = path.join(configDir, 'egc-memory.md');
+      const configPath = path.join(configDir, 'opencode.json');
+      assert.strictEqual(fs.existsSync(memoryFile), true, 'egc-memory.md should be created');
+      assert.strictEqual(fs.existsSync(configPath), true, 'opencode.json should be created');
+
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      assert.deepStrictEqual(config.instructions, [memoryFile], 'instructions should list egc-memory.md');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  // Case 2: Existing config with existing instructions -> preserves existing instructions and appends egc-memory.md
+  if (await test('OpenCode: appends egc-memory.md to existing instructions in opencode.json', () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+      const configPath = path.join(configDir, 'opencode.json');
+      fs.writeFileSync(configPath, JSON.stringify({ instructions: ['/custom/rule.md'], other: true }), 'utf8');
+
+      run(home);
+
+      const memoryFile = path.join(configDir, 'egc-memory.md');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      assert.strictEqual(config.other, true, 'existing config fields preserved');
+      assert.deepStrictEqual(config.instructions, ['/custom/rule.md', memoryFile], 'egc-memory.md appended');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  // Case 3: Rerun (idempotent) -> listed only once in instructions
+  if (await test('OpenCode: idempotent rerun adds egc-memory.md only once', () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+
+      run(home);
+      run(home);
+
+      const memoryFile = path.join(configDir, 'egc-memory.md');
+      const configPath = path.join(configDir, 'opencode.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      assert.strictEqual(config.instructions.filter(i => i === memoryFile).length, 1, 'listed exactly once');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  // Case 4: opencode.jsonc without instructions key -> updates opencode.json, leaves .jsonc untouched
+  if (await test('OpenCode: updates opencode.json when jsonc exists without instructions', () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+      const jsoncPath = path.join(configDir, 'opencode.jsonc');
+      const initialJsoncContent = '{\n  // User comments\n  "theme": "dark"\n}\n';
+      fs.writeFileSync(jsoncPath, initialJsoncContent, 'utf8');
+
+      run(home);
+
+      const memoryFile = path.join(configDir, 'egc-memory.md');
+      const configPath = path.join(configDir, 'opencode.json');
+      assert.strictEqual(fs.readFileSync(jsoncPath, 'utf8'), initialJsoncContent, 'jsonc remains untouched');
+      assert.strictEqual(fs.existsSync(configPath), true, 'opencode.json created');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      assert.deepStrictEqual(config.instructions, [memoryFile]);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  // Case 5: opencode.jsonc with instructions key -> prints console instruction and does NOT edit config
+  if (await test('OpenCode: warns and skips config update when opencode.jsonc has instructions', () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+      const jsoncPath = path.join(configDir, 'opencode.jsonc');
+      fs.writeFileSync(jsoncPath, '{\n  "instructions": ["/some/file.md"]\n}\n', 'utf8');
+
+      const output = run(home);
+
+      const configPath = path.join(configDir, 'opencode.json');
+      assert.strictEqual(fs.existsSync(configPath), false, 'opencode.json not created');
+      assert.strictEqual(output.includes('opencode.jsonc contains an instructions list'), true, 'console warning printed');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  // Case 6: Invalid opencode.json syntax -> skips update and logs error
+  if (await test('OpenCode: skips update on invalid JSON syntax', () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+      const configPath = path.join(configDir, 'opencode.json');
+      fs.writeFileSync(configPath, '{ invalid json... }', 'utf8');
+
+      const output = run(home);
+
+      assert.strictEqual(output.includes('skipping config update'), true, 'logs skip error');
+      assert.strictEqual(fs.readFileSync(configPath, 'utf8'), '{ invalid json... }', 'invalid json untouched');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  // Case 7: Custom XDG_CONFIG_HOME set -> uses XDG_CONFIG_HOME/opencode
+  if (await test('OpenCode: respects XDG_CONFIG_HOME env variable', () => {
+    const home = mktempHome();
+    try {
+      const customXdg = path.join(home, 'custom_xdg');
+      const configDir = path.join(customXdg, 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+
+      execFileSync('node', [SCRIPT_PATH], {
+        env: { ...process.env, HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: customXdg },
+        encoding: 'utf8',
+      });
+
+      const memoryFile = path.join(configDir, 'egc-memory.md');
+      const configPath = path.join(configDir, 'opencode.json');
+      assert.strictEqual(fs.existsSync(memoryFile), true, 'egc-memory.md created in XDG dir');
+      assert.strictEqual(fs.existsSync(configPath), true, 'opencode.json created in XDG dir');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  // Case 8: Existing AGENTS.md present -> left 100% untouched
+  if (await test('OpenCode: AGENTS.md remains 100% untouched', () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+      const agentsPath = path.join(configDir, 'AGENTS.md');
+      const initialAgentsContent = '# Custom AGENTS file\nDo not touch.';
+      fs.writeFileSync(agentsPath, initialAgentsContent, 'utf8');
+
+      run(home);
+
+      assert.strictEqual(fs.readFileSync(agentsPath, 'utf8'), initialAgentsContent, 'AGENTS.md preserved byte-for-byte');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  // Case 9: Legacy EGC_MEMORY.md cleanup -> deleted if EGC marker present, kept if not
+  if (await test('OpenCode: cleans up legacy EGC_MEMORY.md only if EGC marker is present', () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+
+      const legacyDir = path.join(home, '.opencode', 'instructions');
+      fs.mkdirSync(legacyDir, { recursive: true });
+
+      const legacyFileWithMarker = path.join(legacyDir, 'EGC_MEMORY.md');
+      fs.writeFileSync(legacyFileWithMarker, '# EGC Session Memory\nProtocol content...', 'utf8');
+
+      run(home);
+
+      assert.strictEqual(fs.existsSync(legacyFileWithMarker), false, 'legacy file with marker deleted');
+
+      // User file without marker
+      fs.writeFileSync(legacyFileWithMarker, '# My Custom Rules\nNo EGC marker here.', 'utf8');
+      run(home);
+      assert.strictEqual(fs.existsSync(legacyFileWithMarker), true, 'legacy file without marker preserved');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  // Case 10: OpenCode directory missing -> nothing created
+  if (await test('OpenCode: does nothing if OpenCode config dir does not exist', () => {
+    const home = mktempHome();
+    try {
+      run(home);
+
+      const configDir = path.join(home, '.config', 'opencode');
+      assert.strictEqual(fs.existsSync(configDir), false, 'missing dir remains uncreated');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 // Same complexity-budget reasoning as above: the 4 standalone markdown
-// targets (OpenCode, Trae, CodeBuddy) each need the same pair
+// targets (Trae, CodeBuddy) each need the same pair
 // of upgrade-from-legacy / stay-idempotent-at-current-version cases.
 async function runStandaloneTargetUpgradeTests() {
   const STANDALONE_TARGETS = [
-    { home: '.opencode', target: ['.opencode', 'instructions', 'EGC_MEMORY.md'], label: 'OpenCode' },
     { home: '.trae', target: ['.trae', 'MEMORY.md'], label: 'Trae (.trae)' },
     { home: '.trae-cn', target: ['.trae-cn', 'MEMORY.md'], label: 'Trae (.trae-cn)' },
     { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
@@ -646,14 +850,12 @@ async function runStandaloneTargetUpgradeTests() {
   return [passed, failed];
 }
 
-// Each standalone markdown target's own top-level catch block (OpenCode,
 // Trae, CodeBuddy, Continue.dev) was never exercised by any existing test,
 // since none of them ever hand injectStandaloneProtocol() a structurally
 // broken path. Split out for the same complexity-budget reason as the
 // helpers above.
 async function runStandaloneCatchBlockTests() {
   const BROKEN_PATH_TARGETS = [
-    { home: '.opencode', target: ['.opencode', 'instructions', 'EGC_MEMORY.md'], label: 'OpenCode' },
     { home: '.trae', target: ['.trae', 'MEMORY.md'], label: 'Trae' },
     { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
   ];
@@ -756,6 +958,12 @@ async function runTests() {
     failed += cursorCodexEdgeFailed;
   }
 
+  {
+    const [openCodePassed, openCodeFailed] = await runOpenCodeTests();
+    passed += openCodePassed;
+    failed += openCodeFailed;
+  }
+
   if (await test('BLOCK advertises all 9 session bus commands', () => {
     for (const cmd of SESSION_BUS_COMMANDS) {
       assert.ok(SCRIPT_SOURCE.includes(cmd), `BLOCK must reference ${cmd}`);
@@ -810,11 +1018,10 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('installs all 9 session bus commands for Cursor, Codex, OpenCode, Trae, and CodeBuddy', () => {
+  if (await test('installs all 9 session bus commands for Cursor, Codex, Trae, and CodeBuddy', () => {
     const home = mktempHome();
     try {
-      fs.mkdirSync(path.join(home, '.codex'));
-      fs.mkdirSync(path.join(home, '.opencode'));
+      fs.mkdirSync(path.join(home, '.codex'));;
       fs.mkdirSync(path.join(home, '.trae'));
       fs.mkdirSync(path.join(home, '.codebuddy'));
       // No .cursor/.config/Cursor -> exercises the injectProtocol(BLOCK) fallback,
@@ -824,7 +1031,6 @@ async function runTests() {
 
       const filesToCheck = [
         path.join(home, '.codex', 'config.toml'),
-        path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'),
         path.join(home, '.trae', 'MEMORY.md'),
         path.join(home, '.codebuddy', 'MEMORY.md'),
       ];
@@ -839,19 +1045,17 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('markdownProtocolBody fallback (OpenCode/CodeBuddy) has full session bus and Guardian if the repo source .md ever goes missing', () => {
+  if (await test('markdownProtocolBody fallback (CodeBuddy) has full session bus and Guardian if the repo source .md ever goes missing', () => {
     let fakeScript;
     let home;
     try {
       fakeScript = mktempFakeRepo();
       home = mktempHome();
-      fs.mkdirSync(path.join(home, '.opencode'));
       fs.mkdirSync(path.join(home, '.codebuddy'));
       runScript(fakeScript, home);
 
-      const opencodeContent = fs.readFileSync(path.join(home, '.opencode', 'instructions', 'EGC_MEMORY.md'), 'utf8');
       const codebuddyContent = fs.readFileSync(path.join(home, '.codebuddy', 'MEMORY.md'), 'utf8');
-      for (const content of [opencodeContent, codebuddyContent]) {
+      for (const content of [codebuddyContent]) {
         for (const cmd of SESSION_BUS_COMMANDS) {
           assert.ok(content.includes(cmd), `fallback content must reference ${cmd}`);
         }

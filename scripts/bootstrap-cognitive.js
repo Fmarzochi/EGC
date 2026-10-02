@@ -4,6 +4,7 @@
 const fs   = require('node:fs');
 const path = require('node:path');
 const os   = require('node:os');
+const { openCodeConfigDir, openCodeConfigPath } = require('./lib/mcp-register');
 
 // Bump when BLOCK's content changes in a way that already-configured installs
 // should receive (e.g. a new protocol section). injectProtocol() upgrades any
@@ -428,22 +429,71 @@ const CODEX_SKIP_MESSAGES = {
   }
 })();
 
-// ── OpenCode (~/.opencode/instructions/EGC_MEMORY.md) ────────────────────────
-// Generated straight from markdownProtocolBody() rather than copied from a
-// static repo file, so its content can never drift out of sync with the
-// canonical protocol text the way the old copied-file version did.
-(function bootstrapOpenCode() {
-  try {
-    const opencodeDir = path.join(HOME, '.opencode');
-    if (!fs.existsSync(opencodeDir)) return;
-    const instructionsDir = path.join(opencodeDir, 'instructions');
-    if (!fs.existsSync(instructionsDir)) fs.mkdirSync(instructionsDir, { recursive: true });
-    const target = path.join(instructionsDir, 'EGC_MEMORY.md');
-    injectStandaloneProtocol(target, 'OpenCode', markdownProtocolBody('EGC Session Memory'));
-  } catch (e) {
-    console.log(`  [cognitive] OpenCode: unexpected error: ${e.message}`);
-  }
-})();
+// ── OpenCode (<OpenCode config dir>/egc-memory.md & instructions key) ─────
+  (function bootstrapOpenCode() {
+    try {
+      const configDir = openCodeConfigDir(HOME);
+      if (!fs.existsSync(configDir) || !fs.statSync(configDir).isDirectory()) return;
+
+      const memoryFile = path.join(configDir, 'egc-memory.md');
+      injectStandaloneProtocol(memoryFile, 'OpenCode', markdownProtocolBody('EGC Session Memory'));
+
+      // Clean up legacy ~/.opencode/instructions/EGC_MEMORY.md if EGC marker exists
+      const legacyFile = path.join(HOME, '.opencode', 'instructions', 'EGC_MEMORY.md');
+      if (fs.existsSync(legacyFile)) {
+        try {
+          const content = fs.readFileSync(legacyFile, 'utf8');
+          if (content.includes('EGC Session Memory') || content.includes('<!-- egc:start -->')) {
+            fs.unlinkSync(legacyFile);
+          }
+        } catch {
+          // Ignore errors during legacy cleanup
+        }
+      }
+
+      // Check opencode.jsonc for its own instructions key
+      const jsoncPath = path.join(configDir, 'opencode.jsonc');
+      if (fs.existsSync(jsoncPath)) {
+        try {
+          const jsoncContent = fs.readFileSync(jsoncPath, 'utf8');
+          if (/"instructions"\s*:/.test(jsoncContent)) {
+            console.log(`  [cognitive] OpenCode: opencode.jsonc contains an instructions list; manually add "${memoryFile}" to it.`);
+            return;
+          }
+        } catch {
+          // Ignore read errors and fall through
+        }
+      }
+
+      // Update opencode.json or legacy config.json
+      const configPath = openCodeConfigPath(HOME);
+      let config = {};
+
+      if (fs.existsSync(configPath)) {
+        try {
+          config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        } catch {
+          console.log(`  [cognitive] OpenCode: skipping config update, ${configPath} is not valid JSON.`);
+          return;
+        }
+      }
+
+      if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+        console.log(`  [cognitive] OpenCode: skipping config update, ${configPath} must contain a JSON object.`);
+        return;
+      }
+
+      const instructions = Array.isArray(config.instructions) ? config.instructions : [];
+      if (!instructions.includes(memoryFile)) {
+        instructions.push(memoryFile);
+      }
+      config.instructions = instructions;
+
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+    } catch (e) {
+      console.log(`  [cognitive] OpenCode: unexpected error: ${e.message}`);
+    }
+  })();
 
 // ── Trae (~/.trae/MEMORY.md and ~/.trae-cn/MEMORY.md) ────────────────────────
 (function bootstrapTrae() {

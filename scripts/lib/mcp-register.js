@@ -913,6 +913,7 @@ module.exports = {
   registerToml,
   registerZedContextServers,
   registerOpenCodeMcp,
+  openCodeConfigDir,
   openCodeConfigPath,
   registerClaudeCli,
   quoteForCmdShell,
