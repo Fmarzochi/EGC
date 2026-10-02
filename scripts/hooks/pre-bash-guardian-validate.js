@@ -2226,7 +2226,7 @@ function judgeCommand(inputOrRaw) {
   return { exitCode: 0 };
 }
 
-module.exports = { run, extractSegments, isAdvisory, bindingsOfSegments, ProgramUnreadable };
+module.exports = { run, extractSegments, isAdvisory, bindingsOfSegments, gitIn, ProgramUnreadable };
 
 if (require.main === module) {
   readHookInput(({ raw, truncated }) => {

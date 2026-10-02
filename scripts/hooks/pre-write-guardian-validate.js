@@ -170,12 +170,53 @@ function resolveTarget(input, filePath) {
   return path.isAbsolute(expanded) ? expanded : path.resolve(cwd, expanded);
 }
 
+// The commands of the version of the file committed at HEAD, counted: that
+// version went through review, writing those commands again runs nothing,
+// and running the script is judged by the Bash hook. A file outside a
+// repository, never committed, or unreadable there has none. git is run
+// the way the Bash hook runs it to read: nothing the repository configures
+// starts.
+function committedSegmentCounts(target) {
+  const counts = new Map();
+  const committed = bashGuardian.gitIn(path.dirname(target), ['cat-file', 'blob', `HEAD:./${path.basename(target)}`]);
+  if (committed === null) return counts;
+  let segments;
+  try {
+    segments = bashGuardian.extractSegments(committed);
+  } catch {
+    return counts;
+  }
+  for (const segment of segments || []) counts.set(lineKey(segment), (counts.get(lineKey(segment)) || 0) + 1);
+  return counts;
+}
+
+// A checkout that writes CRLF (core.autocrlf on Windows) holds the committed
+// LF lines with a carriage return added; they are the same commands.
+function lineKey(segment) {
+  return segment.replaceAll('\r', '');
+}
+
+// What the write would hold that the commit does not: the commands it adds
+// or changes, and any that reached the file without a commit. A command
+// that appears more often than in the commit is judged for each extra copy.
+function uncommittedSegments(segments, target) {
+  const counts = committedSegmentCounts(target);
+  return segments.filter(segment => {
+    const left = counts.get(lineKey(segment)) || 0;
+    if (left === 0) return true;
+    counts.set(lineKey(segment), left - 1);
+    return false;
+  });
+}
+
 function blockedScript(cli, input, filePath) {
   if (!bashGuardian) return null;
-  const content = resultingContent(input?.tool_input, filePath, resolveTarget(input, filePath));
+  const target = resolveTarget(input, filePath);
+  const content = resultingContent(input?.tool_input, filePath, target);
   if (!content || !isShellScript(filePath, content)) return null;
-  const { segments, error } = scriptSegments(content);
+  const { segments: written, error } = scriptSegments(content);
   if (error) return blocked(error);
+  const segments = uncommittedSegments(written, target);
   if (segments.length === 0) return null;
   const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
   const answer = callGuardianVerdict(cli, ['command-batch'], JSON.stringify({ commands: segments, cwd }), VALIDATE_TIMEOUT_MS);

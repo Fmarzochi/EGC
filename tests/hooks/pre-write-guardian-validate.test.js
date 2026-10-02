@@ -45,6 +45,95 @@ function runHook(filePath, env = {}, toolInput = null, toolName = 'Write', cwd =
   };
 }
 
+// S4036: prefer fixed git locations over a PATH lookup, as session-end.js
+// does; the bare name is the last resort for layouts like nix or portable Git.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  '/opt/homebrew/bin/git',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
+].find(candidate => fs.existsSync(candidate)) || 'git';
+
+// A throwaway repository with `script` committed as run.sh (or, with null,
+// only a README committed), isolated from the machine's git configuration.
+function withCommittedScript(script, fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-write-head-'));
+  try {
+    const emptyConfig = path.join(dir, '.gitconfig-empty');
+    fs.writeFileSync(emptyConfig, '');
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: emptyConfig, GIT_CONFIG_NOSYSTEM: '1' };
+    const repo = path.join(dir, 'repo');
+    fs.mkdirSync(repo);
+    const git = (...args) => spawnSync(GIT_BIN, ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args], { env, encoding: 'utf8' });
+    git('init', '-q');
+    const file = path.join(repo, 'run.sh');
+    const seeded = script === null ? path.join(repo, 'README.md') : file;
+    fs.writeFileSync(seeded, script === null ? 'x\n' : script);
+    git('add', path.basename(seeded));
+    assert.strictEqual(git('commit', '-q', '-m', 'seed').status, 0, 'seed commit');
+    return fn(file, repo);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// What is already in the commit at HEAD went through review and is not judged
+// again when the file is written; everything else is.
+function runCommittedScriptTests(wipe) {
+  let passed = 0;
+  let failed = 0;
+  const tally = ok => { if (ok) passed++; else failed++; };
+
+  tally(test('an edit of a committed script is judged only on what it changes', () => {
+    withCommittedScript(`#!/bin/sh\necho start\n${wipe} "$PID_FILE"\n`, file => {
+      const result = runHook(file, {}, { file_path: file, old_string: 'echo start', new_string: 'echo begin' }, 'Edit');
+      assert.strictEqual(result.code, 0, result.stderr);
+    });
+  }));
+
+  tally(test('a whole rewrite of a committed script keeps its committed commands, and judges a new one', () => {
+    withCommittedScript(`#!/bin/sh\necho start\n${wipe} "$PID_FILE"\n`, file => {
+      const same = runHook(file, {}, { file_path: file, content: `#!/bin/sh\necho begin\n${wipe} "$PID_FILE"\n` });
+      assert.strictEqual(same.code, 0, same.stderr);
+      const added = runHook(file, {}, { file_path: file, content: `#!/bin/sh\necho begin\n${wipe} "$PID_FILE"\n${wipe} /tmp/egc-victim\n` });
+      assert.strictEqual(added.code, 2, added.stderr);
+    });
+  }));
+
+  tally(test('a committed script checked out with CRLF line endings keeps its committed commands', () => {
+    withCommittedScript(`#!/bin/sh\necho start\n${wipe} "$PID_FILE"\n`, file => {
+      fs.writeFileSync(file, `#!/bin/sh\r\necho start\r\n${wipe} "$PID_FILE"\r\n`);
+      const result = runHook(file, {}, { file_path: file, old_string: 'echo start', new_string: 'echo begin' }, 'Edit');
+      assert.strictEqual(result.code, 0, result.stderr);
+    });
+  }));
+
+  tally(test('a second copy of a committed denied command is judged', () => {
+    withCommittedScript(`#!/bin/sh\necho start\n${wipe} "$PID_FILE"\n`, file => {
+      const result = runHook(file, {}, { file_path: file, old_string: 'echo start', new_string: `${wipe} "$PID_FILE"` }, 'Edit');
+      assert.strictEqual(result.code, 2, result.stderr);
+    });
+  }));
+
+  tally(test('a denied command that reached the script without a commit is judged', () => {
+    withCommittedScript('#!/bin/sh\necho start\n', file => {
+      fs.appendFileSync(file, `${wipe} /tmp/egc-victim\n`);
+      const result = runHook(file, {}, { file_path: file, old_string: 'echo start', new_string: 'echo begin' }, 'Edit');
+      assert.strictEqual(result.code, 2, result.stderr);
+    });
+  }));
+
+  tally(test('a script the repository never committed is judged whole', () => {
+    withCommittedScript(null, (file, repo) => {
+      fs.writeFileSync(file, `#!/bin/sh\necho start\n${wipe} /tmp/egc-victim\n`);
+      const result = runHook(file, {}, { file_path: file, old_string: 'echo start', new_string: 'echo begin' }, 'Edit', repo);
+      assert.strictEqual(result.code, 2, result.stderr);
+    });
+  }));
+
+  return { passed, failed };
+}
+
 function runTests() {
   console.log('\n=== Testing pre-write-guardian-validate ===\n');
 
@@ -216,6 +305,10 @@ function runTests() {
       assert.strictEqual(result.code, 2, `${JSON.stringify(content)}: ${result.stderr}`);
     }
   })) passed++; else failed++;
+
+  const committed = runCommittedScriptTests(wipe);
+  passed += committed.passed;
+  failed += committed.failed;
 
   if (test('passes through input without a file path', () => {
     const rawInput = JSON.stringify({ tool_name: 'Write', tool_input: {} });

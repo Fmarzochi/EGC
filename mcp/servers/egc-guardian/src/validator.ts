@@ -10,7 +10,9 @@ import { programRefs } from './program-refs.js';
 export { RUNNER_SPECS } from './runner-wrappers.js';
 
 // Trust level tiers
-export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git'];
+// `[`, `[[` and `test` only stat the files they name, as `stat` does, so they
+// are judged as it is: a credential store is refused, .git is not.
+export const SAFE_READONLY = ['ls', 'cat', 'grep', 'find', 'stat', 'head', 'git', '[', '[[', 'test'];
 // egc is this package's own CLI and gh is how reviews, checks and merges
 // happen: answering "is not in the allowlist" for either reads as a block on
 // the tools the work runs on. Their destructive forms are covered where it
@@ -1481,13 +1483,163 @@ function isGitControlPath(rest: string[], regularFile: boolean): boolean {
   return rest.length === 1 && GIT_CONTROL_FILES.has(rest[0]);
 }
 
+// The directories a repository conventionally points core.hooksPath at: git
+// runs what they hold as it runs .git/hooks, so they are written as it is.
+const HOOK_DIRECTORY_NAMES = new Set(['.githooks', '.husky']);
+
 // A git directory is one named `.git` or `<name>.git`: only there are its
 // control files protected from a write, whatever repository they belong to.
 // A path so named is one, or may become one, unless it is a regular file
 // already (`regularFile`): writing that makes no git directory.
 function isGitControlFile(candidate: string, regularFile = false): boolean {
   const parts = candidate.split(/[\\/]/);
-  return parts.some((part, i) => part.endsWith('.git') && isGitControlPath(parts.slice(i + 1), regularFile));
+  return parts.some((part, i) => HOOK_DIRECTORY_NAMES.has(part) || (part.endsWith('.git') && isGitControlPath(parts.slice(i + 1), regularFile)));
+}
+
+// core.hooksPath as one config file sets it, the last setting winning; a
+// value after `#` or `;` is a comment. Include files are not followed.
+function hooksPathOf(configFile: string): string | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(configFile, 'utf8');
+  } catch {
+    return null;
+  }
+  let inCore = false;
+  let value: string | null = null;
+  for (const raw of configLines(text)) {
+    let line = raw.trim();
+    if (line.startsWith('[')) {
+      const close = line.indexOf(']');
+      inCore = (close < 0 ? line.slice(1) : line.slice(1, close)).trim().split(/[\s"]/)[0].toLowerCase() === 'core';
+      // A variable may follow the section header on its line.
+      line = close < 0 ? '' : line.slice(close + 1).trim();
+    }
+    const entry = inCore ? configValue(line, 'hookspath') : null;
+    if (entry !== null) value = entry;
+  }
+  return value || null;
+}
+
+// A config file's lines, a line ending in an unescaped backslash joined to
+// the next, as git continues a value there.
+function configLines(text: string): string[] {
+  const lines: string[] = [];
+  let pending = '';
+  for (const raw of text.split(/\r?\n/)) {
+    let end = raw.length;
+    while (end > 0 && raw[end - 1] === '\\') end -= 1;
+    const continued = (raw.length - end) % 2 === 1;
+    pending += continued ? raw.slice(0, -1) : raw;
+    if (continued) continue;
+    lines.push(pending);
+    pending = '';
+  }
+  if (pending) lines.push(pending);
+  return lines;
+}
+
+const CONFIG_ESCAPES: Record<string, string> = { '"': '"', '\\': '\\', n: '\n', t: '\t', b: '\b' };
+
+// The value a `name = value` config line sets, when it sets `name`, read as
+// git reads it: quotes removed, escapes resolved, a `#` or `;` outside
+// quotes starting a comment.
+function configValue(line: string, name: string): string | null {
+  const eq = line.indexOf('=');
+  if (eq < 0 || line.slice(0, eq).trim().toLowerCase() !== name) return null;
+  const raw = line.slice(eq + 1).trim();
+  let value = '';
+  let quoted = false;
+  for (let k = 0; k < raw.length; k += 1) {
+    const ch = raw[k];
+    if (ch === '\\' && k + 1 < raw.length) {
+      value += CONFIG_ESCAPES[raw[k + 1]] ?? raw[k + 1];
+      k += 1;
+    } else if (ch === '"') {
+      quoted = !quoted;
+    } else if (!quoted && (ch === '#' || ch === ';')) {
+      break;
+    } else {
+      value += ch;
+    }
+  }
+  return value.trim();
+}
+
+// The config a `.git` entry leads to: a directory's own, or, for the file a
+// linked work tree or a submodule keeps there, the one of the git directory
+// it names (through its commondir, when it has one).
+function gitDirectoryConfig(dotGit: string): string | null {
+  try {
+    if (fs.statSync(dotGit).isDirectory()) return path.join(dotGit, 'config');
+    const pointer = fs.readFileSync(dotGit, 'utf8').split(/\r?\n/).find(line => line.startsWith('gitdir:'));
+    if (pointer === undefined) return null;
+    const gitDir = path.resolve(path.dirname(dotGit), pointer.slice('gitdir:'.length).trim());
+    let commonDir = gitDir;
+    try {
+      commonDir = path.resolve(gitDir, fs.readFileSync(path.join(gitDir, 'commondir'), 'utf8').trim());
+    } catch {
+      // no commondir: the git directory is its own
+    }
+    return path.join(commonDir, 'config');
+  } catch {
+    return null;
+  }
+}
+
+function repositoryOf(start: string): { root: string; config: string } | null {
+  let dir = start;
+  for (;;) {
+    const config = gitDirectoryConfig(path.join(dir, '.git'));
+    if (config !== null) return { root: dir, config };
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+// Where git reads core.hooksPath when the repository does not set it, the
+// first one that does winning.
+function globalGitConfigs(): string[] {
+  const home = os.homedir();
+  const xdg = process.env.XDG_CONFIG_HOME?.trim() || path.join(home, '.config');
+  return [path.join(home, '.gitconfig'), path.join(xdg, 'git', 'config'), '/etc/gitconfig'];
+}
+
+// The names git runs a hook by (githooks(5)).
+const GIT_HOOK_NAMES = new Set([
+  'applypatch-msg', 'pre-applypatch', 'post-applypatch', 'pre-commit', 'pre-merge-commit',
+  'prepare-commit-msg', 'commit-msg', 'post-commit', 'pre-rebase', 'post-checkout', 'post-merge',
+  'pre-push', 'pre-receive', 'update', 'proc-receive', 'post-receive', 'post-update',
+  'reference-transaction', 'push-to-checkout', 'pre-auto-gc', 'post-rewrite', 'sendemail-validate',
+  'fsmonitor-watchman', 'p4-changelist', 'p4-prepare-changelist', 'p4-post-changelist', 'p4-pre-submit',
+  'post-index-change',
+]);
+
+// The directories core.hooksPath points git at for a file in `dir`: the
+// repository's own setting, and the user's, which every repository without
+// one of its own follows. A relative value is taken from the top of the
+// work tree, so it only counts inside a repository.
+function configuredHooksDirectories(dir: string): string[] {
+  const repository = repositoryOf(dir);
+  const own = repository === null ? null : hooksPathOf(repository.config);
+  const user = globalGitConfigs().map(hooksPathOf).find(value => value !== null) ?? null;
+  const directories: string[] = [];
+  for (const value of [own, user]) {
+    const expanded = value === null ? null : expandHome(value);
+    if (expanded !== null && path.isAbsolute(expanded)) directories.push(expanded);
+    else if (expanded !== null && repository !== null) directories.push(path.resolve(repository.root, expanded));
+  }
+  return directories;
+}
+
+// Whether the path is a hook git runs from a directory core.hooksPath points
+// at. That directory may hold other files too (it can be the work tree
+// itself), so there only the hooks are written as .git/hooks is.
+function isConfiguredHook(normalizedP: string): boolean {
+  if (!GIT_HOOK_NAMES.has(foldCase(path.basename(normalizedP)))) return false;
+  const dir = foldCase(path.dirname(normalizedP));
+  return configuredHooksDirectories(path.dirname(normalizedP)).some(hooks => foldCase(resolveRealOrLexical(hooks)) === dir);
 }
 
 function isRegularFile(p: string): boolean {
@@ -1536,7 +1688,7 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
     }
   }
 
-  return isGitControlFile(candidate, isRegularFile(normalizedP));
+  return isGitControlFile(candidate, isRegularFile(normalizedP)) || isConfiguredHook(normalizedP);
 }
 
 // Reading and writing carry different risk, and treating them alike is what
@@ -1629,9 +1781,10 @@ export function isReadDeniedPath(p: string, baseDir: string = process.cwd()): bo
   // Folded on the same terms as the denial side: where the filesystem opens
   // ~/.BASHRC and ~/.bashrc as one file, both spellings have to be readable,
   // or the case fix would have quietly turned a harmless read into a denial.
-  // A git directory's config and hooks are persistence too.
+  // A git directory's config and hooks are persistence too, and so are the
+  // hooks git runs from elsewhere; a secret's name keeps it denied even there.
   const folded = foldCase(normalizedP);
-  return !READ_SAFE_FILE_PATTERNS.some(pattern => pattern.test(folded)) && !isGitControlFile(folded);
+  return !READ_SAFE_FILE_PATTERNS.some(pattern => pattern.test(folded)) && PROTECTED_FILE_PATTERNS.some(pattern => pattern.test(folded));
 }
 
 export interface ValidationResult {
@@ -2826,6 +2979,26 @@ function validateFindArgs(args: string[], cwd?: string): ValidationResult {
   return { allowed: true, trust_level: 'SAFE_READONLY' };
 }
 
+// The operands `[`, `[[` and `test` look up as files: what a unary file test
+// (-e, -f, -d...) names and both sides of -nt, -ot and -ef. The others are
+// strings compared, never opened.
+const FILE_TEST_OPERATORS = new Set(['-a', '-b', '-c', '-d', '-e', '-f', '-g', '-h', '-k', '-p', '-r', '-s', '-u', '-w', '-x', '-G', '-L', '-N', '-O', '-S']);
+const FILE_COMPARISON_OPERATORS = new Set(['-nt', '-ot', '-ef']);
+
+// -a tests a file where an expression starts and joins two expressions
+// between them.
+const EXPRESSION_STARTS = new Set<string | undefined>([undefined, '!', '(', '&&', '||', '-a', '-o']);
+
+function isTestedFile(args: string[], i: number): boolean {
+  const operator = args[i - 1];
+  if (operator === '-a') return EXPRESSION_STARTS.has(args[i - 2]);
+  return FILE_TEST_OPERATORS.has(operator) || FILE_COMPARISON_OPERATORS.has(operator) || FILE_COMPARISON_OPERATORS.has(args[i + 1]);
+}
+
+function testedFiles(args: string[]): string[] {
+  return args.filter((_, i) => isTestedFile(args, i));
+}
+
 function validateReadOnlyPathArgs(baseCommand: string, args: string[], cwd?: string): ValidationResult {
   // These are read-only but we still block protected paths
   for (const arg of args) {
@@ -2882,6 +3055,9 @@ export function validateCommandArgs(
     case 'head':
     case 'stat':
     case 'ls': return validateReadOnlyPathArgs(baseCommand, args, cwd);
+    case '[':
+    case '[[':
+    case 'test': return validateReadOnlyPathArgs(baseCommand, testedFiles(args), cwd);
     case 'npm':
     case 'npx':
     case 'node':
@@ -3268,6 +3444,11 @@ function validateCommandVerdict(command: string, cwd?: string): ValidationResult
   // or inside a process substitution.
   const redirected = redirectionVerdict(command, cwd);
   if (redirected) return redirected;
+
+  // 5c. What would run later without being judged: a shell script written
+  // through the shell, and a job handed to a scheduler.
+  const runsLater = scriptWriteVerdict(baseCommand, args, cwd) ?? schedulerVerdict(baseCommand, args);
+  if (runsLater) return runsLater;
 
   // 6. Per-command checks (protected paths, destructive git/find forms,
   // dev-tool targets) and the allowlist verdict, always. They used to sit
@@ -3912,11 +4093,258 @@ function targetSpellings(target: ShellWord): string[] {
   return process.platform === 'win32' ? [target.value, target.raw] : [target.value];
 }
 
+// A shell script, to the writes judged here: a file named like one, or an
+// existing file whose first line runs a POSIX shell. The Write and Edit
+// tools judge what such a file will run through the write hook; the shell's
+// own ways of writing one would skip that judgment, so they are refused.
+const SHELL_SCRIPT_EXTENSIONS = new Set(['.sh', '.bash', '.zsh', '.ksh']);
+const SHELL_SHEBANG_RE = /^#![^\n]*\b(?:sh|bash|zsh|ksh|dash|ash)\b/;
+
+function isShellScriptTarget(target: string, cwd?: string): boolean {
+  const trimmed = target.trim();
+  if (!trimmed) return false;
+  if (SHELL_SCRIPT_EXTENSIONS.has(path.extname(trimmed).toLowerCase())) return true;
+  let fd: number | undefined;
+  try {
+    const resolved = path.resolve(writeBaseDir(cwd), expandHome(trimmed));
+    if (!fs.statSync(resolved).isFile()) return false;
+    fd = fs.openSync(resolved, 'r');
+    const head = Buffer.alloc(128);
+    const read = fs.readSync(fd, head, 0, head.length, 0);
+    return SHELL_SHEBANG_RE.test(head.subarray(0, read).toString('utf8'));
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+// A denial of what would run later without being judged: flagged, not
+// refused, in a committed script.
+function laterRunDenial(reason: string): ValidationResult | null {
+  const denial: ValidationResult = { allowed: false, reason, trust_level: 'DANGEROUS' };
+  return flagsInCommittedScript(denial) ? null : denial;
+}
+
+function scriptWriteDenial(writer: string, target: string): ValidationResult | null {
+  return laterRunDenial(`${writer} writes the shell script '${target}'; a script gets its content only through the Write or Edit tool, where the commands it will run are judged`);
+}
+
+// A cluster of short options (`-sSo file`): the flag letters before the
+// first letter that takes a value, that letter, and its value, the rest of
+// the word or else the next word.
+interface ShortCluster { flags: string; letter: string | null; value: string | null; takesNext: boolean }
+
+function readCluster(arg: string, next: string | undefined, valueLetters: string): ShortCluster {
+  for (let k = 1; k < arg.length; k += 1) {
+    if (!valueLetters.includes(arg[k])) continue;
+    const rest = arg.slice(k + 1);
+    return { flags: arg.slice(1, k), letter: arg[k], value: rest === '' ? next ?? null : rest, takesNext: rest === '' };
+  }
+  return { flags: arg.slice(1), letter: null, value: null, takesNext: false };
+}
+
+const isShortCluster = (arg: string): boolean => arg.length > 1 && arg.startsWith('-') && !arg.startsWith('--');
+
+// sed's options that take a value: -e and -f give its script, -l a length.
+const SED_VALUE_LETTERS = 'efl';
+const SED_LONG_VALUE_OPTIONS = new Set(['--expression', '--file', '--line-length']);
+
+// sed edits in place with -i (alone, with a suffix, or in a cluster of short
+// options) or --in-place.
+function isInPlaceSed(args: string[]): boolean {
+  return args.some(arg => arg === '--in-place' || arg.startsWith('--in-place=') || (isShortCluster(arg) && readCluster(arg, undefined, SED_VALUE_LETTERS).flags.includes('i')));
+}
+
+// A cluster with its -i suffix (`-i.bak`, `-Ei~`) dropped, so the suffix is
+// not read as options.
+function withoutInPlaceSuffix(arg: string): string {
+  if (!isShortCluster(arg)) return arg;
+  const at = readCluster(arg, undefined, SED_VALUE_LETTERS).flags.indexOf('i');
+  return at < 0 ? arg : arg.slice(0, at + 2);
+}
+
+// The files sed -i edits: its operands, the first one aside when that is
+// the script (no -e or -f gave it).
+function sedEditedFiles(args: string[]): string[] {
+  if (!isInPlaceSed(args)) return [];
+  const words = args.filter((_, i) => !SED_LONG_VALUE_OPTIONS.has(args[i - 1])).map(withoutInPlaceSuffix);
+  const { values, operands } = readOptions(words, SED_VALUE_LETTERS);
+  const scripted = values.has('e') || values.has('f') || hasLongOption(args, ['expression', 'file']);
+  return scripted ? operands : operands.slice(1);
+}
+
+// cp, install and ln write their last operand, or, where that is a directory
+// (named with -t, or one that exists or ends in a separator), a file there
+// named as each source is; ln given only a target links it here.
+const COPYING_COMMANDS = new Set(['cp', 'install', 'ln']);
+// Their long options that take the next word as a value, and the short ones
+// that take the rest of their word, or the next word.
+const COPY_LONG_VALUE_OPTIONS = new Set(['--mode', '--owner', '--group', '--suffix', '--target-directory']);
+const COPY_VALUE_LETTERS = 'mogSt';
+
+function copyWords(args: string[]): { operands: string[]; directory: string | null } {
+  const words = args.filter((_, i) => !COPY_LONG_VALUE_OPTIONS.has(args[i - 1]));
+  const { values, operands } = readOptions(words, COPY_VALUE_LETTERS);
+  const directories = [...(values.get('t') ?? []), ...longOptionValues(args, ['target-directory'])];
+  return { operands, directory: directories.length > 0 ? directories[directories.length - 1] : null };
+}
+
+function isDirectoryTarget(target: string, cwd?: string): boolean {
+  if (target.endsWith('/') || target.endsWith('\\')) return true;
+  try {
+    return fs.statSync(path.resolve(writeBaseDir(cwd), expandHome(target))).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function copiedFiles(baseCommand: string, args: string[], cwd?: string): string[] {
+  const { operands, directory } = copyWords(args);
+  const into = (dir: string, sources: string[]) => sources.map(source => path.join(dir, path.basename(source)));
+  if (directory !== null) return into(directory, operands);
+  if (operands.length < 2) return baseCommand === 'ln' ? operands.map(target => path.basename(target)) : [];
+  const destination = operands[operands.length - 1];
+  return isDirectoryTarget(destination, cwd) ? into(destination, operands.slice(0, -1)) : [destination];
+}
+
+// A command's short options, read cluster by cluster: the flag letters set,
+// the values each value-taking letter was given, and the words that are
+// neither (long options aside).
+function readOptions(args: string[], valueLetters: string): { flags: string; values: Map<string, string[]>; operands: string[] } {
+  let flags = '';
+  const values = new Map<string, string[]>();
+  const operands: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '--') {
+      operands.push(...args.slice(i + 1));
+      break;
+    }
+    if (!isShortCluster(arg)) {
+      if (!arg.startsWith('--')) operands.push(arg);
+      continue;
+    }
+    const cluster = readCluster(arg, args[i + 1], valueLetters);
+    flags += cluster.flags;
+    if (cluster.letter !== null) values.set(cluster.letter, [...(values.get(cluster.letter) ?? []), cluster.value ?? '']);
+    if (cluster.takesNext) i += 1;
+  }
+  return { flags, values, operands };
+}
+
+// The values long options are given: `--name value` and `--name=value`.
+function longOptionValues(args: string[], names: string[]): string[] {
+  const values: string[] = [];
+  args.forEach((arg, i) => {
+    for (const name of names) {
+      if (arg === `--${name}`) values.push(args[i + 1] ?? '');
+      else if (arg.startsWith(`--${name}=`)) values.push(arg.slice(name.length + 3));
+    }
+  });
+  return values;
+}
+
+const hasLongOption = (args: string[], names: string[]): boolean => args.some(arg => names.some(name => arg === `--${name}` || arg.startsWith(`--${name}=`)));
+
+// The name a download keeps when no output is named: the last part of the
+// URL's path, a URL without a scheme being taken as http, as both tools do.
+function urlFileNames(words: string[]): string[] {
+  return words.map(word => {
+    try {
+      return path.posix.basename(new URL(word.includes('://') ? word : `http://${word}`).pathname);
+    } catch {
+      return path.posix.basename(word.split(/[?#]/)[0]);
+    }
+  });
+}
+
+// What a download writes: the files the command line names, and whether the
+// server or a list the command reads names others, which it does not show.
+interface DownloadWrites { files: string[]; namesUnseen: boolean }
+
+// The short options of curl and wget that take a value (wget's -n takes the
+// letter after it: -nv, -np).
+const CURL_VALUE_LETTERS = 'AbcCdDeEFHKmoPQrtTuUwxXyYz';
+const WGET_VALUE_LETTERS = 'aABDeiIlnOoPQRtTUwX';
+
+// curl writes -o, its headers (-D) and cookies (-c), its traces and logs,
+// and with -O the URL's own name, or with -J one the server sends.
+function curlWrites(args: string[]): DownloadWrites {
+  const { flags, values, operands } = readOptions(args, CURL_VALUE_LETTERS);
+  const named = ['o', 'D', 'c'].flatMap(letter => values.get(letter) ?? []);
+  const files = [...named, ...longOptionValues(args, ['output', 'dump-header', 'cookie-jar', 'trace', 'trace-ascii', 'stderr', 'libcurl', 'etag-save'])];
+  const remoteName = flags.includes('O') || hasLongOption(args, ['remote-name', 'remote-name-all']);
+  const serverNamed = remoteName && (flags.includes('J') || hasLongOption(args, ['remote-header-name']));
+  return { files: remoteName ? [...files, ...urlFileNames(operands)] : files, namesUnseen: serverNamed };
+}
+
+// wget writes -O and its log (-o, -a), or else each URL's own name, unless
+// recursion, an input list or the server picks the names.
+function wgetWrites(args: string[]): DownloadWrites {
+  const { flags, values, operands } = readOptions(args, WGET_VALUE_LETTERS);
+  const documents = [...(values.get('O') ?? []), ...longOptionValues(args, ['output-document'])];
+  const logs = [...['o', 'a'].flatMap(letter => values.get(letter) ?? []), ...longOptionValues(args, ['output-file', 'append-output'])];
+  if (documents.length > 0) return { files: [...documents, ...logs], namesUnseen: false };
+  const listed = values.has('i') || /[rmp]/.test(flags) || hasLongOption(args, ['input-file', 'recursive', 'mirror', 'page-requisites', 'content-disposition', 'trust-server-names']);
+  return { files: [...logs, ...urlFileNames(operands)], namesUnseen: listed };
+}
+
+function downloadVerdict(baseCommand: string, args: string[], cwd?: string): ValidationResult | null {
+  const { files, namesUnseen } = baseCommand === 'wget' ? wgetWrites(args) : curlWrites(args);
+  if (namesUnseen) {
+    return laterRunDenial(`'${baseCommand}' here lets the server or a list name the files it writes, so one may be a shell script the Guardian never sees; name the output (curl -o, wget -O) instead`);
+  }
+  const script = files.find(target => isShellScriptTarget(target, cwd));
+  return script === undefined ? null : scriptWriteDenial(`'${baseCommand}'`, script);
+}
+
+function writtenFiles(baseCommand: string, args: string[], cwd?: string): string[] {
+  if (baseCommand === 'tee') return readOptions(args, '').operands;
+  if (baseCommand === 'sed') return sedEditedFiles(args);
+  if (COPYING_COMMANDS.has(baseCommand)) return copiedFiles(baseCommand, args, cwd);
+  return [];
+}
+
+const DOWNLOADERS = new Set(['curl', 'wget']);
+
+function scriptWriteVerdict(baseCommand: string, args: string[], cwd?: string): ValidationResult | null {
+  if (DOWNLOADERS.has(baseCommand)) return downloadVerdict(baseCommand, args, cwd);
+  const script = writtenFiles(baseCommand, args, cwd).find(target => isShellScriptTarget(target, cwd));
+  return script === undefined ? null : scriptWriteDenial(`'${baseCommand}'`, script);
+}
+
+// A job handed to cron or at runs later, outside every check here, so
+// scheduling one is the user's call; listing what is scheduled is not.
+const SCHEDULERS = new Set(['crontab', 'at', 'batch']);
+
+function onlyListsJobs(baseCommand: string, args: string[]): boolean {
+  if (baseCommand === 'crontab') {
+    const rest = args.filter((arg, i) => !arg.startsWith('-u') && args[i - 1] !== '-u');
+    return rest.length === 1 && rest[0] === '-l';
+  }
+  return baseCommand === 'at' && (args[0] === '-l' || args[0] === '-c');
+}
+
+function schedulerVerdict(baseCommand: string, args: string[]): ValidationResult | null {
+  if (!SCHEDULERS.has(baseCommand) || onlyListsJobs(baseCommand, args)) return null;
+  return laterRunDenial(`'${baseCommand}' hands a job to the scheduler, which runs it later without the Guardian judging it; scheduling one is the user's call`);
+}
+
+function redirectedScriptVerdict(target: ShellWord, cwd?: string): ValidationResult | null {
+  const script = targetSpellings(target).find(spelling => isShellScriptTarget(spelling, cwd));
+  return script === undefined ? null : scriptWriteDenial('redirecting output', script);
+}
+
 function redirectionVerdict(command: string, cwd?: string): ValidationResult | null {
   for (const { target, writes } of redirectionsOf(command)) {
     const denies = writes ? isProtectedPath : isReadDeniedPath;
     const denied = targetSpellings(target).find(spelling => denies(spelling, cwd));
-    if (denied === undefined) continue;
+    if (denied === undefined) {
+      const scriptDenial = writes ? redirectedScriptVerdict(target, cwd) : null;
+      if (scriptDenial) return scriptDenial;
+      continue;
+    }
     const denial: ValidationResult = {
       allowed: false,
       reason: writes
@@ -3957,9 +4385,10 @@ function withoutInputRedirections(args: string[], raw: string[]): string[] {
   return kept;
 }
 
-// Builtins that only test or read the files they name: in a committed
-// script, naming a protected file with them is flagged, not grave.
-const COMMITTED_READ_BUILTINS = new Set(['[', '[[', 'test', '.', 'source']);
+// Builtins that read the files they name: in a committed script, naming a
+// protected file with them is flagged, not grave. (`[`, `[[` and `test` are
+// judged with the read-only commands.)
+const COMMITTED_READ_BUILTINS = new Set(['.', 'source']);
 
 // A command a sed e, an ag --pager or an rg --pre runs: inline code (see
 // isInlineProgram) is refused as sh -c is; a plain one is judged as the
