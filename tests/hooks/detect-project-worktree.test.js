@@ -18,7 +18,14 @@ const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execFileSync, execSync } = require('child_process');
+const { execFileSync, execSync, spawnSync } = require('child_process');
+
+// Fixed git locations before a PATH lookup.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  '/opt/homebrew/bin/git'
+].find(candidate => fs.existsSync(candidate)) || 'git';
 
 let passed = 0;
 let failed = 0;
@@ -167,7 +174,7 @@ test('detect-project.sh sets PROJECT_NAME and non-global PROJECT_ID for worktree
     const mainRepo = path.join(testDir, 'main-repo');
     fs.mkdirSync(mainRepo, { recursive: true });
     execSync('git init', { cwd: mainRepo, stdio: 'pipe' });
-    execSync('git commit --allow-empty -m "init"', {
+    execSync('git -c maintenance.auto=false commit --allow-empty -m "init"', {
       cwd: mainRepo,
       stdio: 'pipe',
       env: {
@@ -198,6 +205,22 @@ test('detect-project.sh sets PROJECT_NAME and non-global PROJECT_ID for worktree
     fs.writeFileSync(
       path.join(worktreeDir, '.git'),
       `gitdir: ${worktreesDir}\n`
+    );
+    fs.writeFileSync(
+      path.join(worktreesDir, 'gitdir'),
+      `${path.join(worktreeDir, '.git')}\n`
+    );
+
+    // Git 2.54+ runs worktree-prune in the background after a commit, so a
+    // fixture git considers prunable can vanish before the hook reads it.
+    const prune = spawnSync(GIT_BIN, ['worktree', 'prune', '--dry-run', '--verbose'], {
+      cwd: mainRepo,
+      encoding: 'utf8'
+    });
+    assert.strictEqual(prune.status, 0, prune.stderr);
+    assert.ok(
+      !`${prune.stdout}${prune.stderr}`.includes('my-worktree'),
+      `git would prune the worktree fixture: ${prune.stderr}`
     );
 
     // Source detect-project.sh from the worktree directory and capture results

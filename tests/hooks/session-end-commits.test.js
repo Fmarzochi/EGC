@@ -9,6 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
+const { withoutHarnessVariables } = require('../fixtures/harness-variables');
 
 const hookScript = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'session-end.js');
 // The hook names the session file after the transcript UUID's last 8 chars.
@@ -16,12 +17,15 @@ const TRANSCRIPT = path.join(os.tmpdir(), 'egc-n33-missing', '12345678-1234-1234
 const SHORT_ID = '567890ab';
 const ME = { name: 'Session Person', email: 'person@example.com' };
 const OTHER = { name: 'Someone Else', email: 'other@example.com' };
-// An empty global config keeps the machine's own git settings (signing,
-// hooks paths) out of these repositories on every platform.
+// A global config of our own keeps the machine's git settings (signing,
+// hooks paths) out of these repositories on every platform, and turns off the
+// maintenance a commit starts in the background, which on Windows can still
+// hold a repository when cleanup removes it.
 const GIT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-n33-gitconfig-'));
-const EMPTY_GIT_CONFIG = path.join(GIT_HOME, '.gitconfig');
-fs.writeFileSync(EMPTY_GIT_CONFIG, '');
-const GIT_ISOLATION = { GIT_CONFIG_GLOBAL: EMPTY_GIT_CONFIG, GIT_CONFIG_NOSYSTEM: '1' };
+const ISOLATED_GIT_CONFIG = path.join(GIT_HOME, '.gitconfig');
+fs.writeFileSync(ISOLATED_GIT_CONFIG, '[maintenance]\n\tauto = false\n');
+const GIT_ISOLATION = { GIT_CONFIG_GLOBAL: ISOLATED_GIT_CONFIG, GIT_CONFIG_NOSYSTEM: '1' };
+const REMOVE_RETRIES = { maxRetries: 10, retryDelay: 100 };
 // Fixed git locations before a PATH lookup, as the hook itself does.
 const GIT_BIN = [
   '/usr/bin/git',
@@ -116,7 +120,7 @@ function runHook(home, cwd, extraEnv = {}) {
     cwd,
     input: JSON.stringify({ transcript_path: TRANSCRIPT }),
     encoding: 'utf8',
-    env: { ...process.env, HOME: home, USERPROFILE: home, ...GIT_ISOLATION, ...extraEnv },
+    env: { ...withoutHarnessVariables(process.env), HOME: home, USERPROFILE: home, ...GIT_ISOLATION, ...extraEnv },
     timeout: 30000,
   });
   assert.strictEqual(result.status, 0, result.stderr);
@@ -131,13 +135,22 @@ function headerOf(sessionFile) {
 }
 
 function cleanup(...dirs) {
-  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true });
+  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true, ...REMOVE_RETRIES });
 }
 
 function runTests() {
   console.log('\n=== Testing session-end commit list ===\n');
 
   const results = [
+    test('the fixture repositories start no automatic maintenance, which could still hold them during cleanup', () => {
+      const { home, repo } = setup();
+      try {
+        assert.strictEqual(git(repo, ['config', '--get', 'maintenance.auto']), 'false');
+      } finally {
+        cleanup(home, repo);
+      }
+    }),
+
     test('lists the person\'s commits since the session started, on every branch, without merges, other authors or earlier work', () => {
       const { home, repo, sessionFile } = setup();
       try {
