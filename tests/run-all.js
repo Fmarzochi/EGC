@@ -8,7 +8,7 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { withoutHarnessVariables } = require('./fixtures/harness-variables');
+const { suiteEnv } = require('./fixtures/suite-env');
 
 const testsDir = __dirname;
 const repoRoot = path.resolve(testsDir, '..');
@@ -16,8 +16,9 @@ const TEST_GLOB = 'tests/**/*.test.js';
 
 // The variables a tool session sets tell getEGCDir() which tool is in use.
 // Tests set the ones they need themselves, so the suite gives the same result
-// inside a Claude Code or Antigravity session as in CI.
-const TEST_ENV = withoutHarnessVariables(process.env);
+// inside a Claude Code or Antigravity session as in CI. Git runs no automatic
+// maintenance under the suite (fixtures/suite-env.js).
+const TEST_ENV = suiteEnv(process.env);
 
 function matchesTestGlob(relativePath) {
   const normalized = relativePath.split(path.sep).join('/');
