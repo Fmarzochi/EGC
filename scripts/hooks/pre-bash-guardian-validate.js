@@ -1348,9 +1348,10 @@ function isCommittedUnchanged(file) {
 // What the command line itself leaves the scripts it runs to know: the
 // variables it or the environment sets (a committed script cannot count
 // those as its own), and no script directory.
-function commandContext(segments, cwd, bindings) {
+function commandContext(segments, cwd, bindings, bound) {
   return {
     own: true,
+    bound,
     cwdUnknown: null,
     cwdKnown: true,
     homeKnown: true,
@@ -1441,9 +1442,10 @@ function sourcedMove(where, operands, own) {
 function scriptSegmentsOf(segments, cwd, depth, seen, context) {
   const collected = [];
   const committed = [];
+  const bound = [];
   const places = [];
   const collectedPlaces = [];
-  const outcome = blocked => ({ segments: collected, committed, places, collectedPlaces, blocked });
+  const outcome = blocked => ({ segments: collected, committed, bound, places, collectedPlaces, blocked });
   let homeKnown = context.homeKnown;
   let where = startCwd(cwd || process.cwd());
   for (const segment of segments) {
@@ -1456,6 +1458,7 @@ function scriptSegmentsOf(segments, cwd, depth, seen, context) {
       const found = fileSegmentsOf(file, { ...operands, base, bases, args }, depth, seen, here);
       collected.push(...found.segments);
       committed.push(...found.committed);
+      bound.push(...found.bound);
       collectedPlaces.push(...found.places);
       if (found.blocked) return outcome(found.blocked);
       sourcedChangesHome = sourcedChangesHome || (operands.sources && actsInCaller(found.own, changesHome));
@@ -1520,7 +1523,14 @@ function setsPositionals(values) {
 // The segments one script file brings, its own and those of the scripts it
 // runs in turn, each marked committed or not. A script that cannot be
 // analyzed fails closed whoever runs it: its commands could be anything.
-const NO_FILE_SEGMENTS = { segments: [], own: [], committed: [], places: [] };
+const NO_FILE_SEGMENTS = { segments: [], own: [], committed: [], bound: [], places: [] };
+
+// The values two sets of assignments give each variable, both kept.
+function mergedBound(first, second) {
+  const merged = { ...first };
+  for (const [name, values] of Object.entries(second)) merged[name] = [...new Set([...(merged[name] ?? []), ...values])];
+  return merged;
+}
 
 function fileSegmentsOf(file, operands, depth, seen, context) {
   const nested = nestedSegmentsOf(file, depth, seen);
@@ -1539,6 +1549,8 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
   if (reread.blocked) return { ...NO_FILE_SEGMENTS, blocked: `script ${file}: ${reread.blocked}` };
   const own = [...words.segments, ...reread.segments];
   const mark = committedFile ? { bound: boundAssignments(nested.segments, context.callerSet) } : false;
+  // The script's targets are judged by what the script and its caller set.
+  const scriptBound = mergedBound(context.bound ?? {}, boundAssignments(nested.segments, new Set()));
   // A script the wrapper moved into a directory runs its own children there.
   const ownWrites = writesOf(own, operands.base, false);
   const inner = scriptSegmentsOf(own, operands.bases ?? operands.base, depth + 1, seen, {
@@ -1549,6 +1561,7 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
     scriptDir: path.dirname(file),
     dirVars: scriptDirVariables(nested.segments),
     bindings,
+    bound: scriptBound,
     scriptVars: scriptVarsOf(ownBindings),
     callerSet: new Set([...context.callerSet, ...assignedNames(nested.segments)]),
     written: { paths: new Set([...context.written.paths, ...ownWrites.paths]), bulk: context.written.bulk },
@@ -1561,6 +1574,7 @@ function fileSegmentsOf(file, operands, depth, seen, context) {
     segments: [...own, ...inner.segments],
     own,
     committed: [...own.map(() => mark), ...inner.committed],
+    bound: [...own.map(() => scriptBound), ...inner.bound],
     places: [...ownPlaces, ...inner.collectedPlaces],
     blocked: inner.blocked,
   };
@@ -2186,7 +2200,8 @@ function judgeCommand(inputOrRaw) {
   }
 
   const cwd = typeof input.cwd === 'string' ? input.cwd : undefined;
-  const scripts = scriptSegmentsOf(segments, cwd, 0, new Set(), commandContext(segments, cwd, bindings));
+  const lineBound = boundAssignments(extracted, new Set());
+  const scripts = scriptSegmentsOf(segments, cwd, 0, new Set(), commandContext(segments, cwd, bindings, lineBound));
   if (scripts.blocked) {
     return {
       exitCode: 2,
@@ -2194,6 +2209,10 @@ function judgeCommand(inputOrRaw) {
     };
   }
   const committed = [...segments.map(() => false), ...scripts.committed];
+  // A target spelled with a variable the line sets (`D=file; echo x > "$D"`)
+  // is judged by every value the line gives it, in the typed segments and in
+  // the scripts they run; the validator reads the values in.
+  const bound = [...segments.map(() => lineBound), ...scripts.bound];
   // A segment is judged in every directory a cd before it can have left it
   // in (`cd dir && git status` runs git in dir), a script's from where the
   // script runs; code the line reads after expanding, and a segment after a
@@ -2203,7 +2222,7 @@ function judgeCommand(inputOrRaw) {
   const answer = callGuardianVerdict(
     cli,
     ['command-batch'],
-    JSON.stringify({ commands: segments, cwd, cwds, committed }),
+    JSON.stringify({ commands: segments, cwd, cwds, committed, bound }),
     VALIDATE_TIMEOUT_MS,
   );
   if (!answer.ok) return withoutVerdict(answer);

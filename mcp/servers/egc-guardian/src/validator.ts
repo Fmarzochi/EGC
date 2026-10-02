@@ -46,6 +46,10 @@ let committedFlag: ValidationResult | null = null;
 // What the committed script itself sets its variables to, for the ones the
 // command and the environment cannot set first (see isNarrowTarget).
 let committedBound: ReadonlyMap<string, readonly string[]> = new Map();
+// The variables the command line sets, by name, with every literal value the
+// line gives each one: a target spelled with one of them is judged by the
+// files those values name as well as by its own spelling.
+let lineBound: ReadonlyMap<string, readonly string[]> = new Map();
 
 function flagsInCommittedScript(denial: ValidationResult): boolean {
   if (!committedScript) return false;
@@ -3076,20 +3080,26 @@ export function validateCommandArgs(
   }
 }
 
-export function validateCommand(command: string, cwd?: string): ValidationResult {
-  const verdict = validateCommandVerdict(command, cwd);
-  return { ...verdict, advisory: verdict.advisory === true };
+export function validateCommand(command: string, cwd?: string, bound: Readonly<Record<string, readonly string[]>> = {}): ValidationResult {
+  const outer = lineBound;
+  lineBound = new Map(Object.entries(bound));
+  try {
+    const verdict = validateCommandVerdict(command, cwd);
+    return { ...verdict, advisory: verdict.advisory === true };
+  } finally {
+    lineBound = outer;
+  }
 }
 
 // A command out of a script committed in git and unchanged since: a grave
 // denial blocks it as usual; a rule it met that only exists to stop hiding
 // flags it, unless something grave follows.
-export function validateCommittedScriptCommand(command: string, cwd?: string, bound: Readonly<Record<string, readonly string[]>> = {}): ValidationResult {
+export function validateCommittedScriptCommand(command: string, cwd?: string, bound: Readonly<Record<string, readonly string[]>> = {}, lineVariables: Readonly<Record<string, readonly string[]>> = {}): ValidationResult {
   committedScript = true;
   committedFlag = null;
   committedBound = new Map(Object.entries(bound));
   try {
-    const verdict = validateCommand(command, cwd);
+    const verdict = validateCommand(command, cwd, lineVariables);
     if (committedFlag === null || (!verdict.allowed && !verdict.advisory)) return verdict;
     return {
       ...committedFlag,
@@ -3682,7 +3692,39 @@ function expandArguments(words: string[]): string[] | null {
 }
 
 function pathSpellings(arg: string): string[] {
-  return process.platform === 'win32' ? [arg, unquoteWord(arg)] : [arg];
+  return withLineValues(process.platform === 'win32' ? [arg, unquoteWord(arg)] : [arg]);
+}
+
+// `$NAME` or `${NAME}` anywhere in a spelling.
+const LINE_VARIABLE_RE = /\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/g;
+const MAX_LINE_VALUES = 64;
+const MAX_LINE_DEPTH = 4;
+
+// What a spelling names once the variables the command line sets are put
+// in: the first bound variable in it is replaced by each value the line
+// gives it, and every result is read again for the next one, since a value
+// may name another bound variable. A variable the line does not set, or
+// sets from a source this check cannot read, stays as written, where it
+// names no file. The spellings come after the original, so a reading that
+// picks the first ones (pathValue) still gets the word as handed over.
+function lineValuesOf(spelling: string, depth = 0): string[] {
+  if (depth >= MAX_LINE_DEPTH || !spelling.includes('$')) return [];
+  for (const match of spelling.matchAll(LINE_VARIABLE_RE)) {
+    const values = lineBound.get(match[1] ?? match[2]);
+    if (values === undefined) continue;
+    const at = match.index ?? 0;
+    const resolved = values.flatMap(value => {
+      const next = spelling.slice(0, at) + value + spelling.slice(at + match[0].length);
+      return [next, ...lineValuesOf(next, depth + 1)];
+    });
+    return [...new Set(resolved)].slice(0, MAX_LINE_VALUES);
+  }
+  return [];
+}
+
+function withLineValues(spellings: string[]): string[] {
+  if (lineBound.size === 0) return spellings;
+  return [...new Set(spellings.flatMap(spelling => [spelling, ...lineValuesOf(spelling)]))];
 }
 
 // The readings of a path value, one per spelling pathSpellings gives.
@@ -4093,7 +4135,7 @@ function redirectionsOf(line: string): Redirection[] {
 // over and, on Windows, where a backslash separates path components rather
 // than escaping the next character, the word as typed.
 function targetSpellings(target: ShellWord): string[] {
-  return process.platform === 'win32' ? [target.value, target.raw] : [target.value];
+  return withLineValues(process.platform === 'win32' ? [target.value, target.raw] : [target.value]);
 }
 
 // A shell script, to the writes judged here: a file named like one, or an

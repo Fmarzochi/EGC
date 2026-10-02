@@ -23,6 +23,21 @@ interface BatchEntry {
   command: string;
   committed: { bound: Record<string, string[]> } | null;
   dirs: string[] | null;
+  // The variables the line that runs the command sets (`bound[i]`), each
+  // with every literal value it takes: a target spelled with one of them is
+  // judged by the files those values name.
+  bound: Record<string, string[]>;
+}
+
+// A map of variable names to their values, or null for any other shape.
+function boundMap(given: unknown): Record<string, string[]> | null {
+  if (given === null || typeof given !== 'object' || Array.isArray(given)) return null;
+  const bound: Record<string, string[]> = {};
+  for (const [name, values] of Object.entries(given)) {
+    if (!Array.isArray(values) || !values.every((value): value is string => typeof value === 'string')) return null;
+    bound[name] = values;
+  }
+  return bound;
 }
 
 function batchDirs(value: unknown): string[] | null {
@@ -35,21 +50,16 @@ function batchDirs(value: unknown): string[] | null {
 function committedMark(flag: unknown): BatchEntry['committed'] {
   if (flag === true) return { bound: {} };
   if (flag === null || typeof flag !== 'object' || Array.isArray(flag)) return null;
-  const given = (flag as { bound?: unknown }).bound;
-  if (given === null || typeof given !== 'object' || Array.isArray(given)) return null;
-  const bound: Record<string, string[]> = {};
-  for (const [name, values] of Object.entries(given)) {
-    if (!Array.isArray(values) || !values.every((value): value is string => typeof value === 'string')) return null;
-    bound[name] = values;
-  }
-  return { bound };
+  const bound = boundMap((flag as { bound?: unknown }).bound);
+  return bound === null ? null : { bound };
 }
 
-function batchEntries(values: unknown[], committed: unknown, cwds?: unknown): BatchEntry[] {
+function batchEntries(values: unknown[], committed: unknown, cwds?: unknown, lineBound?: unknown): BatchEntry[] {
   const flags = Array.isArray(committed) ? committed : [];
   const places = Array.isArray(cwds) ? cwds : [];
+  const bounds = Array.isArray(lineBound) ? lineBound : [];
   return values
-    .map((value, i) => ({ command: value, committed: committedMark(flags[i]), dirs: batchDirs(places[i]) }))
+    .map((value, i) => ({ command: value, committed: committedMark(flags[i]), dirs: batchDirs(places[i]), bound: boundMap(bounds[i]) ?? {} }))
     .filter((entry): entry is BatchEntry => typeof entry.command === 'string');
 }
 
@@ -57,7 +67,7 @@ function batchEntries(values: unknown[], committed: unknown, cwds?: unknown): Ba
 // refused in any of them, one read out of a committed script as well.
 function judgeEntry(entry: BatchEntry, cwd: string | undefined): ReturnType<typeof validateCommand> {
   const { committed } = entry;
-  const judge = (dir: string | undefined) => (committed ? validateCommittedScriptCommand(entry.command, dir, committed.bound) : validateCommand(entry.command, dir));
+  const judge = (dir: string | undefined) => (committed ? validateCommittedScriptCommand(entry.command, dir, committed.bound, entry.bound) : validateCommand(entry.command, dir, entry.bound));
   const verdicts = (entry.dirs ?? [cwd]).map(judge);
   return verdicts.find(verdict => !verdict.allowed && !verdict.advisory) ?? verdicts.find(verdict => !verdict.allowed) ?? verdicts[0];
 }
@@ -71,7 +81,7 @@ function commandBatch(payload: string): unknown {
       // Legacy shape: a bare array of command strings, no cwd available.
       entries = batchEntries(parsed, undefined);
     } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.commands)) {
-      entries = batchEntries(parsed.commands, parsed.committed, parsed.cwds);
+      entries = batchEntries(parsed.commands, parsed.committed, parsed.cwds, parsed.bound);
       if (typeof parsed.cwd === 'string') cwd = parsed.cwd;
     }
   } catch {
