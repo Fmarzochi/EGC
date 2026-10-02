@@ -29,7 +29,7 @@ function cleanup(dir) {
 
 function run(homeDir) {
   return execFileSync('node', [SCRIPT_PATH], {
-    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, XDG_CONFIG_HOME: path.join(homeDir, '.config')},
     encoding: 'utf8',
   });
 }
@@ -712,7 +712,11 @@ async function runOpenCodeTests() {
 
       const output = run(home);
 
-      assert.strictEqual(output.includes('skipping config update'), true, 'logs skip error');
+      assert.strictEqual(
+        output.includes('invalid JSON syntax') || output.includes('left untouched'),
+        true,
+        'logs skip error'
+      );
       assert.strictEqual(fs.readFileSync(configPath, 'utf8'), '{ invalid json... }', 'invalid json untouched');
     } finally {
       cleanup(home);
@@ -770,13 +774,16 @@ async function runOpenCodeTests() {
       fs.mkdirSync(legacyDir, { recursive: true });
 
       const legacyFileWithMarker = path.join(legacyDir, 'EGC_MEMORY.md');
-      fs.writeFileSync(legacyFileWithMarker, '# EGC Session Memory\nProtocol content...', 'utf8');
-
+      fs.writeFileSync(
+        legacyFileWithMarker,
+        '<!-- egc-memory-protocol:v1 -->\n# EGC Session Memory\nProtocol content...\n<!-- /egc-memory-protocol -->',
+        'utf8'
+      );
+  
       run(home);
 
       assert.strictEqual(fs.existsSync(legacyFileWithMarker), false, 'legacy file with marker deleted');
 
-      // User file without marker
       fs.writeFileSync(legacyFileWithMarker, '# My Custom Rules\nNo EGC marker here.', 'utf8');
       run(home);
       assert.strictEqual(fs.existsSync(legacyFileWithMarker), true, 'legacy file without marker preserved');

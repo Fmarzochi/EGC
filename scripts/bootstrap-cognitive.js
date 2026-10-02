@@ -4,7 +4,7 @@
 const fs   = require('node:fs');
 const path = require('node:path');
 const os   = require('node:os');
-const { openCodeConfigDir, openCodeConfigPath } = require('./lib/mcp-register');
+const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions } = require('./lib/mcp-register');
 
 // Bump when BLOCK's content changes in a way that already-configured installs
 // should receive (e.g. a new protocol section). injectProtocol() upgrades any
@@ -438,25 +438,28 @@ const CODEX_SKIP_MESSAGES = {
       const memoryFile = path.join(configDir, 'egc-memory.md');
       injectStandaloneProtocol(memoryFile, 'OpenCode', markdownProtocolBody('EGC Session Memory'));
 
-      // Clean up legacy ~/.opencode/instructions/EGC_MEMORY.md if EGC marker exists
       const legacyFile = path.join(HOME, '.opencode', 'instructions', 'EGC_MEMORY.md');
       if (fs.existsSync(legacyFile)) {
         try {
           const content = fs.readFileSync(legacyFile, 'utf8');
-          if (content.includes('EGC Session Memory') || content.includes('<!-- egc:start -->')) {
+          if (MARKER_BLOCK_RE.test(content)) {
             fs.unlinkSync(legacyFile);
           }
         } catch {
-          // Ignore errors during legacy cleanup
+          // Ignore legacy cleanup errors
         }
       }
 
-      // Check opencode.jsonc for its own instructions key
       const jsoncPath = path.join(configDir, 'opencode.jsonc');
       if (fs.existsSync(jsoncPath)) {
         try {
           const jsoncContent = fs.readFileSync(jsoncPath, 'utf8');
-          if (/"instructions"\s*:/.test(jsoncContent)) {
+          const uncommentedContent = jsoncContent
+            .split('\n')
+            .filter(line => !line.trim().startsWith('//'))
+            .join('\n');
+
+          if (/"instructions"\s*:/.test(uncommentedContent)) {
             console.log(`  [cognitive] OpenCode: opencode.jsonc contains an instructions list; manually add "${memoryFile}" to it.`);
             return;
           }
@@ -465,31 +468,12 @@ const CODEX_SKIP_MESSAGES = {
         }
       }
 
-      // Update opencode.json or legacy config.json
       const configPath = openCodeConfigPath(HOME);
-      let config = {};
-
-      if (fs.existsSync(configPath)) {
-        try {
-          config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        } catch {
-          console.log(`  [cognitive] OpenCode: skipping config update, ${configPath} is not valid JSON.`);
-          return;
-        }
+      try {
+        registerOpenCodeInstructions(configPath, memoryFile);
+      } catch (err) {
+        console.log(`  [cognitive] OpenCode: ${err.message}`);
       }
-
-      if (typeof config !== 'object' || config === null || Array.isArray(config)) {
-        console.log(`  [cognitive] OpenCode: skipping config update, ${configPath} must contain a JSON object.`);
-        return;
-      }
-
-      const instructions = Array.isArray(config.instructions) ? config.instructions : [];
-      if (!instructions.includes(memoryFile)) {
-        instructions.push(memoryFile);
-      }
-      config.instructions = instructions;
-
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
     } catch (e) {
       console.log(`  [cognitive] OpenCode: unexpected error: ${e.message}`);
     }
