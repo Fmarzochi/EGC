@@ -60,24 +60,15 @@ function git(args) {
   return result.stdout;
 }
 
-function firstLineOf(file) {
-  let fd;
-  try {
-    fd = fs.openSync(path.join(repoRoot, file), 'r');
-    const head = Buffer.alloc(128);
-    return head.subarray(0, fs.readSync(fd, head, 0, head.length, 0)).toString('utf8');
-  } catch {
-    return '';
-  } finally {
-    if (fd !== undefined) fs.closeSync(fd);
-  }
-}
-
+// The shell scripts of the commit at HEAD, read from the commit itself: the
+// ones named as scripts, and those whose committed text opens with a shell
+// shebang (git grep narrows the blobs to read to those with a #! line).
 function committedScripts() {
-  return git(['ls-tree', '-r', '-z', '--name-only', 'HEAD'])
-    .split('\0')
-    .filter(file => file && (SHELL_EXTENSION_RE.test(file) || SHELL_SHEBANG_RE.test(firstLineOf(file))))
-    .map(file => ({ file, content: git(['cat-file', 'blob', `HEAD:${file}`]) }));
+  const named = git(['ls-tree', '-r', '-z', '--name-only', 'HEAD']).split('\0').filter(file => SHELL_EXTENSION_RE.test(file));
+  const withShebang = git(['grep', '-lIz', '-e', '^#!', 'HEAD']).split('\0').filter(Boolean).map(entry => entry.slice('HEAD:'.length));
+  return [...new Set([...named, ...withShebang])]
+    .map(file => ({ file, content: git(['cat-file', 'blob', `HEAD:${file}`]) }))
+    .filter(({ file, content }) => SHELL_EXTENSION_RE.test(file) || SHELL_SHEBANG_RE.test(content));
 }
 
 function isHookDirectory(file) {

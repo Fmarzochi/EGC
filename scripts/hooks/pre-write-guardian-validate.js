@@ -191,9 +191,11 @@ function committedSegmentCounts(target) {
 }
 
 // A checkout that writes CRLF (core.autocrlf on Windows) holds the committed
-// LF lines with a carriage return added; they are the same commands.
+// LF lines with a carriage return added; they are the same commands. A
+// carriage return anywhere else is part of the command.
 function lineKey(segment) {
-  return segment.replaceAll('\r', '');
+  const lines = segment.replaceAll('\r\n', '\n');
+  return lines.endsWith('\r') ? lines.slice(0, -1) : lines;
 }
 
 // What the write would hold that the commit does not: the commands it adds

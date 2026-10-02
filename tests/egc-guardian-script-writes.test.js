@@ -123,6 +123,8 @@ test('a shell script is never written through the shell', () => {
     'tee -- -exploit.sh',
     "sed -i -- 's/a/b/' -exploit.sh",
     'cp -- /tmp/x -run.sh',
+    'cp build.sh backup.txt',
+    'ln -s ../scripts/build.sh bin/tool',
   ]) {
     const verdict = assertHardDenied(command);
     assert.match(verdict.reason, /Write or Edit/, `${command}: the reason names the way to write it`);
@@ -134,6 +136,8 @@ test('a script without an extension is recognized by its shebang', () => {
     const script = path.join(dir, 'deploy');
     fs.writeFileSync(script, '#!/bin/sh\necho hi\n');
     assertHardDenied(`echo x >> ${script}`);
+    assertHardDenied(`cp ${script} ${path.join(dir, 'run')}`);
+    assertHardDenied(`ln -s ${script} ${path.join(dir, 'run')}`);
     const program = path.join(dir, 'tool');
     fs.writeFileSync(program, '#!/usr/bin/env node\nconsole.log(1)\n');
     assertNotHardDenied(`echo x >> ${program}`);
@@ -147,7 +151,7 @@ test('reading a script, or writing a file that is not one, is not refused', () =
     "sed 's/a/b/' build.sh",
     "sed -n 's/x/y/p' build.sh",
     'cat build.sh',
-    'cp build.sh backup.txt',
+    'cp notes.txt backup.txt',
     'tee notes.txt',
     'cp /tmp/x.txt -t bin/',
     'curl -o out.json https://example.com/install.sh',
@@ -177,6 +181,10 @@ test('a download whose file names the server or a list picks is refused', () => 
     'wget -r https://example.com/',
     'wget -m https://example.com/',
     'wget -i urls.txt',
+    'curl -K download.cfg https://example.com/x',
+    'curl --config download.cfg https://example.com/x',
+    'wget -e output_document=run.sh https://example.com/x',
+    'wget --config=download.wgetrc https://example.com/x',
   ]) {
     const verdict = assertHardDenied(command);
     assert.match(verdict.reason, /name the output/, command);
@@ -234,6 +242,17 @@ test('core.hooksPath is read as git reads it: quoted, escaped, commented, after 
       assert.strictEqual(validateWrite(path.join(dir, ...hooks, 'pre-commit'), dir).allowed, false, JSON.stringify(line));
     });
   }
+});
+
+test('a repository core.hooksPath outside its work tree protects the hooks there, for commands run in it', () => {
+  withTempDir(outside => {
+    const hooks = path.join(outside, 'shared-hooks');
+    withRepositoryHooksPath(hooks, dir => {
+      assert.strictEqual(validateWrite(path.join(hooks, 'pre-commit'), dir).allowed, false);
+      assertHardDenied(`cp /tmp/x ${path.join(hooks, 'pre-push')}`, dir);
+      assert.strictEqual(validateWrite(path.join(hooks, 'notes.txt'), dir).allowed, true);
+    });
+  });
 });
 
 test('a core.hooksPath at the top of the work tree protects its hooks, not the whole tree', () => {

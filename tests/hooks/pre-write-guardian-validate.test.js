@@ -108,6 +108,13 @@ function runCommittedScriptTests(wipe) {
     });
   }));
 
+  tally(test('a carriage return a write puts inside a committed command makes it a new one', () => {
+    withCommittedScript(`#!/bin/sh\necho start\n${wipe} "$PID_FILE"\n`, file => {
+      const result = runHook(file, {}, { file_path: file, old_string: `${wipe} "$PID_FILE"`, new_string: `${wipe} "$PID\r_FILE"` }, 'Edit');
+      assert.strictEqual(result.code, 2, result.stderr);
+    });
+  }));
+
   tally(test('a second copy of a committed denied command is judged', () => {
     withCommittedScript(`#!/bin/sh\necho start\n${wipe} "$PID_FILE"\n`, file => {
       const result = runHook(file, {}, { file_path: file, old_string: 'echo start', new_string: `${wipe} "$PID_FILE"` }, 'Edit');

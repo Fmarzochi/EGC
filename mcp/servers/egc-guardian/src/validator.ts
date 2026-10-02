@@ -1634,12 +1634,15 @@ function configuredHooksDirectories(dir: string): string[] {
 }
 
 // Whether the path is a hook git runs from a directory core.hooksPath points
-// at. That directory may hold other files too (it can be the work tree
-// itself), so there only the hooks are written as .git/hooks is.
-function isConfiguredHook(normalizedP: string): boolean {
+// at, for the repository holding the path or the one the command runs in
+// (its setting may point outside it). That directory may hold other files
+// too (it can be the work tree itself), so there only the hooks are written
+// as .git/hooks is.
+function isConfiguredHook(normalizedP: string, baseDir: string): boolean {
   if (!GIT_HOOK_NAMES.has(foldCase(path.basename(normalizedP)))) return false;
   const dir = foldCase(path.dirname(normalizedP));
-  return configuredHooksDirectories(path.dirname(normalizedP)).some(hooks => foldCase(resolveRealOrLexical(hooks)) === dir);
+  const directories = [...configuredHooksDirectories(path.dirname(normalizedP)), ...configuredHooksDirectories(path.resolve(baseDir))];
+  return directories.some(hooks => foldCase(resolveRealOrLexical(hooks)) === dir);
 }
 
 function isRegularFile(p: string): boolean {
@@ -1688,7 +1691,7 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
     }
   }
 
-  return isGitControlFile(candidate, isRegularFile(normalizedP)) || isConfiguredHook(normalizedP);
+  return isGitControlFile(candidate, isRegularFile(normalizedP)) || isConfiguredHook(normalizedP, baseDir);
 }
 
 // Reading and writing carry different risk, and treating them alike is what
@@ -4187,7 +4190,7 @@ function copyWords(args: string[]): { operands: string[]; directory: string | nu
   const words = args.filter((_, i) => !COPY_LONG_VALUE_OPTIONS.has(args[i - 1]));
   const { values, operands } = readOptions(words, COPY_VALUE_LETTERS);
   const directories = [...(values.get('t') ?? []), ...longOptionValues(args, ['target-directory'])];
-  return { operands, directory: directories.length > 0 ? directories[directories.length - 1] : null };
+  return { operands, directory: directories.at(-1) ?? null };
 }
 
 function isDirectoryTarget(target: string, cwd?: string): boolean {
@@ -4199,13 +4202,25 @@ function isDirectoryTarget(target: string, cwd?: string): boolean {
   }
 }
 
-function copiedFiles(baseCommand: string, args: string[], cwd?: string): string[] {
+interface Copy { source: string; destination: string }
+
+// What cp, install and ln make of each source: a copy or a link of it, at
+// the destination it gets.
+function copies(baseCommand: string, args: string[], cwd?: string): Copy[] {
   const { operands, directory } = copyWords(args);
-  const into = (dir: string, sources: string[]) => sources.map(source => path.join(dir, path.basename(source)));
+  const into = (dir: string, sources: string[]) => sources.map(source => ({ source, destination: path.join(dir, path.basename(source)) }));
   if (directory !== null) return into(directory, operands);
-  if (operands.length < 2) return baseCommand === 'ln' ? operands.map(target => path.basename(target)) : [];
-  const destination = operands[operands.length - 1];
-  return isDirectoryTarget(destination, cwd) ? into(destination, operands.slice(0, -1)) : [destination];
+  if (operands.length < 2) return baseCommand === 'ln' ? operands.map(source => ({ source, destination: path.basename(source) })) : [];
+  const destination = operands.at(-1) ?? '';
+  const sources = operands.slice(0, -1);
+  return isDirectoryTarget(destination, cwd) ? into(destination, sources) : sources.map(source => ({ source, destination }));
+}
+
+// A copy or a link of a shell script is a shell script too, whatever its
+// new name.
+function copiedScript(baseCommand: string, args: string[], cwd?: string): string | undefined {
+  const copy = copies(baseCommand, args, cwd).find(({ source, destination }) => isShellScriptTarget(destination, cwd) || isShellScriptTarget(source, cwd));
+  return copy?.destination;
 }
 
 // A command's short options, read cluster by cluster: the flag letters set,
@@ -4269,40 +4284,43 @@ const CURL_VALUE_LETTERS = 'AbcCdDeEFHKmoPQrtTuUwxXyYz';
 const WGET_VALUE_LETTERS = 'aABDeiIlnOoPQRtTUwX';
 
 // curl writes -o, its headers (-D) and cookies (-c), its traces and logs,
-// and with -O the URL's own name, or with -J one the server sends.
+// and with -O the URL's own name, or with -J one the server sends; a config
+// file (-K) may name any of them.
 function curlWrites(args: string[]): DownloadWrites {
   const { flags, values, operands } = readOptions(args, CURL_VALUE_LETTERS);
   const named = ['o', 'D', 'c'].flatMap(letter => values.get(letter) ?? []);
   const files = [...named, ...longOptionValues(args, ['output', 'dump-header', 'cookie-jar', 'trace', 'trace-ascii', 'stderr', 'libcurl', 'etag-save'])];
   const remoteName = flags.includes('O') || hasLongOption(args, ['remote-name', 'remote-name-all']);
   const serverNamed = remoteName && (flags.includes('J') || hasLongOption(args, ['remote-header-name']));
-  return { files: remoteName ? [...files, ...urlFileNames(operands)] : files, namesUnseen: serverNamed };
+  const configured = values.has('K') || hasLongOption(args, ['config']);
+  return { files: remoteName ? [...files, ...urlFileNames(operands)] : files, namesUnseen: serverNamed || configured };
 }
 
 // wget writes -O and its log (-o, -a), or else each URL's own name, unless
-// recursion, an input list or the server picks the names.
+// recursion, an input list or the server picks the names; a wgetrc command
+// (-e) or file (--config) may name any of them.
 function wgetWrites(args: string[]): DownloadWrites {
   const { flags, values, operands } = readOptions(args, WGET_VALUE_LETTERS);
+  const configured = values.has('e') || hasLongOption(args, ['execute', 'config']);
   const documents = [...(values.get('O') ?? []), ...longOptionValues(args, ['output-document'])];
   const logs = [...['o', 'a'].flatMap(letter => values.get(letter) ?? []), ...longOptionValues(args, ['output-file', 'append-output'])];
-  if (documents.length > 0) return { files: [...documents, ...logs], namesUnseen: false };
+  if (documents.length > 0) return { files: [...documents, ...logs], namesUnseen: configured };
   const listed = values.has('i') || /[rmp]/.test(flags) || hasLongOption(args, ['input-file', 'recursive', 'mirror', 'page-requisites', 'content-disposition', 'trust-server-names']);
-  return { files: [...logs, ...urlFileNames(operands)], namesUnseen: listed };
+  return { files: [...logs, ...urlFileNames(operands)], namesUnseen: listed || configured };
 }
 
 function downloadVerdict(baseCommand: string, args: string[], cwd?: string): ValidationResult | null {
   const { files, namesUnseen } = baseCommand === 'wget' ? wgetWrites(args) : curlWrites(args);
   if (namesUnseen) {
-    return laterRunDenial(`'${baseCommand}' here lets the server or a list name the files it writes, so one may be a shell script the Guardian never sees; name the output (curl -o, wget -O) instead`);
+    return laterRunDenial(`'${baseCommand}' here lets the server, a list or a config name the files it writes, so one may be a shell script the Guardian never sees; name the output (curl -o, wget -O) on the command line instead`);
   }
   const script = files.find(target => isShellScriptTarget(target, cwd));
   return script === undefined ? null : scriptWriteDenial(`'${baseCommand}'`, script);
 }
 
-function writtenFiles(baseCommand: string, args: string[], cwd?: string): string[] {
+function writtenFiles(baseCommand: string, args: string[]): string[] {
   if (baseCommand === 'tee') return readOptions(args, '').operands;
   if (baseCommand === 'sed') return sedEditedFiles(args);
-  if (COPYING_COMMANDS.has(baseCommand)) return copiedFiles(baseCommand, args, cwd);
   return [];
 }
 
@@ -4310,7 +4328,9 @@ const DOWNLOADERS = new Set(['curl', 'wget']);
 
 function scriptWriteVerdict(baseCommand: string, args: string[], cwd?: string): ValidationResult | null {
   if (DOWNLOADERS.has(baseCommand)) return downloadVerdict(baseCommand, args, cwd);
-  const script = writtenFiles(baseCommand, args, cwd).find(target => isShellScriptTarget(target, cwd));
+  const script = COPYING_COMMANDS.has(baseCommand)
+    ? copiedScript(baseCommand, args, cwd)
+    : writtenFiles(baseCommand, args).find(target => isShellScriptTarget(target, cwd));
   return script === undefined ? null : scriptWriteDenial(`'${baseCommand}'`, script);
 }
 
@@ -4483,7 +4503,7 @@ export function validateWrite(filepath: string, cwd?: string | null): Validation
       trust_level: 'BLOCKED',
     };
   }
-  if (isProtectedPath(resolveWriteTarget(filepath, cwd))) {
+  if (isProtectedPath(resolveWriteTarget(filepath, cwd), writeBaseDir(cwd))) {
     return {
       allowed: false,
       reason: `Path '${filepath}' is protected`,
