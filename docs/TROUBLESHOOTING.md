@@ -110,7 +110,7 @@ The installer never writes through a link below a target root: a link at the des
 
 **Cause:** EGC was installed globally under one Node version (e.g. 24), but a project's `.tool-versions` activates a different version (e.g. 20). The two global installs each have their own copy of EGC, and they can disagree about where EGC's files came from.
 
-**Fix:** Keep EGC in a single Node version — the one that is active outside of any project directory.
+**Fix:** Keep EGC in a single Node version: the one that is active outside of any project directory.
 
 ```bash
 # 1. Check which Node version is your system default
@@ -130,7 +130,7 @@ With mise, you can also align the project's `.tool-versions` with your global No
 echo "nodejs $(node --version | tr -d v)" > .tool-versions
 ```
 
-**Verification:** After fixing, run `egc doctor` — it should report no errors.
+**Verification:** After fixing, run `egc doctor`. It should report no errors.
 
 ---
 

@@ -11,7 +11,7 @@ egc install
 
 That's it. The installer detects which AI tools you have installed and configures all of them automatically.
 
-> **Note:** If you use a Node.js version manager (mise, nvm, asdf, fnm), install EGC under your **default** Node version — the one active outside any project directory. Installing it under multiple Node versions causes version conflicts. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for details.
+> **Note:** If you use a Node.js version manager (mise, nvm, asdf, fnm), install EGC under your **default** Node version (the one active outside any project directory). Installing it under multiple Node versions causes version conflicts. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for details.
 >
 > **Permissions:** if `npm install -g` fails with `EACCES` (typical when Node comes from your distro's package manager or a system-wide installer and the global npm prefix is root-owned, as on a stock Ubuntu with `apt` Node or a Homebrew Node on macOS), the clean fix is a user-writable prefix: a Node version manager (mise, nvm, asdf, fnm) or a custom npm global prefix under your home directory, as described in [TROUBLESHOOTING.md](TROUBLESHOOTING.md). If you would rather keep the system Node, `sudo npm install -g @egchq/egc` works as a one-off; run `egc install` and everything after it **without** sudo, so the files EGC writes under your home stay owned by you.
 
@@ -19,7 +19,7 @@ The bare install prepares the runtime only. To have your AI tools restore projec
 
 ### VS Code + GitHub Copilot
 
-If VS Code is your primary editor, install the [GitHub Copilot Chat extension](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot-chat) first. Inline autocomplete alone is not enough — Copilot needs the chat extension to discover and use EGC skills.
+If VS Code is your primary editor, install the [GitHub Copilot Chat extension](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot-chat) first. Inline autocomplete alone is not enough: Copilot needs the chat extension to discover and use EGC skills.
 
 Then install the Copilot target:
 
@@ -301,9 +301,9 @@ egc discover           # scan recent session transcripts for crushable output th
 
 On hook-capable harnesses the bash dispatcher routes eligible simple commands through `egc run` automatically. The rewrite is strictly fail-open: pipelines, chaining, redirection, already-wrapped commands, or a missing `egc` CLI all pass through untouched. Opt out anytime with `EGC_DISABLED_HOOKS=pre:bash:crusher-rewrite`.
 
-**Known limitation:** on Claude Code, that hook rewrite does not fire for commands the AI assistant itself runs through the Bash tool — only for a human typing directly into the terminal. This is a confirmed, permanent gap in how Claude Code's `PreToolUse` hook applies to assistant-issued commands, not an EGC bug.
+**Known limitation:** on Claude Code, that hook rewrite does not fire for commands the AI assistant itself runs through the Bash tool. It fires only for a human typing directly into the terminal. This is a confirmed, permanent gap in how Claude Code's `PreToolUse` hook applies to assistant-issued commands, not an EGC bug.
 
-To cover that gap, `egc install` and `egc auto-update` also install a PATH-level binary shim under `~/.egc/bin`, covering `git`, `npm`, `pnpm`, `yarn`, `bun`, `pip`, `pip3`, `poetry`, `pipenv`, `uv`, `composer`, `bundle`, and `gh`: small launcher files that sit ahead of the real binaries on `PATH` and route through the same compression engine. Because it works via normal shell `PATH` resolution, it compresses output for any caller — a human, this AI, or another tool entirely — regardless of hook support. It requires a new shell session after install to pick up the `PATH` change. Manage it directly with:
+To cover that gap, `egc install` and `egc auto-update` also install a PATH-level binary shim under `~/.egc/bin`, covering `git`, `npm`, `pnpm`, `yarn`, `bun`, `pip`, `pip3`, `poetry`, `pipenv`, `uv`, `composer`, `bundle`, and `gh`: small launcher files that sit ahead of the real binaries on `PATH` and route through the same compression engine. Because it works via normal shell `PATH` resolution, it compresses output for any caller (a human, this AI, or another tool entirely), regardless of hook support. It requires a new shell session after install to pick up the `PATH` change. Manage it directly with:
 
 ```bash
 egc crusher-shim install    # add the shim to ~/.egc/bin and your shell's PATH

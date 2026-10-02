@@ -8,6 +8,30 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 
 const docs = ['docs/installation.md', 'docs/TROUBLESHOOTING.md'];
 
+const DASH_PUNCTUATION = new RegExp(`(^|\\s)--(\\s|$)|\\w--\\w|[${String.fromCharCode(0x2013, 0x2014)}]`);
+
+function proseOffenders(content) {
+  const offenders = [];
+  let inFence = false;
+
+  content.split(/\r?\n/).forEach((line, index) => {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      return;
+    }
+
+    if (inFence) return;
+
+    const prose = line.replace(/`[^`]*`/g, '').replace(/\]\([^)]*\)/g, ']');
+
+    if (DASH_PUNCTUATION.test(prose)) {
+      offenders.push(`${index + 1}: ${line}`);
+    }
+  });
+
+  return offenders;
+}
+
 let passed = 0;
 let failed = 0;
 
@@ -23,63 +47,55 @@ function test(name, fn) {
   }
 }
 
-function hasDoubleHyphenDash(line) {
-  // Ignore inline code and Markdown link destinations.
-  let text = line.replace(/`[^`]*`/g, '').replace(/\[[^\]]*\]\([^)]*\)/g, '');
-
-  // Ignore Markdown table separators.
-  if (/^\s*\|?[\s:-]+\|[\s|:-]+\|?\s*$/.test(text)) {
-    return false;
-  }
-
-  // Ignore CLI flags such as --raw, --target, --history, --lts.
-  text = text.replace(/(^|[^\w-])--[\w-]+/g, '$1');
-
-  // Ignore code-block content represented by indentation.
-  if (/^\s{4}/.test(line)) {
-    return false;
-  }
-
-  // Detect remaining double hyphens used as punctuation.
-  return /--/.test(text);
-}
-
-console.log('\n=== Testing docs for double-hyphen dash separators ===\n');
+console.log('\n=== Testing docs for dash punctuation ===\n');
 
 test('detects spaced double-hyphen dash punctuation', () => {
-  assert.strictEqual(hasDoubleHyphenDash('hello -- world'), true);
+  assert.deepStrictEqual(proseOffenders('first -- second'), ['1: first -- second']);
 });
 
 test('detects unspaced double-hyphen dash punctuation', () => {
-  assert.strictEqual(hasDoubleHyphenDash('hello--world'), true);
+  assert.deepStrictEqual(proseOffenders('first--second'), ['1: first--second']);
+});
+
+test('detects double hyphen at end of line', () => {
+  assert.deepStrictEqual(proseOffenders('ends with --'), ['1: ends with --']);
+});
+
+test('detects double hyphen at start of line', () => {
+  assert.deepStrictEqual(proseOffenders('-- starts here'), ['1: -- starts here']);
+});
+
+test('detects em dash', () => {
+  assert.deepStrictEqual(proseOffenders(`first ${String.fromCharCode(0x2014)} second`), [`1: first ${String.fromCharCode(0x2014)} second`]);
+});
+
+test('detects en dash', () => {
+  assert.deepStrictEqual(proseOffenders(`first ${String.fromCharCode(0x2013)} second`), [`1: first ${String.fromCharCode(0x2013)} second`]);
 });
 
 test('allows CLI flags', () => {
-  assert.strictEqual(hasDoubleHyphenDash('Run the command with --raw.'), false);
+  assert.deepStrictEqual(proseOffenders('egc install --target copilot'), []);
 });
 
-test('allows code-formatted filenames', () => {
-  assert.strictEqual(hasDoubleHyphenDash('See `some--filename.md` for details.'), false);
+test('allows CLI flags in parentheses', () => {
+  assert.deepStrictEqual(proseOffenders('run it (--raw skips compression)'), []);
 });
 
-test('allows Markdown syntax', () => {
-  assert.strictEqual(hasDoubleHyphenDash('[link](https://example.com?a=1--2)'), false);
+test('allows double hyphens inside inline code', () => {
+  assert.deepStrictEqual(proseOffenders('`Projetos--demo.md`'), []);
+});
+
+test('allows double hyphens inside Markdown link destinations', () => {
+  assert.deepStrictEqual(proseOffenders('see [the guide](TROUBLESHOOTING.md#npm-install--g-on-windows)'), []);
 });
 
 for (const relativePath of docs) {
-  test(`${relativePath} does not use double hyphens as dash punctuation`, () => {
+  test(`${relativePath} does not use invalid dash punctuation`, () => {
     const content = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 
-    const lines = content.split(/\r?\n/);
-    const offenders = [];
+    const offenders = proseOffenders(content);
 
-    lines.forEach((line, index) => {
-      if (hasDoubleHyphenDash(line)) {
-        offenders.push(`${index + 1}: ${line}`);
-      }
-    });
-
-    assert.deepStrictEqual(offenders, [], `Found double-hyphen dash punctuation:\n${offenders.join('\n')}`);
+    assert.deepStrictEqual(offenders, [], `Found invalid dash punctuation:\n${offenders.join('\n')}`);
   });
 }
 
