@@ -18,7 +18,7 @@
 
 ---
 
-EGC est un premier runtime local pour les outils de codage IA. Installez-le une fois et Curseur, Claude Code, Codex, Copilot, Aider et le reste des 19 outils de codage IA qu'il supporte partager une mémoire chiffrée de vos projets, une couche de sécurité devant chaque commande, un filtre qui éloigne la sortie bruyante du modèle, et un bus en direct qui permet à vos sessions ouvertes de se voir. Fonctionne nativement avec Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere et Vertex AI, plus OpenRouter pour Qwen3, Llama 4, et plus.
+EGC est un premier runtime local pour les outils de codage IA. Installez-le une fois et Curseur, Claude Code, Codex, Copilot, Aider et le reste des 20 outils de codage IA qu'il supporte partager une mémoire chiffrée de vos projets, une couche de sécurité devant chaque commande, un filtre qui éloigne la sortie bruyante du modèle, et un bus en direct qui permet à vos sessions ouvertes de se voir. Fonctionne nativement avec Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere et Vertex AI, plus OpenRouter pour Qwen3, Llama 4, et plus.
 
 Rien ne quitte votre machine. La mémoire réside dans `~/.egc`, chiffrée avec AES-256-GCM, gardée par projet et branche, et jamais engagée à git.
 
@@ -33,7 +33,7 @@ npm install -g @egchq/egc && egc install
 C'est tout le moteur. `egc install` détecte les outils que vous avez, enregistre les deux serveurs MCP locaux dans chacun d'eux, écrit le protocole mémoire que chaque agent lit et met en place le Token Crusher. Il pose une question, si vous voulez aussi la bibliothèque d'invite optionnelle, et la valeur par défaut est non.
 
 <div align="center">
-  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 19 AI coding tools" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
 </div>
 
 [Guide d'installation complète](../../docs/installation.md)
