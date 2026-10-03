@@ -2,7 +2,7 @@
 
 > The honest map of how each supported AI coding tool integrates with EGC.
 
-EGC supports 19 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
+EGC supports 20 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
 
 What the maintainers guarantee per tool is a separate axis: see [support levels](../governance/support-levels.md).
 
@@ -14,7 +14,7 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 | **2** | Custom-script (retired) | Formerly tool-specific assets via a dedicated shell script | none: Kiro, Trae and CodeBuddy assets ship through their Tier 1 adapters |
 | **3** | Protocol-only | MCP server registration + memory protocol injection | `scripts/bootstrap-cognitive.js` + `install.sh` MCP registration |
 
-## The 19 harnesses
+## The 20 harnesses
 
 > Retired on 2026-08-16, after each vendor's own lifecycle decision: Gemini CLI (standalone product stopped serving 2026-06-18; Antigravity succeeded it on the same home directory), Continue.dev (shut down after the Cursor acqui-hire, repository read-only), and Roo Code (archived upstream since 2026-05-15). Their adapter files left the tree on 2026-09-30; the ids stay recognized so `egc install`, `egc doctor`, `egc repair` and `egc auto-update` explain the retirement instead of calling them unknown, and what those installs wrote is still cleaned by `egc uninstall`. Amazon Q Developer CLI was retired on 2026-09-30: AWS closed new sign-ups on 2026-05-15 and ends support on 2027-04-30, its CLI became the Kiro CLI (which EGC supports as `kiro`), and its Guardian agent never activated on its own (upstream bug open since 2025-11-14); `egc uninstall` still removes what its installs wrote.
 
@@ -41,6 +41,7 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 | 17 | **Cline** | 1 | `cline` | `.clinerules/` (project only, no home target) | Rules are flattened into Cline's project-level rules directory using collision-safe namespaced filenames; agents and commands as library folders under `.clinerules/` |
 | 18 | **Warp** | 1 | `warp` | `.warp/skills/<name>.md` + index in project root `AGENTS.md` (project only, no home target) | Warp only discovers a single root `AGENTS.md`/`WARP.md` file as project rules, not a directory of skill files -- confirmed a plain `AGENTS.md` is sufficient (Warp's own docs call it the default project rules file; `WARP.md` is legacy and only takes priority if both exist). Full skill content is copied flat to `.warp/skills/<name>.md` (read on demand); a short index (name + one-line description + path) is merged into a marked block inside `AGENTS.md` via a new `merge-markdown-skill-index` operation kind, since concatenating all 230+ skills (~2MB) into the always-loaded rules file would blow the context budget. Install/repair/uninstall all wired; uninstall never deletes `AGENTS.md` itself, only the EGC block |
 | 19 | **Qwen Code** | 1 | `qwen` | `.qwen/skills/<name>/SKILL.md` (project only, no home target) | Skills installed flat with the source category stripped; Qwen Code discovers project skills natively from `.qwen/skills/`; agents, commands and rules as library folders under `.qwen/`; no hook wiring |
+| 20 | **Kimi Code CLI** | 1 | `kimi` | `~/.kimi-code/skills/<name>/SKILL.md` (home only; `KIMI_CODE_HOME` moves the data root) | Skills installed flat (source category stripped); agents, commands and rules as library folders under `~/.kimi-code/`; MCP servers registered in `~/.kimi-code/mcp.json` (or `$KIMI_CODE_HOME/mcp.json`) in the standard `{mcpServers: {}}` JSON shape; the hook surface (a `[[hooks]]` array in `config.toml`) is deferred pending machine verification of the TOML merge and the Bash matcher, the same way Warp and Qwen defer their hooks |
 
 ## Prompt library per target
 
@@ -50,8 +51,8 @@ With `--profile full` every target receives the whole prompt library the README 
 
 Every harness participates in the real-time session mesh through two always-on layers, plus a native turn signal where the host's own extension surface supports context injection (each claim below was verified against the vendor's current official documentation, or its source code, on 2026-08-16):
 
-1. **MCP bus (all 20):** `session_announce`, `session_events`, `session_send`, `claim_path`, `working_memory_*`, and the long-poll `session_wait` (wake-on-write, ON by default, with a slow stat poll of the store while a waiter is parked as the safety net for a silent watcher; `EGC_MESH_PUSH=0` opts a server out).
-2. **Cognitive protocol v8 (all 20):** every install's context file teaches the agent to announce presence after restoring state, drain events when an `[egc-mesh]` notice appears, drain `session_events` at the start of every turn while busy (autonomous-loop ticks and scheduled wakeups included) before deciding to stay silent, claim paths before shared edits, and park with `session_wait` when idle. Since v6 the same block states that the state store belongs to `egc-memory` (encrypted at rest, one file per project and branch), that the agent must never read or write those files directly, and that an agent without `get_state` among its tools should say the server is not registered and point at `egc init` instead of improvising memory on the filesystem. Since v7 the review line sends the agent to the `/review-pr` agents only when the prompt library is installed for the tool, and `orchestrate_task` lists what is not installed. Since v8 a request to remember a decision goes to `update_state` (its `decisions` field), `store_decision` stays the searchable decision history, and a question about what was decided checks `get_state` before `search_history` and `query_history`.
+1. **MCP bus (all 21):** `session_announce`, `session_events`, `session_send`, `claim_path`, `working_memory_*`, and the long-poll `session_wait` (wake-on-write, ON by default, with a slow stat poll of the store while a waiter is parked as the safety net for a silent watcher; `EGC_MESH_PUSH=0` opts a server out).
+2. **Cognitive protocol v8 (all 21):** every install's context file teaches the agent to announce presence after restoring state, drain events when an `[egc-mesh]` notice appears, drain `session_events` at the start of every turn while busy (autonomous-loop ticks and scheduled wakeups included) before deciding to stay silent, claim paths before shared edits, and park with `session_wait` when idle. Since v6 the same block states that the state store belongs to `egc-memory` (encrypted at rest, one file per project and branch), that the agent must never read or write those files directly, and that an agent without `get_state` among its tools should say the server is not registered and point at `egc init` instead of improvising memory on the filesystem. Since v7 the review line sends the agent to the `/review-pr` agents only when the prompt library is installed for the tool, and `orchestrate_task` lists what is not installed. Since v8 a request to remember a decision goes to `update_state` (its `decisions` field), `store_decision` stays the searchable decision history, and a question about what was decided checks `get_state` before `search_history` and `query_history`.
 3. **Native turn signal (hosts with injection-capable surfaces):** the standalone `mesh-events-inject.js` stats the bus store on every user prompt and injects a one-line drain notice.
    - **Claude Code**: `UserPromptSubmit` hook (settings.json).
    - **Antigravity**: not yet. Antigravity's hook events are PreToolUse, PostToolUse, PreInvocation, PostInvocation and Stop, with no UserPromptSubmit, so the notice registered at `.agents/hooks.json` and `~/.gemini/antigravity-cli/hooks.json` never fires; Antigravity sessions rely on the MCP bus and the protocol until the notice is ported to PreInvocation.
@@ -59,7 +60,7 @@ Every harness participates in the real-time session mesh through two always-on l
    - **Trae**: same hook at `.trae/hooks.json` (hook stdout becomes model context).
    - **Amp**: `agent.start` plugin at `.amp/plugins/` and `~/.config/amp/plugins/` returning a hidden context message.
    - **Kiro**: dedicated hook document at `.kiro/hooks/egc-mesh-notice.json` (project and home), `UserPromptSubmit` command action whose stdout becomes agent context (`--format=text`).
-   - **Not wired, by the host's own limitation** (documented upstream, revisited when vendors ship injection): Cursor (`beforeSubmitPrompt` observes/blocks but does not inject), OpenCode (no per-turn context event), Goose (turn-boundary hook stdout is discarded upstream), and the remaining harnesses whose surfaces expose no per-turn hook (Qwen, Devin Desktop, VS Code Copilot, Zed, Junie, OpenHands, Aider, Cline, Warp, CodeBuddy). All of these still get layers 1 and 2.
+   - **Not wired, by the host's own limitation** (documented upstream, revisited when vendors ship injection): Cursor (`beforeSubmitPrompt` observes/blocks but does not inject), OpenCode (no per-turn context event), Goose (turn-boundary hook stdout is discarded upstream), and the remaining harnesses whose surfaces expose no per-turn hook (Qwen, Kimi Code CLI, Devin Desktop, VS Code Copilot, Zed, Junie, OpenHands, Aider, Cline, Warp, CodeBuddy). All of these still get layers 1 and 2.
 
 ## Why three tiers (history, not aspiration)
 
@@ -71,7 +72,7 @@ Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude
 
 ## What "supported" guarantees
 
-For all 19 harnesses, EGC guarantees:
+For all 20 harnesses, EGC guarantees:
 
 - The install path is documented above
 - MCP server registration (if the tool supports MCP)

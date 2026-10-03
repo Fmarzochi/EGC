@@ -150,8 +150,81 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Kimi Code CLI',
     ]);
+  })));
+
+  (tally(test('Kimi Code CLI: the gate opens on the ~/.kimi-code directory, and the path is mcp.json under it', () => {
+    const tmpHome = makeTempDir();
+    const savedKimi = process.env.KIMI_CODE_HOME;
+    delete process.env.KIMI_CODE_HOME;
+    try {
+      const kimiDir = path.join(tmpHome, '.kimi-code');
+      fs.mkdirSync(kimiDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kimi Code CLI');
+      assert.ok(target, 'Kimi Code CLI must be a registration target');
+      assert.strictEqual(target.path, path.join(kimiDir, 'mcp.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the config directory alone opens the gate');
+    } finally {
+      if (savedKimi === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = savedKimi;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Kimi Code CLI: the gate returns a boolean when neither the directory nor the binary is present', () => {
+    const tmpHome = makeTempDir();
+    const savedKimi = process.env.KIMI_CODE_HOME;
+    delete process.env.KIMI_CODE_HOME;
+    try {
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kimi Code CLI');
+      assert.strictEqual(fs.existsSync(path.join(tmpHome, '.kimi-code')), false, 'sanity: no kimi-code directory in a fresh home');
+      assert.strictEqual(typeof target.gate(), 'boolean', 'the gate returns a boolean, it never throws');
+    } finally {
+      if (savedKimi === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = savedKimi;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Kimi Code CLI: KIMI_CODE_HOME redirects both the mcp.json path and the gate directory', () => {
+    const tmpHome = makeTempDir();
+    const customRoot = path.join(tmpHome, 'custom-kimi');
+    const savedKimi = process.env.KIMI_CODE_HOME;
+    process.env.KIMI_CODE_HOME = customRoot;
+    try {
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kimi Code CLI');
+      assert.strictEqual(target.path, path.join(customRoot, 'mcp.json'), 'the mcp.json path follows KIMI_CODE_HOME');
+      fs.mkdirSync(customRoot, { recursive: true });
+      const reloaded = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kimi Code CLI');
+      assert.strictEqual(reloaded.gate(), true, 'the KIMI_CODE_HOME directory opens the gate');
+    } finally {
+      if (savedKimi === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = savedKimi;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Kimi Code CLI: an install writes egc-guardian and egc-memory into the .kimi-code mcp.json', () => {
+    const tmpHome = makeTempDir();
+    const savedKimi = process.env.KIMI_CODE_HOME;
+    const savedXdg = process.env.XDG_CONFIG_HOME;
+    delete process.env.KIMI_CODE_HOME;
+    delete process.env.XDG_CONFIG_HOME;
+    try {
+      fs.mkdirSync(path.join(tmpHome, '.kimi-code'), { recursive: true });
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(path.join(tmpHome, '.kimi-code', 'mcp.json'), 'utf8'));
+      assert.ok(written.mcpServers['egc-guardian'], 'egc-guardian is registered where Kimi Code CLI reads it');
+      assert.ok(written.mcpServers['egc-memory'], 'egc-memory is registered where Kimi Code CLI reads it');
+    } finally {
+      if (savedKimi === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = savedKimi;
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = savedXdg;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
   })));
 
   (tally(test('OpenCode: a fresh install gets opencode.json with both servers under mcp in OpenCode\'s own shape', () => {
