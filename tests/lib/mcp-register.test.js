@@ -209,7 +209,9 @@ function runTests() {
   (tally(test('Kimi Code CLI: an install writes egc-guardian and egc-memory into the .kimi-code mcp.json', () => {
     const tmpHome = makeTempDir();
     const savedKimi = process.env.KIMI_CODE_HOME;
+    const savedXdg = process.env.XDG_CONFIG_HOME;
     delete process.env.KIMI_CODE_HOME;
+    delete process.env.XDG_CONFIG_HOME;
     try {
       fs.mkdirSync(path.join(tmpHome, '.kimi-code'), { recursive: true });
       registerIsolated(tmpHome, {});
@@ -219,6 +221,8 @@ function runTests() {
     } finally {
       if (savedKimi === undefined) delete process.env.KIMI_CODE_HOME;
       else process.env.KIMI_CODE_HOME = savedKimi;
+      if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = savedXdg;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   })));
