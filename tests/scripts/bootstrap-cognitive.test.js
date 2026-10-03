@@ -886,15 +886,18 @@ async function runOpenCodeTests() {
       try {
         fs.symlinkSync(targetOutsideConfig, configDir, 'dir');
       } catch {
+        console.log('  [SKIP] symlink not available on this runner');
         return;
       }
     
       const output = run(home);
     
+      const outsideMemoryFile = path.join(targetOutsideConfig, 'egc-memory.md');
       const outsideConfigFile = path.join(targetOutsideConfig, 'opencode.json');
-      assert.strictEqual(fs.existsSync(outsideConfigFile), false, 'outside file was not created');
+      assert.strictEqual(fs.existsSync(outsideMemoryFile), false, 'outside memory file was not created');
+      assert.strictEqual(fs.existsSync(outsideConfigFile), false, 'outside config file was not created');
       assert.strictEqual(
-        output.includes('lands outside allowed roots') || output.includes('OpenCode'),
+        output.includes('leads through a link'),
         true,
         'logs boundary protection error'
       );
