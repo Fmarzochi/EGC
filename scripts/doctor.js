@@ -52,6 +52,10 @@ function statusLabel(status) {
   return status.toUpperCase();
 }
 
+function summaryLine(summary) {
+  return `\nSummary: checked=${summary.checkedCount}, ok=${summary.okCount}, warnings=${summary.warningCount}, errors=${summary.errorCount}`;
+}
+
 function printHuman(report) {
   if (report.manifestError) {
     console.log(`Install manifests refused: ${report.manifestError}`);
@@ -60,6 +64,7 @@ function printHuman(report) {
     console.log('Core runtime: OK. No managed target profile installed (that is what a bare `egc install` does).');
     console.log('Managed content (skills, rules, hooks) is optional; add it anytime with:');
     console.log('  egc install --target <target> --profile full');
+    console.log(summaryLine(report.summary));
     return;
   }
 
@@ -79,7 +84,7 @@ function printHuman(report) {
     }
   }
 
-  console.log(`\nSummary: checked=${report.summary.checkedCount}, ok=${report.summary.okCount}, warnings=${report.summary.warningCount}, errors=${report.summary.errorCount}`);
+  console.log(summaryLine(report.summary));
 }
 
 // Windows filesystems are case-insensitive and drive letters arrive in
