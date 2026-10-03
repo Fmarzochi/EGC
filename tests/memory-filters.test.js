@@ -338,6 +338,25 @@ run('re-binds a propagation file whose filter a later attributes pattern overrod
   assert.ok(!after.actions.some(a => a.includes('AGENTS.md')), `idempotent once the filter is effective again: ${JSON.stringify(after.actions)}`);
 });
 
+run('stays idempotent for a project below the top level (check-attr runs from the top level the bindings are anchored to, so none loops)', () => {
+  const { dir } = makeRepo();
+  const project = path.join(dir, 'pkg');
+  fs.mkdirSync(project);
+  const first = configureMemoryFilters({ projectDir: project, scriptPath: LEAK_SCRIPT, dryRun: false });
+  assert.strictEqual(first.configured, true);
+  // The bindings written to the common .git/info/attributes are top-level
+  // anchored (the propagation paths as-is). check-attr is run from the work
+  // tree top level, matching how git reads them, so a slash-anchored binding
+  // like `.cursor/rules/egc-context.mdc` resolves to the driver and is not
+  // re-appended on the next run. Querying from the subdirectory instead would
+  // never match that binding and would append it forever.
+  const plan = configureMemoryFilters({ projectDir: project, scriptPath: LEAK_SCRIPT, dryRun: true });
+  assert.deepStrictEqual(plan.actions, [], `no action on the second run from a subdirectory: ${JSON.stringify(plan.actions)}`);
+  const attrs = fs.readFileSync(path.join(dir, '.git', 'info', 'attributes'), 'utf8');
+  const slashBinding = attrs.split('\n').filter(l => l.trim() === `.cursor/rules/egc-context.mdc filter=${FILTER_NAME}`).length;
+  assert.strictEqual(slashBinding, 1, `the slash-anchored binding is written exactly once, not looped: ${slashBinding}`);
+});
+
 run('configures and cleans correctly when the script path itself contains a space and a single quote (audit EGC-547, P2)', () => {
   const { dir, git } = makeRepo();
   const oddDir = path.join(dir, "a path with spaces and a ' quote");
