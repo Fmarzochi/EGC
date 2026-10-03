@@ -3880,7 +3880,9 @@ function operatorWords(reference: VariableReference, depth: number, budget: Line
 // whole, which only adds spellings.
 function referenceValues(reference: VariableReference, depth: number, budget: LineBudget): string[] | null {
   const { operator } = reference;
-  const values = boundValuesOf(reference);
+  // One value past the budget is enough to overflow it; the rest is never
+  // read, so it is never materialized.
+  const values = boundValuesOf(reference).slice(0, budget.left + 1);
   if (operator === null || operator === '') return values.length > 0 ? [...values] : null;
   const words = operatorWords(reference, depth, budget);
   const set = CONDITIONAL_COLON.has(operator) ? values.filter(value => value !== '') : [...values];
@@ -3905,13 +3907,21 @@ function* oneByOne(parts: string[][], first: string[]): Generator<string> {
   }
 }
 
-// The product of the parts, in order, built only as far as it is read.
-function* product(parts: string[][], prefix = '', index = 0): Generator<string> {
-  if (index === parts.length) {
-    yield prefix;
-    return;
+// The product of the parts, in order, built only as far as it is read: an
+// odometer over the parts, so a word of thousands of references costs no
+// stack.
+function* product(parts: string[][]): Generator<string> {
+  if (parts.some(alternatives => alternatives.length === 0)) return;
+  const index = parts.map(() => 0);
+  for (;;) {
+    yield parts.map((alternatives, i) => alternatives[index[i]]).join('');
+    let i = parts.length - 1;
+    while (i >= 0 && ++index[i] === parts[i].length) {
+      index[i] = 0;
+      i -= 1;
+    }
+    if (i < 0) return;
   }
-  for (const alternative of parts[index]) yield* product(parts, prefix + alternative, index + 1);
 }
 
 // Adds the values to `out` while the budget lasts; false when one was left
@@ -3969,7 +3979,7 @@ function lineValuesOnce(spelling: string, depth: number, budget: LineBudget): st
 // after the original, so a reading that picks the first ones (pathValue)
 // still gets the word as handed over. One budget covers the whole
 // resolution of a spelling; a value it cannot fit refuses the command.
-function lineValuesOf(spelling: string, depth = 0, budget: LineBudget = { left: MAX_LINE_VALUES }): string[] {
+function lineValuesOf(spelling: string, depth: number, budget: LineBudget): string[] {
   if (depth >= MAX_LINE_DEPTH || !spelling.includes('$')) return [];
   const out = new Set<string>();
   for (const next of lineValuesOnce(spelling, depth, budget)) {
@@ -3981,7 +3991,7 @@ function lineValuesOf(spelling: string, depth = 0, budget: LineBudget = { left: 
 
 function withLineValues(spellings: string[]): string[] {
   if (lineBound.size === 0) return spellings;
-  return [...new Set(spellings.flatMap(spelling => [spelling, ...lineValuesOf(spelling)]))];
+  return [...new Set(spellings.flatMap(spelling => [spelling, ...lineValuesOf(spelling, 0, { left: MAX_LINE_VALUES })]))];
 }
 
 // The readings of a path value, one per spelling pathSpellings gives.

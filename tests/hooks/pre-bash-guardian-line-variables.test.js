@@ -84,7 +84,11 @@ test('a variable named like a property of every object is a variable like any ot
 
 test('the CLI refuses an entry whose line bindings it cannot read, and reads them by index otherwise', () => {
   const { spawnSync } = require('child_process');
-  const batch = payload => JSON.parse(spawnSync(process.execPath, [cliPath, 'command-batch'], { input: JSON.stringify(payload), encoding: 'utf8', timeout: 20000 }).stdout);
+  const batch = payload => {
+    const run = spawnSync(process.execPath, [cliPath, 'command-batch'], { input: JSON.stringify(payload), encoding: 'utf8', timeout: 20000 });
+    assert.strictEqual(run.status, 0, `the CLI must answer the batch: status ${run.status}, ${run.error ?? ''} ${run.stderr}`);
+    return JSON.parse(run.stdout);
+  };
   const hard = verdict => !verdict.allowed && !verdict.advisory;
   const [byIndex] = batch({ commands: ['cat "$D"'], cwd, bounds: [{ D: ['~/.ssh/id_rsa'] }], bound: [0] });
   assert.ok(hard(byIndex) && /protected/.test(byIndex.reason), JSON.stringify(byIndex));

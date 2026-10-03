@@ -136,6 +136,13 @@ test('a quoted brace inside the reference does not close it', () => {
   assertDenied('cat ${D:-"}"}', { D: ['cert.pem'] });
 });
 
+test('a word of thousands of references is resolved without growing the stack', () => {
+  const word = '$B'.repeat(3000);
+  assertNotHardDenied(`cat ${word}`, { B: ['x'] });
+  assertDenied(`cat ${word}`, { B: ['a', 'b'] }, /more values/);
+  assertDenied(`cat ${'$B'.repeat(2999)}$C`, { B: [''], C: ['~/.ssh/id_rsa'] });
+});
+
 test('more values than the check reads are refused instead of dropped', () => {
   const values = Array.from({ length: 2000 }, (_, i) => `file${i}.txt`);
   assertDenied('cat "$B"', { B: values }, /more values/);
