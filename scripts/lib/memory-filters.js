@@ -124,16 +124,58 @@ function hardenMissingScriptFilter(projectDir, scriptPath, dryRun) {
   return { configured: false, reason: `clean-filter script not found at ${scriptPath}`, actions: [] };
 }
 
-// Exact-line matching (not a raw substring test): a commented-out entry or
-// a line with extra trailing content would still satisfy .includes(),
-// silently skipping the real binding this project needs.
-function computeMissingBindings(attributesFile) {
+// git's own resolution of each path's `filter` attribute, honouring precedence
+// and every attributes source, run from the work tree's top level where the
+// bindings' paths are anchored. A binding line can sit in .git/info/attributes
+// exactly as written yet be overridden by a later, broader pattern (git-lfs
+// ships `*.md filter=lfs`): git then stages the file through that filter, not
+// the privacy one, while the exact line is still there to fool a text scan.
+// Returns a path -> value map, or null when git cannot answer (no work tree,
+// git missing) so the caller falls back to the text match.
+function effectiveFilterValues(projectDir) {
+  let topLevel;
+  try {
+    topLevel = execFileSync(GIT_BIN, ['rev-parse', '--show-toplevel'], {
+      cwd: projectDir, encoding: 'utf8', env: localConfigEnv(), stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return null;
+  }
+  if (!topLevel) return null;
+  try {
+    // -z gives flat NUL-separated triples: <path> \0 filter \0 <value> \0 ...
+    const out = execFileSync(GIT_BIN, ['check-attr', '-z', 'filter', '--', ...PROPAGATION_FILES], {
+      cwd: topLevel, encoding: 'utf8', env: localConfigEnv(), stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const parts = out.split('\0');
+    const values = new Map();
+    for (let i = 0; i + 2 < parts.length; i += 3) values.set(parts[i], parts[i + 2]);
+    return values;
+  } catch {
+    return null;
+  }
+}
+
+// Which propagation files are not bound to this filter yet. The authority is
+// git check-attr: a file counts as bound only when git itself resolves its
+// `filter` attribute to this driver, so a per-file line that a later pattern
+// silently overrode is re-bound (appending it last makes it win again) instead
+// of being read off the file as present and left defeated. When git cannot
+// answer, it falls back to exact-line matching (not a substring test: a
+// commented-out entry or a line with trailing content would still satisfy
+// .includes() and skip the real binding this project needs).
+function computeMissingBindings(attributesFile, projectDir) {
   let existing = '';
   try {
     existing = fs.readFileSync(attributesFile, 'utf8');
   } catch { /* first configuration: attributes file does not exist yet */ }
   const existingLines = new Set(existing.split('\n').map(l => l.trim()));
-  const missing = PROPAGATION_FILES.filter(file => !existingLines.has(`${file} filter=${FILTER_NAME}`));
+  const effective = effectiveFilterValues(projectDir);
+  const missing = PROPAGATION_FILES.filter(file => (
+    effective
+      ? effective.get(file) !== FILTER_NAME
+      : !existingLines.has(`${file} filter=${FILTER_NAME}`)
+  ));
   return { existing, missing };
 }
 
@@ -237,7 +279,7 @@ function configureMemoryFilters({ projectDir, scriptPath, dryRun = false }) {
   const missingConfig = computeMissingConfig(projectDir, cleanCommand, smudgeCommand);
   const actions = missingConfig.map(entry => `git config ${entry.key} ${entry.shown} (local repo config)`);
 
-  const { existing, missing: missingBindings } = computeMissingBindings(attributesFile);
+  const { existing, missing: missingBindings } = computeMissingBindings(attributesFile, projectDir);
   for (const file of missingBindings) {
     actions.push(`bind ${file} to filter=${FILTER_NAME} (.git/info/attributes)`);
   }
