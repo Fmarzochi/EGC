@@ -3711,6 +3711,8 @@ const MAX_LINE_DEPTH = 4;
 // and `=` yield the word, `:+` and `+` nothing, and the rest stay as written.
 const WORD_WHEN_SET = new Set([':+', '+']);
 const WORD_WHEN_UNSET = new Set([':-', '-', ':=', '=']);
+// The operators that edit the value: on an unset variable they yield nothing.
+const EDITING_OPERATORS = new Set([':', '#', '%', '/', ',', '^']);
 const PARAMETER_OPERATORS = [':-', ':=', ':+', ':?', '-', '=', '+', '?'];
 const NAME_RE = /^[A-Za-z_]\w*/;
 
@@ -3855,7 +3857,8 @@ function referenceValues(reference: VariableReference, depth: number): string[] 
   }
   if (operator === null || operator === '') return null;
   if (WORD_WHEN_UNSET.has(operator)) return words;
-  return WORD_WHEN_SET.has(operator) ? [''] : null;
+  if (WORD_WHEN_SET.has(operator) || EDITING_OPERATORS.has(operator)) return [''];
+  return null;
 }
 
 // Adds values to `out` until the cap; whether the cap is reached.

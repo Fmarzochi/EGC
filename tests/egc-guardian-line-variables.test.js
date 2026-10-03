@@ -104,6 +104,12 @@ test('a literal pattern operator is applied the way the shell applies it', () =>
   assertDenied('cat "${D##*/}"', { D: ['a/b/cert.pem'] });
 });
 
+test('an unset variable under an editing operator yields nothing', () => {
+  assertDenied('cat ${UNSET:0}$D', { D: ['~/.ssh/id_rsa'] });
+  assertDenied('cat "${UNSET#x}${D}"', { D: ['cert.pem'] });
+  assertNotHardDenied('cat "$UNSET/notes.txt"', { D: ['x'] });
+});
+
 test('a variable inside the word of an operator is read first', () => {
   assertDenied('cat "${D/${E}/}"', { D: ['Xcert.pem'], E: ['X'] });
   assertDenied('cat "${UNSET:-${F}}"', { F: ['cert.pem'] });
