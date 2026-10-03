@@ -25,6 +25,7 @@ const traeProject = require('./trae-project');
 const junieHome = require('./junie-home');
 const junieProject = require('./junie-project');
 const warpProject = require('./warp-project');
+const kimiHome = require('./kimi-home');
 
 // Retired adapters (their files left the tree on 2026-09-30; the ids stay
 // recognized below so every command explains the retirement): gemini-project
@@ -62,6 +63,7 @@ const ADAPTERS = Object.freeze([
   junieHome,
   junieProject,
   warpProject,
+  kimiHome,
 ]);
 
 function listInstallTargetAdapters() {

@@ -388,6 +388,22 @@ function registerOpenCodeInstructions(targetPath, instructionFile, homeDir = pro
 // Antigravity install.
 const ANTIGRAVITY_SURFACES = ['config', 'antigravity', 'antigravity-cli', 'antigravity-ide'];
 
+// Kimi Code CLI keeps its config under ~/.kimi-code by default; KIMI_CODE_HOME
+// moves it, and a leading tilde there is expanded to the home directory so a
+// value like ~/kimi-data is not read as relative to the process working
+// directory. Mirrors scripts/lib/install-targets/kimi-home.js so the
+// registration path and the install root stay in step.
+function resolveKimiCodeHome(homeDir) {
+  const configured = process.env.KIMI_CODE_HOME;
+  if (configured) {
+    if (configured === '~' || configured.startsWith('~/')) {
+      return path.join(homeDir, configured.slice(1));
+    }
+    return path.resolve(configured);
+  }
+  return path.join(homeDir, '.kimi-code');
+}
+
 function buildMcpRegistrationTargets(homeDir) {
   return [
     {
@@ -448,6 +464,18 @@ function buildMcpRegistrationTargets(homeDir) {
       path: path.join(homeDir, '.config', 'zed', 'settings.json'),
       gate: () => fs.existsSync(path.join(homeDir, '.config', 'zed')),
       format: 'zed-context-servers',
+    },
+    {
+      // Kimi Code CLI (MoonshotAI/kimi-code) reads MCP servers from
+      // ~/.kimi-code/mcp.json (or $KIMI_CODE_HOME/mcp.json) in the standard
+      // {mcpServers: {name: {command, args}}} JSON shape. The gate opens on the
+      // config directory (created on first launch) or the `kimi` binary on
+      // PATH, so a machine that installed the CLI but never launched it is
+      // still covered.
+      name: 'Kimi Code CLI',
+      path: path.join(resolveKimiCodeHome(homeDir), 'mcp.json'),
+      gate: () => fs.existsSync(resolveKimiCodeHome(homeDir)) || commandExists('kimi'),
+      format: 'json',
     },
   ];
 }
