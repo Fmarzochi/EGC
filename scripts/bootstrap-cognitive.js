@@ -438,18 +438,6 @@ const CODEX_SKIP_MESSAGES = {
       const memoryFile = path.join(configDir, 'egc-memory.md');
       injectStandaloneProtocol(memoryFile, 'OpenCode', markdownProtocolBody('EGC Session Memory'));
 
-      const legacyFile = path.join(HOME, '.opencode', 'instructions', 'EGC_MEMORY.md');
-      if (fs.existsSync(legacyFile)) {
-        try {
-          const content = fs.readFileSync(legacyFile, 'utf8');
-          if (MARKER_BLOCK_RE.test(content)) {
-            fs.unlinkSync(legacyFile);
-          }
-        } catch {
-          // Ignore legacy cleanup errors
-        }
-      }
-
       const jsoncPath = path.join(configDir, 'opencode.jsonc');
       if (fs.existsSync(jsoncPath)) {
         try {
@@ -463,14 +451,22 @@ const CODEX_SKIP_MESSAGES = {
             console.log(`  [cognitive] OpenCode: opencode.jsonc contains an instructions list; manually add "${memoryFile}" to it.`);
             return;
           }
-        } catch {
-          // Ignore read errors and fall through
-        }
+        } catch { }
       }
 
       const configPath = openCodeConfigPath(HOME);
       try {
-        registerOpenCodeInstructions(configPath, memoryFile);
+        registerOpenCodeInstructions(configPath, memoryFile, HOME);
+
+        const legacyFile = path.join(HOME, '.opencode', 'instructions', 'EGC_MEMORY.md');
+        if (fs.existsSync(legacyFile)) {
+          try {
+            const content = fs.readFileSync(legacyFile, 'utf8');
+            if (MARKER_BLOCK_RE.test(content)) {
+              fs.unlinkSync(legacyFile);
+            }
+          } catch { }
+        }
       } catch (err) {
         console.log(`  [cognitive] OpenCode: ${err.message}`);
       }

@@ -362,7 +362,10 @@ function openCodeConfigPath(homeDir) {
   return documented;
 }
 
-function registerOpenCodeInstructions(targetPath, instructionFile) {
+function registerOpenCodeInstructions(targetPath, instructionFile, homeDir = process.env.HOME || process.env.USERPROFILE) {
+  const allowedRoots = [homeDir, process.env.XDG_CONFIG_HOME].filter(Boolean);
+  assertLandsInside(targetPath, allowedRoots, 'OpenCode config');
+
   const obj = parseJsonObject(targetPath, readFileIfExists(targetPath), 'OpenCode config');
   if (obj.instructions === undefined || obj.instructions === null) {
     obj.instructions = [];

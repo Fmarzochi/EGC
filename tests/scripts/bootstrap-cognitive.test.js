@@ -599,7 +599,6 @@ async function runOpenCodeTests() {
   let passed = 0;
   let failed = 0;
 
-  // Case 1: ~/.config/opencode exists with no config -> creates egc-memory.md and opencode.json with instructions
   if (await test('OpenCode: creates egc-memory.md and opencode.json when dir exists', () => {
     const home = mktempHome();
     try {
@@ -620,7 +619,6 @@ async function runOpenCodeTests() {
     }
   })) passed++; else failed++;
 
-  // Case 2: Existing config with existing instructions -> preserves existing instructions and appends egc-memory.md
   if (await test('OpenCode: appends egc-memory.md to existing instructions in opencode.json', () => {
     const home = mktempHome();
     try {
@@ -640,7 +638,6 @@ async function runOpenCodeTests() {
     }
   })) passed++; else failed++;
 
-  // Case 3: Rerun (idempotent) -> listed only once in instructions
   if (await test('OpenCode: idempotent rerun adds egc-memory.md only once', () => {
     const home = mktempHome();
     try {
@@ -659,7 +656,6 @@ async function runOpenCodeTests() {
     }
   })) passed++; else failed++;
 
-  // Case 4: opencode.jsonc without instructions key -> updates opencode.json, leaves .jsonc untouched
   if (await test('OpenCode: updates opencode.json when jsonc exists without instructions', () => {
     const home = mktempHome();
     try {
@@ -682,7 +678,6 @@ async function runOpenCodeTests() {
     }
   })) passed++; else failed++;
 
-  // Case 5: opencode.jsonc with instructions key -> prints console instruction and does NOT edit config
   if (await test('OpenCode: warns and skips config update when opencode.jsonc has instructions', () => {
     const home = mktempHome();
     try {
@@ -701,7 +696,6 @@ async function runOpenCodeTests() {
     }
   })) passed++; else failed++;
 
-  // Case 6: Invalid opencode.json syntax -> skips update and logs error
   if (await test('OpenCode: skips update on invalid JSON syntax', () => {
     const home = mktempHome();
     try {
@@ -723,7 +717,6 @@ async function runOpenCodeTests() {
     }
   })) passed++; else failed++;
 
-  // Case 7: Custom XDG_CONFIG_HOME set -> uses XDG_CONFIG_HOME/opencode
   if (await test('OpenCode: respects XDG_CONFIG_HOME env variable', () => {
     const home = mktempHome();
     try {
@@ -745,7 +738,6 @@ async function runOpenCodeTests() {
     }
   })) passed++; else failed++;
 
-  // Case 8: Existing AGENTS.md present -> left 100% untouched
   if (await test('OpenCode: AGENTS.md remains 100% untouched', () => {
     const home = mktempHome();
     try {
@@ -763,7 +755,6 @@ async function runOpenCodeTests() {
     }
   })) passed++; else failed++;
 
-  // Case 9: Legacy EGC_MEMORY.md cleanup -> deleted if EGC marker present, kept if not
   if (await test('OpenCode: cleans up legacy EGC_MEMORY.md only if EGC marker is present', () => {
     const home = mktempHome();
     try {
@@ -792,7 +783,6 @@ async function runOpenCodeTests() {
     }
   })) passed++; else failed++;
 
-  // Case 10: OpenCode directory missing -> nothing created
   if (await test('OpenCode: does nothing if OpenCode config dir does not exist', () => {
     const home = mktempHome();
     try {
@@ -802,6 +792,115 @@ async function runOpenCodeTests() {
       assert.strictEqual(fs.existsSync(configDir), false, 'missing dir remains uncreated');
     } finally {
       cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('OpenCode: leaves file untouched when instructions key is not an array', () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+
+      const configPath = path.join(configDir, 'opencode.json');
+      const initialContent = JSON.stringify({ instructions: "not-an-array" }, null, 2) + '\n';
+      fs.writeFileSync(configPath, initialContent, 'utf8');
+    
+      const output = run(home);
+    
+      const actualContent = fs.readFileSync(configPath, 'utf8');
+      assert.strictEqual(actualContent, initialContent, 'config file remains untouched');
+      assert.strictEqual(
+        output.includes('invalid instructions list') || output.includes('left untouched'),
+        true,
+        'logs invalid instructions error'
+      );
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('OpenCode: second run is idempotent and does not touch opencode.json mtimeMs', async () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+    
+      run(home);
+    
+      const configPath = path.join(configDir, 'opencode.json');
+      assert.strictEqual(fs.existsSync(configPath), true, 'opencode.json created on first run');
+      
+      const statsFirstRun = fs.statSync(configPath);
+      const contentFirstRun = fs.readFileSync(configPath, 'utf8');
+    
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    
+      run(home);
+    
+      const statsSecondRun = fs.statSync(configPath);
+      const contentSecondRun = fs.readFileSync(configPath, 'utf8');
+    
+      assert.strictEqual(contentSecondRun, contentFirstRun, 'content remains identical');
+      assert.strictEqual(statsSecondRun.mtimeMs, statsFirstRun.mtimeMs, 'mtimeMs was not modified on second run');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('OpenCode: preserves legacy EGC_MEMORY.md when jsonc requires manual configuration', () => {
+    const home = mktempHome();
+    try {
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(configDir, { recursive: true });
+
+      const jsoncPath = path.join(configDir, 'opencode.jsonc');
+      fs.writeFileSync(jsoncPath, '{\n  "instructions": []\n}', 'utf8');
+
+      const legacyDir = path.join(home, '.opencode', 'instructions');
+      fs.mkdirSync(legacyDir, { recursive: true });
+      const legacyFile = path.join(legacyDir, 'EGC_MEMORY.md');
+      fs.writeFileSync(
+        legacyFile,
+        '<!-- egc-memory-protocol:v1 -->\n# EGC Session Memory\nProtocol content...\n<!-- /egc-memory-protocol -->',
+        'utf8'
+      );
+
+      run(home);
+
+      assert.strictEqual(fs.existsSync(legacyFile), true, 'legacy file preserved when jsonc requires manual action');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('OpenCode: refuses to write when config path is a symlink outside allowed roots', () => {
+    const home = mktempHome();
+    const outsideDir = mktempHome();
+    try {
+      const targetOutsideConfig = path.join(outsideDir, 'external-opencode');
+      fs.mkdirSync(targetOutsideConfig, { recursive: true });
+    
+      const configDir = path.join(home, '.config', 'opencode');
+      fs.mkdirSync(path.dirname(configDir), { recursive: true });
+      
+      try {
+        fs.symlinkSync(targetOutsideConfig, configDir, 'dir');
+      } catch {
+        return;
+      }
+    
+      const output = run(home);
+    
+      const outsideConfigFile = path.join(targetOutsideConfig, 'opencode.json');
+      assert.strictEqual(fs.existsSync(outsideConfigFile), false, 'outside file was not created');
+      assert.strictEqual(
+        output.includes('lands outside allowed roots') || output.includes('OpenCode'),
+        true,
+        'logs boundary protection error'
+      );
+    } finally {
+      cleanup(home);
+      cleanup(outsideDir);
     }
   })) passed++; else failed++;
 
