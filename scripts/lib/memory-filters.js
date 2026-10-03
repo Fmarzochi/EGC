@@ -150,7 +150,11 @@ function effectiveFilterValues(projectDir) {
     const parts = out.split('\0');
     const values = new Map();
     for (let i = 0; i + 2 < parts.length; i += 3) values.set(parts[i], parts[i + 2]);
-    return values;
+    // An empty map means git answered with nothing (a broken or shadowed git
+    // on the GIT_BIN fallback exiting 0 with no stdout): treat that as "cannot
+    // answer" and fall back to the idempotent text match, rather than reading
+    // every file as unbound and re-appending every binding on a loop.
+    return values.size > 0 ? values : null;
   } catch {
     return null;
   }
