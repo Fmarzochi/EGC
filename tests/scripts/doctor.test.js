@@ -116,6 +116,8 @@ function runTests() {
       assert.strictEqual(result.code, 0, result.stderr);
       assert.ok(result.stdout.includes('Core runtime: OK. No managed target profile installed'));
       assert.ok(result.stdout.includes('egc install --target <target> --profile full'));
+      assert.ok(result.stdout.includes('Summary: checked=0'), 'the Summary line prints even with no target detected');
+      assert.ok(result.stdout.includes('errors=0'), 'the done criterion errors=0 is reachable on a bare install');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
