@@ -3,6 +3,7 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
+- A target spelled with a variable the command line sets is judged by the file it names: the Bash hook hands the Guardian the values the line gives its variables, and the validator reads them into every spelling it judges, parameter expansions included (#1725).
 - Every test file runs without git's automatic maintenance: `tests/run-all.js` gives the whole suite `'maintenance.auto'='false'`, so the race #1722 fixed in two files cannot reach any test that commits into a temporary repository (#1723).
 - The worktree and session-end tests no longer race git's background maintenance (since Git 2.54 the maintenance a commit starts prunes a worktree whose `gitdir` file is missing, as the fixture's was) and no longer depend on the tool the suite runs inside (#1722, closes #1718).
 - The installation and troubleshooting guides drop the double hyphen as punctuation: six sentences read with a colon, parentheses or a new sentence, and a docs test keeps double-hyphen, en dash and em dash punctuation out of their prose (#1720 by @Akshayx07, closes #1660).
