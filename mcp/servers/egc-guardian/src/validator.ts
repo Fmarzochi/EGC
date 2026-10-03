@@ -50,6 +50,9 @@ let committedBound: ReadonlyMap<string, readonly string[]> = new Map();
 // line gives each one: a target spelled with one of them is judged by the
 // files those values name as well as by its own spelling.
 let lineBound: ReadonlyMap<string, readonly string[]> = new Map();
+// Set when a resolution had to leave values unread: the verdict then refuses
+// the command, since a target spelled with them could go unjudged.
+let lineOverflow = false;
 
 function flagsInCommittedScript(denial: ValidationResult): boolean {
   if (!committedScript) return false;
@@ -3082,12 +3085,16 @@ export function validateCommandArgs(
 
 export function validateCommand(command: string, cwd?: string, bound: Readonly<Record<string, readonly string[]>> = {}): ValidationResult {
   const outer = lineBound;
+  const outerOverflow = lineOverflow;
   lineBound = new Map(Object.entries(bound));
+  lineOverflow = false;
   try {
     const verdict = validateCommandVerdict(command, cwd);
+    if (lineOverflow && (verdict.allowed || verdict.advisory === true)) return LINE_OVERFLOW_VERDICT;
     return { ...verdict, advisory: verdict.advisory === true };
   } finally {
     lineBound = outer;
+    lineOverflow = outerOverflow;
   }
 }
 
@@ -3704,6 +3711,15 @@ function pathSpellings(arg: string): string[] {
 const MAX_LINE_VALUES = 64;
 const MAX_LINE_DEPTH = 4;
 
+// The verdict of a command whose line gives a variable more values than one
+// resolution reads: a target spelled with it could go unjudged.
+const LINE_OVERFLOW_VERDICT: ValidationResult = {
+  allowed: false,
+  reason: `A variable the command line sets takes more values than this check reads (${MAX_LINE_VALUES}), so a target spelled with it could go unjudged; run the command with fewer values at a time`,
+  trust_level: 'BLOCKED',
+  advisory: false,
+};
+
 // The parameter operators whose result the line decides. With the variable
 // set to a value, `:+` and `+` yield the word and the others the value (an
 // operator that edits the value, as `%` or `/`, is read as the value, an
@@ -3713,6 +3729,12 @@ const WORD_WHEN_SET = new Set([':+', '+']);
 const WORD_WHEN_UNSET = new Set([':-', '-', ':=', '=']);
 // The operators that edit the value: on an unset variable they yield nothing.
 const EDITING_OPERATORS = new Set([':', '#', '%', '/', ',', '^']);
+// Under these, an empty value counts as unset, as the shell counts it.
+const CONDITIONAL_COLON = new Set([':-', ':=', ':+', ':?']);
+
+// How many spellings one resolution may still produce; shared by every
+// reference and every level of the spelling being resolved.
+interface LineBudget { left: number }
 const PARAMETER_OPERATORS = [':-', ':=', ':+', ':?', '-', '=', '+', '?'];
 const NAME_RE = /^[A-Za-z_]\w*/;
 
@@ -3843,31 +3865,33 @@ function closingBrace(spelling: string, from: number): number {
   return -1;
 }
 
-// What a reference yields on this line, or null when it stays as written.
-// The word of an operator is read first, since it may carry a reference of
-// its own. An arithmetic offset or a pattern with a wildcard is beyond this
-// check and leaves the value whole, which only adds spellings.
-function referenceValues(reference: VariableReference, depth: number): string[] | null {
-  const { operator } = reference;
-  const words = reference.word.includes('$') ? [reference.word, ...lineValuesOf(reference.word, depth + 1)] : [reference.word];
-  const values = boundValuesOf(reference).slice(0, MAX_LINE_VALUES);
-  if (values.length > 0) {
-    if (operator === null || operator === '') return values;
-    return [...new Set(words.flatMap(word => operatorResult(values, operator, word)))].slice(0, MAX_LINE_VALUES);
-  }
-  if (operator === null || operator === '') return null;
-  if (WORD_WHEN_UNSET.has(operator)) return words;
-  if (WORD_WHEN_SET.has(operator) || EDITING_OPERATORS.has(operator)) return [''];
-  return null;
+// The word of an operator as the shell hands it over: a reference in it is
+// read first, and its quotes are removed, since the shell removes them.
+function operatorWords(reference: VariableReference, depth: number, budget: LineBudget): string[] {
+  const raw = reference.word;
+  const resolved = raw.includes('$') ? [raw, ...lineValuesOf(raw, depth + 1, budget)] : [raw];
+  return [...new Set(resolved.map(word => unquoteWord(word)))];
 }
 
-// Adds values to `out` until the cap; whether the cap is reached.
-function addUpToCap(out: Set<string>, values: Iterable<string>): boolean {
-  for (const value of values) {
-    if (out.size >= MAX_LINE_VALUES) return true;
-    out.add(value);
+// What a reference yields on this line, or null when it stays as written.
+// Each value is read on its own: under an operator spelled with a colon an
+// empty value counts as unset, as the shell counts it. An arithmetic offset
+// or a pattern with a wildcard is beyond this check and leaves the value
+// whole, which only adds spellings.
+function referenceValues(reference: VariableReference, depth: number, budget: LineBudget): string[] | null {
+  const { operator } = reference;
+  const values = boundValuesOf(reference);
+  if (operator === null || operator === '') return values.length > 0 ? [...values] : null;
+  const words = operatorWords(reference, depth, budget);
+  const set = CONDITIONAL_COLON.has(operator) ? values.filter(value => value !== '') : [...values];
+  const out: string[] = [];
+  if (set.length > 0) out.push(...(WORD_WHEN_SET.has(operator) ? words : words.flatMap(word => operatorResult(set, operator, word))));
+  if (set.length < values.length || values.length === 0) {
+    if (WORD_WHEN_UNSET.has(operator)) out.push(...words);
+    else if (WORD_WHEN_SET.has(operator) || EDITING_OPERATORS.has(operator)) out.push('');
+    else if (out.length === 0) return null;
   }
-  return out.size >= MAX_LINE_VALUES;
+  return [...new Set(out)];
 }
 
 // Every alternative of every part with the other parts at their first one,
@@ -3881,40 +3905,48 @@ function* oneByOne(parts: string[][], first: string[]): Generator<string> {
   }
 }
 
-// The product of the parts, in order, never built past the cap.
-function product(parts: string[][]): string[] {
-  let combined = [''];
-  for (const alternatives of parts) {
-    const next: string[] = [];
-    for (const prefix of combined) {
-      for (const alternative of alternatives) {
-        if (next.length >= MAX_LINE_VALUES) break;
-        next.push(prefix + alternative);
-      }
-    }
-    combined = next;
+// The product of the parts, in order, built only as far as it is read.
+function* product(parts: string[][], prefix = '', index = 0): Generator<string> {
+  if (index === parts.length) {
+    yield prefix;
+    return;
   }
-  return combined;
+  for (const alternative of parts[index]) yield* product(parts, prefix + alternative, index + 1);
 }
 
-// The combinations of the alternatives of the parts, up to the cap: the
+// Adds the values to `out` while the budget lasts; false when one was left
+// out, which marks the resolution as overflowing.
+function takeWithin(out: Set<string>, values: Iterable<string>, budget: LineBudget): boolean {
+  for (const value of values) {
+    if (out.has(value)) continue;
+    if (budget.left <= 0) {
+      lineOverflow = true;
+      return false;
+    }
+    out.add(value);
+    budget.left -= 1;
+  }
+  return true;
+}
+
+// The combinations of the alternatives of the parts, within the budget: the
 // ones that differ from the first in one part, then the rest of the product.
-function combinations(parts: string[][]): string[] {
+function combinations(parts: string[][], budget: LineBudget): string[] {
   const first = parts.map(alternatives => alternatives[0] ?? '');
-  const out = new Set<string>([first.join('')]);
-  if (!addUpToCap(out, oneByOne(parts, first))) addUpToCap(out, product(parts));
+  const out = new Set<string>();
+  if (takeWithin(out, [first.join('')], budget) && takeWithin(out, oneByOne(parts, first), budget)) takeWithin(out, product(parts), budget);
   return [...out];
 }
 
 // The spelling with every reference the line resolves replaced by what it
 // yields, one result per combination; empty when nothing in it resolves.
-function lineValuesOnce(spelling: string, depth: number): string[] {
+function lineValuesOnce(spelling: string, depth: number, budget: LineBudget): string[] {
   const parts: string[][] = [];
   let literalFrom = 0;
   let i = 0;
   while (i < spelling.length) {
     const reference = spelling[i] === '$' ? variableReferenceAt(spelling, i) : null;
-    const values = reference === null ? null : referenceValues(reference, depth);
+    const values = reference === null ? null : referenceValues(reference, depth, budget);
     if (reference === null || values === null) {
       i += 1;
       continue;
@@ -3925,7 +3957,7 @@ function lineValuesOnce(spelling: string, depth: number): string[] {
   }
   if (parts.length === 0) return [];
   parts.push([spelling.slice(literalFrom)]);
-  return combinations(parts);
+  return combinations(parts, budget);
 }
 
 // What a spelling names once the variables the command line sets are put
@@ -3935,11 +3967,16 @@ function lineValuesOnce(spelling: string, depth: number): string[] {
 // stops. A variable the line does not set, or sets from a source this check
 // cannot read, stays as written, where it names no file. The spellings come
 // after the original, so a reading that picks the first ones (pathValue)
-// still gets the word as handed over.
-function lineValuesOf(spelling: string, depth = 0): string[] {
+// still gets the word as handed over. One budget covers the whole
+// resolution of a spelling; a value it cannot fit refuses the command.
+function lineValuesOf(spelling: string, depth = 0, budget: LineBudget = { left: MAX_LINE_VALUES }): string[] {
   if (depth >= MAX_LINE_DEPTH || !spelling.includes('$')) return [];
-  const resolved = lineValuesOnce(spelling, depth).flatMap(next => [next, ...lineValuesOf(next, depth + 1)]);
-  return [...new Set(resolved)].slice(0, MAX_LINE_VALUES);
+  const out = new Set<string>();
+  for (const next of lineValuesOnce(spelling, depth, budget)) {
+    out.add(next);
+    for (const deeper of lineValuesOf(next, depth + 1, budget)) out.add(deeper);
+  }
+  return [...out];
 }
 
 function withLineValues(spellings: string[]): string[] {

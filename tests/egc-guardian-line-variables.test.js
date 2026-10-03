@@ -87,21 +87,23 @@ test('an operator that yields its word when the variable is set or unset is read
   assertNotHardDenied('cat "${UNSET:+~/.ssh/id_rsa}"', { E: ['x'] });
 });
 
+// Every raw value below is allowed as written (`zzcert.pemX`, `CERT.PEM`,
+// `junk~/.ssh/id_rsa`), so a denial proves the operator was applied.
 test('an indirect reference, a substring and a case change are read as the shell yields them', () => {
   assertDenied('cat "${!REF}"', { D: ['~/.ssh/id_rsa'], REF: ['D'] });
   assertDenied('cat "${D:0:8}"', { D: ['cert.pemx'] });
-  assertDenied('cat "${D:5}"', { D: ['junk/cert.pem'] });
+  assertDenied('cat "${D:4}"', { D: ['junk~/.ssh/id_rsa'] });
+  assertDenied('cat "${D: -9:8}"', { D: ['zzcert.pemX'] });
   assertDenied('cat "${D,,}"', { D: ['CERT.PEM'] });
-  assertDenied('cat "${D^}"', { D: ['cert.pem'] });
-  assertDenied('cat "${D: -8}"', { D: ['junk/cert.pem'] });
+  assertNotHardDenied('cat "${D:0:4}"', { D: ['cert.pemx'] });
 });
 
 test('a literal pattern operator is applied the way the shell applies it', () => {
-  assertDenied('cat "${D/X/c}"', { D: ['Xert.pem'] });
+  assertDenied('cat "${D/X/.}"', { D: ['certXpem'] });
   assertDenied('cat "${D//X/e}"', { D: ['cXrt.pXm'] });
-  assertDenied('cat "${D#junk/}"', { D: ['junk/cert.pem'] });
+  assertDenied('cat "${D#junk}"', { D: ['junk~/.ssh/id_rsa'] });
   assertDenied('cat "${D%.bak}"', { D: ['cert.pem.bak'] });
-  assertDenied('cat "${D##*/}"', { D: ['a/b/cert.pem'] });
+  assertDenied('cat "${D##*X}"', { D: ['aXbX~/.ssh/id_rsa'] });
 });
 
 test('an unset variable under an editing operator yields nothing', () => {
@@ -110,21 +112,38 @@ test('an unset variable under an editing operator yields nothing', () => {
   assertNotHardDenied('cat "$UNSET/notes.txt"', { D: ['x'] });
 });
 
+test('an empty value counts as unset under an operator spelled with a colon, and as set without it', () => {
+  assertDenied('cat ${D:-.env}', { D: [''] });
+  assertDenied('cat "${D:-.env}"', { D: ['', 'notes.txt'] });
+  assertDenied('cat "${D:=.env}"', { D: [''] });
+  assertNotHardDenied('cat "${D-.env}"', { D: [''] });
+  assertNotHardDenied('cat "${D:+.env}"', { D: [''] });
+  assertDenied('cat "${D+.env}"', { D: [''] });
+});
+
 test('a variable inside the word of an operator is read first', () => {
-  assertDenied('cat "${D/${E}/}"', { D: ['Xcert.pem'], E: ['X'] });
+  assertDenied('cat "${D/${E}/.}"', { D: ['certXpem'], E: ['X'] });
   assertDenied('cat "${UNSET:-${F}}"', { F: ['cert.pem'] });
+});
+
+test('quotes inside the word of an operator are removed the way the shell removes them', () => {
+  assertDenied('echo x > ${D:-".env"}', { E: ['x'] });
+  assertDenied("cat ${D:-'.env'}", { E: ['x'] });
+  assertDenied('cat ${D:+".env"}', { D: ['x'] });
 });
 
 test('a quoted brace inside the reference does not close it', () => {
   assertDenied('cat ${D:-"}"}', { D: ['cert.pem'] });
 });
 
-test('many values and many references stay bounded in time and memory', () => {
+test('more values than the check reads are refused instead of dropped', () => {
   const values = Array.from({ length: 2000 }, (_, i) => `file${i}.txt`);
-  const started = Date.now();
-  assertNotHardDenied('cat "$B$B$B$B"', { B: values });
+  assertDenied('cat "$B"', { B: values }, /more values/);
+  assertDenied('cat "$B$B$B$B"', { B: values }, /more values/);
   assertDenied('cat "$B$B$C"', { B: values, C: ['', '/.env'] });
-  assert.ok(Date.now() - started < 2000, 'the resolution must stay fast');
+  assertDenied('cat "$A$B"', { A: values.slice(0, 9), B: values.slice(0, 9) }, /more values/);
+  assertNotHardDenied('cat "$B"', { B: values.slice(0, 60) });
+  assertNotHardDenied('cat "$A$B"', { A: values.slice(0, 7), B: values.slice(0, 7) });
 });
 
 test('every variable of a word is resolved, however many the word carries', () => {

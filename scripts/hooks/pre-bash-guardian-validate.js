@@ -1527,7 +1527,7 @@ const NO_FILE_SEGMENTS = { segments: [], own: [], committed: [], bound: [], plac
 
 // The values two sets of assignments give each variable, both kept.
 function mergedBound(first, second) {
-  const merged = { ...first };
+  const merged = Object.assign(Object.create(null), first);
   for (const [name, values] of Object.entries(second)) merged[name] = [...new Set([...(merged[name] ?? []), ...values])];
   return merged;
 }
@@ -1601,8 +1601,7 @@ function assignedNames(segments) {
 function lineBoundOf(segments, bindings) {
   const bound = boundAssignments(segments, new Set());
   for (const [name, entry] of bindings.names) {
-    const values = [...entry.values].filter(value => value !== '');
-    if (values.length > 0) bound[name] = [...new Set([...(bound[name] ?? []), ...values])];
+    if (entry.values.size > 0) bound[name] = [...new Set([...(bound[name] ?? []), ...entry.values])];
   }
   return bound;
 }
@@ -1611,7 +1610,8 @@ function lineBoundOf(segments, bindings) {
 // command nor the environment can set before it runs: the validator counts
 // a variable as the script's own only when every value is a narrow target.
 function boundAssignments(segments, callerSet) {
-  const values = {};
+  // No prototype: `constructor=x` or `__proto__=x` name variables here.
+  const values = Object.create(null);
   for (const segment of segments) {
     for (const word of shellWords(segment)) {
       const assignment = /^([A-Za-z_]\w*)=(.*)$/s.exec(word.value);
@@ -2225,7 +2225,14 @@ function judgeCommand(inputOrRaw) {
   // A target spelled with a variable the line sets (`D=file; echo x > "$D"`)
   // is judged by every value the line gives it, in the typed segments and in
   // the scripts they run; the validator reads the values in.
-  const bound = [...segments.map(() => lineBound), ...scripts.bound];
+  // Each distinct map is sent once, in `bounds`; a segment names its map by
+  // index in `bound`, so a line of many segments does not repeat the map.
+  const boundMaps = [...segments.map(() => lineBound), ...scripts.bound];
+  const bounds = [];
+  const bound = boundMaps.map(map => {
+    const at = bounds.indexOf(map);
+    return at === -1 ? bounds.push(map) - 1 : at;
+  });
   // A segment is judged in every directory a cd before it can have left it
   // in (`cd dir && git status` runs git in dir), a script's from where the
   // script runs; code the line reads after expanding, and a segment after a
@@ -2235,7 +2242,7 @@ function judgeCommand(inputOrRaw) {
   const answer = callGuardianVerdict(
     cli,
     ['command-batch'],
-    JSON.stringify({ commands: segments, cwd, cwds, committed, bound }),
+    JSON.stringify({ commands: segments, cwd, cwds, committed, bounds, bound }),
     VALIDATE_TIMEOUT_MS,
   );
   if (!answer.ok) return withoutVerdict(answer);

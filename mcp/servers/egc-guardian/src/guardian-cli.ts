@@ -25,20 +25,36 @@ interface BatchEntry {
   dirs: string[] | null;
   // The variables the line that runs the command sets (`bound[i]`), each
   // with every literal value it takes: a target spelled with one of them is
-  // judged by the files those values name.
-  bound: Record<string, string[]>;
+  // judged by the files those values name. Null when the payload named
+  // bindings this reader could not take, which refuses the entry.
+  bound: Record<string, string[]> | null;
 }
 
 // A map of variable names to their values, or null for any other shape.
 function boundMap(given: unknown): Record<string, string[]> | null {
   if (given === null || typeof given !== 'object' || Array.isArray(given)) return null;
-  const bound: Record<string, string[]> = {};
+  // No prototype, so a variable named `__proto__` is kept like any other.
+  const bound = Object.create(null) as Record<string, string[]>;
   for (const [name, values] of Object.entries(given)) {
     if (!Array.isArray(values) || !values.every((value): value is string => typeof value === 'string')) return null;
     bound[name] = values;
   }
   return bound;
 }
+
+// The line bindings of one entry: an index into the table of maps the
+// payload carries, or a map itself; null for anything else, which refuses
+// the entry rather than judging it without its bindings.
+function lineBoundAt(given: unknown, table: unknown[]): Record<string, string[]> | null {
+  return boundMap(typeof given === 'number' ? table[given] : given);
+}
+
+const MALFORMED_BOUND: ReturnType<typeof validateCommand> = {
+  allowed: false,
+  reason: 'malformed line bindings in the command-batch payload',
+  trust_level: 'DANGEROUS',
+  advisory: false,
+};
 
 function batchDirs(value: unknown): string[] | null {
   if (!Array.isArray(value) || value.length === 0) return null;
@@ -54,18 +70,22 @@ function committedMark(flag: unknown): BatchEntry['committed'] {
   return bound === null ? null : { bound };
 }
 
-function batchEntries(values: unknown[], committed: unknown, cwds?: unknown, lineBound?: unknown): BatchEntry[] {
+function batchEntries(values: unknown[], committed: unknown, cwds?: unknown, lineBound?: unknown, boundTable?: unknown): BatchEntry[] {
   const flags = Array.isArray(committed) ? committed : [];
   const places = Array.isArray(cwds) ? cwds : [];
-  const bounds = Array.isArray(lineBound) ? lineBound : [];
+  // A payload without `bound` predates the bindings: every entry is judged
+  // as typed. One with it must name readable bindings for every entry.
+  const bounds = Array.isArray(lineBound) ? lineBound : null;
+  const table = Array.isArray(boundTable) ? boundTable : [];
   return values
-    .map((value, i) => ({ command: value, committed: committedMark(flags[i]), dirs: batchDirs(places[i]), bound: boundMap(bounds[i]) ?? {} }))
+    .map((value, i) => ({ command: value, committed: committedMark(flags[i]), dirs: batchDirs(places[i]), bound: bounds === null ? {} : lineBoundAt(bounds[i], table) }))
     .filter((entry): entry is BatchEntry => typeof entry.command === 'string');
 }
 
 // A command that can run in several directories is refused if it is
 // refused in any of them, one read out of a committed script as well.
 function judgeEntry(entry: BatchEntry, cwd: string | undefined): ReturnType<typeof validateCommand> {
+  if (entry.bound === null) return MALFORMED_BOUND;
   const { committed } = entry;
   const judge = (dir: string | undefined) => (committed ? validateCommittedScriptCommand(entry.command, dir, committed.bound, entry.bound) : validateCommand(entry.command, dir, entry.bound));
   const verdicts = (entry.dirs ?? [cwd]).map(judge);
@@ -81,7 +101,7 @@ function commandBatch(payload: string): unknown {
       // Legacy shape: a bare array of command strings, no cwd available.
       entries = batchEntries(parsed, undefined);
     } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.commands)) {
-      entries = batchEntries(parsed.commands, parsed.committed, parsed.cwds, parsed.bound);
+      entries = batchEntries(parsed.commands, parsed.committed, parsed.cwds, parsed.bound, parsed.bounds);
       if (typeof parsed.cwd === 'string') cwd = parsed.cwd;
     }
   } catch {
