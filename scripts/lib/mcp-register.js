@@ -362,6 +362,22 @@ function openCodeConfigPath(homeDir) {
   return documented;
 }
 
+function registerOpenCodeInstructions(targetPath, instructionFile, homeDir = process.env.HOME || process.env.USERPROFILE) {
+  const allowedRoots = [homeDir, process.env.XDG_CONFIG_HOME].filter(Boolean);
+  assertLandsInside(targetPath, allowedRoots);
+
+  const obj = parseJsonObject(targetPath, readFileIfExists(targetPath), 'OpenCode config');
+  if (obj.instructions === undefined || obj.instructions === null) {
+    obj.instructions = [];
+  } else if (!Array.isArray(obj.instructions)) {
+    throw new TypeError(`existing file at ${targetPath} has an invalid instructions list - left untouched`);
+  }
+  if (obj.instructions.includes(instructionFile)) return false;
+  obj.instructions.push(instructionFile);
+  writeConfig(targetPath, JSON.stringify(obj, null, 2) + '\n');
+  return true;
+}
+
 // Gemini CLI and Continue.dev left this list with their retirement (their
 // adapters went in #1279); the ~/.gemini tree below belongs to Antigravity.
 // The Antigravity CLI, the Antigravity IDE and Antigravity 2.0 all read the
@@ -913,7 +929,9 @@ module.exports = {
   registerToml,
   registerZedContextServers,
   registerOpenCodeMcp,
+  openCodeConfigDir,
   openCodeConfigPath,
+  registerOpenCodeInstructions,
   registerClaudeCli,
   quoteForCmdShell,
   registerMcpServers,
