@@ -18,7 +18,8 @@ const {
   getGoDeps,
   getRustDeps,
   getComposerDeps,
-  getElixirDeps
+  getElixirDeps,
+  getDartDeps
 } = require('../../scripts/lib/project-detect');
 
 function test(name, fn) {
@@ -388,6 +389,44 @@ function runTests() {
     }
   }));
 
+  tally(test('getDartDeps reads only dependency sections from pubspec.yaml', () => {
+    const dir = createTempDir();
+    try {
+      const pubspec = [
+        'name: my_app',
+        'description: A Flutter application',
+        'environment:',
+        "  sdk: '>=3.0.0 <4.0.0'",
+        '',
+        'dependencies:',
+        '  flutter:',
+        '    sdk: flutter',
+        '  http: ^1.2.0',
+        '  path: ^1.9.0',
+        '',
+        'dev_dependencies:',
+        '  flutter_test:',
+        '    sdk: flutter',
+        '  lints: ^3.0.0',
+        '',
+        'dependency_overrides:',
+        '  archive: ^3.6.1',
+        '',
+        'flutter:',
+        '  uses-material-design: true',
+        '  assets:',
+        '    - assets/images/',
+        '  fonts:',
+        '    - family: Roboto'
+      ].join('\n');
+      writeTestFile(dir, 'pubspec.yaml', pubspec);
+      const deps = getDartDeps(dir);
+      assert.deepStrictEqual(deps, ['flutter', 'http', 'path', 'flutter_test', 'lints', 'archive']);
+    } finally {
+      cleanupDir(dir);
+    }
+  }));
+
   tally(test('returns empty arrays for missing files', () => {
     const dir = createTempDir();
     try {
@@ -397,6 +436,7 @@ function runTests() {
       assert.deepStrictEqual(getRustDeps(dir), []);
       assert.deepStrictEqual(getComposerDeps(dir), []);
       assert.deepStrictEqual(getElixirDeps(dir), []);
+      assert.deepStrictEqual(getDartDeps(dir), []);
     } finally {
       cleanupDir(dir);
     }
