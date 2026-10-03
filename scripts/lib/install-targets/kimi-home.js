@@ -27,7 +27,7 @@ function resolveKimiCodeRoot(input = {}) {
   const configured = process.env.KIMI_CODE_HOME;
   if (configured) {
     if (configured === '~' || configured.startsWith('~/')) {
-      return path.join(os.homedir(), configured.slice(1));
+      return path.join(input.homeDir || os.homedir(), configured.slice(1));
     }
     return path.resolve(configured);
   }

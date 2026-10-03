@@ -206,6 +206,23 @@ function runTests() {
     }
   })));
 
+  (tally(test('Kimi Code CLI: an install writes egc-guardian and egc-memory into the .kimi-code mcp.json', () => {
+    const tmpHome = makeTempDir();
+    const savedKimi = process.env.KIMI_CODE_HOME;
+    delete process.env.KIMI_CODE_HOME;
+    try {
+      fs.mkdirSync(path.join(tmpHome, '.kimi-code'), { recursive: true });
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(path.join(tmpHome, '.kimi-code', 'mcp.json'), 'utf8'));
+      assert.ok(written.mcpServers['egc-guardian'], 'egc-guardian is registered where Kimi Code CLI reads it');
+      assert.ok(written.mcpServers['egc-memory'], 'egc-memory is registered where Kimi Code CLI reads it');
+    } finally {
+      if (savedKimi === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = savedKimi;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
   (tally(test('OpenCode: a fresh install gets opencode.json with both servers under mcp in OpenCode\'s own shape', () => {
     const tmpHome = makeTempDir();
     // CI runners export XDG_CONFIG_HOME; the temp home must be the directory read.

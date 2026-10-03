@@ -475,6 +475,7 @@ function buildMcpRegistrationTargets(homeDir) {
       name: 'Kimi Code CLI',
       path: path.join(resolveKimiCodeHome(homeDir), 'mcp.json'),
       gate: () => fs.existsSync(resolveKimiCodeHome(homeDir)) || commandExists('kimi'),
+      allowedRoot: resolveKimiCodeHome(homeDir),
       format: 'json',
     },
   ];
@@ -911,7 +912,7 @@ function registerTarget(target, bins, roots, onRegister, onWarn, onUnchanged) {
   if (!handler) return;
   try {
     // The Claude Code CLI writes its own file; every other handler writes here.
-    if (target.format !== 'claude-cli') assertLandsInside(target.path, roots);
+    if (target.format !== 'claude-cli') assertLandsInside(target.path, target.allowedRoot ? [...roots, target.allowedRoot] : roots);
     const registered = handler(target.path, bins);
     if (registered) {
       if (onRegister) onRegister(target);

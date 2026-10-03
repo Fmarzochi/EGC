@@ -3753,20 +3753,27 @@ function runTests() {
   }));
 
   tally(test('resolves kimi adapter root and install-state path from the home directory', () => {
-    const adapter = getInstallTargetAdapter('kimi');
-    const homeDir = '/home/example';
-    assert.strictEqual(adapter.id, 'kimi-home');
-    assert.strictEqual(adapter.target, 'kimi');
-    assert.strictEqual(adapter.kind, 'home');
-    assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, '.kimi-code'));
-    assert.strictEqual(
-      adapter.getInstallStatePath({ homeDir }),
-      path.join(homeDir, '.kimi-code', 'egc', 'install-state.json')
-    );
-    const byId = getInstallTargetAdapter('kimi-home');
-    assert.strictEqual(byId.target, 'kimi', 'kimi is reachable by target id and adapter id');
-    const { listInstallTargetAdapters } = require('../../scripts/lib/install-targets/registry');
-    assert.ok(listInstallTargetAdapters().some(a => a.target === 'kimi'), 'kimi is registered in the adapter list');
+    const previous = process.env.KIMI_CODE_HOME;
+    delete process.env.KIMI_CODE_HOME;
+    try {
+      const adapter = getInstallTargetAdapter('kimi');
+      const homeDir = '/home/example';
+      assert.strictEqual(adapter.id, 'kimi-home');
+      assert.strictEqual(adapter.target, 'kimi');
+      assert.strictEqual(adapter.kind, 'home');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, '.kimi-code'));
+      assert.strictEqual(
+        adapter.getInstallStatePath({ homeDir }),
+        path.join(homeDir, '.kimi-code', 'egc', 'install-state.json')
+      );
+      const byId = getInstallTargetAdapter('kimi-home');
+      assert.strictEqual(byId.target, 'kimi', 'kimi is reachable by target id and adapter id');
+      const { listInstallTargetAdapters } = require('../../scripts/lib/install-targets/registry');
+      assert.ok(listInstallTargetAdapters().some(a => a.target === 'kimi'), 'kimi is registered in the adapter list');
+    } finally {
+      if (previous === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = previous;
+    }
   }));
 
   tally(test('kimi adapter routes resolveRoot, every plan destination and every managed root through KIMI_CODE_HOME', () => {
@@ -3799,14 +3806,21 @@ function runTests() {
   }));
 
   tally(test('kimi adapter installs skills flat under the .kimi-code/skills directory', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const homeDir = '/home/example';
-    const plan = planInstallTargetScaffold({ target: 'kimi', repoRoot, homeDir, modules: [{ id: 'skills-core', paths: ['skills'] }] });
-    const skillsRoot = path.join(homeDir, '.kimi-code', 'skills');
-    assert.ok(
-      plan.operations.some(operation => String(operation.destinationPath).startsWith(skillsRoot)),
-      'at least one skill lands under ~/.kimi-code/skills'
-    );
+    const previous = process.env.KIMI_CODE_HOME;
+    delete process.env.KIMI_CODE_HOME;
+    try {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const homeDir = '/home/example';
+      const plan = planInstallTargetScaffold({ target: 'kimi', repoRoot, homeDir, modules: [{ id: 'skills-core', paths: ['skills'] }] });
+      const skillsRoot = path.join(homeDir, '.kimi-code', 'skills');
+      assert.ok(
+        plan.operations.some(operation => String(operation.destinationPath).startsWith(skillsRoot)),
+        'at least one skill lands under ~/.kimi-code/skills'
+      );
+    } finally {
+      if (previous === undefined) delete process.env.KIMI_CODE_HOME;
+      else process.env.KIMI_CODE_HOME = previous;
+    }
   }));
 
   tally(test('resolves warp adapter root and install-state path from project root', () => {

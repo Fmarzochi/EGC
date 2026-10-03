@@ -188,6 +188,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   amp:          { name: 'Amp',                url: 'https://ampcode.com' },
   copilot:      { name: 'VS Code Copilot',    url: 'https://code.visualstudio.com' },
   zed:          { name: 'Zed',               url: 'https://zed.dev' },
+  kimi:         { name: 'Kimi Code CLI',     url: 'https://github.com/MoonshotAI/kimi-code' },
 });
 
 // An adapter that picks its root by policy (config.resolveRoot) is detected
