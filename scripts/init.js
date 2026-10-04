@@ -347,7 +347,15 @@ function reportCrusherStatus() {
   if (!shim) {
     skip('token crusher', 'status unavailable');
   } else if (shim.dirExists && shim.shimmed.length > 0) {
-    ok('token crusher', shim.activeInCurrentShell ? 'shim installed and on PATH' : 'shim installed, active in every new shell');
+    let msg;
+    if (shim.activeInCurrentShell) {
+      msg = 'shim installed and on PATH';
+    } else if (shim.pathPersisted) {
+      msg = 'shim installed, active in every new shell';
+    } else {
+      msg = 'shim installed, not yet on PATH';
+    }
+    ok('token crusher', msg);
   } else {
     skip('token crusher', 'shim not installed; egc install adds it');
   }
@@ -486,7 +494,11 @@ async function launchDashboardLine() {
   spinner.stop();
 
   if (ready) {
-    ok('dashboard', `available at ${dashboard.DASHBOARD_URL} (opened in your browser; close with \`egc dashboard stop\`)`);
+    const browserOpened = typeof ready === 'object' && ready !== null ? ready.browserOpened : dashboard.canOpenBrowser();
+    const suffix = browserOpened
+      ? ' (opened in your browser; close with `egc dashboard stop`)'
+      : ' (close with `egc dashboard stop`)';
+    ok('dashboard', `available at ${dashboard.DASHBOARD_URL}${suffix}`);
     return;
   }
   if (notes.length === 0) {

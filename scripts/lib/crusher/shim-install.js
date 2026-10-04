@@ -207,6 +207,26 @@ function uninstall() {
   return { dir, removed, pathResult };
 }
 
+function isPathPersisted(dir = shimDir()) {
+  if (process.platform === 'win32') {
+    const safeDir = powershellSingleQuote(dir);
+    const script = `$dir = ${safeDir}; $current = [Environment]::GetEnvironmentVariable('Path','User'); if ($current -eq $null) { $current = '' }; $parts = ($current -split ';') | Where-Object { $_ }; if ($parts -contains $dir) { Write-Output 'present' } else { Write-Output 'not-present' }`;
+    const result = runPowerShell(script);
+    return result.ok && /present/.test(result.stdout);
+  }
+  const home = os.homedir();
+  return RC_CANDIDATES.some(name => {
+    const rcPath = path.join(home, name);
+    try {
+      if (!fs.existsSync(rcPath)) return false;
+      const content = fs.readFileSync(rcPath, 'utf8');
+      return content.includes(PATH_MARKER) || content.includes(dir);
+    } catch {
+      return false;
+    }
+  });
+}
+
 function status() {
   const dir = shimDir();
   const manifest = readManifest();
@@ -214,13 +234,15 @@ function status() {
   const activeInCurrentShell = (process.env[key] || '')
     .split(path.delimiter)
     .some(p => p && path.resolve(p) === path.resolve(dir));
+  const pathPersisted = isPathPersisted(dir);
 
   return {
     dir,
     dirExists: fs.existsSync(dir),
     shimmed: Object.keys(manifest),
     activeInCurrentShell,
+    pathPersisted,
   };
 }
 
-module.exports = { install, uninstall, status, SHIM_BINARY_NAMES, powershellSingleQuote };
+module.exports = { install, uninstall, status, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote };

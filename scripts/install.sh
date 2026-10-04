@@ -153,6 +153,11 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 if [[ "$DRY_RUN" = false ]]; then
+  # Anonymous telemetry: prompt upfront if consent not yet recorded,
+  # matching `egc install` ordering and avoiding confusion with the
+  # prompt-library prompt at the end (#1730).
+  node "$ROOT_DIR/scripts/lib/telemetry.js" || true
+
   # Root dependencies (sqlite3 etc.)
   echo "  installing root dependencies..."
   cd "$ROOT_DIR"

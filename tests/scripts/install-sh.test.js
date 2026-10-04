@@ -344,6 +344,15 @@ function runTests() {
     );
   })) passed++; else failed++;
 
+  if (test('ensures telemetry consent upfront before builds (#1730)', () => {
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+
+    assert.ok(
+      /node "\$ROOT_DIR\/scripts\/lib\/telemetry\.js"/.test(script),
+      'install.sh must invoke telemetry.js upfront so telemetry consent is asked at the beginning'
+    );
+  })) passed++; else failed++;
+
   if (test('custom-prefix npm install never links into the active npm prefix (#1464)', () => {
     const sandbox = createTempDir('egc-custom-prefix-');
     const homeDir = path.join(sandbox, 'home');

@@ -32,7 +32,15 @@ async function waitForDashboard(timeoutMs) {
   return poll();
 }
 
+function canOpenBrowser() {
+  if (process.platform === 'win32' || process.platform === 'darwin') {
+    return true;
+  }
+  return Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+}
+
 function openBrowser() {
+  if (!canOpenBrowser()) return false;
   let cmd;
   if (process.platform === 'win32') {
     cmd = 'start';
@@ -41,7 +49,23 @@ function openBrowser() {
   } else {
     cmd = 'xdg-open';
   }
-  try { spawnSync(cmd, [DASHBOARD_URL], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* ignore: best-effort browser open, failure is non-fatal */ } // NOSONAR
+  try {
+    const result = spawnSync(cmd, [DASHBOARD_URL], { shell: process.platform === 'win32', stdio: 'ignore' });
+    return !result.error && result.status === 0;
+  } catch (_) {
+    return false;
+  }
+}
+
+function createLaunchResult(ready, browserOpened) {
+  if (!ready) return false;
+  return {
+    ready: true,
+    browserOpened: Boolean(browserOpened),
+    toString() { return 'true'; },
+    valueOf() { return true; },
+    [Symbol.toPrimitive](hint) { return hint === 'string' ? 'true' : true; },
+  };
 }
 
 // log(msg) receives already-formatted lines so each caller keeps its own
@@ -60,8 +84,8 @@ async function launchDashboard({ log = () => {} } = {}) {
     const already = await pingDashboard();
     if (already) {
       log(`Dashboard already running at ${DASHBOARD_URL}`);
-      openBrowser();
-      return true;
+      const browserOpened = openBrowser();
+      return createLaunchResult(true, browserOpened);
     }
     // No shell, on any platform. Both arguments are absolute paths this
     // process already owns (process.execPath, and a sibling of __dirname),
@@ -96,8 +120,8 @@ async function launchDashboard({ log = () => {} } = {}) {
     const ready = await waitForDashboard(budgetMs);
     if (ready) {
       log('Minimize it to keep working. Run `egc dashboard stop` to close.');
-      openBrowser();
-      return true;
+      const browserOpened = openBrowser();
+      return createLaunchResult(true, browserOpened);
     }
     log(`EGC Dashboard did not respond within ${Math.round(budgetMs / 1000)}s.`);
     log(`See the startup error with: node "${dashboardScript}" start`);
@@ -114,4 +138,4 @@ function shouldAutoLaunch() {
   return Boolean(process.stdout.isTTY) && !process.env.CI;
 }
 
-module.exports = { launchDashboard, shouldAutoLaunch, waitForDashboard, DASHBOARD_URL };
+module.exports = { launchDashboard, shouldAutoLaunch, waitForDashboard, openBrowser, canOpenBrowser, DASHBOARD_URL };

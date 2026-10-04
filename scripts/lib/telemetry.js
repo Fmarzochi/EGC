@@ -137,3 +137,7 @@ module.exports = {
   ensureConsent,
   ping,
 };
+
+if (require.main === module) {
+  ensureConsent().catch(() => {});
+}

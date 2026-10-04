@@ -163,6 +163,30 @@ async function runTests() {
     assert.ok(Date.now() - started >= 600, 'the poll must keep trying until the budget is spent');
   })) passed++; else failed++;
 
+  if (test('canOpenBrowser detects display availability on Linux (#1730)', () => {
+    const { canOpenBrowser, openBrowser } = require(LAUNCHER);
+    if (process.platform !== 'win32' && process.platform !== 'darwin') {
+      const savedDisplay = process.env.DISPLAY;
+      const savedWayland = process.env.WAYLAND_DISPLAY;
+      try {
+        delete process.env.DISPLAY;
+        delete process.env.WAYLAND_DISPLAY;
+        assert.strictEqual(canOpenBrowser(), false, 'must return false without DISPLAY or WAYLAND_DISPLAY');
+        assert.strictEqual(openBrowser(), false, 'openBrowser must return false when display is unavailable');
+
+        process.env.DISPLAY = ':0';
+        assert.strictEqual(canOpenBrowser(), true, 'must return true with DISPLAY set');
+      } finally {
+        if (savedDisplay !== undefined) process.env.DISPLAY = savedDisplay;
+        else delete process.env.DISPLAY;
+        if (savedWayland !== undefined) process.env.WAYLAND_DISPLAY = savedWayland;
+        else delete process.env.WAYLAND_DISPLAY;
+      }
+    } else {
+      assert.strictEqual(canOpenBrowser(), true, 'macOS and Windows always support launching default browser');
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

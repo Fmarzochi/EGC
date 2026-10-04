@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { install, uninstall, status, SHIM_BINARY_NAMES, powershellSingleQuote } = require('../../scripts/lib/crusher/shim-install');
+const { install, uninstall, status, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote } = require('../../scripts/lib/crusher/shim-install');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -176,6 +176,28 @@ function runTests() {
         } finally {
           process.env.PATH = savedPath;
         }
+      });
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('status() reports pathPersisted based on whether shell config actually has the PATH marker (#1730)', () => {
+    if (process.platform === 'win32') return;
+    const dir = createTempDir('egc-shim-install-');
+    try {
+      withHome(dir, () => {
+        // Without any rc file: pathPersisted must be false
+        install();
+        assert.strictEqual(status().pathPersisted, false, 'pathPersisted must be false when no rc file exists in HOME');
+        assert.strictEqual(isPathPersisted(), false);
+
+        // With .bashrc containing the marker: pathPersisted must be true
+        const rcPath = path.join(dir, '.bashrc');
+        fs.writeFileSync(rcPath, '# pre-existing\n');
+        install();
+        assert.strictEqual(status().pathPersisted, true, 'pathPersisted must be true when rc file contains the PATH marker');
+        assert.strictEqual(isPathPersisted(), true);
       });
     } finally {
       cleanup(dir);

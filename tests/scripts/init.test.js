@@ -156,5 +156,47 @@ test('a dry run announces the check and completes without touching the dashboard
   }
 });
 
+test('token crusher status in init only promises active in every new shell when PATH was persisted (#1730)', () => {
+  const homeDir = makeTempDir('egc-init-home-');
+  const projectDir = makeTempDir('egc-init-project-');
+  const SHIM_INSTALL = path.join(ROOT, 'scripts', 'crusher-shim.js');
+  try {
+    // 1. Install shim into empty home (no .bashrc/.zshrc)
+    spawnSync(process.execPath, [SHIM_INSTALL, 'install'], {
+      env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+      encoding: 'utf8',
+    });
+
+    const resNoRc = runInit(['--yes'], { homeDir, projectDir });
+    assert.strictEqual(resNoRc.status, 0);
+    assert.ok(
+      resNoRc.stdout.includes('token crusher  shim installed, not yet on PATH'),
+      `must report not yet on PATH when no rc file exists, got:\n${resNoRc.stdout}`
+    );
+    assert.ok(
+      !resNoRc.stdout.includes('active in every new shell'),
+      'must not claim active in every new shell when PATH was not persisted'
+    );
+
+    // 2. Now add .bashrc and install again so PATH is persisted
+    const rcPath = path.join(homeDir, '.bashrc');
+    fs.writeFileSync(rcPath, '# user bashrc\n');
+    spawnSync(process.execPath, [SHIM_INSTALL, 'install'], {
+      env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+      encoding: 'utf8',
+    });
+
+    const resWithRc = runInit(['--yes'], { homeDir, projectDir });
+    assert.strictEqual(resWithRc.status, 0);
+    assert.ok(
+      resWithRc.stdout.includes('token crusher  shim installed, active in every new shell'),
+      `must report active in every new shell once persisted, got:\n${resWithRc.stdout}`
+    );
+  } finally {
+    cleanup(homeDir);
+    cleanup(projectDir);
+  }
+});
+
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
 process.exit(failed > 0 ? 1 : 0);
