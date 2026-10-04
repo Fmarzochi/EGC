@@ -369,11 +369,35 @@ function getDartDeps(projectDir) {
     if (!fs.existsSync(pubspecPath)) return [];
     const content = fs.readFileSync(pubspecPath, 'utf8');
     const deps = [];
+    const depSections = new Set(['dependencies', 'dev_dependencies', 'dependency_overrides']);
+    let inDepSection = false;
+    let depIndent = null;
+
     for (const line of content.split('\n')) {
-      const trimmed = line.trimStart();
-      if (!trimmed || line[0] === trimmed[0]) continue;
-      const colonIdx = trimmed.indexOf(':');
-      if (colonIdx > 0) deps.push(trimmed.slice(0, colonIdx).trim());
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+
+      // Check for top-level section (no leading whitespace)
+      const topMatch = line.match(/^([a-zA-Z0-9_-]+):/);
+      if (topMatch) {
+        inDepSection = depSections.has(topMatch[1]);
+        depIndent = null;
+        continue;
+      }
+
+      if (!inDepSection) continue;
+
+      // Match dependency keys with indentation
+      const depMatch = line.match(/^(\s+)([a-zA-Z0-9_-]+):/);
+      if (depMatch) {
+        const indent = depMatch[1].length;
+        if (depIndent === null) {
+          depIndent = indent;
+        }
+        if (indent === depIndent) {
+          deps.push(depMatch[2]);
+        }
+      }
     }
     return deps;
   } catch {
