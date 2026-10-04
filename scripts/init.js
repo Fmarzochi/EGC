@@ -354,7 +354,7 @@ function reportCrusherStatus() {
     if (shim.activeInCurrentShell) {
       msg = 'shim installed and on PATH';
     } else if (shim.pathPersisted) {
-      msg = 'shim installed, active in every new shell';
+      msg = 'shim installed, PATH entry persisted';
     } else {
       msg = 'shim installed, not yet on PATH';
     }
