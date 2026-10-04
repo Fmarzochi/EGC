@@ -721,7 +721,7 @@ const SearchHistorySchema = z.object({
 });
 
 const QueryHistorySchema = z.object({
-  limit: z.number().min(1).max(100).optional().default(10),
+  limit: z.number().min(1).max(100).optional().default(20),
   offset: z.number().min(0).optional().default(0)
 });
 

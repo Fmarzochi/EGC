@@ -83,6 +83,16 @@ async function runTests() {
       const state = JSON.parse(await callTool(server, 'get_project_state', {}));
       assert.strictEqual(state.status, 'active');
     }));
+
+    tally(await test('query_history tool description and schema default limit agree on 20 (#1663)', async () => {
+      const tools = (await server.request('tools/list', {})).result.tools;
+      const queryHistoryTool = tools.find(tool => tool.name === 'query_history');
+      assert.ok(queryHistoryTool, 'query_history tool must be registered');
+      const limitDesc = queryHistoryTool.inputSchema?.properties?.limit?.description;
+      assert.ok(limitDesc && limitDesc.includes('Defaults to 20.'), `limit description must state Defaults to 20: ${limitDesc}`);
+      const history = JSON.parse(await callTool(server, 'query_history', {}));
+      assert.strictEqual(history.meta?.limit, 20, `schema default limit must be 20, but was ${history.meta?.limit}`);
+    }));
   } finally {
     await server.stop();
     fs.rmSync(home, { recursive: true, force: true });
