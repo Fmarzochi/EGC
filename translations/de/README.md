@@ -18,7 +18,7 @@
 
 ---
 
-EGC ist eine lokale Laufzeit für AI-Codierungswerkzeuge. Installiere es einmal und Cursor, Claude Code, Codex, Copilot, Aider und der Rest der 19 AI-Codierungstools teilen einen verschlüsselten Speicher Ihrer Projekte eine Sicherheitsschicht vor jedem Befehl, ein Filter, der die Geräuschausgabe vom Modell fernhält und ein Live-Bus, mit dem sich Ihre offenen Sitzungen sehen lassen. Funktioniert nativ mit Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, Vertex AI, plus OpenRouter für Qwen3, Llama 4 und mehr.
+EGC ist eine lokale Laufzeit für AI-Codierungswerkzeuge. Installiere es einmal und Cursor, Claude Code, Codex, Copilot, Aider und der Rest der 20 AI-Codierungstools teilen einen verschlüsselten Speicher Ihrer Projekte eine Sicherheitsschicht vor jedem Befehl, ein Filter, der die Geräuschausgabe vom Modell fernhält und ein Live-Bus, mit dem sich Ihre offenen Sitzungen sehen lassen. Funktioniert nativ mit Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, Vertex AI, plus OpenRouter für Qwen3, Llama 4 und mehr.
 
 Nichts verlässt deine Maschine. Speicher lebt in `~/.egc`, verschlüsselt mit AES-256-GCM, wird pro Projekt und Zweig gehalten und nie zu git verpflichtet.
 
@@ -33,7 +33,7 @@ npm install -g @egchq/egc && egc install
 Das ist der ganze Motor. `egc install` erkennt die Werkzeuge, die du hast, registriert die beiden lokalen MCP-Server in jedem von ihnen schreibt das Memory-Protokoll, das jeder Agent liest und setzt den Token Crusher ein. Es stellt eine Frage, ob Sie auch die optionale Eingabeaufforder-Bibliothek wollen, und die Standardeinstellung ist nein.
 
 <div align="center">
-  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 19 AI coding tools" width="800" />
+  <img src="../../assets/gifs/install.gif" alt="One command installs EGC across 20 AI coding tools" width="800" />
 </div>
 
 [Vollständige Installationsanleitung](../../docs/installation.md)
