@@ -157,6 +157,7 @@ test('a dry run announces the check and completes without touching the dashboard
 });
 
 test('token crusher status in init reports PATH entry persisted when configured in shell (#1730)', () => {
+  // POSIX-only: on Windows, install() persists PATH to HKCU user environment and does not use shell RC files.
   if (process.platform === 'win32') return;
   const homeDir = makeTempDir('egc-init-home-');
   const projectDir = makeTempDir('egc-init-project-');
@@ -202,6 +203,14 @@ test('token crusher status in init reports PATH entry persisted when configured 
       'must not claim active in every new shell'
     );
   } finally {
+    try {
+      spawnSync(process.execPath, [SHIM_INSTALL, 'uninstall'], {
+        env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+        stdio: 'ignore',
+      });
+    } catch (_) {
+      // best-effort uninstall
+    }
     cleanup(homeDir);
     cleanup(projectDir);
   }
