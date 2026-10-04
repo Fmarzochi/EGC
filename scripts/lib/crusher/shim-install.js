@@ -228,6 +228,7 @@ function isPathPersisted(dir = shimDir()) {
       const content = fs.readFileSync(rcPath, 'utf8');
       return content.split(/\r?\n/).some(line => line.trim() === `export PATH="${dir}:$PATH"`);
     } catch {
+      // Inaccessible or unreadable RC file: treat as not persisted. // NOSONAR
       return false;
     }
   });

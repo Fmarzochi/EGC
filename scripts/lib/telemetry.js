@@ -139,7 +139,7 @@ module.exports = {
 };
 
 if (require.main === module) {
-  (async () => {
+  void (async () => {
     try {
       await ensureConsent();
     } catch {
