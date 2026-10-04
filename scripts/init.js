@@ -337,6 +337,9 @@ function reportStateStoreFromDisk() {
   }
 }
 
+/**
+ * Reports the current installation and shell activation status of Token Crusher shims.
+ */
 function reportCrusherStatus() {
   if (flags.dryRun) {
     logDry('would report the token crusher status');
@@ -467,6 +470,11 @@ async function runDoctor() {
 // terminal gets the dashboard, a CI job or a piped run gets the headless
 // line. The launcher's own messages are folded into one check line so the
 // completion line below stays the last thing on screen.
+/**
+ * Starts the EGC dashboard in the background and reports its availability.
+ *
+ * @returns {Promise<void>}
+ */
 async function launchDashboardLine() {
   if (flags.dryRun) return;
   let dashboard;

@@ -202,16 +202,26 @@ async function runTests() {
     delete require.cache[require.resolve(path.join(__dirname, '..', '..', 'dashboard', 'port'))];
     const { launchDashboard } = require(LAUNCHER);
     try {
-      const logs = [];
-      const res = await launchDashboard({ log: line => logs.push(line) });
-      assert.ok(res && res.ready === true, 'result must have ready: true');
-      assert.strictEqual(typeof res.browserOpened, 'boolean', 'browserOpened must be boolean');
-      if (res.browserOpened) {
-        assert.ok(logs.some(l => l.includes('Minimize it to keep working')));
-      } else {
-        assert.ok(logs.some(l => l.includes('Run `egc dashboard stop` to close.')));
-        assert.ok(!logs.some(l => l.includes('Minimize it to keep working')));
-      }
+      // 1. Stubbed browserOpener returning false
+      const logsFalse = [];
+      const resFalse = await launchDashboard({
+        log: line => logsFalse.push(line),
+        browserOpener: () => false,
+      });
+      assert.ok(resFalse && resFalse.ready === true, 'result must have ready: true');
+      assert.strictEqual(resFalse.browserOpened, false, 'browserOpened must be false');
+      assert.ok(logsFalse.some(l => l.includes('Run `egc dashboard stop` to close.')));
+      assert.ok(!logsFalse.some(l => l.includes('Minimize it to keep working')));
+
+      // 2. Stubbed browserOpener returning true
+      const logsTrue = [];
+      const resTrue = await launchDashboard({
+        log: line => logsTrue.push(line),
+        browserOpener: () => true,
+      });
+      assert.ok(resTrue && resTrue.ready === true, 'result must have ready: true');
+      assert.strictEqual(resTrue.browserOpened, true, 'browserOpened must be true');
+      assert.ok(logsTrue.some(l => l.includes('Minimize it to keep working')));
     } finally {
       await new Promise(resolve => testServer.close(resolve));
     }

@@ -139,5 +139,11 @@ module.exports = {
 };
 
 if (require.main === module) {
-  ensureConsent().catch(() => {});
+  (async () => {
+    try {
+      await ensureConsent();
+    } catch {
+      // Best-effort execution: do not surface consent errors
+    }
+  })();
 }

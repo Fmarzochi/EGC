@@ -207,6 +207,12 @@ function uninstall() {
   return { dir, removed, pathResult };
 }
 
+/**
+ * Checks whether the shim directory PATH addition is persisted in the environment or RC files.
+ *
+ * @param {string} [dir] The shim directory to look for.
+ * @returns {boolean} True if the PATH entry is persisted.
+ */
 function isPathPersisted(dir = shimDir()) {
   if (process.platform === 'win32') {
     const safeDir = powershellSingleQuote(dir);
@@ -227,6 +233,11 @@ function isPathPersisted(dir = shimDir()) {
   });
 }
 
+/**
+ * Inspects the current installation and PATH status of Token Crusher binary shims.
+ *
+ * @returns {{ dir: string, dirExists: boolean, shimmed: string[], activeInCurrentShell: boolean, pathPersisted: boolean }}
+ */
 function status() {
   const dir = shimDir();
   const manifest = readManifest();
