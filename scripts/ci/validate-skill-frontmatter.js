@@ -11,6 +11,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const yaml = require('js-yaml');
 const { listSkillLeaves } = require('#lib/skill-tree-walker');
 const { extractFrontmatterBlock } = require('#lib/frontmatter-block');
 const { skipIfMissing, finishValidation } = require('#lib/validator-cli');
@@ -88,6 +89,16 @@ function validateLeafFrontmatter(leaf) {
   }
 
   let hasError = false;
+
+  const block = extractFrontmatterBlock(content);
+  if (!block.error && block.raw) {
+    try {
+      yaml.load(block.raw);
+    } catch (yamlErr) {
+      console.error(`ERROR: ${leaf.relPath}/SKILL.md - Invalid YAML frontmatter: ${yamlErr.message}`);
+      hasError = true;
+    }
+  }
 
   if (!frontmatter.name?.trim()) {
     console.error(`ERROR: ${leaf.relPath}/SKILL.md - Missing required frontmatter field: name`);
