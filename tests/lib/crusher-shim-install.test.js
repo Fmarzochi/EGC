@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { install, uninstall, status, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote } = require('../../scripts/lib/crusher/shim-install');
+const { install, uninstall, status, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER } = require('../../scripts/lib/crusher/shim-install');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -198,6 +198,11 @@ function runTests() {
         install();
         assert.strictEqual(status().pathPersisted, true, 'pathPersisted must be true when rc file contains the PATH marker');
         assert.strictEqual(isPathPersisted(), true);
+
+        // A mere comment or textual mention without the export line must be rejected
+        const dummyDir = path.join(dir, 'dummy');
+        fs.writeFileSync(rcPath, `# ${PATH_MARKER}\n# mention of ${dummyDir}\n`);
+        assert.strictEqual(isPathPersisted(dummyDir), false, 'pathPersisted must be false when export line is absent');
       });
     } finally {
       cleanup(dir);

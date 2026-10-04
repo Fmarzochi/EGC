@@ -212,7 +212,7 @@ function isPathPersisted(dir = shimDir()) {
     const safeDir = powershellSingleQuote(dir);
     const script = `$dir = ${safeDir}; $current = [Environment]::GetEnvironmentVariable('Path','User'); if ($current -eq $null) { $current = '' }; $parts = ($current -split ';') | Where-Object { $_ }; if ($parts -contains $dir) { Write-Output 'present' } else { Write-Output 'not-present' }`;
     const result = runPowerShell(script);
-    return result.ok && /present/.test(result.stdout);
+    return result.ok && result.stdout.trim() === 'present';
   }
   const home = os.homedir();
   return RC_CANDIDATES.some(name => {
@@ -220,7 +220,7 @@ function isPathPersisted(dir = shimDir()) {
     try {
       if (!fs.existsSync(rcPath)) return false;
       const content = fs.readFileSync(rcPath, 'utf8');
-      return content.includes(PATH_MARKER) || content.includes(dir);
+      return content.split(/\r?\n/).some(line => line.trim() === `export PATH="${dir}:$PATH"`);
     } catch {
       return false;
     }
@@ -245,4 +245,4 @@ function status() {
   };
 }
 
-module.exports = { install, uninstall, status, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote };
+module.exports = { install, uninstall, status, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER };

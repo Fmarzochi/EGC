@@ -494,8 +494,7 @@ async function launchDashboardLine() {
   spinner.stop();
 
   if (ready) {
-    const browserOpened = typeof ready === 'object' && ready !== null ? ready.browserOpened : dashboard.canOpenBrowser();
-    const suffix = browserOpened
+    const suffix = ready.browserOpened
       ? ' (opened in your browser; close with `egc dashboard stop`)'
       : ' (close with `egc dashboard stop`)';
     ok('dashboard', `available at ${dashboard.DASHBOARD_URL}${suffix}`);

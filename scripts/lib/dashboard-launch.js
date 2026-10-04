@@ -62,9 +62,6 @@ function createLaunchResult(ready, browserOpened) {
   return {
     ready: true,
     browserOpened: Boolean(browserOpened),
-    toString() { return 'true'; },
-    valueOf() { return true; },
-    [Symbol.toPrimitive](hint) { return hint === 'string' ? 'true' : true; },
   };
 }
 
@@ -85,6 +82,11 @@ async function launchDashboard({ log = () => {} } = {}) {
     if (already) {
       log(`Dashboard already running at ${DASHBOARD_URL}`);
       const browserOpened = openBrowser();
+      if (browserOpened) {
+        log('Minimize it to keep working. Run `egc dashboard stop` to close.');
+      } else {
+        log('Run `egc dashboard stop` to close.');
+      }
       return createLaunchResult(true, browserOpened);
     }
     // No shell, on any platform. Both arguments are absolute paths this
@@ -119,8 +121,12 @@ async function launchDashboard({ log = () => {} } = {}) {
     const budgetMs = installAhead ? 60000 : 4000;
     const ready = await waitForDashboard(budgetMs);
     if (ready) {
-      log('Minimize it to keep working. Run `egc dashboard stop` to close.');
       const browserOpened = openBrowser();
+      if (browserOpened) {
+        log('Minimize it to keep working. Run `egc dashboard stop` to close.');
+      } else {
+        log('Run `egc dashboard stop` to close.');
+      }
       return createLaunchResult(true, browserOpened);
     }
     log(`EGC Dashboard did not respond within ${Math.round(budgetMs / 1000)}s.`);

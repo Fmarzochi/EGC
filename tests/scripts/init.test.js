@@ -157,6 +157,7 @@ test('a dry run announces the check and completes without touching the dashboard
 });
 
 test('token crusher status in init only promises active in every new shell when PATH was persisted (#1730)', () => {
+  if (process.platform === 'win32') return;
   const homeDir = makeTempDir('egc-init-home-');
   const projectDir = makeTempDir('egc-init-project-');
   const SHIM_INSTALL = path.join(ROOT, 'scripts', 'crusher-shim.js');

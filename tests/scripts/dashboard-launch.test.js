@@ -176,6 +176,9 @@ async function runTests() {
 
         process.env.DISPLAY = ':0';
         assert.strictEqual(canOpenBrowser(), true, 'must return true with DISPLAY set');
+        delete process.env.DISPLAY;
+        process.env.WAYLAND_DISPLAY = 'wayland-0';
+        assert.strictEqual(canOpenBrowser(), true, 'must return true with WAYLAND_DISPLAY set');
       } finally {
         if (savedDisplay !== undefined) process.env.DISPLAY = savedDisplay;
         else delete process.env.DISPLAY;
@@ -184,6 +187,33 @@ async function runTests() {
       }
     } else {
       assert.strictEqual(canOpenBrowser(), true, 'macOS and Windows always support launching default browser');
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('launchDashboard propagates browser-open result into browserOpened (#1730)', async () => {
+    const testServer = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"ok":true}');
+    });
+    await new Promise(resolve => testServer.listen(0, '127.0.0.1', resolve));
+    const port = testServer.address().port;
+    process.env.EGC_PORT = String(port);
+    delete require.cache[require.resolve(LAUNCHER)];
+    delete require.cache[require.resolve(path.join(__dirname, '..', '..', 'dashboard', 'port'))];
+    const { launchDashboard } = require(LAUNCHER);
+    try {
+      const logs = [];
+      const res = await launchDashboard({ log: line => logs.push(line) });
+      assert.ok(res && res.ready === true, 'result must have ready: true');
+      assert.strictEqual(typeof res.browserOpened, 'boolean', 'browserOpened must be boolean');
+      if (res.browserOpened) {
+        assert.ok(logs.some(l => l.includes('Minimize it to keep working')));
+      } else {
+        assert.ok(logs.some(l => l.includes('Run `egc dashboard stop` to close.')));
+        assert.ok(!logs.some(l => l.includes('Minimize it to keep working')));
+      }
+    } finally {
+      await new Promise(resolve => testServer.close(resolve));
     }
   })) passed++; else failed++;
 

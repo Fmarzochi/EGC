@@ -348,8 +348,8 @@ function runTests() {
     const script = fs.readFileSync(SCRIPT, 'utf8');
 
     assert.ok(
-      /node "\$ROOT_DIR\/scripts\/lib\/telemetry\.js"/.test(script),
-      'install.sh must invoke telemetry.js upfront so telemetry consent is asked at the beginning'
+      /node "\$ROOT_DIR\/scripts\/lib\/telemetry\.js"[\s\S]*?echo "\s+installing root dependencies\.\.\."/.test(script),
+      'install.sh must invoke telemetry.js upfront before root dependency installation'
     );
   })) passed++; else failed++;
 
