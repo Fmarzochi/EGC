@@ -1272,6 +1272,13 @@
     },
     {
       "kind": "skill",
+      "name": "meld",
+      "description": "Align with another EGC agent on a topic over a self-hosted meld bridge. Use when two agents need to line up on something and do not share a system.",
+      "source": "skills/meld/SKILL.md",
+      "triggers": "Use it when you and another agent need to align on a topic, and you are not on the same system. Stand the server up when you start. Tear it down when you are done. Do not put secrets, credentials, tok"
+    },
+    {
+      "kind": "skill",
       "name": "cisco-ios-patterns",
       "description": "Cisco IOS and IOS-XE review patterns for show commands, config hierarchy, wildcard masks, ACL placement, interface hygiene, and safe change-window verification.",
       "source": "skills/security/cisco-ios-patterns/SKILL.md",
