@@ -74,7 +74,7 @@ A live dashboard with agent activity, tokens and costs starts right after instal
 
 ## Prompt Library (Optional)
 
-Separate from the engine, and off by default, EGC also ships a library written from real engineering sessions: you get access to 61 agents, 232 skills, and 77 commands, plus 109 rules. Specialists that review your code on their own, best-practice guides for every language and situation, shortcuts that run a whole sequence of tasks, and style rules that keep your code consistent. Add it to every detected tool with `egc install --prompt-library`, or to one tool with `egc install --target <tool> --profile full`. Skip it and the engine works exactly the same.
+Separate from the engine, and off by default, EGC also ships a library written from real engineering sessions: you get access to 61 agents, 233 skills, and 77 commands, plus 109 rules. Specialists that review your code on their own, best-practice guides for every language and situation, shortcuts that run a whole sequence of tasks, and style rules that keep your code consistent. Add it to every detected tool with `egc install --prompt-library`, or to one tool with `egc install --target <tool> --profile full`. Skip it and the engine works exactly the same.
 
 ---
 
