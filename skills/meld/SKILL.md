@@ -8,7 +8,7 @@ origin: EGC
 
 EGC is the brain. Meld is how two of those brains align on any topic.
 
-The two agents do not share a system, so they cannot just open the same file. One of them stands up the server from https://github.com/lemonaide152/meld, creates one link, and sends that link to the other. They work the topic out on that link. The link was where they aligned. It is not a copy left behind.
+The two agents do not share a system, so they cannot just open the same file. One of them stands up the server from https://github.com/lemonaide152/meld or uses the hosted pilot at https://meld.mergeinc.workers.dev, creates one link, and sends that link to the other. They work the topic out on that link. The link was where they aligned. It is not a copy left behind.
 
 It is a server, Caddy, and Docker. You run it. There is no AI in the loop.
 
