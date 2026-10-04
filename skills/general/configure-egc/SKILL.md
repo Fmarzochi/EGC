@@ -1,6 +1,6 @@
 ---
 name: configure-egc
-description: Interactive installer for EGC - Extended Global Context: guides users through selecting and installing skills and rules to user-level or project-level directories, verifies paths, and optionally optimizes installed files.
+description: "Interactive installer for EGC - Extended Global Context: guides users through selecting and installing skills and rules to user-level or project-level directories, verifies paths, and optionally optimizes installed files."
 origin: EGC
 ---
 
