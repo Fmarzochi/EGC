@@ -73,8 +73,7 @@ function openBrowser() {
   try {
     const result = spawnSync(cmd, [DASHBOARD_URL], { shell: process.platform === 'win32', stdio: 'ignore' });
     return !result.error && result.status === 0;
-  } catch (_) {
-    // Best-effort browser open: failure is non-fatal and treated as browser not opened. // NOSONAR
+  } catch (_) { // NOSONAR: best-effort browser open, failure is non-fatal
     return false;
   }
 }
