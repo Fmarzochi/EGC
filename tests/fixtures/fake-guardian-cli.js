@@ -17,7 +17,7 @@ const PROTECTED_RE = /\.ssh|\.aws|id_rsa|\.pem$|\.key$/;
 // leading wrappers like sudo before judging the base command; this fixture
 // only needs to mirror that for the wrappers the hook tests actually assert
 // on (e.g. "blocks a destructive command behind sudo"), not the full unwrap
-// logic — that sophistication is covered by the real guardian tests.
+// logic - that sophistication is covered by the real guardian tests.
 const LEADING_WRAPPERS = new Set(['sudo', 'env', 'nohup', 'time', 'command', 'doas', 'exec', 'if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
 
 // Mirrors the validator: wrappers, then case arms, coprocesses and function
@@ -45,13 +45,13 @@ function verdictForCommand(segment) {
   const word = (tokens[0] || '').replace(/^(['"])(.*)\1$/, '$2');
   const base = word.split(/[\\/]/).pop();
   if (base === 'rm' || base === 'mv') {
-    return { allowed: false, reason: `'${base}' is a destructive command and is always denied`, trust_level: 'DANGEROUS' };
+    return { allowed: false, reason: `'${base}' is a destructive command and is always denied`, trust_level: 'DANGEROUS', advisory: false };
   }
   if (PROTECTED_RE.test(segment)) {
-    return { allowed: false, reason: `${base} of protected path is forbidden`, trust_level: 'SAFE_READONLY' };
+    return { allowed: false, reason: `${base} of protected path is forbidden`, trust_level: 'SAFE_READONLY', advisory: false };
   }
   if (base === 'git' && /\bpush\b/.test(segment) && /(\s--force\b|\s-f\b)/.test(segment)) {
-    return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY' };
+    return { allowed: false, reason: 'git force-push is forbidden', trust_level: 'SAFE_READONLY', advisory: false };
   }
   // Probes for the advisory field: a hard block whose reason happens to carry
   // an advisory phrase, and an advisory verdict whose reason carries none.
@@ -61,7 +61,7 @@ function verdictForCommand(segment) {
   if (base === 'advisory-probe-soft') {
     return { allowed: false, reason: 'nothing to see here', trust_level: 'SAFE_READONLY', advisory: true };
   }
-  return { allowed: true, trust_level: 'SAFE_READONLY' };
+  return { allowed: true, trust_level: 'SAFE_READONLY', advisory: false };
 }
 
 // A target from the root, the home directory or a Windows drive, which the
@@ -97,26 +97,47 @@ try { payload = fs.readFileSync(0, 'utf8'); } catch { payload = ''; }
 if (mode === 'command') {
   process.stdout.write(JSON.stringify(verdictForCommand(payload)));
 } else if (mode === 'command-batch') {
-  let parsed;
-  try { parsed = JSON.parse(payload); } catch { parsed = []; }
-  const segments = Array.isArray(parsed)
-    ? parsed
-    : Array.isArray(parsed && parsed.commands) ? parsed.commands : [];
-  const committed = !Array.isArray(parsed) && Array.isArray(parsed && parsed.committed) ? parsed.committed : [];
-  const markOf = flag => {
-    if (flag === true) return {};
-    if (flag && typeof flag === 'object') return flag.bound || {};
-    return null;
-  };
-  process.stdout.write(JSON.stringify(segments.map((segment, i) => {
-    const bound = markOf(committed[i]);
-    return bound === null ? verdictForCommand(segment) : committedVerdict(segment, bound);
-  })));
+  let segments = [];
+  let committed = [];
+  try {
+    const parsed = JSON.parse(payload);
+    if (Array.isArray(parsed)) {
+      segments = parsed;
+    } else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.commands)) {
+      segments = parsed.commands;
+      committed = Array.isArray(parsed.committed) ? parsed.committed : [];
+    }
+  } catch {
+    segments = [];
+  }
+  if (segments.length === 0) {
+    process.stdout.write(JSON.stringify([{ allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS', advisory: false }]));
+  } else {
+    const markOf = flag => {
+      if (flag === true) return {};
+      if (flag && typeof flag === 'object') return flag.bound || {};
+      return null;
+    };
+    process.stdout.write(JSON.stringify(segments.map((segment, i) => {
+      const bound = markOf(committed[i]);
+      return bound === null ? verdictForCommand(segment) : committedVerdict(segment, bound);
+    })));
+  }
 } else if (mode === 'write') {
   if (PROTECTED_RE.test(payload)) {
     process.stdout.write(JSON.stringify({ allowed: false, reason: `Path '${payload}' is protected`, trust_level: 'BLOCKED' }));
   } else {
     process.stdout.write(JSON.stringify({ allowed: true }));
+  }
+} else if (mode === 'content') {
+  if (process.env.FAKE_GUARDIAN_CONTENT === 'flagged' || /ignore previous instructions|disregard all previous instructions|system override/i.test(payload)) {
+    process.stdout.write(JSON.stringify([{
+      category: 'prompt_injection',
+      reason: 'prompt injection pattern detected',
+      snippet: payload.slice(0, 80),
+    }]));
+  } else {
+    process.stdout.write(JSON.stringify([]));
   }
 } else if (mode === 'route') {
   if (process.env.FAKE_GUARDIAN_ROUTE === 'empty') {
@@ -140,7 +161,24 @@ if (mode === 'command') {
     }));
   }
 } else if (mode === 'learn') {
-  process.stdout.write(JSON.stringify({ patterns_found: 0, skipped: true, reason: 'fixture' }));
+  if (process.env.FAKE_GUARDIAN_LEARN === 'written') {
+    process.stdout.write(JSON.stringify({
+      patterns_found: 1,
+      recommendations_written: 1,
+      target_file: 'CLAUDE.md',
+      skipped: false,
+      propagated_to: ['GEMINI.md', 'AGENTS.md'],
+    }));
+  } else {
+    process.stdout.write(JSON.stringify({
+      patterns_found: 0,
+      recommendations_written: 0,
+      target_file: '',
+      skipped: true,
+      reason: 'fixture',
+      propagated_to: [],
+    }));
+  }
 } else {
   process.stdout.write(JSON.stringify({ error: `unknown mode: ${mode}` }));
 }
