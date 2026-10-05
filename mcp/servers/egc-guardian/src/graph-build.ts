@@ -27,10 +27,10 @@ function compileRule(raw: string): IgnoreFn {
   if (pat.startsWith('/')) pat = pat.slice(1);
   const body = pat
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '\u0000')
+    .replace(/\*\*/g, '\0')
     .replace(/\*/g, '[^/]*')
     .replace(/\?/g, '[^/]')
-    .replace(/\u0000/g, '.*');
+    .replaceAll('\0', '.*');
   const re = new RegExp(`${rooted ? '^' : '(?:^|/)'}${body}${dirOnly ? '/' : '(?:/|$)'}`);
   return (rel, isDir) => re.test(dirOnly && isDir ? rel + '/' : rel);
 }
