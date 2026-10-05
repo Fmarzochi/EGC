@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript (Node16 modules) in the guardian server; Node built-ins only (`node:child_process`, `node:fs`, `node:path`); plain `node:assert` test scripts run by `tests/run-all.js`. No new dependencies.
 
-**Spec:** GitHub issue #1386 (https://github.com/Fmarzochi/EGC/issues/1386) and The Link source at https://github.com/UnforGBeast/thelink, commit `4f607a4217e2fe5e6a8c9a07187058b96acb6c3f`, Apache-2.0 (`thelink/scoring.py`, `thelink/gitsignals.py`, `thelink/cli.py`, `thelink/graph.py`). Prerequisite: the code-graph work on `feat/my-contribution` (`graph-build.ts` exports `makeIgnore`, `resolveSpecifier`; `graph-extract.ts` exports `extractFile`).
+**Spec:** GitHub issue #1386 (<https://github.com/Fmarzochi/EGC/issues/1386>) and The Link source at <https://github.com/UnforGBeast/thelink>, commit `4f607a4217e2fe5e6a8c9a07187058b96acb6c3f`, Apache-2.0 (`thelink/scoring.py`, `thelink/gitsignals.py`, `thelink/cli.py`, `thelink/graph.py`). Prerequisite: the code-graph work on `feat/my-contribution` (`graph-build.ts` exports `makeIgnore`, `resolveSpecifier`; `graph-extract.ts` exports `extractFile`).
 
 ## Global Constraints
 
