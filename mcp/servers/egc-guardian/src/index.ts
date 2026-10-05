@@ -26,6 +26,7 @@ import { reduceJsonArray } from './egc-array-crusher.js';
 import { autoLearn } from './learn-writer.js';
 import { compressViaHeadroom } from './headroom-client.js';
 import { buildRelevantContext } from './graph-context.js';
+import { rankProjectFiles } from './file-rank.js';
 
 interface PipelineResult {
   chunks: string[];
@@ -218,6 +219,16 @@ const ReduceContextSchema = z.object({
   mode: z.enum(['FAST_RESPONSE', 'DEEP_COGNITION']).optional().default('DEEP_COGNITION')
 });
 
+const RankFilesSchema = z.object({
+  query: z.string(),
+  project_path: z.string().optional(),
+  history: z.string().optional(),
+  top_n: z.number().int().min(1).max(50).optional(),
+  use_git: z.boolean().optional(),
+  graph_hops: z.number().int().min(0).max(4).optional(),
+  explain: z.boolean().optional()
+});
+
 const OrchestrateTaskSchema = z.object({
   prompt: z.string(),
   filepaths: z.array(z.string()).optional().default([]),
@@ -278,6 +289,23 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
              context_budget_tokens: { type: "number", description: "Token budget for relevant_context snippets (200-8000, default 2000)." }
           },
           required: ["prompt"]
+        }
+      },
+      {
+        name: "rank_files",
+        description: "Ranks the project's files for a task using four signals: BM25 over path, symbols, keywords and summary (weight 1.0), path hits (1.5), local git state (uncommitted, branch, recency, co-change; 1.0), and import-graph propagation two hops from the top files (1.2). Returns the ranking, a three-block briefing, and on request an explain table of each signal's contribution. Pass history from get_state so the briefing includes session decisions.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "The task, in the user's words." },
+            project_path: { type: "string", description: "Absolute project root. Defaults to the server's working directory." },
+            history: { type: "string", description: "Session history to include under PROJECT HISTORY (e.g. the decisions from get_state)." },
+            top_n: { type: "number", description: "How many files to return (1-50, default 10)." },
+            use_git: { type: "boolean", description: "Include local git signals when the project is a repository (default true)." },
+            graph_hops: { type: "number", description: "Import-graph hops from the top files (0-4, default 2; 0 disables)." },
+            explain: { type: "boolean", description: "Include the explain table lines in the result." }
+          },
+          required: ["query"]
         }
       },
       {
@@ -478,6 +506,28 @@ async function handleReduceContext(toolArgs: unknown) {
   return { content: [{ type: "text", text: `${header}\n\n${finalContent}` }] };
 }
 
+async function handleRankFiles(toolArgs: unknown) {
+  const parsed = RankFilesSchema.parse(toolArgs);
+  const result = await rankProjectFiles({
+    projectPath: parsed.project_path ?? process.cwd(),
+    query: parsed.query,
+    history: parsed.history ? String(redactPayload({ text: parsed.history }).text) : '',
+    topN: parsed.top_n,
+    useGit: parsed.use_git ?? true,
+    graphHops: parsed.graph_hops
+  });
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        ranked: result.ranked,
+        briefing: result.briefing,
+        ...(parsed.explain ? { explain: result.explain } : {})
+      }, null, 2)
+    }]
+  };
+}
+
 async function handleOrchestrateTask(toolArgs: unknown) {
   const parsed = OrchestrateTaskSchema.parse(toolArgs);
   const prompt = parsed.prompt;
@@ -609,6 +659,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "validate_content": return handleValidateContent(request.params.arguments);
       case "reduce_context": return await handleReduceContext(request.params.arguments);
       case "orchestrate_task": return await handleOrchestrateTask(request.params.arguments);
+      case "rank_files": return await handleRankFiles(request.params.arguments);
       case "auto_learn": return await handleAutoLearn(request.params.arguments);
 
       default:
