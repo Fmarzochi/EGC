@@ -23,12 +23,13 @@ function resolveRoot(projectPath: string | undefined): { root: string } | { reas
     return { reason: 'project path does not exist' };
   }
   if (path.parse(root).root === root) return { reason: 'refusing to index a filesystem root' };
-  let home: string | null = null;
-  try {
-    home = fs.realpathSync(os.homedir());
-  } catch {
-    home = null;
-  }
+  const home = (() => {
+    try {
+      return fs.realpathSync(os.homedir());
+    } catch {
+      return null;
+    }
+  })();
   if (home && root === home) return { reason: 'refusing to index the home directory; pass project_path' };
   return { root };
 }
