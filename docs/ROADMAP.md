@@ -4,7 +4,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 
 ## Unreleased
 - The fake Guardian CLI of the hook tests returns the response fields of the real engine, with a contract test that runs the same inputs through the fake and the real CLI and requires identical output (#1739 by @phaiffer, closes #1667).
-- The 32 Antigravity skills whose `description` or `origin` carried an unquoted colon load as valid YAML again, with a test that parses every `SKILL.md` strictly (#1735 by @phaiffer, closes #1653).
+- The 32 Antigravity skills whose `description` or `origin` carried an unquoted colon load as valid YAML again, with a test that parses every catalog `SKILL.md` strictly (#1735 by @phaiffer, closes #1653).
 - The `query_history` schema default is 20, as the tool description promises, with a test that compares the two (#1734 by @phaiffer, closes #1663).
 - `getDartDeps` reads only the `dependencies`, `dev_dependencies` and `dependency_overrides` sections of a pubspec (#1733 by @phaiffer, closes #1665).
 - Kimi Code CLI (MoonshotAI/kimi-code) joins as a home-scoped install target under `~/.kimi-code`, relocatable by `KIMI_CODE_HOME` (read through the adapter so the override reaches the whole install plan, with a leading tilde expanded); skills install flat, MCP servers register in `~/.kimi-code/mcp.json`, the `config.toml` hook surface is deferred, and the supported tool count moves to 20 (21 install targets) across the docs (#1727, closes #1492, carrying forward the work of @Maqbool61).
