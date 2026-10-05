@@ -40,7 +40,7 @@ That is the whole engine. `egc install` detects the tools you have, registers th
 
 ## The Engine: How EGC Works
 
-EGC is one brain with four faculties. Each one is on from the first install, in every supported tool, with no command to learn.
+EGC is one brain with five faculties. Each one is on from the first install, in every supported tool, with no command to learn.
 
 <div align="center">
   <img src="assets/gifs/sharedbrain.gif" alt="A decision made in Cursor is already known in Claude Code" width="900" />
@@ -61,6 +61,14 @@ Guardian validates commands before they run, gates risky writes and keeps contex
 ### Token Crusher: Noise Never Reaches the Model
 
 Before shell output reaches the model, the Token Crusher compresses git logs, test spam, install noise and giant JSON by up to 90 percent while keeping every error and warning. Ask "how much did I save?" in any language and the answer comes straight from your local ledger.
+
+### Context: The Right Code Before the Prompt
+
+Starting a task, `orchestrate_task` returns a `relevant_context` block: ranked snippets from your project's own JS/TS code, found through a local graph of its files, symbols, imports and references. The graph is built on first use under `~/.egc/graph/` and refreshed only for changed files. Nothing leaves the machine.
+
+To rank files for a task on demand, use the `rank_files` tool or run `egc context "<task>"`. It combines word matching (BM25), path matches, local git state and import-graph proximity, and `--explain` shows how each signal contributed to each file's rank. The ranking method is a port of [The Link](https://github.com/UnforGBeast/thelink) (Apache-2.0, credited in [NOTICE](NOTICE)).
+
+To measure ranking quality, latency and context size on this repository, run `node scripts/bench/run.js`. Tasks live in `benchmarks/egc/tasks.json`, so you can add your own.
 
 ---
 
