@@ -11,6 +11,8 @@
 'use strict';
 
 const fs = require('node:fs');
+const path = require('node:path');
+const { z } = require('zod');
 const PROTECTED_RE = /\.ssh|\.aws|id_rsa|\.pem$|\.key$/;
 
 // The real validateCommand (mcp/servers/egc-guardian/src/validator.ts) peels
@@ -110,15 +112,18 @@ if (mode === 'command') {
   } catch {
     segments = [];
   }
-  if (segments.length === 0) {
+  const batchSchema = z.array(z.string()).min(1);
+  const parsedBatch = batchSchema.safeParse(segments);
+  if (!parsedBatch.success) {
     process.stdout.write(JSON.stringify([{ allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS', advisory: false }]));
   } else {
+    const validSegments = parsedBatch.data;
     const markOf = flag => {
       if (flag === true) return {};
       if (flag && typeof flag === 'object') return flag.bound || {};
       return null;
     };
-    process.stdout.write(JSON.stringify(segments.map((segment, i) => {
+    process.stdout.write(JSON.stringify(validSegments.map((segment, i) => {
       const bound = markOf(committed[i]);
       return bound === null ? verdictForCommand(segment) : committedVerdict(segment, bound);
     })));
@@ -130,10 +135,18 @@ if (mode === 'command') {
     process.stdout.write(JSON.stringify({ allowed: true }));
   }
 } else if (mode === 'content') {
-  if (process.env.FAKE_GUARDIAN_CONTENT === 'flagged' || /ignore previous instructions|disregard all previous instructions|system override/i.test(payload)) {
+  const overridePattern = /ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions?|context|prompts?)/i;
+  const match = overridePattern.exec(payload);
+  if (match) {
     process.stdout.write(JSON.stringify([{
-      category: 'prompt_injection',
-      reason: 'prompt injection pattern detected',
+      category: 'instruction_override',
+      reason: 'attempt to override prior instructions',
+      snippet: match[0].slice(0, 80),
+    }]));
+  } else if (process.env.FAKE_GUARDIAN_CONTENT === 'flagged') {
+    process.stdout.write(JSON.stringify([{
+      category: 'instruction_override',
+      reason: 'attempt to override prior instructions',
       snippet: payload.slice(0, 80),
     }]));
   } else {
@@ -161,11 +174,13 @@ if (mode === 'command') {
     }));
   }
 } else if (mode === 'learn') {
+  const projectRoot = payload.trim() || '.';
+  const targetFile = path.join(projectRoot, 'CLAUDE.md');
   if (process.env.FAKE_GUARDIAN_LEARN === 'written') {
     process.stdout.write(JSON.stringify({
       patterns_found: 1,
       recommendations_written: 1,
-      target_file: 'CLAUDE.md',
+      target_file: targetFile,
       skipped: false,
       propagated_to: ['GEMINI.md', 'AGENTS.md'],
     }));
@@ -173,9 +188,9 @@ if (mode === 'command') {
     process.stdout.write(JSON.stringify({
       patterns_found: 0,
       recommendations_written: 0,
-      target_file: '',
+      target_file: targetFile,
       skipped: true,
-      reason: 'fixture',
+      reason: 'no failures found in session history',
       propagated_to: [],
     }));
   }
