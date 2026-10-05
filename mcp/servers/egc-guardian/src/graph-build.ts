@@ -261,31 +261,66 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
   };
 }
 
+const LOCK_STALE_MS = 120_000;
+
+function acquireLock(lock: string, token: string): number | null {
+  try {
+    const fd = fs.openSync(lock, 'wx');
+    fs.writeSync(fd, token);
+    return fd;
+  } catch {
+    return null;
+  }
+}
+
+// Moves the lock aside and checks what was moved: only a lock whose owner
+// token is the stale one we read is removed. A fresh lock moved by mistake
+// is put back, so a racing breaker cannot take a live lock.
+function breakStaleLock(lock: string): boolean {
+  let staleToken: string;
+  try {
+    if (Date.now() - fs.statSync(lock).mtimeMs <= LOCK_STALE_MS) return false;
+    staleToken = fs.readFileSync(lock, 'utf8');
+  } catch {
+    return false;
+  }
+  const moved = `${lock}.break-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
+  try {
+    fs.renameSync(lock, moved);
+  } catch {
+    return false;
+  }
+  let movedToken: string | null = null;
+  try {
+    movedToken = fs.readFileSync(moved, 'utf8');
+  } catch {
+    movedToken = null;
+  }
+  if (movedToken === staleToken) {
+    fs.rmSync(moved, { force: true });
+    return true;
+  }
+  try {
+    fs.linkSync(moved, lock);
+  } catch {
+    // another process already holds the path
+  }
+  fs.rmSync(moved, { force: true });
+  return false;
+}
+
 export async function withBuildLock<T>(dbPath: string, fn: () => Promise<T>): Promise<{ ran: true; value: T } | { ran: false }> {
   const lock = `${dbPath}.lock`;
-  const acquire = (): number | null => {
-    try {
-      return fs.openSync(lock, 'wx');
-    } catch {
-      return null;
-    }
-  };
-  let fd = acquire();
-  if (fd === null) {
-    try {
-      if (Date.now() - fs.statSync(lock).mtimeMs > 120_000) {
-        fs.unlinkSync(lock);
-        fd = acquire();
-      }
-    } catch {
-      // another process took or removed it first
-    }
-  }
+  const token = `${process.pid}-${crypto.randomBytes(8).toString('hex')}`;
+  let fd = acquireLock(lock, token);
+  if (fd === null && breakStaleLock(lock)) fd = acquireLock(lock, token);
   if (fd === null) return { ran: false };
   try {
     return { ran: true, value: await fn() };
   } finally {
     try { fs.closeSync(fd); } catch { /* already closed */ }
-    try { fs.unlinkSync(lock); } catch { /* already removed */ }
+    try {
+      if (fs.readFileSync(lock, 'utf8') === token) fs.unlinkSync(lock);
+    } catch { /* already removed */ }
   }
 }
