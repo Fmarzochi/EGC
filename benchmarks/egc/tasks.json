@@ -1,0 +1,45 @@
+{
+  "description": "Maintainer-style tasks against this repository. Each task lists the files a maintainer would open first; paths are relative to the project root.",
+  "tasks": [
+    {
+      "id": "chunk-classify",
+      "query": "classify a chunk as json, code, log or diff before crushing it",
+      "expected": ["mcp/servers/egc-guardian/src/egc-chunk-router.ts"]
+    },
+    {
+      "id": "injection-scan",
+      "query": "the prompt injection scanner should flag a new pattern",
+      "expected": ["mcp/servers/egc-guardian/src/prompt-injection-scanner.ts"]
+    },
+    {
+      "id": "validate-command",
+      "query": "validateCommand denies a dangerous git command",
+      "expected": ["mcp/servers/egc-guardian/src/validator.ts"]
+    },
+    {
+      "id": "audit-redaction",
+      "query": "write an audit log entry with redacted secrets",
+      "expected": ["mcp/servers/egc-guardian/src/audit-log.ts"]
+    },
+    {
+      "id": "session-bus",
+      "query": "the session bus announce and claim path functions",
+      "expected": ["mcp/servers/egc-memory/src/session-bus.ts"]
+    },
+    {
+      "id": "memory-search",
+      "query": "search the memory history for past decisions",
+      "expected": ["mcp/servers/egc-memory/src/search.ts"]
+    },
+    {
+      "id": "graph-build",
+      "query": "build the code graph incrementally when files change",
+      "expected": ["mcp/servers/egc-guardian/src/graph-build.ts"]
+    },
+    {
+      "id": "sqlite-engine",
+      "query": "open the sqlite database with the wasm fallback engine",
+      "expected": ["mcp/servers/egc-guardian/src/sqlite-compat.ts"]
+    }
+  ]
+}
