@@ -3,3 +3,11 @@ Copyright 2026 Felipe Marzochi
 
 This product includes software developed as part of the EGC project
 (https://github.com/Fmarzochi/EGC).
+
+The file ranking in mcp/servers/egc-guardian/src/file-ranker.ts, file-git.ts,
+file-index.ts and file-rank.ts, and scripts/context.js, is a TypeScript and
+Node port of The Link (https://github.com/UnforGBeast/thelink, commit
+4f607a4217e2fe5e6a8c9a07187058b96acb6c3f), Copyright 2024 The Link Authors,
+licensed under the Apache License, Version 2.0. The scoring signals, the BM25
+field weights, the import-graph propagation and the local-git signal follow
+thelink/scoring.py and thelink/gitsignals.py.
