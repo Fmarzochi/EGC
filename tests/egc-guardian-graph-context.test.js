@@ -1,0 +1,145 @@
+'use strict';
+/**
+ * buildRelevantContext is what orchestrate_task calls: it owns the safety
+ * checks, the lock, the audit events, and turning every failure into an
+ * "unavailable" answer instead of an error.
+ *
+ * Run with: node tests/egc-guardian-graph-context.test.js
+ */
+const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const buildDir = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build');
+if (!fs.existsSync(path.join(buildDir, 'graph-context.js'))) {
+  console.log('[SKIP] build not found. Run npm run build in mcp/servers/egc-guardian first.');
+  process.exit(0);
+}
+const { buildRelevantContext } = require(path.join(buildDir, 'graph-context.js'));
+const { graphDbPath } = require(path.join(buildDir, 'graph-store.js'));
+
+let passed = 0;
+let failed = 0;
+async function run(name, fn) {
+  try {
+    await fn();
+    console.log(`  PASS ${name}`);
+    passed++;
+  } catch (err) {
+    console.log(`  FAIL ${name}`);
+    console.log(`    ${err.stack || err.message}`);
+    failed++;
+  }
+}
+
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-graph-context-'));
+const env = { ...process.env, EGC_DIR: path.join(tmp, 'egc-home') };
+const root = path.join(tmp, 'proj');
+fs.mkdirSync(root, { recursive: true });
+fs.writeFileSync(path.join(root, 'helper.js'), 'export function parseHelper(input) {\n  return String(input).trim();\n}\n');
+fs.writeFileSync(path.join(root, 'main.js'), "import { parseHelper } from './helper.js';\nexport function runMain(x) {\n  return parseHelper(x);\n}\n");
+fs.writeFileSync(path.join(root, 'secrets.js'), 'export const apiKey = "sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";\nexport function useKey() { return apiKey; }\n');
+
+(async () => {
+  await run('returns ranked snippets with graph stats, then refreshes nothing on the second call', async () => {
+    const audits = [];
+    const deps = { env, audit: (action, details) => audits.push({ action, details }) };
+    const first = await buildRelevantContext('change parseHelper to also lowercase', root, undefined, deps);
+    assert.strictEqual(first.status, 'ok', JSON.stringify(first));
+    assert.strictEqual(first.files[0].path, 'helper.js');
+    assert.strictEqual(first.files[0].snippets[0].symbol, 'parseHelper');
+    assert.ok('start_line' in first.files[0].snippets[0]);
+    assert.ok(first.files.some(f => f.path === 'main.js'), 'the caller comes along');
+    assert.strictEqual(first.graph.refreshed, 3);
+    assert.strictEqual(first.graph.build, 'ran');
+
+    const second = await buildRelevantContext('change parseHelper', root, undefined, deps);
+    assert.strictEqual(second.graph.refreshed, 0);
+    const events = audits.map(a => a.action);
+    assert.ok(events.includes('GRAPH_QUERY'));
+    assert.ok(!JSON.stringify(audits).includes('trim()'), 'audit events carry no snippet text');
+  });
+
+  await run('transformSnippet is applied to everything returned', async () => {
+    const r = await buildRelevantContext('parseHelper', root, undefined, { env, transformSnippet: t => t.replace(/trim\(\)/g, 'HIDDEN') });
+    assert.ok(JSON.stringify(r).includes('HIDDEN'));
+    assert.ok(!JSON.stringify(r).includes('trim()'));
+  });
+
+  await run('a protected path callback keeps a file out of the graph', async () => {
+    const r = await buildRelevantContext('useKey apiKey', root, undefined, { env, isProtectedPath: p => path.basename(p) === 'secrets.js' });
+    assert.ok(!JSON.stringify(r).includes('sk-ant'), 'the secret never appears');
+  });
+
+  await run('bad project paths are unavailable, not errors and not walked', async () => {
+    for (const p of [path.join(tmp, 'missing'), path.join(root, 'main.js'), path.parse(root).root, os.homedir()]) {
+      const r = await buildRelevantContext('anything useful', p, undefined, { env });
+      assert.strictEqual(r.status, 'unavailable', p);
+      assert.ok(typeof r.reason === 'string' && r.reason.length > 0);
+    }
+  });
+
+  await run('a prompt with no usable words is ok with no files', async () => {
+    const r = await buildRelevantContext('???', root, undefined, { env });
+    assert.strictEqual(r.status, 'ok');
+    assert.deepStrictEqual(r.files, []);
+  });
+
+  await run('a corrupt database is rebuilt once and the call still succeeds', async () => {
+    const db = graphDbPath(fs.realpathSync(root), env);
+    fs.writeFileSync(db, 'not sqlite '.repeat(200));
+    const r = await buildRelevantContext('parseHelper', root, undefined, { env });
+    assert.strictEqual(r.status, 'ok', JSON.stringify(r));
+    assert.strictEqual(r.files[0].path, 'helper.js');
+  });
+
+  await run('two callers at once on a cold project both succeed', async () => {
+    const cold = path.join(tmp, 'cold');
+    fs.mkdirSync(cold);
+    fs.writeFileSync(path.join(cold, 'a.js'), 'export function coldStart() { return 1; }\n');
+    const [x, y] = await Promise.all([
+      buildRelevantContext('coldStart', cold, undefined, { env }),
+      buildRelevantContext('coldStart', cold, undefined, { env })
+    ]);
+    for (const r of [x, y]) assert.notStrictEqual(r.status, undefined);
+    assert.ok([x, y].some(r => r.status === 'ok' && r.graph.build === 'ran'));
+    for (const r of [x, y]) assert.ok(r.status === 'ok' || r.status === 'unavailable', JSON.stringify(r));
+  });
+
+  await run('orchestrate_task over stdio returns relevant_context and keeps its other fields', async () => {
+    const { spawn } = require('node:child_process');
+    const child = spawn(process.execPath, [path.join(buildDir, 'index.js')], { env, stdio: ['pipe', 'pipe', 'ignore'] });
+    const pending = new Map();
+    let buf = '';
+    child.stdout.on('data', chunk => {
+      buf += chunk;
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const msg = JSON.parse(buf.slice(0, nl));
+        buf = buf.slice(nl + 1);
+        pending.get(msg.id)?.(msg);
+      }
+    });
+    const rpc = (id, method, params) => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`timeout on ${method}`)), 20000);
+      pending.set(id, msg => { clearTimeout(timer); resolve(msg); });
+      child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
+    });
+    try {
+      await rpc(1, 'initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '0' } });
+      child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
+      const res = await rpc(2, 'tools/call', { name: 'orchestrate_task', arguments: { prompt: 'change parseHelper', project_path: root } });
+      const body = JSON.parse(res.result.content[0].text);
+      assert.ok(body.routing && body.context_reduction, 'existing fields are intact');
+      assert.strictEqual(body.relevant_context.status, 'ok', JSON.stringify(body.relevant_context));
+      assert.strictEqual(body.relevant_context.files[0].path, 'helper.js');
+    } finally {
+      child.kill();
+    }
+  });
+
+  fs.rmSync(tmp, { recursive: true, force: true });
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+})();
