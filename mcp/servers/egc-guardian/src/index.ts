@@ -25,6 +25,7 @@ import { classifyChunk } from './egc-chunk-router.js';
 import { reduceJsonArray } from './egc-array-crusher.js';
 import { autoLearn } from './learn-writer.js';
 import { compressViaHeadroom } from './headroom-client.js';
+import { buildRelevantContext } from './graph-context.js';
 
 interface PipelineResult {
   chunks: string[];
@@ -220,7 +221,9 @@ const ReduceContextSchema = z.object({
 const OrchestrateTaskSchema = z.object({
   prompt: z.string(),
   filepaths: z.array(z.string()).optional().default([]),
-  heuristic_sandbox_id: z.string().optional()
+  heuristic_sandbox_id: z.string().optional(),
+  project_path: z.string().optional(),
+  context_budget_tokens: z.number().int().min(200).max(8000).optional()
 });
 
 server.setRequestHandler(ListToolsRequestSchema, () => {
@@ -265,12 +268,14 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
       },
       {
         name: "orchestrate_task",
-        description: "Routes a prompt against the EGC catalog of skills, agents, and rules with local scoring on this machine, no API key needed; the result lists what the active tool has installed and, under not_installed, what only exists in the catalog. Only when EGC_LLM_ROUTING is set to 1, on, true or yes and a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY) is the task prompt sent to that provider for semantic routing instead. Also returns context-reduction metrics for any file payloads.",
+        description: "Routes a prompt against the EGC catalog of skills, agents, and rules with local scoring on this machine, no API key needed; the result lists what the active tool has installed and, under not_installed, what only exists in the catalog. Only when EGC_LLM_ROUTING is set to 1, on, true or yes and a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY) is the task prompt sent to that provider for semantic routing instead. Also returns context-reduction metrics for any file payloads, and a relevant_context block of ranked snippets from the project's own JS/TS code, found through a local graph of its files, symbols, imports and references.",
         inputSchema: {
           type: "object",
           properties: {
              prompt: { type: "string" },
-             filepaths: { type: "array", items: { type: "string" } }
+             filepaths: { type: "array", items: { type: "string" } },
+             project_path: { type: "string", description: "Absolute path to the project root for relevant_context. Defaults to the server's working directory." },
+             context_budget_tokens: { type: "number", description: "Token budget for relevant_context snippets (200-8000, default 2000)." }
           },
           required: ["prompt"]
         }
@@ -497,6 +502,15 @@ async function handleOrchestrateTask(toolArgs: unknown) {
 
   const hint = routing.provider === 'keyword' ? keywordRoutingHint() : undefined;
 
+  const relevantContext = await buildRelevantContext(prompt, parsed.project_path, parsed.context_budget_tokens, {
+    isProtectedPath: p => isProtectedPath(p),
+    transformSnippet: text => {
+      if (scanForInjection(text).length > 0) return null;
+      return String(redactPayload({ text }).text);
+    },
+    audit: (action, details) => auditLog(action, 'ALLOWED', details)
+  });
+
   return {
     content: [{
       type: 'text',
@@ -510,6 +524,7 @@ async function handleOrchestrateTask(toolArgs: unknown) {
     savings_pct: pipeline.savings_pct,
         },
         files_loaded: filesLoaded,
+        relevant_context: relevantContext,
       }, null, 2),
     }],
   };
