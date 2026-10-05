@@ -13,6 +13,7 @@ export interface BuildOptions {
 export interface BuildResult { status: 'ok' | 'partial'; files: number; refreshed: number; removed: number; buildMs: number }
 
 const SOURCE_EXT = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+export const TEXT_EXT = /\.(?:[cm]?[jt]sx?|md|json|ya?ml|sh|txt|toml)$/i;
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'out', 'coverage', '.next', '.nuxt', '.turbo', '.cache', '.svn', '.hg', '.idea', '.vscode']);
 const TS_SWAP: Record<string, string[]> = { '.js': ['.ts', '.tsx'], '.mjs': ['.mts'], '.cjs': ['.cts'], '.jsx': ['.tsx'] };
 const TRY_EXT = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'];
@@ -142,7 +143,13 @@ export function computeEdges(data: Pick<GraphData, 'files' | 'symbols' | 'import
   return [...edges.values()];
 }
 
-async function walk(root: string, ignore: IgnoreFn, maxFiles: number, deadline: number): Promise<{ files: string[]; truncated: boolean }> {
+export async function walkFiles(
+  root: string,
+  ignore: IgnoreFn,
+  accept: (name: string) => boolean,
+  maxFiles: number,
+  deadline: number
+): Promise<{ files: string[]; truncated: boolean }> {
   const files: string[] = [];
   const stack = [''];
   while (stack.length > 0) {
@@ -160,7 +167,7 @@ async function walk(root: string, ignore: IgnoreFn, maxFiles: number, deadline: 
       const childRel = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
         if (!SKIP_DIRS.has(e.name) && !ignore(childRel, true)) stack.push(childRel);
-      } else if (e.isFile() && SOURCE_EXT.test(e.name) && !ignore(childRel, false)) {
+      } else if (e.isFile() && accept(e.name) && !ignore(childRel, false)) {
         if (files.length >= maxFiles) return { files, truncated: true };
         files.push(childRel);
       }
@@ -232,7 +239,7 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
     // no .gitignore
   }
 
-  const walked = await walk(root, ignore, maxFiles, deadline);
+  const walked = await walkFiles(root, ignore, name => SOURCE_EXT.test(name), maxFiles, deadline);
   const known = await store.getFiles();
   const wanted = new Set<string>();
   let refreshed = 0;
