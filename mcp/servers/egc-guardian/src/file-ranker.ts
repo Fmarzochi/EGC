@@ -134,3 +134,186 @@ export class Bm25Index {
     return total;
   }
 }
+
+export interface GitContextLike {
+  changed: Set<string>;
+  branch: Set<string>;
+  recent: Map<string, number>;
+  cochange: Map<string, Map<string, number>>;
+}
+
+export interface ImportEdge { from: string; to: string; rel: 'imports' }
+
+export interface ScoreContext {
+  query: string;
+  history: string;
+  edges: ImportEdge[];
+  extras: { gitSignal?: GitContextLike; graphHops?: number };
+  queryTerms: string[];
+  historyTerms: string[];
+  bm25: Bm25Index | null;
+  docIndex: Map<string, number>;
+}
+
+export interface SignalScore { name: string; raw: number; weight: number }
+export interface ScoredDoc { doc: FileDoc; signals: SignalScore[]; total: number }
+
+type SignalFn = (doc: FileDoc, ctx: ScoreContext) => number;
+type PropagatorFn = (ranked: ScoredDoc[], ctx: ScoreContext, weight: number) => void;
+
+const SIGNALS = new Map<string, { fn: SignalFn; weight: number }>();
+const PROPAGATORS = new Map<string, { fn: PropagatorFn; weight: number }>();
+
+export function signal(name: string, weight: number, fn: SignalFn): void {
+  SIGNALS.set(name, { fn, weight });
+}
+
+export function propagator(name: string, weight: number, fn: PropagatorFn): void {
+  PROPAGATORS.set(name, { fn, weight });
+}
+
+export function registeredSignals(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [n, s] of SIGNALS) out[n] = s.weight;
+  for (const [n, p] of PROPAGATORS) out[n] = p.weight;
+  return out;
+}
+
+export const DEFAULT_SIGNALS = ['bm25', 'path_hit'] as const;
+export const DEFAULT_PROPAGATORS = ['import_graph'] as const;
+const GRAPH_SEED_COUNT = 5;
+const GRAPH_HOP_DECAY = 0.5;
+const GRAPH_DEFAULT_HOPS = 2;
+
+signal('bm25', 1.0, (doc, ctx) => {
+  if (!ctx.bm25) return 0;
+  const idx = ctx.bm25;
+  const di = ctx.docIndex.get(doc.path);
+  if (di === undefined) return 0;
+  const weighted: Array<[string, number]> = [
+    ...idx.expand(ctx.queryTerms),
+    ...idx.expand(ctx.historyTerms).map(([t, w]): [string, number] => [t, w * HISTORY_TERM_WEIGHT])
+  ];
+  return idx.score(di, weighted);
+});
+
+signal('path_hit', 1.5, (doc, ctx) => {
+  const pathTerms = new Set(doc.fields.path);
+  const stemTerms = new Set(tokenize(doc.path.split('/').pop()?.replace(/\.[^.]*$/, '') ?? ''));
+  const q = new Set(ctx.queryTerms);
+  let hits = 0;
+  for (const t of q) {
+    if (pathTerms.has(t)) hits++;
+    if (stemTerms.has(t)) hits++;
+  }
+  return hits;
+});
+
+function resolveImportTarget(target: string, byKey: Map<string, string>): string | undefined {
+  if (byKey.has(target)) return byKey.get(target);
+  const dotted = target.replace(/\./g, '/').replace(/^\/+|\/+$/g, '');
+  for (const cand of [dotted, `${dotted}/__init__`, target.replace(/\\/g, '/').replace(/^\.\//, '')]) {
+    if (byKey.has(cand)) return byKey.get(cand);
+  }
+  const stemName = target.replace(/^[./\\]+|[./\\]+$/g, '').split(/[./\\]/).pop() ?? '';
+  return byKey.get(`stem:${stemName}`);
+}
+
+propagator('import_graph', 1.2, (ranked, ctx, weight) => {
+  const hops = ctx.extras.graphHops ?? GRAPH_DEFAULT_HOPS;
+  const byPath = new Map(ranked.map(sd => [sd.doc.path, sd]));
+  const emit = (raw: (sd: ScoredDoc) => number) => {
+    for (const sd of ranked) sd.signals.push({ name: 'import_graph', raw: raw(sd), weight });
+  };
+  if (hops <= 0 || ctx.edges.length === 0) return emit(() => 0);
+
+  const byKey = new Map<string, string>();
+  for (const p of byPath.keys()) {
+    const norm = p.replace(/\\/g, '/');
+    if (!byKey.has(norm)) byKey.set(norm, p);
+    const noExt = norm.replace(/\.[^./]+$/, '');
+    if (!byKey.has(noExt)) byKey.set(noExt, p);
+    const stemName = (norm.split('/').pop() ?? '').replace(/\.[^.]+$/, '');
+    if (!byKey.has(`stem:${stemName}`)) byKey.set(`stem:${stemName}`, p);
+  }
+
+  const adj = new Map<string, Set<string>>();
+  for (const p of byPath.keys()) adj.set(p, new Set());
+  for (const e of ctx.edges) {
+    if (e.rel !== 'imports') continue;
+    const src = byKey.get(e.from.replace(/\\/g, '/')) ?? byKey.get(e.from.replace(/\\/g, '/').replace(/\.[^./]+$/, ''));
+    const dst = resolveImportTarget(e.to, byKey);
+    if (src && dst && src !== dst) {
+      adj.get(src)?.add(dst);
+      adj.get(dst)?.add(src);
+    }
+  }
+
+  const seeds = ranked.slice(0, GRAPH_SEED_COUNT).filter(sd => sd.total > 0).map(sd => sd.doc.path);
+  if (seeds.length === 0) return emit(() => 0);
+
+  const dist = new Map<string, number>(seeds.map(s => [s, 0]));
+  let frontier = [...seeds];
+  for (let d = 1; d <= hops && frontier.length; d++) {
+    const next: string[] = [];
+    for (const p of frontier) {
+      for (const q of adj.get(p) ?? []) {
+        if (!dist.has(q)) {
+          dist.set(q, d);
+          next.push(q);
+        }
+      }
+    }
+    frontier = next;
+  }
+  emit(sd => {
+    const d = dist.get(sd.doc.path);
+    return d && d >= 1 ? GRAPH_HOP_DECAY ** (d - 1) : 0;
+  });
+});
+
+const byRank = (a: ScoredDoc, b: ScoredDoc): number =>
+  b.total - a.total || (a.doc.path < b.doc.path ? -1 : a.doc.path > b.doc.path ? 1 : 0);
+
+export function scoreDocuments(
+  docs: FileDoc[],
+  ctx: Omit<ScoreContext, 'queryTerms' | 'historyTerms' | 'bm25' | 'docIndex'>,
+  opts: { signals?: readonly string[]; propagators?: readonly string[]; weights?: Record<string, number> } = {}
+): ScoredDoc[] {
+  const full: ScoreContext = {
+    ...ctx,
+    queryTerms: tokenize(ctx.query),
+    historyTerms: tokenize(ctx.history),
+    bm25: Bm25Index.build(docs),
+    docIndex: new Map(docs.map((d, i) => [d.path, i]))
+  };
+  const activeSignals = opts.signals ?? DEFAULT_SIGNALS;
+  const activeProps = opts.propagators ?? DEFAULT_PROPAGATORS;
+
+  const ranked: ScoredDoc[] = docs.map(doc => {
+    const signals: SignalScore[] = [];
+    for (const name of activeSignals) {
+      const s = SIGNALS.get(name);
+      if (!s) continue;
+      const w = opts.weights?.[name] ?? s.weight;
+      if (w === 0) continue;
+      signals.push({ name, raw: s.fn(doc, full), weight: w });
+    }
+    return { doc, signals, total: 0 };
+  });
+  const finish = () => {
+    for (const sd of ranked) sd.total = sd.signals.reduce((a, s) => a + s.raw * s.weight, 0);
+    ranked.sort(byRank);
+  };
+  finish();
+
+  for (const name of activeProps) {
+    const p = PROPAGATORS.get(name);
+    if (!p) continue;
+    const w = opts.weights?.[name] ?? p.weight;
+    if (w === 0) continue;
+    p.fn(ranked, full, w);
+  }
+  finish();
+  return ranked;
+}
