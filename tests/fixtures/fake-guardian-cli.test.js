@@ -114,6 +114,7 @@ if (fs.existsSync(REAL_CLI)) {
       ['command', 'ls -la'],
       ['command', 'rm -rf /tmp/test'],
       ['command-batch', JSON.stringify(['ls', 'rm file.txt'])],
+      ['command-batch', JSON.stringify([null])],
       ['write', 'src/app.js'],
       ['write', '~/.ssh/authorized_keys'],
       ['content', 'Hello, world! Write clean code.'],
@@ -144,19 +145,19 @@ test('command-batch mode returns array of verdicts and fails closed on malformed
   // Malformed input fails closed with single blocking verdict
   const malformed = runCli('command-batch', '{not json');
   assert.deepStrictEqual(malformed, [
-    { allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS', advisory: false },
+    { allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS' },
   ]);
 
   // Empty commands fails closed
   const empty = runCli('command-batch', JSON.stringify({ commands: [] }));
   assert.deepStrictEqual(empty, [
-    { allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS', advisory: false },
+    { allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS' },
   ]);
 
   // Nonempty malformed batch like [null] fails closed
   const nullBatch = runCli('command-batch', JSON.stringify([null]));
   assert.deepStrictEqual(nullBatch, [
-    { allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS', advisory: false },
+    { allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS' },
   ]);
 });
 

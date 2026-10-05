@@ -115,7 +115,7 @@ if (mode === 'command') {
   const batchSchema = z.array(z.string()).min(1);
   const parsedBatch = batchSchema.safeParse(segments);
   if (!parsedBatch.success) {
-    process.stdout.write(JSON.stringify([{ allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS', advisory: false }]));
+    process.stdout.write(JSON.stringify([{ allowed: false, reason: 'malformed command-batch payload', trust_level: 'DANGEROUS' }]));
   } else {
     const validSegments = parsedBatch.data;
     const markOf = flag => {
