@@ -483,7 +483,7 @@ function buildMcpRegistrationTargets(homeDir) {
       name: 'Crush',
       path: resolveCrushConfigPath(homeDir),
       gate: () => fs.existsSync(path.dirname(resolveCrushConfigPath(homeDir))) || commandExists('crush'),
-      allowedRoot: path.dirname(resolveCrushConfigPath(homeDir)),
+      allowedRoot: process.env.CRUSH_GLOBAL_CONFIG ? path.dirname(resolveCrushConfigPath(homeDir)) : undefined,
       format: 'crush-mcp',
     },
   ];

@@ -31,18 +31,41 @@ const GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/crush-guardi
 const EGC_GUARDIAN_ADAPTER_BASENAME = path.basename(GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH);
 const EGC_CRUSHER_BASENAME = 'crusher-hook.js';
 
+/**
+ * Checks if a hook command contains our own adapter or crusher basename.
+ * @param {string} command
+ * @returns {boolean}
+ */
 function isOwnBasename(command) {
   return command.includes(EGC_GUARDIAN_ADAPTER_BASENAME) || command.includes(EGC_CRUSHER_BASENAME);
 }
 
+/**
+ * Resolves the path to the crush.json config file within targetRoot.
+ * @param {string} targetRoot
+ * @returns {string}
+ */
 function resolveCrushHooksJsonPath(targetRoot) {
   return path.join(targetRoot, CRUSH_CONFIG_FILE_NAME);
 }
 
+/**
+ * Resolves the destination path for the crush-guardian-adapter.js script within targetRoot.
+ * @param {string} targetRoot
+ * @returns {string}
+ */
 function resolveCrushGuardianAdapterDestination(targetRoot) {
   return path.join(targetRoot, 'scripts', 'hooks', 'crush-guardian-adapter.js');
 }
 
+/**
+ * Adds or updates a hook entry in the Crush configuration object.
+ * @param {Record<string, unknown>} config
+ * @param {string} event
+ * @param {string} command
+ * @param {string} [matcher]
+ * @returns {{config: Record<string, unknown>, changed: boolean}}
+ */
 function addCrushHookEntry(config, event, command, matcher) {
   const base = isPlainObject(config) ? config : {};
   const hooks = isPlainObject(base.hooks) ? { ...base.hooks } : {};
@@ -74,10 +97,24 @@ function addCrushHookEntry(config, event, command, matcher) {
   return { config: { ...base, hooks }, changed: true };
 }
 
+/**
+ * Removes a hook entry from a Crush configuration object.
+ * @param {Record<string, unknown>} config
+ * @param {string} event
+ * @param {string} command
+ * @returns {{config: Record<string, unknown>, changed: boolean}}
+ */
 function removeCrushHookEntry(config, event, command) {
   return removeFlatHookEntry(config, event, command);
 }
 
+/**
+ * Applies a Crush hook command and matcher to a configuration file on disk.
+ * @param {string} hooksJsonPath
+ * @param {string} hookScriptPath
+ * @param {string} [matcher]
+ * @returns {{changed: boolean}}
+ */
 function applyCrushHookToFile(hooksJsonPath, hookScriptPath, matcher) {
   const command = buildHookCommand(hookScriptPath);
   const current = readFlatHooksFile(hooksJsonPath, HOST_LABEL);
@@ -88,11 +125,24 @@ function applyCrushHookToFile(hooksJsonPath, hookScriptPath, matcher) {
   return { changed };
 }
 
+/**
+ * Removes a Crush hook from a configuration file on disk.
+ * @param {string} hooksJsonPath
+ * @param {string} hookScriptPath
+ * @returns {{changed: boolean}}
+ */
 function removeCrushHookFromFile(hooksJsonPath, hookScriptPath) {
   const command = buildHookCommand(hookScriptPath);
   return removeFlatHookFromFile(hooksJsonPath, HOST_LABEL, PRE_TOOL_USE_EVENT, command);
 }
 
+/**
+ * Inspects a Crush hook configuration file to verify if a hook is present and configured.
+ * @param {string} hooksJsonPath
+ * @param {string} hookScriptPath
+ * @param {string} [matcher]
+ * @returns {'ok'|'drifted'}
+ */
 function inspectCrushHookFile(hooksJsonPath, hookScriptPath, matcher) {
   try {
     const current = readFlatHooksFile(hooksJsonPath, HOST_LABEL);
@@ -110,6 +160,11 @@ function inspectCrushHookFile(hooksJsonPath, hookScriptPath, matcher) {
   }
 }
 
+/**
+ * Creates the Guardian PreToolUse hook merge operation for Crush.
+ * @param {string} targetRoot
+ * @returns {object}
+ */
 function createCrushGuardianHookMergeOperation(targetRoot) {
   const destinationPath = resolveCrushHooksJsonPath(targetRoot);
   const hookScriptPath = resolveCrushGuardianAdapterDestination(targetRoot);
@@ -127,6 +182,11 @@ function createCrushGuardianHookMergeOperation(targetRoot) {
   };
 }
 
+/**
+ * Creates the Crusher PreToolUse hook merge operation for Crush.
+ * @param {string} targetRoot
+ * @returns {object}
+ */
 function createCrushCrusherHookMergeOperation(targetRoot) {
   const { resolveCrusherHookScriptDestination } = require('./claude-settings-hooks');
   const destinationPath = resolveCrushHooksJsonPath(targetRoot);
@@ -145,6 +205,12 @@ function createCrushCrusherHookMergeOperation(targetRoot) {
   };
 }
 
+/**
+ * Creates operations to copy Guardian and Crusher support scripts into targetRoot.
+ * @param {Function} createRemappedOperation
+ * @param {string} targetRoot
+ * @returns {Array<object>}
+ */
 function createCrushGuardianScriptCopyOperations(createRemappedOperation, targetRoot) {
   const {
     createAdapterStdinJsonCopyOperation,

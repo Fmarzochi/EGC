@@ -19,6 +19,12 @@ const {
   createCrushGuardianScriptCopyOperations,
 } = require('../crush-settings-hooks');
 
+/**
+ * Resolves the configuration directory for Charmbracelet Crush.
+ * Honors CRUSH_GLOBAL_CONFIG, Windows LOCALAPPDATA, XDG_CONFIG_HOME, and falls back to ~/.config/crush.
+ * @param {string|{homeDir?: string}} [input]
+ * @returns {string}
+ */
 function resolveCrushConfigDir(input = {}) {
   const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
   if (process.env.CRUSH_GLOBAL_CONFIG) {
@@ -34,6 +40,11 @@ function resolveCrushConfigDir(input = {}) {
   return path.join(home, '.config', 'crush');
 }
 
+/**
+ * Resolves the crush.json configuration file path for Charmbracelet Crush.
+ * @param {string|{homeDir?: string}} [input]
+ * @returns {string}
+ */
 function resolveCrushConfigPath(input = {}) {
   if (process.env.CRUSH_GLOBAL_CONFIG) {
     const custom = process.env.CRUSH_GLOBAL_CONFIG;
@@ -42,6 +53,12 @@ function resolveCrushConfigPath(input = {}) {
   return path.join(resolveCrushConfigDir(input), 'crush.json');
 }
 
+/**
+ * Creates file copy and hook merge operations for Crush installation.
+ * @param {object} adapter
+ * @param {string} targetRoot
+ * @returns {Array<object>}
+ */
 function createCrushOperations(adapter, targetRoot) {
   const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
     createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)

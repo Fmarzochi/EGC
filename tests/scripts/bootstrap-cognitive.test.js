@@ -27,9 +27,11 @@ function cleanup(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-function run(homeDir) {
-  const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, XDG_CONFIG_HOME: path.join(homeDir, '.config') };
-  delete env.CRUSH_GLOBAL_CONFIG;
+function run(homeDir, extraEnv = {}) {
+  const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, XDG_CONFIG_HOME: path.join(homeDir, '.config'), ...extraEnv };
+  if (!('CRUSH_GLOBAL_CONFIG' in extraEnv)) {
+    delete env.CRUSH_GLOBAL_CONFIG;
+  }
   return execFileSync('node', [SCRIPT_PATH], {
     env,
     encoding: 'utf8',
@@ -1418,6 +1420,22 @@ async function runRemainingHarnessTests() {
       fs.writeFileSync(crushFile, 'regular file', 'utf8');
       const output = run(home);
       assert.ok(!output.includes('Crush:'), `output should not mention Crush when file: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('honors CRUSH_GLOBAL_CONFIG override when installing Crush CRUSH.md', () => {
+    const home = mktempHome();
+    try {
+      const customCrushDir = path.join(home, 'custom-crush-root');
+      fs.mkdirSync(customCrushDir, { recursive: true });
+      const output = run(home, { CRUSH_GLOBAL_CONFIG: customCrushDir });
+      assert.ok(/Crush: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const target = path.join(customCrushDir, 'CRUSH.md');
+      assert.ok(fs.existsSync(target), 'must install CRUSH.md into CRUSH_GLOBAL_CONFIG directory');
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(content.includes('EGC Session Memory'), 'must contain EGC memory protocol');
     } finally {
       cleanup(home);
     }
