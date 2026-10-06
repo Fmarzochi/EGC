@@ -206,7 +206,7 @@ function createCrushCrusherHookMergeOperation(targetRoot) {
 }
 
 /**
- * Creates operations to copy Guardian and Crusher support scripts into targetRoot.
+ * Creates operations to copy Guardian support scripts into targetRoot.
  * @param {Function} createRemappedOperation
  * @param {string} targetRoot
  * @returns {Array<object>}
