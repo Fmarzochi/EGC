@@ -47,6 +47,13 @@ test('drops the variables a tool session sets and keeps the rest', () => {
   assert.strictEqual(env.PATH, '/bin');
 });
 
+test('drops the variables that move a config directory out of the home a test passes', () => {
+  const env = suiteEnv({ PATH: '/bin', XDG_CONFIG_HOME: '/home/runner/.config', CRUSH_GLOBAL_CONFIG: '/somewhere/crush' });
+  assert.strictEqual(env.XDG_CONFIG_HOME, undefined);
+  assert.strictEqual(env.CRUSH_GLOBAL_CONFIG, undefined);
+  assert.strictEqual(env.PATH, '/bin');
+});
+
 test('turns git automatic maintenance off', () => {
   assert.strictEqual(suiteEnv({}).GIT_CONFIG_PARAMETERS, "'maintenance.auto'='false'");
 });

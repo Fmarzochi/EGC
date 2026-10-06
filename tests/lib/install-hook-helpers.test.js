@@ -17,6 +17,7 @@ const { spawnSync } = require('node:child_process');
 
 const { listInstallTargetAdapters, planInstallTargetScaffold } = require('../../scripts/lib/install-targets/registry');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { runWithoutConfigHomeVariables } = require('../fixtures/harness-variables');
 const { resolveInstallPlan } = require('../../scripts/lib/install-manifests');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
@@ -82,9 +83,16 @@ for (const target of targets) {
     run(`${target}, ${label}: each hook it copies loads with the helpers copied next to it`, () => {
       const home = fs.mkdtempSync(path.join(os.tmpdir(), `egc-hook-helpers-${target}-`));
       try {
-        const plan = planFor(target, { repoRoot: REPO_ROOT, projectRoot: home, homeDir: home });
-        layOut(plan);
+        // XDG_CONFIG_HOME (exported by CI runners) would move Crush out of
+        // the scratch home and into the runner's real config directory.
+        const plan = runWithoutConfigHomeVariables(() => planFor(target, { repoRoot: REPO_ROOT, projectRoot: home, homeDir: home }));
         const copies = plan.operations.filter(op => op.kind === 'copy-path');
+        assert.deepStrictEqual(
+          copies.map(op => op.destinationPath).filter(destination => path.relative(home, destination).startsWith('..')),
+          [],
+          'every copy lands inside the scratch home'
+        );
+        layOut(plan);
         const hooks = copies.filter(op => HOOKS.has(op.sourceRelativePath));
         const failures = hooks.map(op => [op.sourceRelativePath, loadFailure(op.destinationPath, home)]).filter(([, failure]) => failure);
         loaded += hooks.length;

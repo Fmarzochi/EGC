@@ -5,6 +5,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { withoutConfigHomeVariables } = require('../fixtures/harness-variables');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const SCRIPT_PATH = path.join(REPO_ROOT, 'scripts', 'bootstrap-cognitive.js');
@@ -61,8 +62,9 @@ function mktempFakeRepo() {
 }
 
 function runScript(scriptPath, homeDir) {
-  const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir };
-  delete env.CRUSH_GLOBAL_CONFIG;
+  // An inherited XDG_CONFIG_HOME or CRUSH_GLOBAL_CONFIG would send the
+  // bootstrap to the real config directories instead of the temporary home.
+  const env = withoutConfigHomeVariables({ ...process.env, HOME: homeDir, USERPROFILE: homeDir });
   return execFileSync('node', [scriptPath], {
     env,
     encoding: 'utf8',
