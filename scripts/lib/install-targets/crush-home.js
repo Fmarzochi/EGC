@@ -33,7 +33,9 @@ const {
 function resolveCrushConfigDir(input = {}) {
   const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
   if (process.env.CRUSH_GLOBAL_CONFIG) {
-    return process.env.CRUSH_GLOBAL_CONFIG;
+    // Crush opens a relative override from its working directory, so it is
+    // resolved against the current one, never against the home.
+    return path.resolve(process.env.CRUSH_GLOBAL_CONFIG);
   }
   if (process.env.XDG_CONFIG_HOME && path.isAbsolute(process.env.XDG_CONFIG_HOME)) {
     return path.join(process.env.XDG_CONFIG_HOME, 'crush');

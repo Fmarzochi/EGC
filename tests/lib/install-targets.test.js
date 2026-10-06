@@ -4689,11 +4689,17 @@ function runTests() {
 
       // Crush always treats the override as a directory, whatever its name.
       process.env.CRUSH_GLOBAL_CONFIG = '/custom/path/crush.json';
-      assert.strictEqual(adapter.resolveRoot({ homeDir }), '/custom/path/crush.json');
-      assert.strictEqual(adapter.resolveCrushConfigPath({ homeDir }), path.join('/custom/path/crush.json', 'crush.json'));
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.resolve('/custom/path/crush.json'));
+      assert.strictEqual(adapter.resolveCrushConfigPath({ homeDir }), path.join(path.resolve('/custom/path/crush.json'), 'crush.json'));
 
       process.env.CRUSH_GLOBAL_CONFIG = '/custom/dir';
-      assert.strictEqual(adapter.resolveRoot({ homeDir }), '/custom/dir');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.resolve('/custom/dir'));
+
+      // Crush opens a relative override from its working directory, so the
+      // install resolves it against the current one, not the home.
+      process.env.CRUSH_GLOBAL_CONFIG = 'relative-crush';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.resolve(process.cwd(), 'relative-crush'));
+      assert.ok(path.isAbsolute(adapter.resolveCrushConfigPath({ homeDir })), 'crush.json path is absolute');
     } finally {
       if (savedLocalAppData === undefined) delete process.env.LOCALAPPDATA; else process.env.LOCALAPPDATA = savedLocalAppData;
     }
