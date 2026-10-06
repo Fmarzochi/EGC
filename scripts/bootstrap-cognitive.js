@@ -552,3 +552,22 @@ const CODEX_SKIP_MESSAGES = {
     console.log(`  [cognitive] Zed: unexpected error: ${e.message}`);
   }
 })();
+
+// ── Crush (<Crush config dir>/CRUSH.md) ───────────────────────────────────────
+(function bootstrapCrush() {
+  try {
+    const configDir = process.env.CRUSH_GLOBAL_CONFIG
+      ? (path.extname(process.env.CRUSH_GLOBAL_CONFIG).toLowerCase() === '.json'
+          ? path.dirname(process.env.CRUSH_GLOBAL_CONFIG)
+          : process.env.CRUSH_GLOBAL_CONFIG)
+      : (process.env.XDG_CONFIG_HOME
+          ? path.join(process.env.XDG_CONFIG_HOME, 'crush')
+          : path.join(HOME, '.config', 'crush'));
+
+    if (!fs.existsSync(configDir)) return;
+    const target = path.join(configDir, 'CRUSH.md');
+    injectStandaloneProtocol(target, 'Crush', markdownProtocolBody('EGC Session Memory'));
+  } catch (e) {
+    console.log(`  [cognitive] Crush: unexpected error: ${e.message}`);
+  }
+})();

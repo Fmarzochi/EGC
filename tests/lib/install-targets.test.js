@@ -4448,7 +4448,7 @@ function runTests() {
 
   tally(test('identity paths .agents and AGENTS.md are foreign for targets that only take the agent files', () => {
     const { isForeignPlatformPath } = require('../../scripts/lib/install-targets/helpers');
-    for (const target of ['claude', 'windsurf', 'amp', 'copilot', 'junie', 'goose', 'openhands', 'opencode', 'qwen', 'cline', 'kiro']) {
+    for (const target of ['claude', 'windsurf', 'amp', 'copilot', 'junie', 'goose', 'openhands', 'opencode', 'qwen', 'cline', 'kiro', 'crush']) {
       assert.ok(isForeignPlatformPath('.agents', target), `.agents must not land on ${target}`);
       assert.ok(isForeignPlatformPath('AGENTS.md', target), `AGENTS.md must not land on ${target}`);
       assert.ok(!isForeignPlatformPath('agents', target), `agents/ must land on ${target}`);
@@ -4654,6 +4654,136 @@ function runTests() {
     } finally {
       if (previous === undefined) delete process.env.TRAE_ENV; else process.env.TRAE_ENV = previous;
     }
+  }));
+
+  tally(test('resolves crush adapter root and install-state path', () => {
+    const adapter = getInstallTargetAdapter('crush');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'crush-home');
+    assert.strictEqual(adapter.target, 'crush');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.config', 'crush'));
+    assert.strictEqual(statePath, path.join(homeDir, '.config', 'crush', 'egc', 'crush-install-state.json'));
+  }));
+
+  tally(test('crush adapter respects CRUSH_GLOBAL_CONFIG and XDG_CONFIG_HOME', () => {
+    const adapter = getInstallTargetAdapter('crush');
+    const homeDir = '/Users/example';
+    const origCrush = process.env.CRUSH_GLOBAL_CONFIG;
+    const origXdg = process.env.XDG_CONFIG_HOME;
+
+    try {
+      delete process.env.CRUSH_GLOBAL_CONFIG;
+      process.env.XDG_CONFIG_HOME = '/custom/xdg';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join('/custom/xdg', 'crush'));
+
+      process.env.CRUSH_GLOBAL_CONFIG = '/custom/path/crush.json';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), '/custom/path');
+
+      process.env.CRUSH_GLOBAL_CONFIG = '/custom/dir';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), '/custom/dir');
+    } finally {
+      if (origCrush !== undefined) process.env.CRUSH_GLOBAL_CONFIG = origCrush; else delete process.env.CRUSH_GLOBAL_CONFIG;
+      if (origXdg !== undefined) process.env.XDG_CONFIG_HOME = origXdg; else delete process.env.XDG_CONFIG_HOME;
+    }
+  }));
+
+  tally(test('crush adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('crush');
+    const byId = getInstallTargetAdapter('crush-home');
+
+    assert.strictEqual(byTarget.id, 'crush-home');
+    assert.strictEqual(byId.id, 'crush-home');
+    assert.ok(byTarget.supports('crush'));
+    assert.ok(byTarget.supports('crush-home'));
+  }));
+
+  tally(test('crush adapter resolves managed roots including both config dir and ~/.agents', () => {
+    const adapter = getInstallTargetAdapter('crush');
+    const homeDir = '/Users/example';
+    const managedRoots = adapter.resolveManagedRoots({ homeDir });
+    assert.deepStrictEqual(managedRoots, [
+      path.join(homeDir, '.config', 'crush'),
+      path.join(homeDir, '.agents'),
+    ]);
+  }));
+
+  tally(test('crush adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'crush',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'crush-home');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.agents', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.agents/skills/'
+    );
+  }));
+
+  tally(test('crush adapter plans agents, commands, and rules under ~/.config/crush/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'crush',
+      repoRoot,
+      homeDir,
+      modules: [
+        { id: 'agents-core', paths: ['agents'] },
+        { id: 'commands-core', paths: ['commands'] },
+        { id: 'rules-core', paths: ['rules'] },
+      ],
+    });
+
+    assert.ok(
+      plan.operations.some(op => op.destinationPath && op.destinationPath.startsWith(path.join(homeDir, '.config', 'crush', 'agents'))),
+      'Agents should land under ~/.config/crush/agents'
+    );
+    assert.ok(
+      plan.operations.some(op => op.destinationPath && op.destinationPath.startsWith(path.join(homeDir, '.config', 'crush', 'commands'))),
+      'Commands should land under ~/.config/crush/commands'
+    );
+    assert.ok(
+      plan.operations.some(op => op.destinationPath && op.destinationPath.startsWith(path.join(homeDir, '.config', 'crush', 'rules'))),
+      'Rules should land under ~/.config/crush/rules'
+    );
+  }));
+
+  tally(test('crush adapter plans Guardian and Crusher hooks in crush.json', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'crush',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+
+    const mergeOps = plan.operations.filter(op => op.kind === 'merge-claude-settings-hooks');
+    assert.strictEqual(mergeOps.length, 2, 'Should plan both Guardian and Crusher hook merge operations');
+    const crushJsonPath = path.join(homeDir, '.config', 'crush', 'crush.json');
+    assert.ok(mergeOps.every(op => op.destinationPath === crushJsonPath), 'Hooks should target crush.json');
+    assert.ok(mergeOps.some(op => op.hookMatcher === '^(bash|edit|write|multiedit)$'), 'Guardian hook matcher');
+    assert.ok(mergeOps.some(op => op.hookMatcher === '^bash$'), 'Crusher hook matcher');
+  }));
+
+  tally(test('crush adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('crush'), 'Should include crush target');
   }));
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

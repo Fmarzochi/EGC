@@ -404,6 +404,25 @@ function resolveKimiCodeHome(homeDir) {
   return path.join(homeDir, '.kimi-code');
 }
 
+function resolveCrushConfigDir(homeDir) {
+  if (process.env.CRUSH_GLOBAL_CONFIG) {
+    const custom = process.env.CRUSH_GLOBAL_CONFIG;
+    return path.extname(custom).toLowerCase() === '.json' ? path.dirname(custom) : custom;
+  }
+  if (process.env.XDG_CONFIG_HOME) {
+    return path.join(process.env.XDG_CONFIG_HOME, 'crush');
+  }
+  return path.join(homeDir, '.config', 'crush');
+}
+
+function resolveCrushConfigPath(homeDir) {
+  if (process.env.CRUSH_GLOBAL_CONFIG) {
+    const custom = process.env.CRUSH_GLOBAL_CONFIG;
+    return path.extname(custom).toLowerCase() === '.json' ? custom : path.join(custom, 'crush.json');
+  }
+  return path.join(resolveCrushConfigDir(homeDir), 'crush.json');
+}
+
 function buildMcpRegistrationTargets(homeDir) {
   return [
     {
@@ -477,6 +496,13 @@ function buildMcpRegistrationTargets(homeDir) {
       gate: () => fs.existsSync(resolveKimiCodeHome(homeDir)) || commandExists('kimi'),
       allowedRoot: resolveKimiCodeHome(homeDir),
       format: 'json',
+    },
+    {
+      name: 'Crush',
+      path: resolveCrushConfigPath(homeDir),
+      gate: () => fs.existsSync(path.dirname(resolveCrushConfigPath(homeDir))) || commandExists('crush'),
+      allowedRoot: path.dirname(resolveCrushConfigPath(homeDir)),
+      format: 'crush-mcp',
     },
   ];
 }
@@ -899,12 +925,44 @@ function retireStaleLegacySibling(targetPath) {
   return true;
 }
 
+/**
+ * Merges egc-guardian / egc-memory into a Crush config under the `mcp`
+ * key, in Crush's own shape ({ type: "stdio", command: "node", args: [...] }),
+ * leaving every other key as it was. Returns true if the file was written.
+ */
+function registerCrushMcp(targetPath, bins) {
+  const { guardianBin, memoryBin } = bins;
+  const existingContent = readFileIfExists(targetPath);
+  const obj = parseJsonObject(targetPath, existingContent, 'Crush config');
+  if (obj.mcp === null || obj.mcp === undefined) {
+    obj.mcp = {};
+  } else if (typeof obj.mcp !== 'object' || Array.isArray(obj.mcp)) {
+    throw new TypeError(`existing file at ${targetPath} has an invalid mcp object - left untouched`);
+  }
+  let changed = false;
+  const incoming = {
+    'egc-guardian': { type: 'stdio', command: 'node', args: [guardianBin] },
+    'egc-memory': { type: 'stdio', command: 'node', args: [memoryBin] },
+  };
+  for (const [name, entry] of Object.entries(incoming)) {
+    if (!Object.hasOwn(obj.mcp, name)) {
+      obj.mcp[name] = entry;
+      changed = true;
+    }
+  }
+  if (changed) {
+    writeConfig(targetPath, JSON.stringify(obj, null, 2) + '\n');
+  }
+  return changed;
+}
+
 const FORMAT_HANDLERS = {
   'json': registerJson,
   'toml': registerToml,
   'zed-context-servers': registerZedContextServers,
   'opencode-mcp': registerOpenCodeMcp,
   'claude-cli': registerClaudeCli,
+  'crush-mcp': registerCrushMcp,
 };
 
 function registerTarget(target, bins, roots, onRegister, onWarn, onUnchanged) {
@@ -962,6 +1020,8 @@ module.exports = {
   openCodeConfigPath,
   registerOpenCodeInstructions,
   registerClaudeCli,
+  registerCrushMcp,
+  resolveCrushConfigPath,
   quoteForCmdShell,
   registerMcpServers,
 };

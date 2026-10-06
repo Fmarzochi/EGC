@@ -67,6 +67,12 @@ const {
   inspectRoocodeDenylistFile,
   removeRoocodeDenylistFromFile,
 } = require('./vscode-denied-commands');
+const {
+  CRUSH_PRE_TOOL_USE_EVENT,
+  applyCrushHookToFile,
+  inspectCrushHookFile,
+  removeCrushHookFromFile,
+} = require('./crush-settings-hooks');
 
 const SESSION_START_EVENT = 'SessionStart';
 const STOP_EVENT = 'Stop';
@@ -1243,6 +1249,11 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeRoocodeDenylistFromFile(operation.destinationPath),
     inspect: operation => inspectRoocodeDenylistFile(operation.destinationPath),
   },
+  [CRUSH_PRE_TOOL_USE_EVENT]: {
+    apply: operation => applyCrushHookToFile(operation.destinationPath, operation.hookScriptPath, operation.hookMatcher),
+    remove: operation => removeCrushHookFromFile(operation.destinationPath, operation.hookScriptPath),
+    inspect: operation => inspectCrushHookFile(operation.destinationPath, operation.hookScriptPath, operation.hookMatcher),
+  },
 };
 
 const SESSION_START_HOOK_OPERATION_HANDLERS = {
@@ -1277,6 +1288,7 @@ module.exports = {
   CRUSHER_HOOK_LIB_SOURCES,
   CRUSHER_HOOK_MODULE_ID,
   CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  CRUSH_PRE_TOOL_USE_EVENT,
   PRE_COMPACT_EVENT,
   POST_COMPACT_EVENT,
   EGC_MEMORY_SAVE_HOOK_MODULE_ID,

@@ -1377,6 +1377,48 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('writes Crush CRUSH.md when ~/.config/crush exists', () => {
+    const home = mktempHome();
+    try {
+      const crushDir = path.join(home, '.config', 'crush');
+      fs.mkdirSync(crushDir, { recursive: true });
+      const output = run(home);
+      assert.ok(/Crush: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const crushMd = path.join(crushDir, 'CRUSH.md');
+      assert.ok(fs.existsSync(crushMd), 'CRUSH.md must exist');
+      const content = fs.readFileSync(crushMd, 'utf8');
+      assert.ok(content.includes('EGC Session Memory'), 'must contain session memory protocol');
+
+      const secondOutput = run(home);
+      assert.ok(/Crush: already configured/.test(secondOutput), `second run should report already configured, got: ${secondOutput}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Crush when ~/.config/crush does not exist', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home);
+      assert.ok(!output.includes('Crush:'), `output should not mention Crush when dir absent: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('logs an error instead of crashing when the Crush CRUSH.md path is structurally broken', () => {
+    const home = mktempHome();
+    try {
+      const crushDir = path.join(home, '.config', 'crush');
+      fs.mkdirSync(crushDir, { recursive: true });
+      fs.mkdirSync(path.join(crushDir, 'CRUSH.md'));
+      const output = run(home);
+      assert.ok(/Crush: unexpected error:/.test(output), 'should report the error, not crash');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('does not target a home-level file for Cline or Aider (project-only harnesses)', () => {
     assert.ok(
       !SCRIPT_SOURCE.includes("'.clinerules'"),

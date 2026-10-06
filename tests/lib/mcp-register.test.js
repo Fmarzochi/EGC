@@ -24,6 +24,8 @@ const {
   registerOpenCodeMcp,
   openCodeConfigPath,
   registerClaudeCli,
+  registerCrushMcp,
+  resolveCrushConfigPath,
   registerMcpServers,
 } = require('../../scripts/lib/mcp-register');
 
@@ -150,7 +152,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Kimi Code CLI',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Kimi Code CLI', 'Crush',
     ]);
   })));
 
@@ -2183,6 +2185,102 @@ function runTests() {
         fs.fchownSync = realFchownSync;
         fs.rmSync(tmp, { recursive: true, force: true });
       }
+    })));
+    // ── Crush MCP Registration ───────────────────────────────────────
+
+    (tally(test('resolveCrushConfigPath honors default, XDG_CONFIG_HOME, and CRUSH_GLOBAL_CONFIG', () => {
+      const tmpHome = makeTempDir();
+      const origCrush = process.env.CRUSH_GLOBAL_CONFIG;
+      const origXdg = process.env.XDG_CONFIG_HOME;
+
+      try {
+        delete process.env.CRUSH_GLOBAL_CONFIG;
+        delete process.env.XDG_CONFIG_HOME;
+        assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, '.config', 'crush', 'crush.json'));
+
+        process.env.XDG_CONFIG_HOME = path.join(tmpHome, 'custom-xdg');
+        assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-xdg', 'crush', 'crush.json'));
+
+        process.env.CRUSH_GLOBAL_CONFIG = path.join(tmpHome, 'custom-crush.json');
+        assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-crush.json'));
+
+        process.env.CRUSH_GLOBAL_CONFIG = path.join(tmpHome, 'custom-dir');
+        assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-dir', 'crush.json'));
+      } finally {
+        if (origCrush !== undefined) process.env.CRUSH_GLOBAL_CONFIG = origCrush; else delete process.env.CRUSH_GLOBAL_CONFIG;
+        if (origXdg !== undefined) process.env.XDG_CONFIG_HOME = origXdg; else delete process.env.XDG_CONFIG_HOME;
+        fs.rmSync(tmpHome, { recursive: true, force: true });
+      }
+    })));
+
+    (tally(test('Crush: registers egc-guardian and egc-memory into crush.json under mcp key', () => {
+      const tmpHome = makeTempDir();
+      const crushConfig = path.join(tmpHome, 'crush.json');
+      fs.writeFileSync(crushConfig, JSON.stringify({ other: 'setting' }, null, 2));
+
+      const registered = registerCrushMcp(crushConfig, bins);
+      assert.strictEqual(registered, true);
+
+      const parsed = JSON.parse(fs.readFileSync(crushConfig, 'utf8'));
+      assert.strictEqual(parsed.other, 'setting');
+      assert.deepStrictEqual(parsed.mcp['egc-guardian'], {
+        type: 'stdio',
+        command: 'node',
+        args: [bins.guardianBin],
+      });
+      assert.deepStrictEqual(parsed.mcp['egc-memory'], {
+        type: 'stdio',
+        command: 'node',
+        args: [bins.memoryBin],
+      });
+
+      // Idempotency: second run returns false
+      const secondRun = registerCrushMcp(crushConfig, bins);
+      assert.strictEqual(secondRun, false);
+
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    })));
+
+    (tally(test('Crush: preserves existing mcp servers and does not overwrite', () => {
+      const tmpHome = makeTempDir();
+      const crushConfig = path.join(tmpHome, 'crush.json');
+      fs.writeFileSync(crushConfig, JSON.stringify({
+        mcp: {
+          custom: { type: 'stdio', command: 'custom-mcp' },
+          'egc-guardian': { type: 'stdio', command: 'existing', args: ['existing-arg'] },
+        },
+      }, null, 2));
+
+      const registered = registerCrushMcp(crushConfig, bins);
+      assert.strictEqual(registered, true);
+
+      const parsed = JSON.parse(fs.readFileSync(crushConfig, 'utf8'));
+      assert.deepStrictEqual(parsed.mcp.custom, { type: 'stdio', command: 'custom-mcp' });
+      assert.deepStrictEqual(parsed.mcp['egc-guardian'], {
+        type: 'stdio',
+        command: 'existing',
+        args: ['existing-arg'],
+      });
+      assert.deepStrictEqual(parsed.mcp['egc-memory'], {
+        type: 'stdio',
+        command: 'node',
+        args: [bins.memoryBin],
+      });
+
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    })));
+
+    (tally(test('Crush: throws on invalid JSON or invalid mcp object', () => {
+      const tmpHome = makeTempDir();
+      const invalidJson = path.join(tmpHome, 'invalid.json');
+      fs.writeFileSync(invalidJson, 'not-json');
+      assert.throws(() => registerCrushMcp(invalidJson, bins), /is not valid JSON/);
+
+      const invalidMcp = path.join(tmpHome, 'invalid-mcp.json');
+      fs.writeFileSync(invalidMcp, JSON.stringify({ mcp: 'not-an-object' }));
+      assert.throws(() => registerCrushMcp(invalidMcp, bins), /invalid mcp object/);
+
+      fs.rmSync(tmpHome, { recursive: true, force: true });
     })));
   }
 
