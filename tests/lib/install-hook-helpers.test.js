@@ -88,7 +88,11 @@ for (const target of targets) {
         const plan = runWithoutConfigHomeVariables(() => planFor(target, { repoRoot: REPO_ROOT, projectRoot: home, homeDir: home }));
         const copies = plan.operations.filter(op => op.kind === 'copy-path');
         assert.deepStrictEqual(
-          copies.map(op => op.destinationPath).filter(destination => path.relative(home, destination).startsWith('..')),
+          copies.map(op => op.destinationPath).filter(destination => {
+            // On Windows another drive yields an absolute relative path.
+            const relative = path.relative(home, destination);
+            return path.isAbsolute(relative) || relative.startsWith('..');
+          }),
           [],
           'every copy lands inside the scratch home'
         );
