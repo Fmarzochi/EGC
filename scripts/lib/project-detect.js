@@ -368,9 +368,9 @@ const DART_DEP_SECTIONS = new Set(['dependencies', 'dev_dependencies', 'dependen
 function classifyPubspecLine(line) {
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith('#')) return null;
-  const topMatch = line.match(/^([a-zA-Z0-9_-]+):/);
+  const topMatch = /^([a-zA-Z0-9_-]+):/.exec(line);
   if (topMatch) return { section: topMatch[1] };
-  const depMatch = line.match(/^(\s+)([a-zA-Z0-9_-]+):/);
+  const depMatch = /^(\s+)([a-zA-Z0-9_-]+):/.exec(line);
   if (depMatch) return { key: depMatch[2], indent: depMatch[1].length };
   return null;
 }
