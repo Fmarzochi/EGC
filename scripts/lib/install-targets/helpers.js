@@ -362,17 +362,20 @@ function createFlatRuleOperations(options) {
  * hook-operation append around it - so it lives here instead of being
  * copied into each adapter file.
  */
-function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningInput, targetRoot) {
+function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningInput, targetRoot, destSkillsDir = null) {
   const normalizedPath = normalizeRelativePath(sourceRelativePath);
 
   if (normalizedPath.startsWith('skills/')) {
     const parts = normalizedPath.slice('skills/'.length).split('/');
     const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
+    const destinationPath = destSkillsDir
+      ? path.join(destSkillsDir, flatRemainder)
+      : path.join(targetRoot, 'skills', flatRemainder);
     return createRemappedOperation(
       adapter,
       moduleId,
       sourceRelativePath,
-      path.join(targetRoot, 'skills', flatRemainder),
+      destinationPath,
       { strategy: 'preserve-relative-path' }
     );
   }

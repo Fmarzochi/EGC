@@ -37,6 +37,58 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function extractCwd(crushEvent) {
+  if (typeof crushEvent.cwd === 'string') return crushEvent.cwd;
+  if (typeof crushEvent.working_dir === 'string') return crushEvent.working_dir;
+  return undefined;
+}
+
+function extractRawInput(crushEvent) {
+  if (isPlainObject(crushEvent.tool_input)) return crushEvent.tool_input;
+  if (isPlainObject(crushEvent.input)) return crushEvent.input;
+  return {};
+}
+
+function buildBashGuardianEvent(rawInput, cwd, crushEvent) {
+  const toolInput = { ...rawInput };
+  if (typeof toolInput.command !== 'string' && typeof crushEvent.command === 'string') {
+    toolInput.command = crushEvent.command;
+  }
+  return {
+    kind: 'bash',
+    input: {
+      tool_name: 'Bash',
+      tool_input: toolInput,
+      ...(cwd ? { cwd } : {}),
+    },
+  };
+}
+
+function resolveWriteToolName(toolName) {
+  const lower = toolName.toLowerCase();
+  if (lower === 'write') return 'Write';
+  if (lower === 'multiedit') return 'MultiEdit';
+  return 'Edit';
+}
+
+function buildWriteGuardianEvent(toolName, rawInput, cwd, crushEvent) {
+  const toolInput = { ...rawInput };
+  const mappedToolName = resolveWriteToolName(toolName);
+  const target = toolInput.file_path || toolInput.path || toolInput.file || toolInput.TargetFile || crushEvent.path || crushEvent.file_path;
+  if (target) {
+    toolInput.path = target;
+    toolInput.file_path = target;
+  }
+  return {
+    kind: 'write',
+    input: {
+      tool_name: mappedToolName,
+      tool_input: toolInput,
+      ...(cwd ? { cwd } : {}),
+    },
+  };
+}
+
 function buildGuardianEvent(crushEvent) {
   if (!isPlainObject(crushEvent)) {
     return null;
@@ -46,46 +98,15 @@ function buildGuardianEvent(crushEvent) {
     return null;
   }
   const toolName = rawTool.trim();
-  const cwd = typeof crushEvent.cwd === 'string'
-    ? crushEvent.cwd
-    : (typeof crushEvent.working_dir === 'string' ? crushEvent.working_dir : undefined);
-
-  const rawInput = isPlainObject(crushEvent.tool_input)
-    ? crushEvent.tool_input
-    : (isPlainObject(crushEvent.input) ? crushEvent.input : {});
+  const cwd = extractCwd(crushEvent);
+  const rawInput = extractRawInput(crushEvent);
 
   if (BASH_TOOL_RE.test(toolName)) {
-    const toolInput = { ...rawInput };
-    if (typeof toolInput.command !== 'string' && typeof crushEvent.command === 'string') {
-      toolInput.command = crushEvent.command;
-    }
-    return {
-      kind: 'bash',
-      input: {
-        tool_name: 'Bash',
-        tool_input: toolInput,
-        ...(cwd ? { cwd } : {}),
-      },
-    };
+    return buildBashGuardianEvent(rawInput, cwd, crushEvent);
   }
 
   if (WRITE_TOOL_RE.test(toolName)) {
-    const toolInput = { ...rawInput };
-    const lower = toolName.toLowerCase();
-    const mappedToolName = lower === 'write' ? 'Write' : (lower === 'multiedit' ? 'MultiEdit' : 'Edit');
-    const target = toolInput.file_path || toolInput.path || toolInput.file || toolInput.TargetFile || crushEvent.path || crushEvent.file_path;
-    if (target) {
-      toolInput.path = target;
-      toolInput.file_path = target;
-    }
-    return {
-      kind: 'write',
-      input: {
-        tool_name: mappedToolName,
-        tool_input: toolInput,
-        ...(cwd ? { cwd } : {}),
-      },
-    };
+    return buildWriteGuardianEvent(toolName, rawInput, cwd, crushEvent);
   }
 
   return null;

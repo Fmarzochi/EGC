@@ -27,6 +27,7 @@ const { isDeepStrictEqual } = require('node:util');
 const { commandExists } = require('./utils');
 const { isInsideReal, realizePath } = require('./path-safety');
 const { replaceFileWith } = require('./install/preserving-write');
+const { resolveCrushConfigDir, resolveCrushConfigPath } = require('./install-targets/crush-home');
 
 let TOML = null;
 try {
@@ -402,25 +403,6 @@ function resolveKimiCodeHome(homeDir) {
     return path.resolve(configured);
   }
   return path.join(homeDir, '.kimi-code');
-}
-
-function resolveCrushConfigDir(homeDir) {
-  if (process.env.CRUSH_GLOBAL_CONFIG) {
-    const custom = process.env.CRUSH_GLOBAL_CONFIG;
-    return path.extname(custom).toLowerCase() === '.json' ? path.dirname(custom) : custom;
-  }
-  if (process.env.XDG_CONFIG_HOME) {
-    return path.join(process.env.XDG_CONFIG_HOME, 'crush');
-  }
-  return path.join(homeDir, '.config', 'crush');
-}
-
-function resolveCrushConfigPath(homeDir) {
-  if (process.env.CRUSH_GLOBAL_CONFIG) {
-    const custom = process.env.CRUSH_GLOBAL_CONFIG;
-    return path.extname(custom).toLowerCase() === '.json' ? custom : path.join(custom, 'crush.json');
-  }
-  return path.join(resolveCrushConfigDir(homeDir), 'crush.json');
 }
 
 function buildMcpRegistrationTargets(homeDir) {
@@ -1021,6 +1003,7 @@ module.exports = {
   registerOpenCodeInstructions,
   registerClaudeCli,
   registerCrushMcp,
+  resolveCrushConfigDir,
   resolveCrushConfigPath,
   quoteForCmdShell,
   registerMcpServers,

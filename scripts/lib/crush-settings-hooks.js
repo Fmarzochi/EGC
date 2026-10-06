@@ -8,7 +8,6 @@
 
 const path = require('node:path');
 const {
-  applyFlatHookToFile,
   buildHookCommand,
   isPlainObject,
   isStaleEgcEntry,

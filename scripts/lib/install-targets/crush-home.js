@@ -7,7 +7,7 @@ const {
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
-  normalizeRelativePath,
+  planFlatSkillOperation,
   resolveModulesPlan,
 } = require('./helpers');
 const {
@@ -20,15 +20,26 @@ const {
 } = require('../crush-settings-hooks');
 
 function resolveCrushConfigDir(input = {}) {
-  const home = input.homeDir || os.homedir();
+  const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
   if (process.env.CRUSH_GLOBAL_CONFIG) {
     const custom = process.env.CRUSH_GLOBAL_CONFIG;
     return path.extname(custom).toLowerCase() === '.json' ? path.dirname(custom) : custom;
   }
-  if (process.env.XDG_CONFIG_HOME) {
+  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
+    return path.join(process.env.LOCALAPPDATA, 'crush');
+  }
+  if (process.env.XDG_CONFIG_HOME && path.isAbsolute(process.env.XDG_CONFIG_HOME)) {
     return path.join(process.env.XDG_CONFIG_HOME, 'crush');
   }
   return path.join(home, '.config', 'crush');
+}
+
+function resolveCrushConfigPath(input = {}) {
+  if (process.env.CRUSH_GLOBAL_CONFIG) {
+    const custom = process.env.CRUSH_GLOBAL_CONFIG;
+    return path.extname(custom).toLowerCase() === '.json' ? custom : path.join(custom, 'crush.json');
+  }
+  return path.join(resolveCrushConfigDir(input), 'crush.json');
 }
 
 function createCrushOperations(adapter, targetRoot) {
@@ -44,7 +55,7 @@ function createCrushOperations(adapter, targetRoot) {
   ];
 }
 
-module.exports = createInstallTargetAdapter({
+const baseAdapter = createInstallTargetAdapter({
   id: 'crush-home',
   target: 'crush',
   kind: 'home',
@@ -55,7 +66,7 @@ module.exports = createInstallTargetAdapter({
     return resolveCrushConfigDir(input);
   },
   resolveManagedRoots(input = {}, adapter) {
-    const home = input.homeDir || os.homedir();
+    const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
     return [adapter.resolveRoot(input), path.join(home, '.agents')];
   },
   planOperations(input, adapter) {
@@ -65,21 +76,14 @@ module.exports = createInstallTargetAdapter({
     const moduleOperations = modules.flatMap(module => {
       const paths = (Array.isArray(module.paths) ? module.paths : [])
         .filter(p => !isForeignPlatformPath(p, adapter.target));
-      return paths.map(sourceRelativePath => {
-        const normalizedPath = normalizeRelativePath(sourceRelativePath);
-        if (normalizedPath.startsWith('skills/')) {
-          const parts = normalizedPath.slice('skills/'.length).split('/');
-          const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
-          return createRemappedOperation(
-            adapter,
-            module.id,
-            sourceRelativePath,
-            path.join(sharedAgentsRoot, 'skills', flatRemainder),
-            { strategy: 'preserve-relative-path' }
-          );
-        }
-        return adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput);
-      });
+      return paths.map(sourceRelativePath => planFlatSkillOperation(
+        adapter,
+        module.id,
+        sourceRelativePath,
+        planningInput,
+        targetRoot,
+        path.join(sharedAgentsRoot, 'skills')
+      ));
     });
 
     return [
@@ -88,3 +92,11 @@ module.exports = createInstallTargetAdapter({
     ];
   },
 });
+
+const adapter = Object.freeze(Object.assign({}, baseAdapter, {
+  resolveCrushConfigDir,
+  resolveCrushConfigPath,
+}));
+
+module.exports = adapter;
+

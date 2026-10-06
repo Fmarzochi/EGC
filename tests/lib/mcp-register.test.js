@@ -2186,32 +2186,43 @@ function runTests() {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
     })));
-    // ── Crush MCP Registration ───────────────────────────────────────
+  }
 
-    (tally(test('resolveCrushConfigPath honors default, XDG_CONFIG_HOME, and CRUSH_GLOBAL_CONFIG', () => {
-      const tmpHome = makeTempDir();
-      const origCrush = process.env.CRUSH_GLOBAL_CONFIG;
-      const origXdg = process.env.XDG_CONFIG_HOME;
+  // ── Crush MCP Registration ───────────────────────────────────────
 
-      try {
-        delete process.env.CRUSH_GLOBAL_CONFIG;
-        delete process.env.XDG_CONFIG_HOME;
-        assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, '.config', 'crush', 'crush.json'));
+  (tally(test('resolveCrushConfigPath honors default, XDG_CONFIG_HOME, and CRUSH_GLOBAL_CONFIG', () => {
+    const tmpHome = makeTempDir();
+    const origCrush = process.env.CRUSH_GLOBAL_CONFIG;
+    const origXdg = process.env.XDG_CONFIG_HOME;
+    const origLocalApp = process.env.LOCALAPPDATA;
 
-        process.env.XDG_CONFIG_HOME = path.join(tmpHome, 'custom-xdg');
-        assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-xdg', 'crush', 'crush.json'));
+    try {
+      delete process.env.CRUSH_GLOBAL_CONFIG;
+      delete process.env.XDG_CONFIG_HOME;
+      delete process.env.LOCALAPPDATA;
+      assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, '.config', 'crush', 'crush.json'));
 
-        process.env.CRUSH_GLOBAL_CONFIG = path.join(tmpHome, 'custom-crush.json');
-        assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-crush.json'));
-
-        process.env.CRUSH_GLOBAL_CONFIG = path.join(tmpHome, 'custom-dir');
-        assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-dir', 'crush.json'));
-      } finally {
-        if (origCrush !== undefined) process.env.CRUSH_GLOBAL_CONFIG = origCrush; else delete process.env.CRUSH_GLOBAL_CONFIG;
-        if (origXdg !== undefined) process.env.XDG_CONFIG_HOME = origXdg; else delete process.env.XDG_CONFIG_HOME;
-        fs.rmSync(tmpHome, { recursive: true, force: true });
+      if (process.platform === 'win32') {
+        process.env.LOCALAPPDATA = path.join(tmpHome, 'custom-localappdata');
+        assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-localappdata', 'crush', 'crush.json'));
+        delete process.env.LOCALAPPDATA;
       }
-    })));
+
+      process.env.XDG_CONFIG_HOME = path.join(tmpHome, 'custom-xdg');
+      assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-xdg', 'crush', 'crush.json'));
+
+      process.env.CRUSH_GLOBAL_CONFIG = path.join(tmpHome, 'custom-crush.json');
+      assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-crush.json'));
+
+      process.env.CRUSH_GLOBAL_CONFIG = path.join(tmpHome, 'custom-dir');
+      assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-dir', 'crush.json'));
+    } finally {
+      if (origCrush !== undefined) process.env.CRUSH_GLOBAL_CONFIG = origCrush; else delete process.env.CRUSH_GLOBAL_CONFIG;
+      if (origXdg !== undefined) process.env.XDG_CONFIG_HOME = origXdg; else delete process.env.XDG_CONFIG_HOME;
+      if (origLocalApp !== undefined) process.env.LOCALAPPDATA = origLocalApp; else delete process.env.LOCALAPPDATA;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
 
     (tally(test('Crush: registers egc-guardian and egc-memory into crush.json under mcp key', () => {
       const tmpHome = makeTempDir();
@@ -2282,7 +2293,6 @@ function runTests() {
 
       fs.rmSync(tmpHome, { recursive: true, force: true });
     })));
-  }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

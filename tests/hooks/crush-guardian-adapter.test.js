@@ -141,6 +141,17 @@ function runTests() {
     assert.ok(result.stderr.includes('BLOCKED'));
   })) passed++; else failed++;
 
+  if (test('CLI: fails closed with exit 2 when stdin payload exceeds size cap', () => {
+    const oversizedPayload = JSON.stringify({
+      tool_name: 'bash',
+      tool_input: { command: 'ls' },
+      padding: 'x'.repeat(1024 * 1024 + 1024),
+    });
+    const result = runAdapterCli(oversizedPayload);
+    assert.strictEqual(result.code, 2);
+    assert.ok(result.stderr.includes('BLOCKED'));
+  })) passed++; else failed++;
+
   if (test('runCrushGuardianAdapter allows non-matching or invalid JSON payload', () => {
     const res1 = runCrushGuardianAdapter('invalid json');
     assert.strictEqual(res1.exitCode, 0);

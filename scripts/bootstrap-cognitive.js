@@ -4,7 +4,7 @@
 const fs   = require('node:fs');
 const path = require('node:path');
 const os   = require('node:os');
-const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, assertLandsInside } = require('./lib/mcp-register');
+const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, assertLandsInside, resolveCrushConfigDir } = require('./lib/mcp-register');
 
 // Bump when BLOCK's content changes in a way that already-configured installs
 // should receive (e.g. a new protocol section). injectProtocol() upgrades any
@@ -556,17 +556,10 @@ const CODEX_SKIP_MESSAGES = {
 // ── Crush (<Crush config dir>/CRUSH.md) ───────────────────────────────────────
 (function bootstrapCrush() {
   try {
-    const configDir = process.env.CRUSH_GLOBAL_CONFIG
-      ? (path.extname(process.env.CRUSH_GLOBAL_CONFIG).toLowerCase() === '.json'
-          ? path.dirname(process.env.CRUSH_GLOBAL_CONFIG)
-          : process.env.CRUSH_GLOBAL_CONFIG)
-      : (process.env.XDG_CONFIG_HOME
-          ? path.join(process.env.XDG_CONFIG_HOME, 'crush')
-          : path.join(HOME, '.config', 'crush'));
-
-    if (!fs.existsSync(configDir)) return;
+    const configDir = resolveCrushConfigDir(HOME);
+    if (!fs.existsSync(configDir) || !fs.statSync(configDir).isDirectory()) return;
     const target = path.join(configDir, 'CRUSH.md');
-    injectStandaloneProtocol(target, 'Crush', markdownProtocolBody('EGC Session Memory'));
+    injectProtocol(target, 'Crush');
   } catch (e) {
     console.log(`  [cognitive] Crush: unexpected error: ${e.message}`);
   }
