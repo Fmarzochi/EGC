@@ -212,7 +212,7 @@ function main() {
       ? runBashGuardian(target.input)
       : runWriteGuardian(target.input);
 
-    if (result && result.exitCode === 2) {
+    if (result?.exitCode === 2) {
       const reason = result.stderr || 'Blocked by the EGC Guardian.';
       process.stderr.write(reason.endsWith('\n') ? reason : `${reason}\n`);
       process.exitCode = 2;
