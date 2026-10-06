@@ -15,6 +15,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { runWithoutConfigHomeVariables } = require('../fixtures/harness-variables');
 
 const {
   buildMcpRegistrationTargets,
@@ -2202,17 +2203,18 @@ function runTests() {
       delete process.env.LOCALAPPDATA;
       assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, '.config', 'crush', 'crush.json'));
 
-      if (process.platform === 'win32') {
-        process.env.LOCALAPPDATA = path.join(tmpHome, 'custom-localappdata');
-        assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-localappdata', 'crush', 'crush.json'));
-        delete process.env.LOCALAPPDATA;
-      }
+      // %LOCALAPPDATA%\crush is Crush's data config only; the global
+      // crush.json stays under ~/.config/crush on Windows too.
+      process.env.LOCALAPPDATA = path.join(tmpHome, 'custom-localappdata');
+      assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, '.config', 'crush', 'crush.json'));
+      delete process.env.LOCALAPPDATA;
 
       process.env.XDG_CONFIG_HOME = path.join(tmpHome, 'custom-xdg');
       assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-xdg', 'crush', 'crush.json'));
 
+      // Crush joins crush.json onto the override whatever its name.
       process.env.CRUSH_GLOBAL_CONFIG = path.join(tmpHome, 'custom-crush.json');
-      assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-crush.json'));
+      assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-crush.json', 'crush.json'));
 
       process.env.CRUSH_GLOBAL_CONFIG = path.join(tmpHome, 'custom-dir');
       assert.strictEqual(resolveCrushConfigPath(tmpHome), path.join(tmpHome, 'custom-dir', 'crush.json'));
@@ -2298,4 +2300,8 @@ function runTests() {
   process.exit(failed > 0 ? 1 : 0);
 }
 
-runTests();
+// The temporary homes decide every config path: an inherited
+// XDG_CONFIG_HOME or CRUSH_GLOBAL_CONFIG would point the registration at the
+// real crush.json of the machine running the suite. Cases about those
+// variables set them on their own.
+runWithoutConfigHomeVariables(runTests);

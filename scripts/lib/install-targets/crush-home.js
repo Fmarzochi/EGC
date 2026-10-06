@@ -20,19 +20,20 @@ const {
 } = require('../crush-settings-hooks');
 
 /**
- * Resolves the configuration directory for Charmbracelet Crush.
- * Honors CRUSH_GLOBAL_CONFIG, Windows LOCALAPPDATA, XDG_CONFIG_HOME, and falls back to ~/.config/crush.
+ * Resolves the configuration directory for Charmbracelet Crush, the way
+ * Crush's own GlobalConfig() does (internal/config/load.go): the
+ * CRUSH_GLOBAL_CONFIG directory (always a directory, whatever its name),
+ * then $XDG_CONFIG_HOME/crush, then ~/.config/crush on every platform,
+ * Windows included. %LOCALAPPDATA%\crush only holds Crush's data config,
+ * and CRUSH.md is read next to crush.json alone. A relative XDG_CONFIG_HOME
+ * is invalid under the XDG spec and falls back to the home default.
  * @param {string|{homeDir?: string}} [input]
  * @returns {string}
  */
 function resolveCrushConfigDir(input = {}) {
   const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
   if (process.env.CRUSH_GLOBAL_CONFIG) {
-    const custom = process.env.CRUSH_GLOBAL_CONFIG;
-    return path.extname(custom).toLowerCase() === '.json' ? path.dirname(custom) : custom;
-  }
-  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, 'crush');
+    return process.env.CRUSH_GLOBAL_CONFIG;
   }
   if (process.env.XDG_CONFIG_HOME && path.isAbsolute(process.env.XDG_CONFIG_HOME)) {
     return path.join(process.env.XDG_CONFIG_HOME, 'crush');
@@ -46,10 +47,6 @@ function resolveCrushConfigDir(input = {}) {
  * @returns {string}
  */
 function resolveCrushConfigPath(input = {}) {
-  if (process.env.CRUSH_GLOBAL_CONFIG) {
-    const custom = process.env.CRUSH_GLOBAL_CONFIG;
-    return path.extname(custom).toLowerCase() === '.json' ? custom : path.join(custom, 'crush.json');
-  }
   return path.join(resolveCrushConfigDir(input), 'crush.json');
 }
 
@@ -79,13 +76,34 @@ const baseAdapter = createInstallTargetAdapter({
   rootSegments: ['.config', 'crush'],
   installStatePathSegments: ['egc', 'crush-install-state.json'],
   nativeRootRelativePath: '.config/crush',
+  /**
+   * The Crush config directory, where crush.json, CRUSH.md, agents,
+   * commands, rules and the hook scripts land.
+   * @param {string|{homeDir?: string}} [input]
+   * @returns {string}
+   */
   resolveRoot(input = {}) {
     return resolveCrushConfigDir(input);
   },
-  resolveManagedRoots(input = {}, adapter) {
+  /**
+   * The roots uninstall and retirement may touch: the config directory and
+   * the ~/.agents root whose skills Crush shares with Codex, Goose and
+   * OpenHands. Detection keys on the config directory alone.
+   * @param {string|{homeDir?: string}} input
+   * @param {object} adapter
+   * @returns {string[]}
+   */
+  resolveManagedRoots(input, adapter) {
     const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
     return [adapter.resolveRoot(input), path.join(home, '.agents')];
   },
+  /**
+   * Skills go flat into ~/.agents/skills; everything else lands under the
+   * config directory, followed by the Guardian and Crusher hook operations.
+   * @param {object} input
+   * @param {object} adapter
+   * @returns {Array<object>}
+   */
   planOperations(input, adapter) {
     const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
     const sharedAgentsRoot = path.join(planningInput.homeDir || os.homedir(), '.agents');
@@ -110,10 +128,11 @@ const baseAdapter = createInstallTargetAdapter({
   },
 });
 
-const adapter = Object.freeze(Object.assign({}, baseAdapter, {
+const adapter = Object.freeze({
+  ...baseAdapter,
   resolveCrushConfigDir,
   resolveCrushConfigPath,
-}));
+});
 
 module.exports = adapter;
 
