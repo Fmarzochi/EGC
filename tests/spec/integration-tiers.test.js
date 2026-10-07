@@ -177,10 +177,16 @@ function testJunieRowDocumentsAgentsMd() {
   const pathCell = row.split('|')[pathColumn] || '';
   assert.ok(pathCell.trim(), 'the Junie row must fill the Install path column');
   assert.ok(!pathCell.includes('guidelines.md'), 'the Junie path must not be the legacy .junie/guidelines.md');
-  for (const file of ['`.junie/AGENTS.md`', '`~/.junie/AGENTS.md`']) {
+  for (const file of ['`.junie/AGENTS.md`', '`~/.junie/AGENTS.md`', '`.junie/guidelines/`']) {
     assert.ok(row.includes(file), `the Junie row must name ${file}`);
   }
-  assert.ok(row.includes('https://junie.jetbrains.com/docs/guidelines-and-memory.html'), 'the Junie row must cite the official page');
+  // The project files are alternatives: Junie uses the first that exists.
+  assert.ok(/first of these that exists/.test(row), 'the Junie row must say the project files are alternatives');
+  // Matched as a whole Markdown link, not as a URL substring.
+  assert.ok(
+    /\[[^\]]+\]\(https:\/\/junie\.jetbrains\.com\/docs\/guidelines-and-memory\.html\)/.test(row),
+    'the Junie row must link the official page'
+  );
   const targetsDir = path.join(REPO_ROOT, 'scripts', 'lib', 'install-targets');
   const writers = fs.readdirSync(targetsDir)
     .filter(name => name.endsWith('.js'))
