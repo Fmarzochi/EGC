@@ -110,7 +110,7 @@ async function runTests() {
     assert.ok(/projectPath: process\.cwd\(\)/.test(watch), 'watch.js must default to the current directory');
     assert.ok(watch.includes("'--project'"), 'watch.js must accept --project');
     assert.ok(/!args\[i\]\.startsWith\('-'\)/.test(watch), 'watch.js must accept a positional project path');
-    const row = guide.split('\n').find(line => line.startsWith('| `egc watch` |'));
+    const row = guide.split(/\r?\n/).find(line => line.startsWith('| `egc watch` |'));
     assert.ok(row, 'docs/installation.md must list egc watch in the command reference');
     assert.ok(/\bone project\b/.test(row), 'the egc watch row must say it watches one project');
     assert.ok(/current directory/.test(row), 'the egc watch row must say it defaults to the current directory');
