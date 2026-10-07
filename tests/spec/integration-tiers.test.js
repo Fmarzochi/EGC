@@ -166,7 +166,8 @@ function testClaudeCodeProtocolInjectionExists() {
 
 // Junie reads AGENTS.md now; .junie/guidelines.md is its legacy format (#1655).
 function testJunieRowDocumentsAgentsMd() {
-  const lines = loadDoc().split('\n');
+  // A Windows checkout can carry CRLF, which would hide the trailing `|`.
+  const lines = loadDoc().split(/\r?\n/);
   const row = lines.find(line => line.includes('**JetBrains Junie**'));
   assert.ok(row, 'the harness table must have a JetBrains Junie row');
   // The column comes from the header, so a new column cannot shift the check.
