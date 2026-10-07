@@ -164,6 +164,24 @@ function testClaudeCodeProtocolInjectionExists() {
   console.log(`  ✓ Claude Code Tier 3 injection path documented in bootstrap-cognitive.js`);
 }
 
+// Junie reads AGENTS.md now; .junie/guidelines.md is its legacy format (#1655).
+function testJunieRowDocumentsAgentsMd() {
+  const row = loadDoc().split('\n').find(line => line.includes('**JetBrains Junie**'));
+  assert.ok(row, 'the harness table must have a JetBrains Junie row');
+  const pathCell = row.split('|')[5] || '';
+  assert.ok(!pathCell.includes('guidelines.md'), 'the Junie path must not be the legacy .junie/guidelines.md');
+  for (const file of ['`.junie/AGENTS.md`', '`~/.junie/AGENTS.md`']) {
+    assert.ok(row.includes(file), `the Junie row must name ${file}`);
+  }
+  assert.ok(row.includes('https://junie.jetbrains.com/docs/guidelines-and-memory.html'), 'the Junie row must cite the official page');
+  const targetsDir = path.join(REPO_ROOT, 'scripts', 'lib', 'install-targets');
+  const writers = fs.readdirSync(targetsDir)
+    .filter(name => name.endsWith('.js'))
+    .filter(name => fs.readFileSync(path.join(targetsDir, name), 'utf8').includes('guidelines.md'));
+  assert.deepStrictEqual(writers, [], `no install target may write the legacy guidelines.md: ${writers.join(', ')}`);
+  console.log('  ✓ Junie row documents AGENTS.md and no target writes guidelines.md');
+}
+
 console.log('=== Testing docs/spec/integration-tiers.md ===\n');
 
 let passed = 0;
@@ -174,6 +192,7 @@ for (const test of [
   testTier1TargetsMatchSupportedInstallTargets,
   testTier2InstallersRetired,
   testClaudeCodeProtocolInjectionExists,
+  testJunieRowDocumentsAgentsMd,
 ]) {
   try {
     test();
