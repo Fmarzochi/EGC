@@ -5,6 +5,7 @@ const fs   = require('node:fs');
 const path = require('node:path');
 const os   = require('node:os');
 const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, assertLandsInside, resolveCrushConfigDir } = require('./lib/mcp-register');
+const { commandExists } = require('./lib/utils');
 
 // Bump when BLOCK's content changes in a way that already-configured installs
 // should receive (e.g. a new protocol section). injectProtocol() upgrades any
@@ -557,7 +558,12 @@ const CODEX_SKIP_MESSAGES = {
 (function bootstrapCrush() {
   try {
     const configDir = resolveCrushConfigDir(HOME);
-    if (!fs.existsSync(configDir) || !fs.statSync(configDir).isDirectory()) return;
+    const dirExists = fs.existsSync(configDir);
+    if (dirExists && !fs.statSync(configDir).isDirectory()) return;
+    // The same gate as the MCP registration (mcp-register.js): the config
+    // directory, or crush on PATH. Otherwise a first install registers the
+    // servers and only the second run writes CRUSH.md.
+    if (!dirExists && !commandExists('crush')) return;
     const target = path.join(configDir, 'CRUSH.md');
     injectProtocol(target, 'Crush');
   } catch (e) {

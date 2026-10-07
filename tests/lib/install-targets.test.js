@@ -688,6 +688,21 @@ function runTests() {
     assert.ok(!warning.message.includes('Windsurf'), 'the former product name is gone from the warning');
   }));
 
+  // #1491, decision 3: Crush installs only where Crush is present, so a home
+  // without its config directory gets the same warning --require-detected
+  // turns into a refusal.
+  tally(test('the missing-IDE warning names Crush and links to it when its config directory is absent', () => runWithoutConfigHomeVariables(() => {
+    const adapter = getInstallTargetAdapter('crush');
+    const homeDir = path.join(os.tmpdir(), 'egc-crush-home-that-does-not-exist');
+    const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' })
+      .find(issue => issue.code === 'ide-not-detected');
+
+    assert.ok(warning, 'a home without ~/.config/crush gets the ide-not-detected warning');
+    assert.match(warning.message, /^Crush does not appear to be installed/);
+    assert.match(warning.message, /https:\/\/github\.com\/charmbracelet\/crush/);
+    assert.ok(warning.message.includes(path.join(homeDir, '.config', 'crush')), 'the warning names the expected config directory');
+  })));
+
   // Devin Desktop loads .devin/skills/ when it exists and only falls back to
   // .windsurf/skills/ when it does not (never merged), so the skills
   // directory decides the root. These cases pin that down.

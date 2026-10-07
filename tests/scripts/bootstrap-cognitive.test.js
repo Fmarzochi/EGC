@@ -1404,13 +1404,37 @@ async function runRemainingHarnessTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('skips Crush when ~/.config/crush does not exist', () => {
+  // A PATH holding node and, on Windows, the `where` the lookup runs, but no
+  // crush unless a fake one is put first.
+  function crushPath(fakeBin) {
+    const dirs = [path.dirname(process.execPath)];
+    if (process.platform === 'win32') dirs.push(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'));
+    return [fakeBin, ...dirs].filter(Boolean).join(path.delimiter);
+  }
+
+  if (await test('skips Crush when ~/.config/crush does not exist and crush is not on PATH', () => {
     const home = mktempHome();
     try {
-      const output = run(home);
+      const output = run(home, { PATH: crushPath(null) });
       assert.ok(!output.includes('Crush:'), `output should not mention Crush when dir absent: ${output}`);
     } finally {
       cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes Crush CRUSH.md when crush is on PATH before ~/.config/crush exists (the MCP registration gate)', () => {
+    const home = mktempHome();
+    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-fake-crush-'));
+    try {
+      fs.writeFileSync(path.join(fakeBin, 'crush'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(fakeBin, 'crush.cmd'), '@exit /b 0\r\n');
+      const output = run(home, { PATH: crushPath(fakeBin) });
+      assert.ok(/Crush: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const target = path.join(home, '.config', 'crush', 'CRUSH.md');
+      assert.ok(fs.existsSync(target), 'CRUSH.md must be written on the first run');
+    } finally {
+      cleanup(home);
+      cleanup(fakeBin);
     }
   })) passed++; else failed++;
 

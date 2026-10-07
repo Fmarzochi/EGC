@@ -23,6 +23,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { withoutConfigHomeVariables } = require('../fixtures/harness-variables');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const BOOTSTRAP_SCRIPT = path.join(REPO_ROOT, 'scripts', 'bootstrap-cognitive.js');
@@ -42,12 +43,14 @@ function runWithSyntheticHome(scriptPath, args, homeDir, cwd) {
     cwd: cwd || homeDir,
     encoding: 'utf8',
     timeout: FULL_INSTALL_TIMEOUT_MS,
-    env: {
+    // A config directory variable from the machine would point a tool such
+    // as Crush outside the synthetic home.
+    env: withoutConfigHomeVariables({
       ...process.env,
       HOME: homeDir,
       USERPROFILE: homeDir,
       PATH: RESTRICTED_PATH,
-    },
+    }),
   });
   // A timed-out subprocess has a null status and (usually) an empty stderr;
   // folding that into a bare exit 1 would make the assertion failure mute,
@@ -149,6 +152,27 @@ function runTests() {
         [],
         'a refused install must not write anything into the home'
       );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('--require-detected refuses Crush in a home without its config directory (#1491, decision 3)', () => {
+    const homeDir = createTempDir('clean-env-require-crush-');
+    const projectRoot = createTempDir('clean-env-require-crush-project-');
+
+    try {
+      const result = runWithSyntheticHome(
+        INSTALL_SCRIPT,
+        ['--target', 'crush', '--profile', 'core', '--require-detected'],
+        homeDir,
+        projectRoot
+      );
+
+      assert.strictEqual(result.code, 1, `an absent Crush must be refused: ${result.stderr}`);
+      assert.ok(result.stderr.includes('Crush does not appear to be installed'), result.stderr);
+      assert.deepStrictEqual(listHomeEntries(homeDir), [], 'a refused install must not write anything into the home');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
