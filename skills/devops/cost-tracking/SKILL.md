@@ -61,17 +61,22 @@ for dir in "${EGC_DIR:-}" ~/.claude ~/.cursor ~/.gemini ~/.codeium/windsurf ~/.c
   [ -f "$dir/metrics/costs.jsonl" ] && echo "costs: $dir/metrics/costs.jsonl"
   [ -f "$dir/cost-tracker.log" ] && echo "bash log: $dir/cost-tracker.log"
 done
+test -f ~/.egc/metrics/costs.jsonl && echo "costs: ~/.egc/metrics/costs.jsonl"
 command -v jq >/dev/null && echo "jq available" || echo "jq missing"
 ```
 
 When `EGC_DIR` is set, use its files. Otherwise prefer the directory of the
-tool you are running in. When more than one directory has files, say which one
-you report on, or report each separately: they are separate histories.
+tool you are running in, and `~/.egc` when the hooks ran outside one. When more
+than one directory has files, say which one you report on, or report each
+separately: they are separate histories.
 
-The last fallback, `~/.egc`, is EGC's protected state directory: the Guardian
-refuses agent commands that touch it, by design. If the files can only be
-there, tell the user and give them the commands below with `COSTS` pointing
-into `~/.egc` to run themselves; do not route around the Guardian.
+`~/.egc` is EGC's protected home. The Guardian lets the agent read its
+`metrics/` folder, so `costs.jsonl` there works with the examples below, which
+read the file with `cat` and pipe it into `jq` (the Guardian refuses `jq`, or a
+`for` loop, that names a path under `~/.egc` itself). The rest of `~/.egc`
+stays refused, `cost-tracker.log` at its root included: if that log only exists
+there, tell the user and give them the commands to run themselves; do not route
+around the Guardian.
 
 If no file exists, cost tracking is not active for this tool: say so and do
 not invent figures. If `jq` is missing, read the last lines with `tail` and
@@ -85,50 +90,50 @@ per session stop, so reading it whole is cheap.
 ### Quick Summary
 
 ```bash
-jq -s '{
+cat "$COSTS" | jq -s '{
   rows: length,
   sessions: (map(.session_id) | unique | length),
   input_tokens: (map(.input_tokens) | add),
   output_tokens: (map(.output_tokens) | add),
   estimated_cost_usd: (map(.estimated_cost_usd) | add)
-}' "$COSTS"
+}'
 ```
 
 ### Today
 
 ```bash
-jq -s --arg day "$(date -u +%F)" '
+cat "$COSTS" | jq -s --arg day "$(date -u +%F)" '
   map(select(.timestamp | startswith($day)))
   | {rows: length, estimated_cost_usd: (map(.estimated_cost_usd) | add // 0)}
-' "$COSTS"
+'
 ```
 
 ### Last Seven Days
 
 ```bash
-jq -s '((now - 6 * 86400) | strftime("%Y-%m-%d")) as $since
+cat "$COSTS" | jq -s '((now - 6 * 86400) | strftime("%Y-%m-%d")) as $since
   | map(select(.timestamp[0:10] >= $since))
   | group_by(.timestamp[0:10])
   | map({date: .[0].timestamp[0:10], rows: length, estimated_cost_usd: (map(.estimated_cost_usd) | add)})
-  | reverse' "$COSTS"
+  | reverse'
 ```
 
 ### By Model
 
 ```bash
-jq -s 'group_by(.model)
+cat "$COSTS" | jq -s 'group_by(.model)
   | map({model: .[0].model, rows: length, input_tokens: (map(.input_tokens) | add),
          output_tokens: (map(.output_tokens) | add), estimated_cost_usd: (map(.estimated_cost_usd) | add)})
-  | sort_by(-.estimated_cost_usd)' "$COSTS"
+  | sort_by(-.estimated_cost_usd)'
 ```
 
 ### By Session
 
 ```bash
-jq -s 'group_by(.session_id)
+cat "$COSTS" | jq -s 'group_by(.session_id)
   | map({session: .[0].session_id, started: (map(.timestamp) | min), ended: (map(.timestamp) | max),
          estimated_cost_usd: (map(.estimated_cost_usd) | add)})
-  | sort_by(.started) | reverse | .[0:10]' "$COSTS"
+  | sort_by(.started) | reverse | .[0:10]'
 ```
 
 ### Bash Commands Per Day

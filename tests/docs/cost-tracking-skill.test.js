@@ -87,9 +87,45 @@ test('the discovery loop covers every tool directory getEGCDir() can resolve to'
   }
 });
 
-test('no command in the skill touches the Guardian-protected ~/.egc', () => {
-  const codeBlocks = (skill.match(/```[\s\S]*?```/g) || []).join('\n');
-  assert.ok(!codeBlocks.includes('~/.egc'), 'the Guardian refuses agent commands on ~/.egc; tell the user instead');
+test('skill commands reach the protected EGC home only where the Guardian allows it', () => {
+  // The Guardian lets the agent read ~/.egc/metrics (buildReadSafePaths in
+  // validator.ts) through read-only commands such as test and cat, but
+  // refuses jq or a for loop that names a path there, and the rest of ~/.egc.
+  const validator = read('mcp/servers/egc-guardian/src/validator.ts');
+  assert.ok(
+    /function buildReadSafePaths\(\)[\s\S]*?path\.join\(home, '\.egc', 'metrics'\)/.test(validator),
+    'the Guardian no longer lists ~/.egc/metrics as readable: revisit the skill'
+  );
+  guardianSafeCommands(skill, 'SKILL.md');
+});
+
+// The commands of a cost document name the EGC home only in a test -f on
+// metrics/costs.jsonl, and every jq reads the ledger through cat.
+function guardianSafeCommands(markdown, label) {
+  const codeLines = (markdown.match(/```[\s\S]*?```/g) || []).join('\n').split(/\r?\n/);
+  const egcLines = codeLines.filter(line => line.includes('~/.egc'));
+  assert.ok(egcLines.length > 0, `${label} must check ~/.egc/metrics/costs.jsonl`);
+  for (const line of egcLines) {
+    assert.ok(/^test -f ~\/\.egc\/metrics\/costs\.jsonl /.test(line.trim()), `${label}: only a test -f on ~/.egc/metrics/costs.jsonl may name the EGC home: ${line.trim()}`);
+  }
+  const jqLines = codeLines.filter(line => /\bjq -r?s\b/.test(line));
+  assert.ok(jqLines.length > 0, `${label} must keep its jq examples`);
+  for (const line of jqLines) {
+    assert.ok(/^cat "\$COSTS" \| jq -r?s/.test(line.trim()), `${label}: jq must read through cat, not name the file: ${line.trim()}`);
+  }
+}
+
+test('the /cost-report command reads the same ledger, with no SQLite left', () => {
+  const command = read('commands/cost-report.md');
+  assert.ok(!command.includes('.Gemini-cost-tracker') && !command.includes('usage.db'), 'cost-report.md must not point at a usage.db');
+  const codeBlocks = (command.match(/```[\s\S]*?```/g) || []).join('\n');
+  assert.ok(!/\bsqlite3\b/.test(codeBlocks), 'no cost-report.md command may run sqlite3');
+  assert.ok(command.includes('`metrics/costs.jsonl`'), 'cost-report.md must name metrics/costs.jsonl');
+  const row = costTracker.match(/const row = \{([\s\S]*?)\};/);
+  for (const field of [...row[1].matchAll(/^\s*([A-Za-z_$][\w$]*)\s*[:,]/gm)].map(match => match[1])) {
+    assert.ok(command.includes(`\`${field}\``), `cost-report.md must name the ${field} field`);
+  }
+  guardianSafeCommands(command, 'cost-report.md');
 });
 
 test('the skill shows the cost-tracker.log line format', () => {
