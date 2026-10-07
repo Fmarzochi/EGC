@@ -1,9 +1,16 @@
 # EGC 2.0 ARCHITECTURAL BLUEPRINT: THE AGENT OS
 
 **Architect:** EGC Architectural Unit  
-**Status:** Design Proposal  
+**Status:** Unimplemented design proposal  
 **Target:** Unified Sovereign Runtime  
 **Version:** 1.0.0 (Design Proposal)
+
+> **Status: unimplemented proposal.** Nothing this page describes exists in
+> the repository: there is no Rust kernel or Rust code at all, no `egcd`
+> daemon, no Protobuf or gRPC contract, and no `~/.gemini/egc/` store. EGC
+> runs today on the Node.js + MCP runtime, the Python LLM engine in
+> `src/llm/`, and the memory server's SQLite store; see the
+> [architecture index](README.md).
 
 ---
 
@@ -18,7 +25,7 @@ EGC v1 proved the viability of a hybrid Node/Python cognitive chain. However, it
 ## 2. THE UNIFIED CONTROL PLANE (UCP)
 
 ### 2.1 Host: The Rust Kernel
-The existing `egc/` Rust scaffold will be promoted to the primary **System Kernel**.
+A new Rust process would become the primary **System Kernel** (no Rust code exists in the repository today).
 - **Role:** Process supervisor, TUI host, and secure IPC broker.
 - **Language:** Rust (for performance and safety).
 
@@ -32,7 +39,7 @@ The existing `egc/` Rust scaffold will be promoted to the primary **System Kerne
 ## 3. DETERMINISTIC MEMORY FABRIC
 
 ### 3.1 Namespace Unification
-Complete migration from `~/.egc-learning` to `~/.gemini/egc`.
+Proposed: a single `~/.gemini/egc` namespace. Today EGC keeps its state under `~/.egc` and the continuous-learning store under `~/.egc-learning` (`getLearningDir()` in `scripts/lib/utils.js`), and no migration exists.
 
 ### 3.2 Storage Tiering
 - **Hot Memory (RAM/SQLite):** Live session context, active instincts, and recent tool results.

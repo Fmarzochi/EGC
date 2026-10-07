@@ -1,9 +1,8 @@
 # EGC Architecture
 
-EGC ships one production runtime alongside an exploratory kernel
-direction kept under `architecture/` for research and
-ecosystem-evolution work. This page is the index: read it first,
-then drill into the specific documents below.
+EGC ships one production runtime. This folder documents it, plus an
+unimplemented "EGC 2.0" proposal kept for reference. This page is the
+index: read it first, then drill into the specific documents below.
 
 ## Runtime
 
@@ -16,43 +15,43 @@ Antigravity, OpenCode, Kiro, Trae, and Codebuddy harnesses.
 |---|---|---|
 | Manifests | `.gemini-plugin/`, `.codex-plugin/`, `.gemini-plugin/marketplace.json` | Static plugin discovery |
 | Install adapters | `scripts/lib/install-targets/` | Per-target materialization |
-| Install entry | `scripts/install-apply.js`, `install.sh`, `install.ps1` | User-facing installers |
+| Install entry | `scripts/install-apply.js`, `scripts/install.sh`, `scripts/install.ps1` | User-facing installers |
 | Hooks pipeline | `hooks/hooks.json` + `scripts/hooks/*` | Pre/Post-tool, session, governance hooks |
+| MCP servers | `mcp/servers/egc-guardian/`, `mcp/servers/egc-memory/` | Guardian validation and session memory (SQLite state store) |
 | CI gates | `scripts/ci/validate-*.js`, `scripts/ci/catalog.js` | Workflow validation |
 
-The Node/MCP runtime is fully exercised by the CI matrix
-(`.github/workflows/ci.yml`, `reusable-test.yml`,
-`reusable-validate.yml`) across Linux/macOS/Windows × Node 20/22 ×
-npm/yarn/bun.
+The Node/MCP runtime is exercised by the test matrix in
+`.github/workflows/ci.yml` across Linux/macOS/Windows × Node 20/22 ×
+npm/yarn/bun. The Python LLM engine under `src/llm/` is covered by the
+same workflow's Python job (`python -m pytest tests/`).
 
 ### Dormant scaffolding (preserved)
 
-- `scripts/runtime/{router,discovery,mount-all,unmount-all,activator}.js`
-- `scripts/orchestration/router.py`
-- `scripts/health-check.js`, `scripts/generate-plugin-manifest.js`
+- `scripts/orchestration/router.py`: no callers.
 
-These resolve a non-existent `registry/` path and have no callers.
-See `scripts/runtime/README.md` and `governance/SUBSYSTEM-MAP.md` for the
-DORMANT status.
+`scripts/runtime/discovery.js` is active: it compiles the runtime map
+into `internal/registry/runtime-map.json`, a generated file that is not
+tracked. The router, mount and activator scripts that used to sit next to
+it are no longer in the tree. See `scripts/runtime/README.md` and
+`docs/governance/SUBSYSTEM-MAP.md` for the subsystem status.
 
-## EGC 2.0 architectural exploration
+## EGC 2.0 proposal (not implemented)
 
-`EGC_2.0_BLUEPRINT.md` and `EGC_2.0_TECHNICAL_DESIGN.md` collect
-ecosystem-evolution research around a unified-control-plane variant
-(Rust kernel + Python LLM engine + Node hook worker + SQLite state
-store). They are advanced runtime studies, not a replacement schedule
-for the production runtimes documented above.
-
-The Rust scaffold at `egc/` is reserved for that exploration. It does
-not displace the current production runtimes.
+`EGC_2.0_BLUEPRINT.md` and `EGC_2.0_TECHNICAL_DESIGN.md` describe a
+proposed unified control plane: a Rust kernel daemon supervising a Python
+LLM engine and Node.js hook workers over Protobuf IPC, with one shared
+SQLite store. None of it exists in the repository: there is no Rust
+code, no `egcd` daemon, no Protobuf or gRPC contract, and no
+`~/.gemini/egc/` store. Both pages are kept as a design proposal, not a
+description of EGC or a replacement schedule for the runtime above.
 
 ## Documents in this folder
 
 | File | Scope |
 |---|---|
 | `ARCHITECTURE-IMPROVEMENTS.md` | Cross-cutting improvements and refactors landed during v1 stabilization |
-| `EGC_2.0_BLUEPRINT.md` | Vision for the v2.0 Agent OS |
-| `EGC_2.0_TECHNICAL_DESIGN.md` | v2.0 component integration and IPC contracts |
+| `EGC_2.0_BLUEPRINT.md` | Unimplemented proposal: vision for a v2.0 "Agent OS" |
+| `EGC_2.0_TECHNICAL_DESIGN.md` | Unimplemented proposal: v2.0 component integration and IPC contracts |
 | `SELECTIVE-INSTALL-ARCHITECTURE.md` | Module/profile system in `manifests/install-*.json` |
 | `SELECTIVE-INSTALL-DESIGN.md` | Selective install design rationale and per-target rules |
 | `SINGLE-AGENT-OPERATIONAL-MODEL.md` | Authoritative single-agent execution model |
