@@ -163,30 +163,29 @@ async function runTests() {
     assert.ok(Date.now() - started >= 600, 'the poll must keep trying until the budget is spent');
   })) passed++; else failed++;
 
-  if (test('canOpenBrowser detects display availability on Linux (#1730)', () => {
-    const { canOpenBrowser, openBrowser } = require(LAUNCHER);
-    if (process.platform !== 'win32' && process.platform !== 'darwin') {
-      const savedDisplay = process.env.DISPLAY;
-      const savedWayland = process.env.WAYLAND_DISPLAY;
-      try {
-        delete process.env.DISPLAY;
-        delete process.env.WAYLAND_DISPLAY;
-        assert.strictEqual(canOpenBrowser(), false, 'must return false without DISPLAY or WAYLAND_DISPLAY');
-        assert.strictEqual(openBrowser(), false, 'openBrowser must return false when display is unavailable');
+  if (test('openBrowser tries the opener without a display and reports its real status (#1730)', () => {
+    const { openBrowser, DASHBOARD_URL } = require(LAUNCHER);
+    const savedDisplay = process.env.DISPLAY;
+    const savedWayland = process.env.WAYLAND_DISPLAY;
+    try {
+      // WSL without WSLg: no DISPLAY, but the wslu xdg-open still works.
+      delete process.env.DISPLAY;
+      delete process.env.WAYLAND_DISPLAY;
+      const calls = [];
+      const spawnOk = (cmd, args) => { calls.push([cmd, args]); return { status: 0 }; };
+      assert.strictEqual(openBrowser(spawnOk), true, 'a successful opener must count as opened');
+      assert.strictEqual(calls.length, 1, 'the opener must run even without DISPLAY or WAYLAND_DISPLAY');
+      assert.deepStrictEqual(calls[0][1], [DASHBOARD_URL]);
 
-        process.env.DISPLAY = ':0';
-        assert.strictEqual(canOpenBrowser(), true, 'must return true with DISPLAY set');
-        delete process.env.DISPLAY;
-        process.env.WAYLAND_DISPLAY = 'wayland-0';
-        assert.strictEqual(canOpenBrowser(), true, 'must return true with WAYLAND_DISPLAY set');
-      } finally {
-        if (savedDisplay !== undefined) process.env.DISPLAY = savedDisplay;
-        else delete process.env.DISPLAY;
-        if (savedWayland !== undefined) process.env.WAYLAND_DISPLAY = savedWayland;
-        else delete process.env.WAYLAND_DISPLAY;
-      }
-    } else {
-      assert.strictEqual(canOpenBrowser(), true, 'macOS and Windows always support launching default browser');
+      assert.strictEqual(openBrowser(() => ({ status: 3 })), false, 'a headless failure must not count as opened');
+      assert.strictEqual(openBrowser(() => ({ status: null, error: new Error('ENOENT') })), false,
+        'a missing opener must not count as opened');
+      assert.strictEqual(openBrowser(() => { throw new Error('spawn failed'); }), false);
+    } finally {
+      if (savedDisplay !== undefined) process.env.DISPLAY = savedDisplay;
+      else delete process.env.DISPLAY;
+      if (savedWayland !== undefined) process.env.WAYLAND_DISPLAY = savedWayland;
+      else delete process.env.WAYLAND_DISPLAY;
     }
   })) passed++; else failed++;
 

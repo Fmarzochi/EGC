@@ -44,24 +44,16 @@ async function waitForDashboard(timeoutMs) {
 }
 
 /**
- * Detects whether a graphical browser can be launched on the current platform.
- *
- * @returns {boolean} True if a graphical display or platform opener is available.
- */
-function canOpenBrowser() {
-  if (process.platform === 'win32' || process.platform === 'darwin') {
-    return true;
-  }
-  return Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
-}
-
-/**
  * Attempts to open the dashboard URL in the default browser.
  *
- * @returns {boolean} True if the browser command was executed without error.
+ * There is no DISPLAY check on Linux: WSL without WSLg has no DISPLAY, yet
+ * the xdg-open from wslu opens the Windows browser. The opener is always
+ * tried, and a headless machine reports its failure through the exit status.
+ *
+ * @param {typeof spawnSync} [spawn] Process runner, injectable for tests.
+ * @returns {boolean} True if the browser command exited with status 0.
  */
-function openBrowser() {
-  if (!canOpenBrowser()) return false;
+function openBrowser(spawn = spawnSync) {
   let cmd;
   if (process.platform === 'win32') {
     cmd = 'start';
@@ -71,7 +63,7 @@ function openBrowser() {
     cmd = 'xdg-open';
   }
   try {
-    const result = spawnSync(cmd, [DASHBOARD_URL], { shell: process.platform === 'win32', stdio: 'ignore' });
+    const result = spawn(cmd, [DASHBOARD_URL], { shell: process.platform === 'win32', stdio: 'ignore' });
     return !result.error && result.status === 0;
   } catch (_) { // NOSONAR: best-effort browser open, failure is non-fatal
     return false;
@@ -181,4 +173,4 @@ function shouldAutoLaunch() {
   return Boolean(process.stdout.isTTY) && !process.env.CI;
 }
 
-module.exports = { launchDashboard, shouldAutoLaunch, waitForDashboard, openBrowser, canOpenBrowser, DASHBOARD_URL };
+module.exports = { launchDashboard, shouldAutoLaunch, waitForDashboard, openBrowser, DASHBOARD_URL };
