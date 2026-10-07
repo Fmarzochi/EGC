@@ -56,10 +56,15 @@ test('retries a busy directory with a growing delay and succeeds once the handle
 });
 
 test('a directory the system still holds after every attempt is left behind with a warning, not a failure', () => {
-  const rm = () => { throw busy('EBUSY'); };
+  let calls = 0;
+  const rm = () => {
+    calls++;
+    throw busy('EBUSY');
+  };
   const warnings = [];
   const result = removeDirWithRetries('D:\\work\\egc-held', { rm, sleep: () => {}, attempts: 4, warn: (message) => warnings.push(message) });
   assert.strictEqual(result, false);
+  assert.strictEqual(calls, 4, 'every attempt ran before giving up');
   assert.strictEqual(warnings.length, 1, 'one warning');
   assert.ok(warnings[0].includes('EBUSY'), warnings[0]);
   assert.ok(warnings[0].includes('D:\\work\\egc-held'), warnings[0]);
@@ -87,6 +92,17 @@ test('an error that is not a handle race is thrown at once, without retries', ()
   };
   assert.throws(() => removeDirWithRetries('denied-dir', { rm, sleep: () => {}, attempts: 5 }), /EACCES/);
   assert.strictEqual(calls, 1);
+});
+
+test('an explicit delay of zero is honored instead of the default', () => {
+  let calls = 0;
+  const rm = () => {
+    calls++;
+    if (calls < 3) throw busy('EBUSY');
+  };
+  const sleeps = [];
+  assert.strictEqual(removeDirWithRetries('held-by-the-system', { rm, sleep: (ms) => sleeps.push(ms), delayMs: 0, attempts: 5 }), true);
+  assert.deepStrictEqual(sleeps, [0, 0], 'no wait between the attempts');
 });
 
 test('the default budget covers more than one second of a held handle', () => {

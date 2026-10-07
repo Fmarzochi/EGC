@@ -24,7 +24,7 @@ function warnOnStderr(message) {
 
 function removeDirWithRetries(dir, options = {}) {
   const attempts = options.attempts || DEFAULT_ATTEMPTS;
-  const delayMs = options.delayMs || DEFAULT_DELAY_MS;
+  const delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
   const rm = options.rm || fs.rmSync;
   const sleep = options.sleep || sleepMs;
   const warn = options.warn || warnOnStderr;
