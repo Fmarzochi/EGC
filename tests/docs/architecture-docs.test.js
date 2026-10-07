@@ -37,18 +37,25 @@ function test(name, fn) {
 const read = name => fs.readFileSync(path.join(archDir, name), 'utf8');
 
 // Backticked tokens that look like repository paths: a slash or a file
-// extension, no spaces, not a home path.
+// extension, no spaces, not a home path, a URL or a bare number pair such
+// as 20/22.
 function namedPaths(markdown) {
   return [...new Set([...markdown.matchAll(/`([^`\s]+)`/g)].map(match => match[1]))]
-    .filter(token => !token.startsWith('~'))
+    .filter(token => !token.startsWith('~') && !token.includes('://') && !/^\d+\/\d+$/.test(token))
     .filter(token => token.includes('/') || /\.(md|js|py|json|ya?ml|sh|ps1|ts)$/.test(token));
 }
 
-// A glob such as scripts/hooks/* or manifests/install-*.json is checked by
-// its directory; a bare file name by the architecture folder.
+// A glob such as scripts/hooks/* or manifests/install-*.json must match at
+// least one entry of its directory; a bare file name is looked up in the
+// architecture folder.
 function existsInTree(token) {
-  const candidate = token.includes('*') ? path.dirname(token) : token;
-  return fs.existsSync(path.join(repoRoot, candidate)) || fs.existsSync(path.join(archDir, candidate));
+  if (!token.includes('*')) {
+    return fs.existsSync(path.join(repoRoot, token)) || fs.existsSync(path.join(archDir, token));
+  }
+  const dir = path.join(repoRoot, path.dirname(token));
+  if (!fs.existsSync(dir)) return false;
+  const pattern = new RegExp(`^${path.basename(token).split('*').map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`);
+  return fs.readdirSync(dir).some(entry => pattern.test(entry));
 }
 
 console.log('\n=== Testing docs/architecture against the tree ===\n');

@@ -39,7 +39,7 @@ A new Rust process would become the primary **System Kernel** (no Rust code exis
 ## 3. DETERMINISTIC MEMORY FABRIC
 
 ### 3.1 Namespace Unification
-Proposed: a single `~/.gemini/egc` namespace. Today EGC keeps its state under `~/.egc` and the continuous-learning store under `~/.egc-learning` (`getLearningDir()` in `scripts/lib/utils.js`), and no migration exists.
+Proposed: a single `~/.gemini/egc` namespace. Today EGC keeps its state under `~/.egc` by default (`EGC_DIR` overrides it; see `getEGCDir()` in `scripts/lib/utils.js`) and the continuous-learning store under `~/.egc-learning` (`getLearningDir()` in the same file), and no migration exists.
 
 ### 3.2 Storage Tiering
 - **Hot Memory (RAM/SQLite):** Live session context, active instincts, and recent tool results.

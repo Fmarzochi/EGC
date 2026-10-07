@@ -25,15 +25,18 @@ The Node/MCP runtime is exercised by the test matrix in
 npm/yarn/bun. The Python LLM engine under `src/llm/` is covered by the
 same workflow's Python job (`python -m pytest tests/`).
 
-### Dormant scaffolding (preserved)
+### Orchestration and runtime map
 
-- `scripts/orchestration/router.py`: no callers.
+- `scripts/orchestration/orchestrator.py` drives the Python orchestration
+  layer and imports `scripts/orchestration/router.py` for agent routing.
+- `scripts/runtime/discovery.js` compiles the runtime map into
+  `internal/registry/runtime-map.json`, a generated file that is not
+  tracked. The router, mount and activator scripts that used to sit next
+  to it are no longer in the tree.
 
-`scripts/runtime/discovery.js` is active: it compiles the runtime map
-into `internal/registry/runtime-map.json`, a generated file that is not
-tracked. The router, mount and activator scripts that used to sit next to
-it are no longer in the tree. See `scripts/runtime/README.md` and
-`docs/governance/SUBSYSTEM-MAP.md` for the subsystem status.
+`scripts/ci/runtime-topology.js` records which of these modules are
+wired and how. See `scripts/runtime/README.md` and
+`docs/governance/SUBSYSTEM-MAP.md` for the subsystem notes.
 
 ## EGC 2.0 proposal (not implemented)
 
