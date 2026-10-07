@@ -177,7 +177,7 @@ function testJunieRowDocumentsAgentsMd() {
   const pathCell = row.split('|')[pathColumn] || '';
   assert.ok(pathCell.trim(), 'the Junie row must fill the Install path column');
   assert.ok(!pathCell.includes('guidelines.md'), 'the Junie path must not be the legacy .junie/guidelines.md');
-  for (const file of ['`.junie/AGENTS.md`', '`~/.junie/AGENTS.md`', '`.junie/guidelines/`']) {
+  for (const file of ['`.junie/AGENTS.md`', '`~/.junie/AGENTS.md`', '`.junie/guidelines.md`', '`.junie/guidelines/`']) {
     assert.ok(row.includes(file), `the Junie row must name ${file}`);
   }
   // The project files are alternatives: Junie uses the first that exists.
