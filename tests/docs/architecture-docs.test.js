@@ -46,8 +46,8 @@ function namedPaths(markdown) {
 }
 
 // A glob such as scripts/hooks/* or manifests/install-*.json must match at
-// least one entry of its directory; a bare file name is looked up in the
-// architecture folder.
+// least one file (not a directory) of its directory; a bare file name is
+// looked up in the architecture folder.
 function existsInTree(token) {
   if (!token.includes('*')) {
     return fs.existsSync(path.join(repoRoot, token)) || fs.existsSync(path.join(archDir, token));
@@ -55,7 +55,7 @@ function existsInTree(token) {
   const dir = path.join(repoRoot, path.dirname(token));
   if (!fs.existsSync(dir)) return false;
   const pattern = new RegExp(`^${path.basename(token).split('*').map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`);
-  return fs.readdirSync(dir).some(entry => pattern.test(entry));
+  return fs.readdirSync(dir, { withFileTypes: true }).some(entry => entry.isFile() && pattern.test(entry.name));
 }
 
 console.log('\n=== Testing docs/architecture against the tree ===\n');
