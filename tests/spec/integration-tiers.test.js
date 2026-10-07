@@ -166,9 +166,15 @@ function testClaudeCodeProtocolInjectionExists() {
 
 // Junie reads AGENTS.md now; .junie/guidelines.md is its legacy format (#1655).
 function testJunieRowDocumentsAgentsMd() {
-  const row = loadDoc().split('\n').find(line => line.includes('**JetBrains Junie**'));
+  const lines = loadDoc().split('\n');
+  const row = lines.find(line => line.includes('**JetBrains Junie**'));
   assert.ok(row, 'the harness table must have a JetBrains Junie row');
-  const pathCell = row.split('|')[5] || '';
+  // The column comes from the header, so a new column cannot shift the check.
+  const header = lines.slice(0, lines.indexOf(row)).reverse().find(line => /^\|.*\bInstall path\b.*\|$/.test(line));
+  assert.ok(header, 'the harness table must have an Install path column');
+  const pathColumn = header.split('|').map(cell => cell.trim()).indexOf('Install path');
+  const pathCell = row.split('|')[pathColumn] || '';
+  assert.ok(pathCell.trim(), 'the Junie row must fill the Install path column');
   assert.ok(!pathCell.includes('guidelines.md'), 'the Junie path must not be the legacy .junie/guidelines.md');
   for (const file of ['`.junie/AGENTS.md`', '`~/.junie/AGENTS.md`']) {
     assert.ok(row.includes(file), `the Junie row must name ${file}`);
