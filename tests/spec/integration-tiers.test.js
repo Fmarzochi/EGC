@@ -206,7 +206,11 @@ function testOpenHandsRowDocumentsGlobalHooks() {
   assert.ok(row.includes('`~/.openhands/hooks.json`'), 'the OpenHands row must name the global ~/.openhands/hooks.json');
   assert.ok(row.includes('`.openhands/hooks.json`'), 'the OpenHands row must keep the project .openhands/hooks.json');
   assert.ok(/never merge/.test(row), 'the OpenHands row must say the project file shadows the global one');
-  assert.ok(row.includes('https://docs.openhands.dev/openhands/usage/customization/hooks'), 'the OpenHands row must cite the official hooks page');
+  // Matched as a whole Markdown link, not as a URL substring.
+  assert.ok(
+    /\[[^\]]+\]\(https:\/\/docs\.openhands\.dev\/openhands\/usage\/customization\/hooks\)/.test(row),
+    'the OpenHands row must link the official hooks page'
+  );
   console.log('  ✓ OpenHands row documents the global hooks file and its precedence');
 }
 
