@@ -503,9 +503,9 @@
     {
       "kind": "skill",
       "name": "cost-tracking",
-      "description": "Report token usage and estimated cost from the files EGC's own hooks write, metrics/costs.jsonl and cost-tracker.log in the EGC directory. Use when the user asks about costs, spending, tokens, usage, or a breakdown by session, model or date.",
+      "description": "Report estimated cost and token usage from metrics/costs.jsonl, and the agent's Bash command history from cost-tracker.log, both in the EGC directory. Use when the user asks about costs, spending, tokens, usage, a breakdown by session, model or date, or which shell commands ran.",
       "source": "skills/devops/cost-tracking/SKILL.md",
-      "triggers": "The user asks \"how much have I spent?\", \"what did this session cost?\", or \"what is my token usage?\" The user wants usage broken down by session, model, or date. The user wants to compare today against"
+      "triggers": "Costs, spending, token usage, or what a session cost. Which shell commands the agent ran, or how many. A breakdown by session, model or date, or today against previous days."
     },
     {
       "kind": "skill",

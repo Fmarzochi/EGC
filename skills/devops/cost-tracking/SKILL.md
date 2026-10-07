@@ -1,6 +1,6 @@
 ---
 name: cost-tracking
-description: Report token usage and estimated cost from the files EGC's own hooks write, metrics/costs.jsonl and cost-tracker.log in the EGC directory. Use when the user asks about costs, spending, tokens, usage, or a breakdown by session, model or date.
+description: Report estimated cost and token usage from metrics/costs.jsonl, and the agent's Bash command history from cost-tracker.log, both in the EGC directory. Use when the user asks about costs, spending, tokens, usage, a breakdown by session, model or date, or which shell commands ran.
 origin: community
 ---
 
@@ -14,17 +14,15 @@ read what EGC actually writes.
 
 ## When to Use
 
-- The user asks "how much have I spent?", "what did this session cost?", or
-  "what is my token usage?"
-- The user wants usage broken down by session, model, or date.
-- The user wants to compare today against previous days.
-- The user asks how many shell commands the agent ran, or which ones.
+- Costs, spending, token usage, or what a session cost.
+- Which shell commands the agent ran, or how many.
+- A breakdown by session, model or date, or today against previous days.
 
 ## What EGC Writes
 
-Both files live in the EGC directory of the tool the hooks ran in: `$EGC_DIR`
-when it is set, otherwise that tool's own directory (`~/.claude`, `~/.cursor`,
-`~/.gemini`, ...), otherwise `~/.egc`.
+Both files live in the EGC directory the hooks resolved when they ran:
+`$EGC_DIR` when it is set, otherwise the directory of the tool the hooks run
+in (`~/.claude`, `~/.cursor`, `~/.gemini`, ...), otherwise `~/.egc`.
 
 | File | Written by | One line per |
 | --- | --- | --- |
@@ -36,8 +34,8 @@ A `metrics/costs.jsonl` line has exactly these fields:
 | Field | Meaning |
 | --- | --- |
 | `timestamp` | ISO 8601 time, UTC |
-| `session_id` | `EGC_SESSION_ID`, or `default` when it is not set |
-| `model` | the model the tool reported, or `unknown` |
+| `session_id` | `EGC_SESSION_ID`, then the legacy `ECC_SESSION_ID`, or `default` when neither is set |
+| `model` | the model in the hook input, then Cursor's `_cursor.model`, then `GEMINI_MODEL`, or `unknown` |
 | `input_tokens` | input tokens the tool reported, `0` when it reported none |
 | `output_tokens` | output tokens the tool reported, `0` when it reported none |
 | `estimated_cost_usd` | an estimate from EGC's per-tier rates (`scripts/lib/llm-costs.js`), not the provider's bill |
@@ -53,10 +51,12 @@ can be turned off with `EGC_DISABLED_HOOKS`.
 ## How It Works
 
 First find the files. Inline interpreters (`node -e`, `python -c`) are refused
-by the EGC Guardian, so the steps below use the shell and `jq`.
+by the EGC Guardian, so the steps below use the shell and `jq`. The list holds
+every tool directory EGC can resolve to; print what exists instead of guessing.
 
 ```bash
-for dir in "${EGC_DIR:-}" ~/.egc ~/.claude ~/.cursor ~/.gemini ~/.codeium/windsurf ~/.config/opencode ~/.kiro ~/.trae ~/.codebuddy; do
+for dir in "${EGC_DIR:-}" ~/.claude ~/.cursor ~/.gemini ~/.codeium/windsurf ~/.config/opencode ~/.config/zed \
+  ~/.agents ~/.amp ~/.continue ~/.github ~/.kiro ~/.trae ~/.trae-cn ~/.codebuddy; do
   [ -n "$dir" ] || continue
   [ -f "$dir/metrics/costs.jsonl" ] && echo "costs: $dir/metrics/costs.jsonl"
   [ -f "$dir/cost-tracker.log" ] && echo "bash log: $dir/cost-tracker.log"
@@ -64,13 +64,23 @@ done
 command -v jq >/dev/null && echo "jq available" || echo "jq missing"
 ```
 
-If neither file exists, cost tracking is not active for this tool: say so and
-do not invent figures. If `jq` is missing, read the last lines with `tail` and
+When `EGC_DIR` is set, use its files. Otherwise prefer the directory of the
+tool you are running in. When more than one directory has files, say which one
+you report on, or report each separately: they are separate histories.
+
+The last fallback, `~/.egc`, is EGC's protected state directory: the Guardian
+refuses agent commands that touch it, by design. If the files can only be
+there, tell the user and give them the commands below with `COSTS` pointing
+into `~/.egc` to run themselves; do not route around the Guardian.
+
+If no file exists, cost tracking is not active for this tool: say so and do
+not invent figures. If `jq` is missing, read the last lines with `tail` and
 total them in the answer instead of guessing.
 
 ## Examples
 
-Set `COSTS` to the `costs.jsonl` path found above.
+Set `COSTS` to the `costs.jsonl` path chosen above. The file grows by one line
+per session stop, so reading it whole is cheap.
 
 ### Quick Summary
 
@@ -96,9 +106,11 @@ jq -s --arg day "$(date -u +%F)" '
 ### Last Seven Days
 
 ```bash
-jq -s 'group_by(.timestamp[0:10])
+jq -s '((now - 6 * 86400) | strftime("%Y-%m-%d")) as $since
+  | map(select(.timestamp[0:10] >= $since))
+  | group_by(.timestamp[0:10])
   | map({date: .[0].timestamp[0:10], rows: length, estimated_cost_usd: (map(.estimated_cost_usd) | add)})
-  | reverse | .[0:7]' "$COSTS"
+  | reverse' "$COSTS"
 ```
 
 ### By Model
@@ -121,7 +133,7 @@ jq -s 'group_by(.session_id)
 
 ### Bash Commands Per Day
 
-Set `BASHLOG` to the `cost-tracker.log` path found above.
+Set `BASHLOG` to the `cost-tracker.log` path chosen above.
 
 ```bash
 cut -c2-11 "$BASHLOG" | sort | uniq -c | tail -7

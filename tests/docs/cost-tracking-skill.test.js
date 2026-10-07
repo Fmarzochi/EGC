@@ -58,11 +58,38 @@ test('the skill names both files the hooks write', () => {
 test('the skill lists every field cost-tracker.js writes', () => {
   const row = costTracker.match(/const row = \{([\s\S]*?)\};/);
   assert.ok(row, 'cost-tracker.js must build its JSON line in `const row = {...}`');
-  const fields = [...row[1].matchAll(/^\s*([a-z_]+)\s*[:,]/gm)].map(match => match[1]);
+  const fields = [...row[1].matchAll(/^\s*([A-Za-z_$][\w$]*)\s*[:,]/gm)].map(match => match[1]);
   assert.ok(fields.length >= 5, `expected the row fields, got ${fields.join(', ')}`);
   for (const field of fields) {
     assert.ok(skill.includes(`| \`${field}\` |`), `SKILL.md must document the ${field} field`);
   }
+});
+
+test('the skill names every variable cost-tracker.js reads', () => {
+  const names = [...new Set([...costTracker.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map(match => match[1]))];
+  assert.ok(names.length > 0, 'cost-tracker.js must read at least one variable');
+  for (const name of names) {
+    assert.ok(skill.includes(`\`${name}\``), `SKILL.md must name ${name}, which decides a field`);
+  }
+});
+
+test('the discovery loop covers every tool directory getEGCDir() can resolve to', () => {
+  const utils = read('scripts/lib/utils.js');
+  const body = utils.match(/function getKnownHarnessDirs\(home\) \{([\s\S]*?)\n\}/);
+  assert.ok(body, 'scripts/lib/utils.js must define getKnownHarnessDirs(home)');
+  const dirs = [...body[1].matchAll(/path\.join\(home, ([^)]+)\)/g)]
+    .map(match => `~/${[...match[1].matchAll(/'([^']+)'/g)].map(part => part[1]).join('/')}`);
+  assert.ok(dirs.length > 5, `expected the known tool directories, got ${dirs.join(', ')}`);
+  const loop = skill.match(/for dir in [\s\S]*?; do/);
+  assert.ok(loop, 'SKILL.md must keep its discovery loop');
+  for (const dir of dirs) {
+    assert.ok(new RegExp(`(^|\\s)${dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|;)`).test(loop[0]), `the discovery loop must check ${dir}`);
+  }
+});
+
+test('no command in the skill touches the Guardian-protected ~/.egc', () => {
+  const codeBlocks = (skill.match(/```[\s\S]*?```/g) || []).join('\n');
+  assert.ok(!codeBlocks.includes('~/.egc'), 'the Guardian refuses agent commands on ~/.egc; tell the user instead');
 });
 
 test('the skill shows the cost-tracker.log line format', () => {
