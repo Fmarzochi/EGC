@@ -9,6 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execFileSync, spawn, spawnSync } = require('child_process');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 const SKIP_BASH = process.platform === 'win32';
 
@@ -76,10 +77,6 @@ function normalizeComparablePath(filePath) {
   }
 
   return process.platform === 'win32' ? comparablePath.toLowerCase() : comparablePath;
-}
-
-function sleepMs(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 function getCanonicalSessionsDir(homeDir) {
@@ -190,19 +187,7 @@ function createTestDir() {
 }
 
 function cleanupTestDir(testDir) {
-  const retryableCodes = new Set(['EPERM', 'EBUSY', 'ENOTEMPTY']);
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      fs.rmSync(testDir, { recursive: true, force: true });
-      return;
-    } catch (error) {
-      if (!retryableCodes.has(error.code) || attempt === 4) {
-        throw error;
-      }
-      sleepMs(50 * (attempt + 1));
-    }
-  }
+  removeDirWithRetries(testDir);
 }
 
 function createCommandShim(binDir, baseName, logFile) {
