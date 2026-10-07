@@ -1,4 +1,4 @@
-"""Tests for llm.core.model_resolver -- model aliases, provider detection and fallbacks.
+"""Tests for llm.core.model_resolver: model aliases, provider detection and fallbacks.
 
 ModelResolver was only exercised through the provider tests (#1691). These
 cover it directly: alias resolution, pass-through of real model IDs, provider
