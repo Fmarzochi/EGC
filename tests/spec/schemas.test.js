@@ -10,6 +10,8 @@ const { discover } = require('../../scripts/runtime/discovery');
 const { writeProvenance } = require('../../scripts/lib/skill-evolution/provenance');
 const { setProjectPackageManager } = require('../../scripts/lib/package-manager');
 const { createInstallState } = require('../../scripts/lib/install-state');
+const { loadInstallConfig } = require('../../scripts/lib/install/config');
+const { validateEntity } = require('../../scripts/lib/state-store/schema');
 
 const repoRoot = path.resolve(__dirname, '..', '..');
 const schemasDir = path.join(repoRoot, 'schemas');
@@ -31,7 +33,7 @@ function test(name, fn) {
 
 function createAjv() {
   const ajv = new Ajv({ allErrors: true, strict: false });
-  ajv.addFormat('date-time', value => /^\d{4}-\d{2}-\d{2}T/.test(value) && !Number.isNaN(Date.parse(value)));
+  ajv.addFormat('date-time', value => /^\d{4}-\d{2}-\d{2}T/.test(value) && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) && !Number.isNaN(Date.parse(value)));
   ajv.addFormat('uri', value => {
     try {
       new URL(value);
@@ -61,12 +63,16 @@ function assertValid(schemaFile, data, label) {
   assert.deepStrictEqual(errors, [], `${label} does not match schemas/${schemaFile}: ${errors.join('; ')}`);
 }
 
-function assertLoadedAtRuntime(schemaFile, modulePath) {
-  const source = fs.readFileSync(path.join(repoRoot, modulePath), 'utf8');
-  assert.ok(source.includes(schemaFile), `${modulePath} no longer loads ${schemaFile}`);
-  assert.ok(/\.compile\(/.test(source), `${modulePath} no longer compiles a schema validator`);
-  createAjv().compile(readJson(path.join(schemasDir, schemaFile)));
-}
+const SESSION = {
+  id: 'session-1',
+  adapterId: 'claude-history',
+  harness: 'claude',
+  state: 'active',
+  repoRoot: null,
+  startedAt: '2026-10-08T12:00:00.000Z',
+  endedAt: null,
+  snapshot: {},
+};
 
 const CASES = {
   'hooks.schema.json': () => assertValid('hooks.schema.json', repoJson('hooks/hooks.json'), 'hooks/hooks.json'),
@@ -113,8 +119,20 @@ const CASES = {
     });
     assertValid('install-state.schema.json', state, 'the install state install-state.js creates');
   },
-  'egc-install-config.schema.json': () => assertLoadedAtRuntime('egc-install-config.schema.json', 'scripts/lib/install/config.js'),
-  'state-store.schema.json': () => assertLoadedAtRuntime('state-store.schema.json', 'scripts/lib/state-store/schema.js'),
+  'egc-install-config.schema.json': () => withTempDir(dir => {
+    const configPath = path.join(dir, 'egc-install.json');
+    const config = { version: 1, target: 'claude', profile: 'core' };
+    assertValid('egc-install-config.schema.json', config, 'an install config');
+    fs.writeFileSync(configPath, JSON.stringify(config));
+    assert.strictEqual(loadInstallConfig(configPath).profileId, 'core');
+    fs.writeFileSync(configPath, JSON.stringify({ version: 2 }));
+    assert.throws(() => loadInstallConfig(configPath), /Invalid install config/, 'config.js must reject what the schema rejects');
+  }),
+  'state-store.schema.json': () => {
+    assertValid('state-store.schema.json', { sessions: [SESSION] }, 'a state store with one session');
+    assert.strictEqual(validateEntity('session', SESSION).valid, true);
+    assert.strictEqual(validateEntity('session', { ...SESSION, id: '' }).valid, false, 'schema.js must reject what the schema rejects');
+  },
 };
 
 console.log('\n=== Testing every schema in schemas/ against its data ===\n');
@@ -140,7 +158,7 @@ test('the spec index lists only schemas that exist', () => {
 
 test('the spec index points only at documents that exist', () => {
   const spec = fs.readFileSync(path.join(repoRoot, 'docs', 'spec', 'README.md'), 'utf8');
-  const missing = [...new Set([...spec.matchAll(/`((?:docs|tests|schemas|scripts)\/[^`\s{}]+)`/g)].map(match => match[1]))]
+  const missing = [...new Set([...spec.matchAll(/`((?:docs|tests|schemas|scripts|manifests|hooks|\.gemini-plugin)\/[^`\s{}]+)`/g)].map(match => match[1]))]
     .filter(relative => !fs.existsSync(path.join(repoRoot, relative)));
   assert.deepStrictEqual(missing, [], `docs/spec/README.md points at paths that do not exist: ${missing.join(', ')}`);
 });
