@@ -17,7 +17,7 @@ Set up package manager preference for the project or globally.
 2. **Project config**: `.egc/package-manager.json` (an old `.gemini/package-manager.json` is still read)
 3. **package.json**: `packageManager` field
 4. **Lock file**: Auto-detect from lock files
-5. **Global config**: `package-manager.json` in the EGC directory
+5. **Global config**: `package-manager.json` in the EGC directory of the active tool (or in the directory `EGC_DIR` names when it is set)
 6. **Fallback**: First available
 
 ## Configuration Options
@@ -41,10 +41,11 @@ echo '{"packageManager": "pnpm"}' > .egc/package-manager.json
 ```
 
 ### Option 4: Global Config
-```bash
-# Writes package-manager.json in the EGC directory of the tool in session
-# (~/.claude, ~/.gemini or ~/.egc) and prints the path it used
-node scripts/setup-package-manager.js --global yarn
+Create `package-manager.json` in the EGC directory of the active tool (the directory `EGC_DIR` names when it is set; otherwise the one EGC uses for the tool in session, where its sessions and learned skills live):
+```json
+{
+  "packageManager": "yarn"
+}
 ```
 
 ## Supported Package Managers

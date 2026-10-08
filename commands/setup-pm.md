@@ -31,7 +31,7 @@ When determining which package manager to use, the following order is checked:
 2. **Project config**: `.egc/package-manager.json` (an old `.gemini/package-manager.json` is still read)
 3. **package.json**: `packageManager` field
 4. **Lock file**: Presence of package-lock.json, yarn.lock, pnpm-lock.yaml, or bun.lockb
-5. **Global config**: `package-manager.json` in the EGC directory (`~/.claude`, `~/.gemini` or `~/.egc`, the one of the tool in session)
+5. **Global config**: `package-manager.json` in the EGC directory of the active tool (or in the directory `EGC_DIR` names when it is set)
 6. **Fallback**: First available package manager (pnpm > bun > yarn > npm)
 
 ## Configuration Files
