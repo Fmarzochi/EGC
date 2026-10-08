@@ -283,7 +283,7 @@ function breakStaleLock(lock: string): boolean {
   } catch {
     return false;
   }
-  let movedToken: string | null = null;
+  let movedToken: string | null;
   try {
     movedToken = fs.readFileSync(moved, 'utf8');
   } catch {
