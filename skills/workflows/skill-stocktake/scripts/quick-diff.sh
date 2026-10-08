@@ -3,29 +3,35 @@
 # Usage: quick-diff.sh RESULTS_JSON [CWD_SKILLS_DIR]
 # Output: JSON array of changed/new files to stdout (empty [] if no changes)
 #
-# When CWD_SKILLS_DIR is omitted, defaults to $PWD/.gemini/skills so the
-# script always picks up project-level skills without relying on the caller.
+# When CWD_SKILLS_DIR is omitted, defaults to the project skills folder
+# ($PWD/.agents/skills, or the tool's own) so the script always picks up
+# project-level skills without relying on the caller.
 #
 # Environment:
-#   SKILL_STOCKTAKE_GLOBAL_DIR   Override ~/.gemini/skills (for testing only;
+#   SKILL_STOCKTAKE_GLOBAL_DIR   Override the global skills folder of the EGC
+#                                directory in use (for testing only;
 #                                do not set in production: intended for bats tests)
 #   SKILL_STOCKTAKE_PROJECT_DIR  Override project dir detection (for testing only)
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=egc-paths.sh
+source "$SCRIPT_DIR/egc-paths.sh"
+
 RESULTS_JSON="${1:-}"
-CWD_SKILLS_DIR="${SKILL_STOCKTAKE_PROJECT_DIR:-${2:-$PWD/.gemini/skills}}"
-GLOBAL_DIR="${SKILL_STOCKTAKE_GLOBAL_DIR:-$HOME/.gemini/skills}"
+CWD_SKILLS_DIR="${SKILL_STOCKTAKE_PROJECT_DIR:-${2:-$(egc_project_skills_dir "$PWD")}}"
+GLOBAL_DIR="${SKILL_STOCKTAKE_GLOBAL_DIR:-$(egc_global_skills_dir "$SCRIPT_DIR")}"
 
 if [[ -z "$RESULTS_JSON" || ! -f "$RESULTS_JSON" ]]; then
   echo "Error: RESULTS_JSON not found: ${RESULTS_JSON:-<empty>}" >&2
   exit 1
 fi
 
-# Validate CWD_SKILLS_DIR looks like a .gemini/skills path (defense-in-depth).
+# Validate CWD_SKILLS_DIR looks like a skills path (defense-in-depth).
 # Only warn when the path exists: a nonexistent path poses no traversal risk.
-if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */.gemini/skills* ]]; then
-  echo "Warning: CWD_SKILLS_DIR does not look like a .gemini/skills path: $CWD_SKILLS_DIR" >&2
+if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */skills* ]]; then
+  echo "Warning: CWD_SKILLS_DIR does not look like a skills path: $CWD_SKILLS_DIR" >&2
 fi
 
 evaluated_at=$(jq -r '.evaluated_at' "$RESULTS_JSON")
@@ -54,11 +60,13 @@ process_dir() {
   while IFS= read -r file; do
     local mtime dp is_new
     mtime=$(date -u -r "$file" +%Y-%m-%dT%H:%M:%SZ)
-    dp="${file/#$HOME/~}"
+    dp="$file"
+    [[ "$file" == "$HOME/"* ]] && dp="~${file#"$HOME"}"
 
     # Check if this file is known to results.json (exact whole-line match to
     # avoid substring false-positives, e.g. "python-patterns" matching "python-patterns-v2").
-    if echo "$known_paths" | grep -qxF "$dp"; then
+    # A results.json written before the paths were shortened holds the absolute form.
+    if echo "$known_paths" | grep -qxF -e "$dp" -e "$file"; then
       is_new="false"
       # Known file: only emit if mtime changed (ISO 8601 string comparison is safe)
       [[ "$mtime" > "$evaluated_at" ]] || continue

@@ -38,7 +38,7 @@ The `suggest-compact.js` script runs on PreToolUse (Edit/Write) and:
 
 ## Hook Setup
 
-Add to your `~/.gemini/settings.json`:
+Add to the hook settings of your tool, with the path the skill was installed under (example for Claude Code, `~/.claude/settings.json`):
 
 ```json
 {
@@ -46,11 +46,11 @@ Add to your `~/.gemini/settings.json`:
     "PreToolUse": [
       {
         "matcher": "Edit",
-        "hooks": [{ "type": "command", "command": "node ~/.gemini/skills/strategic-compact/suggest-compact.js" }]
+        "hooks": [{ "type": "command", "command": "~/.claude/skills/strategic-compact/suggest-compact.sh" }]
       },
       {
         "matcher": "Write",
-        "hooks": [{ "type": "command", "command": "node ~/.gemini/skills/strategic-compact/suggest-compact.js" }]
+        "hooks": [{ "type": "command", "command": "~/.claude/skills/strategic-compact/suggest-compact.sh" }]
       }
     ]
   }
@@ -83,7 +83,7 @@ Understanding what persists helps you compact with confidence:
 |----------|------|
 | GEMINI.md instructions | Intermediate reasoning and analysis |
 | TodoWrite task list | File contents you previously read |
-| Memory files (`~/.gemini/memory/`) | Multi-step conversation context |
+| Memory files (the memory folder of the tool, and the EGC session state) | Multi-step conversation context |
 | Git state (commits, branches) | Tool call history and counts |
 | Files on disk | Nuanced user preferences stated verbally |
 
@@ -116,7 +116,7 @@ Monitor what's consuming your context window:
 
 ### Duplicate Instruction Detection
 Common sources of duplicate context:
-- Same rules in both `~/.gemini/rules/` and project `.gemini/rules/`
+- Same rules in both the global `rules/` folder of the tool and the project one
 - Skills that repeat GEMINI.md instructions
 - Multiple skills covering overlapping domains
 

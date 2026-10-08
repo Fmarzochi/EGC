@@ -22,16 +22,18 @@ The rules distillation process follows three phases:
 
 ### Phase 1: Inventory (Deterministic Collection)
 
+`<skills dir>` below is the global skills folder of the tool in use (`~/.claude/skills` in Claude Code, `~/.gemini/config/skills` in Antigravity, `~/.cursor/skills` in Cursor); the scripts resolve the EGC directory themselves (`EGC_DIR`, then the tool the session runs inside, then the folder the skill was installed under).
+
 #### 1a. Collect skill inventory
 
 ```bash
-bash ~/.gemini/skills/rules-distill/scripts/scan-skills.sh
+bash <skills dir>/rules-distill/scripts/scan-skills.sh
 ```
 
 #### 1b. Collect rules index
 
 ```bash
-bash ~/.gemini/skills/rules-distill/scripts/scan-rules.sh
+bash <skills dir>/rules-distill/scripts/scan-rules.sh
 ```
 
 #### 1c. Present to user

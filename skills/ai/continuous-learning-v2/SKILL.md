@@ -26,7 +26,7 @@ An advanced learning system that turns your AI coding sessions into reusable kno
 
 | Feature | v2.0 | v2.1 |
 |---------|------|------|
-| Storage | Global (~/.gemini/homunculus/) | Project-scoped (projects/<hash>/) |
+| Storage | Global (one `homunculus/` folder per tool) | Project-scoped (projects/<hash>/) |
 | Scope | All instincts apply everywhere | Project-scoped + global |
 | Detection | None | git remote URL / repo path |
 | Promotion | N/A | Project → global when seen in 2+ projects |
@@ -142,9 +142,9 @@ Each project gets a 12-character hash ID (e.g., `a1b2c3d4e5f6`). A registry file
 
 No extra `settings.json` hook block is required. Claude Code v2.1+ auto-loads the plugin `hooks/hooks.json`, and `observe.sh` is already registered there.
 
-If you previously copied `observe.sh` into `~/.gemini/settings.json`, remove that duplicate `PreToolUse` / `PostToolUse` block. Duplicating the plugin hook causes double execution and `${GEMINI_PLUGIN_ROOT}` resolution errors because that variable is only available inside plugin-managed `hooks/hooks.json` entries.
+If you previously copied `observe.sh` into the hook settings of your tool (`~/.claude/settings.json` in Claude Code), remove that duplicate `PreToolUse` / `PostToolUse` block. Duplicating the plugin hook causes double execution and plugin root resolution errors (`${CLAUDE_PLUGIN_ROOT}` in Claude Code) because that variable is only available inside plugin-managed `hooks/hooks.json` entries.
 
-**If installed manually** to `~/.gemini/skills`, add this to your `~/.gemini/settings.json`:
+**If installed manually**, add this to the hook settings of your tool, with the path the skill was installed under (example for Claude Code, `~/.claude/settings.json`):
 
 ```json
 {
@@ -153,14 +153,14 @@ If you previously copied `observe.sh` into `~/.gemini/settings.json`, remove tha
       "matcher": "*",
       "hooks": [{
         "type": "command",
-        "command": "~/.gemini/skills/continuous-learning-v2/hooks/observe.sh"
+        "command": "~/.claude/skills/continuous-learning-v2/hooks/observe.sh"
       }]
     }],
     "PostToolUse": [{
       "matcher": "*",
       "hooks": [{
         "type": "command",
-        "command": "~/.gemini/skills/continuous-learning-v2/hooks/observe.sh"
+        "command": "~/.claude/skills/continuous-learning-v2/hooks/observe.sh"
       }]
     }]
   }
@@ -324,7 +324,7 @@ Hooks fire **100% of the time**, deterministically. This means:
 v2.1 is fully compatible with v2.0 and v1:
 - Global instincts kept in `~/.gemini/homunculus/instincts/` (or any other tool's own `homunculus/` folder) by earlier versions are copied into `~/.egc-learning/instincts/` once, at the first session start after the upgrade, and still work as global instincts
 - The copy is one-time and marker-gated: anything written to the old folder after that first copy is never picked up again, so every tool should move to the new store rather than keep writing the old one
-- Existing `~/.gemini/skills/learned/` skills from v1 still work
+- Existing `skills/learned/` skills from v1, in any tool folder, still work
 - Stop hook still runs (but now also feeds into v2)
 
 ## Privacy

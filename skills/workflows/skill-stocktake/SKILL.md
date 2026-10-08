@@ -14,8 +14,10 @@ The command targets the following paths **relative to the directory where it is 
 
 | Path | Description |
 |------|-------------|
-| `~/.gemini/skills/` | Global skills (all projects) |
-| `{cwd}/.gemini/skills/` | Project-level skills (if the directory exists) |
+| `<skills dir>`: `skills/` of the EGC directory in use (`~/.claude/skills/` in Claude Code, `~/.gemini/config/skills/` in Antigravity, `~/.cursor/skills/` in Cursor) | Global skills (all projects) |
+| `{cwd}/.agents/skills/`, or the project skills folder of the tool in use (`.claude/skills/`, `.gemini/skills/`, `.cursor/skills/` and the others) | Project-level skills (if the directory exists) |
+
+The scripts resolve `<skills dir>` themselves (`EGC_DIR`, then the tool the session runs inside, then the folder the skill was installed under).
 
 **At the start of Phase 1, the command explicitly lists which paths were found and scanned.**
 
@@ -28,7 +30,7 @@ cd ~/path/to/my-project
 /skill-stocktake
 ```
 
-If the project has no `.gemini/skills/` directory, only global skills and commands are evaluated.
+If the project has no skills folder, only global skills and commands are evaluated.
 
 ## Modes
 
@@ -37,37 +39,37 @@ If the project has no `.gemini/skills/` directory, only global skills and comman
 | Quick Scan | `results.json` exists (default) | 5–10 min |
 | Full Stocktake | `results.json` absent, or `/skill-stocktake full` | 20–30 min |
 
-**Results cache:** `~/.gemini/skills/skill-stocktake/results.json`
+**Results cache:** `<skills dir>/skill-stocktake/results.json`
 
 ## Quick Scan Flow
 
-Re-evaluate only skills that have changed since the last run (5–10 min).
+Re-evaluate only skills that have changed since the last run (5-10 min).
 
-1. Read `~/.gemini/skills/skill-stocktake/results.json`
-2. Run: `bash ~/.gemini/skills/skill-stocktake/scripts/quick-diff.sh \
-         ~/.gemini/skills/skill-stocktake/results.json`
-   (Project dir is auto-detected from `$PWD/.gemini/skills`; pass it explicitly only if needed)
+1. Read `<skills dir>/skill-stocktake/results.json`
+2. Run: `bash <skills dir>/skill-stocktake/scripts/quick-diff.sh \
+         <skills dir>/skill-stocktake/results.json`
+   (Project dir is auto-detected from `$PWD/.agents/skills` or the tool's own folder; pass it explicitly only if needed)
 3. If output is `[]`: report "No changes since last run." and stop
 4. Re-evaluate only those changed files using the same Phase 2 criteria
 5. Carry forward unchanged skills from previous results
 6. Output only the diff
-7. Run: `bash ~/.gemini/skills/skill-stocktake/scripts/save-results.sh \
-         ~/.gemini/skills/skill-stocktake/results.json <<< "$EVAL_RESULTS"`
+7. Run: `bash <skills dir>/skill-stocktake/scripts/save-results.sh \
+         <skills dir>/skill-stocktake/results.json <<< "$EVAL_RESULTS"`
 
 ## Full Stocktake Flow
 
 ### Phase 1: Inventory
 
-Run: `bash ~/.gemini/skills/skill-stocktake/scripts/scan.sh`
+Run: `bash <skills dir>/skill-stocktake/scripts/scan.sh`
 
 The script enumerates skill files, extracts frontmatter, and collects UTC mtimes.
-Project dir is auto-detected from `$PWD/.gemini/skills`; pass it explicitly only if needed.
+Project dir is auto-detected from `$PWD/.agents/skills` or the tool's own folder; pass it explicitly only if needed.
 Present the scan summary and inventory table from the script output:
 
 ```
 Scanning:
-  ✓ ~/.gemini/skills/         (17 files)
-  ✗ {cwd}/.gemini/skills/    (not found: global skills only)
+  ✓ ~/.claude/skills/         (17 files)
+  ✗ {cwd}/.agents/skills/    (not found: global skills only)
 ```
 
 | Skill | 7d use | 30d use | Description |
@@ -162,7 +164,7 @@ Evaluation is **holistic AI judgment**: not a numeric rubric. Guiding dimensions
 
 ## Results File Schema
 
-`~/.gemini/skills/skill-stocktake/results.json`:
+`<skills dir>/skill-stocktake/results.json`:
 
 **`evaluated_at`**: Must be set to the actual UTC time of evaluation completion.
 Obtain via Bash: `date -u +%Y-%m-%dT%H:%M:%SZ`. Never use a date-only approximation like `T00:00:00Z`.
@@ -178,7 +180,7 @@ Obtain via Bash: `date -u +%Y-%m-%dT%H:%M:%SZ`. Never use a date-only approximat
   },
   "skills": {
     "skill-name": {
-      "path": "~/.gemini/skills/skill-name/SKILL.md",
+      "path": "~/.claude/skills/skill-name/SKILL.md",
       "verdict": "Keep",
       "reason": "Concrete, actionable, unique value for X workflow",
       "mtime": "2026-01-15T08:30:00Z"
