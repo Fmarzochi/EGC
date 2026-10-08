@@ -13,24 +13,24 @@ Set up package manager preference for the project or globally.
 
 ## Detection Order
 
-1. **Environment variable**: `GEMINI_PACKAGE_MANAGER`
-2. **Project config**: `.gemini/package-manager.json`
+1. **Environment variable**: `EGC_PACKAGE_MANAGER` (the old `GEMINI_PACKAGE_MANAGER` still counts)
+2. **Project config**: `.egc/package-manager.json` (an old `.gemini/package-manager.json` is still read)
 3. **package.json**: `packageManager` field
 4. **Lock file**: Auto-detect from lock files
-5. **Global config**: `~/.gemini/package-manager.json`
+5. **Global config**: `package-manager.json` in the EGC directory
 6. **Fallback**: First available
 
 ## Configuration Options
 
 ### Option 1: Environment Variable
 ```bash
-export GEMINI_PACKAGE_MANAGER=pnpm
+export EGC_PACKAGE_MANAGER=pnpm
 ```
 
 ### Option 2: Project Config
 ```bash
-# Create .gemini/package-manager.json
-echo '{"packageManager": "pnpm"}' > .gemini/package-manager.json
+# Create .egc/package-manager.json
+echo '{"packageManager": "pnpm"}' > .egc/package-manager.json
 ```
 
 ### Option 3: package.json
@@ -42,8 +42,9 @@ echo '{"packageManager": "pnpm"}' > .gemini/package-manager.json
 
 ### Option 4: Global Config
 ```bash
-# Create ~/.gemini/package-manager.json
-echo '{"packageManager": "yarn"}' > ~/.gemini/package-manager.json
+# Writes package-manager.json in the EGC directory of the tool in session
+# (~/.claude, ~/.gemini or ~/.egc) and prints the path it used
+node scripts/setup-package-manager.js --global yarn
 ```
 
 ## Supported Package Managers

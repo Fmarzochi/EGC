@@ -268,7 +268,7 @@ function runTests() {
       assert.ok(!fs.existsSync(path.join(testDir, '.gemini')), 'nothing is written under .gemini');
       assert.strictEqual(pm.getPackageManager({ projectDir: testDir }).source, 'project-config');
 
-      const legacyDir = createTestDir();
+      const legacyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-legacy-'));
       try {
         fs.mkdirSync(path.join(legacyDir, '.gemini'), { recursive: true });
         fs.writeFileSync(path.join(legacyDir, '.gemini', 'package-manager.json'), JSON.stringify({ packageManager: 'pnpm' }));
@@ -398,7 +398,8 @@ function runTests() {
     const prompt = pm.getSelectionPrompt();
     assert.ok(prompt.includes('Supported package managers'), 'Should list supported managers');
     assert.ok(prompt.includes('EGC_PACKAGE_MANAGER'), 'Should mention env var');
-    assert.ok(!prompt.includes('.gemini'), 'the prompt points at the EGC directory, not at a fixed ~/.gemini');
+    const { getEGCDir } = require('../../scripts/lib/utils');
+    assert.ok(prompt.includes(path.join(getEGCDir(), 'package-manager.json')), 'the prompt names the file in the EGC directory in use');
     assert.ok(prompt.includes('lock file'), 'Should mention lock file option');
   }));
 

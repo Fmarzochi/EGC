@@ -990,6 +990,14 @@ test('a session name resolves to the .orchestration folder the orchestrator writ
       path.join(repoRoot, '.gemini', 'orchestration', 'old-session')
     );
 
+    fs.mkdirSync(path.join(repoRoot, '.gemini', 'orchestration', 'fresh-session'), { recursive: true });
+    assert.strictEqual(
+      resolveSnapshotTarget('fresh-session', repoRoot).coordinationDir,
+      path.join(repoRoot, '.orchestration', 'fresh-session'),
+      'when both folders exist, the one the orchestrator writes wins'
+    );
+    assert.strictEqual(adapter.canOpen('../fresh-session', { cwd: repoRoot }), false, 'a name with a separator is not a session');
+
     process.env.EGC_ARTIFACTS_DIR = 'artifacts';
     fs.mkdirSync(path.join(repoRoot, 'artifacts', 'env-session'), { recursive: true });
     assert.strictEqual(adapter.canOpen('env-session', { cwd: repoRoot }), true, 'EGC_ARTIFACTS_DIR moves the root as it does for the orchestrator');

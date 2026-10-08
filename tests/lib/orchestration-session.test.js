@@ -208,10 +208,15 @@ test('resolveSnapshotTarget handles plan files and direct session names', () => 
     coordinationRoot: path.join(repoRoot, '.gemini', 'orchestration')
   }));
 
+  const previousArtifactsDir = process.env.EGC_ARTIFACTS_DIR;
+  delete process.env.EGC_ARTIFACTS_DIR;
+
   try {
     const fromPlan = resolveSnapshotTarget(planPath, repoRoot);
     assert.strictEqual(fromPlan.targetType, 'plan');
     assert.strictEqual(fromPlan.sessionName, 'workflow-visual-proof');
+
+    assert.throws(() => resolveSnapshotTarget('../outside', repoRoot), /plain folder name/, 'a session name never leaves the coordination root');
 
     const fromSession = resolveSnapshotTarget('workflow-visual-proof', repoRoot);
     assert.strictEqual(fromSession.targetType, 'session');
@@ -229,6 +234,8 @@ test('resolveSnapshotTarget handles plan files and direct session names', () => 
       'a session written before the move is still found where it is'
     );
   } finally {
+    if (typeof previousArtifactsDir === 'string') process.env.EGC_ARTIFACTS_DIR = previousArtifactsDir;
+    else delete process.env.EGC_ARTIFACTS_DIR;
     fs.rmSync(tempRoot, { recursive: true, force: true });
   }
 });

@@ -56,25 +56,25 @@ export interface GetPackageManagerOptions {
  * Get the package manager to use for the current project.
  *
  * Detection priority:
- * 1. GEMINI_PACKAGE_MANAGER environment variable
- * 2. Project-specific config (.gemini/package-manager.json)
+ * 1. EGC_PACKAGE_MANAGER environment variable (GEMINI_PACKAGE_MANAGER, the old name, still counts)
+ * 2. Project-specific config (.egc/package-manager.json; an old .gemini/package-manager.json is still read)
  * 3. package.json `packageManager` field
  * 4. Lock file detection
- * 5. Global user preference (~/.gemini/package-manager.json)
+ * 5. Global user preference (package-manager.json in the EGC directory)
  * 6. Default to npm (no child processes spawned)
  */
 export function getPackageManager(options?: GetPackageManagerOptions): PackageManagerResult;
 
 /**
  * Set the user's globally preferred package manager.
- * Saves to ~/.gemini/package-manager.json.
+ * Saves to package-manager.json in the EGC directory.
  * @throws If pmName is not a known package manager or if save fails
  */
 export function setPreferredPackageManager(pmName: PackageManagerName): { packageManager: string; setAt: string };
 
 /**
  * Set a project-specific preferred package manager.
- * Saves to <projectDir>/.gemini/package-manager.json.
+ * Saves to <projectDir>/.egc/package-manager.json.
  * @throws If pmName is not a known package manager
  */
 export function setProjectPackageManager(pmName: PackageManagerName, projectDir?: string): { packageManager: string; setAt: string };

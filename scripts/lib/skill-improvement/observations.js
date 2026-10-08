@@ -87,11 +87,15 @@ function appendSkillObservation(observation, options = {}) {
 }
 
 function readObservationFile(observationPath) {
-  if (!fs.existsSync(observationPath)) {
+  let content;
+  try {
+    content = fs.readFileSync(observationPath, 'utf8');
+  } catch {
+    // A missing, unreadable or stale file means no observations, not a crash.
     return [];
   }
 
-  return fs.readFileSync(observationPath, 'utf8')
+  return content
     .split(/\r?\n/)
     .filter(Boolean)
     .map(line => {
@@ -104,15 +108,32 @@ function readObservationFile(observationPath) {
     .filter(record => record?.schemaVersion === OBSERVATION_SCHEMA_VERSION);
 }
 
+// A record copied from the old file into the new one counts once; the first
+// occurrence (the older file) wins.
+function dedupeObservations(records) {
+  const seen = new Set();
+  return records.filter(record => {
+    const key = typeof record.observationId === 'string' ? record.observationId : null;
+    if (key === null) {
+      return true;
+    }
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 function readSkillObservations(options = {}) {
   if (options.observationsPath) {
     return readObservationFile(path.resolve(options.observationsPath));
   }
 
-  return [
+  return dedupeObservations([
     ...readObservationFile(getLegacySkillObservationsPath(options)),
     ...readObservationFile(getSkillObservationsPath(options))
-  ];
+  ]);
 }
 
 module.exports = {

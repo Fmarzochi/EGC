@@ -23,7 +23,7 @@ function isSessionNameTarget(target, cwd) {
   }
 
   const coordinationDir = resolveSessionCoordinationDir(target, cwd);
-  return fs.existsSync(coordinationDir) && fs.statSync(coordinationDir).isDirectory();
+  return coordinationDir !== null && fs.existsSync(coordinationDir) && fs.statSync(coordinationDir).isDirectory();
 }
 
 function buildSourceTarget(target, cwd) {

@@ -457,7 +457,7 @@ function runTests() {
       );
     })) passed++; else failed++;
 
-    if (test('resolves default run paths and treats missing JSONL storage as empty', () => {
+    if (test('resolves default run paths and treats missing JSONL storage as empty', () => runWithoutHarnessVariables(() => {
       const pathHome = createTempDir('skill-evolution-path-home-');
       try {
         const defaultPath = tracker.getRunsFilePath({ homeDir: pathHome });
@@ -475,9 +475,9 @@ function runTests() {
       } finally {
         cleanupTempDir(pathHome);
       }
-    })) passed++; else failed++;
+    }))) passed++; else failed++;
 
-    const legacyRunsOutcome = tallied('the runs file follows the EGC directory of the home, and runs recorded under the old ~/.gemini are still read', () => {
+    const legacyRunsOutcome = tallied('the runs file follows the EGC directory of the home, and runs recorded under the old ~/.gemini are still read', () => runWithoutHarnessVariables(() => {
       const legacyHome = createTempDir('skill-evolution-legacy-home-');
       try {
         fs.mkdirSync(path.join(legacyHome, '.egc'), { recursive: true });
@@ -508,7 +508,7 @@ function runTests() {
       } finally {
         cleanupTempDir(legacyHome);
       }
-    });
+    }));
     passed += legacyRunsOutcome.passed;
     failed += legacyRunsOutcome.failed;
 

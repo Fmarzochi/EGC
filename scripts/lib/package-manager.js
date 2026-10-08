@@ -163,11 +163,29 @@ function getProjectConfigPath(projectDir) {
   return path.join(projectDir, '.egc', 'package-manager.json');
 }
 
+// The known package manager a config file names, or null when the file is
+// absent, malformed or names an unknown one.
+function readConfiguredPackageManager(configPath) {
+  const content = readFile(configPath);
+  if (!content) {
+    return null;
+  }
+
+  try {
+    const config = JSON.parse(content);
+    return config.packageManager && PACKAGE_MANAGERS[config.packageManager] ? config.packageManager : null;
+  } catch {
+    return null;
+  }
+}
+
 function getPackageManager(options = {}) {
   const { projectDir = process.cwd() } = options;
 
-  // 1. Check environment variable
-  const envPm = process.env.EGC_PACKAGE_MANAGER || process.env.GEMINI_PACKAGE_MANAGER;
+  // 1. Check environment variable: the EGC name when it names a known
+  //    manager, else the old GEMINI name
+  const egcEnvPm = process.env.EGC_PACKAGE_MANAGER;
+  const envPm = egcEnvPm && PACKAGE_MANAGERS[egcEnvPm] ? egcEnvPm : process.env.GEMINI_PACKAGE_MANAGER;
   if (envPm && PACKAGE_MANAGERS[envPm]) {
     return {
       name: envPm,
@@ -176,22 +194,17 @@ function getPackageManager(options = {}) {
     };
   }
 
-  // 2. Check project-specific config
-  const projectConfig = readFile(getProjectConfigPath(projectDir))
-    || readFile(path.join(projectDir, '.gemini', 'package-manager.json'));
-  if (projectConfig) {
-    try {
-      const config = JSON.parse(projectConfig);
-      if (config.packageManager && PACKAGE_MANAGERS[config.packageManager]) {
-        return {
-          name: config.packageManager,
-          config: PACKAGE_MANAGERS[config.packageManager],
-          source: 'project-config'
-        };
-      }
-    } catch {
-      // Invalid config
-    }
+  // 2. Check project-specific config: the first candidate that names a known
+  //    manager wins, so an unreadable new file never hides a valid old one
+  const projectPm = [getProjectConfigPath(projectDir), path.join(projectDir, '.gemini', 'package-manager.json')]
+    .map(readConfiguredPackageManager)
+    .find(Boolean);
+  if (projectPm) {
+    return {
+      name: projectPm,
+      config: PACKAGE_MANAGERS[projectPm],
+      source: 'project-config'
+    };
   }
 
   // 3. Check package.json packageManager field

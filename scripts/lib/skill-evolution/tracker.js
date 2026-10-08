@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { appendFile, resolveEGCDir } = require('../utils');
+const { appendFile, getEGCDir, resolveEGCDir } = require('../utils');
 
 const VALID_OUTCOMES = new Set(['success', 'failure', 'partial']);
 const VALID_FEEDBACK = new Set(['accepted', 'corrected', 'rejected']);
@@ -14,14 +14,28 @@ function resolveHomeDir(homeDir) {
   return homeDir ? path.resolve(homeDir) : os.homedir();
 }
 
-// The runs file lives in the EGC directory of the home, the folder the
-// hooks and the learned skills use for the tool in session.
+// The runs file lives in the EGC directory, the folder the hooks and the
+// learned skills use for the tool in session: getEGCDir() for the home in
+// use (EGC_DIR included), resolveEGCDir() for another home.
 function getRunsFilePath(options = {}) {
   if (options.runsFilePath) {
     return path.resolve(options.runsFilePath);
   }
 
-  return path.join(resolveEGCDir(resolveHomeDir(options.homeDir)), ...RUNS_FILE_SEGMENTS);
+  const egcDir = options.homeDir ? resolveEGCDir(resolveHomeDir(options.homeDir)) : getEGCDir();
+  return path.join(egcDir, ...RUNS_FILE_SEGMENTS);
+}
+
+function isSameFile(first, second) {
+  if (first === second) {
+    return true;
+  }
+
+  try {
+    return fs.realpathSync(first) === fs.realpathSync(second);
+  } catch {
+    return false;
+  }
 }
 
 // Runs recorded before the file moved out of the fixed ~/.gemini are read
@@ -150,7 +164,7 @@ function readSkillExecutionRecords(options = {}) {
   }
 
   const legacyRunsFilePath = getLegacyRunsFilePath(options);
-  const legacyRows = legacyRunsFilePath === runsFilePath ? [] : readJsonl(legacyRunsFilePath);
+  const legacyRows = isSameFile(legacyRunsFilePath, runsFilePath) ? [] : readJsonl(legacyRunsFilePath);
   return [...legacyRows, ...readJsonl(runsFilePath)];
 }
 
