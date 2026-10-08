@@ -15,7 +15,7 @@ The command targets the following paths **relative to the directory where it is 
 | Path | Description |
 |------|-------------|
 | `<skills dir>`: `skills/` of the EGC directory in use (`~/.claude/skills/` in Claude Code, `~/.gemini/config/skills/` in Antigravity, `~/.cursor/skills/` in Cursor) | Global skills (all projects) |
-| `{cwd}/.agents/skills/`, or the project skills folder of the tool in use (`.claude/skills/`, `.gemini/skills/`, `.cursor/skills/` and the others) | Project-level skills (if the directory exists) |
+| `{cwd}/.agents/skills/`, or the first of `.agent`, `.claude`, `.gemini`, `.cursor`, `.github`, `.kiro`, `.trae`/`.trae-cn`, `.codebuddy`, `.amp`, `.continue`, `.qwen`, `.devin`, `.windsurf` that has one (fixed order, not the tool the session runs inside) | Project-level skills (if the directory exists) |
 
 The scripts resolve `<skills dir>` themselves (`EGC_DIR`, then the tool the session runs inside, then the folder the skill was installed under).
 
@@ -48,7 +48,7 @@ Re-evaluate only skills that have changed since the last run (5-10 min).
 1. Read `<skills dir>/skill-stocktake/results.json`
 2. Run: `bash <skills dir>/skill-stocktake/scripts/quick-diff.sh \
          <skills dir>/skill-stocktake/results.json`
-   (Project dir is auto-detected from `$PWD/.agents/skills` or the tool's own folder; pass it explicitly only if needed)
+   (Project dir is auto-detected, the first project folder present in the fixed order of the Scope table; pass it explicitly only if needed)
 3. If output is `[]`: report "No changes since last run." and stop
 4. Re-evaluate only those changed files using the same Phase 2 criteria
 5. Carry forward unchanged skills from previous results
@@ -63,7 +63,7 @@ Re-evaluate only skills that have changed since the last run (5-10 min).
 Run: `bash <skills dir>/skill-stocktake/scripts/scan.sh`
 
 The script enumerates skill files, extracts frontmatter, and collects UTC mtimes.
-Project dir is auto-detected from `$PWD/.agents/skills` or the tool's own folder; pass it explicitly only if needed.
+Project dir is auto-detected, the first project folder present in the fixed order of the Scope table; pass it explicitly only if needed.
 Present the scan summary and inventory table from the script output:
 
 ```

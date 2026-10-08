@@ -30,7 +30,7 @@ OBSERVATIONS="${SKILL_STOCKTAKE_OBSERVATIONS:-$HOME/.egc-learning}"
 
 # Validate CWD_SKILLS_DIR looks like a skills path (defense-in-depth).
 # Only warn when the path exists: a nonexistent path poses no traversal risk.
-if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */skills* ]]; then
+if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */skills ]]; then
   echo "Warning: CWD_SKILLS_DIR does not look like a skills path: $CWD_SKILLS_DIR" >&2
 fi
 
@@ -75,13 +75,15 @@ date_ago() {
   date -u -d "${n} days ago" +%Y-%m-%dT%H:%M:%SZ
 }
 
-# Count observations matching a file path since a cutoff timestamp
-count_obs() {
-  local file="$1" cutoff="$2"
-  observation_lines | jq -r --arg p "$file" --arg c "$cutoff" \
-    'select(.tool=="Read" and .path==$p and .timestamp>=$c) | 1' \
-    2>/dev/null | wc -l | tr -d ' '
-}
+# The path a Read observation names. continuous-learning-v2's observe.sh
+# (the real writer of ~/.egc-learning/.../observations.jsonl) never puts a
+# top-level path on the record: a "tool_start" event carries the tool_input
+# it was given, JSON-encoded, in .input; the matching "tool_complete" event
+# carries no input at all. A record with a top-level .path (another writer,
+# or a future format) is read directly. Neither shape carries a timestamp,
+# so a record without one counts in every window: there is no way to tell
+# a stale read from a fresh one, and showing 0 would be the wrong default.
+OBS_PATH_FILTER='select(.tool=="Read") | (.path // (if .event=="tool_start" then (.input | try fromjson catch null).file_path else null end)) as $p | select($p != null) | {path: $p, in_window: ((.timestamp // $c) >= $c)}'
 
 # Scan a directory and produce a JSON array of skill objects
 scan_dir_to_json() {
@@ -106,10 +108,10 @@ scan_dir_to_json() {
   obs_lines=$(observation_lines)
   if [[ -n "$obs_lines" ]]; then
     obs_7d_counts=$(echo "$obs_lines" | jq -r --arg c "$c7" \
-      'select(.tool=="Read" and .timestamp>=$c) | .path' \
+      "$OBS_PATH_FILTER | select(.in_window) | .path" \
       2>/dev/null | sort | uniq -c)
     obs_30d_counts=$(echo "$obs_lines" | jq -r --arg c "$c30" \
-      'select(.tool=="Read" and .timestamp>=$c) | .path' \
+      "$OBS_PATH_FILTER | select(.in_window) | .path" \
       2>/dev/null | sort | uniq -c)
   fi
 
@@ -126,7 +128,7 @@ scan_dir_to_json() {
     u30=$(echo "$obs_30d_counts" | awk -v f="$file" '$2 == f {print $1}' | head -1)
     u30="${u30:-0}"
     dp="$file"
-    [[ "$file" == "$HOME/"* ]] && dp="~${file#"$HOME"}"
+    [[ "$file" == "${HOME%/}/"* ]] && dp="~${file#"${HOME%/}"}"
 
     jq -n \
       --arg path "$dp" \

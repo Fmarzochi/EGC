@@ -5,7 +5,9 @@
  * the first tool folder present in the home) instead of a fixed ~/.gemini:
  * the continuous-learning evaluator, the skill-stocktake scan and quick diff,
  * and the rules-distill scans. Each script runs against a temporary home.
- * Needs bash and jq, so the file is skipped on Windows.
+ * Needs bash and jq: skipped on Windows (the scripts never run there), but
+ * a POSIX host without jq fails loudly instead, since every case would
+ * otherwise silently pass with zero coverage on a CI image missing it.
  */
 'use strict';
 
@@ -47,10 +49,20 @@ function makeHome() {
   return { home, project };
 }
 
+// The scripts' own test-only overrides: an ambient value (left over from a
+// prior run, or set in the shell this suite happens to run under) would
+// otherwise bypass the fixture and make this suite depend on the outside
+// environment.
+const SCRIPT_OVERRIDE_VARIABLES = [
+  'SKILL_STOCKTAKE_GLOBAL_DIR', 'SKILL_STOCKTAKE_PROJECT_DIR', 'SKILL_STOCKTAKE_OBSERVATIONS',
+  'RULES_DISTILL_DIR', 'RULES_DISTILL_GLOBAL_DIR', 'RULES_DISTILL_PROJECT_DIR',
+];
+
 function cleanEnv(home, extra) {
   const env = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (HARNESS_VARIABLES.includes(key) || CONFIG_HOME_VARIABLES.includes(key)) continue;
+    if (SCRIPT_OVERRIDE_VARIABLES.includes(key)) continue;
     env[key] = value;
   }
   return { ...env, HOME: home, ...extra };
@@ -193,17 +205,24 @@ function runStocktakeScanCases() {
     }
   }));
 
-  addOutcome(totals, tallied('counts the observations of every project in the learning store', () => {
+  addOutcome(totals, tallied('counts a continuous-learning-v2 tool_start observation of a skill, across every project store', () => {
     const { home, project } = makeHome();
     try {
       const alpha = writeSkill(path.join(home, '.claude', 'skills'), 'alpha');
-      const observations = path.join(home, '.egc-learning', 'projects', 'abc123', 'observations.jsonl');
-      fs.mkdirSync(path.dirname(observations), { recursive: true });
-      const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-      fs.writeFileSync(observations, JSON.stringify({ tool: 'Read', path: alpha, timestamp: now }) + '\n');
+      // The real shape observe.sh writes: no top-level path or timestamp, the
+      // file path buried in .input as a JSON string, only on "tool_start".
+      const projectA = path.join(home, '.egc-learning', 'projects', 'abc123', 'observations.jsonl');
+      const projectB = path.join(home, '.egc-learning', 'projects', 'def456', 'observations.jsonl');
+      fs.mkdirSync(path.dirname(projectA), { recursive: true });
+      fs.mkdirSync(path.dirname(projectB), { recursive: true });
+      const startEvent = JSON.stringify({ parsed: true, event: 'tool_start', tool: 'Read', input: JSON.stringify({ file_path: alpha }), output: null });
+      const completeEvent = JSON.stringify({ parsed: true, event: 'tool_complete', tool: 'Read', input: null, output: 'the file body' });
+      fs.writeFileSync(projectA, `${startEvent}\n${completeEvent}\n`);
+      fs.writeFileSync(projectB, `${startEvent}\n`);
       const result = run(SCAN, [], { home, cwd: project, env: { CLAUDECODE: '1' } });
       const output = parseJson(result, 'scan.sh');
-      assert.strictEqual(output.skills[0].use_7d, 1, `counts the read of the skill. Got: ${JSON.stringify(output.skills[0])}`);
+      assert.strictEqual(output.skills[0].use_7d, 2, `counts the tool_start of each project, ignores tool_complete. Got: ${JSON.stringify(output.skills[0])}`);
+      assert.strictEqual(output.skills[0].use_30d, 2, `the 30d window counts the same, timestamp-less records. Got: ${JSON.stringify(output.skills[0])}`);
     } finally {
       removeDirWithRetries(home);
     }
@@ -226,6 +245,21 @@ function runQuickDiffCases() {
       const output = parseJson(result, 'quick-diff.sh');
       assert.deepStrictEqual(output.map(entry => entry.path), ['~/.claude/skills/alpha/SKILL.md']);
       assert.strictEqual(output[0].is_new, true);
+    } finally {
+      removeDirWithRetries(home);
+    }
+  }));
+
+  addOutcome(totals, tallied('matches a results.json written before paths were shortened, by its absolute path', () => {
+    const { home, project } = makeHome();
+    try {
+      const alpha = writeSkill(path.join(home, '.claude', 'skills'), 'alpha');
+      const results = path.join(home, 'results.json');
+      fs.writeFileSync(results, JSON.stringify({ evaluated_at: '2020-01-01T00:00:00Z', skills: { alpha: { path: alpha } } }));
+      const result = run(QUICK_DIFF, [results], { home, cwd: project, env: { CLAUDECODE: '1' } });
+      const output = parseJson(result, 'quick-diff.sh');
+      assert.strictEqual(output.length, 1, `one changed entry, the known skill with a newer mtime. Got: ${JSON.stringify(output)}`);
+      assert.strictEqual(output[0].is_new, false, `known by its absolute path, not reported as new. Got: ${JSON.stringify(output[0])}`);
     } finally {
       removeDirWithRetries(home);
     }
@@ -278,9 +312,13 @@ function runRulesDistillCases() {
 }
 
 function runTests() {
-  if (process.platform === 'win32' || !toolsPresent()) {
-    console.log(`  - skipped: the skill scripts need ${BASH} and jq`);
+  if (process.platform === 'win32') {
+    console.log(`  - skipped: the skill scripts need ${BASH}, not present on Windows`);
     process.exit(0);
+  }
+  if (!toolsPresent()) {
+    console.log(`  ✗ ${BASH} and jq are required on this platform; none of this file's cases ran`);
+    process.exit(1);
   }
 
   const totals = { passed: 0, failed: 0 };

@@ -37,7 +37,7 @@ egc_dir() {
 egc_global_skills_dir() {
   local dir
   dir="$(egc_dir "${1:-}")"
-  if [[ "$dir" == "$HOME/.gemini" && -d "$dir/config/skills" ]]; then
+  if [[ "$dir" == "$HOME/.gemini" ]]; then
     echo "$dir/config/skills"
   else
     echo "$dir/skills"
@@ -46,11 +46,15 @@ egc_global_skills_dir() {
 
 # egc_project_skills_dir PROJECT: the project skills folder, .agents/skills
 # (the folder most tools read) or the first tool folder of the project that
-# holds skills.
+# holds skills. Antigravity (.agent/skills, antigravity-project.js) and the
+# project-only targets Qwen Code, Devin Desktop and Windsurf come after the
+# home-level tool folders, which a project install never writes to;
+# .trae-cn is tried before .trae when TRAE_ENV names the CN edition.
 egc_project_skills_dir() {
-  local project="$1" dir
-  for dir in .agents .claude .gemini .cursor .github .kiro .trae .trae-cn .codebuddy .amp .continue; do
-    if [[ -d "$project/$dir/skills" ]]; then echo "$project/$dir/skills"; return; fi
+  local project="$1" dir trae_first="trae" trae_second="trae-cn"
+  [[ "${TRAE_ENV:-}" == "cn" ]] && { trae_first="trae-cn"; trae_second="trae"; }
+  for dir in agents agent claude gemini cursor github kiro "$trae_first" "$trae_second" codebuddy amp continue qwen devin windsurf; do
+    if [[ -d "$project/.$dir/skills" ]]; then echo "$project/.$dir/skills"; return; fi
   done
   echo "$project/.agents/skills"
 }

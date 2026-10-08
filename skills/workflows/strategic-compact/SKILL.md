@@ -30,7 +30,7 @@ Strategic compaction at logical boundaries:
 
 ## How It Works
 
-The `suggest-compact.js` script runs on PreToolUse (Edit/Write) and:
+The `suggest-compact.sh` script runs on PreToolUse (Edit/Write) and:
 
 1. **Tracks tool calls**: Counts tool invocations in session
 2. **Threshold detection**: Suggests at configurable threshold (default: 50 calls)

@@ -30,7 +30,7 @@ fi
 
 # Validate CWD_SKILLS_DIR looks like a skills path (defense-in-depth).
 # Only warn when the path exists: a nonexistent path poses no traversal risk.
-if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */skills* ]]; then
+if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */skills ]]; then
   echo "Warning: CWD_SKILLS_DIR does not look like a skills path: $CWD_SKILLS_DIR" >&2
 fi
 
@@ -61,7 +61,7 @@ process_dir() {
     local mtime dp is_new
     mtime=$(date -u -r "$file" +%Y-%m-%dT%H:%M:%SZ)
     dp="$file"
-    [[ "$file" == "$HOME/"* ]] && dp="~${file#"$HOME"}"
+    [[ "$file" == "${HOME%/}/"* ]] && dp="~${file#"${HOME%/}"}"
 
     # Check if this file is known to results.json (exact whole-line match to
     # avoid substring false-positives, e.g. "python-patterns" matching "python-patterns-v2").

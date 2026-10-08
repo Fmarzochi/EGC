@@ -324,7 +324,7 @@ Hooks fire **100% of the time**, deterministically. This means:
 v2.1 is fully compatible with v2.0 and v1:
 - Global instincts kept in `~/.gemini/homunculus/instincts/` (or any other tool's own `homunculus/` folder) by earlier versions are copied into `~/.egc-learning/instincts/` once, at the first session start after the upgrade, and still work as global instincts
 - The copy is one-time and marker-gated: anything written to the old folder after that first copy is never picked up again, so every tool should move to the new store rather than keep writing the old one
-- Existing `skills/learned/` skills from v1, in any tool folder, still work
+- Existing v1 skills still work, at `skills/learned/` of whichever tool folder holds them (for example `~/.claude/skills/learned/`)
 - Stop hook still runs (but now also feeds into v2)
 
 ## Privacy

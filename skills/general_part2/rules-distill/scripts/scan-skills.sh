@@ -23,7 +23,7 @@ GLOBAL_DIR="${RULES_DISTILL_GLOBAL_DIR:-$(egc_global_skills_dir "$SCRIPT_DIR")}"
 CWD_SKILLS_DIR="${RULES_DISTILL_PROJECT_DIR:-${1:-$(egc_project_skills_dir "$PWD")}}"
 # Validate CWD_SKILLS_DIR looks like a skills path (defense-in-depth).
 # Only warn when the path exists: a nonexistent path poses no traversal risk.
-if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */skills* ]]; then
+if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */skills ]]; then
   echo "Warning: CWD_SKILLS_DIR does not look like a skills path: $CWD_SKILLS_DIR" >&2
 fi
 
