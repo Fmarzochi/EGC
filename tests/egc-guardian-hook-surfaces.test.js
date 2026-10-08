@@ -55,6 +55,8 @@ const HOOK_CONFIGURATIONS = [
   at(home, '.claude', 'settings.json'),
   at(project, '.claude', 'settings.json'),
   at(project, '.claude', 'settings.local.json'),
+  at(home, '.claude', 'hooks', 'pre-commit.sh'),
+  at(project, '.claude', 'hooks', 'quality-gate.md'),
   at(home, '.codex', 'hooks.json'),
   at(home, '.gemini', 'config', 'hooks.json'),
   at(home, '.gemini', 'antigravity-cli', 'hooks.json'),
@@ -156,6 +158,27 @@ test('the files next to a hook surface, and a repository of its own, stay writab
     const verdict = validateWrite(file, project);
     assert.strictEqual(verdict.allowed, true, `${file}: ${verdict.reason}`);
   }
+});
+
+test('a link does not take a hook surface out of the rule, in either direction', () => {
+  // A hook script that is a link to a file elsewhere: the tool still runs
+  // what the link leads to, so the name under the hooks directory counts.
+  const elsewhere = at(home, 'elsewhere', 'dispatcher.js');
+  fs.mkdirSync(path.dirname(elsewhere), { recursive: true });
+  fs.writeFileSync(elsewhere, '');
+  const hooksDir = at(home, '.claude', 'scripts', 'hooks');
+  fs.mkdirSync(hooksDir, { recursive: true });
+  fs.symlinkSync(elsewhere, at(hooksDir, 'dispatcher.js'));
+  assert.strictEqual(validateWrite(at(hooksDir, 'dispatcher.js'), project).allowed, false, 'a linked hook script must be refused');
+  assert.strictEqual(validateWrite(elsewhere, project).allowed, true, 'the file the link leads to is not a hook surface by itself');
+  // A tool directory that is itself a link: the tool reads its hooks there.
+  const realConfig = at(home, 'real-cursor');
+  fs.mkdirSync(realConfig, { recursive: true });
+  fs.symlinkSync(realConfig, at(home, '.cursor'));
+  assert.strictEqual(validateWrite(at(home, '.cursor', 'hooks.json'), project).allowed, false, 'a hooks.json behind a linked tool directory must be refused');
+  // A link that leads into a hook surface is refused as the surface is.
+  fs.symlinkSync(at(home, '.claude'), at(home, 'shortcut'));
+  assert.strictEqual(validateWrite(at(home, 'shortcut', 'settings.json'), project).allowed, false, 'a link into a tool directory must be refused');
 });
 
 test('a hook surface is read freely', () => {

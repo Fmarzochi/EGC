@@ -1505,9 +1505,11 @@ const HOOK_DIRECTORY_NAMES = new Set(['.githooks', '.husky']);
 // repository keeps for those tools are the one exception, since the tools
 // run them from there.
 const TOOL_HOOK_SURFACE_PATTERNS: RegExp[] = [
-  // Claude Code, in the home and in a project, and CodeBuddy and Qwen Code,
-  // whose project settings.json carries hooks of the same shape.
+  // Claude Code, in the home and in a project, with the .claude/hooks
+  // directory its documentation keeps the hook scripts in, and CodeBuddy and
+  // Qwen Code, whose project settings.json carries hooks of the same shape.
   /(^|[\\/])\.claude[\\/]settings(\.local)?\.json$/,
+  /(^|[\\/])\.claude[\\/]hooks([\\/]|$)/,
   /(^|[\\/])\.(codebuddy|qwen)[\\/]settings\.json$/,
   // hooks.json: Codex, Antigravity (the shared config/, the CLI's own
   // directory, and the hooks/ the retired Gemini CLI read), the project
@@ -1793,7 +1795,12 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
     }
   }
 
-  return isGitControlFile(candidate, isRegularFile(normalizedP)) || isConfiguredHook(normalizedP, baseDir) || matchesToolHookSurface(candidate);
+  if (isGitControlFile(candidate, isRegularFile(normalizedP)) || isConfiguredHook(normalizedP, baseDir)) return true;
+  // A hook surface is judged by its name as well as by where it really is:
+  // a link inside ~/.claude/scripts/hooks still names the file the tool
+  // runs, wherever the link leads, and a ~/.claude that is itself a link
+  // elsewhere is still where the tool reads its hooks.
+  return matchesToolHookSurface(candidate) || matchesToolHookSurface(foldCase(path.resolve(baseDir, expanded)));
 }
 
 // Reading and writing carry different risk, and treating them alike is what
