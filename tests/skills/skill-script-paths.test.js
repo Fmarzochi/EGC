@@ -221,20 +221,23 @@ function runStocktakeScanCases() {
     const { home, project } = makeHome();
     try {
       const alpha = writeSkill(path.join(home, '.claude', 'skills'), 'alpha');
-      // The real shape observe.sh writes: no top-level path or timestamp, the
-      // file path buried in .input as a JSON string, only on "tool_start".
+      // The real shape observe.sh writes: a timestamp on every record, no
+      // top-level path, the file path buried in .input as a JSON string,
+      // only on "tool_start".
       const projectA = path.join(home, '.egc-learning', 'projects', 'abc123', 'observations.jsonl');
       const projectB = path.join(home, '.egc-learning', 'projects', 'def456', 'observations.jsonl');
       fs.mkdirSync(path.dirname(projectA), { recursive: true });
       fs.mkdirSync(path.dirname(projectB), { recursive: true });
-      const startEvent = JSON.stringify({ parsed: true, event: 'tool_start', tool: 'Read', input: JSON.stringify({ file_path: alpha }), output: null });
-      const completeEvent = JSON.stringify({ parsed: true, event: 'tool_complete', tool: 'Read', input: null, output: 'the file body' });
-      fs.writeFileSync(projectA, `${startEvent}\n${completeEvent}\n`);
-      fs.writeFileSync(projectB, `${startEvent}\n`);
+      const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+      const stale = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+      const startEvent = (timestamp) => JSON.stringify({ timestamp, event: 'tool_start', tool: 'Read', input: JSON.stringify({ file_path: alpha }) });
+      const completeEvent = JSON.stringify({ timestamp: now, event: 'tool_complete', tool: 'Read', output: 'the file body' });
+      fs.writeFileSync(projectA, `${startEvent(now)}\n${completeEvent}\n${startEvent(stale)}\n`);
+      fs.writeFileSync(projectB, `${startEvent(now)}\n`);
       const result = run(SCAN, [], { home, cwd: project, env: { CLAUDECODE: '1' } });
       const output = parseJson(result, 'scan.sh');
-      assert.strictEqual(output.skills[0].use_7d, 2, `counts the tool_start of each project, ignores tool_complete. Got: ${JSON.stringify(output.skills[0])}`);
-      assert.strictEqual(output.skills[0].use_30d, 2, `the 30d window counts the same, timestamp-less records. Got: ${JSON.stringify(output.skills[0])}`);
+      assert.strictEqual(output.skills[0].use_7d, 2, `counts the fresh tool_start of each project, ignores tool_complete and the one outside the 7d window. Got: ${JSON.stringify(output.skills[0])}`);
+      assert.strictEqual(output.skills[0].use_30d, 3, `the 30d window also counts the 10-day-old record. Got: ${JSON.stringify(output.skills[0])}`);
     } finally {
       removeDirWithRetries(home);
     }

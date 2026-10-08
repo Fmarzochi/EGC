@@ -34,7 +34,7 @@ The `suggest-compact.sh` script runs on PreToolUse (Edit/Write) and:
 
 1. **Tracks tool calls**: Counts tool invocations in session
 2. **Threshold detection**: Suggests at configurable threshold (default: 50 calls)
-3. **Periodic reminders**: Reminds every 25 calls after threshold
+3. **Periodic reminders**: Once past threshold, reminds again on every absolute multiple of 25 (with the default threshold of 50: 75, 100, 125...; a custom `COMPACT_THRESHOLD=40` still reminds at 50, 75, 100, not at 65, 90)
 
 ## Hook Setup
 

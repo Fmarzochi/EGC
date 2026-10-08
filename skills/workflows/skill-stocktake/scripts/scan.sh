@@ -75,15 +75,14 @@ date_ago() {
   date -u -d "${n} days ago" +%Y-%m-%dT%H:%M:%SZ
 }
 
-# The path a Read observation names. continuous-learning-v2's observe.sh
-# (the real writer of ~/.egc-learning/.../observations.jsonl) never puts a
-# top-level path on the record: a "tool_start" event carries the tool_input
-# it was given, JSON-encoded, in .input; the matching "tool_complete" event
-# carries no input at all. A record with a top-level .path (another writer,
-# or a future format) is read directly. Neither shape carries a timestamp,
-# so a record without one counts in every window: there is no way to tell
-# a stale read from a fresh one, and showing 0 would be the wrong default.
-OBS_PATH_FILTER='select(.tool=="Read") | (.path // (if .event=="tool_start" then (.input | try fromjson catch null).file_path else null end)) as $p | select($p != null) | {path: $p, in_window: ((.timestamp // $c) >= $c)}'
+# The path a Read observation names, within the window $c starts. continuous-
+# learning-v2's observe.sh (the real writer of
+# ~/.egc-learning/.../observations.jsonl) always sets .timestamp, but never
+# puts a top-level path on the record: a "tool_start" event carries the tool
+# input it was given, JSON-encoded, in .input; the matching "tool_complete"
+# event carries no input at all. A record with a top-level .path (another
+# writer, or a future format) is read directly.
+OBS_PATH_FILTER='select(.tool=="Read" and .timestamp>=$c) | .path // (if .event=="tool_start" then (.input | try fromjson catch null).file_path else null end)'
 
 # Scan a directory and produce a JSON array of skill objects
 scan_dir_to_json() {
@@ -101,18 +100,18 @@ scan_dir_to_json() {
   trap _scan_cleanup RETURN
 
   # Pre-aggregate observation counts in two passes (one per window) instead of
-  # calling jq per-file: reduces from O(n*m) to O(n+m) jq invocations.
+  # calling jq per-file: reduces from O(n*m) to O(n+m) jq invocations. Counted
+  # as a {path: count} JSON object, not text grouped by uniq -c: a path with
+  # a space would otherwise split across awk's default fields and never match.
   local obs_7d_counts obs_30d_counts obs_lines
-  obs_7d_counts=""
-  obs_30d_counts=""
+  obs_7d_counts='{}'
+  obs_30d_counts='{}'
   obs_lines=$(observation_lines)
   if [[ -n "$obs_lines" ]]; then
-    obs_7d_counts=$(echo "$obs_lines" | jq -r --arg c "$c7" \
-      "$OBS_PATH_FILTER | select(.in_window) | .path" \
-      2>/dev/null | sort | uniq -c)
-    obs_30d_counts=$(echo "$obs_lines" | jq -r --arg c "$c30" \
-      "$OBS_PATH_FILTER | select(.in_window) | .path" \
-      2>/dev/null | sort | uniq -c)
+    obs_7d_counts=$(echo "$obs_lines" | jq -r --arg c "$c7" "$OBS_PATH_FILTER" 2>/dev/null \
+      | jq -R -s '[splits("\n")] | map(select(length>0)) | group_by(.) | map({key: .[0], value: length}) | from_entries')
+    obs_30d_counts=$(echo "$obs_lines" | jq -r --arg c "$c30" "$OBS_PATH_FILTER" 2>/dev/null \
+      | jq -R -s '[splits("\n")] | map(select(length>0)) | group_by(.) | map({key: .[0], value: length}) | from_entries')
   fi
 
   local i=0
@@ -121,12 +120,8 @@ scan_dir_to_json() {
     name=$(extract_field "$file" "name")
     desc=$(extract_field "$file" "description")
     mtime=$(date -u -r "$file" +%Y-%m-%dT%H:%M:%SZ)
-    # Use awk exact field match to avoid substring false-positives from grep -F.
-    # uniq -c output format: "   N /path/to/file": path is always field 2.
-    u7=$(echo "$obs_7d_counts" | awk -v f="$file" '$2 == f {print $1}' | head -1)
-    u7="${u7:-0}"
-    u30=$(echo "$obs_30d_counts" | awk -v f="$file" '$2 == f {print $1}' | head -1)
-    u30="${u30:-0}"
+    u7=$(echo "$obs_7d_counts" | jq -r --arg f "$file" '.[$f] // 0')
+    u30=$(echo "$obs_30d_counts" | jq -r --arg f "$file" '.[$f] // 0')
     dp="$file"
     [[ "$file" == "${HOME%/}/"* ]] && dp="~${file#"${HOME%/}"}"
 
