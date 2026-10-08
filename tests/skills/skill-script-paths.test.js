@@ -205,6 +205,18 @@ function runStocktakeScanCases() {
     }
   }));
 
+  addOutcome(totals, tallied('an explicit project folder with a trailing slash raises no false warning', () => {
+    const { home, project } = makeHome();
+    try {
+      const skillsDir = path.join(project, '.agents', 'skills');
+      fs.mkdirSync(skillsDir, { recursive: true });
+      const result = run(SCAN, [`${skillsDir}/`], { home, cwd: project, env: { CLAUDECODE: '1' } });
+      assert.ok(!result.stderr.includes('Warning'), `a trailing slash is still a skills path. Got: ${result.stderr}`);
+    } finally {
+      removeDirWithRetries(home);
+    }
+  }));
+
   addOutcome(totals, tallied('counts a continuous-learning-v2 tool_start observation of a skill, across every project store', () => {
     const { home, project } = makeHome();
     try {
