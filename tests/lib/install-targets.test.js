@@ -136,16 +136,9 @@ function runTests() {
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'skills/tdd-workflow'
-        && operation.destinationPath === path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'tdd-workflow')
-      )),
-      'Should install bundled skills under antigravity-cli/skills, where the Antigravity CLI reads them'
-    );
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'skills/tdd-workflow'
         && operation.destinationPath === path.join(homeDir, '.gemini', 'config', 'skills', 'tdd-workflow')
       )),
-      'Should install bundled skills under config/skills, where the Antigravity IDE and Antigravity 2.0 read them'
+      'Should install bundled skills under config/skills, where every Antigravity surface reads them'
     );
     const skillDestinations = plan.operations
       .filter(operation => normalizedRelativePath(operation.sourceRelativePath) === 'skills/tdd-workflow')
@@ -154,10 +147,9 @@ function runTests() {
     assert.deepStrictEqual(
       skillDestinations,
       [
-        path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'tdd-workflow'),
         path.join(homeDir, '.gemini', 'config', 'skills', 'tdd-workflow'),
       ].sort(),
-      'Each skill lands once per Antigravity skills directory, never twice in the same one'
+      'Each skill lands exactly once, under config/skills'
     );
     assert.ok(
       !under(path.join(homeDir, '.gemini', 'skills')),

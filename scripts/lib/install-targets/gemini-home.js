@@ -26,8 +26,7 @@ const { createAntigravityGuardianOperations } = require('../antigravity-guardian
 const { resolveGlobalHooksJsonPath } = require('../antigravity-guardian-hooks');
 
 const GEMINI_EGC_NAMESPACE = 'egc';
-const AGY_IDE_SKILLS_SUBDIR = 'config/skills';
-const AGY_SKILLS_SUBDIRS = [AGY_IDE_SKILLS_SUBDIR, 'antigravity-cli/skills'];
+const AGY_SKILLS_SUBDIR = 'config/skills';
 
 // Source paths only the retired Gemini CLI read from this root and that no
 // family of the library counts on: Antigravity keeps its hooks in
@@ -47,10 +46,9 @@ function isGeminiCliOnlySource(sourceRelativePath) {
 
 // Where a bundled source lands under ~/.gemini when it does not keep its
 // relative path: rules under rules/egc, the managed namespace next to the
-// person's own rules, and skills under config/skills, where the Antigravity
-// IDE and Antigravity 2.0 read them, and under antigravity-cli/skills, where
-// the Antigravity CLI reads them. The skills/egc namespace of the retired
-// Gemini CLI is not written any more.
+// person's own rules, and skills under config/skills, the directory the
+// Antigravity IDE, Antigravity 2.0 and the Antigravity CLI all read. The
+// skills/egc namespace of the retired Gemini CLI is not written any more.
 function getGeminiManagedDestinationPaths(adapter, sourceRelativePath, input, recordedDestinations) {
   const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
   const targetRoot = adapter.resolveRoot(input);
@@ -67,7 +65,7 @@ function getGeminiManagedDestinationPaths(adapter, sourceRelativePath, input, re
 }
 
 // Antigravity shares this home root (~/.gemini) for skill discovery (see
-// AGY_SKILLS_SUBDIRS above) but reads its own hooks.json at
+// AGY_SKILLS_SUBDIR above) but reads its own hooks.json at
 // ~/.gemini/antigravity-cli/hooks.json, distinct from Gemini CLI's
 // ~/.gemini/hooks/hooks.json -- so Gemini CLI's existing GateGuard wiring
 // does not automatically cover Antigravity and needs this separate merge.
@@ -194,11 +192,28 @@ function collectRecordedDestinations(adapter, input) {
   return destinations;
 }
 
-function isPersonOwned(destination, recordedDestinations) {
-  if (!fs.existsSync(destination)) return false;
-  if (!recordedDestinations) return true;
+function isSameTree(sourcePath, destinationPath) {
+  const source = fs.statSync(sourcePath, { throwIfNoEntry: false });
+  const destination = fs.lstatSync(destinationPath, { throwIfNoEntry: false });
+  if (!source || !destination) return false;
+  if (source.isFile() && destination.isFile()) {
+    return fs.readFileSync(sourcePath).equals(fs.readFileSync(destinationPath));
+  }
+  if (!source.isDirectory() || !destination.isDirectory()) return false;
+  const sourceEntries = fs.readdirSync(sourcePath).sort();
+  const destinationEntries = fs.readdirSync(destinationPath).sort();
+  if (sourceEntries.join('\n') !== destinationEntries.join('\n')) return false;
+  return sourceEntries.every(entry => isSameTree(path.join(sourcePath, entry), path.join(destinationPath, entry)));
+}
+
+function isPersonOwned(destination, sourcePath, recordedDestinations) {
+  const stat = fs.lstatSync(destination, { throwIfNoEntry: false });
+  if (!stat || stat.isSymbolicLink()) return false;
   const resolved = path.resolve(destination);
-  return !recordedDestinations.some(recorded => recorded === resolved || recorded.startsWith(resolved + path.sep));
+  if (recordedDestinations && recordedDestinations.some(recorded => recorded === resolved || recorded.startsWith(resolved + path.sep))) {
+    return false;
+  }
+  return !(sourcePath && isSameTree(sourcePath, resolved));
 }
 
 function getAGYManagedDestinationPaths(adapter, sourceRelativePath, input, recordedDestinations = []) {
@@ -206,21 +221,19 @@ function getAGYManagedDestinationPaths(adapter, sourceRelativePath, input, recor
   const targetRoot = adapter.resolveRoot(input);
 
   if (normalizedSourcePath.startsWith('skills/')) {
-    // Antigravity reads global skills from <dir>/<skillName>/ in one of
-    // AGY_SKILLS_SUBDIRS per surface, and no surface reads both. Source
-    // layout in the repo is `skills/<category>/<skillName>[/<file>]`: strip
-    // exactly the leading category segment when present, so the tool never
-    // depends on the repo's category taxonomy; leave already-flat paths
-    // untouched.
+    // Every Antigravity surface reads global skills from
+    // ~/.gemini/config/skills/<skillName>/. Source layout in the repo is
+    // `skills/<category>/<skillName>[/<file>]`: strip exactly the leading
+    // category segment when present, so the tool never depends on the repo's
+    // category taxonomy; leave already-flat paths untouched.
     const parts = normalizedSourcePath.slice('skills/'.length).split('/');
     const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
-    const ideSkillsRoot = path.join(targetRoot, AGY_IDE_SKILLS_SUBDIR);
-    return AGY_SKILLS_SUBDIRS
-      .map(subdir => path.join(targetRoot, subdir, flatRemainder))
-      .filter(destination => !(destination.startsWith(ideSkillsRoot + path.sep) && isPersonOwned(destination, recordedDestinations)));
+    const destination = path.join(targetRoot, AGY_SKILLS_SUBDIR, flatRemainder);
+    const sourcePath = input.repoRoot ? path.join(input.repoRoot, normalizedSourcePath) : null;
+    return isPersonOwned(destination, sourcePath, recordedDestinations) ? [] : [destination];
   }
 
-  return [];
+  return null;
 }
 
 module.exports = createInstallTargetAdapter({
@@ -246,7 +259,7 @@ module.exports = createInstallTargetAdapter({
             recordedDestinations
           );
 
-          if (managedDestinationPaths.length > 0) {
+          if (managedDestinationPaths) {
             return managedDestinationPaths.map(managedDestinationPath => createRemappedOperation(
               adapter,
               module.id,
