@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 const {
   parseArgs,
@@ -41,7 +42,7 @@ function createTempDir(prefix) {
 }
 
 function cleanup(dirPath) {
-  fs.rmSync(dirPath, { recursive: true, force: true });
+  removeDirWithRetries(dirPath);
 }
 
 function makeRecord({ repoRoot, homeDir, projectRoot, adapter, request, resolution, operations }) {
@@ -784,7 +785,7 @@ function runTests() {
       // Replace the placeholder .git dir from ensureFakeRepo with a real,
       // freshly initialized repo that has a commit but no remote/upstream,
       // so the unmocked runExternalCommand really shells out to git.
-      fs.rmSync(path.join(repoRoot, '.git'), { recursive: true, force: true });
+      removeDirWithRetries(path.join(repoRoot, '.git'));
       spawnSync('git', ['init'], { cwd: repoRoot, encoding: 'utf8' });
       spawnSync('git', ['config', 'user.email', 'egc-test@example.com'], { cwd: repoRoot, encoding: 'utf8' });
       spawnSync('git', ['config', 'user.name', 'EGC Test'], { cwd: repoRoot, encoding: 'utf8' });

@@ -17,13 +17,14 @@ if (!fs.existsSync(PROPAGATE_PATH)) {
 }
 
 const { propagateStateToTools } = require(PROPAGATE_PATH);
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function mktemp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-propagate-'));
 }
 
 function cleanup(dir) {
-  fs.rmSync(dir, { recursive: true, force: true });
+  removeDirWithRetries(dir);
 }
 
 async function test(name, fn) {

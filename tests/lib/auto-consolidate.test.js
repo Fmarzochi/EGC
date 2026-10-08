@@ -10,6 +10,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const { autoConsolidateStateFile } = require('../../scripts/lib/auto-consolidate');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function test(name, fn) {
   try {
@@ -28,7 +29,7 @@ function createTempDir(prefix) {
 }
 
 function cleanup(dirPath) {
-  fs.rmSync(dirPath, { recursive: true, force: true });
+  removeDirWithRetries(dirPath);
 }
 
 function bigStateDocument(projectPath) {

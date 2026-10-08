@@ -15,6 +15,7 @@ const {
   writeReceipt,
 } = require('../../scripts/lib/verify-receipt');
 const { run: runGate } = require('../../scripts/hooks/pre-bash-verification-gate');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function test(name, fn) {
   try {
@@ -33,7 +34,7 @@ function createTempDir(prefix) {
 }
 
 function cleanup(dirPath) {
-  fs.rmSync(dirPath, { recursive: true, force: true });
+  removeDirWithRetries(dirPath);
 }
 
 function git(cwd, args) {

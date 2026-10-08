@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 const runner = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'run-with-flags.js');
 const fakeCli = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
@@ -73,7 +74,7 @@ function withCommittedScript(script, fn) {
     assert.strictEqual(git('commit', '-q', '-m', 'seed').status, 0, 'seed commit');
     return fn(file, repo);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeDirWithRetries(dir);
   }
 }
 
@@ -221,7 +222,7 @@ function runTests() {
       assert.strictEqual(crashed.code, 2, crashed.stderr);
       assert.match(crashed.stderr, /stopped with exit code 3/);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      removeDirWithRetries(dir);
     }
   })) passed++; else failed++;
 
@@ -243,7 +244,7 @@ function runTests() {
       const result = runHook(script, {}, { file_path: script, old_string: 'echo ok', new_string: `echo ok && ${wipe} /tmp/egc-victim` }, 'Edit');
       assert.strictEqual(result.code, 2, result.stderr);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      removeDirWithRetries(dir);
     }
   })) passed++; else failed++;
 
@@ -286,7 +287,7 @@ function runTests() {
       assert.strictEqual(result.code, 2, JSON.stringify(result));
       assert.ok(result.stderr.includes('runs a denied command'), result.stderr);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      removeDirWithRetries(dir);
     }
   })) passed++; else failed++;
 
@@ -303,7 +304,7 @@ function runTests() {
       const elsewhere = runHook('~/notes.txt', env, { file_path: '~/notes.txt', content: 'plain notes' }, 'Write', os.tmpdir());
       assert.strictEqual(elsewhere.code, 0, JSON.stringify(elsewhere));
     } finally {
-      fs.rmSync(home, { recursive: true, force: true });
+      removeDirWithRetries(home);
     }
   })) passed++; else failed++;
   if (test('blocks a denied command carried by a function body or a case arm', () => {

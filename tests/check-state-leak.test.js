@@ -13,6 +13,7 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { removeDirWithRetries } = require('./fixtures/remove-dir');
 
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'check-state-leak.js');
 
@@ -44,7 +45,7 @@ function tempDir(prefix) {
   return dir;
 }
 process.on('exit', () => {
-  for (const dir of TEMP_DIRS) fs.rmSync(dir, { recursive: true, force: true });
+  for (const dir of TEMP_DIRS) removeDirWithRetries(dir);
 });
 
 function makeRepo() {
@@ -173,7 +174,7 @@ run('a clean packaged tree keeps stdout empty so npm pack --json can parse its o
     assert.strictEqual(res.stdout, '', 'status lines must not reach stdout');
     assert.ok(res.stderr.includes('state-leak check: clean'), res.stderr);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeDirWithRetries(dir);
   }
 });
 
@@ -187,7 +188,7 @@ run('packaged-tree skips with a notice outside a git checkout', () => {
     assert.strictEqual(res.status, 0, res.stderr);
     assert.ok(res.stderr.includes('skipped (not a git checkout'), res.stderr);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeDirWithRetries(dir);
   }
 });
 

@@ -12,6 +12,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { installPreCommitHook, main, HOOK, PREVIOUS_NAME } = require('../../scripts/lib/git-pre-commit-install');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function test(name, fn) {
   try {
@@ -31,7 +32,7 @@ function withRepo(fn, { git = true } = {}) {
     if (git) fs.mkdirSync(path.join(root, '.git'));
     fn(root, path.join(root, '.git', 'hooks', 'pre-commit'));
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    removeDirWithRetries(root);
   }
 }
 

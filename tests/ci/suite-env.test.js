@@ -14,6 +14,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { suiteEnv } = require('../fixtures/suite-env');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 // Fixed git locations before a PATH lookup.
 const GIT_BIN = [
@@ -95,7 +96,7 @@ test('a commit under the suite environment starts no automatic maintenance', () 
       .map(event => event.argv.join(' '));
     assert.ok(!children.some(argv => /\bmaintenance\b/.test(argv)), `maintenance started: ${children.join(' | ')}`);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeDirWithRetries(dir);
   }
 });
 
