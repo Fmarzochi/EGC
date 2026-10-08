@@ -3,6 +3,7 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
+- The Guardian audit log is three modules: `audit-log.ts` keeps the writer, `audit-redact.ts` the redaction of keys, text and payloads, `audit-redact-shell.ts` the shell command-line reader, a literal move with no behavior change (#1781 by @UnforGBeast, first file of #1712).
 - The git calls of one judgement in the Bash hook and in the write hook share a budget of 15 seconds of git time, counted only while git runs, so a slow git on a loaded runner no longer makes a committed script a stranger (#1779).
 - Every schema in `schemas/` is validated against its data by `tests/spec/schemas.test.js` (repository manifests, the files the code writes, and the runtime validators of the install config and the state store), `runtime-map.schema.json` describes the file `discovery.js` writes, the two registry schemas nothing used are removed, and the spec index names what validates each schema (#1778 by @phaiffer, closes #1702).
 - The subsystem map and the runtime README describe main: rows for files that no longer exist are gone, `agent.yaml` and `src/llm/` are active, a Schemas table names what covers each schema, the runtime README names the three live files and the nine dormant modules, and a docs test keeps both pages tied to the tree (#1776 by @phaiffer, closes #1764).
