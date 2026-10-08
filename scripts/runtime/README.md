@@ -10,7 +10,8 @@ names a file that is not here.
 - `discovery.js` builds the topology cache `internal/registry/runtime-map.json`
   from the install manifests. `scripts/install-apply.js` calls it after an
   install; `internal/` is gitignored.
-- `session_bridge.py` is started by the `sessionstart:egc-session-bridge` hook
+- `session_bridge.py` is started by the `sessionstart:egc-session-bridge` and
+  `sessionend:egc-session-bridge` hooks of `hooks/hooks.json`
   (`scripts/hooks/egc-session-bridge.js`) with the plugin's Python.
 - `tracer.py` records the events `session_bridge.py` emits.
 
