@@ -1290,23 +1290,52 @@ function nestedSegmentsOf(file, depth, seen) {
   return { segments: nested, text };
 }
 
-// Segments of every script the command runs, following scripts that run
-// scripts; `blocked` names the reason when one of them cannot be inspected.
-const GIT_TIMEOUT_MS = 2000;
+// The git calls of one judgement share one budget, inside the 30 seconds
+// the hook runner gives the whole hook: a loaded runner that takes longer
+// than a fixed two seconds for one call (the Windows lane of 2026-10-08) is
+// no reason to judge a committed script as if it were written moments ago.
+// Once the budget is spent, the calls left are not made and the script is
+// judged in full, as a script outside a repository is.
+const GIT_BUDGET_MS = 15000;
+// The budget of the judgement under way: the git time it has left. Only the
+// time git itself takes is deducted, so the validator and the reads of the
+// hook never eat into it.
+let gitBudget = null;
+
+// Runs `work` with one git budget for every gitIn it makes, and ends the
+// budget after it. A budget opened inside another never has more than the
+// outer one has left, and what it spends is spent for the outer one too. A
+// call outside any budget gets the whole budget for itself.
+function withGitBudget(work, budgetMs = GIT_BUDGET_MS) {
+  const previous = gitBudget;
+  const inner = { left: previous === null ? budgetMs : Math.min(previous.left, budgetMs) };
+  const opened = inner.left;
+  gitBudget = inner;
+  try {
+    return work();
+  } finally {
+    if (previous !== null) previous.left -= opened - inner.left;
+    gitBudget = previous;
+  }
+}
 
 // git run to read, never to act: the variables that point it at another
 // repository are dropped and fsmonitor, the one command the repository's
 // config could have these subcommands start, is switched off.
 function gitIn(dir, args) {
+  const budget = gitBudget ?? { left: GIT_BUDGET_MS };
+  if (budget.left <= 0) return null;
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  const started = Date.now();
   const result = spawnSync('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...args], { // NOSONAR javascript:S4036 -- the user's own git knows their repositories; fixed argv, no shell
     cwd: dir,
     env,
     encoding: 'utf8',
-    timeout: GIT_TIMEOUT_MS,
+    timeout: budget.left,
     stdio: ['ignore', 'pipe', 'ignore'],
     windowsHide: true,
   });
+  budget.left -= Date.now() - started;
   return result.status === 0 ? result.stdout.trim() : null;
 }
 
@@ -2166,7 +2195,7 @@ function withoutVerdict(failure) {
 function run(inputOrRaw, options = {}) {
   if (options.truncated) return { exitCode: 2, stderr: OVER_LIMIT };
   try {
-    return judgeCommand(inputOrRaw);
+    return withGitBudget(() => judgeCommand(inputOrRaw));
   } catch (error) {
     if (error instanceof ProgramUnreadable) return { exitCode: 2, stderr: `EGC Guardian BLOCKED this command: ${error.message}.` };
     throw error;
@@ -2265,7 +2294,7 @@ function judgeCommand(inputOrRaw) {
   return { exitCode: 0 };
 }
 
-module.exports = { run, extractSegments, isAdvisory, bindingsOfSegments, gitIn, ProgramUnreadable };
+module.exports = { run, extractSegments, isAdvisory, bindingsOfSegments, gitIn, withGitBudget, ProgramUnreadable };
 
 if (require.main === module) {
   readHookInput(({ raw, truncated }) => {
