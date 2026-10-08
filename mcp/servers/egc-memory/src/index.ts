@@ -983,7 +983,7 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
             project_path: { type: "string", description: "Absolute path to the project root. Defaults to current working directory." },
             key: { type: "string", description: "Unique name for this transient entry, e.g. 'debug_flag' or 'active_config'." },
             value: { type: "string", description: "Value to store. Any string including JSON." },
-            ttl_seconds: { type: "number", description: "How long the entry lives in seconds (1-604800, default 86400s). Longer-lived data belongs in update_state, not here." }
+            ttl_seconds: { type: "number", minimum: 1, maximum: WORKING_MEMORY_MAX_TTL_SECONDS, description: "How long the entry lives in seconds (1-604800, default 86400s). Longer-lived data belongs in update_state, not here." }
           },
           required: ["key", "value"]
         }
