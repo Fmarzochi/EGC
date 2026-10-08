@@ -34,8 +34,8 @@ trap _rules_cleanup EXIT
 
 for i in "${!files[@]}"; do
   file="${files[$i]}"
-  rel_path="${file#"$HOME"/}"
-  rel_path="~/$rel_path"
+  rel_path="$file"
+  [[ "$file" == "${HOME%/}/"* ]] && rel_path="~${file#"${HOME%/}"}"
 
   # Extract H2 headings (## Title) into a JSON array via jq
   headings_json=$({ grep -E '^## ' "$file" 2>/dev/null || true; } | sed 's/^## //' | jq -R . | jq -s '.')

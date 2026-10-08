@@ -3,9 +3,9 @@
 # Usage: quick-diff.sh RESULTS_JSON [CWD_SKILLS_DIR]
 # Output: JSON array of changed/new files to stdout (empty [] if no changes)
 #
-# When CWD_SKILLS_DIR is omitted, defaults to the project skills folder
-# ($PWD/.agents/skills, or the tool's own) so the script always picks up
-# project-level skills without relying on the caller.
+# When CWD_SKILLS_DIR is omitted, defaults to the project skills folder:
+# $PWD/.agents/skills, or the first of the other project tool folders
+# (fixed order, not the tool the session runs inside) that has one.
 #
 # Environment:
 #   SKILL_STOCKTAKE_GLOBAL_DIR   Override the global skills folder of the EGC

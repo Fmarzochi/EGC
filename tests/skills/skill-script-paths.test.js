@@ -293,6 +293,23 @@ function runRulesDistillCases() {
     }
   }));
 
+  addOutcome(totals, tallied('scan-rules keeps the absolute path when EGC_DIR names a folder outside HOME', () => {
+    const outsideHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-outside-home-')));
+    const { home } = makeHome();
+    try {
+      const rulesDir = path.join(outsideHome, 'rules');
+      fs.mkdirSync(rulesDir, { recursive: true });
+      const ruleFile = path.join(rulesDir, 'other.md');
+      fs.writeFileSync(ruleFile, '# Other\n');
+      const output = parseJson(run(SCAN_RULES, [], { home, env: { CLAUDECODE: '1', EGC_DIR: outsideHome } }), 'scan-rules.sh');
+      assert.strictEqual(output.rules_dir, rulesDir);
+      assert.strictEqual(output.rules[0].path, ruleFile, `the path stays absolute, no tilde or double slash. Got: ${JSON.stringify(output.rules[0])}`);
+    } finally {
+      removeDirWithRetries(home);
+      removeDirWithRetries(outsideHome);
+    }
+  }));
+
   addOutcome(totals, tallied('scan-skills reads the global skills of the tool and the project skills under .agents', () => {
     const { home, project } = makeHome();
     try {
