@@ -1494,6 +1494,101 @@ function isGitControlPath(rest: string[], regularFile: boolean): boolean {
 // runs what they hold as it runs .git/hooks, so they are written as it is.
 const HOOK_DIRECTORY_NAMES = new Set(['.githooks', '.husky']);
 
+// The hook surfaces of the tools EGC installs into: the configuration a tool
+// reads its hooks from, and the directories EGC installs its hook scripts and
+// the libraries they load into. A tool runs what it finds there on its next
+// session without anyone reading it first, so they are written as .git/hooks
+// is: by the person and the installer, never by the agent. Reading them
+// stays free. Every pattern is rooted in a tool's own directory, in the home
+// or in a project, so a repository's own scripts/hooks or hooks/hooks.json
+// is a source tree and stays writable; the Cursor and Kiro files a
+// repository keeps for those tools are the one exception, since the tools
+// run them from there.
+const TOOL_HOOK_SURFACE_PATTERNS: RegExp[] = [
+  // Claude Code, in the home and in a project, and CodeBuddy and Qwen Code,
+  // whose project settings.json carries hooks of the same shape.
+  /(^|[\\/])\.claude[\\/]settings(\.local)?\.json$/,
+  /(^|[\\/])\.(codebuddy|qwen)[\\/]settings\.json$/,
+  // hooks.json: Codex, Antigravity (the shared config/, the CLI's own
+  // directory, and the hooks/ the retired Gemini CLI read), the project
+  // .agents/, Cursor, Copilot, Devin Desktop (the home directory, .windsurf
+  // and .devin, where Devin Local also reads hooks.v1.json), Trae and
+  // OpenHands (project and home).
+  /(^|[\\/])\.codex[\\/]hooks\.json$/,
+  /(^|[\\/])\.gemini[\\/](config|antigravity-cli|hooks)[\\/]hooks\.json$/,
+  /(^|[\\/])\.agents[\\/]hooks\.json$/,
+  /(^|[\\/])\.cursor[\\/]hooks\.json$/,
+  /(^|[\\/])\.copilot[\\/]hooks[\\/]hooks\.json$/,
+  /(^|[\\/])(\.codeium[\\/]windsurf|\.windsurf|\.devin)[\\/]hooks(\.v1)?\.json$/,
+  /(^|[\\/])\.trae[\\/]hooks\.json$/,
+  /(^|[\\/])\.openhands[\\/]hooks\.json$/,
+  // Devin Local's user config (~/.config/devin, %APPDATA%\devin) and its
+  // project override both carry PreToolUse hooks.
+  /(^|[\\/])(\.config|appdata[\\/]roaming)[\\/]devin[\\/]config\.json$/,
+  /(^|[\\/])\.devin[\\/]config\.local\.json$/,
+  // Kiro: the CLI reads hooks from each agent file, the IDE from its panel.
+  /(^|[\\/])\.kiro[\\/]agents[\\/][^\\/]+\.json$/,
+  /(^|[\\/])\.kiro[\\/]hooks([\\/]|$)/,
+  // Cline runs the files of .clinerules/hooks as its hooks.
+  /(^|[\\/])\.clinerules[\\/]hooks([\\/]|$)/,
+  // Junie reads ~/.junie/config.json; Crush reads a crush.json or .crush.json
+  // from the directory it runs in and from its config directory
+  // (~/.config/crush, $XDG_CONFIG_HOME/crush or $CRUSH_GLOBAL_CONFIG), so the
+  // file is known by its name wherever it is.
+  /(^|[\\/])\.junie[\\/]config\.json$/,
+  /(^|[\\/])\.?crush\.json$/,
+  // OpenCode and Amp load every file of the plugin directories EGC installs
+  // into (a project's own .opencode is a source tree, as the EGC repository's
+  // is); the Goose plugin EGC installs is a self-contained root of hooks and
+  // scripts.
+  /(^|[\\/])\.config[\\/]opencode[\\/]plugins?([\\/]|$)/,
+  /(^|[\\/])(\.config[\\/]amp|\.amp)[\\/]plugins([\\/]|$)/,
+  /(^|[\\/])\.agents[\\/]plugins[\\/]egc-guardian([\\/]|$)/,
+  // Cursor runs its hook scripts from .cursor/hooks.
+  /(^|[\\/])\.cursor[\\/]hooks([\\/]|$)/,
+];
+
+// The roots the installers copy the hook scripts and their libraries under:
+// a tool's own directory, named by one segment, or by two for the tools
+// that live under ~/.codeium or ~/.config.
+const TOOL_ROOT_NAMES = new Set([
+  '.claude', '.gemini', '.agents', '.codex', '.copilot', '.junie', '.kiro', '.amp', '.trae', '.cursor',
+  '.clinerules', '.windsurf', '.devin', '.codebuddy', '.qwen', '.openhands', '.kimi-code',
+]);
+const TOOL_ROOT_PAIRS = new Map<string, Set<string>>([
+  ['.codeium', new Set(['windsurf'])],
+  ['.config', new Set(['opencode', 'crush', 'amp', 'zed', 'devin'])],
+]);
+// Under such a root, the directories that hold what the hooks run.
+const INSTALLED_HOOK_DIRECTORIES: ReadonlyArray<readonly [string, string]> = [
+  ['scripts', 'hooks'], ['scripts', 'lib'], ['egc', 'hooks'], ['egc', 'lib'],
+];
+
+// Whether the path lies in a directory EGC installs hook scripts into, under
+// one of the tool roots above; a repository's own scripts/hooks has no such
+// root above it and is left alone.
+function isInstalledHookScriptPath(parts: string[]): boolean {
+  for (let i = 0; i < parts.length; i += 1) {
+    let next = -1;
+    if (TOOL_ROOT_NAMES.has(parts[i])) next = i + 1;
+    else if (TOOL_ROOT_PAIRS.get(parts[i])?.has(parts[i + 1] ?? '')) next = i + 2;
+    if (next < 0) continue;
+    if (INSTALLED_HOOK_DIRECTORIES.some(([first, second]) => parts[next] === first && parts[next + 1] === second)) return true;
+  }
+  return false;
+}
+
+function matchesToolHookSurface(candidate: string): boolean {
+  return TOOL_HOOK_SURFACE_PATTERNS.some(pattern => pattern.test(candidate)) || isInstalledHookScriptPath(candidate.split(/[\\/]/));
+}
+
+// Whether the path is a hook surface of a tool (see TOOL_HOOK_SURFACE_PATTERNS),
+// read the same way isProtectedPath reads a path.
+export function isToolHookSurface(p: string, baseDir: string = process.cwd()): boolean {
+  const normalizedP = resolveRealOrLexical(path.resolve(baseDir, expandHome(p.trim())));
+  return matchesToolHookSurface(foldCase(normalizedP));
+}
+
 // A git directory is one named `.git` or `<name>.git`: only there are its
 // control files protected from a write, whatever repository they belong to.
 // A path so named is one, or may become one, unless it is a regular file
@@ -1698,7 +1793,7 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
     }
   }
 
-  return isGitControlFile(candidate, isRegularFile(normalizedP)) || isConfiguredHook(normalizedP, baseDir);
+  return isGitControlFile(candidate, isRegularFile(normalizedP)) || isConfiguredHook(normalizedP, baseDir) || matchesToolHookSurface(candidate);
 }
 
 // Reading and writing carry different risk, and treating them alike is what
@@ -4812,10 +4907,15 @@ export function validateWrite(filepath: string, cwd?: string | null): Validation
       trust_level: 'BLOCKED',
     };
   }
-  if (isProtectedPath(resolveWriteTarget(filepath, cwd), writeBaseDir(cwd))) {
+  const target = resolveWriteTarget(filepath, cwd);
+  const baseDir = writeBaseDir(cwd);
+  if (isProtectedPath(target, baseDir)) {
+    const reason = isToolHookSurface(target, baseDir)
+      ? `Path '${filepath}' is a hook surface of a tool: the person or the installer writes it, the agent does not`
+      : `Path '${filepath}' is protected`;
     return {
       allowed: false,
-      reason: `Path '${filepath}' is protected`,
+      reason,
       trust_level: 'BLOCKED',
     };
   }
