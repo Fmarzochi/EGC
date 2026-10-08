@@ -1585,10 +1585,13 @@ function matchesToolHookSurface(candidate: string): boolean {
 }
 
 // Whether the path is a hook surface of a tool (see TOOL_HOOK_SURFACE_PATTERNS),
-// read the same way isProtectedPath reads a path.
+// judged by its name as well as by where it really is: a link inside
+// ~/.claude/scripts/hooks still names the file the tool runs, wherever the
+// link leads, and a ~/.claude that is itself a link elsewhere is still where
+// the tool reads its hooks.
 export function isToolHookSurface(p: string, baseDir: string = process.cwd()): boolean {
-  const normalizedP = resolveRealOrLexical(path.resolve(baseDir, expandHome(p.trim())));
-  return matchesToolHookSurface(foldCase(normalizedP));
+  const lexical = path.resolve(baseDir, expandHome(p.trim()));
+  return matchesToolHookSurface(foldCase(lexical)) || matchesToolHookSurface(foldCase(resolveRealOrLexical(lexical)));
 }
 
 // A git directory is one named `.git` or `<name>.git`: only there are its
@@ -1795,12 +1798,7 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
     }
   }
 
-  if (isGitControlFile(candidate, isRegularFile(normalizedP)) || isConfiguredHook(normalizedP, baseDir)) return true;
-  // A hook surface is judged by its name as well as by where it really is:
-  // a link inside ~/.claude/scripts/hooks still names the file the tool
-  // runs, wherever the link leads, and a ~/.claude that is itself a link
-  // elsewhere is still where the tool reads its hooks.
-  return matchesToolHookSurface(candidate) || matchesToolHookSurface(foldCase(path.resolve(baseDir, expanded)));
+  return isGitControlFile(candidate, isRegularFile(normalizedP)) || isConfiguredHook(normalizedP, baseDir) || isToolHookSurface(p, baseDir);
 }
 
 // Reading and writing carry different risk, and treating them alike is what

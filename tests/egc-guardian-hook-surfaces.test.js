@@ -169,20 +169,25 @@ test('a link does not take a hook surface out of the rule, in either direction',
   const hooksDir = at(home, '.claude', 'scripts', 'hooks');
   fs.mkdirSync(hooksDir, { recursive: true });
   fs.symlinkSync(elsewhere, at(hooksDir, 'dispatcher.js'));
-  assert.strictEqual(validateWrite(at(hooksDir, 'dispatcher.js'), project).allowed, false, 'a linked hook script must be refused');
+  const refusedAsSurface = (file, message) => {
+    const verdict = validateWrite(file, project);
+    assert.strictEqual(verdict.allowed, false, message);
+    assert.match(verdict.reason, /hook surface of a tool/, `${message}, with the hook surface named as the reason`);
+  };
+  refusedAsSurface(at(hooksDir, 'dispatcher.js'), 'a linked hook script must be refused');
   assert.strictEqual(validateWrite(elsewhere, project).allowed, true, 'the file the link leads to is not a hook surface by itself');
   // A tool directory that is itself a link: the tool reads its hooks there.
   const realConfig = at(home, 'real-cursor');
   fs.mkdirSync(realConfig, { recursive: true });
   fs.symlinkSync(realConfig, at(home, '.cursor'));
-  assert.strictEqual(validateWrite(at(home, '.cursor', 'hooks.json'), project).allowed, false, 'a hooks.json behind a linked tool directory must be refused');
+  refusedAsSurface(at(home, '.cursor', 'hooks.json'), 'a hooks.json behind a linked tool directory must be refused');
   // A link that leads into a hook surface is refused as the surface is.
   fs.symlinkSync(at(home, '.claude'), at(home, 'shortcut'));
-  assert.strictEqual(validateWrite(at(home, 'shortcut', 'settings.json'), project).allowed, false, 'a link into a tool directory must be refused');
+  refusedAsSurface(at(home, 'shortcut', 'settings.json'), 'a link into a tool directory must be refused');
 });
 
-test('a hook surface is read freely', () => {
-  for (const file of [HOOK_CONFIGURATIONS[0], HOOK_CONFIGURATIONS[7], HOOK_CONFIGURATIONS[25], HOOK_SCRIPT_DIRECTORIES[0]]) {
+test('every hook surface is read freely', () => {
+  for (const file of [...HOOK_CONFIGURATIONS, ...HOOK_SCRIPT_DIRECTORIES]) {
     for (const command of [`cat ${file}`, `head -n 5 ${file}`, `grep -n hooks ${file}`]) {
       const verdict = validateCommand(command, project);
       assert.strictEqual(verdict.allowed, true, `${command}: ${verdict.reason}`);
@@ -191,14 +196,15 @@ test('a hook surface is read freely', () => {
 });
 
 test('the shell does not write a hook surface either', () => {
-  const settings = HOOK_CONFIGURATIONS[0];
-  const script = HOOK_SCRIPT_DIRECTORIES[0];
+  const settings = at(home, '.claude', 'settings.json');
+  const script = at(home, '.claude', 'scripts', 'hooks', 'bash-hook-dispatcher.js');
   for (const command of [
     `echo x > ${settings}`,
     `cp /tmp/settings.json ${settings}`,
-    `tee ${HOOK_CONFIGURATIONS[3]} < /tmp/hooks.json`,
+    `tee ${at(home, '.codex', 'hooks.json')} < /tmp/hooks.json`,
     `cp /tmp/dispatcher.js ${script}`,
-    `sed -i s/a/b/ ${HOOK_CONFIGURATIONS[8]}`,
+    `sed -i s/a/b/ ${at(project, '.cursor', 'hooks.json')}`,
+    `cp /tmp/pre-commit.sh ${at(home, '.claude', 'hooks', 'pre-commit.sh')}`,
   ]) {
     const verdict = validateCommand(command, project);
     assert.ok(!verdict.allowed && !verdict.advisory, `${command} must be refused, got ${JSON.stringify(verdict)}`);
