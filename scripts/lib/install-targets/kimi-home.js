@@ -14,7 +14,7 @@ const {
 // [[hooks]] array in config.toml) is deferred: the TOML merge and the exact
 // matcher string for the Guardian and the Token Crusher still need machine
 // verification, so this adapter ships skills and MCP registration only, the
-// same way Warp and Qwen defer their hooks.
+// same way Warp defers its hooks.
 //
 // KIMI_CODE_HOME moves the data root. It is read through resolveRoot, which
 // createInstallTargetAdapter calls from every method that needs the root

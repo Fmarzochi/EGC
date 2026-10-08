@@ -228,6 +228,52 @@ function testOpenHandsRowDocumentsGlobalHooks() {
   console.log('  ✓ OpenHands row documents the global hooks file and its precedence');
 }
 
+function testProtocolVersionMatchesCode() {
+  const source = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'bootstrap-cognitive.js'), 'utf8');
+  const match = /const PROTOCOL_VERSION = (\d+);/.exec(source);
+  assert.ok(match, 'scripts/bootstrap-cognitive.js must declare PROTOCOL_VERSION');
+  const documented = [...loadDoc().matchAll(/Cognitive protocol v(\d+)/g)].map(found => found[1]);
+  assert.ok(documented.length > 0, 'the spec must name the cognitive protocol version');
+  assert.deepStrictEqual([...new Set(documented)], [match[1]], `the spec must name protocol v${match[1]}, the version bootstrap-cognitive.js writes`);
+  console.log(`  ✓ the spec names cognitive protocol v${match[1]}, as the code does`);
+}
+
+function testQwenRowDocumentsHooks() {
+  const { getInstallTargetAdapter } = require('../../scripts/lib/install-targets/registry');
+  const adapter = getInstallTargetAdapter('qwen');
+  const projectRoot = path.join(REPO_ROOT, 'tmp-qwen-plan');
+  const hookOperations = adapter.planOperations({ repoRoot: REPO_ROOT, projectRoot, homeDir: projectRoot })
+    .filter(operation => operation.hookMatcher);
+  assert.ok(hookOperations.length > 0, 'the Qwen adapter must plan its hook operations');
+  assert.ok(
+    hookOperations.every(operation => operation.destinationPath === path.join(projectRoot, '.qwen', 'settings.json')),
+    'the Qwen hooks must land in .qwen/settings.json'
+  );
+  assert.deepStrictEqual(
+    [...new Set(hookOperations.map(operation => operation.moduleId))].sort(),
+    ['egc-bash-guardian-hook', 'egc-crusher-hook'],
+    'the Qwen adapter must plan both the Guardian and the Token Crusher hooks'
+  );
+  const matchers = [...new Set(hookOperations.map(operation => operation.hookMatcher))];
+  const doc = loadDoc();
+  const row = doc.split(/\r?\n/).find(line => line.includes('**Qwen Code**'));
+  assert.ok(row, 'the harness table must have a Qwen Code row');
+  assert.ok(!/no hook wiring/.test(row), 'the Qwen Code row must not say there is no hook wiring');
+  assert.ok(row.includes('Guardian') && row.includes('Token Crusher'), 'the Qwen Code row must name both hooks');
+  assert.ok(!/Qwen defers?\b/.test(doc), 'the spec must not say elsewhere that Qwen defers its hooks');
+  const kimiSource = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'lib', 'install-targets', 'kimi-home.js'), 'utf8');
+  assert.ok(!/Qwen defers?\b/.test(kimiSource), 'kimi-home.js must not say Qwen defers its hooks');
+  assert.ok(row.includes('`.qwen/settings.json`'), 'the Qwen Code row must name .qwen/settings.json');
+  for (const matcher of matchers) {
+    assert.ok(row.includes(`\`${matcher}\``), `the Qwen Code row must name the ${matcher} matcher`);
+  }
+  assert.ok(
+    /\[[^\]]+\]\(https:\/\/qwenlm\.github\.io\/qwen-code-docs\/en\/users\/features\/hooks\/\)/.test(row),
+    'the Qwen Code row must link the official hooks page'
+  );
+  console.log('  ✓ Qwen Code row documents the hooks the adapter plans');
+}
+
 console.log('=== Testing docs/spec/integration-tiers.md ===\n');
 
 let passed = 0;
@@ -240,6 +286,8 @@ for (const test of [
   testClaudeCodeProtocolInjectionExists,
   testJunieRowDocumentsAgentsMd,
   testOpenHandsRowDocumentsGlobalHooks,
+  testProtocolVersionMatchesCode,
+  testQwenRowDocumentsHooks,
 ]) {
   try {
     test();
