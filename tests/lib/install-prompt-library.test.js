@@ -19,6 +19,7 @@ const {
 } = require('../../scripts/lib/install/prompt-library');
 const { getInstallTargetAdapter, listInstallTargetAdapters } = require('../../scripts/lib/install-targets/registry');
 const { CLI_TIMEOUT_MS, FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { runWithoutConfigHomeVariables } = require('../fixtures/harness-variables');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 
@@ -99,8 +100,8 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('a shared ~/.agents root does not detect Codex, Goose and OpenHands together', () => {
-    const cases = [['.agents', []], ['.codex', ['codex']], ['.config/goose', ['goose']], ['.openhands', ['openhands']]];
+  if (test('a shared ~/.agents root does not detect Codex, Goose, OpenHands and Crush together', () => {
+    const cases = [['.agents', []], ['.codex', ['codex']], ['.config/goose', ['goose']], ['.openhands', ['openhands']], ['.config/crush', ['crush']]];
     for (const [dir, expected] of cases) {
       const homeDir = makeHome([dir]);
       try {
@@ -280,8 +281,11 @@ function runTests() {
   }
 }
 
+// The temporary homes must decide what is detected: XDG_CONFIG_HOME (CI
+// runners export it) or CRUSH_GLOBAL_CONFIG would point Crush at a real
+// config directory instead, here and in the CLI subprocesses.
 if (require.main === module) {
-  runTests();
+  runWithoutConfigHomeVariables(runTests);
 }
 
 module.exports = { runTests };

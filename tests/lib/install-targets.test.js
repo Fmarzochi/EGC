@@ -15,6 +15,7 @@ const {
 const {
   createInstallTargetAdapter,
 } = require('../../scripts/lib/install-targets/helpers');
+const { runWithoutConfigHomeVariables } = require('../fixtures/harness-variables');
 
 function normalizedRelativePath(value) {
   return String(value || '').replace(/\\/g, '/');
@@ -686,6 +687,21 @@ function runTests() {
     assert.match(warning.message, /https:\/\/devin\.ai\/desktop/);
     assert.ok(!warning.message.includes('Windsurf'), 'the former product name is gone from the warning');
   }));
+
+  // #1491, decision 3: Crush installs only where Crush is present, so a home
+  // without its config directory gets the same warning --require-detected
+  // turns into a refusal.
+  tally(test('the missing-IDE warning names Crush and links to it when its config directory is absent', () => runWithoutConfigHomeVariables(() => {
+    const adapter = getInstallTargetAdapter('crush');
+    const homeDir = path.join(os.tmpdir(), 'egc-crush-home-that-does-not-exist');
+    const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' })
+      .find(issue => issue.code === 'ide-not-detected');
+
+    assert.ok(warning, 'a home without ~/.config/crush gets the ide-not-detected warning');
+    assert.match(warning.message, /^Crush does not appear to be installed/);
+    assert.match(warning.message, /https:\/\/github\.com\/charmbracelet\/crush/);
+    assert.ok(warning.message.includes(path.join(homeDir, '.config', 'crush')), 'the warning names the expected config directory');
+  })));
 
   // Devin Desktop loads .devin/skills/ when it exists and only falls back to
   // .windsurf/skills/ when it does not (never merged), so the skills
@@ -4448,7 +4464,7 @@ function runTests() {
 
   tally(test('identity paths .agents and AGENTS.md are foreign for targets that only take the agent files', () => {
     const { isForeignPlatformPath } = require('../../scripts/lib/install-targets/helpers');
-    for (const target of ['claude', 'windsurf', 'amp', 'copilot', 'junie', 'goose', 'openhands', 'opencode', 'qwen', 'cline', 'kiro']) {
+    for (const target of ['claude', 'windsurf', 'amp', 'copilot', 'junie', 'goose', 'openhands', 'opencode', 'qwen', 'cline', 'kiro', 'crush']) {
       assert.ok(isForeignPlatformPath('.agents', target), `.agents must not land on ${target}`);
       assert.ok(isForeignPlatformPath('AGENTS.md', target), `AGENTS.md must not land on ${target}`);
       assert.ok(!isForeignPlatformPath('agents', target), `agents/ must land on ${target}`);
@@ -4654,6 +4670,153 @@ function runTests() {
     } finally {
       if (previous === undefined) delete process.env.TRAE_ENV; else process.env.TRAE_ENV = previous;
     }
+  }));
+
+  tally(test('resolves crush adapter root and install-state path', () => runWithoutConfigHomeVariables(() => {
+    const adapter = getInstallTargetAdapter('crush');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'crush-home');
+    assert.strictEqual(adapter.target, 'crush');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.config', 'crush'));
+    assert.strictEqual(statePath, path.join(homeDir, '.config', 'crush', 'egc', 'crush-install-state.json'));
+  })));
+
+  tally(test('crush adapter respects CRUSH_GLOBAL_CONFIG and XDG_CONFIG_HOME the way Crush does', () => runWithoutConfigHomeVariables(() => {
+    const adapter = getInstallTargetAdapter('crush');
+    const homeDir = '/Users/example';
+    const savedLocalAppData = process.env.LOCALAPPDATA;
+    try {
+      // %LOCALAPPDATA% holds only Crush's data config: the global config
+      // directory stays ~/.config/crush on Windows too.
+      process.env.LOCALAPPDATA = path.join(homeDir, 'AppData', 'Local');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, '.config', 'crush'));
+
+      process.env.XDG_CONFIG_HOME = path.resolve('/custom/xdg');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(path.resolve('/custom/xdg'), 'crush'));
+
+      // A relative XDG_CONFIG_HOME is invalid under the XDG spec.
+      process.env.XDG_CONFIG_HOME = 'relative/xdg';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, '.config', 'crush'));
+
+      // Crush always treats the override as a directory, whatever its name.
+      process.env.CRUSH_GLOBAL_CONFIG = '/custom/path/crush.json';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.resolve('/custom/path/crush.json'));
+      assert.strictEqual(adapter.resolveCrushConfigPath({ homeDir }), path.join(path.resolve('/custom/path/crush.json'), 'crush.json'));
+
+      process.env.CRUSH_GLOBAL_CONFIG = '/custom/dir';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.resolve('/custom/dir'));
+
+      // Crush opens a relative override from its working directory, so the
+      // install resolves it against the current one, not the home.
+      process.env.CRUSH_GLOBAL_CONFIG = 'relative-crush';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.resolve(process.cwd(), 'relative-crush'));
+      assert.ok(path.isAbsolute(adapter.resolveCrushConfigPath({ homeDir })), 'crush.json path is absolute');
+    } finally {
+      if (savedLocalAppData === undefined) delete process.env.LOCALAPPDATA; else process.env.LOCALAPPDATA = savedLocalAppData;
+    }
+  })));
+
+  tally(test('crush adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('crush');
+    const byId = getInstallTargetAdapter('crush-home');
+
+    assert.strictEqual(byTarget.id, 'crush-home');
+    assert.strictEqual(byId.id, 'crush-home');
+    assert.ok(byTarget.supports('crush'));
+    assert.ok(byTarget.supports('crush-home'));
+  }));
+
+  tally(test('crush adapter resolves managed roots including both config dir and ~/.agents', () => runWithoutConfigHomeVariables(() => {
+    const adapter = getInstallTargetAdapter('crush');
+    const homeDir = '/Users/example';
+    const managedRoots = adapter.resolveManagedRoots({ homeDir });
+    assert.deepStrictEqual(managedRoots, [
+      path.join(homeDir, '.config', 'crush'),
+      path.join(homeDir, '.agents'),
+    ]);
+  })));
+
+  tally(test('crush adapter strips category from skill paths and installs flat under ~/.agents/skills/', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'crush',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.strictEqual(plan.adapter.id, 'crush-home');
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.agents', 'skills', 'tdd-workflow')
+      )),
+      'Should strip category and install skill flat under ~/.agents/skills/'
+    );
+  }));
+
+  tally(test('crush adapter plans agents, commands, and rules under ~/.config/crush/', () => runWithoutConfigHomeVariables(() => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'crush',
+      repoRoot,
+      homeDir,
+      modules: [
+        { id: 'agents-core', paths: ['agents'] },
+        { id: 'commands-core', paths: ['commands'] },
+        { id: 'rules-core', paths: ['rules'] },
+      ],
+    });
+
+    const agentsDir = path.join(homeDir, '.config', 'crush', 'agents');
+    const commandsDir = path.join(homeDir, '.config', 'crush', 'commands');
+    const rulesDir = path.join(homeDir, '.config', 'crush', 'rules');
+
+    assert.ok(
+      plan.operations.some(op => op.destinationPath && (op.destinationPath === agentsDir || op.destinationPath.startsWith(agentsDir + path.sep))),
+      'Agents should land under ~/.config/crush/agents'
+    );
+    assert.ok(
+      plan.operations.some(op => op.destinationPath && (op.destinationPath === commandsDir || op.destinationPath.startsWith(commandsDir + path.sep))),
+      'Commands should land under ~/.config/crush/commands'
+    );
+    assert.ok(
+      plan.operations.some(op => op.destinationPath && (op.destinationPath === rulesDir || op.destinationPath.startsWith(rulesDir + path.sep))),
+      'Rules should land under ~/.config/crush/rules'
+    );
+  })));
+
+  tally(test('crush adapter plans Guardian and Crusher hooks in crush.json', () => runWithoutConfigHomeVariables(() => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'crush',
+      repoRoot,
+      homeDir,
+      modules: [],
+    });
+
+    const mergeOps = plan.operations.filter(op => op.kind === 'merge-claude-settings-hooks');
+    assert.strictEqual(mergeOps.length, 2, 'Should plan both Guardian and Crusher hook merge operations');
+    const crushJsonPath = path.join(homeDir, '.config', 'crush', 'crush.json');
+    assert.ok(mergeOps.every(op => op.destinationPath === crushJsonPath), 'Hooks should target crush.json');
+    assert.ok(mergeOps.some(op => op.hookMatcher === '^(bash|edit|write|multiedit)$'), 'Guardian hook matcher');
+    assert.ok(mergeOps.some(op => op.hookMatcher === '^bash$'), 'Crusher hook matcher');
+  })));
+
+  tally(test('crush adapter is included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const targets = adapters.map(a => a.target);
+    assert.ok(targets.includes('crush'), 'Should include crush target');
   }));
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

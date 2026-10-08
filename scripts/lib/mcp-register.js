@@ -27,6 +27,7 @@ const { isDeepStrictEqual } = require('node:util');
 const { commandExists } = require('./utils');
 const { isInsideReal, realizePath } = require('./path-safety');
 const { replaceFileWith } = require('./install/preserving-write');
+const { resolveCrushConfigDir, resolveCrushConfigPath } = require('./install-targets/crush-home');
 
 let TOML = null;
 try {
@@ -478,6 +479,13 @@ function buildMcpRegistrationTargets(homeDir) {
       allowedRoot: resolveKimiCodeHome(homeDir),
       format: 'json',
     },
+    {
+      name: 'Crush',
+      path: resolveCrushConfigPath(homeDir),
+      gate: () => fs.existsSync(path.dirname(resolveCrushConfigPath(homeDir))) || commandExists('crush'),
+      allowedRoot: process.env.CRUSH_GLOBAL_CONFIG ? path.dirname(resolveCrushConfigPath(homeDir)) : undefined,
+      format: 'crush-mcp',
+    },
   ];
 }
 
@@ -899,12 +907,44 @@ function retireStaleLegacySibling(targetPath) {
   return true;
 }
 
+/**
+ * Merges egc-guardian / egc-memory into a Crush config under the `mcp`
+ * key, in Crush's own shape ({ type: "stdio", command: "node", args: [...] }),
+ * leaving every other key as it was. Returns true if the file was written.
+ */
+function registerCrushMcp(targetPath, bins) {
+  const { guardianBin, memoryBin } = bins;
+  const existingContent = readFileIfExists(targetPath);
+  const obj = parseJsonObject(targetPath, existingContent, 'Crush config');
+  if (obj.mcp === null || obj.mcp === undefined) {
+    obj.mcp = {};
+  } else if (typeof obj.mcp !== 'object' || Array.isArray(obj.mcp)) {
+    throw new TypeError(`existing file at ${targetPath} has an invalid mcp object - left untouched`);
+  }
+  let changed = false;
+  const incoming = {
+    'egc-guardian': { type: 'stdio', command: 'node', args: [guardianBin] },
+    'egc-memory': { type: 'stdio', command: 'node', args: [memoryBin] },
+  };
+  for (const [name, entry] of Object.entries(incoming)) {
+    if (!Object.hasOwn(obj.mcp, name)) {
+      obj.mcp[name] = entry;
+      changed = true;
+    }
+  }
+  if (changed) {
+    writeConfig(targetPath, JSON.stringify(obj, null, 2) + '\n');
+  }
+  return changed;
+}
+
 const FORMAT_HANDLERS = {
   'json': registerJson,
   'toml': registerToml,
   'zed-context-servers': registerZedContextServers,
   'opencode-mcp': registerOpenCodeMcp,
   'claude-cli': registerClaudeCli,
+  'crush-mcp': registerCrushMcp,
 };
 
 function registerTarget(target, bins, roots, onRegister, onWarn, onUnchanged) {
@@ -962,6 +1002,9 @@ module.exports = {
   openCodeConfigPath,
   registerOpenCodeInstructions,
   registerClaudeCli,
+  registerCrushMcp,
+  resolveCrushConfigDir,
+  resolveCrushConfigPath,
   quoteForCmdShell,
   registerMcpServers,
 };

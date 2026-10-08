@@ -189,6 +189,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   copilot:      { name: 'VS Code Copilot',    url: 'https://code.visualstudio.com' },
   zed:          { name: 'Zed',               url: 'https://zed.dev' },
   kimi:         { name: 'Kimi Code CLI',     url: 'https://github.com/MoonshotAI/kimi-code' },
+  crush:        { name: 'Crush',             url: 'https://github.com/charmbracelet/crush' },
 });
 
 // An adapter that picks its root by policy (config.resolveRoot) is detected
@@ -362,17 +363,20 @@ function createFlatRuleOperations(options) {
  * hook-operation append around it - so it lives here instead of being
  * copied into each adapter file.
  */
-function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningInput, targetRoot) {
+function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningInput, targetRoot, destSkillsDir = null) {
   const normalizedPath = normalizeRelativePath(sourceRelativePath);
 
   if (normalizedPath.startsWith('skills/')) {
     const parts = normalizedPath.slice('skills/'.length).split('/');
     const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
+    const destinationPath = destSkillsDir
+      ? path.join(destSkillsDir, flatRemainder)
+      : path.join(targetRoot, 'skills', flatRemainder);
     return createRemappedOperation(
       adapter,
       moduleId,
       sourceRelativePath,
-      path.join(targetRoot, 'skills', flatRemainder),
+      destinationPath,
       { strategy: 'preserve-relative-path' }
     );
   }

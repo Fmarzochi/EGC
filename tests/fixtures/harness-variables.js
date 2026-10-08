@@ -28,19 +28,27 @@ const HARNESS_VARIABLES = Object.freeze([
   'TRAE_ENV',
 ]);
 
-// A copy of `env` without the harness variables, for a subprocess.
-function withoutHarnessVariables(env) {
+// The variables that move a tool's config directory out of the home a test
+// passes: Crush reads CRUSH_GLOBAL_CONFIG, then XDG_CONFIG_HOME, before the
+// home (scripts/lib/install-targets/crush-home.js). CI runners on Linux
+// export XDG_CONFIG_HOME, so a test that installs into a temporary home
+// would otherwise write into the runner's real config directory, and every
+// later test would find the tool there. tests/run-all.js clears them too.
+const CONFIG_HOME_VARIABLES = Object.freeze([
+  'CRUSH_GLOBAL_CONFIG',
+  'XDG_CONFIG_HOME',
+]);
+
+function without(names, env) {
   const copy = { ...env };
-  for (const name of HARNESS_VARIABLES) delete copy[name];
+  for (const name of names) delete copy[name];
   return copy;
 }
 
-// Runs `fn` with the harness variables removed from process.env, then puts
-// back exactly what was there.
-function runWithoutHarnessVariables(fn) {
-  const saved = new Map(HARNESS_VARIABLES.map(name => [name, process.env[name]]));
+function runWithout(names, fn) {
+  const saved = new Map(names.map(name => [name, process.env[name]]));
   try {
-    for (const name of HARNESS_VARIABLES) delete process.env[name];
+    for (const name of names) delete process.env[name];
     return fn();
   } finally {
     for (const [name, value] of saved) {
@@ -49,4 +57,33 @@ function runWithoutHarnessVariables(fn) {
   }
 }
 
-module.exports = { HARNESS_VARIABLES, withoutHarnessVariables, runWithoutHarnessVariables };
+// A copy of `env` without the harness variables, for a subprocess.
+function withoutHarnessVariables(env) {
+  return without(HARNESS_VARIABLES, env);
+}
+
+// Runs `fn` with the harness variables removed from process.env, then puts
+// back exactly what was there.
+function runWithoutHarnessVariables(fn) {
+  return runWithout(HARNESS_VARIABLES, fn);
+}
+
+// A copy of `env` without the config-home variables, for a subprocess.
+function withoutConfigHomeVariables(env) {
+  return without(CONFIG_HOME_VARIABLES, env);
+}
+
+// Runs `fn` with the config-home variables removed from process.env, then
+// puts back exactly what was there.
+function runWithoutConfigHomeVariables(fn) {
+  return runWithout(CONFIG_HOME_VARIABLES, fn);
+}
+
+module.exports = {
+  HARNESS_VARIABLES,
+  CONFIG_HOME_VARIABLES,
+  withoutHarnessVariables,
+  runWithoutHarnessVariables,
+  withoutConfigHomeVariables,
+  runWithoutConfigHomeVariables,
+};
