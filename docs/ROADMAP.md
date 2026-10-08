@@ -3,6 +3,8 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
+- The Guardian protects the hook surfaces of the tools the way it protects `.git/hooks`: the configuration each tool reads its hooks from and the directories EGC installs its hook scripts into are written by the person and the installer, refused to the agent through the tools and the shell, judged by name and by real location, and read freely (#1775).
+- The OpenHands row of the integration tiers documents the global `~/.openhands/hooks.json`, read only when the project has no hooks file, and that the two never merge, with the install comments aligned and a spec test (#1756 by @phaiffer, closes #1656).
 - The session-end hook gives its two git calls one shared budget of 15 seconds, inside the budget of the hook runner, and reports on stderr why the commit list of the session header was skipped, with the line git wrote and never the command line (#1772).
 - The js-yaml override of the root manifest follows the direct dependency (`$js-yaml` in `overrides` and `pnpm.overrides`), so the root Dependabot job runs again instead of failing on an override conflict (#1771).
 - A 21-file sweep moves the cleanup of git-repository tests to the shared retrying fixture, after the two files of #1765 (#1768).
