@@ -503,9 +503,9 @@
     {
       "kind": "skill",
       "name": "cost-tracking",
-      "description": "Track and report your AI coding tool's token usage, spending, and budgets from a local cost-tracking database. Use when the user asks about costs, spending, usage, tokens, budgets, or cost breakdowns by project, tool, session, or date.",
+      "description": "Report estimated cost and token usage from metrics/costs.jsonl, and the agent's Bash command history from cost-tracker.log, both in the EGC directory. Use when the user asks about costs, spending, tokens, usage, a breakdown by session, model or date, or which shell commands ran.",
       "source": "skills/devops/cost-tracking/SKILL.md",
-      "triggers": "The user asks \"how much have I spent?\", \"what did this session cost?\", or \"what is my token usage?\" The user mentions budgets, spending limits, overruns, or cost controls. The user wants a cost breakd"
+      "triggers": "Costs, spending, token usage, or what a session cost. Which shell commands the agent ran, or how many. A breakdown by session, model or date, or today against previous days."
     },
     {
       "kind": "skill",
