@@ -261,6 +261,8 @@ function testQwenRowDocumentsHooks() {
   assert.ok(!/no hook wiring/.test(row), 'the Qwen Code row must not say there is no hook wiring');
   assert.ok(row.includes('Guardian') && row.includes('Token Crusher'), 'the Qwen Code row must name both hooks');
   assert.ok(!/Qwen defers?\b/.test(doc), 'the spec must not say elsewhere that Qwen defers its hooks');
+  const kimiSource = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'lib', 'install-targets', 'kimi-home.js'), 'utf8');
+  assert.ok(!/Qwen defers?\b/.test(kimiSource), 'kimi-home.js must not say Qwen defers its hooks');
   assert.ok(row.includes('`.qwen/settings.json`'), 'the Qwen Code row must name .qwen/settings.json');
   for (const matcher of matchers) {
     assert.ok(row.includes(`\`${matcher}\``), `the Qwen Code row must name the ${matcher} matcher`);
