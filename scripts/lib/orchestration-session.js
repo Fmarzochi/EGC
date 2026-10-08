@@ -265,10 +265,20 @@ function resolveSnapshotTarget(targetPath, cwd = process.cwd()) {
 
   return {
     sessionName: targetPath,
-    coordinationDir: path.join(cwd, '.gemini', 'orchestration', targetPath),
+    coordinationDir: resolveSessionCoordinationDir(targetPath, cwd),
     repoRoot: cwd,
     targetType: 'session'
   };
+}
+
+// A session named on the command line lives under the root the orchestrator
+// writes (.orchestration, or EGC_ARTIFACTS_DIR when it is set). A session
+// written before that root moved out of the fixed .gemini is still found
+// where it is.
+function resolveSessionCoordinationDir(sessionName, cwd = process.cwd()) {
+  const current = path.resolve(cwd, process.env.EGC_ARTIFACTS_DIR || '.orchestration', sessionName);
+  const legacy = path.resolve(cwd, '.gemini', 'orchestration', sessionName);
+  return !fs.existsSync(current) && fs.existsSync(legacy) ? legacy : current;
 }
 
 function collectSessionSnapshot(targetPath, cwd = process.cwd()) {
@@ -296,5 +306,6 @@ module.exports = {
   parseWorkerHandoff,
   parseWorkerStatus,
   parseWorkerTask,
+  resolveSessionCoordinationDir,
   resolveSnapshotTarget
 };

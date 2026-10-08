@@ -966,5 +966,43 @@ test('persistence only falls back when the state-store module is missing', () =>
   }, /state-store bootstrap failed/);
 });
 
+test('a session name resolves to the .orchestration folder the orchestrator writes, and an old .gemini/orchestration folder is still found', () => {
+  const { resolveSnapshotTarget } = require('../../scripts/lib/orchestration-session');
+  const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-session-name-'));
+  const previousArtifactsDir = process.env.EGC_ARTIFACTS_DIR;
+  delete process.env.EGC_ARTIFACTS_DIR;
+
+  try {
+    const adapter = createDmuxTmuxAdapter({ loadStateStoreImpl: () => null });
+    assert.strictEqual(adapter.canOpen('fresh-session', { cwd: repoRoot }), false, 'a name nobody wrote is not a session');
+
+    fs.mkdirSync(path.join(repoRoot, '.orchestration', 'fresh-session'), { recursive: true });
+    assert.strictEqual(adapter.canOpen('fresh-session', { cwd: repoRoot }), true);
+    assert.strictEqual(
+      resolveSnapshotTarget('fresh-session', repoRoot).coordinationDir,
+      path.join(repoRoot, '.orchestration', 'fresh-session')
+    );
+
+    fs.mkdirSync(path.join(repoRoot, '.gemini', 'orchestration', 'old-session'), { recursive: true });
+    assert.strictEqual(adapter.canOpen('old-session', { cwd: repoRoot }), true, 'a session written before the move is still found');
+    assert.strictEqual(
+      resolveSnapshotTarget('old-session', repoRoot).coordinationDir,
+      path.join(repoRoot, '.gemini', 'orchestration', 'old-session')
+    );
+
+    process.env.EGC_ARTIFACTS_DIR = 'artifacts';
+    fs.mkdirSync(path.join(repoRoot, 'artifacts', 'env-session'), { recursive: true });
+    assert.strictEqual(adapter.canOpen('env-session', { cwd: repoRoot }), true, 'EGC_ARTIFACTS_DIR moves the root as it does for the orchestrator');
+    assert.strictEqual(
+      resolveSnapshotTarget('env-session', repoRoot).coordinationDir,
+      path.join(repoRoot, 'artifacts', 'env-session')
+    );
+  } finally {
+    if (typeof previousArtifactsDir === 'string') process.env.EGC_ARTIFACTS_DIR = previousArtifactsDir;
+    else delete process.env.EGC_ARTIFACTS_DIR;
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  }
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

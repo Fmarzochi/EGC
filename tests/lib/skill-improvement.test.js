@@ -64,7 +64,39 @@ test('observation layer writes and reads structured skill outcomes', () => {
     assert.strictEqual(records[0].skill.id, 'e2e-testing');
     assert.strictEqual(records[0].outcome.success, false);
     assert.strictEqual(records[0].outcome.error, 'playwright timeout');
-    assert.strictEqual(getSkillObservationsPath({ projectRoot }), path.join(projectRoot, '.gemini', 'egc', 'skills', 'observations.jsonl'));
+    assert.strictEqual(getSkillObservationsPath({ projectRoot }), path.join(projectRoot, '.egc', 'skills', 'observations.jsonl'));
+  } finally {
+    cleanup(projectRoot);
+  }
+});
+
+test('observations recorded under the old .gemini/egc/skills of a project are still read, before the current ones', () => {
+  const projectRoot = makeProjectRoot('egc-skill-observe-legacy-');
+
+  try {
+    const legacyDir = path.join(projectRoot, '.gemini', 'egc', 'skills');
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, 'observations.jsonl'), JSON.stringify({
+      schemaVersion: 'egc.skill-observation.v1',
+      observationId: 'obs-legacy',
+      timestamp: '2026-09-01T00:00:00.000Z',
+      task: 'Recorded before the move',
+      skill: { id: 'e2e-testing', path: 'skills/testing/e2e-testing/SKILL.md' },
+      outcome: { success: true, status: 'success', error: null, feedback: null },
+      run: { variant: 'baseline', amendmentId: null, sessionId: 'sess-legacy' }
+    }) + '\n');
+
+    appendSkillObservation(createSkillObservation({
+      task: 'Recorded after the move',
+      skill: { id: 'e2e-testing', path: 'skills/testing/e2e-testing/SKILL.md' },
+      success: true,
+      sessionId: 'sess-current'
+    }), { projectRoot });
+
+    const records = readSkillObservations({ projectRoot });
+    assert.deepStrictEqual(records.map(record => record.task), ['Recorded before the move', 'Recorded after the move']);
+    assert.ok(fs.existsSync(path.join(projectRoot, '.egc', 'skills', 'observations.jsonl')), 'the new observation lands in .egc/skills');
+    assert.strictEqual(fs.readFileSync(path.join(legacyDir, 'observations.jsonl'), 'utf8').split('\n').filter(Boolean).length, 1, 'the old file is read, never written');
   } finally {
     cleanup(projectRoot);
   }

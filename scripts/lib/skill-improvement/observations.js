@@ -10,12 +10,20 @@ function resolveProjectRoot(options = {}) {
   return path.resolve(options.projectRoot || options.cwd || process.cwd());
 }
 
+// The telemetry of a project lives in its .egc folder, the tool-neutral
+// home of what EGC writes next to the code.
 function getSkillTelemetryRoot(options = {}) {
-  return path.join(resolveProjectRoot(options), '.gemini', 'egc', 'skills');
+  return path.join(resolveProjectRoot(options), '.egc', 'skills');
 }
 
 function getSkillObservationsPath(options = {}) {
   return path.join(getSkillTelemetryRoot(options), 'observations.jsonl');
+}
+
+// Observations recorded before the folder moved out of the fixed .gemini
+// are read from there and never written again.
+function getLegacySkillObservationsPath(options = {}) {
+  return path.join(resolveProjectRoot(options), '.gemini', 'egc', 'skills', 'observations.jsonl');
 }
 
 function ensureString(value, label) {
@@ -78,8 +86,7 @@ function appendSkillObservation(observation, options = {}) {
   return outputPath;
 }
 
-function readSkillObservations(options = {}) {
-  const observationPath = path.resolve(options.observationsPath || getSkillObservationsPath(options));
+function readObservationFile(observationPath) {
   if (!fs.existsSync(observationPath)) {
     return [];
   }
@@ -95,6 +102,17 @@ function readSkillObservations(options = {}) {
       }
     })
     .filter(record => record?.schemaVersion === OBSERVATION_SCHEMA_VERSION);
+}
+
+function readSkillObservations(options = {}) {
+  if (options.observationsPath) {
+    return readObservationFile(path.resolve(options.observationsPath));
+  }
+
+  return [
+    ...readObservationFile(getLegacySkillObservationsPath(options)),
+    ...readObservationFile(getSkillObservationsPath(options))
+  ];
 }
 
 module.exports = {

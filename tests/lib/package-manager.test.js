@@ -238,6 +238,55 @@ function runTests() {
     }
   }));
 
+  tally(test('EGC_PACKAGE_MANAGER wins over the old GEMINI_PACKAGE_MANAGER, which is still honored alone', () => {
+    const originalEgc = process.env.EGC_PACKAGE_MANAGER;
+    const originalGemini = process.env.GEMINI_PACKAGE_MANAGER;
+    try {
+      process.env.EGC_PACKAGE_MANAGER = 'pnpm';
+      process.env.GEMINI_PACKAGE_MANAGER = 'yarn';
+      assert.strictEqual(pm.getPackageManager().name, 'pnpm');
+      delete process.env.EGC_PACKAGE_MANAGER;
+      assert.strictEqual(pm.getPackageManager().name, 'yarn');
+    } finally {
+      for (const [name, value] of [['EGC_PACKAGE_MANAGER', originalEgc], ['GEMINI_PACKAGE_MANAGER', originalGemini]]) {
+        if (value !== undefined) process.env[name] = value;
+        else delete process.env[name];
+      }
+    }
+  }));
+
+  tally(test('the project preference lives in .egc/package-manager.json, and an old .gemini/package-manager.json is still read', () => {
+    const originalEgc = process.env.EGC_PACKAGE_MANAGER;
+    const originalGemini = process.env.GEMINI_PACKAGE_MANAGER;
+    delete process.env.EGC_PACKAGE_MANAGER;
+    delete process.env.GEMINI_PACKAGE_MANAGER;
+    const testDir = createTestDir();
+    try {
+      pm.setProjectPackageManager('yarn', testDir);
+      const written = JSON.parse(fs.readFileSync(path.join(testDir, '.egc', 'package-manager.json'), 'utf8'));
+      assert.strictEqual(written.packageManager, 'yarn');
+      assert.ok(!fs.existsSync(path.join(testDir, '.gemini')), 'nothing is written under .gemini');
+      assert.strictEqual(pm.getPackageManager({ projectDir: testDir }).source, 'project-config');
+
+      const legacyDir = createTestDir();
+      try {
+        fs.mkdirSync(path.join(legacyDir, '.gemini'), { recursive: true });
+        fs.writeFileSync(path.join(legacyDir, '.gemini', 'package-manager.json'), JSON.stringify({ packageManager: 'pnpm' }));
+        const detected = pm.getPackageManager({ projectDir: legacyDir });
+        assert.strictEqual(detected.name, 'pnpm');
+        assert.strictEqual(detected.source, 'project-config');
+      } finally {
+        cleanupTestDir(legacyDir);
+      }
+    } finally {
+      cleanupTestDir(testDir);
+      for (const [name, value] of [['EGC_PACKAGE_MANAGER', originalEgc], ['GEMINI_PACKAGE_MANAGER', originalGemini]]) {
+        if (value !== undefined) process.env[name] = value;
+        else delete process.env[name];
+      }
+    }
+  }));
+
   tally(test('detects from lock file in project', () => {
     const originalEnv = process.env.GEMINI_PACKAGE_MANAGER;
     delete process.env.GEMINI_PACKAGE_MANAGER;
@@ -348,7 +397,8 @@ function runTests() {
   tally(test('returns informative prompt', () => {
     const prompt = pm.getSelectionPrompt();
     assert.ok(prompt.includes('Supported package managers'), 'Should list supported managers');
-    assert.ok(prompt.includes('GEMINI_PACKAGE_MANAGER'), 'Should mention env var');
+    assert.ok(prompt.includes('EGC_PACKAGE_MANAGER'), 'Should mention env var');
+    assert.ok(!prompt.includes('.gemini'), 'the prompt points at the EGC directory, not at a fixed ~/.gemini');
     assert.ok(prompt.includes('lock file'), 'Should mention lock file option');
   }));
 
@@ -361,7 +411,7 @@ function runTests() {
       const result = pm.setProjectPackageManager('pnpm', testDir);
       assert.strictEqual(result.packageManager, 'pnpm');
       assert.ok(result.setAt, 'Should have setAt timestamp');
-      const configPath = path.join(testDir, '.gemini', 'package-manager.json');
+      const configPath = path.join(testDir, '.egc', 'package-manager.json');
       assert.ok(fs.existsSync(configPath), 'Config file should exist');
       const saved = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       assert.strictEqual(saved.packageManager, 'pnpm');
@@ -1027,14 +1077,14 @@ function runTests() {
   // ── Round 31: setProjectPackageManager write verification ──
   console.log('\nsetProjectPackageManager (write verification, Round 31):');
 
-  tally(test('setProjectPackageManager creates .gemini directory if missing', () => {
+  tally(test('setProjectPackageManager creates the .egc directory if missing', () => {
     const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pm-mkdir-'));
     try {
-      const claudeDir = path.join(testDir, '.gemini');
-      assert.ok(!fs.existsSync(claudeDir), '.gemini should not pre-exist');
+      const egcDir = path.join(testDir, '.egc');
+      assert.ok(!fs.existsSync(egcDir), '.egc should not pre-exist');
       pm.setProjectPackageManager('npm', testDir);
-      assert.ok(fs.existsSync(claudeDir), '.gemini should be created');
-      const configPath = path.join(claudeDir, 'package-manager.json');
+      assert.ok(fs.existsSync(egcDir), '.egc should be created');
+      const configPath = path.join(egcDir, 'package-manager.json');
       assert.ok(fs.existsSync(configPath), 'Config file should be created');
     } finally {
       fs.rmSync(testDir, { recursive: true, force: true });
@@ -1316,9 +1366,9 @@ function runTests() {
       return;
     }
     const isoProject = path.join(os.tmpdir(), `egc-pm-proj-r72-${Date.now()}`);
-    const claudeDir = path.join(isoProject, '.gemini');
+    const claudeDir = path.join(isoProject, '.egc');
     fs.mkdirSync(claudeDir, { recursive: true });
-    // Make .gemini directory read-only: can't create new files
+    // Make the .egc directory read-only: can't create new files
     fs.chmodSync(claudeDir, 0o555);
     try {
       assert.throws(() => {

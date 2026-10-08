@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { collectSessionSnapshot } = require('../orchestration-session');
+const { collectSessionSnapshot, resolveSessionCoordinationDir } = require('../orchestration-session');
 const { normalizeDmuxSnapshot, persistCanonicalSnapshot } = require('./canonical-session');
 
 function isPlanFileTarget(target, cwd) {
@@ -22,7 +22,7 @@ function isSessionNameTarget(target, cwd) {
     return false;
   }
 
-  const coordinationDir = path.resolve(cwd, '.gemini', 'orchestration', target);
+  const coordinationDir = resolveSessionCoordinationDir(target, cwd);
   return fs.existsSync(coordinationDir) && fs.statSync(coordinationDir).isDirectory();
 }
 

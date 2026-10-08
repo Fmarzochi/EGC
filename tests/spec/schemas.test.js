@@ -97,7 +97,7 @@ const CASES = {
   }),
   'package-manager.schema.json': () => withTempDir(dir => {
     setProjectPackageManager('npm', dir);
-    assertValid('package-manager.schema.json', readJson(path.join(dir, '.gemini', 'package-manager.json')), 'the package-manager.json package-manager.js writes');
+    assertValid('package-manager.schema.json', readJson(path.join(dir, '.egc', 'package-manager.json')), 'the package-manager.json package-manager.js writes');
   }),
   'install-state.schema.json': () => {
     const state = createInstallState({

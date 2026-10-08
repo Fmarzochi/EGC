@@ -4,21 +4,30 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { appendFile } = require('../utils');
+const { appendFile, resolveEGCDir } = require('../utils');
 
 const VALID_OUTCOMES = new Set(['success', 'failure', 'partial']);
 const VALID_FEEDBACK = new Set(['accepted', 'corrected', 'rejected']);
+const RUNS_FILE_SEGMENTS = ['state', 'skill-runs.jsonl'];
 
 function resolveHomeDir(homeDir) {
   return homeDir ? path.resolve(homeDir) : os.homedir();
 }
 
+// The runs file lives in the EGC directory of the home, the folder the
+// hooks and the learned skills use for the tool in session.
 function getRunsFilePath(options = {}) {
   if (options.runsFilePath) {
     return path.resolve(options.runsFilePath);
   }
 
-  return path.join(resolveHomeDir(options.homeDir), '.gemini', 'state', 'skill-runs.jsonl');
+  return path.join(resolveEGCDir(resolveHomeDir(options.homeDir)), ...RUNS_FILE_SEGMENTS);
+}
+
+// Runs recorded before the file moved out of the fixed ~/.gemini are read
+// from there and never written again.
+function getLegacyRunsFilePath(options = {}) {
+  return path.join(resolveHomeDir(options.homeDir), '.gemini', ...RUNS_FILE_SEGMENTS);
 }
 
 function toNullableNumber(value, fieldName) {
@@ -135,7 +144,14 @@ function readSkillExecutionRecords(options = {}) {
     return options.stateStore.listSkillExecutionRecords();
   }
 
-  return readJsonl(getRunsFilePath(options));
+  const runsFilePath = getRunsFilePath(options);
+  if (options.runsFilePath) {
+    return readJsonl(runsFilePath);
+  }
+
+  const legacyRunsFilePath = getLegacyRunsFilePath(options);
+  const legacyRows = legacyRunsFilePath === runsFilePath ? [] : readJsonl(legacyRunsFilePath);
+  return [...legacyRows, ...readJsonl(runsFilePath)];
 }
 
 module.exports = {

@@ -463,7 +463,7 @@ function runTests() {
         const defaultPath = tracker.getRunsFilePath({ homeDir: pathHome });
         assert.strictEqual(
           defaultPath,
-          path.join(pathHome, '.gemini', 'state', 'skill-runs.jsonl')
+          path.join(pathHome, '.egc', 'state', 'skill-runs.jsonl')
         );
         assert.deepStrictEqual(
           tracker.readSkillExecutionRecords({ homeDir: pathHome }),
@@ -476,6 +476,41 @@ function runTests() {
         cleanupTempDir(pathHome);
       }
     })) passed++; else failed++;
+
+    const legacyRunsOutcome = tallied('the runs file follows the EGC directory of the home, and runs recorded under the old ~/.gemini are still read', () => {
+      const legacyHome = createTempDir('skill-evolution-legacy-home-');
+      try {
+        fs.mkdirSync(path.join(legacyHome, '.egc'), { recursive: true });
+        const legacyRunsFile = path.join(legacyHome, '.gemini', 'state', 'skill-runs.jsonl');
+        fs.mkdirSync(path.dirname(legacyRunsFile), { recursive: true });
+        fs.writeFileSync(legacyRunsFile, JSON.stringify({
+          skill_id: 'legacy-skill',
+          skill_version: '1.0.0',
+          task_description: 'recorded before the move',
+          outcome: 'success',
+          recorded_at: '2026-09-01T00:00:00.000Z'
+        }) + '\n');
+
+        tracker.recordSkillExecution({
+          skill_id: 'current-skill',
+          skill_version: '1.0.0',
+          task_description: 'recorded after the move',
+          outcome: 'success'
+        }, { homeDir: legacyHome });
+
+        const currentRunsFile = path.join(legacyHome, '.egc', 'state', 'skill-runs.jsonl');
+        assert.ok(fs.existsSync(currentRunsFile), 'the new run lands in the EGC directory of the home');
+        assert.strictEqual(fs.readFileSync(legacyRunsFile, 'utf8').split('\n').filter(Boolean).length, 1, 'the old file is read, never written');
+        assert.deepStrictEqual(
+          tracker.readSkillExecutionRecords({ homeDir: legacyHome }).map(record => record.skill_id),
+          ['legacy-skill', 'current-skill']
+        );
+      } finally {
+        cleanupTempDir(legacyHome);
+      }
+    });
+    passed += legacyRunsOutcome.passed;
+    failed += legacyRunsOutcome.failed;
 
     console.log('\nHealth:');
 

@@ -148,22 +148,26 @@ function getAvailablePackageManagers() {
  * Get the package manager to use for current project
  *
  * Detection priority:
- * 1. Environment variable GEMINI_PACKAGE_MANAGER
- * 2. Project-specific config (in .gemini/package-manager.json)
+ * 1. Environment variable EGC_PACKAGE_MANAGER (GEMINI_PACKAGE_MANAGER, the old name, still counts)
+ * 2. Project-specific config (in .egc/package-manager.json; the old .gemini/package-manager.json is still read)
  * 3. package.json packageManager field
  * 4. Lock file detection
- * 5. Global user preference (in ~/.gemini/package-manager.json)
+ * 5. Global user preference (package-manager.json in the EGC directory)
  * 6. Default to npm (no child processes spawned)
  *
  * @param {object} options - Options
  * @param {string} options.projectDir - Project directory to detect from (default: cwd)
  * @returns {object} - { name, config, source }
  */
+function getProjectConfigPath(projectDir) {
+  return path.join(projectDir, '.egc', 'package-manager.json');
+}
+
 function getPackageManager(options = {}) {
   const { projectDir = process.cwd() } = options;
 
   // 1. Check environment variable
-  const envPm = process.env.GEMINI_PACKAGE_MANAGER;
+  const envPm = process.env.EGC_PACKAGE_MANAGER || process.env.GEMINI_PACKAGE_MANAGER;
   if (envPm && PACKAGE_MANAGERS[envPm]) {
     return {
       name: envPm,
@@ -173,8 +177,8 @@ function getPackageManager(options = {}) {
   }
 
   // 2. Check project-specific config
-  const projectConfigPath = path.join(projectDir, '.gemini', 'package-manager.json');
-  const projectConfig = readFile(projectConfigPath);
+  const projectConfig = readFile(getProjectConfigPath(projectDir))
+    || readFile(path.join(projectDir, '.gemini', 'package-manager.json'));
   if (projectConfig) {
     try {
       const config = JSON.parse(projectConfig);
@@ -263,8 +267,7 @@ function setProjectPackageManager(pmName, projectDir = process.cwd()) {
     throw new Error(`Unknown package manager: ${pmName}`);
   }
 
-  const configDir = path.join(projectDir, '.gemini');
-  const configPath = path.join(configDir, 'package-manager.json');
+  const configPath = getProjectConfigPath(projectDir);
 
   const config = {
     packageManager: pmName,
@@ -349,8 +352,8 @@ function getSelectionPrompt() {
   let message = '[PackageManager] No package manager preference detected.\n';
   message += 'Supported package managers: ' + Object.keys(PACKAGE_MANAGERS).join(', ') + '\n';
   message += '\nTo set your preferred package manager:\n';
-  message += '  - Global: Set GEMINI_PACKAGE_MANAGER environment variable\n';
-  message += '  - Or add to ~/.gemini/package-manager.json: {"packageManager": "pnpm"}\n';
+  message += '  - Global: Set EGC_PACKAGE_MANAGER environment variable\n';
+  message += `  - Or add to ${getConfigPath()}: {"packageManager": "pnpm"}\n`;
   message += '  - Or add to package.json: {"packageManager": "pnpm@8"}\n';
   message += '  - Or add a lock file to your project (e.g., pnpm-lock.yaml)\n';
 

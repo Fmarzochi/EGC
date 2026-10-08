@@ -176,7 +176,7 @@ function runTests() {
 
   if (test('inspects skill health from recorded observations', () => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-session-inspect-skills-'));
-    const observationsDir = path.join(projectRoot, '.gemini', 'egc', 'skills');
+    const observationsDir = path.join(projectRoot, '.egc', 'skills');
     fs.mkdirSync(observationsDir, { recursive: true });
     fs.writeFileSync(
       path.join(observationsDir, 'observations.jsonl'),
@@ -215,7 +215,7 @@ function runTests() {
 
   if (test('proposes skill amendments through session-inspect', () => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-session-inspect-amend-'));
-    const observationsDir = path.join(projectRoot, '.gemini', 'egc', 'skills');
+    const observationsDir = path.join(projectRoot, '.egc', 'skills');
     fs.mkdirSync(observationsDir, { recursive: true });
     fs.writeFileSync(
       path.join(observationsDir, 'observations.jsonl'),
@@ -246,7 +246,7 @@ function runTests() {
 
   if (test('builds skill evaluation scaffolding through session-inspect', () => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-session-inspect-eval-'));
-    const observationsDir = path.join(projectRoot, '.gemini', 'egc', 'skills');
+    const observationsDir = path.join(projectRoot, '.egc', 'skills');
     fs.mkdirSync(observationsDir, { recursive: true });
     fs.writeFileSync(
       path.join(observationsDir, 'observations.jsonl'),
