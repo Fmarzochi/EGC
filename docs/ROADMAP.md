@@ -3,6 +3,15 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
+- Crush (Charmbracelet) joins as a home-scoped install target: skills flat in the shared `~/.agents/skills` root, agents, commands and rules under `~/.config/crush`, Guardian and Token Crusher hooks and the two MCP servers in `crush.json`, the memory protocol in `~/.config/crush/CRUSH.md`, the install gated on Crush being present, and the supported tool count moves to 21 (22 install targets) (#1744 by @phaiffer, closes #1491).
+- The MCP SDK moves to the 1.32 line in the root and in both servers, `mcp/servers/egc-memory` joins the weekly Dependabot schedule, and the release workflow pins `anchore/sbom-action` v0.24.3 (#1754, #1753, #1762, #1755; closes #1662).
+- Honest output for the telemetry prompt, the Token Crusher PATH status and the dashboard launch: the consent is asked up front and a failure to record it is reported, `egc init` tells whether the shim is on the PATH, persisted or not yet there, and the dashboard line says the browser opened only when the opener really succeeded (#1736 by @phaiffer, closes #1730 and #1377).
+- Test directories are removed through one shared fixture that outlasts a held Windows handle, so a passing behavior test no longer fails on its cleanup (#1765, closes #1763).
+- The installation guide says that the `UserPromptSubmit` classifier of auto-intuition needs a provider key and that `egc watch` watches one project, with a test tied to the code (#1751 by @phaiffer, closes #1666).
+- The Junie row of the integration tiers follows the official guidelines page, `.junie/AGENTS.md` first and `guidelines.md` as the legacy format, and no install target writes a guidelines file (#1752 by @phaiffer, closes #1655).
+- The cost-tracking skill and `/cost-report` read `metrics/costs.jsonl` and `cost-tracker.log`, the files EGC really writes, instead of a SQLite database nothing writes (#1757 by @phaiffer, closes #1701).
+- `ModelResolver` has direct tests with full line coverage, and the prompt builder has more cases (#1758 by @phaiffer, closes #1691).
+- The EGC 2.0 pages say they are an unimplemented proposal and their claims about today point at real files, with a docs test that keeps the index paths real (#1759 by @phaiffer, closes #1703).
 - The fake Guardian CLI of the hook tests returns the response fields of the real engine, with a contract test that runs the same inputs through the fake and the real CLI and requires identical output (#1739 by @phaiffer, closes #1667).
 - The 32 Antigravity skills whose `description` or `origin` carried an unquoted colon load as valid YAML again, with a test that parses every catalog `SKILL.md` strictly (#1735 by @phaiffer, closes #1653).
 - The `query_history` schema default is 20, as the tool description promises, with a test that compares the two (#1734 by @phaiffer, closes #1663).
