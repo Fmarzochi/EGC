@@ -7,6 +7,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const readline = require('readline');
+const { spawnSync } = require('child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+
+const TELEMETRY_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'lib', 'telemetry.js');
 
 function createTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-telemetry-test-'));
@@ -281,6 +285,38 @@ async function runTests() {
       // The request must be time-bounded so a stalled GoatCounter can't keep
       // the CLI process alive past its command (main uses process.exitCode).
       assert.ok(capturedOpts && capturedOpts.signal instanceof AbortSignal, 'fetch should pass an AbortSignal to bound the request');
+    } finally { cleanup(dir); }
+  })) { passed++; } else { failed++; }
+
+  // install.sh runs the script directly, with a trailing `|| true`.
+  const runScript = (homeDir) => spawnSync(process.execPath, [TELEMETRY_SCRIPT], {
+    encoding: 'utf8',
+    input: '',
+    timeout: CLI_TIMEOUT_MS,
+    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+  });
+
+  if (await test('run directly, records the headless default and exits 0', async () => {
+    const dir = createTempDir();
+    try {
+      const result = runScript(dir);
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.strictEqual(result.stderr, '');
+      const saved = JSON.parse(fs.readFileSync(path.join(dir, '.egc', 'telemetry.json'), 'utf8'));
+      assert.strictEqual(saved.enabled, false);
+    } finally { cleanup(dir); }
+  })) { passed++; } else { failed++; }
+
+  if (await test('run directly, a consent that cannot be written exits non-zero with one stderr line (#1730)', async () => {
+    const dir = createTempDir();
+    try {
+      // A file where the EGC directory should be: ensurePrivateDir throws.
+      fs.writeFileSync(path.join(dir, '.egc'), 'not a directory', 'utf8');
+      const result = runScript(dir);
+      assert.strictEqual(result.status, 1, 'the failure must not exit 0');
+      const lines = result.stderr.trim().split(/\r?\n/);
+      assert.strictEqual(lines.length, 1, `expected one stderr line, got: ${result.stderr}`);
+      assert.match(lines[0], /^\[EGC\] telemetry consent was not recorded: /);
     } finally { cleanup(dir); }
   })) { passed++; } else { failed++; }
 

@@ -12,6 +12,11 @@ const { PORT } = require(path.join(__dirname, '..', '..', 'dashboard', 'port'));
 
 const DASHBOARD_URL = `http://localhost:${PORT}`;
 
+/**
+ * Checks whether the dashboard server answers /ping.
+ *
+ * @returns {Promise<boolean>} True if server responds with HTTP 200.
+ */
 function pingDashboard() {
   return new Promise(resolve => {
     const req = http.get(`${DASHBOARD_URL}/ping`, res => { res.resume(); resolve(res.statusCode === 200); });
@@ -20,6 +25,12 @@ function pingDashboard() {
   });
 }
 
+/**
+ * Polls the dashboard /ping endpoint until it responds or the timeout expires.
+ *
+ * @param {number} timeoutMs Budget in milliseconds to wait for the dashboard to respond.
+ * @returns {Promise<boolean>} True if dashboard becomes reachable within timeoutMs.
+ */
 async function waitForDashboard(timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   async function poll() {
@@ -32,7 +43,17 @@ async function waitForDashboard(timeoutMs) {
   return poll();
 }
 
-function openBrowser() {
+/**
+ * Attempts to open the dashboard URL in the default browser.
+ *
+ * There is no DISPLAY check on Linux: WSL without WSLg has no DISPLAY, yet
+ * the xdg-open from wslu opens the Windows browser. The opener is always
+ * tried, and a headless machine reports its failure through the exit status.
+ *
+ * @param {typeof spawnSync} [spawn] Process runner, injectable for tests.
+ * @returns {boolean} True if the browser command exited with status 0.
+ */
+function openBrowser(spawn = spawnSync) {
   let cmd;
   if (process.platform === 'win32') {
     cmd = 'start';
@@ -41,12 +62,38 @@ function openBrowser() {
   } else {
     cmd = 'xdg-open';
   }
-  try { spawnSync(cmd, [DASHBOARD_URL], { shell: process.platform === 'win32', stdio: 'ignore' }); } catch (_) { /* ignore: best-effort browser open, failure is non-fatal */ } // NOSONAR
+  try {
+    const result = spawn(cmd, [DASHBOARD_URL], { shell: process.platform === 'win32', stdio: 'ignore' });
+    return !result.error && result.status === 0;
+  } catch (_) { // NOSONAR: best-effort browser open, failure is non-fatal
+    return false;
+  }
 }
 
-// log(msg) receives already-formatted lines so each caller keeps its own
-// styling. Resolves once the launch decision is made, never rejects.
-async function launchDashboard({ log = () => {} } = {}) {
+/**
+ * Constructs the dashboard launch result payload.
+ *
+ * @param {boolean} ready Whether the dashboard server is responding.
+ * @param {boolean} browserOpened Whether the browser was opened.
+ * @returns {false | { ready: true, browserOpened: boolean }} Launch result object or false.
+ */
+function createLaunchResult(ready, browserOpened) {
+  if (!ready) return false;
+  return {
+    ready: true,
+    browserOpened: Boolean(browserOpened),
+  };
+}
+
+/**
+ * Starts the EGC dashboard server and optionally opens it in the browser.
+ *
+ * @param {object} [options]
+ * @param {(msg: string) => void} [options.log] Callback for user-facing log lines.
+ * @param {() => boolean} [options.browserOpener] Browser opener function.
+ * @returns {Promise<false | { ready: true, browserOpened: boolean }>}
+ */
+async function launchDashboard({ log = () => {}, browserOpener = openBrowser } = {}) {
   // The script to run is derived from this file's own location, never from
   // a caller-supplied root. Every caller (init.js, install-apply.js, the
   // shell wrapper) already resolved the same package root, so nothing
@@ -60,8 +107,13 @@ async function launchDashboard({ log = () => {} } = {}) {
     const already = await pingDashboard();
     if (already) {
       log(`Dashboard already running at ${DASHBOARD_URL}`);
-      openBrowser();
-      return true;
+      const browserOpened = browserOpener();
+      if (browserOpened) {
+        log('Minimize it to keep working. Run `egc dashboard stop` to close.');
+      } else {
+        log('Run `egc dashboard stop` to close.');
+      }
+      return createLaunchResult(true, browserOpened);
     }
     // No shell, on any platform. Both arguments are absolute paths this
     // process already owns (process.execPath, and a sibling of __dirname),
@@ -95,9 +147,13 @@ async function launchDashboard({ log = () => {} } = {}) {
     const budgetMs = installAhead ? 60000 : 4000;
     const ready = await waitForDashboard(budgetMs);
     if (ready) {
-      log('Minimize it to keep working. Run `egc dashboard stop` to close.');
-      openBrowser();
-      return true;
+      const browserOpened = browserOpener();
+      if (browserOpened) {
+        log('Minimize it to keep working. Run `egc dashboard stop` to close.');
+      } else {
+        log('Run `egc dashboard stop` to close.');
+      }
+      return createLaunchResult(true, browserOpened);
     }
     log(`EGC Dashboard did not respond within ${Math.round(budgetMs / 1000)}s.`);
     log(`See the startup error with: node "${dashboardScript}" start`);
@@ -108,10 +164,13 @@ async function launchDashboard({ log = () => {} } = {}) {
   }
 }
 
-// The dashboard is only worth spawning for a human at an interactive
-// terminal; CI runs and scripted installs stay headless.
+/**
+ * Decides whether the dashboard should auto-launch based on interactive TTY and non-CI status.
+ *
+ * @returns {boolean} True if stdout is a TTY and CI is not set.
+ */
 function shouldAutoLaunch() {
   return Boolean(process.stdout.isTTY) && !process.env.CI;
 }
 
-module.exports = { launchDashboard, shouldAutoLaunch, waitForDashboard, DASHBOARD_URL };
+module.exports = { launchDashboard, shouldAutoLaunch, waitForDashboard, openBrowser, DASHBOARD_URL };
