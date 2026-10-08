@@ -281,7 +281,7 @@ function retirableEntries(plan) {
     const filePath = path.resolve(retirement.destinationPath);
     const root = roots.find(candidate => filePath.startsWith(candidate + path.sep));
     if (!root) continue;
-    if (!isRetirableFile(filePath, root, retirement.sourcePath, plan, retirement.transform)) continue;
+    if (!isRetirableFile(filePath, root, retirement.sourcePath, plan, retirement.transform, retirement.contentSha256)) continue;
     result.push({ retirement: { ...retirement, destinationPath: filePath }, root });
   }
   return result;
@@ -366,7 +366,7 @@ function sha256(buffer) {
 // file the plan copies today. A file the person replaced since is theirs, and
 // a file whose source is gone and matches nothing the plan writes cannot be
 // told apart from one, so both stay.
-function isRetirableFile(filePath, root, sourcePath, plan = {}, transform = undefined) {
+function isRetirableFile(filePath, root, sourcePath, plan = {}, transform = undefined, recordedSha256 = undefined) {
   let stat;
   try {
     stat = fs.lstatSync(filePath);
@@ -383,6 +383,9 @@ function isRetirableFile(filePath, root, sourcePath, plan = {}, transform = unde
     content = fs.readFileSync(filePath);
   } catch {
     return false;
+  }
+  if (typeof recordedSha256 === 'string' && recordedSha256.length > 0) {
+    return sha256(content) === recordedSha256;
   }
   try {
     const source = fs.statSync(sourcePath);
@@ -475,6 +478,67 @@ function findLegacyLinks(plan, { strict = false } = {}) {
 // to the target recorded by the scan, otherwise the path changed under the
 // install and is refused, never removed. unlink never follows a link, so
 // only the link itself goes.
+const FORMER_LEGACY_LINK_DIRECTORIES = [['antigravity-cli', 'skills']];
+
+function pointsIntoLegacyRoot(linkPath, root) {
+  let target;
+  try {
+    target = path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath));
+  } catch {
+    return null;
+  }
+  const legacyRoots = [path.join(root, 'skills', 'egc'), ...legacyLinkRoots(root)];
+  return legacyRoots.some(legacyRoot => target === legacyRoot || target.startsWith(legacyRoot + path.sep)) ? target : null;
+}
+
+function findStrandedLegacyLinks(plan) {
+  const root = plan.targetRoot ? path.resolve(plan.targetRoot) : null;
+  if (!root) return [];
+  const planned = new Set((Array.isArray(plan.operations) ? plan.operations : []).map(operation => path.resolve(operation.destinationPath)));
+  const stranded = [];
+  for (const segments of FORMER_LEGACY_LINK_DIRECTORIES) {
+    const directory = path.join(root, ...segments);
+    const stat = fs.lstatSync(directory, { throwIfNoEntry: false });
+    if (!stat || !stat.isDirectory()) continue;
+    for (const entry of fs.readdirSync(directory)) {
+      const linkPath = path.join(directory, entry);
+      if (planned.has(linkPath) || !isSymbolicLink(linkPath)) continue;
+      const pointedAt = pointsIntoLegacyRoot(linkPath, root);
+      if (pointedAt) stranded.push({ linkPath, pointedAt });
+    }
+  }
+  return stranded;
+}
+
+function removeStrandedLegacyLinks(links, targetRoot) {
+  if (!targetRoot || links.length === 0) return [];
+  const root = path.resolve(targetRoot);
+  const removed = [];
+  for (const link of links) {
+    if (!isSymbolicLink(link.linkPath) || pointsIntoLegacyRoot(link.linkPath, root) !== link.pointedAt) continue;
+    fs.unlinkSync(link.linkPath);
+    removed.push(link);
+    removeEmptyParents(path.dirname(link.linkPath), root);
+  }
+  return removed;
+}
+
+function recordWrittenContentHashes(plan) {
+  const written = new Map();
+  for (const operation of plan.operations) {
+    if (operation.kind !== 'copy-file' || isMcpConfigPath(operation.destinationPath)) continue;
+    try {
+      written.set(path.resolve(operation.destinationPath), sha256(fs.readFileSync(operation.destinationPath)));
+    } catch {
+      continue;
+    }
+  }
+  for (const operation of plan.statePreview?.operations || []) {
+    const hash = written.get(path.resolve(String(operation.destinationPath || '')));
+    if (hash && operation.kind === 'copy-file') operation.contentSha256 = hash;
+  }
+}
+
 function removeLegacyLinks(links, targetRoot) {
   const root = targetRoot ? path.resolve(targetRoot) : null;
   const deepestFirst = [...links].sort((a, b) => segments(b.linkPath) - segments(a.linkPath));
@@ -962,7 +1026,9 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
   const retiredFiles = retirePlannedFiles(plan);
   const retiredHooks = retirePlannedHooks(plan);
+  const retiredLegacyLinks = removeStrandedLegacyLinks(findStrandedLegacyLinks(plan), plan.targetRoot);
 
+  recordWrittenContentHashes(plan);
   writeInstallState(plan.installStatePath, plan.statePreview);
   removeLegacyInstallStates(plan);
 
@@ -986,7 +1052,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     },
   });
 
-  const result = { ...plan, applied: true, migratedLegacyLinks, retiredFiles, retiredHooks, shapeTransitions: shapeResult.transitions };
+  const result = { ...plan, applied: true, migratedLegacyLinks, retiredLegacyLinks, retiredFiles, retiredHooks, shapeTransitions: shapeResult.transitions };
   Object.defineProperty(result, 'syncPromise', {
     value: syncPromise,
     enumerable: false,
@@ -1005,6 +1071,7 @@ module.exports = {
   checkedDestinations,
   deepMergeJson,
   findLegacyLinks,
+  findStrandedLegacyLinks,
   refuseLinkedDestination,
   removeLegacyLinks,
   writeGuardianCliMarker,

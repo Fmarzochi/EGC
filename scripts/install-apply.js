@@ -121,6 +121,7 @@ function printHumanPlan(plan, dryRun) {
   printRetirements(plan, dryRun);
   printHookRetirements(plan, dryRun);
   printLegacyLinks(plan, dryRun);
+  printStrandedLegacyLinks(plan, dryRun);
   printShapeTransitions(plan, dryRun);
 
   if (!dryRun) {
@@ -160,6 +161,17 @@ function printHookRetirements(plan, dryRun) {
 // The links from EGC's own June 2026 layout (one link per Antigravity CLI
 // skill into the Gemini home copy) that this run replaces, or would
 // replace, with real files (#1400). Any other link is refused as before.
+function printStrandedLegacyLinks(plan, dryRun) {
+  const links = dryRun ? plan.strandedLegacyLinks : plan.retiredLegacyLinks;
+  if (!links || links.length === 0) return;
+  console.log(dryRun
+    ? '\nLegacy links to remove (EGC\'s own layout from June 2026, at a path EGC no longer writes):'
+    : '\nRemoved legacy links:');
+  for (const link of links) {
+    console.log(`- ${dryRun ? '' : 'removed legacy link: '}${link.linkPath} (pointed at ${link.pointedAt})`);
+  }
+}
+
 function printLegacyLinks(plan, dryRun) {
   const links = dryRun ? plan.legacyLinks : plan.migratedLegacyLinks;
   if (!links || links.length === 0) return;
@@ -426,8 +438,9 @@ function main() {
     enforceTargetDetection(plan, options);
 
     if (options.dryRun) {
-      const { collectShapeTransitions, findLegacyLinks, retirableFiles, retirableHooks } = require('./lib/install/apply');
+      const { collectShapeTransitions, findLegacyLinks, findStrandedLegacyLinks, retirableFiles, retirableHooks } = require('./lib/install/apply');
       plan.legacyLinks = findLegacyLinks(plan);
+      plan.strandedLegacyLinks = findStrandedLegacyLinks(plan);
       // The same test the apply runs: a file the person replaced is not
       // listed, because it would not be removed.
       plan.retirements = retirableFiles(plan);

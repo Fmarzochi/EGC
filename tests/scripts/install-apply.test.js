@@ -296,6 +296,108 @@ function runTests() {
     }
   }));
 
+  if (process.platform !== 'win32') {
+    tally(test('an upgrade removes the June 2026 links left under antigravity-cli/skills and keeps the person\'s link (#1789)', () => {
+      const homeDir = createTempDir('install-apply-home-');
+      const projectDir = createTempDir('install-apply-project-');
+      const outside = createTempDir('install-apply-outside-');
+
+      try {
+        const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+        const env = { EGC_INSTALL_DELEGATED: '1' };
+        const first = run(args, { cwd: projectDir, homeDir, env });
+        assert.strictEqual(first.code, 0, first.stderr);
+
+        const geminiRoot = path.join(homeDir, '.gemini');
+        const cliSkills = path.join(geminiRoot, 'antigravity-cli', 'skills');
+        const managed = path.join(geminiRoot, 'skills', 'egc', 'june-live');
+        fs.mkdirSync(managed, { recursive: true });
+        fs.writeFileSync(path.join(managed, 'SKILL.md'), 'old copy');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        const liveLink = path.join(cliSkills, 'june-live');
+        const goneLink = path.join(cliSkills, 'june-gone');
+        const ownLink = path.join(cliSkills, 'mine');
+        fs.symlinkSync(managed, liveLink, 'dir');
+        fs.symlinkSync(path.join(geminiRoot, 'skills', 'egc', 'june-gone'), goneLink, 'dir');
+        fs.symlinkSync(outside, ownLink, 'dir');
+
+        const dryRun = run([...args, '--dry-run'], { cwd: projectDir, homeDir });
+        assert.strictEqual(dryRun.code, 0, dryRun.stderr);
+        assert.ok(dryRun.stdout.includes('Legacy links to remove'), dryRun.stdout);
+        assert.ok(dryRun.stdout.includes(`- ${liveLink} (pointed at `), 'the live June link is listed');
+        assert.ok(dryRun.stdout.includes(`- ${goneLink} (pointed at `), 'the dangling June link is listed');
+        assert.ok(!dryRun.stdout.includes(ownLink), 'the person\'s link is not listed');
+        assert.ok(fs.lstatSync(liveLink).isSymbolicLink(), 'the dry run touches nothing');
+
+        const upgraded = run(args, { cwd: projectDir, homeDir, env });
+        assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+        assert.ok(upgraded.stdout.includes(`removed legacy link: ${liveLink}`), upgraded.stdout);
+        assert.ok(upgraded.stdout.includes(`removed legacy link: ${goneLink}`), upgraded.stdout);
+        assert.strictEqual(fs.lstatSync(liveLink, { throwIfNoEntry: false }), undefined, 'the live June link is gone');
+        assert.strictEqual(fs.lstatSync(goneLink, { throwIfNoEntry: false }), undefined, 'the dangling June link is gone');
+        assert.ok(fs.lstatSync(ownLink).isSymbolicLink(), 'the person\'s link stays');
+        assert.strictEqual(fs.readFileSync(path.join(managed, 'SKILL.md'), 'utf8'), 'old copy', 'what the link pointed at is untouched');
+      } finally {
+        cleanup(homeDir);
+        cleanup(projectDir);
+        cleanup(outside);
+      }
+    }));
+  }
+
+  tally(test('an upgrade retires a managed copy whose source changed since EGC wrote it, and keeps an edited one (#1789)', () => {
+    const crypto = require('crypto');
+    const sha256 = content => crypto.createHash('sha256').update(content).digest('hex');
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const ideSkills = path.join(geminiRoot, 'config', 'skills');
+      const cliSkills = path.join(geminiRoot, 'antigravity-cli', 'skills');
+      const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
+      const state = readJson(statePath);
+      const copies = state.operations.filter(operation => operation.kind === 'copy-file');
+      assert.ok(copies.length > 0, 'the install records file copies');
+      for (const operation of copies) {
+        assert.strictEqual(operation.contentSha256, sha256(fs.readFileSync(operation.destinationPath)), `${operation.destinationPath} records the hash of what EGC wrote`);
+      }
+
+      const [stale, edited] = fs.readdirSync(ideSkills).sort();
+      assert.ok(stale && edited, 'two skills to work with');
+      const staleContent = 'the SKILL.md an earlier release wrote, before its source changed';
+      for (const operation of state.operations) {
+        for (const skill of [stale, edited]) {
+          const skillDir = path.join(ideSkills, skill);
+          if (!operation.destinationPath.startsWith(skillDir + path.sep)) continue;
+          operation.destinationPath = path.join(cliSkills, skill, path.relative(skillDir, operation.destinationPath));
+          if (skill === stale && path.basename(operation.destinationPath) === 'SKILL.md') operation.contentSha256 = sha256(staleContent);
+        }
+      }
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      fs.mkdirSync(cliSkills, { recursive: true });
+      for (const skill of [stale, edited]) fs.renameSync(path.join(ideSkills, skill), path.join(cliSkills, skill));
+      fs.writeFileSync(path.join(cliSkills, stale, 'SKILL.md'), staleContent);
+      fs.writeFileSync(path.join(cliSkills, edited, 'SKILL.md'), 'edited by hand');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assert.ok(!fs.existsSync(path.join(cliSkills, stale, 'SKILL.md')), 'the stale managed copy is retired although it differs from the current source');
+      assert.strictEqual(fs.readFileSync(path.join(cliSkills, edited, 'SKILL.md'), 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      for (const skill of [stale, edited]) {
+        assert.ok(fs.existsSync(path.join(ideSkills, skill, 'SKILL.md')), `${skill} is written under config/skills`);
+      }
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
   tally(test('installs Cursor configs and writes install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
