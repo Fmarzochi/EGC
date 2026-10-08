@@ -818,11 +818,13 @@ const SessionWaitSchema = z.object({
   timeout_ms: z.number().int().min(100).max(MAX_SESSION_WAIT_MS).optional().default(10000)
 });
 
+const WORKING_MEMORY_MAX_TTL_SECONDS = 604800; // 7 days: longer-lived data belongs in update_state, not working memory.
+
 const WorkingMemorySetSchema = z.object({
   project_path: z.string().optional(),
   key: z.string().min(1).max(200),
   value: z.string().min(1).max(50000),
-  ttl_seconds: z.number().int().min(1).optional()
+  ttl_seconds: z.number().int().min(1).max(WORKING_MEMORY_MAX_TTL_SECONDS).optional()
 });
 
 const WorkingMemoryGetSchema = z.object({
@@ -981,7 +983,7 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
             project_path: { type: "string", description: "Absolute path to the project root. Defaults to current working directory." },
             key: { type: "string", description: "Unique name for this transient entry, e.g. 'debug_flag' or 'active_config'." },
             value: { type: "string", description: "Value to store. Any string including JSON." },
-            ttl_seconds: { type: "number", description: "How long the entry lives in seconds. Omit to use the session default (86400s)." }
+            ttl_seconds: { type: "number", description: "How long the entry lives in seconds (1-604800, default 86400s). Longer-lived data belongs in update_state, not here." }
           },
           required: ["key", "value"]
         }
