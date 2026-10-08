@@ -114,6 +114,7 @@ function applyMcpCopyFileOperation(operation, disabledServers) {
     ? text
     : formatJson(filterMcpConfig(sourceConfig, disabledServers).config);
   writeTextKeepingMode(operation.destinationPath, landed, operation.sourcePath);
+  return landed;
 }
 
 // apply.js's own location is always the real installed package: unlike
@@ -480,6 +481,24 @@ function findLegacyLinks(plan, { strict = false } = {}) {
 // only the link itself goes.
 const FORMER_LEGACY_LINK_DIRECTORIES = [['antigravity-cli', 'skills']];
 
+function hasLinkedComponent(fromRoot, targetPath) {
+  const relative = path.relative(fromRoot, targetPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return true;
+  let current = fromRoot;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    let stat;
+    try {
+      stat = fs.lstatSync(current, { throwIfNoEntry: false });
+    } catch {
+      return true;
+    }
+    if (!stat) return false;
+    if (stat.isSymbolicLink()) return true;
+  }
+  return false;
+}
+
 function pointsIntoLegacyRoot(linkPath, root) {
   let target;
   try {
@@ -487,8 +506,18 @@ function pointsIntoLegacyRoot(linkPath, root) {
   } catch {
     return null;
   }
-  const legacyRoots = [path.join(root, 'skills', 'egc'), ...legacyLinkRoots(root)];
-  return legacyRoots.some(legacyRoot => target === legacyRoot || target.startsWith(legacyRoot + path.sep)) ? target : null;
+  const managed = path.join(root, 'skills', 'egc');
+  if (target !== managed && !target.startsWith(managed + path.sep)) return null;
+  return hasLinkedComponent(root, target) ? null : target;
+}
+
+function isScannableDirectory(directory, root) {
+  if (hasLinkedComponent(root, directory)) return false;
+  try {
+    return fs.lstatSync(directory).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 function findStrandedLegacyLinks(plan) {
@@ -498,9 +527,14 @@ function findStrandedLegacyLinks(plan) {
   const stranded = [];
   for (const segments of FORMER_LEGACY_LINK_DIRECTORIES) {
     const directory = path.join(root, ...segments);
-    const stat = fs.lstatSync(directory, { throwIfNoEntry: false });
-    if (!stat || !stat.isDirectory()) continue;
-    for (const entry of fs.readdirSync(directory)) {
+    if (!isScannableDirectory(directory, root)) continue;
+    let entries;
+    try {
+      entries = fs.readdirSync(directory);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
       const linkPath = path.join(directory, entry);
       if (planned.has(linkPath) || !isSymbolicLink(linkPath)) continue;
       const pointedAt = pointsIntoLegacyRoot(linkPath, root);
@@ -515,6 +549,7 @@ function removeStrandedLegacyLinks(links, targetRoot) {
   const root = path.resolve(targetRoot);
   const removed = [];
   for (const link of links) {
+    if (!isScannableDirectory(path.dirname(link.linkPath), root)) continue;
     if (!isSymbolicLink(link.linkPath) || pointsIntoLegacyRoot(link.linkPath, root) !== link.pointedAt) continue;
     fs.unlinkSync(link.linkPath);
     removed.push(link);
@@ -523,16 +558,7 @@ function removeStrandedLegacyLinks(links, targetRoot) {
   return removed;
 }
 
-function recordWrittenContentHashes(plan) {
-  const written = new Map();
-  for (const operation of plan.operations) {
-    if (operation.kind !== 'copy-file' || isMcpConfigPath(operation.destinationPath)) continue;
-    try {
-      written.set(path.resolve(operation.destinationPath), sha256(fs.readFileSync(operation.destinationPath)));
-    } catch {
-      continue;
-    }
-  }
+function recordWrittenContentHashes(plan, written) {
   for (const operation of plan.statePreview?.operations || []) {
     const hash = written.get(path.resolve(String(operation.destinationPath || '')));
     if (hash && operation.kind === 'copy-file') operation.contentSha256 = hash;
@@ -990,6 +1016,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   const migratedLegacyLinks = findLegacyLinks(plan, { strict: true });
   removeLegacyLinks(migratedLegacyLinks, plan.targetRoot);
   refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
+  const writtenHashes = new Map();
   for (const operation of plan.operations) {
 
     refuseLinkedDestination(operation.destinationPath, managedRootFor(plan, operation.destinationPath));
@@ -1007,15 +1034,16 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
       applyMergeMarkdownIndexOperation(operation);
     } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
-      applyMcpCopyFileOperation(operation, disabledServers);
+      const landed = applyMcpCopyFileOperation(operation, disabledServers);
+      writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
     } else if (operation.kind === 'copy-file' && operation.transform) {
-      writeTextKeepingMode(
-        operation.destinationPath,
-        plannedFileContent(operation.sourcePath, operation.transform).toString('utf8'),
-        operation.sourcePath
-      );
+      const landed = plannedFileContent(operation.sourcePath, operation.transform).toString('utf8');
+      writeTextKeepingMode(operation.destinationPath, landed, operation.sourcePath);
+      writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
     } else {
+      const source = operation.kind === 'copy-file' ? fs.readFileSync(operation.sourcePath) : null;
       copyFileKeepingMode(operation.sourcePath, operation.destinationPath);
+      if (source) writtenHashes.set(path.resolve(operation.destinationPath), sha256(source));
     }
   }
 
@@ -1028,7 +1056,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   const retiredHooks = retirePlannedHooks(plan);
   const retiredLegacyLinks = removeStrandedLegacyLinks(findStrandedLegacyLinks(plan), plan.targetRoot);
 
-  recordWrittenContentHashes(plan);
+  recordWrittenContentHashes(plan, writtenHashes);
   writeInstallState(plan.installStatePath, plan.statePreview);
   removeLegacyInstallStates(plan);
 

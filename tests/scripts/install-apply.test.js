@@ -345,6 +345,43 @@ function runTests() {
     }));
   }
 
+  if (process.platform !== 'win32') {
+    tally(test('the June link scan never follows a linked antigravity-cli or skills/egc folder (#1789)', () => {
+      const { findStrandedLegacyLinks } = require('../../scripts/lib/install/apply');
+      const homeDir = createTempDir('install-apply-home-');
+      const outside = createTempDir('install-apply-outside-');
+
+      try {
+        const root = path.join(homeDir, '.gemini');
+        const managed = path.join(root, 'skills', 'egc');
+        fs.mkdirSync(path.join(outside, 'skills'), { recursive: true });
+        fs.symlinkSync(path.join(managed, 'june'), path.join(outside, 'skills', 'june'), 'dir');
+        fs.mkdirSync(root, { recursive: true });
+        fs.symlinkSync(outside, path.join(root, 'antigravity-cli'), 'dir');
+        assert.deepStrictEqual(findStrandedLegacyLinks({ targetRoot: root, operations: [] }), [], 'a linked antigravity-cli is never scanned');
+
+        fs.unlinkSync(path.join(root, 'antigravity-cli'));
+        const cliSkills = path.join(root, 'antigravity-cli', 'skills');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        fs.symlinkSync(path.join(managed, 'june'), path.join(cliSkills, 'june'), 'dir');
+        fs.mkdirSync(path.join(root, 'skills'), { recursive: true });
+        fs.symlinkSync(outside, managed, 'dir');
+        assert.deepStrictEqual(findStrandedLegacyLinks({ targetRoot: root, operations: [] }), [], 'a link reached through a linked skills/egc is not EGC\'s');
+
+        fs.unlinkSync(managed);
+        fs.mkdirSync(managed, { recursive: true });
+        assert.deepStrictEqual(
+          findStrandedLegacyLinks({ targetRoot: root, operations: [] }).map(link => link.linkPath),
+          [path.join(cliSkills, 'june')],
+          'with real folders the June link is found'
+        );
+      } finally {
+        cleanup(homeDir);
+        cleanup(outside);
+      }
+    }));
+  }
+
   tally(test('an upgrade retires a managed copy whose source changed since EGC wrote it, and keeps an edited one (#1789)', () => {
     const crypto = require('crypto');
     const sha256 = content => crypto.createHash('sha256').update(content).digest('hex');
