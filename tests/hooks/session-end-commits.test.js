@@ -124,6 +124,7 @@ function runHook(home, cwd, extraEnv = {}) {
     timeout: 30000,
   });
   assert.strictEqual(result.status, 0, result.stderr);
+  return result;
 }
 
 // A configured email outside any repository, the way a real machine has one
@@ -220,14 +221,17 @@ function runTests() {
       }
     }),
 
-    test('outside a git repository the hook still writes the session without the field', () => {
+    test('outside a git repository the hook still writes the session without the field, and says why on stderr', () => {
       const { home, repo, sessionFile } = setup();
       const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-n33-plain-'));
       try {
-        runHook(home, plain, EMAIL_FROM_ENV);
+        const result = runHook(home, plain, EMAIL_FROM_ENV);
         const header = headerOf(sessionFile);
         assert.ok(header.includes('**Last Updated:**'));
         assert.ok(!header.includes('**Commits:**'));
+        // A git failure must not pass in silence: a slow or broken git on a
+        // real machine would otherwise lose the commit list without a trace.
+        assert.ok(result.stderr.includes('[session-end] commit list skipped:'), result.stderr);
       } finally {
         cleanup(home, repo, plain);
       }
