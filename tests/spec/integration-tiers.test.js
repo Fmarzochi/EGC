@@ -165,6 +165,37 @@ function testClaudeCodeProtocolInjectionExists() {
   console.log(`  ✓ Claude Code Tier 3 injection path documented in bootstrap-cognitive.js`);
 }
 
+// Junie reads AGENTS.md now; .junie/guidelines.md is its legacy format (#1655).
+function testJunieRowDocumentsAgentsMd() {
+  // A Windows checkout can carry CRLF, which would hide the trailing `|`.
+  const lines = loadDoc().split(/\r?\n/);
+  const row = lines.find(line => line.includes('**JetBrains Junie**'));
+  assert.ok(row, 'the harness table must have a JetBrains Junie row');
+  // The column comes from the header, so a new column cannot shift the check.
+  const header = lines.slice(0, lines.indexOf(row)).reverse().find(line => /^\|.*\bInstall path\b.*\|$/.test(line));
+  assert.ok(header, 'the harness table must have an Install path column');
+  const pathColumn = header.split('|').map(cell => cell.trim()).indexOf('Install path');
+  const pathCell = row.split('|')[pathColumn] || '';
+  assert.ok(pathCell.trim(), 'the Junie row must fill the Install path column');
+  assert.ok(!pathCell.includes('guidelines.md'), 'the Junie path must not be the legacy .junie/guidelines.md');
+  for (const file of ['`.junie/AGENTS.md`', '`~/.junie/AGENTS.md`', '`.junie/guidelines.md`', '`.junie/guidelines/`']) {
+    assert.ok(row.includes(file), `the Junie row must name ${file}`);
+  }
+  // The project files are alternatives: Junie uses the first that exists.
+  assert.ok(/first of these that exists/.test(row), 'the Junie row must say the project files are alternatives');
+  // Matched as a whole Markdown link, not as a URL substring.
+  assert.ok(
+    /\[[^\]]+\]\(https:\/\/junie\.jetbrains\.com\/docs\/guidelines-and-memory\.html\)/.test(row),
+    'the Junie row must link the official page'
+  );
+  const targetsDir = path.join(REPO_ROOT, 'scripts', 'lib', 'install-targets');
+  const writers = fs.readdirSync(targetsDir)
+    .filter(name => name.endsWith('.js'))
+    .filter(name => fs.readFileSync(path.join(targetsDir, name), 'utf8').includes('guidelines.md'));
+  assert.deepStrictEqual(writers, [], `no install target may write the legacy guidelines.md: ${writers.join(', ')}`);
+  console.log('  ✓ Junie row documents AGENTS.md and no target writes guidelines.md');
+}
+
 console.log('=== Testing docs/spec/integration-tiers.md ===\n');
 
 let passed = 0;
@@ -175,6 +206,7 @@ for (const test of [
   testTier1TargetsMatchSupportedInstallTargets,
   testTier2InstallersRetired,
   testClaudeCodeProtocolInjectionExists,
+  testJunieRowDocumentsAgentsMd,
 ]) {
   try {
     test();
