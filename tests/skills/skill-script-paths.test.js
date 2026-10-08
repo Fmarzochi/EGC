@@ -38,7 +38,10 @@ function test(name, fn) {
 }
 
 function makeHome() {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-skill-paths-'));
+  // Resolved through realpath: on macOS os.tmpdir() sits behind a symlink
+  // (/var -> /private/var), and a script that reads its own $PWD gets the
+  // resolved path back, not the one mkdtempSync returned.
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-skill-paths-')));
   const project = path.join(home, 'work', 'app');
   fs.mkdirSync(project, { recursive: true });
   return { home, project };
