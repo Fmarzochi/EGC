@@ -111,6 +111,26 @@ function runTests() {
     assert.strictEqual(statePath, path.join(homeDir, '.gemini', 'egc', 'install-state.json'));
   }));
 
+  tally(test('warns when the egc install state cannot be read, since config/skills is then left as the person\'s (#1705)', () => {
+    const fs = require('fs');
+    const adapter = getInstallTargetAdapter('egc');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-unreadable-state-'));
+    try {
+      const unreadable = issues => issues.filter(issue => issue.code === 'install-state-unreadable');
+      assert.deepStrictEqual(unreadable(adapter.validate({ homeDir, repoRoot })), [], 'no warning without a state file');
+      const statePath = adapter.getInstallStatePath({ homeDir, repoRoot });
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, '{');
+      const warnings = unreadable(adapter.validate({ homeDir, repoRoot }));
+      assert.strictEqual(warnings.length, 1, 'one warning for an unreadable state');
+      assert.strictEqual(warnings[0].severity, 'warning');
+      assert.ok(warnings[0].message.includes(path.join(homeDir, '.gemini', 'config', 'skills')), warnings[0].message);
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('plans egc skills where the Antigravity CLI, IDE and 2.0 read them, and rules under the managed rules/egc namespace', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

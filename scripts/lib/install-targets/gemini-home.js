@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const {
   UNREADABLE_STATE,
+  buildValidationIssue,
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
@@ -193,17 +194,21 @@ function collectRecordedDestinations(adapter, input) {
 }
 
 function isSameTree(sourcePath, destinationPath) {
-  const source = fs.statSync(sourcePath, { throwIfNoEntry: false });
-  const destination = fs.lstatSync(destinationPath, { throwIfNoEntry: false });
-  if (!source || !destination) return false;
-  if (source.isFile() && destination.isFile()) {
-    return fs.readFileSync(sourcePath).equals(fs.readFileSync(destinationPath));
+  try {
+    const source = fs.lstatSync(sourcePath, { throwIfNoEntry: false });
+    const destination = fs.lstatSync(destinationPath, { throwIfNoEntry: false });
+    if (!source || !destination) return false;
+    if (source.isFile() && destination.isFile()) {
+      return fs.readFileSync(sourcePath).equals(fs.readFileSync(destinationPath));
+    }
+    if (!source.isDirectory() || !destination.isDirectory()) return false;
+    const sourceEntries = fs.readdirSync(sourcePath).sort();
+    const destinationEntries = fs.readdirSync(destinationPath).sort();
+    if (sourceEntries.join('\n') !== destinationEntries.join('\n')) return false;
+    return sourceEntries.every(entry => isSameTree(path.join(sourcePath, entry), path.join(destinationPath, entry)));
+  } catch {
+    return false;
   }
-  if (!source.isDirectory() || !destination.isDirectory()) return false;
-  const sourceEntries = fs.readdirSync(sourcePath).sort();
-  const destinationEntries = fs.readdirSync(destinationPath).sort();
-  if (sourceEntries.join('\n') !== destinationEntries.join('\n')) return false;
-  return sourceEntries.every(entry => isSameTree(path.join(sourcePath, entry), path.join(destinationPath, entry)));
 }
 
 function isPersonOwned(destination, sourcePath, recordedDestinations) {
@@ -242,6 +247,14 @@ module.exports = createInstallTargetAdapter({
   kind: 'home',
   rootSegments: ['.gemini'],
   installStatePathSegments: ['egc', 'install-state.json'],
+  validateMore(input, adapter) {
+    if (collectRecordedDestinations(adapter, input)) return [];
+    return [buildValidationIssue(
+      'warning',
+      'install-state-unreadable',
+      `The install state at ${adapter.getInstallStatePath(input)} cannot be read: skills already under ${path.join(adapter.resolveRoot(input), AGY_SKILLS_SUBDIR)} are treated as yours and left as they are until it can be read again.`
+    )];
+  },
   planOperations(input, adapter) {
     const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
     const homeDir = input.homeDir || os.homedir();
