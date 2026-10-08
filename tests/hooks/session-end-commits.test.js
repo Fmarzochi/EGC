@@ -130,6 +130,9 @@ function runHook(home, cwd, extraEnv = {}) {
 // A configured email outside any repository, the way a real machine has one
 // in its global config, so the hook reaches git log and it fails there.
 const EMAIL_FROM_ENV = { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'user.email', GIT_CONFIG_VALUE_0: ME.email };
+// The warning repeats the line git writes, so the case that reads it runs git
+// in the C locale: a translated git would localize the fatal line.
+const GIT_IN_ENGLISH = { LC_ALL: 'C', LANG: 'C' };
 
 function headerOf(sessionFile) {
   return fs.readFileSync(sessionFile, 'utf8').split('\n---\n')[0];
@@ -225,7 +228,7 @@ function runTests() {
       const { home, repo, sessionFile } = setup();
       const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-n33-plain-'));
       try {
-        const result = runHook(home, plain, EMAIL_FROM_ENV);
+        const result = runHook(home, plain, { ...EMAIL_FROM_ENV, ...GIT_IN_ENGLISH });
         const header = headerOf(sessionFile);
         assert.ok(header.includes('**Last Updated:**'));
         assert.ok(!header.includes('**Commits:**'));
