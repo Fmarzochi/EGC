@@ -327,6 +327,8 @@ Everything is pure Node, deterministic, and fail-open: a parse error, an engine 
 
 You never need to type any of these. Talk to your AI naturally, in any language, and the auto-intuition protocol maps your intent to the right action: saying "how much did I save?" runs the savings report, saying "we are done for today" saves the session. The commands below exist for people who prefer explicit control, and every one of them is valid on its own:
 
+> **Auto-intuition and provider keys.** The protocol lives in each tool's context file, so the AI follows it with no API key. The `UserPromptSubmit` hook that also acts on your intent by code, before the AI answers (saving the session, injecting next steps or past decisions, recording what you asked it to remember), classifies the prompt with an LLM provider: it detects nothing unless `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), `OPENAI_API_KEY` or `OPENROUTER_API_KEY` is set, and the lifecycle hooks still save the state at session end. Set `EGC_INTUITION_LLM=0` to turn the classifier off.
+
 | Command | What it does |
 |---------|--------------|
 | `egc init` | First-run bootstrap (cognitive protocol + MCP registration + doctor) |
@@ -349,7 +351,7 @@ You never need to type any of these. Talk to your AI naturally, in any language,
 | `egc session-inspect` | Emit canonical EGC session snapshots from dmux or Gemini history targets |
 | `egc loop-status` | Inspect transcripts for stale loop wakeups and pending tool results |
 | `egc uninstall` | Remove EGC-managed files recorded in install-state |
-| `egc watch` | Watch tool config files and sync state changes bidirectionally |
+| `egc watch` | Watch one project's tool config files and sync state changes bidirectionally: the current directory, or the path given as an argument or with `--project` |
 | `egc telemetry` | Manage anonymous usage telemetry (status, on, off) |
 | `egc dashboard` | Start the EGC Dashboard (stop and status as sub-args) |
 | `egc team` | Team memory sync: init, sync, or status |
