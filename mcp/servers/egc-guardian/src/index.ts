@@ -25,7 +25,7 @@ import { classifyChunk } from './egc-chunk-router.js';
 import { reduceJsonArray } from './egc-array-crusher.js';
 import { autoLearn } from './learn-writer.js';
 import { compressViaHeadroom } from './headroom-client.js';
-import { buildRelevantContext } from './graph-context.js';
+import { buildRelevantContext, resolveRoot } from './graph-context.js';
 import { rankProjectFiles } from './file-rank.js';
 
 interface PipelineResult {
@@ -508,8 +508,15 @@ async function handleReduceContext(toolArgs: unknown) {
 
 async function handleRankFiles(toolArgs: unknown) {
   const parsed = RankFilesSchema.parse(toolArgs);
+  const resolved = resolveRoot(parsed.project_path);
+  if ('reason' in resolved) throw new McpError(ErrorCode.InvalidParams, resolved.reason);
+  if (isProtectedPath(resolved.root)) {
+    auditLog('RANK_FILES_PROTECTED_ROOT', 'DENIED', { project_path: resolved.root });
+    throw new McpError(ErrorCode.InvalidParams, 'project_path must not be a protected path');
+  }
   const result = await rankProjectFiles({
-    projectPath: parsed.project_path ?? process.cwd(),
+    projectPath: resolved.root,
+    isProtectedPath: p => isProtectedPath(p),
     query: parsed.query,
     history: parsed.history ? String(redactPayload({ text: parsed.history }).text) : '',
     topN: parsed.top_n,

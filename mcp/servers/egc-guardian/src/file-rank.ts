@@ -31,11 +31,12 @@ export interface RankOptions {
   useGit?: boolean;
   weights?: Record<string, number>;
   graphHops?: number;
+  isProtectedPath?: (absPath: string) => boolean;
 }
 export interface RankedFile { path: string; score: number; signals: Record<string, number> }
 
 export async function rankProjectFiles(opts: RankOptions): Promise<{ ranked: RankedFile[]; explain: string[]; briefing: string }> {
-  const index = await buildFileIndex(opts.projectPath);
+  const index = await buildFileIndex(opts.projectPath, { isProtectedPath: opts.isProtectedPath });
   const gitSignal = opts.useGit === false ? null : collectGitContext(opts.projectPath);
   const scored = scoreDocuments(index.docs, {
     query: opts.query,

@@ -29,8 +29,13 @@ function summaryOf(text: string): string {
   return line ?? '';
 }
 
+export interface FileIndexOptions {
+  isProtectedPath?: (absPath: string) => boolean;
+}
+
 export async function buildFileIndex(
-  projectRoot: string
+  projectRoot: string,
+  opts: FileIndexOptions = {}
 ): Promise<{ docs: FileDoc[]; edges: ImportEdge[]; skipped: number }> {
   const root = fs.realpathSync(projectRoot);
   let ignore = (_rel: string, _isDir: boolean): boolean => false;
@@ -47,6 +52,10 @@ export async function buildFileIndex(
 
   for (const rel of walked.files) {
     const abs = path.join(root, rel);
+    if (opts.isProtectedPath?.(abs)) {
+      skipped++;
+      continue;
+    }
     let st: fs.Stats;
     try {
       st = fs.statSync(abs);

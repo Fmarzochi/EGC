@@ -16,6 +16,7 @@ if (!fs.existsSync(path.join(buildDir, 'file-rank.js'))) {
   process.exit(0);
 }
 const { rankProjectFiles, renderExplain, renderBriefing } = require(path.join(buildDir, 'file-rank.js'));
+const { resolveRoot } = require(path.join(buildDir, 'graph-context.js'));
 
 let passed = 0;
 let failed = 0;
@@ -90,6 +91,23 @@ fs.writeFileSync(path.join(root, 'unrelated.ts'), 'export const color = "red";\n
     fs.mkdirSync(empty);
     const r = await rankProjectFiles({ projectPath: empty, query: 'anything', useGit: false });
     assert.deepStrictEqual(r.ranked, []);
+  });
+
+  await run('an isProtectedPath predicate keeps those files out of the ranking', async () => {
+    const r = await rankProjectFiles({
+      projectPath: root,
+      query: 'chargeCard payments fees',
+      useGit: false,
+      isProtectedPath: p => p.endsWith('payments.ts')
+    });
+    assert.ok(!r.ranked.some(f => f.path === 'billing/payments.ts'), 'protected file is not indexed');
+    assert.ok(r.ranked.some(f => f.path === 'billing/fees.ts'), 'other files still rank');
+  });
+
+  await run('resolveRoot refuses a filesystem root and the home directory', () => {
+    assert.ok('reason' in resolveRoot(path.parse(root).root));
+    assert.ok('reason' in resolveRoot(os.homedir()));
+    assert.strictEqual(resolveRoot(root).root, fs.realpathSync(root));
   });
 
   fs.rmSync(tmp, { recursive: true, force: true });

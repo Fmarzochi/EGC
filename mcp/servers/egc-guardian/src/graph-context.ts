@@ -14,7 +14,7 @@ export interface ContextDeps {
 
 const unavailable = (reason: string): Record<string, unknown> => ({ status: 'unavailable', reason });
 
-function resolveRoot(projectPath: string | undefined): { root: string } | { reason: string } {
+export function resolveRoot(projectPath: string | undefined): { root: string } | { reason: string } {
   let root: string;
   try {
     root = fs.realpathSync(path.resolve(projectPath ?? process.cwd()));
