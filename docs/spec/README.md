@@ -1,6 +1,6 @@
 # EGC Specification
 
-The EGC specification is executable. It lives in JSON Schemas under `schemas/`, in install manifests under `scripts/lib/`, and in tests under `tests/spec/`. This document is the index that ties them together.
+The EGC specification is executable. It lives in JSON Schemas under `schemas/`, in install manifests under `manifests/`, and in tests under `tests/spec/`. This document is the index that ties them together.
 
 ## Spec version
 
@@ -20,19 +20,19 @@ A 90-day deprecation window applies for `MAJOR` breaking changes to public-facin
 |---------|--------------|--------------|
 | Integration tiers | [`integration-tiers.md`](./integration-tiers.md) | `tests/spec/integration-tiers.test.js` |
 | Agent memory interchange | [`agent-memory-interchange.md`](./agent-memory-interchange.md) | `tests/scripts/export.test.js` (export, section 8.1); gap: reference `egc import` planned |
-| Hooks contract | `schemas/hooks.schema.json` | `tests/hooks/hooks.test.js` |
-| Plugin manifest | `schemas/plugin.schema.json` | `tests/plugin-manifest.test.js` |
-| Runtime map | `schemas/runtime-map.schema.json` | gap: `tests/test_orchestrator.py` was removed in #307; the schema's consumers (`scripts/runtime/discovery.js`, `scripts/orchestration/router.py`) have no dedicated validator |
-| Install profiles | `schemas/install-profiles.schema.json` | `tests/lib/install-manifests.test.js` |
-| Install modules | `schemas/install-modules.schema.json` | `tests/scripts/doctor.test.js` |
-| Install components | `schemas/install-components.schema.json` | `tests/lib/install-manifests.test.js` |
-| Package manager detection | `schemas/package-manager.schema.json` | `tests/scripts/auto-update.test.js` |
-| Provenance metadata | `schemas/provenance.schema.json` | `tests/lib/skill-dashboard.test.js` |
-| State store | `schemas/state-store.schema.json` | `tests/lib/state-store.test.js` |
-| EGC install config | `schemas/egc-install-config.schema.json` | `tests/lib/install-targets.test.js` |
-| Install state | `schemas/install-state.schema.json` | gap: no dedicated test (validated indirectly via install-apply flow) |
-| Agents registry | `schemas/agents-registry.schema.json` | gap: no dedicated validator |
-| Skills registry | `schemas/skills-registry.schema.json` | gap: no dedicated validator |
+| Hooks contract | `schemas/hooks.schema.json` | `tests/spec/schemas.test.js` against `hooks/hooks.json`; `scripts/ci/validate-hooks.js` in CI |
+| Plugin manifest | `schemas/plugin.schema.json` | `tests/spec/schemas.test.js` against `.gemini-plugin/plugin.json`; `tests/plugin-manifest.test.js` checks the manifests field by field |
+| Runtime map | `schemas/runtime-map.schema.json` | `tests/spec/schemas.test.js` against the file `scripts/runtime/discovery.js` writes |
+| Install profiles | `schemas/install-profiles.schema.json` | `tests/spec/schemas.test.js` against `manifests/install-profiles.json`; `scripts/ci/validate-install-manifests.js` in CI |
+| Install modules | `schemas/install-modules.schema.json` | `tests/spec/schemas.test.js` against `manifests/install-modules.json`; `scripts/ci/validate-install-manifests.js` in CI |
+| Install components | `schemas/install-components.schema.json` | `tests/spec/schemas.test.js` against `manifests/install-components.json`; `scripts/ci/validate-install-manifests.js` in CI |
+| Package manager detection | `schemas/package-manager.schema.json` | `tests/spec/schemas.test.js` against the `package-manager.json` that `scripts/lib/package-manager.js` writes |
+| Provenance metadata | `schemas/provenance.schema.json` | `tests/spec/schemas.test.js` against the file `scripts/lib/skill-evolution/provenance.js` writes |
+| State store | `schemas/state-store.schema.json` | At runtime by `scripts/lib/state-store/schema.js`; `tests/lib/state-store.test.js` |
+| EGC install config | `schemas/egc-install-config.schema.json` | At runtime by `scripts/lib/install/config.js`; `tests/lib/install-config.test.js` |
+| Install state | `schemas/install-state.schema.json` | `tests/spec/schemas.test.js` against the state `scripts/lib/install-state.js` creates; at runtime by `scripts/lib/install-state.js` |
+
+`tests/spec/schemas.test.js` fails when a schema in `schemas/` has no case, so a new schema needs its data in that test.
 
 ## Entry points by audience
 
@@ -44,15 +44,15 @@ A 90-day deprecation window applies for `MAJOR` breaking changes to public-facin
 
 **Auditing your fork?** Run `node scripts/harness-audit.js`.
 
-**Migrating between MAJOR versions?** Read the changelog plus the relevant ADR under `docs/decisions/` (planned).
+**Migrating between MAJOR versions?** Read the changelog. There are no ADRs yet (see below).
 
 ## What is NOT yet specified
 
 This section is deliberately public. Honest gap-tracking beats aspirational omission.
 
-- **Harness contract schema**: `harness-contract.schema.json` does not exist yet. The contract is implicit in `install-apply.js`. This is the next maturation step
-- **Per-harness conformance tests**: `tests/spec/{target}.smoke.test.js` does not exist yet. Smoke tests will validate that each harness install produces the documented filesystem layout
-- **ADRs**: `docs/decisions/` does not exist yet. ~5-7 retroactive ADRs are needed for decisions already taken (LEGACY_PLUGIN_SLUG, two MCP servers, SQLite local, tier-3 Claude Code, etc.)
+- **Harness contract schema**: there is no schema for it yet. The contract is implicit in `scripts/install-apply.js`. This is the next maturation step
+- **Per-harness conformance tests**: there are no per-target smoke tests yet. They would validate that each harness install produces the documented filesystem layout
+- **ADRs**: there is no ADR folder yet. ~5-7 retroactive ADRs are needed for decisions already taken (LEGACY_PLUGIN_SLUG, two MCP servers, SQLite local, tier-3 Claude Code, etc.)
 - **HARNESS-{target}.md per Tier 1/2 target**: one-page summary per target with maintainer, install example, known edge cases
 
 ## Compatibility commitments

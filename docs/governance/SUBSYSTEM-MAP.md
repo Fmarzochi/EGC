@@ -47,6 +47,9 @@ clean checkout may not have yet.
 
 ### Schemas
 
+`tests/spec/schemas.test.js` validates every schema in `schemas/` against its
+data, and fails when a schema has no case there.
+
 | Schema | Status |
 |---|---|
 | `schemas/hooks.schema.json` | Validated in CI by `scripts/ci/validate-hooks.js` |
@@ -54,11 +57,10 @@ clean checkout may not have yet.
 | `schemas/egc-install-config.schema.json` | Read at runtime by `scripts/lib/install/config.js` |
 | `schemas/install-state.schema.json` | Read at runtime by `scripts/lib/install-state.js` |
 | `schemas/state-store.schema.json` | Read at runtime by `scripts/lib/state-store/schema.js` |
-| `schemas/provenance.schema.json` | Not loaded; `validateProvenance()` in `scripts/lib/skill-evolution/provenance.js` checks the same records by hand on every read and write |
-| `schemas/package-manager.schema.json` | Not loaded; `scripts/lib/package-manager.js` reads and writes the config it describes without it |
-| `schemas/plugin.schema.json` | Not loaded; `tests/plugin-manifest.test.js` checks the plugin manifests field by field instead |
-| `schemas/runtime-map.schema.json` | Not loaded; `scripts/runtime/discovery.js` writes the runtime map without it (#1702) |
-| `schemas/agents-registry.schema.json`, `schemas/skills-registry.schema.json` | No validator and no reader (#1702) |
+| `schemas/provenance.schema.json` | Not loaded at runtime; `validateProvenance()` in `scripts/lib/skill-evolution/provenance.js` checks the same records by hand on every read and write |
+| `schemas/package-manager.schema.json` | Not loaded at runtime; checked against the file `scripts/lib/package-manager.js` writes |
+| `schemas/plugin.schema.json` | Not loaded at runtime; checked against `.gemini-plugin/plugin.json`, and `tests/plugin-manifest.test.js` checks the manifests field by field |
+| `schemas/runtime-map.schema.json` | Not loaded at runtime; checked against the file `scripts/runtime/discovery.js` writes |
 
 ### Generated / regeneratable
 
