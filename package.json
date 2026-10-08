@@ -147,7 +147,6 @@
   "pnpm": {
     "overrides": {
       "js-yaml": "$js-yaml",
-      "markdownlint-cli>js-yaml": "$js-yaml",
       "markdown-it": "^14.3.1",
       "fast-uri": "^3.1.8",
       "undici": "^6.27.0",
