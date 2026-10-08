@@ -10,6 +10,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 const { withoutHarnessVariables } = require('../fixtures/harness-variables');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 const hookScript = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'session-end.js');
 // The hook names the session file after the transcript UUID's last 8 chars.
@@ -25,7 +26,6 @@ const GIT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-n33-gitconfig-'));
 const ISOLATED_GIT_CONFIG = path.join(GIT_HOME, '.gitconfig');
 fs.writeFileSync(ISOLATED_GIT_CONFIG, '[maintenance]\n\tauto = false\n');
 const GIT_ISOLATION = { GIT_CONFIG_GLOBAL: ISOLATED_GIT_CONFIG, GIT_CONFIG_NOSYSTEM: '1' };
-const REMOVE_RETRIES = { maxRetries: 10, retryDelay: 100 };
 // Fixed git locations before a PATH lookup, as the hook itself does.
 const GIT_BIN = [
   '/usr/bin/git',
@@ -135,7 +135,7 @@ function headerOf(sessionFile) {
 }
 
 function cleanup(...dirs) {
-  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true, ...REMOVE_RETRIES });
+  for (const dir of dirs) removeDirWithRetries(dir);
 }
 
 function runTests() {
