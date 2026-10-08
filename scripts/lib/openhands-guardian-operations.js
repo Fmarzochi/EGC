@@ -2,8 +2,10 @@
 
 // EGC-498 (corrected): OpenHands has a real pre_tool_use hook (verified
 // against OpenHands/docs' own hooks.mdx, not an earlier internal report
-// which incorrectly classified it as prompt-only). Project-only --
-// confirmed no global/home hooks.json path exists.
+// which incorrectly classified it as prompt-only). EGC wires the project
+// file only. OpenHands also reads a global ~/.openhands/hooks.json, but
+// only when the project has none (HookConfig.load in the OpenHands SDK
+// takes the first file that exists); see docs/spec/integration-tiers.md.
 
 const {
   BASH_GUARDIAN_HOOK_MODULE_ID,

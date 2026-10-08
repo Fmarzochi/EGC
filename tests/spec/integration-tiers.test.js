@@ -196,6 +196,38 @@ function testJunieRowDocumentsAgentsMd() {
   console.log('  ✓ Junie row documents AGENTS.md and no target writes guidelines.md');
 }
 
+// OpenHands reads a global ~/.openhands/hooks.json besides the project
+// file, and the project file shadows it (#1656).
+function testOpenHandsRowDocumentsGlobalHooks() {
+  // A Windows checkout can carry CRLF.
+  const row = loadDoc().split(/\r?\n/).find(line => line.includes('**OpenHands**'));
+  assert.ok(row, 'the harness table must have an OpenHands row');
+  assert.ok(!/no global\/home path/.test(row), 'the OpenHands row must not say there is no global hooks path');
+  assert.ok(row.includes('`~/.openhands/hooks.json`'), 'the OpenHands row must name the global ~/.openhands/hooks.json');
+  assert.ok(row.includes('`.openhands/hooks.json`'), 'the OpenHands row must keep the project .openhands/hooks.json');
+  assert.ok(/never merge/.test(row), 'the OpenHands row must say the two files never merge');
+  assert.ok(
+    /only when the project has no `\.openhands\/hooks\.json`/.test(row),
+    'the OpenHands row must say the global file is read only when the project has none'
+  );
+  assert.ok(row.includes('`OH_PERSISTENCE_DIR`'), 'the OpenHands row must name the OH_PERSISTENCE_DIR override');
+  // The install code must not keep the claim this row corrects.
+  for (const relative of [
+    'scripts/lib/openhands-guardian-operations.js',
+    'scripts/lib/openhands-guardian-hooks.js',
+    'scripts/lib/install-targets/openhands-project.js',
+  ]) {
+    const source = fs.readFileSync(path.join(REPO_ROOT, ...relative.split('/')), 'utf8');
+    assert.ok(!/no global\/home/.test(source), `${relative} must not say OpenHands has no global hooks path`);
+  }
+  // Matched as a whole Markdown link, not as a URL substring.
+  assert.ok(
+    /\[[^\]]+\]\(https:\/\/docs\.openhands\.dev\/openhands\/usage\/customization\/hooks\)/.test(row),
+    'the OpenHands row must link the official hooks page'
+  );
+  console.log('  ✓ OpenHands row documents the global hooks file and its precedence');
+}
+
 console.log('=== Testing docs/spec/integration-tiers.md ===\n');
 
 let passed = 0;
@@ -207,6 +239,7 @@ for (const test of [
   testTier2InstallersRetired,
   testClaudeCodeProtocolInjectionExists,
   testJunieRowDocumentsAgentsMd,
+  testOpenHandsRowDocumentsGlobalHooks,
 ]) {
   try {
     test();
