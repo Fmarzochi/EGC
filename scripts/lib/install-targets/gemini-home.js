@@ -1,11 +1,14 @@
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
 const {
+  UNREADABLE_STATE,
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
   normalizeRelativePath,
+  readInstallStateOrNull,
   resolveModulesPlan,
 } = require('./helpers');
 const {
@@ -23,7 +26,8 @@ const { createAntigravityGuardianOperations } = require('../antigravity-guardian
 const { resolveGlobalHooksJsonPath } = require('../antigravity-guardian-hooks');
 
 const GEMINI_EGC_NAMESPACE = 'egc';
-const AGY_SKILLS_SUBDIRS = ['config/skills', 'antigravity-cli/skills'];
+const AGY_IDE_SKILLS_SUBDIR = 'config/skills';
+const AGY_SKILLS_SUBDIRS = [AGY_IDE_SKILLS_SUBDIR, 'antigravity-cli/skills'];
 
 // Source paths only the retired Gemini CLI read from this root and that no
 // family of the library counts on: Antigravity keeps its hooks in
@@ -47,7 +51,7 @@ function isGeminiCliOnlySource(sourceRelativePath) {
 // IDE and Antigravity 2.0 read them, and under antigravity-cli/skills, where
 // the Antigravity CLI reads them. The skills/egc namespace of the retired
 // Gemini CLI is not written any more.
-function getGeminiManagedDestinationPaths(adapter, sourceRelativePath, input) {
+function getGeminiManagedDestinationPaths(adapter, sourceRelativePath, input, recordedDestinations) {
   const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
   const targetRoot = adapter.resolveRoot(input);
 
@@ -59,7 +63,7 @@ function getGeminiManagedDestinationPaths(adapter, sourceRelativePath, input) {
     return [path.join(targetRoot, 'rules', GEMINI_EGC_NAMESPACE, normalizedSourcePath.slice('rules/'.length))];
   }
 
-  return getAGYManagedDestinationPaths(adapter, sourceRelativePath, input);
+  return getAGYManagedDestinationPaths(adapter, sourceRelativePath, input, recordedDestinations);
 }
 
 // Antigravity shares this home root (~/.gemini) for skill discovery (see
@@ -178,7 +182,26 @@ function dedupeCopyOperations(operations) {
   });
 }
 
-function getAGYManagedDestinationPaths(adapter, sourceRelativePath, input) {
+function collectRecordedDestinations(adapter, input) {
+  const statePaths = [adapter.getInstallStatePath(input), ...adapter.resolveLegacyInstallStatePaths(input)];
+  const destinations = [];
+  for (const statePath of statePaths) {
+    const state = readInstallStateOrNull(statePath);
+    if (state === UNREADABLE_STATE) return null;
+    const operations = state && Array.isArray(state.operations) ? state.operations : [];
+    destinations.push(...operations.map(operation => path.resolve(String(operation.destinationPath || ''))));
+  }
+  return destinations;
+}
+
+function isPersonOwned(destination, recordedDestinations) {
+  if (!fs.existsSync(destination)) return false;
+  if (!recordedDestinations) return true;
+  const resolved = path.resolve(destination);
+  return !recordedDestinations.some(recorded => recorded === resolved || recorded.startsWith(resolved + path.sep));
+}
+
+function getAGYManagedDestinationPaths(adapter, sourceRelativePath, input, recordedDestinations = []) {
   const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
   const targetRoot = adapter.resolveRoot(input);
 
@@ -191,7 +214,10 @@ function getAGYManagedDestinationPaths(adapter, sourceRelativePath, input) {
     // untouched.
     const parts = normalizedSourcePath.slice('skills/'.length).split('/');
     const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
-    return AGY_SKILLS_SUBDIRS.map(subdir => path.join(targetRoot, subdir, flatRemainder));
+    const ideSkillsRoot = path.join(targetRoot, AGY_IDE_SKILLS_SUBDIR);
+    return AGY_SKILLS_SUBDIRS
+      .map(subdir => path.join(targetRoot, subdir, flatRemainder))
+      .filter(destination => !(destination.startsWith(ideSkillsRoot + path.sep) && isPersonOwned(destination, recordedDestinations)));
   }
 
   return [];
@@ -206,6 +232,7 @@ module.exports = createInstallTargetAdapter({
   planOperations(input, adapter) {
     const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
     const homeDir = input.homeDir || os.homedir();
+    const recordedDestinations = collectRecordedDestinations(adapter, input);
 
     const moduleOperations = modules.flatMap(module => {
       const paths = Array.isArray(module.paths) ? module.paths : [];
@@ -215,7 +242,8 @@ module.exports = createInstallTargetAdapter({
           const managedDestinationPaths = getGeminiManagedDestinationPaths(
             adapter,
             sourceRelativePath,
-            planningInput
+            planningInput,
+            recordedDestinations
           );
 
           if (managedDestinationPaths.length > 0) {

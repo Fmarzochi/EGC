@@ -254,6 +254,41 @@ function runTests() {
     }
   }));
 
+  tally(test('a skill the person keeps under config/skills with the name of an EGC skill is never overwritten (#1705)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const planned = run([...args, '--dry-run'], { cwd: projectDir, homeDir });
+      assert.strictEqual(planned.code, 0, planned.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const ideSkills = path.join(geminiRoot, 'config', 'skills');
+      const cliSkills = path.join(geminiRoot, 'antigravity-cli', 'skills');
+      const plannedLine = planned.stdout.split('\n').find(line => line.includes(cliSkills + path.sep));
+      assert.ok(plannedLine, 'the plan writes Antigravity CLI skills');
+      const skill = path.relative(cliSkills, plannedLine.slice(plannedLine.indexOf(cliSkills))).split(path.sep)[0];
+      const own = path.join(ideSkills, skill, 'SKILL.md');
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, '# mine');
+
+      for (const pass of ['install', 'reinstall']) {
+        const result = run(args, { cwd: projectDir, homeDir, env });
+        assert.strictEqual(result.code, 0, `${pass}: ${result.stderr}`);
+        assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', `${pass}: the person's ${skill} under config/skills stays theirs`);
+        assert.ok(fs.existsSync(path.join(cliSkills, skill, 'SKILL.md')), `${pass}: the Antigravity CLI still gets ${skill}`);
+      }
+      const recorded = readJson(path.join(geminiRoot, 'egc', 'install-state.json')).operations.map(operation => operation.destinationPath);
+      assert.ok(!recorded.some(destination => destination.startsWith(path.join(ideSkills, skill))), 'the person\'s skill is never recorded as managed');
+      assert.ok(recorded.some(destination => destination.startsWith(ideSkills + path.sep)), 'the other skills still land under config/skills');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
   tally(test('installs Cursor configs and writes install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
