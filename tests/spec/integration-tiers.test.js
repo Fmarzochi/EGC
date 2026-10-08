@@ -249,10 +249,18 @@ function testQwenRowDocumentsHooks() {
     hookOperations.every(operation => operation.destinationPath === path.join(projectRoot, '.qwen', 'settings.json')),
     'the Qwen hooks must land in .qwen/settings.json'
   );
+  assert.deepStrictEqual(
+    [...new Set(hookOperations.map(operation => operation.moduleId))].sort(),
+    ['egc-bash-guardian-hook', 'egc-crusher-hook'],
+    'the Qwen adapter must plan both the Guardian and the Token Crusher hooks'
+  );
   const matchers = [...new Set(hookOperations.map(operation => operation.hookMatcher))];
-  const row = loadDoc().split(/\r?\n/).find(line => line.includes('**Qwen Code**'));
+  const doc = loadDoc();
+  const row = doc.split(/\r?\n/).find(line => line.includes('**Qwen Code**'));
   assert.ok(row, 'the harness table must have a Qwen Code row');
   assert.ok(!/no hook wiring/.test(row), 'the Qwen Code row must not say there is no hook wiring');
+  assert.ok(row.includes('Guardian') && row.includes('Token Crusher'), 'the Qwen Code row must name both hooks');
+  assert.ok(!/Qwen defers?\b/.test(doc), 'the spec must not say elsewhere that Qwen defers its hooks');
   assert.ok(row.includes('`.qwen/settings.json`'), 'the Qwen Code row must name .qwen/settings.json');
   for (const matcher of matchers) {
     assert.ok(row.includes(`\`${matcher}\``), `the Qwen Code row must name the ${matcher} matcher`);
