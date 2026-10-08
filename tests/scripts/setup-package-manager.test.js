@@ -321,7 +321,7 @@ function runTests() {
       assert.strictEqual(result.status, 0, `Expected exit 0, got ${result.status}. stderr: ${result.stderr}`);
       assert.ok(result.stdout.includes('Project preference set to'), 'Should show project success message');
       assert.ok(result.stdout.includes('npm'), 'Should mention npm');
-      const configPath = path.join(tmpDir, '.gemini', 'package-manager.json');
+      const configPath = path.join(tmpDir, '.egc', 'package-manager.json');
       assert.ok(fs.existsSync(configPath), 'Project config file should be created in CWD');
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       assert.strictEqual(config.packageManager, 'npm', 'Config should contain npm');
