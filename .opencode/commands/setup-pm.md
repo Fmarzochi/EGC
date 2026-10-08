@@ -13,24 +13,24 @@ Set up package manager preference for the project or globally.
 
 ## Detection Order
 
-1. **Environment variable**: `GEMINI_PACKAGE_MANAGER`
-2. **Project config**: `.gemini/package-manager.json`
+1. **Environment variable**: `EGC_PACKAGE_MANAGER` (the old `GEMINI_PACKAGE_MANAGER` still counts)
+2. **Project config**: `.egc/package-manager.json` (an old `.gemini/package-manager.json` is still read)
 3. **package.json**: `packageManager` field
 4. **Lock file**: Auto-detect from lock files
-5. **Global config**: `~/.gemini/package-manager.json`
+5. **Global config**: `package-manager.json` in the EGC directory of the active tool (or in the directory `EGC_DIR` names when it is set)
 6. **Fallback**: First available
 
 ## Configuration Options
 
 ### Option 1: Environment Variable
 ```bash
-export GEMINI_PACKAGE_MANAGER=pnpm
+export EGC_PACKAGE_MANAGER=pnpm
 ```
 
 ### Option 2: Project Config
 ```bash
-# Create .gemini/package-manager.json
-echo '{"packageManager": "pnpm"}' > .gemini/package-manager.json
+# Create .egc/package-manager.json
+echo '{"packageManager": "pnpm"}' > .egc/package-manager.json
 ```
 
 ### Option 3: package.json
@@ -41,9 +41,11 @@ echo '{"packageManager": "pnpm"}' > .gemini/package-manager.json
 ```
 
 ### Option 4: Global Config
-```bash
-# Create ~/.gemini/package-manager.json
-echo '{"packageManager": "yarn"}' > ~/.gemini/package-manager.json
+Create `package-manager.json` in the EGC directory of the active tool (the directory `EGC_DIR` names when it is set; otherwise the one EGC uses for the tool in session, where its sessions and learned skills live):
+```json
+{
+  "packageManager": "yarn"
+}
 ```
 
 ## Supported Package Managers
