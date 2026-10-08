@@ -15,7 +15,8 @@
  *
  * TypeScript port of thelink/gitsignals.py at commit 4f607a4 (github.com/UnforGBeast/thelink).
  */
-import { spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
 import { signal, type FileDoc, type GitContextLike, type ScoreContext } from './file-ranker.js';
 
 const LOG_LIMIT = 50;
@@ -25,50 +26,71 @@ const W_CHANGED = 1.0;
 const W_BRANCH = 0.7;
 const W_RECENT = 0.6;
 const W_COCHANGE = 0.5;
+const GIT_TIMEOUT_MS = 5000;
 
-function runGit(projectPath: string, args: string[]): string | null {
-  const r = spawnSync('git', ['-C', projectPath, ...args], {
-    encoding: 'utf8',
-    timeout: 5000,
-    windowsHide: true,
-    maxBuffer: 16 * 1024 * 1024
+// S4036: prefer fixed git locations over a PATH lookup, as the hooks and the
+// leak checks do; the bare name is the last resort for layouts like nix or
+// portable Git.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  '/opt/homebrew/bin/git',
+  String.raw`C:\Program Files\Git\cmd\git.exe`
+].find(candidate => fs.existsSync(candidate)) ?? 'git';
+
+// Asynchronous, so a slow repository never blocks the MCP event loop; null on
+// any failure (no git, not a repository, a call that ran out of time).
+function runGit(projectPath: string, args: string[]): Promise<string | null> {
+  return new Promise(resolve => {
+    execFile(
+      GIT_BIN,
+      ['-C', projectPath, ...args],
+      { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
+      (error, stdout) => resolve(error ? null : stdout)
+    );
   });
-  if (r.error || r.status !== 0) return null;
-  return r.stdout;
 }
 
 const norm = (p: string): string => p.replace(/\\/g, '/').trim().replace(/^\.\/+/, '');
 
-function changedPaths(projectPath: string): Set<string> {
-  const out = runGit(projectPath, ['status', '--porcelain', '-z']);
+// With -z a rename or copy record is followed by one more, bare record that
+// holds the original path; it has no status prefix and is skipped.
+async function changedPaths(projectPath: string): Promise<Set<string>> {
+  const out = await runGit(projectPath, ['status', '--porcelain', '-z']);
   const paths = new Set<string>();
   if (!out) return paths;
-  for (const entry of out.split('\0')) {
-    if (entry.length > 3) paths.add(norm(entry.slice(3)));
+  const entries = out.split('\0');
+  for (let k = 0; k < entries.length; k++) {
+    const entry = entries[k];
+    if (entry.length <= 3) continue;
+    paths.add(norm(entry.slice(3)));
+    if (/[RC]/.test(entry.slice(0, 2))) k++;
   }
   return paths;
 }
 
-function branchPaths(projectPath: string): Set<string> {
+async function branchPaths(projectPath: string): Promise<Set<string>> {
   let base: string | null = null;
   for (const ref of DEFAULT_BRANCHES) {
-    const mb = runGit(projectPath, ['merge-base', 'HEAD', ref]);
-    if (mb && mb.trim()) {
+    const mb = await runGit(projectPath, ['merge-base', 'HEAD', ref]); // NOSONAR: the first ref that resolves wins, so the probes are ordered by design
+    if (mb?.trim()) {
       base = mb.trim();
       break;
     }
   }
   if (!base) return new Set();
-  const head = runGit(projectPath, ['rev-parse', 'HEAD']);
+  const head = await runGit(projectPath, ['rev-parse', 'HEAD']);
   if (head && head.trim() === base) return new Set();
-  const diff = runGit(projectPath, ['diff', '--name-only', `${base}...HEAD`]);
+  const diff = await runGit(projectPath, ['diff', '--name-only', `${base}...HEAD`]);
   return new Set((diff ?? '').split('\n').filter(l => l.trim()).map(norm));
 }
 
-function recentAndCochange(projectPath: string): { recent: Map<string, number>; cochange: Map<string, Map<string, number>> } {
+async function recentAndCochange(
+  projectPath: string
+): Promise<{ recent: Map<string, number>; cochange: Map<string, Map<string, number>> }> {
   const recent = new Map<string, number>();
   const cochange = new Map<string, Map<string, number>>();
-  const raw = runGit(projectPath, ['log', `-${LOG_LIMIT}`, '--name-only', '--pretty=format:%x01%H', '--no-merges']);
+  const raw = await runGit(projectPath, ['log', `-${LOG_LIMIT}`, '--name-only', '--pretty=format:%x01%H', '--no-merges']);
   if (!raw) return { recent, cochange };
 
   const commits: string[][] = [];
@@ -104,11 +126,13 @@ function recentAndCochange(projectPath: string): { recent: Map<string, number>; 
   return { recent, cochange };
 }
 
-export function collectGitContext(projectPath: string): GitContextLike | null {
-  if (runGit(projectPath, ['rev-parse', '--is-inside-work-tree']) === null) return null;
-  const changed = changedPaths(projectPath);
-  const branch = branchPaths(projectPath);
-  const { recent, cochange } = recentAndCochange(projectPath);
+export async function collectGitContext(projectPath: string): Promise<GitContextLike | null> {
+  if ((await runGit(projectPath, ['rev-parse', '--is-inside-work-tree'])) === null) return null;
+  const [changed, branch, { recent, cochange }] = await Promise.all([
+    changedPaths(projectPath),
+    branchPaths(projectPath),
+    recentAndCochange(projectPath)
+  ]);
   if (changed.size === 0 && branch.size === 0 && recent.size === 0) return null;
   return { changed, branch, recent, cochange };
 }
@@ -117,11 +141,7 @@ export function matchPath(docPath: string, keys: Iterable<string>): string | und
   const d = norm(docPath);
   const list = [...keys];
   if (list.includes(d)) return d;
-  for (const k of list) {
-    if (k.endsWith('/' + d) || d.endsWith('/' + k)) return k;
-  }
-  const base = d.split('/').pop();
-  return list.find(k => k.split('/').pop() === base);
+  return list.find(k => k.endsWith('/' + d) || d.endsWith('/' + k));
 }
 
 signal('git', 1.0, (doc: FileDoc, ctx: ScoreContext) => {

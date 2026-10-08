@@ -15,7 +15,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { extractFile } from './graph-extract.js';
+import { extractFile, type ExtractedImport } from './graph-extract.js';
 import { makeIgnore, resolveSpecifier, TEXT_EXT, walkFiles } from './graph-build.js';
 import { tokenize, type FileDoc, type ImportEdge } from './file-ranker.js';
 
@@ -33,79 +33,87 @@ export interface FileIndexOptions {
   isProtectedPath?: (absPath: string) => boolean;
 }
 
+// The text of a file small enough to index; null for a large, unreadable or binary one.
+async function readIndexedText(abs: string, size: number): Promise<string | null> {
+  if (size > MAX_FILE_BYTES) return null;
+  try {
+    const text = await fs.promises.readFile(abs, 'utf8');
+    return text.includes('\u0000') ? null : text;
+  } catch {
+    return null;
+  }
+}
+
+// One document per file, with the imports found by the single extraction of a
+// JS/TS file. null when the file is protected or is not a regular file.
+async function indexFile(
+  root: string,
+  rel: string,
+  opts: FileIndexOptions
+): Promise<{ doc: FileDoc; imports: ExtractedImport[] } | null> {
+  const abs = path.join(root, rel);
+  if (opts.isProtectedPath?.(abs)) return null;
+  let st: fs.Stats;
+  try {
+    st = await fs.promises.stat(abs);
+  } catch {
+    return null;
+  }
+  if (!st.isFile()) return null;
+
+  const pathTokens = tokenize(rel);
+  const text = await readIndexedText(abs, st.size);
+  if (text === null) return { doc: { path: rel, fields: { path: pathTokens, symbols: [], keywords: [], summary: [] } }, imports: [] };
+
+  const summary = tokenize(summaryOf(text));
+  if (!JS_TS.test(rel)) return { doc: { path: rel, fields: { path: pathTokens, symbols: [], keywords: [], summary } }, imports: [] };
+  const ex = extractFile(text);
+  return {
+    doc: { path: rel, fields: { path: pathTokens, symbols: ex.symbols.flatMap(s => tokenize(s.name)), keywords: [], summary } },
+    imports: ex.imports
+  };
+}
+
+async function loadIgnore(root: string): Promise<(rel: string, isDir: boolean) => boolean> {
+  try {
+    return makeIgnore(await fs.promises.readFile(path.join(root, '.gitignore'), 'utf8'));
+  } catch {
+    return () => false; // no .gitignore
+  }
+}
+
+const compareText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 export async function buildFileIndex(
   projectRoot: string,
   opts: FileIndexOptions = {}
 ): Promise<{ docs: FileDoc[]; edges: ImportEdge[]; skipped: number }> {
-  const root = fs.realpathSync(projectRoot);
-  let ignore = (_rel: string, _isDir: boolean): boolean => false;
-  try {
-    ignore = makeIgnore(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'));
-  } catch {
-    // no .gitignore
-  }
+  const root = await fs.promises.realpath(projectRoot);
+  const ignore = await loadIgnore(root);
   const walked = await walkFiles(root, ignore, name => TEXT_EXT.test(name), MAX_FILES, Date.now() + DEADLINE_MS);
   const fileSet = new Set<string>(walked.files);
   const docs: FileDoc[] = [];
-  const jsTs = new Map<string, string>();
+  const importsByFile: Array<[string, ExtractedImport[]]> = [];
   let skipped = 0;
 
   for (const rel of walked.files) {
-    const abs = path.join(root, rel);
-    if (opts.isProtectedPath?.(abs)) {
+    const indexed = await indexFile(root, rel, opts); // NOSONAR: one file at a time keeps memory and open handles bounded
+    if (!indexed) {
       skipped++;
       continue;
     }
-    let st: fs.Stats;
-    try {
-      st = fs.statSync(abs);
-    } catch {
-      skipped++;
-      continue;
-    }
-    if (!st.isFile()) {
-      skipped++;
-      continue;
-    }
-    let text: string | null = null;
-    if (st.size <= MAX_FILE_BYTES) {
-      try {
-        text = fs.readFileSync(abs, 'utf8');
-      } catch {
-        text = null;
-      }
-    }
-    if (text !== null && text.includes('\u0000')) text = null;
-    const pathTokens = tokenize(rel);
-    if (text === null) {
-      docs.push({ path: rel, fields: { path: pathTokens, symbols: [], keywords: [], summary: [] } });
-      continue;
-    }
-    if (JS_TS.test(rel)) {
-      jsTs.set(rel, text);
-      const ex = extractFile(text);
-      docs.push({
-        path: rel,
-        fields: {
-          path: pathTokens,
-          symbols: ex.symbols.flatMap(s => tokenize(s.name)),
-          keywords: [],
-          summary: tokenize(summaryOf(text))
-        }
-      });
-    } else {
-      docs.push({ path: rel, fields: { path: pathTokens, symbols: [], keywords: [], summary: tokenize(summaryOf(text)) } });
-    }
+    docs.push(indexed.doc);
+    if (indexed.imports.length > 0) importsByFile.push([rel, indexed.imports]);
   }
 
   const edges: ImportEdge[] = [];
-  for (const [rel, text] of jsTs) {
-    for (const im of extractFile(text).imports) {
+  for (const [rel, imports] of importsByFile) {
+    for (const im of imports) {
       const target = resolveSpecifier(rel, im.specifier, fileSet);
       if (target && target !== rel) edges.push({ from: rel, to: target, rel: 'imports' });
     }
   }
-  edges.sort((a, b) => (a.from + '\0' + a.to < b.from + '\0' + b.to ? -1 : a.from + '\0' + a.to > b.from + '\0' + b.to ? 1 : 0));
-  docs.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  edges.sort((a, b) => compareText(a.from + '\0' + a.to, b.from + '\0' + b.to));
+  docs.sort((a, b) => compareText(a.path, b.path));
   return { docs, edges, skipped };
 }

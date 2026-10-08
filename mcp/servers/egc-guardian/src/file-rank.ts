@@ -37,7 +37,7 @@ export interface RankedFile { path: string; score: number; signals: Record<strin
 
 export async function rankProjectFiles(opts: RankOptions): Promise<{ ranked: RankedFile[]; explain: string[]; briefing: string }> {
   const index = await buildFileIndex(opts.projectPath, { isProtectedPath: opts.isProtectedPath });
-  const gitSignal = opts.useGit === false ? null : collectGitContext(opts.projectPath);
+  const gitSignal = opts.useGit === false ? null : await collectGitContext(opts.projectPath);
   const scored = scoreDocuments(index.docs, {
     query: opts.query,
     history: opts.history ?? '',

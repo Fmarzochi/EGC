@@ -78,4 +78,10 @@ async function main() {
   return 0;
 }
 
-main().then(code => { process.exitCode = code; });
+main().then(
+  code => { process.exitCode = code; },
+  err => {
+    process.stderr.write(`egc context: ${err.message}\n`);
+    process.exitCode = 1;
+  }
+);

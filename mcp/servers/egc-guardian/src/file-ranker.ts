@@ -209,37 +209,33 @@ signal('path_hit', 1.5, (doc, ctx) => {
   return hits;
 });
 
+// Import edges hold project-relative paths, so a target resolves by its exact
+// path (with or without extension) and never by file name alone, which would
+// credit a different file that happens to share the name.
 function resolveImportTarget(target: string, byKey: Map<string, string>): string | undefined {
   if (byKey.has(target)) return byKey.get(target);
   const dotted = target.replace(/\./g, '/').replace(/^\/+|\/+$/g, '');
   for (const cand of [dotted, `${dotted}/__init__`, target.replace(/\\/g, '/').replace(/^\.\//, '')]) {
     if (byKey.has(cand)) return byKey.get(cand);
   }
-  const stemName = target.replace(/^[./\\]+|[./\\]+$/g, '').split(/[./\\]/).pop() ?? '';
-  return byKey.get(`stem:${stemName}`);
+  return undefined;
 }
 
-propagator('import_graph', 1.2, (ranked, ctx, weight) => {
-  const hops = ctx.extras.graphHops ?? GRAPH_DEFAULT_HOPS;
-  const byPath = new Map(ranked.map(sd => [sd.doc.path, sd]));
-  const emit = (raw: (sd: ScoredDoc) => number) => {
-    for (const sd of ranked) sd.signals.push({ name: 'import_graph', raw: raw(sd), weight });
-  };
-  if (hops <= 0 || ctx.edges.length === 0) return emit(() => 0);
-
+function buildKeyIndex(paths: Iterable<string>): Map<string, string> {
   const byKey = new Map<string, string>();
-  for (const p of byPath.keys()) {
+  for (const p of paths) {
     const norm = p.replace(/\\/g, '/');
     if (!byKey.has(norm)) byKey.set(norm, p);
     const noExt = norm.replace(/\.[^./]+$/, '');
     if (!byKey.has(noExt)) byKey.set(noExt, p);
-    const stemName = (norm.split('/').pop() ?? '').replace(/\.[^.]+$/, '');
-    if (!byKey.has(`stem:${stemName}`)) byKey.set(`stem:${stemName}`, p);
   }
+  return byKey;
+}
 
+function buildImportAdjacency(paths: string[], edges: ImportEdge[], byKey: Map<string, string>): Map<string, Set<string>> {
   const adj = new Map<string, Set<string>>();
-  for (const p of byPath.keys()) adj.set(p, new Set());
-  for (const e of ctx.edges) {
+  for (const p of paths) adj.set(p, new Set());
+  for (const e of edges) {
     if (e.rel !== 'imports') continue;
     const src = byKey.get(e.from.replace(/\\/g, '/')) ?? byKey.get(e.from.replace(/\\/g, '/').replace(/\.[^./]+$/, ''));
     const dst = resolveImportTarget(e.to, byKey);
@@ -248,10 +244,10 @@ propagator('import_graph', 1.2, (ranked, ctx, weight) => {
       adj.get(dst)?.add(src);
     }
   }
+  return adj;
+}
 
-  const seeds = ranked.slice(0, GRAPH_SEED_COUNT).filter(sd => sd.total > 0).map(sd => sd.doc.path);
-  if (seeds.length === 0) return emit(() => 0);
-
+function hopDistances(seeds: string[], adj: Map<string, Set<string>>, hops: number): Map<string, number> {
   const dist = new Map<string, number>(seeds.map(s => [s, 0]));
   let frontier = [...seeds];
   for (let d = 1; d <= hops && frontier.length; d++) {
@@ -266,6 +262,22 @@ propagator('import_graph', 1.2, (ranked, ctx, weight) => {
     }
     frontier = next;
   }
+  return dist;
+}
+
+propagator('import_graph', 1.2, (ranked, ctx, weight) => {
+  const hops = ctx.extras.graphHops ?? GRAPH_DEFAULT_HOPS;
+  const emit = (raw: (sd: ScoredDoc) => number) => {
+    for (const sd of ranked) sd.signals.push({ name: 'import_graph', raw: raw(sd), weight });
+  };
+  if (hops <= 0 || ctx.edges.length === 0) return emit(() => 0);
+
+  const seeds = ranked.slice(0, GRAPH_SEED_COUNT).filter(sd => sd.total > 0).map(sd => sd.doc.path);
+  if (seeds.length === 0) return emit(() => 0);
+
+  const paths = ranked.map(sd => sd.doc.path);
+  const adj = buildImportAdjacency(paths, ctx.edges, buildKeyIndex(paths));
+  const dist = hopDistances(seeds, adj, hops);
   emit(sd => {
     const d = dist.get(sd.doc.path);
     return d && d >= 1 ? GRAPH_HOP_DECAY ** (d - 1) : 0;

@@ -46,6 +46,13 @@ run('prints the three-block briefing on stdout', () => {
   assert.strictEqual(r.stderr.trim(), '', 'no explain output without --explain');
 });
 
+run('a project that does not exist fails with a one-line message, not a stack trace', () => {
+  const r = spawnSync(process.execPath, [script, 'chargeCard', '--project', path.join(tmp, 'missing'), '--no-git'], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 1);
+  assert.ok(r.stderr.startsWith('egc context:'), r.stderr);
+  assert.ok(!r.stderr.includes('    at '), 'no stack trace');
+});
+
 run('--explain writes the table to stderr and leaves stdout as the briefing', () => {
   const r = spawnSync(process.execPath, [script, 'chargeCard', '--project', root, '--no-git', '--explain'], { encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
