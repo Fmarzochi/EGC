@@ -84,6 +84,15 @@ async function runTests() {
       assert.strictEqual(state.status, 'active');
     }));
 
+    tally(await test('working_memory_set caps ttl_seconds at 7 days (#533)', async () => {
+      const withinCap = await server.request('tools/call', { name: 'working_memory_set', arguments: { key: 'ttl-ok', value: 'v', ttl_seconds: 604800 } });
+      assert.strictEqual(withinCap.error, undefined, JSON.stringify(withinCap));
+      const overCap = await server.request('tools/call', { name: 'working_memory_set', arguments: { key: 'ttl-too-long', value: 'v', ttl_seconds: 604801 } });
+      assert.strictEqual(overCap.error?.code, -32602, JSON.stringify(overCap));
+      const yearsOut = await server.request('tools/call', { name: 'working_memory_set', arguments: { key: 'ttl-forever', value: 'v', ttl_seconds: 2147483647 } });
+      assert.strictEqual(yearsOut.error?.code, -32602, JSON.stringify(yearsOut));
+    }));
+
     tally(await test('query_history tool description and schema default limit agree on 20 (#1663)', async () => {
       const tools = (await server.request('tools/list', {})).result.tools;
       const queryHistoryTool = tools.find(tool => tool.name === 'query_history');
