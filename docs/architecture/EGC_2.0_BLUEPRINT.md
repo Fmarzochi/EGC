@@ -41,7 +41,7 @@ A new Rust process would become the primary **System Kernel** (no Rust code exis
 ### 3.1 Namespace Unification
 Proposed: a single `~/.gemini/egc` namespace. Today the paths are split, and no migration exists:
 - The project memory state always lives under `~/.egc/state`, with no override (`scripts/lib/branch-state.js`).
-- The memory server's database is `~/.egc/egc/state.db`, moved by `EGC_STATE_DB` or `EGC_DIR` (`mcp/servers/egc-memory/src/state-store-path.ts`).
+- The memory server's own database is `~/.egc/memory/state.db`, with no override (`getMemoryDbDir()` in `mcp/servers/egc-memory/src/index.ts`); the CLI event store it also reads is `~/.egc/egc/state.db`, moved by `EGC_STATE_DB` or `EGC_DIR` (`mcp/servers/egc-memory/src/state-store-path.ts`).
 - Hook-side files go to the directory `getEGCDir()` resolves in `scripts/lib/utils.js`: `EGC_DIR`, then the variables the tool injects at hook time, then the installed tool home that contains the running package, and `~/.egc` only after those, when it already exists. Inside a tool session that is usually the tool's own directory.
 - The continuous-learning store is `~/.egc-learning` (`getLearningDir()` in the same file).
 
