@@ -1,28 +1,43 @@
 # scripts/runtime
 
-`router.js`, `mount-all.js`, `unmount-all.js`, and
-`activator.js` implement a dynamic skill router that would materialize
-skills into `.agents/skills/`.
+Three files here are part of a running EGC; the rest belong to a Python
+orchestration runtime that nothing starts. `tests/docs/subsystem-map-docs.test.js`
+fails when a file in this folder is missing from this page, or when this page
+names a file that is not here.
 
-**Status: DORMANT.**
+## Active
 
-`discovery.js` is **ACTIVE** and serves as the Topology Hot Cache compiler. It compiles the runtime map into `internal/registry/runtime-map.json`.
+- `discovery.js` builds the topology cache `internal/registry/runtime-map.json`
+  from the install manifests. `scripts/install-apply.js` calls it after an
+  install; `internal/` is gitignored.
+- `session_bridge.py` is started by the `sessionstart:egc-session-bridge` hook
+  (`scripts/hooks/egc-session-bridge.js`) with the plugin's Python.
+- `tracer.py` records the events `session_bridge.py` emits.
 
-The dormant scripts resolve the registry as `registry/runtime-map.json` (top-level) which doesn't exist, and fail with `ENOENT`. CI does not call them, `package.json` `bin` entries do not reference them, and the static plugin manifests plus the install adapters under `scripts/lib/install-targets/` drive the runtime instead.
+## Dormant
 
-To inspect the catalog without this subsystem:
+- `async_task_queue.py`, `doctor_core.py`, `egc_orchestrate_cli.py`,
+  `event_bus.py`, `exceptions.py`, `memory_mesh.py`, `profiler.py`,
+  `runtime_context.py` and `session_manager.py` belong to the orchestration
+  runtime in `scripts/orchestration/`, `scripts/execution/` and
+  `scripts/workflows/`. No CLI command, hook or npm script starts that
+  runtime, and its tests in `scripts/tests/` sit outside the `pytest tests/`
+  step of CI.
+
+`scripts/ci/runtime-topology.js` and `scripts/ci/runtime-snapshot.js` read
+these files for the CI smoke checks; they do not run them.
+
+To inspect the catalog:
 
 ```bash
 node scripts/ci/catalog.js --text
 ```
 
-To materialize skills into a target harness:
+To install skills into a tool:
 
 ```bash
-./install.sh --target <harness> [modules...]
-npx egc-install --target <harness> [modules...]
+egc install --target <tool> --profile full
 ```
 
-This subsystem (excluding `discovery.js`) is preserved for design reference. Do not revive opportunistically. See `docs/governance/SUBSYSTEM-MAP.md` for the full classification.
-
-Direct invocation of the dormant scripts exits with code 2 and a DORMANT notice.
+See `docs/governance/SUBSYSTEM-MAP.md` for the full classification. Do not
+revive the dormant files opportunistically.
