@@ -1297,41 +1297,45 @@ function nestedSegmentsOf(file, depth, seen) {
 // Once the budget is spent, the calls left are not made and the script is
 // judged in full, as a script outside a repository is.
 const GIT_BUDGET_MS = 15000;
-let gitDeadline = null;
+// The budget of the judgement under way: the git time it has left. Only the
+// time git itself takes is deducted, so the validator and the reads of the
+// hook never eat into it.
+let gitBudget = null;
 
 // Runs `work` with one git budget for every gitIn it makes, and ends the
-// budget after it. A budget opened inside another never outlasts the outer
-// one. A call outside any budget gets the whole budget for itself.
+// budget after it. A budget opened inside another never has more than the
+// outer one has left, and what it spends is spent for the outer one too. A
+// call outside any budget gets the whole budget for itself.
 function withGitBudget(work, budgetMs = GIT_BUDGET_MS) {
-  const previous = gitDeadline;
-  const deadline = Date.now() + budgetMs;
-  gitDeadline = previous === null ? deadline : Math.min(previous, deadline);
+  const previous = gitBudget;
+  const inner = { left: previous === null ? budgetMs : Math.min(previous.left, budgetMs) };
+  const opened = inner.left;
+  gitBudget = inner;
   try {
     return work();
   } finally {
-    gitDeadline = previous;
+    if (previous !== null) previous.left -= opened - inner.left;
+    gitBudget = previous;
   }
-}
-
-function gitTimeLeftMs() {
-  return gitDeadline === null ? GIT_BUDGET_MS : gitDeadline - Date.now();
 }
 
 // git run to read, never to act: the variables that point it at another
 // repository are dropped and fsmonitor, the one command the repository's
 // config could have these subcommands start, is switched off.
 function gitIn(dir, args) {
-  const timeLeft = gitTimeLeftMs();
-  if (timeLeft <= 0) return null;
+  const budget = gitBudget ?? { left: GIT_BUDGET_MS };
+  if (budget.left <= 0) return null;
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  const started = Date.now();
   const result = spawnSync('git', ['--no-optional-locks', '-c', 'core.fsmonitor=false', ...args], { // NOSONAR javascript:S4036 -- the user's own git knows their repositories; fixed argv, no shell
     cwd: dir,
     env,
     encoding: 'utf8',
-    timeout: timeLeft,
+    timeout: budget.left,
     stdio: ['ignore', 'pipe', 'ignore'],
     windowsHide: true,
   });
+  budget.left -= Date.now() - started;
   return result.status === 0 ? result.stdout.trim() : null;
 }
 

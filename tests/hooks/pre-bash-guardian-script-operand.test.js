@@ -1119,6 +1119,13 @@ function runTests() {
         assert.strictEqual(withGitBudget(() => gitIn(repo, ['rev-parse', '--is-inside-work-tree']), 0), null, 'a spent budget makes no git call');
         assert.strictEqual(gitIn(repo, ['rev-parse', '--is-inside-work-tree']), 'true', 'outside a judgement a call gets the whole budget');
         assert.strictEqual(withGitBudget(() => run({ tool_name: 'Bash', tool_input: { command: 'bash jar.sh' }, cwd: repo }).exitCode, 0), 2, 'with the budget spent the committed script is judged in full');
+        // Only the time git takes is deducted: a wait elsewhere in the
+        // judgement (the validator, a read) leaves the budget as it was.
+        const waited = withGitBudget(() => {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);
+          return gitIn(repo, ['rev-parse', '--is-inside-work-tree']);
+        }, 100);
+        assert.strictEqual(waited, 'true', 'a wait outside git does not spend the budget');
         if (process.platform === 'win32') {
           console.log('    (the slow git itself is run on POSIX only: a shim named git needs a shell there)');
           return;
