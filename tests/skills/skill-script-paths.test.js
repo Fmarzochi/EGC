@@ -211,6 +211,8 @@ function runStocktakeScanCases() {
       const skillsDir = path.join(project, '.agents', 'skills');
       fs.mkdirSync(skillsDir, { recursive: true });
       const result = run(SCAN, [`${skillsDir}/`], { home, cwd: project, env: { CLAUDECODE: '1' } });
+      const output = parseJson(result, 'scan.sh');
+      assert.strictEqual(output.scan_summary.project.path, `${skillsDir}/`);
       assert.ok(!result.stderr.includes('Warning'), `a trailing slash is still a skills path. Got: ${result.stderr}`);
     } finally {
       removeDirWithRetries(home);
