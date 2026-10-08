@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const readline = require('readline');
 const { spawnSync } = require('child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const TELEMETRY_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'lib', 'telemetry.js');
 
@@ -291,6 +292,7 @@ async function runTests() {
   const runScript = (homeDir) => spawnSync(process.execPath, [TELEMETRY_SCRIPT], {
     encoding: 'utf8',
     input: '',
+    timeout: CLI_TIMEOUT_MS,
     env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
   });
 
