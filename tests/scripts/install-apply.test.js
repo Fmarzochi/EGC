@@ -177,14 +177,14 @@ function runTests() {
       assert.strictEqual(result.code, 0, result.stderr);
 
       const geminiRoot = path.join(homeDir, '.gemini');
-      // The Antigravity CLI reads its skills from antigravity-cli/skills and
+      // Antigravity reads its skills from config/skills and
       // its hooks run from scripts/; the skills/egc namespace, hooks/hooks.json
       // and plugin.json of the retired Gemini CLI are not written any more.
       assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')));
       assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'typescript', 'testing.md')));
       assert.ok(fs.existsSync(path.join(geminiRoot, 'commands', 'plan.md')));
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'tdd-workflow', 'SKILL.md')));
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'coding-standards', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'tdd-workflow', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'coding-standards', 'SKILL.md')));
       assert.ok(fs.existsSync(path.join(geminiRoot, 'scripts', 'hooks', 'session-end.js')));
       assert.ok(fs.existsSync(path.join(geminiRoot, 'scripts', 'lib', 'utils.js')));
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'skills')));
@@ -201,10 +201,95 @@ function runTests() {
       assert.ok(state.resolution.selectedModules.includes('framework-language'));
       assert.ok(
         state.operations.some(operation => (
-          operation.destinationPath === path.join(geminiRoot, 'antigravity-cli', 'skills', 'tdd-workflow', 'SKILL.md')
+          operation.destinationPath === path.join(geminiRoot, 'config', 'skills', 'tdd-workflow', 'SKILL.md')
         )),
         'Should record the Antigravity CLI skill file operation'
       );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('an upgrade moves the managed skills from antigravity-cli/skills to config/skills and keeps the person\'s files (#1705)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const ideSkills = path.join(geminiRoot, 'config', 'skills');
+      const cliSkills = path.join(geminiRoot, 'antigravity-cli', 'skills');
+      const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
+      const skills = fs.readdirSync(ideSkills).sort();
+      assert.ok(skills.length > 1, 'the minimal profile installs skills');
+      assert.ok(!fs.existsSync(cliSkills), 'a fresh install writes no second copy under antigravity-cli/skills');
+
+      const state = readJson(statePath);
+      for (const operation of state.operations) {
+        if (operation.destinationPath.startsWith(ideSkills + path.sep)) {
+          operation.destinationPath = path.join(cliSkills, path.relative(ideSkills, operation.destinationPath));
+        }
+      }
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      fs.mkdirSync(path.dirname(cliSkills), { recursive: true });
+      fs.renameSync(ideSkills, cliSkills);
+      const [edited, ...untouched] = skills;
+      fs.writeFileSync(path.join(cliSkills, edited, 'SKILL.md'), 'edited by hand');
+      const own = path.join(cliSkills, 'my-own-skill', 'SKILL.md');
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, '# mine');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      for (const skill of skills) {
+        assert.ok(fs.existsSync(path.join(ideSkills, skill, 'SKILL.md')), `${skill} is under config/skills after the upgrade`);
+      }
+      for (const skill of untouched) {
+        assert.ok(!fs.existsSync(path.join(cliSkills, skill, 'SKILL.md')), `the managed ${skill} under antigravity-cli/skills is retired`);
+      }
+      assert.strictEqual(fs.readFileSync(path.join(cliSkills, edited, 'SKILL.md'), 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', 'the person\'s own skill under antigravity-cli/skills stays');
+      const recorded = readJson(statePath).operations.map(operation => operation.destinationPath);
+      assert.ok(recorded.some(destination => destination.startsWith(ideSkills + path.sep)), 'the state records the config/skills copies');
+      assert.ok(!recorded.some(destination => destination.startsWith(cliSkills + path.sep)), 'and no antigravity-cli/skills copy any more');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('a skill the person keeps under config/skills with the name of an EGC skill is never overwritten (#1705)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const planned = run([...args, '--dry-run'], { cwd: projectDir, homeDir });
+      assert.strictEqual(planned.code, 0, planned.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const ideSkills = path.join(geminiRoot, 'config', 'skills');
+      const plannedLine = planned.stdout.split('\n').find(line => line.includes(ideSkills + path.sep));
+      assert.ok(plannedLine, 'the plan writes skills under config/skills');
+      const skill = path.relative(ideSkills, plannedLine.slice(plannedLine.indexOf(ideSkills))).split(path.sep)[0];
+      const own = path.join(ideSkills, skill, 'SKILL.md');
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, '# mine');
+
+      for (const pass of ['install', 'reinstall']) {
+        const result = run(args, { cwd: projectDir, homeDir, env });
+        assert.strictEqual(result.code, 0, `${pass}: ${result.stderr}`);
+        assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', `${pass}: the person's ${skill} under config/skills stays theirs`);
+      }
+      const recorded = readJson(path.join(geminiRoot, 'egc', 'install-state.json')).operations.map(operation => operation.destinationPath);
+      assert.ok(!recorded.some(destination => destination.startsWith(path.join(ideSkills, skill) + path.sep)), 'the person\'s skill is never recorded as managed');
+      assert.ok(recorded.some(destination => destination.startsWith(ideSkills + path.sep)), 'the other skills still land under config/skills');
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
@@ -625,7 +710,7 @@ function runTests() {
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'mcp-configs')), 'the emptied mcp-configs directory is gone');
       assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', 'the person\'s own skill stays, and ~/.gemini/skills with it');
       assert.strictEqual(fs.readFileSync(edited, 'utf8'), 'edited by hand', 'a retired file the person edited since stays');
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'tdd-workflow', 'SKILL.md')), 'the Antigravity CLI skills are written');
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'tdd-workflow', 'SKILL.md')), 'the Antigravity CLI skills are written');
       assert.ok(fs.existsSync(path.join(geminiRoot, 'AGENTS.md')), 'AGENTS.md, which Antigravity reads, is written');
       for (const kept of [path.join('rules', 'egc', 'common', 'coding-style.md'), path.join('agents', 'architect.md'), path.join('commands', 'plan.md')]) {
         assert.ok(fs.existsSync(path.join(geminiRoot, kept)), `${kept} is still delivered until its family moves to the directory Antigravity reads`);
@@ -644,7 +729,7 @@ function runTests() {
         // Find a skill the egc target installs, from the plan itself.
         const planned = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
         assert.strictEqual(planned.code, 0, planned.stderr);
-        const cliSkills = path.join(homeDir, '.gemini', 'antigravity-cli', 'skills');
+        const cliSkills = path.join(homeDir, '.gemini', 'config', 'skills');
         const match = planned.stdout.split('\n').map(line => line.trim()).find(line => line.includes(cliSkills));
         assert.ok(match, 'the plan writes Antigravity CLI skills');
         const skill = path.relative(cliSkills, match.slice(match.indexOf(cliSkills))).split(path.sep)[0];
@@ -690,7 +775,7 @@ function runTests() {
       // Find a skill the egc target installs this run, straight from the plan.
       const planned = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
       assert.strictEqual(planned.code, 0, planned.stderr);
-      const cliSkills = path.join(homeDir, '.gemini', 'antigravity-cli', 'skills');
+      const cliSkills = path.join(homeDir, '.gemini', 'config', 'skills');
       const chosen = planned.stdout.split('\n')
         .map(line => line.trim())
         .map(line => /^- (.+?) -> (.+)$/.exec(line))
@@ -800,7 +885,7 @@ function runTests() {
       assert.ok(state.resolution.selectedModules.includes('platform-configs'));
       assert.ok(
         state.operations.some(operation => (
-          operation.destinationPath === path.join(geminiRoot, 'antigravity-cli', 'skills', 'tdd-workflow', 'SKILL.md')
+          operation.destinationPath === path.join(geminiRoot, 'config', 'skills', 'tdd-workflow', 'SKILL.md')
         )),
         'Should record the manifest-driven Antigravity CLI skill copy'
       );
@@ -1014,7 +1099,7 @@ function runTests() {
 
       assert.strictEqual(fs.readFileSync(userRulePath, 'utf8'), '# User custom rule\n');
       assert.strictEqual(fs.readFileSync(userSkillPath, 'utf8'), '# User custom skill\n');
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'tdd-workflow', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'tdd-workflow', 'SKILL.md')));
       assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')), 'the managed copy lands in its own namespace next to the person\'s rules');
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'skills', 'egc')), 'no managed copy lands next to the person\'s skills');
     } finally {
@@ -1371,8 +1456,8 @@ function runTests() {
       const result = run(['--config', configPath], { cwd: projectDir, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
 
-      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'security-review', 'SKILL.md')));
-      assert.ok(!fs.existsSync(path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'dmux-workflows', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'config', 'skills', 'security-review', 'SKILL.md')));
+      assert.ok(!fs.existsSync(path.join(homeDir, '.gemini', 'config', 'skills', 'dmux-workflows', 'SKILL.md')));
 
       const state = readJson(path.join(homeDir, '.gemini', 'egc', 'install-state.json'));
       assert.strictEqual(state.request.profile, 'developer');
@@ -1403,8 +1488,8 @@ function runTests() {
       const result = run([], { cwd: projectDir, homeDir });
       assert.strictEqual(result.code, 0, result.stderr);
 
-      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'security-review', 'SKILL.md')));
-      assert.ok(!fs.existsSync(path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'dmux-workflows', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'config', 'skills', 'security-review', 'SKILL.md')));
+      assert.ok(!fs.existsSync(path.join(homeDir, '.gemini', 'config', 'skills', 'dmux-workflows', 'SKILL.md')));
 
       const state = readJson(path.join(homeDir, '.gemini', 'egc', 'install-state.json'));
       assert.strictEqual(state.request.profile, 'developer');
