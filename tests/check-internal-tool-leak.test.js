@@ -13,11 +13,16 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { removeDirWithRetries } = require('./fixtures/remove-dir');
 
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'check-internal-tool-leak.js');
+// Every repository a case builds, removed together at the end through the
+// shared fixture, which outlasts a handle Windows may still hold on it.
+const repos = [];
 
 function makeRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-tool-leak-test-'));
+  repos.push(dir);
   const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
   git('init', '-q');
   git('config', 'user.email', 'test@example.com');
@@ -114,6 +119,8 @@ run('--text-file mode passes a clean file', () => {
   const res = runScript(dir, '--text-file', file);
   assert.strictEqual(res.status, 0, res.stderr);
 });
+
+for (const dir of repos) removeDirWithRetries(dir);
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

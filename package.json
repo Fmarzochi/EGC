@@ -1,7 +1,7 @@
 {
   "name": "@egchq/egc",
   "version": "1.1.22",
-  "description": "EGC is a local-first MCP runtime that gives every AI agent the same brain: persistent shared memory, security guardrails, and up to 90% token savings across 20 AI coding tools.",
+  "description": "EGC is a local-first MCP runtime that gives every AI agent the same brain: persistent shared memory, security guardrails, and up to 90% token savings across 21 AI coding tools.",
   "author": "Felipe Marzochi <fmarzochi@gmail.com> (https://github.com/Fmarzochi)",
   "license": "Apache-2.0",
   "prettier": {
@@ -134,22 +134,27 @@
     "typescript-eslint": "^8.70.1"
   },
   "overrides": {
-    "js-yaml": "^4.2.0",
+    "js-yaml": "$js-yaml",
     "markdown-it": "^14.3.1",
     "fast-uri": "^3.1.8",
     "undici": "^6.27.0",
     "@hono/node-server": "^2.0.5",
-    "hono": "4.13.7"
+    "hono": "4.13.7",
+    "proxy-addr": "^2.0.8",
+    "katex": "^0.18.2",
+    "smol-toml": "^1.9.0"
   },
   "pnpm": {
     "overrides": {
-      "js-yaml": "^4.2.0",
-      "markdownlint-cli>js-yaml": "^4.2.0",
+      "js-yaml": "$js-yaml",
       "markdown-it": "^14.3.1",
       "fast-uri": "^3.1.8",
       "undici": "^6.27.0",
       "@hono/node-server": "^2.0.5",
-      "hono": "4.13.7"
+      "hono": "4.13.7",
+      "proxy-addr": "^2.0.8",
+      "katex": "^0.18.2",
+      "smol-toml": "^1.9.0"
     }
   }
 }

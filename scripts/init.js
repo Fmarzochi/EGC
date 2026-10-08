@@ -337,6 +337,9 @@ function reportStateStoreFromDisk() {
   }
 }
 
+/**
+ * Reports the current installation and shell activation status of Token Crusher shims.
+ */
 function reportCrusherStatus() {
   if (flags.dryRun) {
     logDry('would report the token crusher status');
@@ -347,7 +350,15 @@ function reportCrusherStatus() {
   if (!shim) {
     skip('token crusher', 'status unavailable');
   } else if (shim.dirExists && shim.shimmed.length > 0) {
-    ok('token crusher', shim.activeInCurrentShell ? 'shim installed and on PATH' : 'shim installed, active in every new shell');
+    let msg;
+    if (shim.activeInCurrentShell) {
+      msg = 'shim installed and on PATH';
+    } else if (shim.pathPersisted) {
+      msg = 'shim installed, PATH entry persisted';
+    } else {
+      msg = 'shim installed, not yet on PATH';
+    }
+    ok('token crusher', msg);
   } else {
     skip('token crusher', 'shim not installed; egc install adds it');
   }
@@ -459,6 +470,11 @@ async function runDoctor() {
 // terminal gets the dashboard, a CI job or a piped run gets the headless
 // line. The launcher's own messages are folded into one check line so the
 // completion line below stays the last thing on screen.
+/**
+ * Starts the EGC dashboard in the background and reports its availability.
+ *
+ * @returns {Promise<void>}
+ */
 async function launchDashboardLine() {
   if (flags.dryRun) return;
   let dashboard;
@@ -486,7 +502,10 @@ async function launchDashboardLine() {
   spinner.stop();
 
   if (ready) {
-    ok('dashboard', `available at ${dashboard.DASHBOARD_URL} (opened in your browser; close with \`egc dashboard stop\`)`);
+    const suffix = ready.browserOpened
+      ? ' (opened in your browser; close with `egc dashboard stop`)'
+      : ' (close with `egc dashboard stop`)';
+    ok('dashboard', `available at ${dashboard.DASHBOARD_URL}${suffix}`);
     return;
   }
   if (notes.length === 0) {

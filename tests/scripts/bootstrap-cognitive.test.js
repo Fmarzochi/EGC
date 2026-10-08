@@ -5,6 +5,7 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { withoutConfigHomeVariables } = require('../fixtures/harness-variables');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const SCRIPT_PATH = path.join(REPO_ROOT, 'scripts', 'bootstrap-cognitive.js');
@@ -27,9 +28,13 @@ function cleanup(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-function run(homeDir) {
+function run(homeDir, extraEnv = {}) {
+  const env = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, XDG_CONFIG_HOME: path.join(homeDir, '.config'), ...extraEnv };
+  if (!('CRUSH_GLOBAL_CONFIG' in extraEnv)) {
+    delete env.CRUSH_GLOBAL_CONFIG;
+  }
   return execFileSync('node', [SCRIPT_PATH], {
-    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir, XDG_CONFIG_HOME: path.join(homeDir, '.config')},
+    env,
     encoding: 'utf8',
   });
 }
@@ -57,8 +62,11 @@ function mktempFakeRepo() {
 }
 
 function runScript(scriptPath, homeDir) {
+  // An inherited XDG_CONFIG_HOME or CRUSH_GLOBAL_CONFIG would send the
+  // bootstrap to the real config directories instead of the temporary home.
+  const env = withoutConfigHomeVariables({ ...process.env, HOME: homeDir, USERPROFILE: homeDir });
   return execFileSync('node', [scriptPath], {
-    env: { ...process.env, HOME: homeDir, USERPROFILE: homeDir },
+    env,
     encoding: 'utf8',
   });
 }
@@ -1044,34 +1052,9 @@ async function runKiroTests() {
   return [passed, failed];
 }
 
-async function runTests() {
-  console.log('\n=== Testing scripts/bootstrap-cognitive.js ===\n');
+async function runProtocolContentTests() {
   let passed = 0;
   let failed = 0;
-
-  {
-    const [claudeGeminiPassed, claudeGeminiFailed] = await runClaudeCodeAndGeminiCliTests();
-    passed += claudeGeminiPassed;
-    failed += claudeGeminiFailed;
-  }
-
-  {
-    const [cursorCodexPassed, cursorCodexFailed] = await runCursorAndCodexUpgradeTests();
-    passed += cursorCodexPassed;
-    failed += cursorCodexFailed;
-  }
-
-  {
-    const [cursorCodexEdgePassed, cursorCodexEdgeFailed] = await runCursorAndCodexEdgeCaseTests();
-    passed += cursorCodexEdgePassed;
-    failed += cursorCodexEdgeFailed;
-  }
-
-  {
-    const [openCodePassed, openCodeFailed] = await runOpenCodeTests();
-    passed += openCodePassed;
-    failed += openCodeFailed;
-  }
 
   if (await test('BLOCK advertises all 9 session bus commands', () => {
     for (const cmd of SESSION_BUS_COMMANDS) {
@@ -1175,6 +1158,13 @@ async function runTests() {
       if (fakeScript) cleanup(path.dirname(path.dirname(fakeScript)));
     }
   })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
+async function runRemainingHarnessTests() {
+  let passed = 0;
+  let failed = 0;
 
   if (await test('installs all 9 session bus commands for Cursor via settings.json', () => {
     const home = mktempHome();
@@ -1377,6 +1367,119 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('writes Crush CRUSH.md when ~/.config/crush exists', () => {
+    const home = mktempHome();
+    try {
+      const crushDir = path.join(home, '.config', 'crush');
+      fs.mkdirSync(crushDir, { recursive: true });
+      const output = run(home);
+      assert.ok(/Crush: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const crushMd = path.join(crushDir, 'CRUSH.md');
+      assert.ok(fs.existsSync(crushMd), 'CRUSH.md must exist');
+      const content = fs.readFileSync(crushMd, 'utf8');
+      assert.ok(content.includes('EGC Session Memory'), 'must contain session memory protocol');
+
+      const secondOutput = run(home);
+      assert.ok(/Crush: already configured/.test(secondOutput), `second run should report already configured, got: ${secondOutput}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('preserves existing user instructions in Crush CRUSH.md', () => {
+    const home = mktempHome();
+    try {
+      const crushDir = path.join(home, '.config', 'crush');
+      fs.mkdirSync(crushDir, { recursive: true });
+      const crushMd = path.join(crushDir, 'CRUSH.md');
+      fs.writeFileSync(crushMd, '# My Personal Custom Rules\n\nDo not delete me!\n', 'utf8');
+      const output = run(home);
+      assert.ok(/Crush: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const content = fs.readFileSync(crushMd, 'utf8');
+      assert.ok(content.includes('# My Personal Custom Rules'), 'must preserve existing user instructions');
+      assert.ok(content.includes('Do not delete me!'), 'must preserve existing body');
+      assert.ok(content.includes('EGC Session Memory'), 'must append session memory protocol');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  // A PATH holding node and, on Windows, the `where` the lookup runs, but no
+  // crush unless a fake one is put first.
+  function crushPath(fakeBin) {
+    const dirs = [path.dirname(process.execPath)];
+    if (process.platform === 'win32') dirs.push(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'));
+    return [fakeBin, ...dirs].filter(Boolean).join(path.delimiter);
+  }
+
+  if (await test('skips Crush when ~/.config/crush does not exist and crush is not on PATH', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home, { PATH: crushPath(null) });
+      assert.ok(!output.includes('Crush:'), `output should not mention Crush when dir absent: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes Crush CRUSH.md when crush is on PATH before ~/.config/crush exists (the MCP registration gate)', () => {
+    const home = mktempHome();
+    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-fake-crush-'));
+    try {
+      fs.writeFileSync(path.join(fakeBin, 'crush'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(fakeBin, 'crush.cmd'), '@exit /b 0\r\n');
+      const output = run(home, { PATH: crushPath(fakeBin) });
+      assert.ok(/Crush: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const target = path.join(home, '.config', 'crush', 'CRUSH.md');
+      assert.ok(fs.existsSync(target), 'CRUSH.md must be written on the first run');
+    } finally {
+      cleanup(home);
+      cleanup(fakeBin);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Crush when ~/.config/crush exists as a file, not a directory', () => {
+    const home = mktempHome();
+    try {
+      const crushFile = path.join(home, '.config', 'crush');
+      fs.mkdirSync(path.dirname(crushFile), { recursive: true });
+      fs.writeFileSync(crushFile, 'regular file', 'utf8');
+      const output = run(home);
+      assert.ok(!output.includes('Crush:'), `output should not mention Crush when file: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('honors CRUSH_GLOBAL_CONFIG override when installing Crush CRUSH.md', () => {
+    const home = mktempHome();
+    try {
+      const customCrushDir = path.join(home, 'custom-crush-root');
+      fs.mkdirSync(customCrushDir, { recursive: true });
+      const output = run(home, { CRUSH_GLOBAL_CONFIG: customCrushDir });
+      assert.ok(/Crush: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const target = path.join(customCrushDir, 'CRUSH.md');
+      assert.ok(fs.existsSync(target), 'must install CRUSH.md into CRUSH_GLOBAL_CONFIG directory');
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(content.includes('EGC Session Memory'), 'must contain EGC memory protocol');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('logs an error instead of crashing when the Crush CRUSH.md path is structurally broken', () => {
+    const home = mktempHome();
+    try {
+      const crushDir = path.join(home, '.config', 'crush');
+      fs.mkdirSync(crushDir, { recursive: true });
+      fs.mkdirSync(path.join(crushDir, 'CRUSH.md'));
+      const output = run(home);
+      assert.ok(/Crush: unexpected error:/.test(output), 'should report the error, not crash');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('does not target a home-level file for Cline or Aider (project-only harnesses)', () => {
     assert.ok(
       !SCRIPT_SOURCE.includes("'.clinerules'"),
@@ -1387,6 +1490,50 @@ async function runTests() {
       'Aider has no home target per docs/spec/integration-tiers.md -- must not be added here'
     );
   })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
+async function runTests() {
+  console.log('\n=== Testing scripts/bootstrap-cognitive.js ===\n');
+  let passed = 0;
+  let failed = 0;
+
+  {
+    const [claudeGeminiPassed, claudeGeminiFailed] = await runClaudeCodeAndGeminiCliTests();
+    passed += claudeGeminiPassed;
+    failed += claudeGeminiFailed;
+  }
+
+  {
+    const [cursorCodexPassed, cursorCodexFailed] = await runCursorAndCodexUpgradeTests();
+    passed += cursorCodexPassed;
+    failed += cursorCodexFailed;
+  }
+
+  {
+    const [cursorCodexEdgePassed, cursorCodexEdgeFailed] = await runCursorAndCodexEdgeCaseTests();
+    passed += cursorCodexEdgePassed;
+    failed += cursorCodexEdgeFailed;
+  }
+
+  {
+    const [openCodePassed, openCodeFailed] = await runOpenCodeTests();
+    passed += openCodePassed;
+    failed += openCodeFailed;
+  }
+
+  {
+    const [protocolPassed, protocolFailed] = await runProtocolContentTests();
+    passed += protocolPassed;
+    failed += protocolFailed;
+  }
+
+  {
+    const [remainingPassed, remainingFailed] = await runRemainingHarnessTests();
+    passed += remainingPassed;
+    failed += remainingFailed;
+  }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

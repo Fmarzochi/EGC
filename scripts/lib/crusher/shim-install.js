@@ -207,6 +207,37 @@ function uninstall() {
   return { dir, removed, pathResult };
 }
 
+/**
+ * Checks whether the shim directory PATH addition is persisted in the environment or RC files.
+ *
+ * @param {string} [dir] The shim directory to look for.
+ * @returns {boolean} True if the PATH entry is persisted.
+ */
+function isPathPersisted(dir = shimDir()) {
+  if (process.platform === 'win32') {
+    const safeDir = powershellSingleQuote(dir);
+    const script = `$dir = ${safeDir}; $current = [Environment]::GetEnvironmentVariable('Path','User'); if ($current -eq $null) { $current = '' }; $parts = ($current -split ';') | Where-Object { $_ }; if ($parts -contains $dir) { Write-Output 'present' } else { Write-Output 'not-present' }`;
+    const result = runPowerShell(script);
+    return result.ok && result.stdout.trim() === 'present';
+  }
+  const home = os.homedir();
+  return RC_CANDIDATES.some(name => {
+    const rcPath = path.join(home, name);
+    try {
+      if (!fs.existsSync(rcPath)) return false;
+      const content = fs.readFileSync(rcPath, 'utf8');
+      return content.split(/\r?\n/).some(line => line.trim() === `export PATH="${dir}:$PATH"`);
+    } catch { // NOSONAR: inaccessible or unreadable RC file is treated as not persisted
+      return false;
+    }
+  });
+}
+
+/**
+ * Inspects the current installation and PATH status of Token Crusher binary shims.
+ *
+ * @returns {{ dir: string, dirExists: boolean, shimmed: string[], activeInCurrentShell: boolean, pathPersisted: boolean }}
+ */
 function status() {
   const dir = shimDir();
   const manifest = readManifest();
@@ -214,13 +245,15 @@ function status() {
   const activeInCurrentShell = (process.env[key] || '')
     .split(path.delimiter)
     .some(p => p && path.resolve(p) === path.resolve(dir));
+  const pathPersisted = isPathPersisted(dir);
 
   return {
     dir,
     dirExists: fs.existsSync(dir),
     shimmed: Object.keys(manifest),
     activeInCurrentShell,
+    pathPersisted,
   };
 }
 
-module.exports = { install, uninstall, status, SHIM_BINARY_NAMES, powershellSingleQuote };
+module.exports = { install, uninstall, status, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER };

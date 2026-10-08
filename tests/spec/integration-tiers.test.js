@@ -42,9 +42,10 @@ const EXPECTED_HARNESSES = [
   'VS Code Copilot',
   'Zed',
   'Kimi Code CLI',
+  'Crush (Charmbracelet)',
 ];
 
-const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'kiro', 'trae', 'junie', 'goose', 'openhands', 'aider', 'cline', 'warp', 'kimi'];
+const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'codex', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'kiro', 'trae', 'junie', 'goose', 'openhands', 'aider', 'cline', 'warp', 'kimi', 'crush'];
 
 function loadDoc() {
   assert.ok(fs.existsSync(DOC_PATH), `integration-tiers.md must exist at ${DOC_PATH}`);
@@ -164,6 +165,115 @@ function testClaudeCodeProtocolInjectionExists() {
   console.log(`  ✓ Claude Code Tier 3 injection path documented in bootstrap-cognitive.js`);
 }
 
+// Junie reads AGENTS.md now; .junie/guidelines.md is its legacy format (#1655).
+function testJunieRowDocumentsAgentsMd() {
+  // A Windows checkout can carry CRLF, which would hide the trailing `|`.
+  const lines = loadDoc().split(/\r?\n/);
+  const row = lines.find(line => line.includes('**JetBrains Junie**'));
+  assert.ok(row, 'the harness table must have a JetBrains Junie row');
+  // The column comes from the header, so a new column cannot shift the check.
+  const header = lines.slice(0, lines.indexOf(row)).reverse().find(line => /^\|.*\bInstall path\b.*\|$/.test(line));
+  assert.ok(header, 'the harness table must have an Install path column');
+  const pathColumn = header.split('|').map(cell => cell.trim()).indexOf('Install path');
+  const pathCell = row.split('|')[pathColumn] || '';
+  assert.ok(pathCell.trim(), 'the Junie row must fill the Install path column');
+  assert.ok(!pathCell.includes('guidelines.md'), 'the Junie path must not be the legacy .junie/guidelines.md');
+  for (const file of ['`.junie/AGENTS.md`', '`~/.junie/AGENTS.md`', '`.junie/guidelines.md`', '`.junie/guidelines/`']) {
+    assert.ok(row.includes(file), `the Junie row must name ${file}`);
+  }
+  // The project files are alternatives: Junie uses the first that exists.
+  assert.ok(/first of these that exists/.test(row), 'the Junie row must say the project files are alternatives');
+  // Matched as a whole Markdown link, not as a URL substring.
+  assert.ok(
+    /\[[^\]]+\]\(https:\/\/junie\.jetbrains\.com\/docs\/guidelines-and-memory\.html\)/.test(row),
+    'the Junie row must link the official page'
+  );
+  const targetsDir = path.join(REPO_ROOT, 'scripts', 'lib', 'install-targets');
+  const writers = fs.readdirSync(targetsDir)
+    .filter(name => name.endsWith('.js'))
+    .filter(name => fs.readFileSync(path.join(targetsDir, name), 'utf8').includes('guidelines.md'));
+  assert.deepStrictEqual(writers, [], `no install target may write the legacy guidelines.md: ${writers.join(', ')}`);
+  console.log('  ✓ Junie row documents AGENTS.md and no target writes guidelines.md');
+}
+
+// OpenHands reads a global ~/.openhands/hooks.json besides the project
+// file, and the project file shadows it (#1656).
+function testOpenHandsRowDocumentsGlobalHooks() {
+  // A Windows checkout can carry CRLF.
+  const row = loadDoc().split(/\r?\n/).find(line => line.includes('**OpenHands**'));
+  assert.ok(row, 'the harness table must have an OpenHands row');
+  assert.ok(!/no global\/home path/.test(row), 'the OpenHands row must not say there is no global hooks path');
+  assert.ok(row.includes('`~/.openhands/hooks.json`'), 'the OpenHands row must name the global ~/.openhands/hooks.json');
+  assert.ok(row.includes('`.openhands/hooks.json`'), 'the OpenHands row must keep the project .openhands/hooks.json');
+  assert.ok(/never merge/.test(row), 'the OpenHands row must say the two files never merge');
+  assert.ok(
+    /only when the project has no `\.openhands\/hooks\.json`/.test(row),
+    'the OpenHands row must say the global file is read only when the project has none'
+  );
+  assert.ok(row.includes('`OH_PERSISTENCE_DIR`'), 'the OpenHands row must name the OH_PERSISTENCE_DIR override');
+  // The install code must not keep the claim this row corrects.
+  for (const relative of [
+    'scripts/lib/openhands-guardian-operations.js',
+    'scripts/lib/openhands-guardian-hooks.js',
+    'scripts/lib/install-targets/openhands-project.js',
+  ]) {
+    const source = fs.readFileSync(path.join(REPO_ROOT, ...relative.split('/')), 'utf8');
+    assert.ok(!/no global\/home/.test(source), `${relative} must not say OpenHands has no global hooks path`);
+  }
+  // Matched as a whole Markdown link, not as a URL substring.
+  assert.ok(
+    /\[[^\]]+\]\(https:\/\/docs\.openhands\.dev\/openhands\/usage\/customization\/hooks\)/.test(row),
+    'the OpenHands row must link the official hooks page'
+  );
+  console.log('  ✓ OpenHands row documents the global hooks file and its precedence');
+}
+
+function testProtocolVersionMatchesCode() {
+  const source = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'bootstrap-cognitive.js'), 'utf8');
+  const match = /const PROTOCOL_VERSION = (\d+);/.exec(source);
+  assert.ok(match, 'scripts/bootstrap-cognitive.js must declare PROTOCOL_VERSION');
+  const documented = [...loadDoc().matchAll(/Cognitive protocol v(\d+)/g)].map(found => found[1]);
+  assert.ok(documented.length > 0, 'the spec must name the cognitive protocol version');
+  assert.deepStrictEqual([...new Set(documented)], [match[1]], `the spec must name protocol v${match[1]}, the version bootstrap-cognitive.js writes`);
+  console.log(`  ✓ the spec names cognitive protocol v${match[1]}, as the code does`);
+}
+
+function testQwenRowDocumentsHooks() {
+  const { getInstallTargetAdapter } = require('../../scripts/lib/install-targets/registry');
+  const adapter = getInstallTargetAdapter('qwen');
+  const projectRoot = path.join(REPO_ROOT, 'tmp-qwen-plan');
+  const hookOperations = adapter.planOperations({ repoRoot: REPO_ROOT, projectRoot, homeDir: projectRoot })
+    .filter(operation => operation.hookMatcher);
+  assert.ok(hookOperations.length > 0, 'the Qwen adapter must plan its hook operations');
+  assert.ok(
+    hookOperations.every(operation => operation.destinationPath === path.join(projectRoot, '.qwen', 'settings.json')),
+    'the Qwen hooks must land in .qwen/settings.json'
+  );
+  assert.deepStrictEqual(
+    [...new Set(hookOperations.map(operation => operation.moduleId))].sort(),
+    ['egc-bash-guardian-hook', 'egc-crusher-hook'],
+    'the Qwen adapter must plan both the Guardian and the Token Crusher hooks'
+  );
+  const matchers = [...new Set(hookOperations.map(operation => operation.hookMatcher))];
+  const doc = loadDoc();
+  const row = doc.split(/\r?\n/).find(line => line.includes('**Qwen Code**'));
+  assert.ok(row, 'the harness table must have a Qwen Code row');
+  assert.ok(!/no hook wiring/.test(row), 'the Qwen Code row must not say there is no hook wiring');
+  assert.ok(row.includes('Guardian') && row.includes('Token Crusher'), 'the Qwen Code row must name both hooks');
+  assert.ok(!/Qwen defers?\b/.test(doc), 'the spec must not say elsewhere that Qwen defers its hooks');
+  const kimiSource = fs.readFileSync(path.join(REPO_ROOT, 'scripts', 'lib', 'install-targets', 'kimi-home.js'), 'utf8');
+  assert.ok(!/Qwen defers?\b/.test(kimiSource), 'kimi-home.js must not say Qwen defers its hooks');
+  assert.ok(row.includes('`.qwen/settings.json`'), 'the Qwen Code row must name .qwen/settings.json');
+  for (const matcher of matchers) {
+    assert.ok(row.includes(`\`${matcher}\``), `the Qwen Code row must name the ${matcher} matcher`);
+  }
+  assert.ok(
+    /\[[^\]]+\]\(https:\/\/qwenlm\.github\.io\/qwen-code-docs\/en\/users\/features\/hooks\/\)/.test(row),
+    'the Qwen Code row must link the official hooks page'
+  );
+  console.log('  ✓ Qwen Code row documents the hooks the adapter plans');
+}
+
 console.log('=== Testing docs/spec/integration-tiers.md ===\n');
 
 let passed = 0;
@@ -174,6 +284,10 @@ for (const test of [
   testTier1TargetsMatchSupportedInstallTargets,
   testTier2InstallersRetired,
   testClaudeCodeProtocolInjectionExists,
+  testJunieRowDocumentsAgentsMd,
+  testOpenHandsRowDocumentsGlobalHooks,
+  testProtocolVersionMatchesCode,
+  testQwenRowDocumentsHooks,
 ]) {
   try {
     test();

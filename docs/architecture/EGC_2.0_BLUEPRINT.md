@@ -1,9 +1,16 @@
 # EGC 2.0 ARCHITECTURAL BLUEPRINT: THE AGENT OS
 
 **Architect:** EGC Architectural Unit  
-**Status:** Design Proposal  
+**Status:** Unimplemented design proposal  
 **Target:** Unified Sovereign Runtime  
 **Version:** 1.0.0 (Design Proposal)
+
+> **Status: unimplemented proposal.** Nothing this page describes exists in
+> the repository: there is no Rust kernel or Rust code at all, no `egcd`
+> daemon, no Protobuf or gRPC contract, and no `~/.gemini/egc/` store. EGC
+> runs today on the Node.js + MCP runtime, the Python LLM engine in
+> `src/llm/`, and the memory server's SQLite store; see the
+> [architecture index](README.md).
 
 ---
 
@@ -18,7 +25,7 @@ EGC v1 proved the viability of a hybrid Node/Python cognitive chain. However, it
 ## 2. THE UNIFIED CONTROL PLANE (UCP)
 
 ### 2.1 Host: The Rust Kernel
-The existing `egc/` Rust scaffold will be promoted to the primary **System Kernel**.
+A new Rust process would become the primary **System Kernel** (no Rust code exists in the repository today).
 - **Role:** Process supervisor, TUI host, and secure IPC broker.
 - **Language:** Rust (for performance and safety).
 
@@ -32,7 +39,11 @@ The existing `egc/` Rust scaffold will be promoted to the primary **System Kerne
 ## 3. DETERMINISTIC MEMORY FABRIC
 
 ### 3.1 Namespace Unification
-Complete migration from `~/.egc-learning` to `~/.gemini/egc`.
+Proposed: a single `~/.gemini/egc` namespace. Today the paths are split, and no migration exists:
+- The project memory state always lives under `~/.egc/state`, with no override (`scripts/lib/branch-state.js`).
+- The memory server's own database is `~/.egc/memory/state.db`, with no override (`getMemoryDbDir()` in `mcp/servers/egc-memory/src/index.ts`); the CLI event store it also reads is `~/.egc/egc/state.db`, moved by `EGC_STATE_DB` or `EGC_DIR` (`mcp/servers/egc-memory/src/state-store-path.ts`).
+- Hook-side files go to the directory `getEGCDir()` resolves in `scripts/lib/utils.js`: `EGC_DIR`, then the variables the tool injects at hook time, then the installed tool home that contains the running package, and `~/.egc` only after those, when it already exists. Inside a tool session that is usually the tool's own directory.
+- The continuous-learning store is `~/.egc-learning` (`getLearningDir()` in the same file).
 
 ### 3.2 Storage Tiering
 - **Hot Memory (RAM/SQLite):** Live session context, active instincts, and recent tool results.

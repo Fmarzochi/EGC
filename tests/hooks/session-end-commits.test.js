@@ -10,6 +10,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 const { withoutHarnessVariables } = require('../fixtures/harness-variables');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 const hookScript = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'session-end.js');
 // The hook names the session file after the transcript UUID's last 8 chars.
@@ -25,7 +26,6 @@ const GIT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-n33-gitconfig-'));
 const ISOLATED_GIT_CONFIG = path.join(GIT_HOME, '.gitconfig');
 fs.writeFileSync(ISOLATED_GIT_CONFIG, '[maintenance]\n\tauto = false\n');
 const GIT_ISOLATION = { GIT_CONFIG_GLOBAL: ISOLATED_GIT_CONFIG, GIT_CONFIG_NOSYSTEM: '1' };
-const REMOVE_RETRIES = { maxRetries: 10, retryDelay: 100 };
 // Fixed git locations before a PATH lookup, as the hook itself does.
 const GIT_BIN = [
   '/usr/bin/git',
@@ -124,18 +124,22 @@ function runHook(home, cwd, extraEnv = {}) {
     timeout: 30000,
   });
   assert.strictEqual(result.status, 0, result.stderr);
+  return result;
 }
 
 // A configured email outside any repository, the way a real machine has one
 // in its global config, so the hook reaches git log and it fails there.
 const EMAIL_FROM_ENV = { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'user.email', GIT_CONFIG_VALUE_0: ME.email };
+// The warning repeats the line git writes, so the case that reads it runs git
+// in the C locale: a translated git would localize the fatal line.
+const GIT_IN_ENGLISH = { LC_ALL: 'C', LANG: 'C' };
 
 function headerOf(sessionFile) {
   return fs.readFileSync(sessionFile, 'utf8').split('\n---\n')[0];
 }
 
 function cleanup(...dirs) {
-  for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true, ...REMOVE_RETRIES });
+  for (const dir of dirs) removeDirWithRetries(dir);
 }
 
 function runTests() {
@@ -220,14 +224,18 @@ function runTests() {
       }
     }),
 
-    test('outside a git repository the hook still writes the session without the field', () => {
+    test('outside a git repository the hook still writes the session without the field, and says why on stderr', () => {
       const { home, repo, sessionFile } = setup();
       const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-n33-plain-'));
       try {
-        runHook(home, plain, EMAIL_FROM_ENV);
+        const result = runHook(home, plain, { ...EMAIL_FROM_ENV, ...GIT_IN_ENGLISH });
         const header = headerOf(sessionFile);
         assert.ok(header.includes('**Last Updated:**'));
         assert.ok(!header.includes('**Commits:**'));
+        // A git failure must not pass in silence: a slow or broken git on a
+        // real machine would otherwise lose the commit list without a trace.
+        assert.ok(result.stderr.includes('[SessionEnd] commit list skipped: fatal: not a git repository'), result.stderr);
+        assert.ok(!result.stderr.includes(ME.email), `the email stays out of the warning:\n${result.stderr}`);
       } finally {
         cleanup(home, repo, plain);
       }

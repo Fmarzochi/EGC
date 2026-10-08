@@ -29,7 +29,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": true,
@@ -64,7 +65,8 @@
         "junie",
         "goose",
         "openhands",
-        "cline"
+        "cline",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": true,
@@ -97,7 +99,8 @@
         "junie",
         "goose",
         "openhands",
-        "cline"
+        "cline",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": true,
@@ -218,7 +221,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -256,7 +260,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -308,7 +313,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": true,
@@ -356,7 +362,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [
         "workflow-quality"
@@ -395,7 +402,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -439,7 +447,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -490,7 +499,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -526,7 +536,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [
         "business-content"
@@ -568,7 +579,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -634,7 +646,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -687,7 +700,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -723,7 +737,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -765,7 +780,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -801,7 +817,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -918,7 +935,8 @@
         "openhands",
         "aider",
         "cline",
-        "warp"
+        "warp",
+        "crush"
       ],
       "dependencies": [],
       "defaultInstall": false,
@@ -951,7 +969,8 @@
         "junie",
         "goose",
         "openhands",
-        "cline"
+        "cline",
+        "crush"
       ],
       "dependencies": [
         "agents-core",

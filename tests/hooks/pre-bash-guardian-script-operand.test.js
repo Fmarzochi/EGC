@@ -14,6 +14,7 @@ const { spawnSync } = require('child_process');
 
 process.env.EGC_GUARDIAN_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 const { run } = require('../../scripts/hooks/pre-bash-guardian-validate');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function test(name, fn) {
   try {
@@ -79,7 +80,7 @@ function runTests() {
         const moved = run({ tool_name: 'Bash', tool_input: { command: `sudo -nD ${JSON.stringify(dir)} bash notes.txt` }, cwd: elsewhere });
         assert.strictEqual(moved.exitCode, 2, `a directory given in a bundle of flags moves the script: ${JSON.stringify(moved)}`);
       } finally {
-        fs.rmSync(elsewhere, { recursive: true, force: true });
+        removeDirWithRetries(elsewhere);
       }
     }));
 
@@ -141,7 +142,7 @@ function runTests() {
           assert.strictEqual(kept.exitCode, 2, `--skip-chdir keeps the directory: ${command}: ${JSON.stringify(kept)}`);
         }
       } finally {
-        fs.rmSync(elsewhere, { recursive: true, force: true });
+        removeDirWithRetries(elsewhere);
       }
     }));
 
@@ -181,7 +182,7 @@ function runTests() {
         const rootAfterLogin = run({ tool_name: 'Bash', tool_input: { command: `sudo -i chroot ${quoted} bash build.sh` }, cwd: elsewhere });
         assert.strictEqual(rootAfterLogin.exitCode, 0, `a chroot after sudo -i starts at its top: ${JSON.stringify(rootAfterLogin)}`);
       } finally {
-        fs.rmSync(elsewhere, { recursive: true, force: true });
+        removeDirWithRetries(elsewhere);
       }
     }));
 
@@ -211,7 +212,7 @@ function runTests() {
           }
         } finally {
           fs.chmodSync(locked, 0o700);
-          fs.rmSync(locked, { recursive: true, force: true });
+          removeDirWithRetries(locked);
         }
       }));
     }
@@ -349,7 +350,7 @@ function runTests() {
           if (value === undefined) delete process.env[key];
           else process.env[key] = value;
         }
-        fs.rmSync(home, { recursive: true, force: true });
+        removeDirWithRetries(home);
       }
     }));
 
@@ -481,7 +482,7 @@ function runTests() {
       } finally {
         if (savedGitDir === undefined) delete process.env.GIT_DIR;
         else process.env.GIT_DIR = savedGitDir;
-        fs.rmSync(repo, { recursive: true, force: true });
+        removeDirWithRetries(repo);
         fs.rmSync(emptyConfig, { force: true });
       }
       const loose = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-script-operand-loose-'));
@@ -489,7 +490,7 @@ function runTests() {
         fs.writeFileSync(path.join(loose, 'tool.sh'), `${wipe} build\n`);
         assert.strictEqual(judged('bash tool.sh', loose), 2, 'outside a repository');
       } finally {
-        fs.rmSync(loose, { recursive: true, force: true });
+        removeDirWithRetries(loose);
       }
     }));
 
@@ -847,7 +848,7 @@ function runTests() {
           assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
         }
       } finally {
-        fs.rmSync(elsewhere, { recursive: true, force: true });
+        removeDirWithRetries(elsewhere);
       }
     }));
 
@@ -876,8 +877,8 @@ function runTests() {
         assert.ok(escapedRoot.stderr.includes('byte escapes'), escapedRoot.stderr);
 
       } finally {
-        fs.rmSync(root, { recursive: true, force: true });
-        fs.rmSync(elsewhere, { recursive: true, force: true });
+        removeDirWithRetries(root);
+        removeDirWithRetries(elsewhere);
       }
     }));
 
@@ -1076,7 +1077,7 @@ function runTests() {
         fs.readFileSync = readFileSync;
         if (savedGitDir === undefined) delete process.env.GIT_DIR;
         else process.env.GIT_DIR = savedGitDir;
-        fs.rmSync(repo, { recursive: true, force: true });
+        removeDirWithRetries(repo);
         fs.rmSync(emptyConfig, { force: true });
       }
     }));
@@ -1085,8 +1086,76 @@ function runTests() {
       const result = run({ tool_name: 'Bash', tool_input: { command: `cat ${denied}` }, cwd: dir });
       assert.strictEqual(result.exitCode, 0, JSON.stringify(result));
     }));
+
+    record(test('the git calls of one judgement share a budget, so a git slower than two seconds does not make a committed script a stranger', () => {
+      // The Windows lane of main 2408d052 judged a committed script in full
+      // because one git call took longer than the fixed two seconds it had.
+      const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-slow-git-repo-'));
+      const emptyConfig = path.join(repo, '..', `${path.basename(repo)}.gitconfig`);
+      fs.writeFileSync(emptyConfig, '');
+      const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+      Object.assign(gitEnv, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: emptyConfig });
+      // The git itself, found on the PATH once, so the shim below can hand
+      // the real one its arguments.
+      const realGit = (process.env.PATH || '').split(path.delimiter)
+        .flatMap(dir => (process.platform === 'win32' ? ['git.exe', 'git.cmd'] : ['git']).map(name => path.join(dir, name)))
+        .find(candidate => fs.existsSync(candidate));
+      assert.ok(realGit, 'git is on the PATH');
+      const git = (...args) => assert.strictEqual(spawnSync(realGit, args, { cwd: repo, env: gitEnv, encoding: 'utf8', timeout: 20000 }).status, 0, `git ${args.join(' ')}`);
+      const savedGitDir = process.env.GIT_DIR;
+      const savedPath = process.env.PATH;
+      try {
+        delete process.env.GIT_DIR;
+        git('init', '-q');
+        git('config', 'user.email', 'test@example.com');
+        git('config', 'user.name', 'Test');
+        git('config', 'core.autocrlf', 'false');
+        fs.writeFileSync(path.join(repo, 'jar.sh'), 'wrapperJarPath="$BASE/.mvn/wrapper/maven-wrapper.jar"\nrm -f "$wrapperJarPath"\n');
+        git('add', 'jar.sh');
+        git('commit', '-q', '-m', 'jar');
+        // A budget already spent makes no git call at all: the script is a
+        // stranger, judged in full, and fails closed on the delete.
+        const { withGitBudget, gitIn } = require('../../scripts/hooks/pre-bash-guardian-validate');
+        assert.strictEqual(withGitBudget(() => gitIn(repo, ['rev-parse', '--is-inside-work-tree']), 0), null, 'a spent budget makes no git call');
+        assert.strictEqual(gitIn(repo, ['rev-parse', '--is-inside-work-tree']), 'true', 'outside a judgement a call gets the whole budget');
+        assert.strictEqual(withGitBudget(() => run({ tool_name: 'Bash', tool_input: { command: 'bash jar.sh' }, cwd: repo }).exitCode, 0), 2, 'with the budget spent the committed script is judged in full');
+        // Only the time git takes is deducted: a wait elsewhere in the
+        // judgement (the validator, a read) leaves the budget as it was.
+        const waited = withGitBudget(() => {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);
+          return gitIn(repo, ['rev-parse', '--is-inside-work-tree']);
+        }, 100);
+        assert.strictEqual(waited, 'true', 'a wait outside git does not spend the budget');
+        if (process.platform === 'win32') {
+          console.log('    (the slow git itself is run on POSIX only: a shim named git needs a shell there)');
+          return;
+        }
+        // A git that takes three seconds per call, longer than the fixed
+        // cap that was: the three calls of one judgement fit in the budget.
+        const shimDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-slow-git-'));
+        fs.writeFileSync(path.join(shimDir, 'git'), '#!/bin/sh\nsleep 3\nexec "$EGC_TEST_REAL_GIT" "$@"\n', { mode: 0o755 });
+        process.env.EGC_TEST_REAL_GIT = realGit;
+        process.env.PATH = `${shimDir}${path.delimiter}${savedPath}`;
+        try {
+          const started = Date.now();
+          const result = run({ tool_name: 'Bash', tool_input: { command: 'bash jar.sh' }, cwd: repo });
+          assert.strictEqual(result.exitCode, 0, `a committed script read through a slow git: ${JSON.stringify(result)}`);
+          assert.ok(Date.now() - started >= 9000, 'the three git calls really went through the slow git');
+        } finally {
+          process.env.PATH = savedPath;
+          delete process.env.EGC_TEST_REAL_GIT;
+          removeDirWithRetries(shimDir);
+        }
+      } finally {
+        process.env.PATH = savedPath;
+        if (savedGitDir === undefined) delete process.env.GIT_DIR;
+        else process.env.GIT_DIR = savedGitDir;
+        removeDirWithRetries(repo);
+        fs.rmSync(emptyConfig, { force: true });
+      }
+    }));
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeDirWithRetries(dir);
   }
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

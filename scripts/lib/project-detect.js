@@ -358,6 +358,48 @@ function getCppDeps(projectDir) {
   }
 }
 
+const DART_DEP_SECTIONS = new Set(['dependencies', 'dev_dependencies', 'dependency_overrides']);
+
+/**
+ * Classify one pubspec.yaml line: a top-level section, an indented key, or nothing
+ * @param {string} line - One line of pubspec.yaml
+ * @returns {{ section: string } | { key: string, indent: number } | null}
+ */
+function classifyPubspecLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('#')) return null;
+  const topMatch = /^([a-zA-Z0-9_-]+):/.exec(line);
+  if (topMatch) return { section: topMatch[1] };
+  const depMatch = /^(\s+)([a-zA-Z0-9_-]+):/.exec(line);
+  if (depMatch) return { key: depMatch[2], indent: depMatch[1].length };
+  return null;
+}
+
+/**
+ * Collect the package names listed under the dependency sections of a pubspec.yaml text
+ * @param {string} content - The pubspec.yaml text
+ * @returns {string[]} Array of package names
+ */
+function pubspecDependencyKeys(content) {
+  const deps = [];
+  let inDepSection = false;
+  let depIndent = null;
+
+  for (const line of content.split('\n')) {
+    const parsed = classifyPubspecLine(line);
+    if (!parsed) continue;
+    if (parsed.section !== undefined) {
+      inDepSection = DART_DEP_SECTIONS.has(parsed.section);
+      depIndent = null;
+      continue;
+    }
+    if (!inDepSection) continue;
+    depIndent = depIndent ?? parsed.indent;
+    if (parsed.indent === depIndent) deps.push(parsed.key);
+  }
+  return deps;
+}
+
 /**
  * Read pubspec.yaml for Dart/Flutter package dependencies
  * @param {string} projectDir - Project root directory
@@ -367,39 +409,7 @@ function getDartDeps(projectDir) {
   try {
     const pubspecPath = path.join(projectDir, 'pubspec.yaml');
     if (!fs.existsSync(pubspecPath)) return [];
-    const content = fs.readFileSync(pubspecPath, 'utf8');
-    const deps = [];
-    const depSections = new Set(['dependencies', 'dev_dependencies', 'dependency_overrides']);
-    let inDepSection = false;
-    let depIndent = null;
-
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-
-      // Check for top-level section (no leading whitespace)
-      const topMatch = line.match(/^([a-zA-Z0-9_-]+):/);
-      if (topMatch) {
-        inDepSection = depSections.has(topMatch[1]);
-        depIndent = null;
-        continue;
-      }
-
-      if (!inDepSection) continue;
-
-      // Match dependency keys with indentation
-      const depMatch = line.match(/^(\s+)([a-zA-Z0-9_-]+):/);
-      if (depMatch) {
-        const indent = depMatch[1].length;
-        if (depIndent === null) {
-          depIndent = indent;
-        }
-        if (indent === depIndent) {
-          deps.push(depMatch[2]);
-        }
-      }
-    }
-    return deps;
+    return pubspecDependencyKeys(fs.readFileSync(pubspecPath, 'utf8'));
   } catch {
     return [];
   }

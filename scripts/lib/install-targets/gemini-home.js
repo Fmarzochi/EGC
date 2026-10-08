@@ -1,11 +1,15 @@
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
 const {
+  UNREADABLE_STATE,
+  buildValidationIssue,
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
   normalizeRelativePath,
+  readInstallStateOrNull,
   resolveModulesPlan,
 } = require('./helpers');
 const {
@@ -23,7 +27,7 @@ const { createAntigravityGuardianOperations } = require('../antigravity-guardian
 const { resolveGlobalHooksJsonPath } = require('../antigravity-guardian-hooks');
 
 const GEMINI_EGC_NAMESPACE = 'egc';
-const AGY_SKILLS_SUBDIR = 'antigravity-cli/skills';
+const AGY_SKILLS_SUBDIR = 'config/skills';
 
 // Source paths only the retired Gemini CLI read from this root and that no
 // family of the library counts on: Antigravity keeps its hooks in
@@ -43,22 +47,22 @@ function isGeminiCliOnlySource(sourceRelativePath) {
 
 // Where a bundled source lands under ~/.gemini when it does not keep its
 // relative path: rules under rules/egc, the managed namespace next to the
-// person's own rules, and skills under antigravity-cli/skills, the one place
-// the Antigravity CLI reads them. The skills/egc namespace of the retired
-// Gemini CLI is not written any more.
-function getGeminiManagedDestinationPath(adapter, sourceRelativePath, input) {
+// person's own rules, and skills under config/skills, the directory the
+// Antigravity IDE, Antigravity 2.0 and the Antigravity CLI all read. The
+// skills/egc namespace of the retired Gemini CLI is not written any more.
+function getGeminiManagedDestinationPaths(adapter, sourceRelativePath, input, recordedDestinations) {
   const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
   const targetRoot = adapter.resolveRoot(input);
 
   if (normalizedSourcePath === 'rules') {
-    return path.join(targetRoot, 'rules', GEMINI_EGC_NAMESPACE);
+    return [path.join(targetRoot, 'rules', GEMINI_EGC_NAMESPACE)];
   }
 
   if (normalizedSourcePath.startsWith('rules/')) {
-    return path.join(targetRoot, 'rules', GEMINI_EGC_NAMESPACE, normalizedSourcePath.slice('rules/'.length));
+    return [path.join(targetRoot, 'rules', GEMINI_EGC_NAMESPACE, normalizedSourcePath.slice('rules/'.length))];
   }
 
-  return getAGYManagedDestinationPath(adapter, sourceRelativePath, input);
+  return getAGYManagedDestinationPaths(adapter, sourceRelativePath, input, recordedDestinations);
 }
 
 // Antigravity shares this home root (~/.gemini) for skill discovery (see
@@ -177,19 +181,61 @@ function dedupeCopyOperations(operations) {
   });
 }
 
-function getAGYManagedDestinationPath(adapter, sourceRelativePath, input) {
+function collectRecordedDestinations(adapter, input) {
+  const statePaths = [adapter.getInstallStatePath(input), ...adapter.resolveLegacyInstallStatePaths(input)];
+  const destinations = [];
+  for (const statePath of statePaths) {
+    const state = readInstallStateOrNull(statePath);
+    if (state === UNREADABLE_STATE) return null;
+    const operations = state && Array.isArray(state.operations) ? state.operations : [];
+    destinations.push(...operations.map(operation => path.resolve(String(operation.destinationPath || ''))));
+  }
+  return destinations;
+}
+
+function isSameTree(sourcePath, destinationPath) {
+  try {
+    const source = fs.lstatSync(sourcePath, { throwIfNoEntry: false });
+    const destination = fs.lstatSync(destinationPath, { throwIfNoEntry: false });
+    if (!source || !destination) return false;
+    if (source.isFile() && destination.isFile()) {
+      return fs.readFileSync(sourcePath).equals(fs.readFileSync(destinationPath));
+    }
+    if (!source.isDirectory() || !destination.isDirectory()) return false;
+    const sourceEntries = fs.readdirSync(sourcePath).sort();
+    const destinationEntries = fs.readdirSync(destinationPath).sort();
+    if (sourceEntries.join('\n') !== destinationEntries.join('\n')) return false;
+    return sourceEntries.every(entry => isSameTree(path.join(sourcePath, entry), path.join(destinationPath, entry)));
+  } catch {
+    return false;
+  }
+}
+
+function isPersonOwned(destination, sourcePath, recordedDestinations) {
+  const stat = fs.lstatSync(destination, { throwIfNoEntry: false });
+  if (!stat || stat.isSymbolicLink()) return false;
+  const resolved = path.resolve(destination);
+  if (recordedDestinations && recordedDestinations.some(recorded => recorded === resolved || recorded.startsWith(resolved + path.sep))) {
+    return false;
+  }
+  return !(sourcePath && isSameTree(sourcePath, resolved));
+}
+
+function getAGYManagedDestinationPaths(adapter, sourceRelativePath, input, recordedDestinations = []) {
   const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
   const targetRoot = adapter.resolveRoot(input);
 
   if (normalizedSourcePath.startsWith('skills/')) {
-    // The Antigravity CLI reads skills from
-    // ~/.gemini/antigravity-cli/skills/<skillName>/. Source layout in the
-    // repo is `skills/<category>/<skillName>[/<file>]`: strip exactly the
-    // leading category segment when present, so the tool never depends on
-    // the repo's category taxonomy; leave already-flat paths untouched.
+    // Every Antigravity surface reads global skills from
+    // ~/.gemini/config/skills/<skillName>/. Source layout in the repo is
+    // `skills/<category>/<skillName>[/<file>]`: strip exactly the leading
+    // category segment when present, so the tool never depends on the repo's
+    // category taxonomy; leave already-flat paths untouched.
     const parts = normalizedSourcePath.slice('skills/'.length).split('/');
     const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
-    return path.join(targetRoot, AGY_SKILLS_SUBDIR, flatRemainder);
+    const destination = path.join(targetRoot, AGY_SKILLS_SUBDIR, flatRemainder);
+    const sourcePath = input.repoRoot ? path.join(input.repoRoot, normalizedSourcePath) : null;
+    return isPersonOwned(destination, sourcePath, recordedDestinations) ? [] : [destination];
   }
 
   return null;
@@ -201,32 +247,42 @@ module.exports = createInstallTargetAdapter({
   kind: 'home',
   rootSegments: ['.gemini'],
   installStatePathSegments: ['egc', 'install-state.json'],
+  validateMore(input, adapter) {
+    if (collectRecordedDestinations(adapter, input)) return [];
+    return [buildValidationIssue(
+      'warning',
+      'install-state-unreadable',
+      `The install state at ${adapter.getInstallStatePath(input)} cannot be read: skills already under ${path.join(adapter.resolveRoot(input), AGY_SKILLS_SUBDIR)} are treated as yours and left as they are until it can be read again.`
+    )];
+  },
   planOperations(input, adapter) {
     const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
     const homeDir = input.homeDir || os.homedir();
+    const recordedDestinations = collectRecordedDestinations(adapter, input);
 
     const moduleOperations = modules.flatMap(module => {
       const paths = Array.isArray(module.paths) ? module.paths : [];
       return paths
         .filter(p => !isForeignPlatformPath(p, adapter.target) && !isGeminiCliOnlySource(p))
-        .map(sourceRelativePath => {
-          const managedDestinationPath = getGeminiManagedDestinationPath(
+        .flatMap(sourceRelativePath => {
+          const managedDestinationPaths = getGeminiManagedDestinationPaths(
             adapter,
             sourceRelativePath,
-            planningInput
+            planningInput,
+            recordedDestinations
           );
 
-          if (managedDestinationPath) {
-            return createRemappedOperation(
+          if (managedDestinationPaths) {
+            return managedDestinationPaths.map(managedDestinationPath => createRemappedOperation(
               adapter,
               module.id,
               sourceRelativePath,
               managedDestinationPath,
               { strategy: 'preserve-relative-path' }
-            );
+            ));
           }
 
-          return adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput);
+          return [adapter.createScaffoldOperation(module.id, sourceRelativePath, planningInput)];
         });
     });
 

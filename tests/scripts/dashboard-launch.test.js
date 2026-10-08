@@ -163,6 +163,69 @@ async function runTests() {
     assert.ok(Date.now() - started >= 600, 'the poll must keep trying until the budget is spent');
   })) passed++; else failed++;
 
+  if (test('openBrowser tries the opener without a display and reports its real status (#1730)', () => {
+    const { openBrowser, DASHBOARD_URL } = require(LAUNCHER);
+    const savedDisplay = process.env.DISPLAY;
+    const savedWayland = process.env.WAYLAND_DISPLAY;
+    try {
+      // WSL without WSLg: no DISPLAY, but the wslu xdg-open still works.
+      delete process.env.DISPLAY;
+      delete process.env.WAYLAND_DISPLAY;
+      const calls = [];
+      const spawnOk = (cmd, args) => { calls.push([cmd, args]); return { status: 0 }; };
+      assert.strictEqual(openBrowser(spawnOk), true, 'a successful opener must count as opened');
+      assert.strictEqual(calls.length, 1, 'the opener must run even without DISPLAY or WAYLAND_DISPLAY');
+      assert.deepStrictEqual(calls[0][1], [DASHBOARD_URL]);
+
+      assert.strictEqual(openBrowser(() => ({ status: 3 })), false, 'a headless failure must not count as opened');
+      assert.strictEqual(openBrowser(() => ({ status: null, error: new Error('ENOENT') })), false,
+        'a missing opener must not count as opened');
+      assert.strictEqual(openBrowser(() => { throw new Error('spawn failed'); }), false);
+    } finally {
+      if (savedDisplay !== undefined) process.env.DISPLAY = savedDisplay;
+      else delete process.env.DISPLAY;
+      if (savedWayland !== undefined) process.env.WAYLAND_DISPLAY = savedWayland;
+      else delete process.env.WAYLAND_DISPLAY;
+    }
+  })) passed++; else failed++;
+
+  if (await asyncTest('launchDashboard propagates browser-open result into browserOpened (#1730)', async () => {
+    const testServer = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"ok":true}');
+    });
+    await new Promise(resolve => testServer.listen(0, '127.0.0.1', resolve));
+    const port = testServer.address().port;
+    process.env.EGC_PORT = String(port);
+    delete require.cache[require.resolve(LAUNCHER)];
+    delete require.cache[require.resolve(path.join(__dirname, '..', '..', 'dashboard', 'port'))];
+    const { launchDashboard } = require(LAUNCHER);
+    try {
+      // 1. Stubbed browserOpener returning false
+      const logsFalse = [];
+      const resFalse = await launchDashboard({
+        log: line => logsFalse.push(line),
+        browserOpener: () => false,
+      });
+      assert.ok(resFalse && resFalse.ready === true, 'result must have ready: true');
+      assert.strictEqual(resFalse.browserOpened, false, 'browserOpened must be false');
+      assert.ok(logsFalse.some(l => l.includes('Run `egc dashboard stop` to close.')));
+      assert.ok(!logsFalse.some(l => l.includes('Minimize it to keep working')));
+
+      // 2. Stubbed browserOpener returning true
+      const logsTrue = [];
+      const resTrue = await launchDashboard({
+        log: line => logsTrue.push(line),
+        browserOpener: () => true,
+      });
+      assert.ok(resTrue && resTrue.ready === true, 'result must have ready: true');
+      assert.strictEqual(resTrue.browserOpened, true, 'browserOpened must be true');
+      assert.ok(logsTrue.some(l => l.includes('Minimize it to keep working')));
+    } finally {
+      await new Promise(resolve => testServer.close(resolve));
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

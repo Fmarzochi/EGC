@@ -1,8 +1,15 @@
 # EGC 2.0 TECHNICAL DESIGN: THE AGENT OS FOUNDATION
 
 **Architect:** EGC Architectural Unit  
-**Status:** Technical Specification  
+**Status:** Unimplemented design proposal  
 **Version:** 1.0.0 (Design Proposal)
+
+> **Status: unimplemented proposal.** Nothing this page describes exists in
+> the repository: there is no Rust kernel or Rust code at all, no `egcd`
+> daemon, no Protobuf or gRPC contract, and no `~/.gemini/egc/egc.db`
+> store. EGC runs today on the Node.js + MCP runtime, the Python LLM
+> engine in `src/llm/`, and the memory server's SQLite store; see the
+> [architecture index](README.md).
 
 ---
 

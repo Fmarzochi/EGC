@@ -177,9 +177,10 @@ function runTests() {
       }
     })) passed++; else failed++;
 
-    if (test('targets that share the ~/.agents root plan one source per destination (Codex, Goose, OpenHands)', () => {
+    if (test('targets that share the ~/.agents root plan one source per destination (Codex, Crush, Goose, OpenHands)', () => {
+      const sharedTargets = ['codex', 'crush', 'goose', 'openhands'];
       const plans = {};
-      for (const target of ['codex', 'goose', 'openhands']) {
+      for (const target of sharedTargets) {
         const plan = createManifestInstallPlan({ sourceRoot: REPO_ROOT, projectRoot, homeDir, target, profileId: 'full' });
         const copies = plan.operations.filter(operation => operation.kind === 'copy-file');
         const destinations = copies.map(operation => path.normalize(operation.destinationPath));
@@ -187,11 +188,15 @@ function runTests() {
         plans[target] = new Map(copies.map(operation => [path.normalize(operation.destinationPath), operation.sourceRelativePath.replaceAll('\\', '/')]));
       }
       const conflicts = [];
-      for (const [a, b] of [['codex', 'goose'], ['codex', 'openhands'], ['goose', 'openhands']]) {
-        for (const [destination, source] of plans[a]) {
-          const other = plans[b].get(destination);
-          if (other !== undefined && other !== source) {
-            conflicts.push(`${path.relative(homeDir, destination)}: ${a}=${source} ${b}=${other}`);
+      for (let i = 0; i < sharedTargets.length; i++) {
+        for (let j = i + 1; j < sharedTargets.length; j++) {
+          const a = sharedTargets[i];
+          const b = sharedTargets[j];
+          for (const [destination, source] of plans[a]) {
+            const other = plans[b].get(destination);
+            if (other !== undefined && other !== source) {
+              conflicts.push(`${path.relative(homeDir, destination)}: ${a}=${source} ${b}=${other}`);
+            }
           }
         }
       }
@@ -203,7 +208,7 @@ function runTests() {
       const inCatalog = relative => categories.some(category => fs.existsSync(path.join(REPO_ROOT, 'skills', category, ...relative.split('/'))));
       const shipped = [];
       let mirrorOnly = 0;
-      for (const target of ['codex', 'goose', 'openhands']) {
+      for (const target of ['codex', 'crush', 'goose', 'openhands']) {
         const plan = createManifestInstallPlan({ sourceRoot: REPO_ROOT, projectRoot, homeDir, target, profileId: 'full' });
         for (const operation of plan.operations) {
           if (operation.kind !== 'copy-file') continue;

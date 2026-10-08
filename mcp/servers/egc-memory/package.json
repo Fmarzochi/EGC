@@ -8,14 +8,14 @@
     "start": "node build/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.4.1",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "simple-git": "^4.0.2",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.4",
     "typescript": "^7.0.2"
   },
   "engines": {
@@ -25,6 +25,7 @@
     "undici": "^6.27.0",
     "@hono/node-server": "^2.0.5",
     "ip-address": "^10.7.2",
-    "hono": "4.13.7"
+    "hono": "4.13.7",
+    "proxy-addr": "^2.0.8"
   }
 }

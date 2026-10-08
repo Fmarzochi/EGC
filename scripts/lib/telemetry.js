@@ -137,3 +137,16 @@ module.exports = {
   ensureConsent,
   ping,
 };
+
+if (require.main === module) {
+  void (async () => {
+    try {
+      await ensureConsent();
+    } catch (error) {
+      // install.sh runs this with a trailing || true, so the install goes on;
+      // the line below is the only sign the consent was not recorded.
+      process.stderr.write(`[EGC] telemetry consent was not recorded: ${error.message}\n`);
+      process.exitCode = 1;
+    }
+  })();
+}

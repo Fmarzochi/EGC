@@ -15,6 +15,7 @@ const { spawnSync } = require('child_process');
 
 process.env.EGC_GUARDIAN_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 const { run } = require('../../scripts/hooks/pre-bash-guardian-validate');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function test(name, fn) {
   try {
@@ -149,15 +150,15 @@ function runTests() {
         assert.strictEqual(judged('bash to-grave.sh'), 2, 'the grave script behind the cd is found');
         assert.strictEqual(judged('bash to-fine.sh'), 0, 'a benign script behind the cd runs');
       } finally {
-        fs.rmSync(repo, { recursive: true, force: true });
+        removeDirWithRetries(repo);
         fs.rmSync(emptyConfig, { force: true });
       }
     }));
   } finally {
     if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome;
     if (savedProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = savedProfile;
-    fs.rmSync(dir, { recursive: true, force: true });
-    fs.rmSync(home, { recursive: true, force: true });
+    removeDirWithRetries(dir);
+    removeDirWithRetries(home);
   }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

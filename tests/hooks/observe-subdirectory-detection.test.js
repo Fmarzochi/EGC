@@ -15,6 +15,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 let passed = 0;
 let failed = 0;
@@ -45,7 +46,7 @@ function createTempDir() {
 
 function cleanupDir(dir) {
   try {
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeDirWithRetries(dir);
   } catch (error) {
     console.error(`[cleanupDir] failed to remove ${dir}: ${error.message}`);
   }

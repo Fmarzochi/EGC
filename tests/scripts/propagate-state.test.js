@@ -7,13 +7,14 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { propagateStateContent } = require('../../scripts/lib/propagate-state');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function mktemp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-propagate-state-'));
 }
 
 function cleanup(dir) {
-  fs.rmSync(dir, { recursive: true, force: true });
+  removeDirWithRetries(dir);
 }
 
 const SAMPLE_STATE = `# Project State

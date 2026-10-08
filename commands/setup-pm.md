@@ -27,18 +27,18 @@ node scripts/setup-package-manager.js --list
 
 When determining which package manager to use, the following order is checked:
 
-1. **Environment variable**: `GEMINI_PACKAGE_MANAGER`
-2. **Project config**: `.gemini/package-manager.json`
+1. **Environment variable**: `EGC_PACKAGE_MANAGER` (the old `GEMINI_PACKAGE_MANAGER` still counts)
+2. **Project config**: `.egc/package-manager.json` (an old `.gemini/package-manager.json` is still read)
 3. **package.json**: `packageManager` field
 4. **Lock file**: Presence of package-lock.json, yarn.lock, pnpm-lock.yaml, or bun.lockb
-5. **Global config**: `~/.gemini/package-manager.json`
+5. **Global config**: `package-manager.json` in the EGC directory of the active tool (or in the directory `EGC_DIR` names when it is set)
 6. **Fallback**: First available package manager (pnpm > bun > yarn > npm)
 
 ## Configuration Files
 
 ### Global Configuration
 ```json
-// ~/.gemini/package-manager.json
+// <EGC directory>/package-manager.json
 {
   "packageManager": "pnpm"
 }
@@ -46,7 +46,7 @@ When determining which package manager to use, the following order is checked:
 
 ### Project Configuration
 ```json
-// .gemini/package-manager.json
+// .egc/package-manager.json
 {
   "packageManager": "bun"
 }
@@ -61,14 +61,14 @@ When determining which package manager to use, the following order is checked:
 
 ## Environment Variable
 
-Set `GEMINI_PACKAGE_MANAGER` to override all other detection methods:
+Set `EGC_PACKAGE_MANAGER` to override all other detection methods (the old `GEMINI_PACKAGE_MANAGER` still works):
 
 ```bash
 # Windows (PowerShell)
-$env:GEMINI_PACKAGE_MANAGER = "pnpm"
+$env:EGC_PACKAGE_MANAGER = "pnpm"
 
 # macOS/Linux
-export GEMINI_PACKAGE_MANAGER=pnpm
+export EGC_PACKAGE_MANAGER=pnpm
 ```
 
 ## Run the Detection

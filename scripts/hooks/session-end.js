@@ -175,6 +175,11 @@ function buildSessionHeader(today, currentTime, metadata, existingContent = '') 
 }
 
 const MAX_SESSION_COMMITS = 30;
+// The two git calls of the commit list share this budget, well inside the
+// 30 seconds the hook runner gives the whole hook. A loaded machine (a CI
+// runner on Windows, a disk being scanned) can take seconds for a log over
+// every branch, and a call cut short leaves the list empty.
+const SESSION_COMMITS_GIT_BUDGET_MS = 15000;
 // S4036: prefer fixed git locations over a PATH lookup, as check-state-leak.js
 // does; the bare name is the last resort for layouts like nix or portable Git.
 const GIT_BIN = [
@@ -202,12 +207,14 @@ function sessionStartOf(content) {
 // --since reads the commit date, which a rebase or an amend renews, so work
 // authored before the session is dropped by its author date as well. git
 // runs with separate arguments and the email as a fixed string; any failure
-// (no git, not a repository) leaves the list empty.
+// (no git, not a repository, a call that ran out of time) leaves the list
+// empty and says so on stderr, so a lost list can be traced.
 function getSessionCommits(start) {
+  const deadline = Date.now() + SESSION_COMMITS_GIT_BUDGET_MS;
   const git = args => execFileSync(GIT_BIN, args, {
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-    timeout: 5000
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: Math.max(1, deadline - Date.now())
   }).trim();
   const startSeconds = new Date(`${start.date}T${start.started}:00`).getTime() / 1000;
   try {
@@ -225,9 +232,23 @@ function getSessionCommits(start) {
       .map(line => /^(\d+) (.+)$/.exec(line))
       .filter(match => match && Number(match[1]) >= startSeconds)
       .map(match => match[2]);
-  } catch {
+  } catch (error) {
+    process.stderr.write(`[SessionEnd] commit list skipped: ${gitFailureReason(error)}\n`);
     return [];
   }
+}
+
+// Why a git call of the commit list failed: the time budget, git's own first
+// line of diagnostics (not a repository, bad config), or its exit status.
+// Never the command line, which carries the email.
+function gitFailureReason(error) {
+  if (error?.code === 'ETIMEDOUT') {
+    return `git took longer than ${SESSION_COMMITS_GIT_BUDGET_MS}ms`;
+  }
+  const diagnostic = String(error?.stderr || '').split('\n').find(line => line.trim());
+  if (diagnostic) return diagnostic.trim();
+  if (typeof error?.status === 'number') return `git exited with status ${error.status}`;
+  return String(error?.code || 'git failed');
 }
 
 function mergeSessionHeader(content, today, currentTime, metadata) {

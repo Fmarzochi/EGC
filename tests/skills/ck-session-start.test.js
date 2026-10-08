@@ -10,6 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 const hook = path.join(__dirname, '..', '..', 'skills', 'general', 'ck', 'hooks', 'session-start.mjs');
 
@@ -76,7 +77,7 @@ function runTests() {
     try {
       assert.strictEqual(runHook(dirs, 'new'), '');
     } finally {
-      fs.rmSync(dirs.home, { recursive: true, force: true });
+      removeDirWithRetries(dirs.home);
     }
   }));
 
@@ -105,7 +106,7 @@ function runTests() {
       const recorded = JSON.parse(fs.readFileSync(path.join(dirs.ck, 'current-session.json'), 'utf8'));
       assert.deepStrictEqual({ ...recorded, startedAt: typeof recorded.startedAt }, { sessionId: 'now-1', projectPath: dirs.project, projectName: 'app', startedAt: 'string' });
     } finally {
-      fs.rmSync(dirs.home, { recursive: true, force: true });
+      removeDirWithRetries(dirs.home);
     }
   }));
 
@@ -120,7 +121,7 @@ function runTests() {
       const lone = runHook(dirs, 'now-3');
       assert.match(lone, /ck: app \| \d+ days ago \| 1 session\nGoal: Ship the exporter/);
     } finally {
-      fs.rmSync(dirs.home, { recursive: true, force: true });
+      removeDirWithRetries(dirs.home);
     }
   }));
 
@@ -136,7 +137,7 @@ function runTests() {
       assert.match(context, /ck: fresh \| \d+ days ago \| 0 sessions\n/);
       assert.ok(context.includes(`0 sessions\nGoal: ${String.fromCharCode(0x2014)}\n`), context);
     } finally {
-      fs.rmSync(dirs.home, { recursive: true, force: true });
+      removeDirWithRetries(dirs.home);
     }
   }));
 
@@ -157,7 +158,7 @@ function runTests() {
       const recorded = JSON.parse(fs.readFileSync(path.join(dirs.ck, 'current-session.json'), 'utf8'));
       assert.strictEqual(recorded.projectName, null);
     } finally {
-      fs.rmSync(dirs.home, { recursive: true, force: true });
+      removeDirWithRetries(dirs.home);
     }
   }));
 
@@ -169,7 +170,7 @@ function runTests() {
       assert.ok(context.includes('ck \u2014 recent projects:'), context);
       assert.ok(context.includes('  app '), context);
     } finally {
-      fs.rmSync(dirs.home, { recursive: true, force: true });
+      removeDirWithRetries(dirs.home);
     }
   }));
 

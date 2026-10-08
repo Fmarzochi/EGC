@@ -21,6 +21,8 @@ const {
   detectFromLockFile,
   detectFromPackageJson
 } = require('./lib/package-manager');
+const path = require('node:path');
+const { getEGCDir } = require('./lib/utils');
 
 function showHelp() {
   console.log(`
@@ -31,8 +33,8 @@ Usage:
 
 Options:
   --detect        Detect and show current package manager
-  --global <pm>   Set global preference (saves to ~/.gemini/package-manager.json)
-  --project <pm>  Set project preference (saves to .gemini/package-manager.json)
+  --global <pm>   Set global preference (saves to package-manager.json in the EGC directory)
+  --project <pm>  Set project preference (saves to .egc/package-manager.json)
   --list          List available package managers
   --help          Show this help message
 
@@ -71,7 +73,7 @@ function detectAndShow() {
   console.log('Detection results:');
   console.log(`  From package.json: ${fromPkg || 'not specified'}`);
   console.log(`  From lock file: ${fromLock || 'not found'}`);
-  console.log(`  Environment var: ${process.env.GEMINI_PACKAGE_MANAGER || 'not set'}`);
+  console.log(`  Environment var: ${process.env.EGC_PACKAGE_MANAGER || process.env.GEMINI_PACKAGE_MANAGER || 'not set'}`);
   console.log('');
 
   console.log('Available package managers:');
@@ -125,7 +127,7 @@ function setGlobal(pmName) {
   try {
     setPreferredPackageManager(pmName);
     console.log(`\n✓ Global preference set to: ${pmName}`);
-    console.log('  Saved to: ~/.gemini/package-manager.json');
+    console.log(`  Saved to: ${path.join(getEGCDir(), 'package-manager.json')}`);
     console.log('');
   } catch (err) {
     console.error(`Error: ${err.message}`);
@@ -143,7 +145,7 @@ function setProject(pmName) {
   try {
     setProjectPackageManager(pmName);
     console.log(`\n✓ Project preference set to: ${pmName}`);
-    console.log('  Saved to: .gemini/package-manager.json');
+    console.log('  Saved to: .egc/package-manager.json');
     console.log('');
   } catch (err) {
     console.error(`Error: ${err.message}`);

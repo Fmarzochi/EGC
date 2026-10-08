@@ -14,6 +14,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { suiteEnv } = require('../fixtures/suite-env');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 // Fixed git locations before a PATH lookup.
 const GIT_BIN = [
@@ -44,6 +45,13 @@ test('drops the variables a tool session sets and keeps the rest', () => {
   const env = suiteEnv({ PATH: '/bin', CLAUDECODE: '1', EGC_DIR: '/somewhere' });
   assert.strictEqual(env.CLAUDECODE, undefined);
   assert.strictEqual(env.EGC_DIR, undefined);
+  assert.strictEqual(env.PATH, '/bin');
+});
+
+test('drops the variables that move a config directory out of the home a test passes', () => {
+  const env = suiteEnv({ PATH: '/bin', XDG_CONFIG_HOME: '/home/runner/.config', CRUSH_GLOBAL_CONFIG: '/somewhere/crush' });
+  assert.strictEqual(env.XDG_CONFIG_HOME, undefined);
+  assert.strictEqual(env.CRUSH_GLOBAL_CONFIG, undefined);
   assert.strictEqual(env.PATH, '/bin');
 });
 
@@ -88,7 +96,7 @@ test('a commit under the suite environment starts no automatic maintenance', () 
       .map(event => event.argv.join(' '));
     assert.ok(!children.some(argv => /\bmaintenance\b/.test(argv)), `maintenance started: ${children.join(' | ')}`);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    removeDirWithRetries(dir);
   }
 });
 

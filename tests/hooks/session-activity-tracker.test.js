@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 const script = path.join(
   __dirname,
@@ -118,7 +119,7 @@ function runTests() {
     assert.ok(row.id, 'Expected stable event id');
     assert.ok(row.timestamp, 'Expected timestamp');
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
   }) ? passed++ : failed++);
 
   (test('captures typed move file events from source/destination inputs', () => {
@@ -146,7 +147,7 @@ function runTests() {
       { path: 'src/new.rs', action: 'move' },
     ]);
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
   }) ? passed++ : failed++);
 
   (test('captures replacement diff previews for edit tool input', () => {
@@ -178,7 +179,7 @@ function runTests() {
       },
     ]);
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
   }) ? passed++ : failed++);
 
   (test('captures MultiEdit nested edits with typed diff previews', () => {
@@ -226,7 +227,7 @@ function runTests() {
       },
     ]);
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
   }) ? passed++ : failed++);
 
   (test('reclassifies tracked Write activity as modify using git diff context', () => {
@@ -274,8 +275,8 @@ function runTests() {
       },
     ]);
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-    fs.rmSync(repoDir, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
+    removeDirWithRetries(repoDir);
   }) ? passed++ : failed++);
 
   (test('captures tracked Delete activity using git diff context', () => {
@@ -322,8 +323,8 @@ function runTests() {
       },
     ]);
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-    fs.rmSync(repoDir, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
+    removeDirWithRetries(repoDir);
   }) ? passed++ : failed++);
 
   (test('resolves repo-relative paths even when the hook runs from a nested cwd', () => {
@@ -374,8 +375,8 @@ function runTests() {
       },
     ]);
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-    fs.rmSync(repoDir, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
+    removeDirWithRetries(repoDir);
   }) ? passed++ : failed++);
 
   (test('prefers canonical EGC_SESSION_ID over legacy ECC_SESSION_ID and redacts bash summaries', () => {
@@ -405,7 +406,7 @@ function runTests() {
     assert.ok(!row.input_params_json.includes('abc123'));
     assert.ok(!row.input_params_json.includes('topsecret'));
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
   }) ? passed++ : failed++);
 
   (test('falls back to legacy ECC_SESSION_ID when canonical EGC_SESSION_ID is unset', () => {
@@ -426,7 +427,7 @@ function runTests() {
     const row = JSON.parse(fs.readFileSync(metricsFile, 'utf8').trim());
     assert.strictEqual(row.session_id, 'egc-session-legacy', 'legacy ECC_SESSION_ID must remain a valid fallback');
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
   }) ? passed++ : failed++);
 
   (test('handles invalid JSON gracefully', () => {
@@ -440,7 +441,7 @@ function runTests() {
     assert.strictEqual(result.code, 0);
     assert.strictEqual(result.stdout, invalidInput);
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
   }) ? passed++ : failed++);
 
   (test('skips non-PostToolUse events and rows without required identifiers', () => {
@@ -630,8 +631,8 @@ function runTests() {
       },
     ]);
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-    fs.rmSync(tmpCwd, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
+    removeDirWithRetries(tmpCwd);
   }) ? passed++ : failed++);
 
   (test('preserves absolute paths outside the repo without git enrichment', () => {
@@ -660,8 +661,8 @@ function runTests() {
       { path: outsideFile, action: 'read' },
     ]);
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
-    fs.rmSync(outsideDir, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
+    removeDirWithRetries(outsideDir);
   }) ? passed++ : failed++);
 
   (test('passes empty stdin through without creating metrics', () => {
@@ -680,7 +681,7 @@ function runTests() {
       false
     );
 
-    fs.rmSync(tmpHome, { recursive: true, force: true });
+    removeDirWithRetries(tmpHome);
   }) ? passed++ : failed++);
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

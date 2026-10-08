@@ -490,7 +490,7 @@ function runTests() {
       assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(homeDir, '.gemini', 'skills') + path.sep)));
       assert.ok(plan.operations.some(operation => (
         operation.sourceRelativePath === path.join('skills', 'demo', 'SKILL.md')
-        && operation.destinationPath === path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'demo', 'SKILL.md')
+        && operation.destinationPath === path.join(homeDir, '.gemini', 'config', 'skills', 'demo', 'SKILL.md')
       )));
       assert.deepStrictEqual(plan.warnings, ['fixture warning']);
       assert.strictEqual(plan.statePreview.request.profile, 'minimal');
@@ -538,7 +538,7 @@ function runTests() {
       const managed = path.join(homeDir, '.gemini', 'skills', 'egc', 'demo');
       fs.mkdirSync(managed, { recursive: true });
       fs.writeFileSync(path.join(managed, 'SKILL.md'), 'old copy');
-      const cliSkills = path.join(homeDir, '.gemini', 'antigravity-cli', 'skills');
+      const cliSkills = path.join(homeDir, '.gemini', 'config', 'skills');
       fs.mkdirSync(cliSkills, { recursive: true });
       try {
         fs.symlinkSync(managed, path.join(cliSkills, 'demo'), 'dir');
@@ -602,7 +602,7 @@ function runTests() {
       assert.strictEqual(applied.applied, true);
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'rules', 'egc', 'common', 'coding-style.md')));
       assert.ok(!fs.existsSync(path.join(homeDir, '.gemini', 'skills')), 'the skills/egc namespace of the retired Gemini CLI is not written');
-      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'demo', 'SKILL.md')));
+      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'config', 'skills', 'demo', 'SKILL.md')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'src', 'app.js')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'standalone.txt')));
       assert.ok(!fs.existsSync(path.join(homeDir, '.gemini', 'plugin.json')), 'the plugin manifest only the retired Gemini CLI read is not written');
