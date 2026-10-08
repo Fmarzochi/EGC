@@ -11,6 +11,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const hook = require('../../scripts/hooks/pre-bash-commit-quality');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function test(name, fn) {
   try {
@@ -36,7 +37,7 @@ function inTempRepo(fn) {
     return fn(repoDir);
   } finally {
     process.chdir(prevCwd);
-    fs.rmSync(repoDir, { recursive: true, force: true });
+    removeDirWithRetries(repoDir);
   }
 }
 

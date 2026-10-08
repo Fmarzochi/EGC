@@ -19,6 +19,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execFileSync, spawnSync } = require('child_process');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 // Fixed git locations before a PATH lookup.
 const GIT_BIN = [
@@ -48,7 +49,7 @@ function createTempDir() {
 
 function cleanupDir(dir) {
   try {
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeDirWithRetries(dir);
   } catch {
     // ignore cleanup errors
   }

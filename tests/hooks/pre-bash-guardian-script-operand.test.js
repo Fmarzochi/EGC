@@ -14,6 +14,7 @@ const { spawnSync } = require('child_process');
 
 process.env.EGC_GUARDIAN_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 const { run } = require('../../scripts/hooks/pre-bash-guardian-validate');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function test(name, fn) {
   try {
@@ -79,7 +80,7 @@ function runTests() {
         const moved = run({ tool_name: 'Bash', tool_input: { command: `sudo -nD ${JSON.stringify(dir)} bash notes.txt` }, cwd: elsewhere });
         assert.strictEqual(moved.exitCode, 2, `a directory given in a bundle of flags moves the script: ${JSON.stringify(moved)}`);
       } finally {
-        fs.rmSync(elsewhere, { recursive: true, force: true });
+        removeDirWithRetries(elsewhere);
       }
     }));
 
@@ -141,7 +142,7 @@ function runTests() {
           assert.strictEqual(kept.exitCode, 2, `--skip-chdir keeps the directory: ${command}: ${JSON.stringify(kept)}`);
         }
       } finally {
-        fs.rmSync(elsewhere, { recursive: true, force: true });
+        removeDirWithRetries(elsewhere);
       }
     }));
 
@@ -181,7 +182,7 @@ function runTests() {
         const rootAfterLogin = run({ tool_name: 'Bash', tool_input: { command: `sudo -i chroot ${quoted} bash build.sh` }, cwd: elsewhere });
         assert.strictEqual(rootAfterLogin.exitCode, 0, `a chroot after sudo -i starts at its top: ${JSON.stringify(rootAfterLogin)}`);
       } finally {
-        fs.rmSync(elsewhere, { recursive: true, force: true });
+        removeDirWithRetries(elsewhere);
       }
     }));
 
@@ -211,7 +212,7 @@ function runTests() {
           }
         } finally {
           fs.chmodSync(locked, 0o700);
-          fs.rmSync(locked, { recursive: true, force: true });
+          removeDirWithRetries(locked);
         }
       }));
     }
@@ -349,7 +350,7 @@ function runTests() {
           if (value === undefined) delete process.env[key];
           else process.env[key] = value;
         }
-        fs.rmSync(home, { recursive: true, force: true });
+        removeDirWithRetries(home);
       }
     }));
 
@@ -481,7 +482,7 @@ function runTests() {
       } finally {
         if (savedGitDir === undefined) delete process.env.GIT_DIR;
         else process.env.GIT_DIR = savedGitDir;
-        fs.rmSync(repo, { recursive: true, force: true });
+        removeDirWithRetries(repo);
         fs.rmSync(emptyConfig, { force: true });
       }
       const loose = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-script-operand-loose-'));
@@ -489,7 +490,7 @@ function runTests() {
         fs.writeFileSync(path.join(loose, 'tool.sh'), `${wipe} build\n`);
         assert.strictEqual(judged('bash tool.sh', loose), 2, 'outside a repository');
       } finally {
-        fs.rmSync(loose, { recursive: true, force: true });
+        removeDirWithRetries(loose);
       }
     }));
 
@@ -847,7 +848,7 @@ function runTests() {
           assert.strictEqual(result.exitCode, 2, `${command}: ${JSON.stringify(result)}`);
         }
       } finally {
-        fs.rmSync(elsewhere, { recursive: true, force: true });
+        removeDirWithRetries(elsewhere);
       }
     }));
 
@@ -876,8 +877,8 @@ function runTests() {
         assert.ok(escapedRoot.stderr.includes('byte escapes'), escapedRoot.stderr);
 
       } finally {
-        fs.rmSync(root, { recursive: true, force: true });
-        fs.rmSync(elsewhere, { recursive: true, force: true });
+        removeDirWithRetries(root);
+        removeDirWithRetries(elsewhere);
       }
     }));
 
@@ -1076,7 +1077,7 @@ function runTests() {
         fs.readFileSync = readFileSync;
         if (savedGitDir === undefined) delete process.env.GIT_DIR;
         else process.env.GIT_DIR = savedGitDir;
-        fs.rmSync(repo, { recursive: true, force: true });
+        removeDirWithRetries(repo);
         fs.rmSync(emptyConfig, { force: true });
       }
     }));
@@ -1086,7 +1087,7 @@ function runTests() {
       assert.strictEqual(result.exitCode, 0, JSON.stringify(result));
     }));
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeDirWithRetries(dir);
   }
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

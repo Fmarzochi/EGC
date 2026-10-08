@@ -13,6 +13,7 @@ const { spawnSync } = require('child_process');
 
 const { FULL_INSTALL_TIMEOUT_MS, CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const { PROPAGATION_FILES } = require('../../scripts/lib/memory-filters');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 const ROOT = path.join(__dirname, '..', '..');
 const INIT = path.join(ROOT, 'scripts', 'init.js');
@@ -49,7 +50,7 @@ function makeTempDir(prefix) {
 
 function cleanup(dirPath) {
   try {
-    fs.rmSync(dirPath, { recursive: true, force: true });
+    removeDirWithRetries(dirPath);
   } catch {
     // best effort
   }

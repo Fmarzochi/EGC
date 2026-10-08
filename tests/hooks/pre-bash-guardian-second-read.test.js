@@ -17,6 +17,7 @@ const { spawnSync } = require('child_process');
 
 process.env.EGC_GUARDIAN_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 const { run } = require('../../scripts/hooks/pre-bash-guardian-validate');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function test(name, fn) {
   try {
@@ -137,12 +138,12 @@ function runTests() {
         assert.strictEqual(judged('bash env.sh'), 0, 'a variable only the environment holds');
         assert.strictEqual(judged('bash opaque.sh'), 0, 'a committed script is held to the grave denials only');
       } finally {
-        fs.rmSync(repo, { recursive: true, force: true });
+        removeDirWithRetries(repo);
         fs.rmSync(emptyConfig, { force: true });
       }
     }));
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeDirWithRetries(dir);
   }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

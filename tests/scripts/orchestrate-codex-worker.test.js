@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'orchestrate-codex-worker.sh');
 
@@ -56,7 +57,7 @@ test('fails fast for an unreadable task file and records failure artifacts', () 
       'Handoff file should explain the task-file failure'
     );
   } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
+    removeDirWithRetries(tempRoot);
   }
 });
 

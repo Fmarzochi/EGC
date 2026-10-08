@@ -21,13 +21,14 @@ const {
 } = require('../../scripts/lib/state-consolidate');
 const { encryptStateBuffer, decryptStateBuffer, isEncryptedBuffer } = require('../../scripts/lib/state-crypto');
 const { getStateDir, branchStateFile } = require('../../scripts/lib/branch-state');
+const { removeDirWithRetries } = require('../fixtures/remove-dir');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
 function cleanup(dirPath) {
-  fs.rmSync(dirPath, { recursive: true, force: true });
+  removeDirWithRetries(dirPath);
 }
 
 function daysAgo(days) {
