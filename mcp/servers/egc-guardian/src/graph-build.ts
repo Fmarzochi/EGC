@@ -58,20 +58,22 @@ export function resolveSpecifier(fromFile: string, specifier: string, fileSet: S
   return candidates.find(c => fileSet.has(c)) ?? null;
 }
 
+function groupByFile<T extends { file: string }>(rows: T[]): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const row of rows) {
+    const list = out.get(row.file);
+    if (list) list.push(row);
+    else out.set(row.file, [row]);
+  }
+  return out;
+}
+
+type BindingTarget = { target: string; imported: string };
+
 export function computeEdges(data: Pick<GraphData, 'files' | 'symbols' | 'imports'>): EdgeRow[] {
   const fileSet = new Set(data.files.map(f => f.path));
-  const byFile = new Map<string, SymbolRow[]>();
-  for (const s of data.symbols) {
-    const list = byFile.get(s.file);
-    if (list) list.push(s);
-    else byFile.set(s.file, [s]);
-  }
-  const importsByFile = new Map<string, GraphData['imports']>();
-  for (const im of data.imports) {
-    const list = importsByFile.get(im.file);
-    if (list) list.push(im);
-    else importsByFile.set(im.file, [im]);
-  }
+  const byFile = groupByFile(data.symbols);
+  const importsByFile = groupByFile(data.imports);
   const edges = new Map<string, EdgeRow>();
   const add = (src: string, dst: string, kind: EdgeRow['kind']): void => {
     if (src !== dst) edges.set(`${kind}|${src}|${dst}`, { src, dst, kind });
@@ -95,8 +97,30 @@ export function computeEdges(data: Pick<GraphData, 'files' | 'symbols' | 'import
     return null;
   };
 
+  const refTarget = (
+    s: SymbolRow,
+    ref: string,
+    sameFile: Map<string, SymbolRow>,
+    bindingTarget: Map<string, BindingTarget>
+  ): string | null => {
+    if (ref.startsWith('.')) {
+      const cls = s.name.includes('.') ? s.name.split('.')[0] : null;
+      const hit = cls ? sameFile.get(`${cls}.${ref.slice(1)}`) : undefined;
+      return hit ? `s:${hit.id}` : null;
+    }
+    const dot = ref.indexOf('.');
+    if (dot > 0) {
+      const bt = bindingTarget.get(ref.slice(0, dot));
+      return bt && bt.imported === '*' ? findExport(bt.target, ref.slice(dot + 1), 0) : null;
+    }
+    const bt = bindingTarget.get(ref);
+    if (bt) return bt.imported === '*' ? `f:${bt.target}` : (findExport(bt.target, bt.imported, 0) ?? `f:${bt.target}`);
+    const local = sameFile.get(ref);
+    return local ? `s:${local.id}` : null;
+  };
+
   for (const file of data.files) {
-    const bindingTarget = new Map<string, { target: string; imported: string }>();
+    const bindingTarget = new Map<string, BindingTarget>();
     for (const im of importsByFile.get(file.path) ?? []) {
       const target = resolveSpecifier(file.path, im.specifier, fileSet);
       if (!target) continue;
@@ -109,31 +133,9 @@ export function computeEdges(data: Pick<GraphData, 'files' | 'symbols' | 'import
     for (const s of syms) if (!sameFile.has(s.name)) sameFile.set(s.name, s);
 
     for (const s of syms) {
-      const from = `s:${s.id}`;
       for (const ref of s.refs) {
-        if (ref.startsWith('.')) {
-          const cls = s.name.includes('.') ? s.name.split('.')[0] : null;
-          const hit = cls ? sameFile.get(`${cls}.${ref.slice(1)}`) : undefined;
-          if (hit) add(from, `s:${hit.id}`, 'ref');
-          continue;
-        }
-        const dot = ref.indexOf('.');
-        if (dot > 0) {
-          const bt = bindingTarget.get(ref.slice(0, dot));
-          if (bt && bt.imported === '*') {
-            const hit = findExport(bt.target, ref.slice(dot + 1), 0);
-            if (hit) add(from, hit, 'ref');
-          }
-          continue;
-        }
-        const bt = bindingTarget.get(ref);
-        if (bt) {
-          if (bt.imported === '*') add(from, `f:${bt.target}`, 'ref');
-          else add(from, findExport(bt.target, bt.imported, 0) ?? `f:${bt.target}`, 'ref');
-          continue;
-        }
-        const local = sameFile.get(ref);
-        if (local) add(from, `s:${local.id}`, 'ref');
+        const hit = refTarget(s, ref, sameFile, bindingTarget);
+        if (hit) add(`s:${s.id}`, hit, 'ref');
       }
     }
   }
@@ -181,6 +183,40 @@ async function readText(abs: string, maxBytes: number): Promise<string | null> {
   }
 }
 
+type IndexOutcome = 'skipped' | 'kept' | 'refreshed';
+
+// One file of the walk: skipped (protected, unreadable, too large), kept as it
+// was, or re-extracted into the store.
+async function indexFile(
+  root: string,
+  rel: string,
+  prev: { mtimeMs: number; size: number; hash: string } | undefined,
+  store: GraphStore,
+  opts: BuildOptions,
+  maxFileBytes: number
+): Promise<IndexOutcome> {
+  const abs = path.join(root, rel);
+  if (opts.isProtectedPath?.(abs)) return 'skipped';
+  let st: fs.Stats;
+  try {
+    st = await fs.promises.lstat(abs);
+  } catch {
+    return 'skipped';
+  }
+  if (!st.isFile() || st.size > maxFileBytes) return 'skipped';
+  if (prev && prev.mtimeMs === st.mtimeMs && prev.size === st.size) return 'kept';
+
+  const text = await readText(abs, maxFileBytes);
+  if (text === null) return 'skipped';
+  const row = { path: rel, mtimeMs: st.mtimeMs, size: st.size, hash: crypto.createHash('sha256').update(text).digest('hex') };
+  if (prev && prev.hash === row.hash) {
+    await store.touchFile(row);
+    return 'kept';
+  }
+  await store.replaceFile(row, extractFile(text));
+  return 'refreshed';
+}
+
 export async function buildGraph(projectRoot: string, store: GraphStore, opts: BuildOptions = {}): Promise<BuildResult> {
   const started = Date.now();
   const maxFiles = opts.maxFiles ?? 5000;
@@ -209,31 +245,9 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
       for (const rest of walked.files.slice(k)) if (known.has(rest)) wanted.add(rest);
       break;
     }
-    const abs = path.join(root, rel);
-    if (opts.isProtectedPath?.(abs)) continue;
-    let st: fs.Stats;
-    try {
-      st = await fs.promises.lstat(abs);
-    } catch {
-      continue;
-    }
-    if (!st.isFile() || st.size > maxFileBytes) continue;
-
-    const prev = known.get(rel);
-    if (prev && prev.mtimeMs === st.mtimeMs && prev.size === st.size) {
-      wanted.add(rel);
-      continue;
-    }
-    const text = await readText(abs, maxFileBytes);
-    if (text === null) continue;
-    const row = { path: rel, mtimeMs: st.mtimeMs, size: st.size, hash: crypto.createHash('sha1').update(text).digest('hex') };
-    wanted.add(rel);
-    if (prev && prev.hash === row.hash) {
-      await store.touchFile(row);
-      continue;
-    }
-    await store.replaceFile(row, extractFile(text));
-    refreshed++;
+    const outcome = await indexFile(root, rel, known.get(rel), store, opts, maxFileBytes);
+    if (outcome !== 'skipped') wanted.add(rel);
+    if (outcome === 'refreshed') refreshed++;
   }
 
   const walkedSet = new Set(walked.files);

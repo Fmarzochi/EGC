@@ -29,17 +29,18 @@ const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
 const lastSegment = (name: string): string => name.slice(name.lastIndexOf('.') + 1);
 
 interface Reach { score: number; why: string }
+interface Ranked extends Reach { s: SymbolRow }
+interface AdjacentEdge { to: string; kind: 'import' | 'ref'; forward: boolean }
+interface FileEntry { score: number; why: Set<string>; snippets: Snippet[] }
 
-export async function queryGraph(prompt: string, graph: GraphData, opts: QueryOptions): Promise<RelevantContext> {
-  const budget = opts.budgetTokens ?? 2000;
-  const seedCount = opts.seeds ?? 8;
-  const hops = opts.hops ?? 2;
-  const empty: RelevantContext = { files: [], tokensEstimated: 0, truncated: false, dropped: 0 };
+const byRank = (a: { s: SymbolRow; score: number }, b: { s: SymbolRow; score: number }): number =>
+  b.score - a.score || (a.s.file < b.s.file ? -1 : a.s.file > b.s.file ? 1 : 0) || a.s.startLine - b.s.startLine;
 
-  const promptWords = new Set(splitWords(prompt));
-  if (promptWords.size === 0) return empty;
-  const promptIdents = new Set((prompt.match(/[A-Za-z_$][\w$]*/g) ?? []).map(w => w.toLowerCase()));
-
+function indexTokens(graph: GraphData): {
+  nameTokens: Map<number, Set<string>>;
+  fileTokens: Map<string, Set<string>>;
+  idf: (t: string) => number;
+} {
   const nameTokens = new Map<number, Set<string>>();
   const fileTokens = new Map<string, Set<string>>();
   const df = new Map<string, number>();
@@ -51,8 +52,17 @@ export async function queryGraph(prompt: string, graph: GraphData, opts: QueryOp
   }
   const n = graph.symbols.length;
   const idf = (t: string): number => Math.log(1 + n / (1 + (df.get(t) ?? 0)));
+  return { nameTokens, fileTokens, idf };
+}
 
-  const byId = new Map<number, SymbolRow>(graph.symbols.map(s => [s.id, s]));
+// Symbols whose own name or file path shares words with the prompt, best first.
+function findSeeds(
+  graph: GraphData,
+  promptWords: Set<string>,
+  promptIdents: Set<string>,
+  seedCount: number
+): { topSeeds: Array<{ s: SymbolRow; score: number }>; matched: Map<number, string[]> } {
+  const { nameTokens, fileTokens, idf } = indexTokens(graph);
   const matched = new Map<number, string[]>();
   const seeds: Array<{ s: SymbolRow; score: number }> = [];
   for (const s of graph.symbols) {
@@ -67,25 +77,38 @@ export async function queryGraph(prompt: string, graph: GraphData, opts: QueryOp
     matched.set(s.id, [...hitsOwn, ...hitsFile]);
     seeds.push({ s, score });
   }
-  const byRank = (a: { s: SymbolRow; score: number }, b: { s: SymbolRow; score: number }): number =>
-    b.score - a.score || (a.s.file < b.s.file ? -1 : a.s.file > b.s.file ? 1 : 0) || a.s.startLine - b.s.startLine;
   seeds.sort(byRank);
-  const topSeeds = seeds.slice(0, seedCount);
-  if (topSeeds.length === 0) return empty;
+  return { topSeeds: seeds.slice(0, seedCount), matched };
+}
 
-  const adjacency = new Map<string, Array<{ to: string; kind: 'import' | 'ref'; forward: boolean }>>();
+function buildAdjacency(edges: GraphData['edges']): Map<string, AdjacentEdge[]> {
+  const adjacency = new Map<string, AdjacentEdge[]>();
   const link = (from: string, to: string, kind: 'import' | 'ref', forward: boolean): void => {
     const list = adjacency.get(from);
     const entry = { to, kind, forward };
     if (list) list.push(entry);
     else adjacency.set(from, [entry]);
   };
-  for (const e of graph.edges) {
+  for (const e of edges) {
     link(e.src, e.dst, e.kind, true);
     link(e.dst, e.src, e.kind, false);
   }
-  const label = (id: string): string => (id.startsWith('s:') ? byId.get(Number(id.slice(2)))?.name ?? id : id.slice(2));
+  return adjacency;
+}
 
+function describeEdge(edge: AdjacentEdge, from: string): string {
+  if (edge.kind === 'import') return edge.forward ? `imported by ${from}` : `imports ${from}`;
+  return edge.forward ? `called by ${from}` : `calls ${from}`;
+}
+
+// Walks the graph outward from the seeds, halving the score at every hop.
+function spreadFromSeeds(
+  topSeeds: Array<{ s: SymbolRow; score: number }>,
+  matched: Map<number, string[]>,
+  adjacency: Map<string, AdjacentEdge[]>,
+  hops: number,
+  label: (id: string) => string
+): Map<string, Reach> {
   const best = new Map<string, Reach>();
   let frontier: string[] = [];
   for (const { s, score } of topSeeds) {
@@ -101,16 +124,17 @@ export async function queryGraph(prompt: string, graph: GraphData, opts: QueryOp
         const score = from.score * 0.5;
         const known = best.get(edge.to);
         if (known && known.score >= score) continue;
-        let why: string;
-        if (edge.kind === 'import') why = edge.forward ? `imported by ${label(id)}` : `imports ${label(id)}`;
-        else why = edge.forward ? `called by ${label(id)}` : `calls ${label(id)}`;
-        best.set(edge.to, { score, why });
+        best.set(edge.to, { score, why: describeEdge(edge, label(id)) });
         next.push(edge.to);
       }
     }
     frontier = next;
   }
+  return best;
+}
 
+// Turns reached nodes into symbols: a reached file stands for its first exported symbols.
+function rankCandidates(best: Map<string, Reach>, graph: GraphData, byId: Map<number, SymbolRow>): Ranked[] {
   const candidates = new Map<number, Reach>();
   const consider = (symbolId: number, reach: Reach): void => {
     const known = candidates.get(symbolId);
@@ -125,15 +149,31 @@ export async function queryGraph(prompt: string, graph: GraphData, opts: QueryOp
       for (const s of exported) consider(s.id, { score: reach.score * 0.5, why: reach.why });
     }
   }
-
-  const ranked = [...candidates.entries()]
+  return [...candidates.entries()]
     .map(([symbolId, reach]) => ({ s: byId.get(symbolId) as SymbolRow, ...reach }))
     .filter(c => c.s)
-    .sort((a, b) => b.score - a.score || (a.s.file < b.s.file ? -1 : a.s.file > b.s.file ? 1 : 0) || a.s.startLine - b.s.startLine);
+    .sort(byRank);
+}
 
+// Shortens a snippet by a fifth at a time until it fits one snippet's share of the budget.
+function fitSnippet(lines: string[], maxOne: number): { lines: string[]; cut: boolean } {
+  let kept = lines;
+  let cut = false;
+  while (kept.length > 1 && estimateTokens(kept.join('\n')) > maxOne) {
+    kept = kept.slice(0, Math.max(1, Math.floor(kept.length * 0.8)));
+    cut = true;
+  }
+  return { lines: kept, cut };
+}
+
+async function cutSnippets(
+  ranked: Ranked[],
+  budget: number,
+  opts: QueryOptions
+): Promise<{ perFile: Map<string, FileEntry>; used: number; truncated: boolean; dropped: number }> {
   const fileLines = new Map<string, string[] | null>();
   const taken = new Map<string, Array<[number, number]>>();
-  const perFile = new Map<string, { score: number; why: Set<string>; snippets: Snippet[] }>();
+  const perFile = new Map<string, FileEntry>();
   let used = 0;
   let truncated = false;
   let dropped = 0;
@@ -153,13 +193,8 @@ export async function queryGraph(prompt: string, graph: GraphData, opts: QueryOp
     const all = fileLines.get(c.s.file);
     if (!all) continue;
 
-    let snippetLines = all.slice(c.s.startLine - 1, c.s.endLine);
-    let cut = false;
-    while (snippetLines.length > 1 && estimateTokens(snippetLines.join('\n')) > maxOne) {
-      snippetLines = snippetLines.slice(0, Math.max(1, Math.floor(snippetLines.length * 0.8)));
-      cut = true;
-    }
-    let text = snippetLines.join('\n');
+    const fitted = fitSnippet(all.slice(c.s.startLine - 1, c.s.endLine), maxOne);
+    let text = fitted.lines.join('\n');
     if (opts.transformSnippet) {
       const out = opts.transformSnippet(text);
       if (out === null) {
@@ -179,10 +214,31 @@ export async function queryGraph(prompt: string, graph: GraphData, opts: QueryOp
     const entry = perFile.get(c.s.file) ?? { score: c.score, why: new Set<string>(), snippets: [] };
     entry.score = Math.max(entry.score, c.score);
     entry.why.add(c.why);
-    entry.snippets.push({ symbol: c.s.name, startLine: c.s.startLine, endLine: c.s.startLine + snippetLines.length - 1, text, ...(cut ? { truncated: true } : {}) });
+    entry.snippets.push({ symbol: c.s.name, startLine: c.s.startLine, endLine: c.s.startLine + fitted.lines.length - 1, text, ...(fitted.cut ? { truncated: true } : {}) });
     perFile.set(c.s.file, entry);
-    if (cut) truncated = true;
+    if (fitted.cut) truncated = true;
   }
+  return { perFile, used, truncated, dropped };
+}
+
+export async function queryGraph(prompt: string, graph: GraphData, opts: QueryOptions): Promise<RelevantContext> {
+  const budget = opts.budgetTokens ?? 2000;
+  const seedCount = opts.seeds ?? 8;
+  const hops = opts.hops ?? 2;
+  const empty: RelevantContext = { files: [], tokensEstimated: 0, truncated: false, dropped: 0 };
+
+  const promptWords = new Set(splitWords(prompt));
+  if (promptWords.size === 0) return empty;
+  const promptIdents = new Set((prompt.match(/[A-Za-z_$][\w$]*/g) ?? []).map(w => w.toLowerCase()));
+
+  const { topSeeds, matched } = findSeeds(graph, promptWords, promptIdents, seedCount);
+  if (topSeeds.length === 0) return empty;
+
+  const byId = new Map<number, SymbolRow>(graph.symbols.map(s => [s.id, s]));
+  const label = (id: string): string => (id.startsWith('s:') ? byId.get(Number(id.slice(2)))?.name ?? id : id.slice(2));
+  const best = spreadFromSeeds(topSeeds, matched, buildAdjacency(graph.edges), hops, label);
+  const ranked = rankCandidates(best, graph, byId);
+  const { perFile, used, truncated, dropped } = await cutSnippets(ranked, budget, opts);
 
   const files: ContextFile[] = [...perFile.entries()]
     .map(([p, e]) => ({ path: p, score: Math.round(e.score * 100) / 100, why: [...e.why].slice(0, 3), snippets: e.snippets.sort((a, b) => a.startLine - b.startLine) }))

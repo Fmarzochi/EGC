@@ -129,6 +129,17 @@ const bump = file => {
     await store.close();
   });
 
+  await run('file content is fingerprinted with SHA-256, not SHA-1', async () => {
+    const text = 'export const a = 1;\n';
+    const root = project({ 'a.js': text });
+    const store = await open();
+    await buildGraph(root, store);
+    const row = (await store.getFiles()).get('a.js');
+    assert.strictEqual(row.hash, require('node:crypto').createHash('sha256').update(text).digest('hex'));
+    assert.strictEqual(row.hash.length, 64);
+    await store.close();
+  });
+
   await run('deleting a file removes its rows and edges', async () => {
     const root = project({
       'a.js': "import { b } from './b.js';\nexport function a() { return b(); }\n",
