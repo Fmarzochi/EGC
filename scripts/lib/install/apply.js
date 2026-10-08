@@ -506,9 +506,10 @@ function pointsIntoLegacyRoot(linkPath, root) {
   } catch {
     return null;
   }
-  const managed = path.join(root, 'skills', 'egc');
-  if (target !== managed && !target.startsWith(managed + path.sep)) return null;
-  return hasLinkedComponent(root, target) ? null : target;
+  const candidates = [path.join(root, 'skills', 'egc'), ...legacyLinkRoots(root)];
+  const matched = candidates.find(candidate => target === candidate || target.startsWith(candidate + path.sep));
+  if (!matched) return null;
+  return hasLinkedComponent(path.dirname(path.dirname(matched)), target) ? null : target;
 }
 
 function isScannableDirectory(directory, root) {

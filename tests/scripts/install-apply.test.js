@@ -380,6 +380,32 @@ function runTests() {
         cleanup(outside);
       }
     }));
+
+    tally(test('the June link scan finds a link into the real path of skills/egc when the target root sits behind an alias (#1789)', () => {
+      const { findStrandedLegacyLinks } = require('../../scripts/lib/install/apply');
+      const homeDir = createTempDir('install-apply-home-');
+      const aliasParent = createTempDir('install-apply-alias-');
+
+      try {
+        const realRoot = path.join(fs.realpathSync(homeDir), '.gemini');
+        fs.mkdirSync(path.join(realRoot, 'skills', 'egc', 'june'), { recursive: true });
+        const cliSkills = path.join(realRoot, 'antigravity-cli', 'skills');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        fs.symlinkSync(path.join(realRoot, 'skills', 'egc', 'june'), path.join(cliSkills, 'june'), 'dir');
+        const alias = path.join(aliasParent, 'home');
+        fs.symlinkSync(homeDir, alias, 'dir');
+        const aliasRoot = path.join(alias, '.gemini');
+
+        assert.deepStrictEqual(
+          findStrandedLegacyLinks({ targetRoot: aliasRoot, operations: [] }).map(link => link.linkPath),
+          [path.join(aliasRoot, 'antigravity-cli', 'skills', 'june')],
+          'a June link spelled through the real path of the managed copy is found'
+        );
+      } finally {
+        cleanup(aliasParent);
+        cleanup(homeDir);
+      }
+    }));
   }
 
   tally(test('an upgrade retires a managed copy whose source changed since EGC wrote it, and keeps an edited one (#1789)', () => {
