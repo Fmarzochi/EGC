@@ -3,6 +3,7 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
+- The `egc` target installs every skill under `~/.gemini/config/skills`, the one directory the Antigravity IDE, Antigravity 2.0 and the Antigravity CLI all read, retires the old managed copies under `antigravity-cli/skills` on upgrade and never overwrites a skill the person keeps there (#1786 by @phaiffer, closes #1705).
 - The skill runs file, the skill observations of a project, the project package manager preference and the session folders of the orchestration readers leave the fixed `.gemini` paths for the EGC directory of the home, the `.egc` folder of the project and the `.orchestration` root the orchestrator writes, with every old location still read (N50 of the plan).
 - The Guardian audit log is three modules: `audit-log.ts` keeps the writer, `audit-redact.ts` the redaction of keys, text and payloads, `audit-redact-shell.ts` the shell command-line reader, a literal move with no behavior change (#1781 by @UnforGBeast, first file of #1712).
 - The integration tiers spec says cognitive protocol v9 and names the Qwen Code hooks the adapter merges into `.qwen/settings.json`, with two spec tests that read the version and the hook plan from the code (#1783 by @phaiffer, closes #1657).
