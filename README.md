@@ -60,7 +60,7 @@ Guardian validates commands before they run, gates risky writes and keeps contex
 
 ### Token Crusher: Noise Never Reaches the Model
 
-Before shell output reaches the model, the Token Crusher compresses git logs, test spam, install noise and giant JSON by up to 90 percent while keeping every error and warning. Ask "how much did I save?" in any language and the answer comes straight from your local ledger.
+Before shell output reaches the model, the Token Crusher compresses git logs, test spam, install noise and giant JSON by up to 90 percent while keeping every error and warning. Ask "how much did I save?" in any language and the answer comes straight from your local ledger. Starting a task, EGC also ranks the right files from a local graph of your code; see [Token Optimization](docs/token-optimization.md).
 
 ---
 
