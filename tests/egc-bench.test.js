@@ -13,7 +13,7 @@ const { spawnSync } = require('node:child_process');
 
 const bench = path.join(__dirname, '..', 'scripts', 'bench');
 const { recallAtK, reciprocalRank, percentile, estimateTokens, mean } = require(path.join(bench, 'metrics.js'));
-const { parse, loadTasks, summarise } = require(path.join(bench, 'run.js'));
+const { parse, loadTasks, summarise, runTask } = require(path.join(bench, 'run.js'));
 
 let passed = 0;
 let failed = 0;
@@ -113,5 +113,52 @@ if (!fs.existsSync(buildPath)) {
   });
 }
 
-console.log(`\n${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+run('a flag without its value is named in the error', () => {
+  assert.throws(() => parse(['--top']), /--top needs a value/);
+  assert.throws(() => parse(['--tasks', '--runs', '2']), /--tasks needs a value/);
+});
+
+run('loadTasks rejects a task whose fields are not text', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bench-types-'));
+  const file = path.join(dir, 'tasks.json');
+  for (const bad of [
+    { id: 7, query: 'q', expected: ['a.js'] },
+    { id: 't', query: ['q'], expected: ['a.js'] },
+    { id: 't', query: 'q', expected: [1] },
+    { id: 't', query: 'q', expected: ['  '] },
+    null
+  ]) {
+    fs.writeFileSync(file, JSON.stringify({ tasks: [bad] }));
+    assert.throws(() => loadTasks(file), /task needs/, JSON.stringify(bad));
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+(async () => {
+  try {
+    const files = ['a.js', 'b.js', 'c.js', 'd.js', 'e.js', 'f.js'];
+    const rank = async ({ topN }) => ({
+      ranked: files.slice(0, topN).map(p => ({ path: p })),
+      briefing: 'x'.repeat(40 * topN)
+    });
+    const task = { id: 't', query: 'q', expected: ['e.js'] };
+
+    const shallow = await runTask(rank, task, { top: 3, runs: 1, project: os.tmpdir() });
+    assert.strictEqual(shallow.recallAt5, 1, 'recall@5 sees rank 5 even when --top is 3');
+    assert.strictEqual(shallow.recallAtTop, 0, 'recall@top only counts the top 3');
+    assert.strictEqual(shallow.briefingTokens, Math.ceil((40 * 3) / 4), 'the briefing keeps the --top size');
+
+    const deep = await runTask(rank, task, { top: 6, runs: 1, project: os.tmpdir() });
+    assert.strictEqual(deep.recallAt5, 1);
+    assert.strictEqual(deep.recallAtTop, 1);
+    console.log('  PASS recall@5 does not undershoot when --top is below 5');
+    passed++;
+  } catch (err) {
+    console.log('  FAIL recall@5 does not undershoot when --top is below 5');
+    console.log(`    ${err.message}`);
+    failed++;
+  }
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+})();

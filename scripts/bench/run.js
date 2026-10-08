@@ -10,17 +10,23 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_TASKS = path.join(REPO_ROOT, 'benchmarks', 'egc', 'tasks.json');
 const USAGE = 'usage: node scripts/bench/run.js [--tasks <file>] [--project <dir>] [--top <n>] [--runs <n>] [--out <file.json>] [--min-recall <0..1>]';
 
+function valueOf(argv, i, flag) {
+  const value = argv[i + 1];
+  if (value === undefined || value.startsWith('--')) throw new Error(`${flag} needs a value`);
+  return value;
+}
+
 function parse(argv) {
   const opts = { tasks: DEFAULT_TASKS, project: REPO_ROOT, top: 10, runs: 3, out: null, minRecall: null, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') opts.help = true;
-    else if (a === '--tasks') opts.tasks = path.resolve(argv[++i]);
-    else if (a === '--project') opts.project = path.resolve(argv[++i]);
-    else if (a === '--top') opts.top = Number(argv[++i]);
-    else if (a === '--runs') opts.runs = Number(argv[++i]);
-    else if (a === '--out') opts.out = path.resolve(argv[++i]);
-    else if (a === '--min-recall') opts.minRecall = Number(argv[++i]);
+    else if (a === '--tasks') opts.tasks = path.resolve(valueOf(argv, i++, a));
+    else if (a === '--project') opts.project = path.resolve(valueOf(argv, i++, a));
+    else if (a === '--top') opts.top = Number(valueOf(argv, i++, a));
+    else if (a === '--runs') opts.runs = Number(valueOf(argv, i++, a));
+    else if (a === '--out') opts.out = path.resolve(valueOf(argv, i++, a));
+    else if (a === '--min-recall') opts.minRecall = Number(valueOf(argv, i++, a));
     else throw new Error(`unknown argument ${a}`);
   }
   if (opts.help) return opts;
@@ -34,8 +40,12 @@ function loadTasks(file) {
   const spec = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (!Array.isArray(spec.tasks) || spec.tasks.length === 0) throw new Error(`no tasks in ${file}`);
   for (const t of spec.tasks) {
-    if (!t.id || !t.query || !Array.isArray(t.expected) || t.expected.length === 0) {
-      throw new Error(`task needs id, query and a non-empty expected list: ${JSON.stringify(t)}`);
+    const wellFormed = typeof t?.id === 'string' && t.id.trim() !== '' &&
+      typeof t.query === 'string' && t.query.trim() !== '' &&
+      Array.isArray(t.expected) && t.expected.length > 0 &&
+      t.expected.every(p => typeof p === 'string' && p.trim() !== '');
+    if (!wellFormed) {
+      throw new Error(`task needs a text id, a text query and a non-empty list of expected paths: ${JSON.stringify(t)}`);
     }
   }
   return spec.tasks;
@@ -53,21 +63,30 @@ function wholeFileChars(projectRoot, rels) {
   return chars;
 }
 
+// recall@5 needs five ranked files even when --top asks for fewer, so the
+// ranking is always at least five deep; recall@top and the briefing keep the
+// size --top asks for.
+const RECALL_DEPTH = 5;
+
 async function runTask(rank, task, opts) {
   const latencies = [];
+  const depth = Math.max(opts.top, RECALL_DEPTH);
   let last = null;
   for (let i = 0; i < opts.runs; i++) {
     const t0 = process.hrtime.bigint();
-    last = await rank({ projectPath: opts.project, query: task.query, topN: opts.top, useGit: false });
+    last = await rank({ projectPath: opts.project, query: task.query, topN: depth, useGit: false });
     latencies.push(Number(process.hrtime.bigint() - t0) / 1e6);
   }
   const ranked = last.ranked.map(f => f.path.replace(/\\/g, '/'));
-  const briefingChars = last.briefing.length;
+  const briefing = opts.top >= RECALL_DEPTH
+    ? last.briefing
+    : (await rank({ projectPath: opts.project, query: task.query, topN: opts.top, useGit: false })).briefing;
+  const briefingChars = briefing.length;
   const baselineChars = wholeFileChars(opts.project, task.expected);
   return {
     id: task.id,
     query: task.query,
-    recallAt5: recallAtK(ranked, task.expected, 5),
+    recallAt5: recallAtK(ranked, task.expected, RECALL_DEPTH),
     recallAtTop: recallAtK(ranked, task.expected, opts.top),
     reciprocalRank: reciprocalRank(ranked, task.expected),
     latencyMsP50: percentile(latencies, 50),
@@ -143,7 +162,13 @@ async function main() {
 }
 
 if (require.main === module) {
-  main().then(code => { process.exitCode = code; });
+  main().then(
+    code => { process.exitCode = code; },
+    err => {
+      process.stderr.write(`egc bench: ${err.message}\n`);
+      process.exitCode = 1;
+    }
+  );
 }
 
-module.exports = { parse, loadTasks, summarise };
+module.exports = { parse, loadTasks, summarise, runTask };
