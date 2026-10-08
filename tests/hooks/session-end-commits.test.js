@@ -231,7 +231,8 @@ function runTests() {
         assert.ok(!header.includes('**Commits:**'));
         // A git failure must not pass in silence: a slow or broken git on a
         // real machine would otherwise lose the commit list without a trace.
-        assert.ok(result.stderr.includes('[session-end] commit list skipped:'), result.stderr);
+        assert.ok(result.stderr.includes('[SessionEnd] commit list skipped: fatal: not a git repository'), result.stderr);
+        assert.ok(!result.stderr.includes(ME.email), `the email stays out of the warning:\n${result.stderr}`);
       } finally {
         cleanup(home, repo, plain);
       }
