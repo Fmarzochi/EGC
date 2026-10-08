@@ -3,6 +3,7 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
+- The skill runs file, the skill observations of a project, the project package manager preference and the session folders of the orchestration readers leave the fixed `.gemini` paths for the EGC directory of the home, the `.egc` folder of the project and the `.orchestration` root the orchestrator writes, with every old location still read (N50 of the plan).
 - The Guardian audit log is three modules: `audit-log.ts` keeps the writer, `audit-redact.ts` the redaction of keys, text and payloads, `audit-redact-shell.ts` the shell command-line reader, a literal move with no behavior change (#1781 by @UnforGBeast, first file of #1712).
 - The git calls of one judgement in the Bash hook and in the write hook share a budget of 15 seconds of git time, counted only while git runs, so a slow git on a loaded runner no longer makes a committed script a stranger (#1779).
 - Every schema in `schemas/` is validated against its data by `tests/spec/schemas.test.js` (repository manifests, the files the code writes, and the runtime validators of the install config and the state store), `runtime-map.schema.json` describes the file `discovery.js` writes, the two registry schemas nothing used are removed, and the spec index names what validates each schema (#1778 by @phaiffer, closes #1702).
