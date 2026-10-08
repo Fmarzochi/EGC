@@ -256,9 +256,15 @@ function run(inputOrRaw, options = {}) {
     return { exitCode: 0 };
   }
 
-  // The committed versions of the targets are read with one git budget for
-  // the whole write, as the Bash hook reads the scripts it judges.
-  return bashGuardian.withGitBudget(() => firstBlocked(cli, input, targets)) || { exitCode: 0 };
+  return withGitBudget(() => firstBlocked(cli, input, targets)) || { exitCode: 0 };
+}
+
+// The committed versions of the targets are read with one git budget for
+// the whole write, as the Bash hook reads the scripts it judges; without
+// the Bash guardian, or with one that has no budget to lend, the checks
+// run as they are.
+function withGitBudget(work) {
+  return typeof bashGuardian?.withGitBudget === 'function' ? bashGuardian.withGitBudget(work) : work();
 }
 
 module.exports = { run };
