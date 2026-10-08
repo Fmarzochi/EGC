@@ -401,9 +401,48 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  const n50 = runN50Cases();
+  passed += n50.passed;
+  failed += n50.failed;
+
   // Summary
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
+}
+
+// N50 of the correction plan: the shipped config does not pin the learned
+// skills to a fixed ~/.gemini, so the hook follows the EGC directory in use.
+function runN50Cases() {
+  console.log('\nN50: learned skills follow the EGC directory in use:');
+  let passed = 0;
+  let failed = 0;
+
+  if (test('with the shipped config, learned skills go to the EGC directory in use, not to a fixed ~/.gemini', () => {
+    const testDir = createTestDir();
+    try {
+      const egcDir = path.join(testDir, 'egc-dir');
+      const transcript = createTranscript(testDir, 12);
+      const result = spawnSync(process.execPath, [evaluateScript], {
+        encoding: 'utf8',
+        input: JSON.stringify({ transcript_path: transcript }),
+        timeout: 10000,
+        env: { ...process.env, EGC_DIR: egcDir },
+      });
+      assert.strictEqual(result.status, 0, `Should exit 0. stderr: ${result.stderr}`);
+      assert.ok(
+        result.stderr.includes(path.join(egcDir, 'skills', 'learned')),
+        `the learned skills land in the EGC directory in use. Got: ${result.stderr}`
+      );
+      assert.ok(
+        !result.stderr.includes(path.join('.gemini', 'skills', 'learned')),
+        `the shipped config must not pin a fixed ~/.gemini. Got: ${result.stderr}`
+      );
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  return { passed, failed };
 }
 
 runTests();

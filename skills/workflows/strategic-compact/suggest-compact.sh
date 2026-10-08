@@ -8,14 +8,15 @@
 # - Compact after exploration, before execution
 # - Compact after completing a milestone, before starting next
 #
-# Hook config (in ~/.gemini/settings.json):
+# Hook config, in the hook settings of your tool (example for Claude Code,
+# ~/.claude/settings.json, with the path the skill was installed under):
 # {
 #   "hooks": {
 #     "PreToolUse": [{
 #       "matcher": "Edit|Write",
 #       "hooks": [{
 #         "type": "command",
-#         "command": "~/.gemini/skills/strategic-compact/suggest-compact.sh"
+#         "command": "~/.claude/skills/strategic-compact/suggest-compact.sh"
 #       }]
 #     }]
 #   }
