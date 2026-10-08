@@ -211,6 +211,49 @@ function runTests() {
     }
   }));
 
+  tally(test('an install from before config/skills gains the Antigravity IDE skills on upgrade and keeps the CLI ones (#1705)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const ideSkills = path.join(geminiRoot, 'config', 'skills');
+      const cliSkills = path.join(geminiRoot, 'antigravity-cli', 'skills');
+      const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
+      const skills = fs.readdirSync(cliSkills).sort();
+      assert.ok(skills.length > 0, 'the minimal profile installs skills');
+      assert.deepStrictEqual(fs.readdirSync(ideSkills).sort(), skills, 'a fresh install writes the same skills to both directories');
+
+      const state = readJson(statePath);
+      state.operations = state.operations.filter(operation => !operation.destinationPath.startsWith(ideSkills + path.sep));
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      fs.rmSync(ideSkills, { recursive: true, force: true });
+      const own = path.join(ideSkills, 'my-own-skill', 'SKILL.md');
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, '# mine');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      for (const skill of skills) {
+        assert.ok(fs.existsSync(path.join(ideSkills, skill, 'SKILL.md')), `${skill} is written under config/skills on upgrade`);
+        assert.ok(fs.existsSync(path.join(cliSkills, skill, 'SKILL.md')), `${skill} stays under antigravity-cli/skills`);
+      }
+      assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', 'the person\'s own skill under config/skills stays');
+      const recorded = readJson(statePath).operations.map(operation => operation.destinationPath);
+      assert.ok(recorded.some(destination => destination.startsWith(ideSkills + path.sep)), 'the upgraded state records the config/skills copies');
+      assert.ok(recorded.some(destination => destination.startsWith(cliSkills + path.sep)), 'and still the antigravity-cli/skills copies');
+      assert.ok(!recorded.some(destination => destination.startsWith(path.join(ideSkills, 'my-own-skill'))), 'the person\'s skill is never recorded as managed');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
   tally(test('installs Cursor configs and writes install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');

@@ -41,14 +41,14 @@ Search installed and marketplace skill names first. Local sources are preferred
 because they are already part of the user's environment.
 
 ```bash
-find ~/.claude/skills ~/.agents/skills ~/.gemini/antigravity-cli/skills -maxdepth 2 -name SKILL.md 2>/dev/null | grep -iE "keyword|synonym"
+find ~/.claude/skills ~/.agents/skills ~/.gemini/config/skills ~/.gemini/antigravity-cli/skills -maxdepth 2 -name SKILL.md 2>/dev/null | grep -iE "keyword|synonym"
 find ~/.claude/plugins/marketplaces -path '*/skills/*/SKILL.md' 2>/dev/null | grep -iE "keyword|synonym"
 ```
 
 Then search frontmatter descriptions:
 
 ```bash
-grep -RilE "keyword|synonym" ~/.claude/skills ~/.agents/skills ~/.gemini/antigravity-cli/skills ~/.claude/plugins/marketplaces 2>/dev/null
+grep -RilE "keyword|synonym" ~/.claude/skills ~/.agents/skills ~/.gemini/config/skills ~/.gemini/antigravity-cli/skills ~/.claude/plugins/marketplaces 2>/dev/null
 ```
 
 ### Step 3 - Search Remote Sources

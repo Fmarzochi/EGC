@@ -111,7 +111,7 @@ function runTests() {
     assert.strictEqual(statePath, path.join(homeDir, '.gemini', 'egc', 'install-state.json'));
   }));
 
-  tally(test('plans egc skills only where the Antigravity CLI reads them, and rules under the managed rules/egc namespace', () => {
+  tally(test('plans egc skills where the Antigravity CLI, IDE and 2.0 read them, and rules under the managed rules/egc namespace', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -139,6 +139,25 @@ function runTests() {
         && operation.destinationPath === path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'tdd-workflow')
       )),
       'Should install bundled skills under antigravity-cli/skills, where the Antigravity CLI reads them'
+    );
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/tdd-workflow'
+        && operation.destinationPath === path.join(homeDir, '.gemini', 'config', 'skills', 'tdd-workflow')
+      )),
+      'Should install bundled skills under config/skills, where the Antigravity IDE and Antigravity 2.0 read them'
+    );
+    const skillDestinations = plan.operations
+      .filter(operation => normalizedRelativePath(operation.sourceRelativePath) === 'skills/tdd-workflow')
+      .map(operation => operation.destinationPath)
+      .sort();
+    assert.deepStrictEqual(
+      skillDestinations,
+      [
+        path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'tdd-workflow'),
+        path.join(homeDir, '.gemini', 'config', 'skills', 'tdd-workflow'),
+      ].sort(),
+      'Each skill lands once per Antigravity skills directory, never twice in the same one'
     );
     assert.ok(
       !under(path.join(homeDir, '.gemini', 'skills')),
