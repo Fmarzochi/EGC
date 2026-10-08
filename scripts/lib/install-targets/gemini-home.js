@@ -215,7 +215,7 @@ function isPersonOwned(destination, sourcePath, recordedDestinations) {
   const stat = fs.lstatSync(destination, { throwIfNoEntry: false });
   if (!stat || stat.isSymbolicLink()) return false;
   const resolved = path.resolve(destination);
-  if (recordedDestinations && recordedDestinations.some(recorded => recorded === resolved || recorded.startsWith(resolved + path.sep))) {
+  if (recordedDestinations?.some(recorded => recorded === resolved || recorded.startsWith(resolved + path.sep))) {
     return false;
   }
   return !(sourcePath && isSameTree(sourcePath, resolved));
