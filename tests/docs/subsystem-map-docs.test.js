@@ -42,7 +42,7 @@ function globMatches(token) {
 
 function exists(token, bareNameDir) {
   if (GENERATED.has(token)) return true;
-  if (token.includes('*')) return token.includes('/') ? globMatches(token) : true;
+  if (token.includes('*')) return token.includes('/') && globMatches(token);
   if (!token.includes('/')) return fs.existsSync(path.join(repoRoot, token)) || fs.existsSync(path.join(bareNameDir, token));
   return fs.existsSync(path.join(repoRoot, token));
 }

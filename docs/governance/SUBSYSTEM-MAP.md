@@ -2,9 +2,9 @@
 
 This page classifies the top-level subsystems and notable subtrees of the
 EGC repository so contributors can tell at a glance what is
-alive, what is generated, and what is dormant. Every path below exists on
-`main`, and `tests/docs/subsystem-map-docs.test.js` fails when one stops
-existing.
+alive, what is generated, and what is dormant. `tests/docs/subsystem-map-docs.test.js`
+fails when a path below stops existing; it exempts the generated paths, which a
+clean checkout may not have yet.
 
 ## Taxonomy
 
@@ -41,7 +41,7 @@ existing.
 | `.gemini-plugin/`, `.codex-plugin/` | ACTIVE | Plugin manifests |
 | `.cursor/`, `.codex/`, `.kiro/`, `.trae/`, `.codebuddy/`, `.opencode/` | ACTIVE | Harness-specific source bundles |
 | `.agents/` | ACTIVE | Shared `.agents` tree: `.agents/AGENTS.md`, `.agents/plugins/` and `.agents/skills/` |
-| `tests/` | ACTIVE | `*.test.js` run by `tests/run-all.js`; `tests/test_*.py` run by the `pytest tests/` step of `.github/workflows/ci.yml` |
+| `tests/` | ACTIVE | Every .test.js file under it run by `tests/run-all.js`; `tests/test_*.py` run by the `pytest tests/` step of `.github/workflows/ci.yml` |
 | `src/llm/` | ACTIVE | Python LLM providers, tested by `tests/test_*.py` in CI and reached through `npm run prompt` (`scripts/gemini.js`) |
 | `scripts/runtime/discovery.js`, `scripts/runtime/session_bridge.py`, `scripts/runtime/tracer.py` | ACTIVE | See `scripts/runtime/README.md` |
 
@@ -54,7 +54,11 @@ existing.
 | `schemas/egc-install-config.schema.json` | Read at runtime by `scripts/lib/install/config.js` |
 | `schemas/install-state.schema.json` | Read at runtime by `scripts/lib/install-state.js` |
 | `schemas/state-store.schema.json` | Read at runtime by `scripts/lib/state-store/schema.js` |
-| `schemas/agents-registry.schema.json`, `schemas/skills-registry.schema.json`, `schemas/runtime-map.schema.json`, `schemas/package-manager.schema.json`, `schemas/plugin.schema.json`, `schemas/provenance.schema.json` | No validator and no reader yet (#1702) |
+| `schemas/provenance.schema.json` | Not loaded; `validateProvenance()` in `scripts/lib/skill-evolution/provenance.js` checks the same records by hand on every read and write |
+| `schemas/package-manager.schema.json` | Not loaded; `scripts/lib/package-manager.js` reads and writes the config it describes without it |
+| `schemas/plugin.schema.json` | Not loaded; `tests/plugin-manifest.test.js` checks the plugin manifests field by field instead |
+| `schemas/runtime-map.schema.json` | Not loaded; `scripts/runtime/discovery.js` writes the runtime map without it (#1702) |
+| `schemas/agents-registry.schema.json`, `schemas/skills-registry.schema.json` | No validator and no reader (#1702) |
 
 ### Generated / regeneratable
 
