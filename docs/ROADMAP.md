@@ -3,6 +3,9 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
+- The session-end hook gives its two git calls one shared budget of 15 seconds, inside the budget of the hook runner, and reports on stderr why the commit list of the session header was skipped, with the line git wrote and never the command line (#1772).
+- The js-yaml override of the root manifest follows the direct dependency (`$js-yaml` in `overrides` and `pnpm.overrides`), so the root Dependabot job runs again instead of failing on an override conflict (#1771).
+- Every test that builds a git repository removes it through the shared retrying fixture, 21 files after the two of #1765 (#1768).
 - Crush (Charmbracelet) joins as a home-scoped install target: skills flat in the shared `~/.agents/skills` root, agents, commands and rules under `~/.config/crush`, Guardian and Token Crusher hooks and the two MCP servers in `crush.json`, the memory protocol in `~/.config/crush/CRUSH.md`, the install gated on Crush being present, and the supported tool count moves to 21 (22 install targets) (#1744 by @phaiffer, closes #1491).
 - The MCP SDK moves to the 1.32 line in the root and in both servers, `mcp/servers/egc-memory` joins the weekly Dependabot schedule, and the release workflow pins `anchore/sbom-action` v0.24.3 (#1754, #1753, #1762, #1755; closes #1662).
 - Honest output for the telemetry prompt, the Token Crusher PATH status and the dashboard launch: the consent is asked up front and a failure to record it is reported, `egc init` tells whether the shim is on the PATH, persisted or not yet there, and the dashboard line says the browser opened only when the opener really succeeded (#1736 by @phaiffer, closes #1730 and #1377).
