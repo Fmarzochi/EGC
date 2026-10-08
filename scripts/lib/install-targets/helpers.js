@@ -749,6 +749,7 @@ function retirementOf(operation, destinationPath, source, repoRoot) {
     sourceRelativePath: source,
     sourcePath: path.join(repoRoot, ...source.split('/')),
     ...(operation.transform ? { transform: operation.transform } : {}),
+    ...(typeof operation.contentSha256 === 'string' ? { contentSha256: operation.contentSha256 } : {}),
     reason: 'file left the install plan',
   };
 }

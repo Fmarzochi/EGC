@@ -167,6 +167,9 @@ function validateOperation(operation, instancePath, pushError) {
     }
   }
   validateOperationPaths(operation, instancePath, pushError);
+  if (operation.contentSha256 !== undefined && !(typeof operation.contentSha256 === 'string' && /^[0-9a-f]{64}$/.test(operation.contentSha256))) {
+    pushError(`${instancePath}/contentSha256`, 'must match pattern "^[0-9a-f]{64}$"');
+  }
   if (typeof operation.scaffoldOnly !== 'boolean') {
     pushError(`${instancePath}/scaffoldOnly`, 'must be boolean');
   }
