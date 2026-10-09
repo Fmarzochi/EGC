@@ -151,6 +151,31 @@ function runTests() {
     }));
   }
 
+  if (!venvAvailable()) {
+    record(skip('bridge accepts the prompt positionally, without -p (D31 C22)', `${VENV_PYTHON} not present`));
+  } else {
+    record(test('bridge accepts the prompt positionally, without -p (D31 C22)', () => {
+      const env = { ...process.env };
+      delete env.GEMINI_API_KEY;
+      delete env.GOOGLE_API_KEY;
+      delete env.ANTHROPIC_API_KEY;
+      delete env.OPENAI_API_KEY;
+
+      const result = spawnSync('node', [BRIDGE, 'hello world'], {
+        cwd: REPO_ROOT,
+        env,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 15000,
+      });
+
+      assert.ok(
+        !/the prompt is required/.test(result.stderr),
+        `a positional prompt must not trigger the "prompt is required" argparse error; got stderr: ${result.stderr}`
+      );
+    }));
+  }
+
   console.log(`\nResults: Passed: ${passed - skipped}, Skipped: ${skipped}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
