@@ -69,7 +69,11 @@ function getSnapshotPath(outputDir, session, usedNames) {
       const innerSuffix = attempt === 1 ? '' : `-${attempt}`;
       suffix = `-${hashSuffix}${innerSuffix}`;
     }
-    const fileName = `${baseName}${suffix}.json`;
+    // A collision suffix (attached when attempt > 0) must not push the
+    // stem past the 96-char limit sanitizeSnapshotName otherwise enforces:
+    // trim the base to leave room for it.
+    const trimmedBase = suffix ? baseName.slice(0, Math.max(0, 96 - suffix.length)) : baseName;
+    const fileName = `${trimmedBase}${suffix}.json`;
     const usedKey = fileName.toLowerCase();
     if (!usedNames.has(usedKey)) {
       usedNames.add(usedKey);

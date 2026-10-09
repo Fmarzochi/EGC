@@ -753,6 +753,48 @@ function runTests() {
     }
   }));
 
+  tally(test('keeps the collision suffix within the 96-character limit, even for a 96-character session id', () => {
+    const homeDir = createTempHome();
+    const snapshotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-loop-status-suffix-cap-'));
+    const longId = 'a'.repeat(96);
+
+    try {
+      writeTranscript(homeDir, '-Users-affoon-project-suffix-cap', 'upper.jsonl', [
+        assistantMessage('2026-04-30T09:55:00.000Z', longId.toUpperCase(), 'Loop checkpoint.'),
+      ]);
+      writeTranscript(homeDir, '-Users-affoon-project-suffix-cap', 'lower.jsonl', [
+        assistantMessage('2026-04-30T09:56:00.000Z', longId, 'Loop checkpoint.'),
+      ]);
+
+      const result = run([
+        '--home',
+        homeDir,
+        '--now',
+        NOW,
+        '--json',
+        '--write-dir',
+        snapshotDir,
+      ]);
+
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      const indexPath = path.join(snapshotDir, 'index.json');
+      const indexPayload = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+      assert.strictEqual(indexPayload.sessions.length, 2);
+
+      for (const sessionIndex of indexPayload.sessions) {
+        const stem = path.basename(sessionIndex.snapshotPath, '.json');
+        assert.ok(stem.length <= 96, `expected <= 96 chars, got ${stem.length}: ${stem}`);
+      }
+
+      const names = indexPayload.sessions.map(session => path.basename(session.snapshotPath));
+      assert.notStrictEqual(names[0].toLowerCase(), names[1].toLowerCase());
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      fs.rmSync(snapshotDir, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('cleans temporary snapshot files when atomic rename fails', () => {
     const snapshotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-loop-status-rename-failure-'));
     const originalRenameSync = fs.renameSync;
