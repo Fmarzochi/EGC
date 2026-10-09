@@ -215,7 +215,8 @@ export async function readFileWithin(root: string, rel: string, maxBytes: number
       if (bytesRead === 0) break;
       filled += bytesRead;
     }
-    return filled > st.size ? null : buffer.toString('utf8', 0, filled);
+    // Exactly the size seen at open: more means it grew, fewer means it shrank, and a part of a file must not be indexed as the whole.
+    return filled === st.size ? buffer.toString('utf8', 0, filled) : null;
   } catch {
     return null;
   } finally {

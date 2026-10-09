@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { buildGraph, readFileWithin, withBuildLock, type BuildResult } from './graph-build.js';
 import { queryGraph } from './graph-query.js';
-import { graphDbPath, openGraphStoreWithRecovery, type GraphData } from './graph-store.js';
+import { graphDbPath, openGraphStoreWithRecovery, type GraphData, type GraphStore } from './graph-store.js';
 
 export interface ContextDeps {
   env?: NodeJS.ProcessEnv;
@@ -15,6 +15,8 @@ export interface ContextDeps {
   audit?: (action: string, details: Record<string, unknown>) => void;
   // How long to wait for another process's build; defaults to LOCK_WAIT_MS.
   lockWaitMs?: number;
+  // How the graph store is opened; for tests, defaults to openGraphStoreWithRecovery.
+  openStore?: (dbPath: string) => Promise<GraphStore>;
 }
 
 const unavailable = (reason: string): Record<string, unknown> => ({ status: 'unavailable', reason });
@@ -56,13 +58,20 @@ async function buildAndLoad(
   const locked = await withBuildLock(
     dbPath,
     async () => {
-      const store = await openGraphStoreWithRecovery(dbPath);
+      const store = await (deps.openStore ?? openGraphStoreWithRecovery)(dbPath);
+      let result: { build: BuildResult; data: GraphData };
       try {
         const build = await buildGraph(root, store, { isProtectedPath: deps.isIndexExcluded ?? deps.isProtectedPath });
-        return { build, data: await store.load() };
-      } finally {
+        result = { build, data: await store.load() };
+      } catch (err) {
+        // The failure that stopped the build is the one to report, not one from closing.
         await store.close().catch(() => undefined);
+        throw err;
       }
+      // The portable engine writes the whole graph during close(), so a close
+      // that fails is a graph that was not saved: it must not be reported as ok.
+      await store.close();
+      return result;
     },
     { waitMs: deps.lockWaitMs ?? LOCK_WAIT_MS }
   );

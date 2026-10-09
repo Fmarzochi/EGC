@@ -17,7 +17,7 @@ if (!fs.existsSync(path.join(buildDir, 'graph-context.js'))) {
   process.exit(0);
 }
 const { buildRelevantContext } = require(path.join(buildDir, 'graph-context.js'));
-const { graphDbPath } = require(path.join(buildDir, 'graph-store.js'));
+const { graphDbPath, openGraphStore } = require(path.join(buildDir, 'graph-store.js'));
 const { withBuildLock } = require(path.join(buildDir, 'graph-build.js'));
 
 let passed = 0;
@@ -75,11 +75,18 @@ fs.writeFileSync(path.join(root, 'secrets.js'), 'export const apiKey = "sk-ant-a
       audit: action => {
         if (action !== 'GRAPH_BUILD') return;
         fs.rmSync(path.join(proj, 'lib'), { recursive: true, force: true });
-        fs.symlinkSync(outside, path.join(proj, 'lib'), 'junction');
+        try {
+          fs.symlinkSync(outside, path.join(proj, 'lib'), 'junction');
+          swapped = true;
+        } catch {
+          // links are not available here
+        }
       }
     };
+    let swapped = false;
     const r = await buildRelevantContext('change leakTarget', proj, undefined, deps);
     assert.ok(!JSON.stringify(r).includes('TOP-SECRET-OUTSIDE'), 'content from outside the project was returned');
+    if (!swapped) console.log('    - directory links not available here (EPERM); nothing to swap');
   });
 
   await run('a build held by another process is reported unavailable after the wait, then works once it ends', async () => {
@@ -136,6 +143,36 @@ fs.writeFileSync(path.join(root, 'secrets.js'), 'export const apiKey = "sk-ant-a
     const r = await buildRelevantContext('anything', proj, undefined, { env, isProtectedPath: () => true });
     assert.strictEqual(r.status, 'unavailable');
     assert.ok(String(r.reason).includes('protected'), r.reason);
+  });
+
+  await run('a store that fails to save on close makes the call unavailable, not ok', async () => {
+    const proj = path.join(tmp, 'closefail');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, 'a.js'), 'export function closeTarget() {\n  return 1;\n}\n');
+    const audits = [];
+    const deps = {
+      env,
+      audit: action => audits.push(action),
+      openStore: async dbPath => {
+        const real = await openGraphStore(dbPath);
+        return new Proxy(real, {
+          get(target, prop) {
+            if (prop === 'close') {
+              return async () => {
+                await target.close();
+                throw new Error('could not persist the graph');
+              };
+            }
+            const value = target[prop];
+            return typeof value === 'function' ? value.bind(target) : value;
+          }
+        });
+      }
+    };
+    const r = await buildRelevantContext('change closeTarget', proj, undefined, deps);
+    assert.strictEqual(r.status, 'unavailable', JSON.stringify(r));
+    assert.ok(String(r.reason).includes('could not persist'), r.reason);
+    assert.ok(audits.includes('GRAPH_ERROR'));
   });
 
   await run('transformSnippet is applied to everything returned', async () => {

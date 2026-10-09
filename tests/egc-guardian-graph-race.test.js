@@ -13,6 +13,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { CLI_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts.js');
 
 const buildDir = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build');
 if (!fs.existsSync(path.join(buildDir, 'graph-context.js'))) {
@@ -45,9 +46,18 @@ function child() {
     const p = spawn(process.execPath, ['-e', childSource, contextModule, root], { env, windowsHide: true });
     let out = '';
     let err = '';
+    let timedOut = false;
     p.stdout.on('data', d => { out += d; });
     p.stderr.on('data', d => { err += d; });
-    p.on('close', code => resolve({ code, out, err }));
+    // A child that hangs (the lock or engine deadlock this test exists to catch) must fail the test, not stall the suite.
+    const timer = setTimeout(() => {
+      timedOut = true;
+      p.kill();
+    }, CLI_TIMEOUT_MS);
+    p.on('close', code => {
+      clearTimeout(timer);
+      resolve({ code, out, err, timedOut });
+    });
   });
 }
 
@@ -56,6 +66,7 @@ function child() {
   try {
     const results = await Promise.all(Array.from({ length: 4 }, child));
     for (const r of results) {
+      assert.ok(!r.timedOut, `a child did not finish within ${CLI_TIMEOUT_MS} ms`);
       assert.strictEqual(r.code, 0, r.err);
       const answer = JSON.parse(r.out);
       assert.strictEqual(answer.status, 'ok', JSON.stringify(answer));

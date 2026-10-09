@@ -152,6 +152,27 @@ const bump = file => {
     assert.strictEqual(await readFileWithin(root, 'big.js', 64), 'x'.repeat(64), 'a file exactly at the limit');
   });
 
+  await run('readFileWithin refuses a file that shrank while it was being read', async () => {
+    const root = fs.realpathSync(project({ 'a.js': 'export const a = 1;\n' }));
+    const realOpen = fs.promises.open;
+    // The size taken at open says 5 bytes more than the file turns out to hold.
+    fs.promises.open = async (...args) => {
+      const handle = await realOpen.apply(fs.promises, args);
+      const realStat = handle.stat.bind(handle);
+      handle.stat = async () => {
+        const st = await realStat();
+        return Object.assign(Object.create(Object.getPrototypeOf(st)), st, { size: st.size + 5 });
+      };
+      return handle;
+    };
+    try {
+      assert.strictEqual(await readFileWithin(root, 'a.js', 1024), null, 'a part of a file was returned as the whole');
+    } finally {
+      fs.promises.open = realOpen;
+    }
+    assert.strictEqual(await readFileWithin(root, 'a.js', 1024), 'export const a = 1;\n', 'and the unchanged file still reads');
+  });
+
   await run('readFileWithin refuses a symbolic link, to a file or as a directory on the way', async () => {
     const root = fs.realpathSync(project({ 'real/a.js': 'export const a = 1;\n' }));
     const outside = fs.mkdtempSync(path.join(tmp, 'outside-'));
@@ -166,8 +187,14 @@ const bump = file => {
     if (fileLinked) assert.strictEqual(await readFileWithin(root, 'link.js', 1024), null, 'a file symlink');
     else console.log('    - file symlinks not available here (EPERM); directory link only');
     // A junction needs no privilege on Windows; elsewhere it is a plain directory symlink.
-    fs.symlinkSync(outside, path.join(root, 'linked-dir'), 'junction');
-    assert.strictEqual(await readFileWithin(root, 'linked-dir/a.js', 1024), null, 'a file reached through a linked directory');
+    let dirLinked = true;
+    try {
+      fs.symlinkSync(outside, path.join(root, 'linked-dir'), 'junction');
+    } catch {
+      dirLinked = false;
+    }
+    if (dirLinked) assert.strictEqual(await readFileWithin(root, 'linked-dir/a.js', 1024), null, 'a file reached through a linked directory');
+    else console.log('    - directory links not available here (EPERM); the regular file only');
     assert.strictEqual(await readFileWithin(root, 'real/a.js', 1024), 'export const a = 1;\n', 'the real file still reads');
   });
 
