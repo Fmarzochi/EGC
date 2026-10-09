@@ -1062,7 +1062,8 @@ async function runTraeUserRulesTests() {
       fs.writeFileSync(rule, `# Before\n\n${current}\n# Middle\n\n<!-- egc-memory-protocol:v1 -->\nold\n<!-- /egc-memory-protocol -->\n`, 'utf8');
       run(home);
       const content = fs.readFileSync(rule, 'utf8');
-      assert.strictEqual(content.split('<!-- /egc-memory-protocol -->').length - 1, 1, 'one EGC block remains');
+      assert.strictEqual((content.match(/<!-- egc-memory-protocol(:v\d+)? -->/g) || []).length, 1, 'one opening marker remains');
+      assert.strictEqual(content.split('<!-- /egc-memory-protocol -->').length - 1, 1, 'one closing marker remains');
       assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'and it is the current one');
       assert.ok(content.startsWith('# Before\n\n') && content.includes('# Middle'), 'the person\'s text stays');
       assert.ok(!content.includes('\nold\n'), 'the stale duplicate is gone');
