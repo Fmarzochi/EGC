@@ -358,6 +358,30 @@ if (test('redactSecretsInText: a decoded apostrophe in $\'...\' must not open a 
   assert.ok(result.includes("it\\x27s"), `the preserved \\x27 escape must not be corrupted by re-encoding: ${result}`);
 })) passed++; else failed++;
 
+// ── cubic review (round 2) on #1805: decode by bash's real IFS and syntax,
+// not an arbitrary allow/deny list ──────────────────────────────────────────
+
+if (test('redactSecretsInText: a decoded ; command separator is read as one, so curl after it is still recognized (P1)', () => {
+  const result = redactSecretsInText("bash -c $'echo\\x3bcurl -u user:pw'");
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: a decoded $( substitution is read as a live one and redacted recursively (P2)', () => {
+  const result = redactSecretsInText("bash -c $'echo \\x24(curl -u user:pw)'");
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: a decoded \\v is not bash IFS, so it must not fabricate a word break curl never gets (P3)', () => {
+  // A real shell treats "curl\v-u\vuser:pw" as a single word (not IFS),
+  // so no curl invocation ever runs; decoding \v to a real vertical tab
+  // would make the scanner split it into words and fabricate a redaction
+  // for a credential that was never actually passed anywhere.
+  const input = "bash -c $'curl\\v-u\\vuser:pw'";
+  assert.strictEqual(redactSecretsInText(input), input);
+})) passed++; else failed++;
+
 // ── writeAuditEntry ─────────────────────────────────────────────────────────
 
 if (test('writeAuditEntry: appends a valid NDJSON line to audit.log', () => {

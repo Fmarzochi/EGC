@@ -63,26 +63,42 @@ function ansiEscape(text: string, at: number): Piece {
   return { value, raw: text.slice(at, at + 2), end: at + 2 };
 }
 
-// Decoded characters that double as shell syntax: re-scanning a decoded
-// quote, substitution opener or separator as literal text would let it be
-// read as real syntax by redactLine below (a decoded apostrophe can open a
-// quoted run that then hides a credential inside it, from the scanner's
-// point of view, as a false quote). Only whitespace escapes are decoded.
-const SYNTACTIC_DECODED_CHARS = new Set(["'", '"', '`', '$', '\\', ';', '|', '&', '(', ')', '<', '>']);
+// Only these two ever need to stay undecoded: a real shell reads a decoded
+// apostrophe or double quote as opening a new quoted run, which can hide
+// everything after it (including a credential) from redactLine below as a
+// false quote -- the one case decoding is actively unsafe.
+const QUOTE_OPENERS = new Set(["'", '"']);
 
-// The effective text of a $'...' body for word-boundary purposes: a
-// whitespace ANSI-C escape decodes to the character it stands for, so a scan
-// over the result sees the real word boundaries (a $'curl\x20-u\x20user:pw'
-// body reads as "curl -u user:pw"). Any other escape is left exactly as
-// written, so it is never re-interpreted as shell syntax by the scan.
+// Bash's default IFS is exactly these three characters; nothing else breaks
+// a word. Decoding an escape that lands on some other \s-matching character
+// (vertical tab, form feed, NBSP, ...) would fabricate a word break the real
+// shell never makes, splitting "curl\v-u\vuser:pw" (one word, passed to
+// nothing a real shell runs) into what looks like a live curl invocation.
+const IFS_WHITESPACE = new Set([' ', '\t', '\n']);
+
+function isSafeToDecode(value: string): boolean {
+  if (value.length !== 1) return false;
+  if (QUOTE_OPENERS.has(value)) return false;
+  return !/\s/.test(value) || IFS_WHITESPACE.has(value);
+}
+
+// The effective text of a $'...' body for word-boundary purposes: every
+// ANSI-C escape is decoded to the character it stands for -- including `$`,
+// backtick, parentheses, command separators (;|&) and backslash, all of
+// which redactLine/wordPiece below already read exactly as a real shell
+// would (a decoded backslash escapes the next character, a decoded $(...)
+// is read as a live substitution and redacted recursively, a decoded ;
+// resets scan state the same way a real separator does) -- except the two
+// quote openers and any whitespace escape that is not real bash IFS, which
+// stay exactly as written so the rescan never fabricates syntax or a word
+// break the real shell does not have.
 function decodeAnsiCBody(text: string): string {
   let out = '';
   let i = 0;
   while (i < text.length) {
     if (text[i] === '\\' && i + 1 < text.length) {
       const piece = ansiEscape(text, i);
-      const keepAsWritten = piece.value.length !== 1 || SYNTACTIC_DECODED_CHARS.has(piece.value);
-      out += keepAsWritten ? text.slice(i, piece.end) : piece.value;
+      out += isSafeToDecode(piece.value) ? piece.value : text.slice(i, piece.end);
       i = piece.end;
     } else {
       out += text[i];
