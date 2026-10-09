@@ -195,11 +195,14 @@ function runTests() {
   tally(test('resolveHeadState reads .git/HEAD exactly once (one snapshot, not two)', () => {
     const repo = makeGitRepo(null);
     git(repo, 'checkout -q --detach');
-    const headPath = path.join(repo, '.git', 'HEAD');
     const originalRead = fs.readFileSync;
     let headReads = 0;
     fs.readFileSync = function patched(target, ...rest) {
-      if (typeof target === 'string' && path.resolve(target) === headPath) headReads += 1;
+      // trustedGitPath canonicalizes through realpathSync.native, so on a
+      // host where the temp root itself is a symlink (macOS: /tmp ->
+      // /private/tmp) the path actually read differs from the lexical one
+      // built from `repo`. Matching by basename is immune to that.
+      if (typeof target === 'string' && path.basename(target) === 'HEAD') headReads += 1;
       return originalRead.call(fs, target, ...rest);
     };
     try {
