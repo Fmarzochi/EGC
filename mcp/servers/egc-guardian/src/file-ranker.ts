@@ -152,6 +152,9 @@ export interface ScoreContext {
   queryTerms: string[];
   historyTerms: string[];
   bm25: Bm25Index | null;
+  // The query and history terms with their weights, expanded against the
+  // vocabulary once per scoring run, not once per document.
+  bm25Terms: Array<[string, number]>;
   docIndex: Map<string, number>;
 }
 
@@ -187,14 +190,9 @@ const GRAPH_DEFAULT_HOPS = 2;
 
 signal('bm25', 1.0, (doc, ctx) => {
   if (!ctx.bm25) return 0;
-  const idx = ctx.bm25;
   const di = ctx.docIndex.get(doc.path);
   if (di === undefined) return 0;
-  const weighted: Array<[string, number]> = [
-    ...idx.expand(ctx.queryTerms),
-    ...idx.expand(ctx.historyTerms).map(([t, w]): [string, number] => [t, w * HISTORY_TERM_WEIGHT])
-  ];
-  return idx.score(di, weighted);
+  return ctx.bm25.score(di, ctx.bm25Terms);
 });
 
 signal('path_hit', 1.5, (doc, ctx) => {
@@ -289,14 +287,21 @@ const byRank = (a: ScoredDoc, b: ScoredDoc): number =>
 
 export function scoreDocuments(
   docs: FileDoc[],
-  ctx: Omit<ScoreContext, 'queryTerms' | 'historyTerms' | 'bm25' | 'docIndex'>,
+  ctx: Omit<ScoreContext, 'queryTerms' | 'historyTerms' | 'bm25' | 'bm25Terms' | 'docIndex'>,
   opts: { signals?: readonly string[]; propagators?: readonly string[]; weights?: Record<string, number> } = {}
 ): ScoredDoc[] {
+  const queryTerms = tokenize(ctx.query);
+  const historyTerms = tokenize(ctx.history);
+  const bm25 = Bm25Index.build(docs);
   const full: ScoreContext = {
     ...ctx,
-    queryTerms: tokenize(ctx.query),
-    historyTerms: tokenize(ctx.history),
-    bm25: Bm25Index.build(docs),
+    queryTerms,
+    historyTerms,
+    bm25,
+    bm25Terms: [
+      ...bm25.expand(queryTerms),
+      ...bm25.expand(historyTerms).map(([t, w]): [string, number] => [t, w * HISTORY_TERM_WEIGHT])
+    ],
     docIndex: new Map(docs.map((d, i) => [d.path, i]))
   };
   const activeSignals = opts.signals ?? DEFAULT_SIGNALS;

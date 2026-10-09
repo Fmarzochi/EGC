@@ -15,7 +15,7 @@ if (!fs.existsSync(buildPath)) {
   console.log('[SKIP] build not found. Run npm run build in mcp/servers/egc-guardian first.');
   process.exit(0);
 }
-const { scoreDocuments, tokenize, registeredSignals } = require(buildPath);
+const { scoreDocuments, tokenize, registeredSignals, Bm25Index } = require(buildPath);
 
 let passed = 0;
 let failed = 0;
@@ -110,6 +110,22 @@ run('the same input always gives the same order', () => {
   const b = scoreDocuments(docs, ctx('billing')).map(r => r.doc.path);
   assert.deepStrictEqual(a, b);
   assert.deepStrictEqual(a, ['x.ts', 'y.ts', 'z.ts']);
+});
+
+run('query terms are expanded against the vocabulary once per run, not once per document', () => {
+  const docs = Array.from({ length: 200 }, (_, i) => docOf(`pkg/file${i}.ts`, `billing payment helper number${i}`));
+  const original = Bm25Index.prototype.expand;
+  let calls = 0;
+  Bm25Index.prototype.expand = function (...args) {
+    calls++;
+    return original.apply(this, args);
+  };
+  try {
+    scoreDocuments(docs, { query: 'billing payments', history: 'refund handling', edges: [], extras: {} });
+  } finally {
+    Bm25Index.prototype.expand = original;
+  }
+  assert.ok(calls <= 2, `expand ran ${calls} times for ${docs.length} documents`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
