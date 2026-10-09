@@ -38,17 +38,38 @@ const GIT_BIN = [
   String.raw`C:\Program Files\Git\cmd\git.exe`
 ].find(candidate => fs.existsSync(candidate)) ?? 'git';
 
+// The project is not trusted: its .git/config can name commands that git runs
+// on its own (core.fsmonitor is run by `git status`). Settings given on the
+// command line win over the repository's, so the ones that run commands are
+// switched off here, and git is told not to take locks or write to the repository.
+const SAFE_GIT_ARGS = ['--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false'];
+
 // Asynchronous, so a slow repository never blocks the MCP event loop; null on
 // any failure (no git, not a repository, a call that ran out of time).
 function runGit(projectPath: string, args: string[]): Promise<string | null> {
   return new Promise(resolve => {
     execFile(
       GIT_BIN,
-      ['-C', projectPath, ...args],
+      [...SAFE_GIT_ARGS, '-C', projectPath, ...args],
       { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
       (error, stdout) => resolve(error ? null : stdout)
     );
   });
+}
+
+// Keys of the repository's own config that make git run something while it
+// looks at files: a filter (git status runs `clean` whenever it has to compare
+// a file's content), a hooks directory, a diff or merge driver, or an include
+// that could bring any of them in. The user's own and the system config are
+// trusted; this one belongs to the project being ranked.
+const RISKY_LOCAL_CONFIG = /^(filter\..+\.(clean|smudge|process|required)|core\.(fsmonitor|hookspath)|include\.path|includeif\..+\.path|diff\..+\.(command|textconv)|merge\..+\.driver)$/i;
+
+// `git config --list` only prints; it runs nothing. When it cannot be read the
+// answer is no, so the working tree is not looked at.
+async function localConfigIsPlain(projectPath: string): Promise<boolean> {
+  const out = await runGit(projectPath, ['config', '--local', '--list', '-z']);
+  if (out === null) return false;
+  return !out.split('\0').some(entry => RISKY_LOCAL_CONFIG.test(entry.split('\n')[0]));
 }
 
 const norm = (p: string): string => p.replaceAll('\\', '/').trim().replace(/^\.\/+/, '');
@@ -57,8 +78,12 @@ const norm = (p: string): string => p.replaceAll('\\', '/').trim().replace(/^\.\
 // With -z a rename or copy record is followed by one more, bare record that
 // holds the original path; it has no status prefix and is skipped.
 async function changedPaths(projectPath: string): Promise<Set<string>> {
-  const out = await runGit(projectPath, ['status', '--porcelain', '-z', '-uall']);
   const paths = new Set<string>();
+  // git status is the one call that reads the working tree, so it is the one a
+  // repository's own filters could reach. Without them it is skipped, and the
+  // branch, recency and co-change signals still come from the commits.
+  if (!(await localConfigIsPlain(projectPath))) return paths;
+  const out = await runGit(projectPath, ['status', '--porcelain', '-z', '-uall']);
   if (!out) return paths;
   const entries = out.split('\0');
   for (let k = 0; k < entries.length; k++) {
@@ -83,7 +108,7 @@ async function branchPaths(projectPath: string): Promise<Set<string>> {
   const head = await runGit(projectPath, ['rev-parse', 'HEAD']);
   if (head && head.trim() === base) return new Set();
   // -z: names come NUL-separated and unquoted, whatever characters they hold.
-  const diff = await runGit(projectPath, ['diff', '-z', '--name-only', `${base}...HEAD`]);
+  const diff = await runGit(projectPath, ['diff', '-z', '--no-ext-diff', '--no-textconv', '--name-only', `${base}...HEAD`]);
   return new Set((diff ?? '').split('\0').filter(l => l.trim()).map(norm));
 }
 
