@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const path = require('node:path');
 
 // A copy transform rewrites the bytes of one planned file on the way to its
 // destination. The plan names it (operation.transform); the executor writes
@@ -9,6 +10,8 @@ const fs = require('node:fs');
 
 const CLAUDE_AGENT_FRONTMATTER_TRANSFORM = 'claude-agent-frontmatter';
 const OPENCODE_AGENT_FRONTMATTER_TRANSFORM = 'opencode-agent-frontmatter';
+const ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM = 'antigravity-rule-frontmatter';
+const ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM = 'antigravity-manual-rule-frontmatter';
 
 // Model names Claude Code resolves itself. Anything else in an agent's
 // frontmatter (the catalog's Gemini ids) would be sent to the API as-is and
@@ -202,30 +205,85 @@ function toOpenCodeAgentFrontmatter(text) {
   return ['---', ...frontmatter, '---', ...parts.body].join('\n');
 }
 
+function readRuleGlobs(frontmatter) {
+  const index = frontmatter.findIndex(line => splitFrontmatterLine(line)?.key === 'paths');
+  if (index < 0) {
+    return [];
+  }
+  const flow = parseFlowSequence(splitFrontmatterLine(frontmatter[index]).value);
+  return flow || collectBlockListItems(frontmatter, index + 1).items;
+}
+
+function ruleTrigger(manual, globs) {
+  if (manual) {
+    return 'manual';
+  }
+  return globs.length > 0 ? 'glob' : 'always_on';
+}
+
+function flattenRuleLinks(line, language) {
+  return line.replaceAll(/\]\((\.\.\/[\w-]+\/|\.\/)?([\w-]+\.md)\)/g, (match, prefix, name) => {
+    if (prefix?.startsWith('../')) {
+      return `](${prefix.slice(3, -1)}-${name})`;
+    }
+    return language ? `](${language}-${name})` : match;
+  });
+}
+
+function toAntigravityRule(text, { manual = false, language = null } = {}) {
+  const source = stripByteOrderMark(text);
+  const parts = splitFrontmatter(source) || { frontmatter: [], body: source.split(/\r?\n/) };
+  const globs = manual ? [] : readRuleGlobs(parts.frontmatter);
+  const heading = parts.body.find(line => line.startsWith('# '));
+  const frontmatter = [`trigger: ${ruleTrigger(manual, globs)}`];
+  if (heading) {
+    frontmatter.push(`description: ${JSON.stringify(heading.slice(2).trim())}`);
+  }
+  if (globs.length > 0) {
+    frontmatter.push(`globs: ${JSON.stringify(globs.join(', '))}`);
+  }
+  return ['---', ...frontmatter, '---', ...parts.body.map(line => flattenRuleLinks(line, language))].join('\n');
+}
+
+function ruleLanguage(sourcePath) {
+  return sourcePath ? path.basename(path.dirname(sourcePath)) : null;
+}
+
 const TRANSFORMS = Object.freeze({
   [CLAUDE_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toClaudeAgentFrontmatter(content.toString('utf8')), 'utf8'),
   [OPENCODE_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toOpenCodeAgentFrontmatter(content.toString('utf8')), 'utf8'),
+  [ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
+    toAntigravityRule(content.toString('utf8'), { language: ruleLanguage(sourcePath) }),
+    'utf8'
+  ),
+  [ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
+    toAntigravityRule(content.toString('utf8'), { manual: true, language: ruleLanguage(sourcePath) }),
+    'utf8'
+  ),
 });
 
-function transformContent(content, transform) {
+function transformContent(content, transform, sourcePath = null) {
   const apply = TRANSFORMS[transform];
   if (typeof apply !== 'function') {
     throw new TypeError(`Unknown copy transform: ${transform}`);
   }
-  return apply(content);
+  return apply(content, sourcePath);
 }
 
 // The bytes a planned copy leaves at its destination: the source as-is, or
 // the source through the operation's transform.
 function plannedFileContent(sourcePath, transform) {
   const content = fs.readFileSync(sourcePath);
-  return transform ? transformContent(content, transform) : content;
+  return transform ? transformContent(content, transform, sourcePath) : content;
 }
 
 module.exports = {
+  ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
+  ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
   OPENCODE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
+  toAntigravityRule,
   toClaudeAgentFrontmatter,
   toOpenCodeAgentFrontmatter,
   transformContent,
