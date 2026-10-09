@@ -20,12 +20,28 @@ const TRY_EXT = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'];
 
 type IgnoreFn = (rel: string, isDir: boolean) => boolean;
 
-function compileRule(raw: string): IgnoreFn {
+// Rules with more wildcards than this are matched without backtracking: a regex
+// built from many `*` or `**/` groups can take longer than the age of the
+// project to judge one path, and a .gitignore comes from the repository.
+const REGEX_WILDCARD_LIMIT = 2;
+const MAX_PATTERN_LENGTH = 1024;
+export const MAX_GITIGNORE_BYTES = 1024 * 1024;
+
+interface RuleShape { body: string; rooted: boolean; dirOnly: boolean }
+
+function shapeOf(raw: string): RuleShape {
   let pat = raw;
   const dirOnly = pat.endsWith('/');
   if (dirOnly) pat = pat.slice(0, -1);
   const rooted = pat.startsWith('/') || pat.includes('/');
   if (pat.startsWith('/')) pat = pat.slice(1);
+  return { body: pat, rooted, dirOnly };
+}
+
+// The rule as one regular expression. Fine for a rule with few wildcards.
+// (Exported for tests, which check it agrees with the matcher below.)
+export function compileRuleRegex(raw: string): IgnoreFn {
+  const { body: pat, rooted, dirOnly } = shapeOf(raw);
   // `**/` is any number of directories, none included; a bare `**` is anything.
   const body = pat
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
@@ -39,9 +55,122 @@ function compileRule(raw: string): IgnoreFn {
   return (rel, isDir) => re.test(dirOnly && isDir ? rel + '/' : rel);
 }
 
-// Rules apply in order and the last one that matches decides, so `*.js` followed
-// by `!keep.js` ignores every script but keep.js, as git does. (Git cannot
-// re-include a file whose directory is ignored; the walk never enters one.)
+type GlobToken =
+  | { k: 'lit'; c: string }
+  | { k: 'one' }
+  | { k: 'star' }
+  | { k: 'glob' }
+  | { k: 'dirs' }
+  | { k: 'dirsBody' };
+
+// Adds a run of stars: `**/` is two tokens, `dirs` (take it or skip it) and
+// `dirsBody` (any text up to a slash); a longer run or a star next to a `**`
+// is one `glob`; a single star is a `star`. Neighbours are merged so the
+// token list stays short.
+function pushStars(tokens: GlobToken[], run: number, dirs: boolean): void {
+  const prev = tokens[tokens.length - 1]?.k;
+  if (dirs) {
+    if (prev !== 'dirsBody') tokens.push({ k: 'dirs' }, { k: 'dirsBody' });
+  } else if (run >= 2 || prev === 'glob') {
+    if (prev === 'star') tokens.pop();
+    if (tokens[tokens.length - 1]?.k !== 'glob') tokens.push({ k: 'glob' });
+  } else if (prev !== 'star') {
+    tokens.push({ k: 'star' });
+  }
+}
+
+function globTokens(pat: string, dirOnly: boolean): GlobToken[] {
+  const tokens: GlobToken[] = [];
+  for (let i = 0; i < pat.length; ) {
+    const c = pat[i];
+    if (c === '*') {
+      let run = 1;
+      while (pat[i + run] === '*') run++;
+      i += run;
+      const dirs = run >= 2 && pat[i] === '/';
+      if (dirs) {
+        i++;
+        // The last two stars and the slash are the directories; any stars before them are a plain wildcard.
+        if (run > 2) pushStars(tokens, run - 2, false);
+        pushStars(tokens, 2, true);
+      } else {
+        pushStars(tokens, run, false);
+      }
+    } else {
+      tokens.push(c === '?' ? { k: 'one' } : { k: 'lit', c });
+      i++;
+    }
+  }
+  if (dirOnly) tokens.push({ k: 'lit', c: '/' });
+  return tokens;
+}
+
+// What one pattern position does at one character: marks the positions alive
+// in this column (cur, for moves that eat nothing) and in the next (next).
+function step(t: GlobToken, i: number, ch: string, cur: Uint8Array, next: Uint8Array): void {
+  switch (t.k) {
+    case 'lit':
+      if (ch === t.c) next[i + 1] = 1;
+      break;
+    case 'one':
+      if (ch !== '' && ch !== '/') next[i + 1] = 1;
+      break;
+    case 'star':
+      cur[i + 1] = 1;
+      if (ch !== '' && ch !== '/') next[i] = 1;
+      break;
+    case 'glob':
+      cur[i + 1] = 1;
+      if (ch !== '') next[i] = 1;
+      break;
+    case 'dirs':
+      cur[i + 1] = 1;
+      cur[i + 2] = 1;
+      break;
+    case 'dirsBody':
+      if (ch !== '') {
+        next[i] = 1;
+        if (ch === '/') next[i + 1] = 1;
+      }
+      break;
+  }
+}
+
+// The same rule matched without backtracking: every position of the path is
+// visited once with the set of pattern positions still alive, so the cost is
+// the pattern length times the path length, whatever the wildcards are.
+// (Exported for tests, which check it agrees with the regex above.)
+export function compileRuleGlob(raw: string): IgnoreFn {
+  const { body: pat, rooted, dirOnly } = shapeOf(raw);
+  const tokens = globTokens(pat, dirOnly);
+  const p = tokens.length;
+  if (p === 0) return () => false;
+  return (rel, isDir) => {
+    const s = dirOnly && isDir ? rel + '/' : rel;
+    const n = s.length;
+    let cur = new Uint8Array(p + 2);
+    let next = new Uint8Array(p + 2);
+    for (let j = 0; j <= n; j++) {
+      if (j === 0 || (!rooted && s[j - 1] === '/')) cur[0] = 1;
+      next.fill(0);
+      const ch = j < n ? s[j] : '';
+      for (let i = 0; i < p; i++) if (cur[i]) step(tokens[i], i, ch, cur, next);
+      if (cur[p] && (dirOnly || j === n || s[j] === '/')) return true;
+      [cur, next] = [next, cur];
+    }
+    return false;
+  };
+}
+
+function wildcardCount(raw: string): number {
+  return (raw.match(/\*+|\?/g) ?? []).length;
+}
+
+function compileRule(raw: string): IgnoreFn | null {
+  if (raw.length > MAX_PATTERN_LENGTH) return null;
+  return wildcardCount(raw) <= REGEX_WILDCARD_LIMIT ? compileRuleRegex(raw) : compileRuleGlob(raw);
+}
+
 export function makeIgnore(gitignoreText: string): IgnoreFn {
   const rules = gitignoreText
     .split(/\r?\n/)
@@ -49,7 +178,8 @@ export function makeIgnore(gitignoreText: string): IgnoreFn {
     .filter(l => l && !l.startsWith('#'))
     .map(l => ({ negate: l.startsWith('!'), pattern: l.startsWith('!') ? l.slice(1) : l }))
     .filter(r => r.pattern !== '')
-    .map(r => ({ negate: r.negate, match: compileRule(r.pattern) }));
+    .map(r => ({ negate: r.negate, match: compileRule(r.pattern) }))
+    .filter((r): r is { negate: boolean; match: IgnoreFn } => r.match !== null);
   return (rel, isDir) => {
     let ignored = false;
     for (const rule of rules) if (rule.match(rel, isDir)) ignored = !rule.negate;
@@ -269,12 +399,9 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
   const deadline = started + maxMs;
   const root = fs.realpathSync(projectRoot);
 
-  let ignore: IgnoreFn = () => false;
-  try {
-    ignore = makeIgnore(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'));
-  } catch {
-    // no .gitignore
-  }
+  // Read like any project file: a .gitignore that is a link or a named pipe is not followed.
+  const gitignore = await readFileWithin(root, '.gitignore', MAX_GITIGNORE_BYTES);
+  const ignore: IgnoreFn = gitignore === null ? () => false : makeIgnore(gitignore);
 
   const walked = await walkFiles(root, ignore, name => SOURCE_EXT.test(name), maxFiles, deadline);
   const known = await store.getFiles();

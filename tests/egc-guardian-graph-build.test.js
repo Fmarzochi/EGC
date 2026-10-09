@@ -16,7 +16,7 @@ if (!fs.existsSync(path.join(buildDir, 'graph-build.js'))) {
   console.log('[SKIP] build not found. Run npm run build in mcp/servers/egc-guardian first.');
   process.exit(0);
 }
-const { buildGraph, makeIgnore, readFileWithin, resolveSpecifier, withBuildLock } = require(path.join(buildDir, 'graph-build.js'));
+const { buildGraph, compileRuleGlob, compileRuleRegex, makeIgnore, readFileWithin, resolveSpecifier, withBuildLock } = require(path.join(buildDir, 'graph-build.js'));
 const { openGraphStore } = require(path.join(buildDir, 'graph-store.js'));
 
 let passed = 0;
@@ -339,6 +339,73 @@ const bump = file => {
     assert.strictEqual(fs.readFileSync(lock, 'utf8'), 'TOKEN-A');
     assert.deepStrictEqual(fs.readdirSync(path.dirname(db)).filter(f => f.includes('.break-')), [], 'nothing left behind');
     fs.rmSync(lock, { force: true });
+  });
+
+  await run('the non-backtracking matcher agrees with the regex on thousands of generated rules and paths', () => {
+    let seed = 20261009;
+    const rnd = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const pick = list => list[Math.floor(rnd() * list.length)];
+    const atoms = ['a', 'b', 'src', 'x.js', 'lib', '*', '**', '**/', '?', '*.js', '/', 'a/', '/a', '.git'];
+    const segments = ['a', 'b', 'src', 'x.js', 'lib', 'c.js', 'a.js', '.git'];
+    const disagreements = [];
+    let compared = 0;
+    for (let n = 0; n < 4000; n++) {
+      const pattern = Array.from({ length: 1 + Math.floor(rnd() * 4) }, () => pick(atoms)).join('');
+      if (!pattern.replace(/\//g, '')) continue;
+      const regexRule = compileRuleRegex(pattern);
+      const globRule = compileRuleGlob(pattern);
+      for (let k = 0; k < 8; k++) {
+        const candidate = Array.from({ length: 1 + Math.floor(rnd() * 4) }, () => pick(segments)).join('/');
+        const isDir = rnd() < 0.5;
+        compared++;
+        if (regexRule(candidate, isDir) !== globRule(candidate, isDir) && disagreements.length < 5) {
+          disagreements.push(`${JSON.stringify(pattern)} on ${JSON.stringify(candidate)} (dir ${isDir}): regex ${regexRule(candidate, isDir)}, matcher ${globRule(candidate, isDir)}`);
+        }
+      }
+    }
+    assert.ok(compared > 20000, `only ${compared} comparisons`);
+    assert.deepStrictEqual(disagreements, [], `the two disagree: ${disagreements.join('; ')}`);
+  });
+
+  await run('a hostile .gitignore rule is judged in a blink and an oversized rule is dropped', () => {
+    const started = Date.now();
+    const nested = makeIgnore(`${'**/'.repeat(12)}x`);
+    const stars = makeIgnore(`${'*a'.repeat(14)}*b`);
+    const slashes = makeIgnore(`${'*/'.repeat(16)}z`);
+    assert.strictEqual(nested('a/'.repeat(30) + 'y', false), false);
+    assert.strictEqual(stars('a'.repeat(60), false), false);
+    assert.strictEqual(slashes('a/'.repeat(40) + 'y', false), false);
+    assert.strictEqual(nested('p/q/x', false), true, 'and it still matches what it should');
+    const ms = Date.now() - started;
+    // One such rule took seconds to judge one path with the regex, and some never finished.
+    assert.ok(ms < 3000, `the hostile rules took ${ms} ms`);
+    assert.strictEqual(makeIgnore(`${'a'.repeat(2000)}`)('a'.repeat(2000), false), false, 'a rule over the length limit is dropped');
+  });
+
+  await run('a .gitignore that is not a plain file is not read, and the project is still indexed', async () => {
+    const root = project({ 'a.js': 'export const a = 1;\n' });
+    fs.mkdirSync(path.join(root, '.gitignore'));
+    const store = await open();
+    const result = await buildGraph(root, store);
+    assert.strictEqual(result.files, 1);
+    const outside = fs.mkdtempSync(path.join(tmp, 'ignore-outside-'));
+    fs.writeFileSync(path.join(outside, 'rules'), 'a.js\n');
+    const linked = project({ 'a.js': 'export const a = 1;\n' });
+    let canLink = true;
+    try {
+      fs.symlinkSync(path.join(outside, 'rules'), path.join(linked, '.gitignore'), 'file');
+    } catch {
+      canLink = false;
+    }
+    if (canLink) {
+      assert.strictEqual((await buildGraph(linked, await open())).files, 1, 'a linked .gitignore is not followed');
+    } else {
+      console.log('    - file symlinks not available here (EPERM); the directory case only');
+    }
+    await store.close();
   });
 
   await run('deleting a file removes its rows and edges', async () => {

@@ -151,12 +151,17 @@ export function isCorruption(err: unknown): boolean {
   return CORRUPTION.test(`${String(e?.code ?? '')} ${String(e?.message ?? err)}`);
 }
 
+// Removes the database and the files the native engine keeps beside it.
+export function removeGraphDatabase(dbPath: string): void {
+  for (const suffix of ['', '-wal', '-shm', '-journal']) fs.rmSync(dbPath + suffix, { force: true });
+}
+
 export async function openGraphStoreWithRecovery(dbPath: string): Promise<GraphStore> {
   try {
     return await openGraphStore(dbPath);
   } catch (err) {
     if (!isCorruption(err)) throw err;
-    for (const suffix of ['', '-wal', '-shm', '-journal']) fs.rmSync(dbPath + suffix, { force: true });
+    removeGraphDatabase(dbPath);
     return openGraphStore(dbPath);
   }
 }

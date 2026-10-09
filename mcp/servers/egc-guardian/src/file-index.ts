@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { extractFile, type ExtractedImport } from './graph-extract.js';
-import { makeIgnore, readFileWithin, resolveSpecifier, TEXT_EXT, walkFiles } from './graph-build.js';
+import { makeIgnore, MAX_GITIGNORE_BYTES, readFileWithin, resolveSpecifier, TEXT_EXT, walkFiles } from './graph-build.js';
 import { tokenize, type FileDoc, type ImportEdge } from './file-ranker.js';
 
 export const MAX_FILE_BYTES = 256 * 1024;
@@ -66,11 +66,9 @@ async function indexFile(
 }
 
 async function loadIgnore(root: string): Promise<(rel: string, isDir: boolean) => boolean> {
-  try {
-    return makeIgnore(await fs.promises.readFile(path.join(root, '.gitignore'), 'utf8'));
-  } catch {
-    return () => false; // no .gitignore
-  }
+  // A .gitignore that is a link, a named pipe or too large is not read; the project is indexed without it.
+  const text = await readFileWithin(root, '.gitignore', MAX_GITIGNORE_BYTES);
+  return text === null ? () => false : makeIgnore(text);
 }
 
 const compareText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
