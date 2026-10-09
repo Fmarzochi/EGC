@@ -564,19 +564,28 @@ class ModelResolver:
             or ("/" in v and not v.startswith("/"))  # OpenRouter "vendor/model" style
         )
 
+    # Providers whose native model IDs also use the "vendor/model" shape,
+    # the same shape OpenRouter uses for every model it brokers. An
+    # unregistered ID in that shape is ambiguous between them on the string
+    # alone.
+    _VENDOR_SLASH_PROVIDERS = frozenset({"groq", "openrouter"})
+
     @classmethod
-    def _provider_for(cls, model_id: str) -> str:
+    def _provider_for(cls, model_id: str, expected: Optional[str] = None) -> str:
         info = cls._REGISTRY.get(model_id)
         if info and info.get("provider"):
             return str(info["provider"])
         v = model_id.lower()
         # OpenRouter brokers everything under "vendor/model" IDs. Note: this is
-        # no longer exclusive to OpenRouter — Groq also hosts "vendor/model"
-        # IDs (e.g. "openai/gpt-oss-120b", registered above). Any *unregistered*
-        # Groq model with a "/" (e.g. a newer "openai/gpt-oss-20b") will still
-        # misroute to "openrouter" here; only registered IDs are exempt via the
-        # _REGISTRY lookup above.
+        # no longer exclusive to OpenRouter, Groq also hosts "vendor/model"
+        # IDs (e.g. "openai/gpt-oss-120b", registered above). An unregistered
+        # Groq model with a "/" (e.g. a newer "openai/gpt-oss-20b") is
+        # ambiguous from the string alone; trust the caller's own intended
+        # provider when it names one of the two that use this shape, instead
+        # of always guessing "openrouter".
         if "/" in v and not v.startswith("/") and "/models/" not in v:
+            if expected in cls._VENDOR_SLASH_PROVIDERS:
+                return expected
             return "openrouter"
         if "claude-" in v:
             return "claude"
@@ -592,11 +601,16 @@ class ModelResolver:
         if v.startswith("deepseek-"):
             return "deepseek"
         # Native Cohere model IDs: command-a-plus-05-2026, command-r-plus, etc.
-        # The bare alias token "cohere" is excluded — no "-" suffix, resolved
+        # The bare alias token "cohere" is excluded, no "-" suffix, resolved
         # via _ALIASES before _provider_for is ever called.
         if v.startswith("command-"):
             return "cohere"
-        return cls._DEFAULT_PROVIDER
+        # Nothing above recognized the shape (e.g. a native Groq id with no
+        # "/", such as "llama-3.3-70b-versatile"). The caller's own expected
+        # provider is a stronger signal at this point than the global
+        # default, since the id has already been cleared of every other
+        # provider's native shape.
+        return expected or cls._DEFAULT_PROVIDER
 
     # ------------------------------------------------------------------ #
     # Public resolution API
@@ -633,7 +647,7 @@ class ModelResolver:
             resolved = cls._ALIASES.get(env_model.lower(), env_model)
             # Only honor the env override when it actually belongs to the
             # provider being resolved (selector.py writes PROVIDER+MODEL together).
-            if cls._provider_for(resolved) == prov:
+            if cls._provider_for(resolved, expected=prov) == prov:
                 return resolved
         return cls._PROVIDER_DEFAULTS.get(prov, cls._PROVIDER_DEFAULTS[cls._DEFAULT_PROVIDER])
 
@@ -847,7 +861,7 @@ class ModelResolver:
         ``Model: gemini-2.0-flash``` as if it were pinned.
         """
         resolved = cls.resolve(model_hint, provider)
-        prov = cls._provider_for(resolved)
+        prov = cls._provider_for(resolved, expected=provider)
         provider_label = {
             "gemini": "Google Gemini",
             "claude": "Anthropic Claude",
@@ -859,7 +873,7 @@ class ModelResolver:
 
         env_model = _first_env(*_MODEL_ENV_VARS)
         env_resolved = cls._ALIASES.get(env_model.lower(), env_model) if env_model else None
-        env_pinned = (not model_hint) and env_resolved is not None and cls._provider_for(env_resolved) == prov
+        env_pinned = (not model_hint) and env_resolved is not None and cls._provider_for(env_resolved, expected=provider) == prov
         explicit = bool(model_hint) and (
             model_hint.strip().lower() in cls._REGISTRY
             or cls._looks_like_real_id(model_hint.strip())
