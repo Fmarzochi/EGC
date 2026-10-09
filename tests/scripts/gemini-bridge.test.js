@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const BRIDGE = path.join(REPO_ROOT, 'scripts', 'gemini.js');
@@ -166,12 +167,12 @@ function runTests() {
         env,
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: 15000,
+        timeout: CLI_TIMEOUT_MS,
       });
 
       assert.ok(
-        !/the prompt is required/.test(result.stderr),
-        `a positional prompt must not trigger the "prompt is required" argparse error; got stderr: ${result.stderr}`
+        !/(prompt is required|unrecognized arguments|arguments are required)/i.test(result.stderr),
+        `a positional prompt must not trigger any argparse rejection (old "-p/--prompt required" or "unrecognized arguments" included); got stderr: ${result.stderr}`
       );
     }));
   }

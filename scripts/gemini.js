@@ -15,7 +15,7 @@ const os = require('node:os');
 
 function bridgeUsage(pythonBin) {
   return [
-    'Usage: egc prompt <text> | -p <text> [options]',
+    'Usage: egc prompt <text> | [-p|--prompt] <text> [options]',
     '',
     'Runs the Python LLM bridge (src/llm/cli/prompt.py) with the package\'s own',
     `virtualenv (${pythonBin}). That virtualenv is not present on this machine, so`,

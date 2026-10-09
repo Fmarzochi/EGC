@@ -71,15 +71,15 @@ async def run_prompt(prompt: str, model: str = None):  # NOSONAR
 
 def main():
     parser = argparse.ArgumentParser(description="EGC Minimal Bridge - Prompt Execution")
-    parser.add_argument("prompt_text", nargs="?", help="The prompt to execute")
-    parser.add_argument("-p", "--prompt", dest="prompt_flag", help="The prompt to execute (flag form, kept for compatibility)")
+    parser.add_argument("prompt_text", nargs="?", help="The prompt to execute (prompts starting with '-' need a preceding '--')")
+    parser.add_argument("-p", "--prompt", dest="prompt_flag", metavar="PROMPT", help="The prompt to execute (flag form, kept for compatibility)")
     parser.add_argument("--model", help="LLM model to use")
 
     args = parser.parse_args()
 
-    if args.prompt_text and args.prompt_flag:
+    if args.prompt_text is not None and args.prompt_flag is not None:
         parser.error("pass the prompt either positionally or with -p/--prompt, not both")
-    prompt = args.prompt_text or args.prompt_flag
+    prompt = args.prompt_text if args.prompt_text is not None else args.prompt_flag
     if not prompt:
         parser.error("the prompt is required: pass it positionally or with -p/--prompt")
 
