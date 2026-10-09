@@ -217,6 +217,30 @@ function runTests() {
     }
   }));
 
+  tally(test('two selected command paths that would install as one skill are refused (#1706)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-command-collision-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'commands', 'foo'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'foo', 'bar.md'), '---\ndescription: a\n---\n');
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'foo-bar.md'), '---\ndescription: b\n---\n');
+      for (const target of ['egc', 'antigravity']) {
+        assert.throws(() => planInstallTargetScaffold({
+          target,
+          repoRoot,
+          homeDir: '/Users/example',
+          projectRoot: '/workspace/app',
+          modules: [
+            { id: 'one', paths: ['commands/foo/bar.md'] },
+            { id: 'two', paths: ['commands/foo-bar.md'] },
+          ],
+        }), /would both install as/, `${target}: one slash skill never replaces another`);
+      }
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('the egc target plans nothing that only the retired Gemini CLI read', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

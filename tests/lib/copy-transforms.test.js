@@ -369,8 +369,12 @@ function runAntigravityCommandTests() {
   results.push(test('every shipped command becomes an Antigravity skill named after its file, with a description (#1706)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const commands = planAntigravityCommandFiles(repoRoot, 'commands');
-    const catalog = fs.readdirSync(path.join(repoRoot, 'commands')).filter(name => name.endsWith('.md'));
-    assert.deepStrictEqual(commands.map(command => command.fileName).sort(), catalog.map(name => `${name.slice(0, -3)}/SKILL.md`).sort());
+    const listCommands = (directory, prefix = '') => fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+      if (entry.isDirectory()) return listCommands(path.join(directory, entry.name), `${prefix}${entry.name}-`);
+      return entry.isFile() && entry.name.endsWith('.md') && entry.name.toLowerCase() !== 'readme.md' ? [`${prefix}${entry.name.slice(0, -3)}`] : [];
+    });
+    const catalog = listCommands(path.join(repoRoot, 'commands'));
+    assert.deepStrictEqual(commands.map(command => command.fileName).sort(), catalog.map(name => `${name}/SKILL.md`).sort());
     for (const command of commands) {
       assert.strictEqual(command.transform, ANTIGRAVITY_COMMAND_SKILL_TRANSFORM);
       const name = path.posix.dirname(command.fileName);

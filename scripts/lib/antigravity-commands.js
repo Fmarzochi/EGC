@@ -35,7 +35,21 @@ function planAntigravityCommandFiles(repoRoot, sourceRelativePath) {
     .filter(command => command.fileName));
 }
 
+function assertUniqueCommandSkills(operations) {
+  const owners = new Map();
+  for (const operation of operations.filter(candidate => candidate.transform === ANTIGRAVITY_COMMAND_SKILL_TRANSFORM)) {
+    const destination = path.resolve(operation.destinationPath);
+    const source = normalizeSourcePath(operation.sourceRelativePath);
+    const owner = owners.get(destination);
+    if (owner && owner !== source) {
+      throw new Error(`${owner} and ${source} would both install as ${destination}`);
+    }
+    owners.set(destination, source);
+  }
+}
+
 function dropCommandsShadowedBySkills(operations) {
+  assertUniqueCommandSkills(operations);
   const skillDestinations = operations
     .filter(operation => normalizeSourcePath(operation.sourceRelativePath).startsWith('skills/'))
     .map(operation => path.resolve(operation.destinationPath));
