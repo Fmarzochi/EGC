@@ -13,6 +13,7 @@ const OPENCODE_AGENT_FRONTMATTER_TRANSFORM = 'opencode-agent-frontmatter';
 const ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM = 'antigravity-rule-frontmatter';
 const ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM = 'antigravity-manual-rule-frontmatter';
 const ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM = 'antigravity-agent-frontmatter';
+const ANTIGRAVITY_COMMAND_SKILL_TRANSFORM = 'antigravity-command-skill';
 
 // Model names Claude Code resolves itself. Anything else in an agent's
 // frontmatter (the catalog's Gemini ids) would be sent to the API as-is and
@@ -394,6 +395,80 @@ function toAntigravityAgentFrontmatter(text) {
   return ['---', ...rewriteAntigravityAgentFrontmatter(parts.frontmatter), '---', ...parts.body].join('\n');
 }
 
+function foldBlockLines(lines) {
+  const paragraphs = [];
+  let current = [];
+  for (const line of lines) {
+    if (line === '') {
+      if (current.length > 0) paragraphs.push(current.join(' '));
+      current = [];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length > 0) paragraphs.push(current.join(' '));
+  return paragraphs.join('\n');
+}
+
+function readBlockScalar(indicator, lines, start) {
+  const body = [];
+  for (let index = start; index < lines.length && (lines[index].trim() === '' || /^\s/.test(lines[index])); index += 1) {
+    body.push(lines[index]);
+  }
+  const indents = body.filter(line => line.trim() !== '').map(line => line.length - line.trimStart().length);
+  const indent = indents.length > 0 ? Math.min(...indents) : 0;
+  const dedented = body.map(line => (line.trim() === '' ? '' : line.slice(indent).trimEnd()));
+  return indicator.startsWith('>') ? foldBlockLines(dedented) : dedented.join('\n').replace(/^\n+|\n+$/g, '');
+}
+
+function yamlScalar(value) {
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).replaceAll("''", "'");
+  }
+  return value;
+}
+
+function commandDescription(parts) {
+  const index = parts.frontmatter.findIndex(line => splitFrontmatterLine(line)?.key === 'description');
+  if (index >= 0) {
+    const value = stripYamlComment(splitFrontmatterLine(parts.frontmatter[index]).value);
+    return /^[|>][+-]?$/.test(value) ? readBlockScalar(value, parts.frontmatter, index + 1) : yamlScalar(value);
+  }
+  const firstLine = parts.body.find(line => line.trim() !== '');
+  return firstLine ? firstLine.replace(/^#+\s*/, '').trim() : null;
+}
+
+function toAntigravityCommandSkill(text, { name = null } = {}) {
+  const source = stripByteOrderMark(text);
+  const parts = splitFrontmatter(source) || { frontmatter: [], body: source.split(/\r?\n/) };
+  const description = commandDescription(parts);
+  const frontmatter = [];
+  if (name) {
+    frontmatter.push(`name: ${name}`);
+  }
+  if (description) {
+    frontmatter.push(`description: ${JSON.stringify(description)}`);
+  }
+  return ['---', ...frontmatter, '---', ...parts.body].join('\n');
+}
+
+function commandName(sourcePath) {
+  if (!sourcePath) {
+    return null;
+  }
+  const segments = path.resolve(sourcePath).split(path.sep);
+  const commandsIndex = segments.lastIndexOf('commands');
+  const relative = commandsIndex < 0 ? segments.slice(-1) : segments.slice(commandsIndex + 1);
+  return relative.join('-').replace(/\.md$/, '');
+}
+
 function ruleDirectory(sourcePath) {
   if (!sourcePath) {
     return null;
@@ -411,6 +486,10 @@ const TRANSFORMS = Object.freeze({
     'utf8'
   ),
   [ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toAntigravityAgentFrontmatter(content.toString('utf8')), 'utf8'),
+  [ANTIGRAVITY_COMMAND_SKILL_TRANSFORM]: (content, sourcePath) => Buffer.from(
+    toAntigravityCommandSkill(content.toString('utf8'), { name: commandName(sourcePath) }),
+    'utf8'
+  ),
   [ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
     toAntigravityRule(content.toString('utf8'), { manual: true, directory: ruleDirectory(sourcePath) }),
     'utf8'
@@ -434,12 +513,14 @@ function plannedFileContent(sourcePath, transform) {
 
 module.exports = {
   ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM,
+  ANTIGRAVITY_COMMAND_SKILL_TRANSFORM,
   ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
   ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
   OPENCODE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
   toAntigravityAgentFrontmatter,
+  toAntigravityCommandSkill,
   toAntigravityRule,
   toClaudeAgentFrontmatter,
   toOpenCodeAgentFrontmatter,
