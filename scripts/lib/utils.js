@@ -25,9 +25,15 @@ const WINDOWS_RESERVED_SESSION_IDS = new Set([
  * Get the user's home directory (cross-platform)
  */
 function getHomeDir() {
-  const explicitHome = process.env.HOME || process.env.USERPROFILE;
-  if (explicitHome && explicitHome.trim().length > 0) {
-    return path.resolve(explicitHome);
+  // Each candidate is validated independently: a whitespace-only HOME must
+  // not shadow a valid USERPROFILE (cubic review, confidence 9 -- the prior
+  // version picked HOME over USERPROFILE with the || operator before
+  // trimming either one, so a blank-but-truthy HOME fell straight through
+  // to os.homedir() and skipped a perfectly good USERPROFILE on the way).
+  for (const candidate of [process.env.HOME, process.env.USERPROFILE]) {
+    if (candidate && candidate.trim().length > 0) {
+      return path.resolve(candidate);
+    }
   }
   return os.homedir();
 }

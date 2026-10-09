@@ -22,7 +22,18 @@
  * which single environment variable a caller or a test set.
  */
 import os from 'node:os';
+import path from 'node:path';
 
 export function resolveHome(): string {
-  return process.env.HOME || process.env.USERPROFILE || os.homedir();
+  // Each candidate is validated independently (trimmed non-blank) and
+  // resolved to an absolute path before being accepted, matching
+  // getHomeDir()'s contract in scripts/lib/utils.js: a whitespace-only
+  // override must not win over a usable one, and a relative override must
+  // not stay relative (cubic review, confidence 9).
+  for (const candidate of [process.env.HOME, process.env.USERPROFILE]) {
+    if (candidate && candidate.trim().length > 0) {
+      return path.resolve(candidate);
+    }
+  }
+  return os.homedir();
 }

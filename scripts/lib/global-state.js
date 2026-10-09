@@ -4,8 +4,8 @@
 // which cannot require the compiled server build. Keep both in sync.
 
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
+const { getHomeDir } = require('./utils');
 
 const GLOBAL_APPENDIX_SECTIONS = [
   { heading: 'Preferences', cap: 5 },
@@ -14,7 +14,7 @@ const GLOBAL_APPENDIX_SECTIONS = [
 ];
 
 function globalStateFilePath() {
-  return path.join(os.homedir(), '.egc', 'global', 'state.md');
+  return path.join(getHomeDir(), '.egc', 'global', 'state.md');
 }
 
 function parseStateDoc(content) {
