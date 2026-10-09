@@ -98,7 +98,7 @@ run('on Windows the browser profiles and the Devin Desktop credentials file are 
     delete process.env.APPDATA;
     process.env.USERPROFILE = profile;
     const denied = buildDeniedPaths();
-    for (const store of ['AppData/Local/Google/Chrome/User Data', 'AppData/Local/Microsoft/Edge/User Data', 'AppData/Local/BraveSoftware/Brave-Browser/User Data', 'AppData/Roaming/devin/credentials.toml']) {
+    for (const store of ['AppData/Local/Google/Chrome/User Data', 'AppData/Local/Microsoft/Edge/User Data', 'AppData/Local/BraveSoftware/Brave-Browser/User Data', 'AppData/Roaming/devin/credentials.toml', 'AppData/Roaming/Mozilla/Firefox/Profiles']) {
       assert.ok(denied.includes(path.join(profile, ...store.split('/'))), `${store} under the profile, got ${denied.join(', ')}`);
     }
     assert.ok(!denied.includes(path.join(profile, 'AppData', 'Roaming')), '%APPDATA% itself must stay free: EGC\'s own targets (Antigravity, VS Code Copilot) write there');
@@ -107,6 +107,7 @@ run('on Windows the browser profiles and the Devin Desktop credentials file are 
     const set = buildDeniedPaths();
     assert.ok(set.includes(path.join(profile, 'Local', 'Google', 'Chrome', 'User Data')), 'LOCALAPPDATA when it is set');
     assert.ok(set.includes(path.join(profile, 'Roaming', 'devin', 'credentials.toml')), 'APPDATA when it is set');
+    assert.ok(set.includes(path.join(profile, 'Roaming', 'Mozilla', 'Firefox', 'Profiles')), 'Firefox profiles when APPDATA is set');
   } finally {
     Object.defineProperty(process, 'platform', platform);
     for (const [name, value] of Object.entries(saved)) {

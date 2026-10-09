@@ -1399,9 +1399,12 @@ export function buildDeniedPaths(): string[] {
     // with a stripped environment still reads and writes the same folders.
     const appData = process.env.APPDATA || path.join(userProfile, 'AppData', 'Roaming');
     const localAppData = process.env.LOCALAPPDATA || path.join(userProfile, 'AppData', 'Local');
-    // The browser profiles Windows keeps under LocalAppData.
+    // The browser profiles Windows keeps under LocalAppData, and Firefox's
+    // own under Roaming instead (its profiles hold logins.json and key4.db,
+    // the encrypted saved-password store and its key).
     const browsers = ['Google/Chrome/User Data', 'Microsoft/Edge/User Data', 'BraveSoftware/Brave-Browser/User Data']
       .map(profile => path.join(localAppData, ...profile.split('/')));
+    browsers.push(path.join(appData, 'Mozilla', 'Firefox', 'Profiles'));
     // The shell Git for Windows ships reads /etc from its install, where its
     // system gitconfig and profile live: the machine-wide one and the
     // per-user one.
