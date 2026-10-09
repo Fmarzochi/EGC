@@ -1038,6 +1038,39 @@ async function runTraeUserRulesTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('Trae: a failure in the ~/.trae home does not stop the ~/.trae-cn home from being installed (#1676)', () => {
+    const home = mktempHome();
+    try {
+      for (const dir of ['.trae', '.trae-cn']) fs.mkdirSync(path.join(home, dir));
+      fs.mkdirSync(path.join(home, '.trae', 'user_rules', 'egc-memory.md'), { recursive: true });
+      const output = run(home);
+      assert.ok(output.includes('Trae (.trae): unexpected error:'), `the .trae failure is reported, got: ${output}`);
+      const rule = fs.readFileSync(path.join(home, '.trae-cn', 'user_rules', 'egc-memory.md'), 'utf8');
+      assert.ok(rule.includes(`<!-- egc-memory-protocol:${V} -->`), 'the CN home is still installed');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Trae: duplicate EGC blocks in user_rules are merged into one current block, keeping the text around them (#1676)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.trae'));
+      run(home);
+      const rule = path.join(home, '.trae', 'user_rules', 'egc-memory.md');
+      const current = fs.readFileSync(rule, 'utf8');
+      fs.writeFileSync(rule, `# Before\n\n${current}\n# Middle\n\n<!-- egc-memory-protocol:v1 -->\nold\n<!-- /egc-memory-protocol -->\n`, 'utf8');
+      run(home);
+      const content = fs.readFileSync(rule, 'utf8');
+      assert.strictEqual(content.split('<!-- /egc-memory-protocol -->').length - 1, 1, 'one EGC block remains');
+      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'and it is the current one');
+      assert.ok(content.startsWith('# Before\n\n') && content.includes('# Middle'), 'the person\'s text stays');
+      assert.ok(!content.includes('\nold\n'), 'the stale duplicate is gone');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('Trae: an egc-memory.md rule of the person\'s own, without the EGC marker, is left untouched (#1676)', () => {
     const home = mktempHome();
     try {

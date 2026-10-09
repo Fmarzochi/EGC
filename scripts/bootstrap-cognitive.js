@@ -487,19 +487,25 @@ function injectTraeUserRule(filepath, label, content) {
     return;
   }
   const raw = fs.readFileSync(filepath, 'utf8');
-  const blockMatch = raw.match(MARKER_BLOCK_RE);
-  if (!blockMatch) {
+  const blocks = [...raw.matchAll(new RegExp(MARKER_BLOCK_RE.source, 'g'))];
+  if (blocks.length === 0) {
     console.log(`  [cognitive] ${label}: ${filepath.replace(HOME, '~')} is a rule of your own, left untouched; the memory protocol was not installed`);
     return;
   }
-  const installedVersion = resolveInstalledVersion(blockMatch, 0);
-  if (installedVersion >= PROTOCOL_VERSION) {
+  const installedVersion = Math.min(...blocks.map(block => resolveInstalledVersion(block, 0)));
+  if (blocks.length === 1 && installedVersion >= PROTOCOL_VERSION) {
     console.log(`  [cognitive] ${label}: already configured (v${installedVersion})`);
     return;
   }
+  let replaced = false;
+  const updated = raw.replace(new RegExp(MARKER_BLOCK_RE.source, 'g'), () => {
+    if (replaced) return '';
+    replaced = true;
+    return content;
+  });
   fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
-  fs.writeFileSync(filepath, raw.replace(MARKER_BLOCK_RE, () => content), 'utf8');
-  console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION} (${filepath.replace(HOME, '~')})`);
+  fs.writeFileSync(filepath, updated, 'utf8');
+  console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION}, ${blocks.length} block(s) merged into one (${filepath.replace(HOME, '~')})`);
 }
 
 // ── Trae (~/.trae/user_rules/egc-memory.md and ~/.trae-cn/user_rules/egc-memory.md) ──
