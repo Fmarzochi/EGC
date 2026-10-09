@@ -28,17 +28,18 @@ const {
 // for the full evidence trail and implementation.
 //
 // Global-scope plugins are NOT under this adapter's own ~/.amp root: Amp's
-// docs are explicit that they live at ~/.config/amp/plugins/ (XDG-style),
-// a genuinely different directory than ~/.amp/skills/ (the pre-existing
-// skills path in this file, not re-verified here -- out of scope for
-// EGC-507). So the plugin-related copy operations resolve their own root
-// independently of adapter.resolveRoot() instead of reusing the skills
-// targetRoot.
+// docs are explicit that they live at ~/.config/amp/plugins/ (XDG-style).
+// So the plugin-related copy operations resolve their own root
+// independently of adapter.resolveRoot().
 const PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/amp-guardian-crusher-plugin.ts';
 const MESH_PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/amp-mesh-notice-plugin.ts';
 
 function resolveAmpConfigRoot(homeDir) {
   return path.join(homeDir || os.homedir(), '.config', 'amp');
+}
+
+function resolveSharedAgentsRoot(homeDir) {
+  return path.join(homeDir || os.homedir(), '.agents');
 }
 
 function resolvePluginScriptDestination(configRoot) {
@@ -93,19 +94,21 @@ module.exports = createInstallTargetAdapter({
   rootSegments: ['.amp'],
   installStatePathSegments: ['egc', 'install-state.json'],
   nativeRootRelativePath: '.amp',
-  // Skills land under ~/.amp while the Guardian/Crusher/Mesh plugin scripts
-  // are copied to ~/.config/amp/plugins/ (an XDG-style location Amp's plugin
-  // API owns, separate from the skills root). Retirement must trust both
-  // roots or it can never retire the plugin scripts it itself installed
-  // (cubic review, #1412).
+  // The library and the install state live under ~/.amp, the skills under
+  // the shared ~/.agents/skills and the Guardian/Crusher/Mesh plugin scripts
+  // under ~/.config/amp/plugins/ (an XDG-style location Amp's plugin API
+  // owns). Retirement must trust every root or it can never retire the
+  // files it itself installed (cubic review, #1412).
   resolveManagedRoots(input, adapter) {
-    return [adapter.resolveRoot(input), resolveAmpConfigRoot(input.homeDir)];
+    return [adapter.resolveRoot(input), resolveAmpConfigRoot(input.homeDir), resolveSharedAgentsRoot(input.homeDir)];
   },
   planOperations(input, adapter) {
     const configRoot = resolveAmpConfigRoot(input.homeDir);
 
     return [
-      ...createFlatSkillPlanOperations(input, adapter),
+      ...createFlatSkillPlanOperations(input, adapter, {
+        skillsDir: planningInput => path.join(resolveSharedAgentsRoot(planningInput.homeDir), 'skills'),
+      }),
       ...createAmpGuardianCrusherOperations(adapter, configRoot),
       ...createAmpMeshNoticeOperations(adapter, configRoot),
     ];

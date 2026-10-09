@@ -931,6 +931,77 @@ function runTests() {
     }
   }));
 
+  tally(test('an amp project install retires the managed copies EGC wrote under .amp/skills and keeps the person\'s (#1671)', () => {
+    const fs = require('fs');
+    const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+    const { applyInstallPlan } = require('../../scripts/lib/install/apply');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-amp-project-upgrade-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-amp-project-upgrade-home-'));
+    try {
+      const sources = ['skills/ai/agent-eval/SKILL.md', 'skills/testing/tdd-workflow/SKILL.md'];
+      const ampSkills = path.join(projectRoot, '.amp', 'skills');
+      const statePath = path.join(projectRoot, '.amp', 'egc-install-state.json');
+      const legacy = sources.map(source => path.join(ampSkills, path.basename(path.dirname(source)), 'SKILL.md'));
+      for (const [index, source] of sources.entries()) {
+        fs.mkdirSync(path.dirname(legacy[index]), { recursive: true });
+        fs.copyFileSync(path.join(repoRoot, source), legacy[index]);
+      }
+      fs.writeFileSync(legacy[1], 'edited by hand');
+      const own = path.join(ampSkills, 'my-skill', 'SKILL.md');
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, '# mine');
+      const stateFields = {
+        request: { profile: 'core', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['skills-amp'], skippedModules: [] },
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      };
+      writeInstallState(statePath, createInstallState({
+        ...stateFields,
+        adapter: { id: 'amp-project', target: 'amp', kind: 'project' },
+        targetRoot: path.join(projectRoot, '.amp'),
+        installStatePath: statePath,
+        operations: sources.map((source, index) => ({
+          kind: 'copy-file',
+          moduleId: 'skills-amp',
+          sourceRelativePath: source,
+          destinationPath: legacy[index],
+          strategy: 'preserve-relative-path',
+          ownership: 'managed',
+          scaffoldOnly: false,
+        })),
+      }));
+
+      const plan = planInstallTargetScaffold({ target: 'amp-project', repoRoot, projectRoot, homeDir, modules: [{ id: 'skills-amp', paths: sources }] });
+      assert.deepStrictEqual(plan.retirements.map(entry => entry.destinationPath).sort(), [...legacy].sort(), 'both recorded .amp/skills copies left the plan and are offered for retirement');
+      const operations = plan.operations.map(operation => ({
+        ...operation,
+        kind: 'copy-file',
+        scaffoldOnly: false,
+        sourcePath: path.join(repoRoot, operation.sourceRelativePath),
+      }));
+      const statePreview = createInstallState({
+        ...stateFields,
+        adapter: plan.adapter,
+        targetRoot: plan.targetRoot,
+        installStatePath: plan.installStatePath,
+        operations,
+      });
+      applyInstallPlan({ ...plan, operations, statePreview }, { homeDir });
+
+      for (const source of sources) {
+        const current = path.join(projectRoot, '.agents', 'skills', path.basename(path.dirname(source)), 'SKILL.md');
+        assert.ok(fs.existsSync(current), `${current} is written under .agents/skills, where Amp reads it`);
+      }
+      assert.ok(!fs.existsSync(legacy[0]), 'the byte-identical copy under .amp/skills is retired');
+      assert.strictEqual(fs.readFileSync(legacy[1], 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', 'the person\'s own skill under .amp/skills stays');
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('throws on unknown target adapter', () => {
     assert.throws(
       () => getInstallTargetAdapter('ghost-target'),
@@ -2116,7 +2187,7 @@ function runTests() {
     assert.strictEqual(statePath, path.join(homeDir, '.amp', 'egc', 'install-state.json'));
   }));
 
-  tally(test('amp adapter strips category from skill paths and installs flat', () => {
+  tally(test('amp adapter strips category from skill paths and installs flat under the shared ~/.agents/skills/ (#1671)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -2136,9 +2207,42 @@ function runTests() {
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
-        && operation.destinationPath === path.join(homeDir, '.amp', 'skills', 'tdd-workflow')
+        && operation.destinationPath === path.join(homeDir, '.agents', 'skills', 'tdd-workflow')
       )),
-      'Should strip category and install skill flat under ~/.amp/skills/'
+      'Should strip category and install skill flat under ~/.agents/skills/, a directory Amp reads'
+    );
+    assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(homeDir, '.amp', 'skills'))), 'nothing is planned under ~/.amp/skills');
+    const adapter = getInstallTargetAdapter('amp');
+    assert.deepStrictEqual(
+      adapter.resolveManagedRoots({ homeDir }, adapter),
+      [path.join(homeDir, '.amp'), path.join(homeDir, '.config', 'amp'), path.join(homeDir, '.agents')],
+      'the shared ~/.agents root is managed, so retirement and uninstall reach it and see the siblings that share it'
+    );
+  }));
+
+  tally(test('amp project adapter installs the skills flat under the project .agents/skills/ (#1671)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'amp-project',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(projectRoot, '.agents', 'skills', 'tdd-workflow')
+      )),
+      'Should install the skill flat under .agents/skills/, a directory Amp reads'
+    );
+    assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(projectRoot, '.amp', 'skills'))), 'nothing is planned under .amp/skills');
+    assert.deepStrictEqual(
+      plan.managedRoots,
+      [path.resolve(projectRoot, '.amp'), path.resolve(projectRoot, '.agents')],
+      'the project .agents root is managed, shared with the antigravity project target'
     );
   }));
 
@@ -4640,8 +4744,8 @@ function runTests() {
       const amp = planInstallTargetScaffold({ target: 'amp-home', repoRoot, homeDir, modules: [] });
       assert.deepStrictEqual(
         amp.managedRoots.map(normalizedRelativePath).sort(),
-        [path.join(homeDir, '.amp'), path.join(homeDir, '.config', 'amp')].map(normalizedRelativePath).sort(),
-        'amp-home declares its skills root and its plugin config root'
+        [path.join(homeDir, '.amp'), path.join(homeDir, '.config', 'amp'), path.join(homeDir, '.agents')].map(normalizedRelativePath).sort(),
+        'amp-home declares its library root, its plugin config root and the shared skills root'
       );
       const claude = planInstallTargetScaffold({ target: 'claude-home', repoRoot, homeDir, modules: [] });
       assert.deepStrictEqual(claude.managedRoots, [claude.targetRoot], 'a target with one root declares just that root');
