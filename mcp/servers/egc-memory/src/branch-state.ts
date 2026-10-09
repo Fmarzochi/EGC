@@ -112,6 +112,23 @@ function findGitDir(startPath: string): string | null {
   }
 }
 
+// O_NOFOLLOW is POSIX-only (undefined in fs.constants on Windows); fall back
+// to a plain open there, where trustedGitPath's canonicalization is the only
+// guard. On POSIX this closes most of the gap between trustedGitPath
+// validating a path and a later fs.readFileSync re-walking it: the open
+// itself refuses a final component that is a symlink, so a link planted
+// there after validation cannot be followed.
+const NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+
+function readFileNoFollow(filePath: string): string {
+  const fd = fs.openSync(filePath, fs.constants.O_RDONLY | NOFOLLOW_FLAG);
+  try {
+    return fs.readFileSync(fd, 'utf8');
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 // Reads the raw, trimmed content of .git/HEAD, resolving worktree and
 // submodule pointer files and refusing anything outside the trusted roots.
 // Shared by detectBranch and detectDetachedCommit so both agree on exactly
@@ -122,16 +139,17 @@ function readHeadLine(projectPath: string): string | null {
     if (!rawGitDir) return null;
     let gitDir = trustedGitPath(rawGitDir);
     if (!gitDir) return null;
+    if (fs.lstatSync(gitDir).isSymbolicLink()) return null;
     if (fs.statSync(gitDir).isFile()) {
       // Worktrees and submodules store a pointer file instead of a directory
-      const pointer = fs.readFileSync(gitDir, 'utf8').trim();
+      const pointer = readFileNoFollow(gitDir).trim();
       if (!pointer.startsWith('gitdir:')) return null;
       gitDir = trustedGitPath(path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim()));
       if (!gitDir) return null;
     }
     const headPath = trustedGitPath(path.resolve(gitDir, 'HEAD'));
     if (!headPath) return null;
-    return fs.readFileSync(headPath, 'utf8').trim();
+    return readFileNoFollow(headPath).trim();
   } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info available
     return null;
   }
