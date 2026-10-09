@@ -2382,6 +2382,76 @@ function runTests() {
     }
   }));
 
+  if (process.platform !== 'win32') {
+    const asRoot = (args, options = {}) => {
+      const preload = `--require ${path.join(__dirname, '..', 'fixtures', 'simulate-root-uid.js')}`;
+      const inheritedNodeOptions = (options.env && options.env.NODE_OPTIONS) || process.env.NODE_OPTIONS || '';
+      return run(args, {
+        ...options,
+        env: { ...options.env, NODE_OPTIONS: inheritedNodeOptions ? `${inheritedNodeOptions} ${preload}` : preload },
+      });
+    };
+
+    tally(test('refuses a real install as root (C50)', () => {
+      const homeDir = createTempDir('install-apply-home-');
+      const projectDir = createTempDir('install-apply-project-');
+      try {
+        const result = asRoot(['--target', 'copilot', '--profile', 'core', '--allow-undetected'], { cwd: projectDir, homeDir });
+        assert.notStrictEqual(result.code, 0, 'a real install as root must fail');
+        assert.ok(/refusing to install as root/.test(result.stderr), result.stderr);
+        assert.ok(!fs.existsSync(path.join(homeDir, '.copilot')), 'nothing was written');
+      } finally {
+        cleanup(homeDir);
+        cleanup(projectDir);
+      }
+    }));
+
+    tally(test('a dry run as root is not refused, since it writes nothing (C50)', () => {
+      const homeDir = createTempDir('install-apply-home-');
+      const projectDir = createTempDir('install-apply-project-');
+      try {
+        const result = asRoot(['--target', 'copilot', '--profile', 'core', '--allow-undetected', '--dry-run'], { cwd: projectDir, homeDir });
+        assert.strictEqual(result.code, 0, result.stderr);
+        assert.ok(!/refusing to install as root/.test(result.stderr), result.stderr);
+      } finally {
+        cleanup(homeDir);
+        cleanup(projectDir);
+      }
+    }));
+
+    tally(test('EGC_ALLOW_ROOT opts a real install as root back in (C50)', () => {
+      const homeDir = createTempDir('install-apply-home-');
+      const projectDir = createTempDir('install-apply-project-');
+      try {
+        const result = asRoot(['--target', 'copilot', '--profile', 'core', '--allow-undetected'], {
+          cwd: projectDir, homeDir, env: { EGC_ALLOW_ROOT: '1' },
+        });
+        assert.strictEqual(result.code, 0, result.stderr);
+        assert.ok(fs.existsSync(path.join(homeDir, '.copilot')), 'the install went through');
+      } finally {
+        cleanup(homeDir);
+        cleanup(projectDir);
+      }
+    }));
+
+    tally(test('EGC_ALLOW_ROOT only opts in with the exact value "1", not any truthy string (C50)', () => {
+      for (const value of ['0', 'false', 'no']) {
+        const homeDir = createTempDir('install-apply-home-');
+        const projectDir = createTempDir('install-apply-project-');
+        try {
+          const result = asRoot(['--target', 'copilot', '--profile', 'core', '--allow-undetected'], {
+            cwd: projectDir, homeDir, env: { EGC_ALLOW_ROOT: value },
+          });
+          assert.notStrictEqual(result.code, 0, `EGC_ALLOW_ROOT=${value} must not opt in`);
+          assert.ok(/refusing to install as root/.test(result.stderr), result.stderr);
+        } finally {
+          cleanup(homeDir);
+          cleanup(projectDir);
+        }
+      }
+    }));
+  }
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

@@ -1354,6 +1354,9 @@ const CREDENTIAL_STORES = [
   '.local/share/com.vercel.cli', '.config/configstore/firebase-tools.json', '.cache/huggingface/token',
   '.huggingface/token', '.config/composer/auth.json', '.composer/auth.json', '.kaggle', '.oci',
   '.pulumi/credentials.json', '.config/ngrok', '.config/stripe', '.config/sops/age', '.supabase/access-token', '.railway',
+  // CodeBuddy keeps the API key of each configured model in models.json; its
+  // settings.json neighbor (hooks, non-secret preferences) stays free.
+  '.codebuddy/models.json',
   // Browser profiles: saved passwords and session cookies.
   '.mozilla/firefox', '.config/google-chrome', '.config/chromium', '.config/BraveSoftware', '.config/microsoft-edge',
   // macOS: the keychains, and the same tools and browsers under Application Support.
@@ -1396,9 +1399,12 @@ export function buildDeniedPaths(): string[] {
     // with a stripped environment still reads and writes the same folders.
     const appData = process.env.APPDATA || path.join(userProfile, 'AppData', 'Roaming');
     const localAppData = process.env.LOCALAPPDATA || path.join(userProfile, 'AppData', 'Local');
-    // The browser profiles Windows keeps under LocalAppData.
+    // The browser profiles Windows keeps under LocalAppData, and Firefox's
+    // own under Roaming instead (its profiles hold logins.json and key4.db,
+    // the encrypted saved-password store and its key).
     const browsers = ['Google/Chrome/User Data', 'Microsoft/Edge/User Data', 'BraveSoftware/Brave-Browser/User Data']
       .map(profile => path.join(localAppData, ...profile.split('/')));
+    browsers.push(path.join(appData, 'Mozilla', 'Firefox', 'Profiles'));
     // The shell Git for Windows ships reads /etc from its install, where its
     // system gitconfig and profile live: the machine-wide one and the
     // per-user one.
@@ -1406,7 +1412,11 @@ export function buildDeniedPaths(): string[] {
     paths.push(
       path.join(userProfile, '.ssh'),
       path.join(userProfile, '.aws'),
-      appData,
+      // %APPDATA% is shared by many unrelated apps, including EGC's own
+      // targets (Antigravity, VS Code Copilot). Deny only the Devin Desktop
+      // credentials file; its config.json and cli/sessions.db neighbors are
+      // not secret.
+      path.join(appData, 'devin', 'credentials.toml'),
       ...browsers,
       path.join(programFiles, 'Git', 'etc'),
       path.join(localAppData, 'Programs', 'Git', 'etc'),

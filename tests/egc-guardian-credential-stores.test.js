@@ -88,7 +88,7 @@ run('a project .yarnrc.yml, .netrc-like names and a .kube folder in a project st
   }
 });
 
-run('on Windows the browser profiles and the roaming settings are found under the profile when LOCALAPPDATA or APPDATA is unset', () => {
+run('on Windows the browser profiles and the Devin Desktop credentials file are found under the profile when LOCALAPPDATA or APPDATA is unset', () => {
   const platform = Object.getOwnPropertyDescriptor(process, 'platform');
   const saved = { LOCALAPPDATA: process.env.LOCALAPPDATA, APPDATA: process.env.APPDATA, USERPROFILE: process.env.USERPROFILE };
   const profile = path.join(os.tmpdir(), 'egc-profile');
@@ -98,14 +98,16 @@ run('on Windows the browser profiles and the roaming settings are found under th
     delete process.env.APPDATA;
     process.env.USERPROFILE = profile;
     const denied = buildDeniedPaths();
-    for (const store of ['AppData/Local/Google/Chrome/User Data', 'AppData/Local/Microsoft/Edge/User Data', 'AppData/Local/BraveSoftware/Brave-Browser/User Data', 'AppData/Roaming']) {
+    for (const store of ['AppData/Local/Google/Chrome/User Data', 'AppData/Local/Microsoft/Edge/User Data', 'AppData/Local/BraveSoftware/Brave-Browser/User Data', 'AppData/Roaming/devin/credentials.toml', 'AppData/Roaming/Mozilla/Firefox/Profiles']) {
       assert.ok(denied.includes(path.join(profile, ...store.split('/'))), `${store} under the profile, got ${denied.join(', ')}`);
     }
+    assert.ok(!denied.includes(path.join(profile, 'AppData', 'Roaming')), '%APPDATA% itself must stay free: EGC\'s own targets (Antigravity, VS Code Copilot) write there');
     process.env.LOCALAPPDATA = path.join(profile, 'Local');
     process.env.APPDATA = path.join(profile, 'Roaming');
     const set = buildDeniedPaths();
     assert.ok(set.includes(path.join(profile, 'Local', 'Google', 'Chrome', 'User Data')), 'LOCALAPPDATA when it is set');
-    assert.ok(set.includes(path.join(profile, 'Roaming')), 'APPDATA when it is set');
+    assert.ok(set.includes(path.join(profile, 'Roaming', 'devin', 'credentials.toml')), 'APPDATA when it is set');
+    assert.ok(set.includes(path.join(profile, 'Roaming', 'Mozilla', 'Firefox', 'Profiles')), 'Firefox profiles when APPDATA is set');
   } finally {
     Object.defineProperty(process, 'platform', platform);
     for (const [name, value] of Object.entries(saved)) {
@@ -113,6 +115,28 @@ run('on Windows the browser profiles and the roaming settings are found under th
       else process.env[name] = value;
     }
   }
+});
+
+run('Devin Desktop\'s own config.json and session history stay readable next to the denied credentials.toml (Windows)', () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const saved = { APPDATA: process.env.APPDATA };
+  const appData = path.join(os.tmpdir(), 'egc-appdata');
+  try {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    process.env.APPDATA = appData;
+    const denied = buildDeniedPaths();
+    assert.ok(denied.includes(path.join(appData, 'devin', 'credentials.toml')), 'the credentials file is denied');
+    assert.ok(!denied.some(p => p === path.join(appData, 'devin')), 'the devin directory itself is not denied as a whole');
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    if (saved.APPDATA === undefined) delete process.env.APPDATA; else process.env.APPDATA = saved.APPDATA;
+  }
+});
+
+run('~/.codebuddy/models.json is protected, read or written; its settings.json neighbor stays free', () => {
+  assert.strictEqual(isReadDeniedPath(inHome('.codebuddy/models.json')), true, 'read of ~/.codebuddy/models.json');
+  assert.strictEqual(isProtectedPath(inHome('.codebuddy/models.json')), true, 'write of ~/.codebuddy/models.json');
+  assert.strictEqual(isReadDeniedPath(inHome('.codebuddy/settings.json')), false, 'settings.json has no API key and stays readable');
 });
 
 run('on Windows the etc that Git for Windows reads as /etc is denied in both of its install places', () => {
