@@ -4015,7 +4015,7 @@ function runTests() {
     assert.strictEqual(statePath, path.join(projectRoot, '.warp', 'egc-install-state.json'));
   }));
 
-  tally(test('warp adapter emits a flat skill copy plus a merge-markdown-skill-index operation per skill', () => {
+  tally(test('warp adapter copies each skill directory to .warp/skills/<name>/ plus a merge-markdown-skill-index operation (#1673)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -4029,15 +4029,15 @@ function runTests() {
     assert.strictEqual(plan.adapter.id, 'warp-project');
 
     const copyOp = plan.operations.find(op => op.kind === 'copy-path');
-    assert.ok(copyOp, 'Should emit a copy-path operation for the skill file');
-    assert.strictEqual(normalizedRelativePath(copyOp.sourceRelativePath), 'skills/testing/tdd-workflow/SKILL.md');
-    assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.warp', 'skills', 'tdd-workflow.md'));
+    assert.ok(copyOp, 'Should emit a copy-path operation for the skill directory');
+    assert.strictEqual(normalizedRelativePath(copyOp.sourceRelativePath), 'skills/testing/tdd-workflow');
+    assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.warp', 'skills', 'tdd-workflow'), 'Warp discovers <name>/SKILL.md natively');
 
     const mergeOp = plan.operations.find(op => op.kind === 'merge-markdown-skill-index');
     assert.ok(mergeOp, 'Should emit a merge-markdown-skill-index operation for AGENTS.md');
     assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, 'AGENTS.md'));
     assert.strictEqual(mergeOp.skillName, 'tdd-workflow');
-    assert.strictEqual(mergeOp.relativePath, '.warp/skills/tdd-workflow.md');
+    assert.strictEqual(mergeOp.relativePath, '.warp/skills/tdd-workflow/SKILL.md');
     assert.ok(mergeOp.skillDescription.startsWith('Use this skill when writing new features'));
     assert.ok(mergeOp.skillDescription.length <= 110, 'Description should be truncated to the shared max length');
   }));

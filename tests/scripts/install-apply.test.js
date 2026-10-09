@@ -773,6 +773,108 @@ function runTests() {
     }
   }));
 
+  tally(test('an upgrade moves the managed Warp skills from .warp/skills/<name>.md to .warp/skills/<name>/SKILL.md and keeps the person\'s files (#1673)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const args = ['--target', 'warp', '--profile', 'core'];
+      const first = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const projectRoot = fs.realpathSync(projectDir);
+      const warpSkills = path.join(projectRoot, '.warp', 'skills');
+      const statePath = path.join(projectRoot, '.warp', 'egc-install-state.json');
+      const agentsPath = path.join(projectRoot, 'AGENTS.md');
+      const state = readJson(statePath);
+      const legacyBySkill = new Map();
+      state.operations = state.operations.filter(operation => {
+        if (operation.kind !== 'copy-file' || !operation.destinationPath.startsWith(warpSkills + path.sep)) return true;
+        const relative = path.relative(warpSkills, operation.destinationPath).split(path.sep);
+        if (relative.length !== 2 || relative[1] !== 'SKILL.md') return false;
+        const legacy = path.join(warpSkills, `${relative[0]}.md`);
+        legacyBySkill.set(relative[0], { legacy, source: operation.sourceRelativePath });
+        operation.destinationPath = legacy;
+        delete operation.contentSha256;
+        return true;
+      });
+      assert.ok(legacyBySkill.size > 5, 'the core profile installs skills for Warp');
+      for (const [name, { legacy, source }] of legacyBySkill) {
+        fs.rmSync(path.join(warpSkills, name), { recursive: true, force: true });
+        fs.copyFileSync(path.join(repoRoot, source), legacy);
+      }
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      let agents = fs.readFileSync(agentsPath, 'utf8');
+      for (const name of legacyBySkill.keys()) {
+        agents = agents.replace(`.warp/skills/${name}/SKILL.md`, `.warp/skills/${name}.md`);
+      }
+      fs.writeFileSync(agentsPath, `# My project notes\n\n${agents}`);
+      const [edited, ...untouched] = [...legacyBySkill.values()].map(entry => entry.legacy);
+      fs.writeFileSync(edited, 'edited by hand');
+      const ownLegacy = path.join(warpSkills, 'my-skill.md');
+      fs.writeFileSync(ownLegacy, '# mine');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      for (const name of legacyBySkill.keys()) {
+        assert.ok(fs.existsSync(path.join(warpSkills, name, 'SKILL.md')), `${name} is written as .warp/skills/${name}/SKILL.md`);
+      }
+      for (const legacy of untouched) {
+        assert.ok(!fs.existsSync(legacy), `the managed ${legacy} is retired`);
+      }
+      assert.strictEqual(fs.readFileSync(edited, 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      assert.strictEqual(fs.readFileSync(ownLegacy, 'utf8'), '# mine', 'the person\'s own flat file stays');
+      const agentsAfter = fs.readFileSync(agentsPath, 'utf8');
+      assert.ok(agentsAfter.startsWith('# My project notes'), 'the person\'s own AGENTS.md content stays');
+      for (const name of legacyBySkill.keys()) {
+        assert.ok(agentsAfter.includes(`(\`.warp/skills/${name}/SKILL.md\`)`), `the index points ${name} at its directory`);
+        assert.ok(!agentsAfter.includes(`(\`.warp/skills/${name}.md\`)`), `no index entry is left on the old ${name}.md`);
+      }
+      const recorded = readJson(statePath).operations.map(operation => operation.destinationPath);
+      assert.ok(!recorded.some(destination => destination.endsWith('.md') && path.dirname(destination) === warpSkills), 'no flat .warp/skills/<name>.md is recorded any more');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('a Warp skill the person keeps, as a directory or a link, is never overwritten or indexed (#1673)', () => {
+    const scenarios = process.platform === 'win32' ? ['directory'] : ['directory', 'link'];
+    for (const scenario of scenarios) {
+      const homeDir = createTempDir('install-apply-home-');
+      const projectDir = createTempDir('install-apply-project-');
+      const outside = createTempDir('install-apply-outside-');
+      try {
+        const projectRoot = fs.realpathSync(projectDir);
+        const own = path.join(projectRoot, '.warp', 'skills', 'tdd-workflow');
+        fs.mkdirSync(path.dirname(own), { recursive: true });
+        if (scenario === 'directory') {
+          fs.mkdirSync(own);
+          fs.writeFileSync(path.join(own, 'SKILL.md'), '# mine');
+        } else {
+          fs.writeFileSync(path.join(outside, 'SKILL.md'), '# mine');
+          fs.symlinkSync(outside, own, 'dir');
+        }
+
+        for (const pass of ['install', 'reinstall']) {
+          const result = run(['--target', 'warp', '--profile', 'core'], { cwd: projectDir, homeDir });
+          assert.strictEqual(result.code, 0, `${scenario} ${pass}: ${result.stderr}`);
+          assert.strictEqual(fs.readFileSync(path.join(own, 'SKILL.md'), 'utf8'), '# mine', `${scenario} ${pass}: the person's tdd-workflow stays theirs`);
+        }
+        const agents = fs.readFileSync(path.join(projectRoot, 'AGENTS.md'), 'utf8');
+        assert.ok(!agents.includes('**tdd-workflow**'), `${scenario}: the index does not claim the person's skill`);
+        const recorded = readJson(path.join(projectRoot, '.warp', 'egc-install-state.json')).operations.map(operation => operation.destinationPath);
+        assert.ok(!recorded.some(destination => destination.startsWith(own + path.sep)), `${scenario}: the person's skill is never recorded`);
+        assert.ok(recorded.some(destination => destination.startsWith(path.join(projectRoot, '.warp', 'skills') + path.sep)), `${scenario}: the other skills still land`);
+      } finally {
+        cleanup(homeDir);
+        cleanup(projectDir);
+        cleanup(outside);
+      }
+    }
+  }));
+
   tally(test('a skill the person keeps under config/skills with the name of an EGC command is never overwritten (#1706)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
