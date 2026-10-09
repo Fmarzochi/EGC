@@ -57,27 +57,34 @@ rules/
 
 ### 选项 2：手动安装
 
+**Antigravity：** 它只读取 `~/.gemini/config/rules/` 中带有 `trigger` frontmatter 的扁平 `.md` 文件，
+直接复制无法生成这种格式。Antigravity 请使用选项 1：安装程序会将每条规则以
+`<group>-<rule>.md` 的形式连同其 trigger 写入该目录。下面的复制方式适用于按目录树读取规则的工具。
+
 > **重要提示：** 复制整个目录: 不要使用 `/*` 展开。
 > 通用和语言特定目录包含同名文件。
 > 将它们展开到一个目录会导致语言特定文件覆盖通用规则，
 > 并破坏语言特定文件使用的 `../common/` 相对引用。
 
 ```bash
+# 你的工具读取的规则目录
+RULES_DIR="$HOME/path/to/your-tool/rules"
+
 # 创建目标目录
-mkdir -p ~/.gemini/rules
+mkdir -p "$RULES_DIR"
 
 # 安装通用规则（所有项目必需）
-cp -r rules/common ~/.gemini/rules/common
+cp -r rules/common "$RULES_DIR/common"
 
 # 安装中文翻译版本（可选）
-cp -r rules/zh ~/.gemini/rules/zh
+cp -r rules/zh "$RULES_DIR/zh"
 
 # 根据项目技术栈安装语言特定规则
-cp -r rules/typescript ~/.gemini/rules/typescript
-cp -r rules/python ~/.gemini/rules/python
-cp -r rules/golang ~/.gemini/rules/golang
-cp -r rules/swift ~/.gemini/rules/swift
-cp -r rules/php ~/.gemini/rules/php
+cp -r rules/typescript "$RULES_DIR/typescript"
+cp -r rules/python "$RULES_DIR/python"
+cp -r rules/golang "$RULES_DIR/golang"
+cp -r rules/swift "$RULES_DIR/swift"
+cp -r rules/php "$RULES_DIR/php"
 ```
 
 ## 规则 vs 技能

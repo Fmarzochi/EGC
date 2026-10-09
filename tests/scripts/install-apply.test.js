@@ -180,9 +180,14 @@ function runTests() {
       // Antigravity reads its skills from config/skills and
       // its hooks run from scripts/; the skills/egc namespace, hooks/hooks.json
       // and plugin.json of the retired Gemini CLI are not written any more.
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')));
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'typescript', 'testing.md')));
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'commands', 'plan.md')));
+      const configRules = path.join(geminiRoot, 'config', 'rules');
+      assert.ok(fs.readFileSync(path.join(configRules, 'common-coding-style.md'), 'utf8').startsWith('---\ntrigger: always_on\n'));
+      assert.ok(fs.readFileSync(path.join(configRules, 'typescript-testing.md'), 'utf8').startsWith('---\ntrigger: glob\n'));
+      assert.ok(fs.readdirSync(configRules, { withFileTypes: true }).every(entry => entry.isFile() && entry.name.endsWith('.md')), 'config/rules holds flat .md files only');
+      assert.ok(!fs.existsSync(path.join(configRules, 'README.md')));
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'rules')), 'the rules/egc tree is not written');
+      assert.ok(fs.readFileSync(path.join(geminiRoot, 'config', 'skills', 'plan', 'SKILL.md'), 'utf8').startsWith('---\nname: plan\n'));
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'commands')), 'nothing is written under ~/.gemini/commands');
       assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'tdd-workflow', 'SKILL.md')));
       assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'coding-standards', 'SKILL.md')));
       assert.ok(fs.existsSync(path.join(geminiRoot, 'scripts', 'hooks', 'session-end.js')));
@@ -290,6 +295,489 @@ function runTests() {
       const recorded = readJson(path.join(geminiRoot, 'egc', 'install-state.json')).operations.map(operation => operation.destinationPath);
       assert.ok(!recorded.some(destination => destination.startsWith(path.join(ideSkills, skill) + path.sep)), 'the person\'s skill is never recorded as managed');
       assert.ok(recorded.some(destination => destination.startsWith(ideSkills + path.sep)), 'the other skills still land under config/skills');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('an upgrade moves the managed rules from rules/egc to flat files under config/rules and keeps the person\'s files (#1668)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const configRules = path.join(geminiRoot, 'config', 'rules');
+      const legacyRules = path.join(geminiRoot, 'rules', 'egc');
+      const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
+      const state = readJson(statePath);
+      const flatRules = [];
+      const legacyCopies = [];
+      for (const operation of state.operations) {
+        if (!operation.destinationPath.startsWith(configRules + path.sep)) continue;
+        const legacy = path.join(legacyRules, ...operation.sourceRelativePath.split('/').slice(1));
+        fs.mkdirSync(path.dirname(legacy), { recursive: true });
+        fs.copyFileSync(path.join(repoRoot, operation.sourceRelativePath), legacy);
+        fs.unlinkSync(operation.destinationPath);
+        flatRules.push(operation.destinationPath);
+        legacyCopies.push(legacy);
+        operation.destinationPath = legacy;
+        delete operation.transform;
+        delete operation.contentSha256;
+      }
+      assert.ok(flatRules.length > 100, 'the minimal profile installs the rules');
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      const [edited, ...untouched] = legacyCopies;
+      fs.writeFileSync(edited, 'edited by hand');
+      const ownLegacy = path.join(legacyRules, 'my-own-rule.md');
+      fs.writeFileSync(ownLegacy, '# mine');
+      const ownFlat = path.join(configRules, 'my-rule.md');
+      fs.writeFileSync(ownFlat, '---\ntrigger: manual\n---\n# my rule\n');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      for (const flat of flatRules) {
+        assert.ok(fs.readFileSync(flat, 'utf8').startsWith('---\ntrigger: '), `${flat} is written under config/rules with a trigger`);
+      }
+      for (const legacy of untouched) {
+        assert.ok(!fs.existsSync(legacy), `the managed ${legacy} is retired`);
+      }
+      assert.strictEqual(fs.readFileSync(edited, 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      assert.strictEqual(fs.readFileSync(ownLegacy, 'utf8'), '# mine', 'the person\'s own rule under rules/egc stays');
+      assert.strictEqual(fs.readFileSync(ownFlat, 'utf8'), '---\ntrigger: manual\n---\n# my rule\n', 'the person\'s own rule under config/rules stays');
+      const recorded = readJson(statePath).operations.map(operation => operation.destinationPath);
+      assert.ok(recorded.some(destination => destination.startsWith(configRules + path.sep)), 'the state records the config/rules files');
+      assert.ok(!recorded.some(destination => destination.startsWith(legacyRules + path.sep)), 'and no rules/egc copy any more');
+      assert.ok(!recorded.includes(ownFlat), 'the person\'s rule is never recorded as managed');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('a rule the person keeps under config/rules with the name of an EGC rule is never overwritten (#1668)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const configRules = path.join(homeDir, '.gemini', 'config', 'rules');
+      const own = path.join(configRules, 'common-coding-style.md');
+      fs.mkdirSync(configRules, { recursive: true });
+      fs.writeFileSync(own, '# mine');
+
+      for (const pass of ['install', 'reinstall']) {
+        const result = run(args, { cwd: projectDir, homeDir, env });
+        assert.strictEqual(result.code, 0, `${pass}: ${result.stderr}`);
+        assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', `${pass}: the person's common-coding-style.md stays theirs`);
+      }
+      const recorded = readJson(path.join(homeDir, '.gemini', 'egc', 'install-state.json')).operations.map(operation => operation.destinationPath);
+      assert.ok(!recorded.includes(own), 'the person\'s rule is never recorded as managed');
+      assert.ok(recorded.includes(path.join(configRules, 'common-testing.md')), 'the other rules still land under config/rules');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  const moveAgentsBack = ({ statePath, fromDir, toDir }) => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const state = readJson(statePath);
+    const moved = [];
+    for (const operation of state.operations) {
+      if (!operation.destinationPath.startsWith(fromDir + path.sep)) continue;
+      const legacy = path.join(toDir, path.basename(operation.destinationPath));
+      fs.mkdirSync(path.dirname(legacy), { recursive: true });
+      fs.copyFileSync(path.join(repoRoot, operation.sourceRelativePath), legacy);
+      fs.unlinkSync(operation.destinationPath);
+      moved.push({ current: operation.destinationPath, legacy });
+      operation.destinationPath = legacy;
+      delete operation.transform;
+      delete operation.contentSha256;
+    }
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+    return moved;
+  };
+
+  const assertAgentsMoved = ({ statePath, moved, fromDir, ownLegacy, ownCurrent }) => {
+    const [edited, ...untouched] = moved;
+    for (const { current } of moved) {
+      assert.ok(fs.readFileSync(current, 'utf8').startsWith('---\nname: '), `${current} is written in the subagent format`);
+    }
+    for (const { legacy } of untouched) {
+      assert.ok(!fs.existsSync(legacy), `the managed ${legacy} is retired`);
+    }
+    assert.strictEqual(fs.readFileSync(edited.legacy, 'utf8'), 'edited by hand', 'an edited managed copy stays');
+    assert.strictEqual(fs.readFileSync(ownLegacy, 'utf8'), '# mine', 'the person\'s own file at the old path stays');
+    assert.strictEqual(fs.readFileSync(ownCurrent, 'utf8'), '---\nname: mine\ndescription: mine\n---\n', 'the person\'s own subagent stays');
+    const recorded = readJson(statePath).operations.map(operation => operation.destinationPath);
+    assert.ok(recorded.some(destination => destination.startsWith(fromDir + path.sep)), 'the state records the new copies');
+    assert.ok(!recorded.some(destination => destination === edited.legacy), 'and no old copy any more');
+    assert.ok(!recorded.includes(ownCurrent), 'the person\'s subagent is never recorded as managed');
+  };
+
+  tally(test('an upgrade moves the managed agents from ~/.gemini/agents to config/agents and keeps the person\'s files (#1669)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'core', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const configAgents = path.join(geminiRoot, 'config', 'agents');
+      const legacyAgents = path.join(geminiRoot, 'agents');
+      const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
+      const moved = moveAgentsBack({ statePath, fromDir: configAgents, toDir: legacyAgents });
+      assert.ok(moved.length > 50, 'the core profile installs the agents');
+      fs.writeFileSync(moved[0].legacy, 'edited by hand');
+      const ownLegacy = path.join(legacyAgents, 'my-agent.md');
+      fs.writeFileSync(ownLegacy, '# mine');
+      const ownCurrent = path.join(configAgents, 'mine.md');
+      fs.writeFileSync(ownCurrent, '---\nname: mine\ndescription: mine\n---\n');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assertAgentsMoved({ statePath, moved, fromDir: configAgents, ownLegacy, ownCurrent });
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('an upgrade moves the managed agents from .agents/skills to .agents/agents in the project and keeps the person\'s files (#1669)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'antigravity', '--profile', 'core'];
+      const first = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const projectRoot = fs.realpathSync(projectDir);
+      const projectAgents = path.join(projectRoot, '.agents', 'agents');
+      const legacyAgents = path.join(projectRoot, '.agents', 'skills');
+      const statePath = path.join(projectRoot, '.agents', 'egc-install-state.json');
+      const moved = moveAgentsBack({ statePath, fromDir: projectAgents, toDir: legacyAgents });
+      assert.ok(moved.length > 50, 'the core profile installs the agents');
+      fs.writeFileSync(moved[0].legacy, 'edited by hand');
+      const ownLegacy = path.join(legacyAgents, 'my-agent.md');
+      fs.writeFileSync(ownLegacy, '# mine');
+      const ownCurrent = path.join(projectAgents, 'mine.md');
+      fs.writeFileSync(ownCurrent, '---\nname: mine\ndescription: mine\n---\n');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assertAgentsMoved({ statePath, moved, fromDir: projectAgents, ownLegacy, ownCurrent });
+      assert.ok(fs.existsSync(path.join(legacyAgents, 'tdd-workflow', 'SKILL.md')), 'the skills under .agents/skills stay');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  const moveCommandsBack = ({ statePath, fromDir, toDir }) => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const state = readJson(statePath);
+    const moved = [];
+    for (const operation of state.operations) {
+      if (operation.transform !== 'antigravity-command-skill' || !operation.destinationPath.startsWith(fromDir + path.sep)) continue;
+      const legacy = path.join(toDir, `${path.basename(path.dirname(operation.destinationPath))}.md`);
+      fs.mkdirSync(path.dirname(legacy), { recursive: true });
+      fs.copyFileSync(path.join(repoRoot, operation.sourceRelativePath), legacy);
+      fs.rmSync(path.dirname(operation.destinationPath), { recursive: true, force: true });
+      moved.push({ current: operation.destinationPath, legacy });
+      operation.destinationPath = legacy;
+      delete operation.transform;
+      delete operation.contentSha256;
+    }
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+    return moved;
+  };
+
+  tally(test('an upgrade moves the managed commands from ~/.gemini/commands to skills under config/skills and keeps the person\'s files (#1706)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'core', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const configSkills = path.join(geminiRoot, 'config', 'skills');
+      const legacyCommands = path.join(geminiRoot, 'commands');
+      const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
+      const moved = moveCommandsBack({ statePath, fromDir: configSkills, toDir: legacyCommands });
+      assert.ok(moved.length > 50, 'the core profile installs the commands');
+      fs.writeFileSync(moved[0].legacy, 'edited by hand');
+      const ownLegacy = path.join(legacyCommands, 'my-command.md');
+      fs.writeFileSync(ownLegacy, '# mine');
+      const ownCurrent = path.join(configSkills, 'mine', 'SKILL.md');
+      fs.mkdirSync(path.dirname(ownCurrent), { recursive: true });
+      fs.writeFileSync(ownCurrent, '---\nname: mine\ndescription: mine\n---\n');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assertAgentsMoved({ statePath, moved, fromDir: configSkills, ownLegacy, ownCurrent });
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('an upgrade moves the managed workflows from .agents/workflows to .agents/skills in the project and keeps the person\'s files (#1706)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'antigravity', '--profile', 'core'];
+      const first = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const projectRoot = fs.realpathSync(projectDir);
+      const projectSkills = path.join(projectRoot, '.agents', 'skills');
+      const legacyWorkflows = path.join(projectRoot, '.agents', 'workflows');
+      const statePath = path.join(projectRoot, '.agents', 'egc-install-state.json');
+      const moved = moveCommandsBack({ statePath, fromDir: projectSkills, toDir: legacyWorkflows });
+      assert.ok(moved.length > 50, 'the core profile installs the commands');
+      fs.writeFileSync(moved[0].legacy, 'edited by hand');
+      const ownLegacy = path.join(legacyWorkflows, 'my-workflow.md');
+      fs.writeFileSync(ownLegacy, '# mine');
+      const ownCurrent = path.join(projectSkills, 'mine', 'SKILL.md');
+      fs.mkdirSync(path.dirname(ownCurrent), { recursive: true });
+      fs.writeFileSync(ownCurrent, '---\nname: mine\ndescription: mine\n---\n');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assertAgentsMoved({ statePath, moved, fromDir: projectSkills, ownLegacy, ownCurrent });
+      assert.ok(fs.existsSync(path.join(projectSkills, 'tdd-workflow', 'SKILL.md')), 'the bundled skills stay');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('a skill the person keeps under config/skills with the name of an EGC command is never overwritten (#1706)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'core', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const own = path.join(homeDir, '.gemini', 'config', 'skills', 'plan', 'SKILL.md');
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, '# mine');
+
+      for (const pass of ['install', 'reinstall']) {
+        const result = run(args, { cwd: projectDir, homeDir, env });
+        assert.strictEqual(result.code, 0, `${pass}: ${result.stderr}`);
+        assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', `${pass}: the person's plan skill stays theirs`);
+      }
+      const recorded = readJson(path.join(homeDir, '.gemini', 'egc', 'install-state.json')).operations.map(operation => operation.destinationPath);
+      assert.ok(!recorded.includes(own), 'the person\'s skill is never recorded as managed');
+      assert.ok(recorded.includes(path.join(homeDir, '.gemini', 'config', 'skills', 'code-review', 'SKILL.md')), 'the other commands still land as skills');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('a subagent the person keeps under config/agents with the name of an EGC agent is never overwritten (#1669)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'core', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const configAgents = path.join(homeDir, '.gemini', 'config', 'agents');
+      const own = path.join(configAgents, 'architect.md');
+      fs.mkdirSync(configAgents, { recursive: true });
+      fs.writeFileSync(own, '# mine');
+
+      for (const pass of ['install', 'reinstall']) {
+        const result = run(args, { cwd: projectDir, homeDir, env });
+        assert.strictEqual(result.code, 0, `${pass}: ${result.stderr}`);
+        assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', `${pass}: the person's architect.md stays theirs`);
+      }
+      const recorded = readJson(path.join(homeDir, '.gemini', 'egc', 'install-state.json')).operations.map(operation => operation.destinationPath);
+      assert.ok(!recorded.includes(own), 'the person\'s subagent is never recorded as managed');
+      assert.ok(recorded.includes(path.join(configAgents, 'planner.md')), 'the other agents still land under config/agents');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  if (process.platform !== 'win32') {
+    tally(test('an upgrade removes the June 2026 links left under antigravity-cli/skills and keeps the person\'s link (#1789)', () => {
+      const homeDir = createTempDir('install-apply-home-');
+      const projectDir = createTempDir('install-apply-project-');
+      const outside = createTempDir('install-apply-outside-');
+
+      try {
+        const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+        const env = { EGC_INSTALL_DELEGATED: '1' };
+        const first = run(args, { cwd: projectDir, homeDir, env });
+        assert.strictEqual(first.code, 0, first.stderr);
+
+        const geminiRoot = path.join(homeDir, '.gemini');
+        const cliSkills = path.join(geminiRoot, 'antigravity-cli', 'skills');
+        const managed = path.join(geminiRoot, 'skills', 'egc', 'june-live');
+        fs.mkdirSync(managed, { recursive: true });
+        fs.writeFileSync(path.join(managed, 'SKILL.md'), 'old copy');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        const liveLink = path.join(cliSkills, 'june-live');
+        const goneLink = path.join(cliSkills, 'june-gone');
+        const ownLink = path.join(cliSkills, 'mine');
+        fs.symlinkSync(managed, liveLink, 'dir');
+        fs.symlinkSync(path.join(geminiRoot, 'skills', 'egc', 'june-gone'), goneLink, 'dir');
+        fs.symlinkSync(outside, ownLink, 'dir');
+
+        const dryRun = run([...args, '--dry-run'], { cwd: projectDir, homeDir });
+        assert.strictEqual(dryRun.code, 0, dryRun.stderr);
+        assert.ok(dryRun.stdout.includes('Legacy links to remove'), dryRun.stdout);
+        assert.ok(dryRun.stdout.includes(`- ${liveLink} (pointed at `), 'the live June link is listed');
+        assert.ok(dryRun.stdout.includes(`- ${goneLink} (pointed at `), 'the dangling June link is listed');
+        assert.ok(!dryRun.stdout.includes(ownLink), 'the person\'s link is not listed');
+        assert.ok(fs.lstatSync(liveLink).isSymbolicLink(), 'the dry run touches nothing');
+
+        const upgraded = run(args, { cwd: projectDir, homeDir, env });
+        assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+        assert.ok(upgraded.stdout.includes(`removed legacy link: ${liveLink}`), upgraded.stdout);
+        assert.ok(upgraded.stdout.includes(`removed legacy link: ${goneLink}`), upgraded.stdout);
+        assert.strictEqual(fs.lstatSync(liveLink, { throwIfNoEntry: false }), undefined, 'the live June link is gone');
+        assert.strictEqual(fs.lstatSync(goneLink, { throwIfNoEntry: false }), undefined, 'the dangling June link is gone');
+        assert.ok(fs.lstatSync(ownLink).isSymbolicLink(), 'the person\'s link stays');
+        assert.strictEqual(fs.readFileSync(path.join(managed, 'SKILL.md'), 'utf8'), 'old copy', 'what the link pointed at is untouched');
+      } finally {
+        cleanup(homeDir);
+        cleanup(projectDir);
+        cleanup(outside);
+      }
+    }));
+  }
+
+  if (process.platform !== 'win32') {
+    tally(test('the June link scan never follows a linked antigravity-cli or skills/egc folder (#1789)', () => {
+      const { findStrandedLegacyLinks } = require('../../scripts/lib/install/apply');
+      const homeDir = createTempDir('install-apply-home-');
+      const outside = createTempDir('install-apply-outside-');
+
+      try {
+        const root = path.join(homeDir, '.gemini');
+        const managed = path.join(root, 'skills', 'egc');
+        fs.mkdirSync(path.join(outside, 'skills'), { recursive: true });
+        fs.symlinkSync(path.join(managed, 'june'), path.join(outside, 'skills', 'june'), 'dir');
+        fs.mkdirSync(root, { recursive: true });
+        fs.symlinkSync(outside, path.join(root, 'antigravity-cli'), 'dir');
+        assert.deepStrictEqual(findStrandedLegacyLinks({ targetRoot: root, operations: [] }), [], 'a linked antigravity-cli is never scanned');
+
+        fs.unlinkSync(path.join(root, 'antigravity-cli'));
+        const cliSkills = path.join(root, 'antigravity-cli', 'skills');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        fs.symlinkSync(path.join(managed, 'june'), path.join(cliSkills, 'june'), 'dir');
+        fs.mkdirSync(path.join(root, 'skills'), { recursive: true });
+        fs.symlinkSync(outside, managed, 'dir');
+        assert.deepStrictEqual(findStrandedLegacyLinks({ targetRoot: root, operations: [] }), [], 'a link reached through a linked skills/egc is not EGC\'s');
+
+        fs.unlinkSync(managed);
+        fs.mkdirSync(managed, { recursive: true });
+        assert.deepStrictEqual(
+          findStrandedLegacyLinks({ targetRoot: root, operations: [] }).map(link => link.linkPath),
+          [path.join(cliSkills, 'june')],
+          'with real folders the June link is found'
+        );
+      } finally {
+        cleanup(homeDir);
+        cleanup(outside);
+      }
+    }));
+
+    tally(test('the June link scan finds a link into the real path of skills/egc when the target root sits behind an alias (#1789)', () => {
+      const { findStrandedLegacyLinks } = require('../../scripts/lib/install/apply');
+      const homeDir = createTempDir('install-apply-home-');
+      const aliasParent = createTempDir('install-apply-alias-');
+
+      try {
+        const realRoot = path.join(fs.realpathSync(homeDir), '.gemini');
+        fs.mkdirSync(path.join(realRoot, 'skills', 'egc', 'june'), { recursive: true });
+        const cliSkills = path.join(realRoot, 'antigravity-cli', 'skills');
+        fs.mkdirSync(cliSkills, { recursive: true });
+        fs.symlinkSync(path.join(realRoot, 'skills', 'egc', 'june'), path.join(cliSkills, 'june'), 'dir');
+        const alias = path.join(aliasParent, 'home');
+        fs.symlinkSync(homeDir, alias, 'dir');
+        const aliasRoot = path.join(alias, '.gemini');
+
+        assert.deepStrictEqual(
+          findStrandedLegacyLinks({ targetRoot: aliasRoot, operations: [] }).map(link => link.linkPath),
+          [path.join(aliasRoot, 'antigravity-cli', 'skills', 'june')],
+          'a June link spelled through the real path of the managed copy is found'
+        );
+      } finally {
+        cleanup(aliasParent);
+        cleanup(homeDir);
+      }
+    }));
+  }
+
+  tally(test('an upgrade retires a managed copy whose source changed since EGC wrote it, and keeps an edited one (#1789)', () => {
+    const crypto = require('crypto');
+    const sha256 = content => crypto.createHash('sha256').update(content).digest('hex');
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const ideSkills = path.join(geminiRoot, 'config', 'skills');
+      const cliSkills = path.join(geminiRoot, 'antigravity-cli', 'skills');
+      const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
+      const state = readJson(statePath);
+      const copies = state.operations.filter(operation => operation.kind === 'copy-file');
+      assert.ok(copies.length > 0, 'the install records file copies');
+      for (const operation of copies) {
+        assert.strictEqual(operation.contentSha256, sha256(fs.readFileSync(operation.destinationPath)), `${operation.destinationPath} records the hash of what EGC wrote`);
+      }
+
+      const [stale, edited] = fs.readdirSync(ideSkills).sort();
+      assert.ok(stale && edited, 'two skills to work with');
+      const staleContent = 'the SKILL.md an earlier release wrote, before its source changed';
+      for (const operation of state.operations) {
+        for (const skill of [stale, edited]) {
+          const skillDir = path.join(ideSkills, skill);
+          if (!operation.destinationPath.startsWith(skillDir + path.sep)) continue;
+          operation.destinationPath = path.join(cliSkills, skill, path.relative(skillDir, operation.destinationPath));
+          if (skill === stale && path.basename(operation.destinationPath) === 'SKILL.md') operation.contentSha256 = sha256(staleContent);
+        }
+      }
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      fs.mkdirSync(cliSkills, { recursive: true });
+      for (const skill of [stale, edited]) fs.renameSync(path.join(ideSkills, skill), path.join(cliSkills, skill));
+      fs.writeFileSync(path.join(cliSkills, stale, 'SKILL.md'), staleContent);
+      fs.writeFileSync(path.join(cliSkills, edited, 'SKILL.md'), 'edited by hand');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assert.ok(!fs.existsSync(path.join(cliSkills, stale, 'SKILL.md')), 'the stale managed copy is retired although it differs from the current source');
+      assert.strictEqual(fs.readFileSync(path.join(cliSkills, edited, 'SKILL.md'), 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      for (const skill of [stale, edited]) {
+        assert.ok(fs.existsSync(path.join(ideSkills, skill, 'SKILL.md')), `${skill} is written under config/skills`);
+      }
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
@@ -447,8 +935,10 @@ function runTests() {
 
       assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'rules', 'common-coding-style.md')));
       assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'rules', 'typescript-testing.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'workflows', 'plan.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'skills', 'architect.md')));
+      assert.ok(fs.readFileSync(path.join(projectDir, '.agents', 'skills', 'plan', 'SKILL.md'), 'utf8').startsWith('---\nname: plan\n'));
+      assert.ok(!fs.existsSync(path.join(projectDir, '.agents', 'workflows')));
+      assert.ok(fs.readFileSync(path.join(projectDir, '.agents', 'agents', 'architect.md'), 'utf8').startsWith('---\nname: architect\n'));
+      assert.ok(!fs.existsSync(path.join(projectDir, '.agents', 'skills', 'architect.md')));
 
       const statePath = path.join(projectDir, '.agents', 'egc-install-state.json');
       const state = readJson(statePath);
@@ -458,7 +948,7 @@ function runTests() {
       assert.deepStrictEqual(state.resolution.selectedModules, ['rules-core', 'agents-core', 'commands-core']);
       assert.ok(
         state.operations.some(operation => (
-          operation.destinationPath.endsWith(path.join('.agents', 'workflows', 'plan.md'))
+          operation.destinationPath.endsWith(path.join('.agents', 'skills', 'plan', 'SKILL.md'))
         )),
         'Should record manifest command file copy operation'
       );
@@ -712,9 +1202,9 @@ function runTests() {
       assert.strictEqual(fs.readFileSync(edited, 'utf8'), 'edited by hand', 'a retired file the person edited since stays');
       assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'tdd-workflow', 'SKILL.md')), 'the Antigravity CLI skills are written');
       assert.ok(fs.existsSync(path.join(geminiRoot, 'AGENTS.md')), 'AGENTS.md, which Antigravity reads, is written');
-      for (const kept of [path.join('rules', 'egc', 'common', 'coding-style.md'), path.join('agents', 'architect.md'), path.join('commands', 'plan.md')]) {
-        assert.ok(fs.existsSync(path.join(geminiRoot, kept)), `${kept} is still delivered until its family moves to the directory Antigravity reads`);
-      }
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'rules', 'common-coding-style.md')), 'the rules are written flat under config/rules');
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'agents', 'architect.md')), 'the agents are written under config/agents');
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'plan', 'SKILL.md')), 'the commands are written as skills under config/skills');
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
@@ -730,7 +1220,7 @@ function runTests() {
         const planned = run(['--target', 'egc', '--profile', 'minimal', '--dry-run', '--allow-undetected'], { cwd: projectDir, homeDir });
         assert.strictEqual(planned.code, 0, planned.stderr);
         const cliSkills = path.join(homeDir, '.gemini', 'config', 'skills');
-        const match = planned.stdout.split('\n').map(line => line.trim()).find(line => line.includes(cliSkills));
+        const match = planned.stdout.split('\n').map(line => line.trim()).find(line => line.startsWith('- skills/') && line.includes(cliSkills));
         assert.ok(match, 'the plan writes Antigravity CLI skills');
         const skill = path.relative(cliSkills, match.slice(match.indexOf(cliSkills))).split(path.sep)[0];
         // The June layout: the skill under the Antigravity CLI is a link into
@@ -779,7 +1269,7 @@ function runTests() {
       const chosen = planned.stdout.split('\n')
         .map(line => line.trim())
         .map(line => /^- (.+?) -> (.+)$/.exec(line))
-        .filter(match => match && match[2].includes(cliSkills + path.sep))
+        .filter(match => match && /^skills[\\/]/.test(match[1]) && match[2].includes(cliSkills + path.sep))
         .map(match => ({ sourceRelative: match[1], destination: match[2] }))
         .find(entry => entry.destination.split(path.sep).length > cliSkills.split(path.sep).length + 1);
       assert.ok(chosen, 'a skill with a directory of its own is planned');
@@ -867,13 +1357,15 @@ function runTests() {
 
       const geminiRoot = path.join(homeDir, '.gemini');
       // What Antigravity reads stays, and so do the families that still wait
-      // for their Antigravity directory (rules/egc, agents, commands); the
+      // for their Antigravity directory (commands); the
       // hooks/hooks.json only the retired Gemini CLI read is not written.
       assert.ok(fs.existsSync(path.join(geminiRoot, 'AGENTS.md')));
       assert.ok(fs.existsSync(path.join(geminiRoot, 'scripts', 'hooks', 'session-end.js')));
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')));
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'agents', 'architect.md')));
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'commands', 'plan.md')));
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'rules', 'common-coding-style.md')));
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'agents', 'architect.md')));
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'agents')));
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'plan', 'SKILL.md')));
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'commands')));
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'hooks', 'hooks.json')));
       assert.ok(fs.existsSync(path.join(geminiRoot, 'scripts', 'lib', 'session-manager.js')));
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'plugin.json')), 'the plugin manifest only the retired Gemini CLI read is not written');
@@ -1100,7 +1592,7 @@ function runTests() {
       assert.strictEqual(fs.readFileSync(userRulePath, 'utf8'), '# User custom rule\n');
       assert.strictEqual(fs.readFileSync(userSkillPath, 'utf8'), '# User custom skill\n');
       assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'tdd-workflow', 'SKILL.md')));
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')), 'the managed copy lands in its own namespace next to the person\'s rules');
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'rules', 'common-coding-style.md')), 'the managed copy lands flat under config/rules, away from the person\'s rules');
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'skills', 'egc')), 'no managed copy lands next to the person\'s skills');
     } finally {
       cleanup(homeDir);
@@ -1117,8 +1609,8 @@ function runTests() {
       assert.strictEqual(result.code, 0, result.stderr);
 
       assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'rules', 'common-coding-style.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'skills', 'architect.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'workflows', 'plan.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'agents', 'architect.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'skills', 'plan', 'SKILL.md')));
       assert.ok(fs.existsSync(path.join(projectDir, '.agents', 'skills', 'tdd-workflow', 'SKILL.md')));
 
       const state = readJson(path.join(projectDir, '.agents', 'egc-install-state.json'));

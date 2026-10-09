@@ -8,12 +8,22 @@ const os = require('os');
 const path = require('path');
 
 const {
+  ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM,
+  ANTIGRAVITY_COMMAND_SKILL_TRANSFORM,
+  ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
+  ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
+  toAntigravityAgentFrontmatter,
+  toAntigravityCommandSkill,
+  toAntigravityRule,
   toClaudeAgentFrontmatter,
   transformContent,
   toOpenCodeAgentFrontmatter,
 } = require('../../scripts/lib/install/copy-transforms');
+const { planAntigravityRuleFiles } = require('../../scripts/lib/antigravity-rules');
+const { planAntigravityAgentFiles } = require('../../scripts/lib/antigravity-agents');
+const { planAntigravityCommandFiles } = require('../../scripts/lib/antigravity-commands');
 
 function test(name, fn) {
   try {
@@ -42,6 +52,22 @@ const AGENT = [
   'tools: ["not", "frontmatter"]',
   '',
 ].join('\n');
+
+const ANTIGRAVITY_TOOLS = new Set(['view_file', 'grep_search', 'run_command', 'write_to_file', 'replace_file_content', 'multi_replace_file_content']);
+
+function assertAntigravityAgent(repoRoot, agent) {
+  assert.strictEqual(agent.transform, ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM, agent.sourceRelativePath);
+  const text = plannedFileContent(path.join(repoRoot, agent.sourceRelativePath), agent.transform).toString('utf8');
+  const frontmatter = text.split('\n---\n')[0];
+  assert.ok(/^---\nname: \S/.test(frontmatter), `${agent.sourceRelativePath}: name`);
+  assert.ok(/\ndescription: \S/.test(frontmatter), `${agent.sourceRelativePath}: description`);
+  for (const [, tool] of frontmatter.matchAll(/\n {2}- (\S+)/g)) {
+    assert.ok(ANTIGRAVITY_TOOLS.has(tool), `${agent.sourceRelativePath}: tool ${tool}`);
+  }
+  const model = /\nmodel: (\S+)/.exec(frontmatter)?.[1];
+  assert.ok(model === undefined || ['inherit', 'flash', 'pro'].includes(model), `${agent.sourceRelativePath}: model ${model}`);
+  assert.ok(!/\n(stack|color):/.test(frontmatter), `${agent.sourceRelativePath}: no stack or color`);
+}
 
 function runTests() {
   console.log('\n=== Testing copy-transforms.js ===\n');
@@ -121,10 +147,256 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('an Antigravity rule with paths becomes a glob rule over them, described by its heading (#1668)', () => {
+    const source = '---\npaths:\n  - "**/*.go"\n  - "**/go.mod"\n---\n# Go Hooks\n\nbody\n';
+    assert.strictEqual(
+      toAntigravityRule(source),
+      '---\ntrigger: glob\ndescription: "Go Hooks"\nglobs: "**/*.go, **/go.mod"\n---\n# Go Hooks\n\nbody\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('---\npaths: ["*.ts", "*.tsx"]\n---\n# TS\n'),
+      '---\ntrigger: glob\ndescription: "TS"\nglobs: "*.ts, *.tsx"\n---\n# TS\n'
+    );
+  })) passed++; else failed++;
+
+  if (test('an Antigravity rule without paths is always_on, and a manual rule never loads by itself (#1668)', () => {
+    assert.strictEqual(
+      toAntigravityRule('# Coding Style\n\nx\n'),
+      '---\ntrigger: always_on\ndescription: "Coding Style"\n---\n# Coding Style\n\nx\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('---\npaths:\n  - "**/*.go"\n---\n# 编码风格\n', { manual: true }),
+      '---\ntrigger: manual\ndescription: "编码风格"\n---\n# 编码风格\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('\uFEFF# T\r\nx\r\n'),
+      '---\ntrigger: always_on\ndescription: "T"\n---\n# T\nx\n',
+      'a byte order mark and CRLF line endings are handled'
+    );
+    assert.strictEqual(
+      toAntigravityRule('no heading\n'),
+      '---\ntrigger: always_on\n---\nno heading\n',
+      'a rule without a heading has no description'
+    );
+  })) passed++; else failed++;
+
+  if (test('an Antigravity rule links to the flat names of the rules it extends (#1668)', () => {
+    const source = '# Go\n> extends [common/hooks.md](../common/hooks.md), see [git](./git-workflow.md), [perf](performance.md), [site](https://example.com/a.md)\n';
+    assert.strictEqual(
+      toAntigravityRule(source, { directory: 'web' }),
+      '---\ntrigger: always_on\ndescription: "Go"\n---\n# Go\n> extends [common/hooks.md](common-hooks.md), see [git](web-git-workflow.md), [perf](web-performance.md), [site](https://example.com/a.md)\n'
+    );
+  })) passed++; else failed++;
+
+  if (test('an Antigravity rule resolves links from its own directory, at any depth (#1668)', () => {
+    assert.strictEqual(
+      toAntigravityRule('# A\n[b](b.md) [c](../common/c.md) [up](../../x.md) [abs](/etc/y.md)\n', { directory: 'zh/sub' }),
+      '---\ntrigger: always_on\ndescription: "A"\n---\n# A\n[b](zh-sub-b.md) [c](zh-common-c.md) [up](x.md) [abs](/etc/y.md)\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('# A\n[b](b.md)\n', { directory: '' }),
+      '---\ntrigger: always_on\ndescription: "A"\n---\n# A\n[b](b.md)\n',
+      'a rule at the top of rules/ links to the top-level flat name'
+    );
+    assert.strictEqual(
+      toAntigravityRule('# A\n[b](../../../out.md)\n', { directory: 'zh' }),
+      '---\ntrigger: always_on\ndescription: "A"\n---\n# A\n[b](../../../out.md)\n',
+      'a link that leaves rules/ is kept as it is'
+    );
+  })) passed++; else failed++;
+
+  if (test('an Antigravity glob rule keeps a quoted comma inside a glob and expands its braces (#1668)', () => {
+    assert.strictEqual(
+      toAntigravityRule('---\npaths: ["**/*.{js,ts}", \'src/**\']\n---\n# X\n'),
+      '---\ntrigger: glob\ndescription: "X"\nglobs: "**/*.js, **/*.ts, src/**"\n---\n# X\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('---\npaths:\n  - "**/*.{c,h}{,pp}"\n---\n# C\n'),
+      '---\ntrigger: glob\ndescription: "C"\nglobs: "**/*.c, **/*.cpp, **/*.h, **/*.hpp"\n---\n# C\n'
+    );
+  })) passed++; else failed++;
+
+  if (test('no rule file is planned without a source root, so nothing depends on the working directory (#1668)', () => {
+    assert.deepStrictEqual(planAntigravityRuleFiles(undefined, 'rules'), []);
+    assert.deepStrictEqual(planAntigravityRuleFiles('', 'rules'), []);
+  })) passed++; else failed++;
+
+  if (test('every shipped rule reaches Antigravity with a valid trigger and under its 24,000-byte limit (#1668)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const rules = planAntigravityRuleFiles(repoRoot, 'rules');
+    assert.ok(rules.length > 100, 'the catalog rules are planned');
+    assert.strictEqual(new Set(rules.map(rule => rule.fileName)).size, rules.length, 'no two rules share a file name');
+    assert.ok(!rules.some(rule => rule.fileName.toLowerCase() === 'readme.md'), 'the rules README is not a rule');
+    const names = new Set(rules.map(rule => rule.fileName));
+    for (const rule of rules) {
+      const content = plannedFileContent(path.join(repoRoot, rule.sourceRelativePath), rule.transform);
+      const text = content.toString('utf8');
+      const trigger = /^---\ntrigger: (\w+)\n/.exec(text)?.[1];
+      const zh = rule.sourceRelativePath.startsWith('rules/zh/');
+      assert.strictEqual(rule.transform, zh ? ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM : ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM, rule.sourceRelativePath);
+      assert.ok(['always_on', 'glob', 'manual'].includes(trigger), `${rule.sourceRelativePath}: trigger ${trigger}`);
+      if (trigger === 'glob') {
+        assert.ok(/\nglobs: "[^"]+"\n/.test(text), `${rule.sourceRelativePath}: a glob rule names its globs`);
+      }
+      assert.ok(content.length <= 24000, `${rule.sourceRelativePath}: ${content.length} bytes`);
+      for (const [, target] of text.matchAll(/\]\(([^)#:]+\.md)\)/g)) {
+        assert.ok(names.has(target), `${rule.sourceRelativePath}: the link to ${target} reaches a planned rule`);
+      }
+    }
+  })) passed++; else failed++;
+
+  const agentResults = runAntigravityAgentTests();
+  passed += agentResults.passed;
+  failed += agentResults.failed;
+  const commandResults = runAntigravityCommandTests();
+  passed += commandResults.passed;
+  failed += commandResults.failed;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failed > 0) {
     process.exit(1);
   }
+}
+
+function runAntigravityAgentTests() {
+  const results = [];
+  results.push(test('an Antigravity subagent names only the tools Antigravity maps, with a model it accepts (#1669)', () => {
+    assert.strictEqual(
+      toAntigravityAgentFrontmatter('---\nname: architect\ndescription: Designs.\ntools: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "WebFetch", "mcp__context7__query-docs"]\nmodel: gemini-3.1-pro\ncolor: teal\nstack: ["*"]\n---\n\nBody\n'),
+      '---\nname: architect\ndescription: Designs.\ntools:\n  - view_file\n  - grep_search\n  - run_command\n  - replace_file_content\n  - write_to_file\nmodel: pro\n---\n\nBody\n'
+    );
+    assert.strictEqual(
+      toAntigravityAgentFrontmatter('---\nname: a\ndescription: d\ntools:\n  - Read\n  - MultiEdit\nmodel: gemini-3.6-flash\n---\nx\n'),
+      '---\nname: a\ndescription: d\ntools:\n  - view_file\n  - multi_replace_file_content\nmodel: flash\n---\nx\n',
+      'a block list and a flash model'
+    );
+    assert.strictEqual(
+      toAntigravityAgentFrontmatter('---\nname: a\ndescription: d\ntools: ["Glob"]\nmodel: sonnet\n---\nx\n'),
+      '---\nname: a\ndescription: d\n---\nx\n',
+      'no mapped tool leaves the default, and a model Antigravity does not name inherits'
+    );
+    assert.strictEqual(
+      toAntigravityAgentFrontmatter('---\nname: a\ndescription: d\ntools: [Read,\n  Grep,\n  Bash]\nmodel: pro\n---\nx\n'),
+      '---\nname: a\ndescription: d\ntools:\n  - view_file\n  - grep_search\n  - run_command\nmodel: pro\n---\nx\n',
+      'a flow list over several lines is read whole'
+    );
+    assert.strictEqual(
+      toAntigravityAgentFrontmatter('---\nname: a\ndescription: d\ntools: [Read, Grep] # read only\nmodel: gemini-3.1-pro # main\n---\nx\n'),
+      '---\nname: a\ndescription: d\ntools:\n  - view_file\n  - grep_search\nmodel: pro\n---\nx\n',
+      'an inline comment does not hide the tools or the model'
+    );
+    assert.strictEqual(toAntigravityAgentFrontmatter('# no frontmatter\n'), '# no frontmatter\n');
+  }));
+
+  results.push(test('two agent sources that flatten to the same name are refused instead of overwriting each other (#1669)', () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-transforms-agents-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'agents', 'foo'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'agents', 'foo', 'bar.md'), '---\nname: a\n---\n');
+      fs.writeFileSync(path.join(repoRoot, 'agents', 'foo-bar.md'), '---\nname: b\n---\n');
+      assert.throws(() => planAntigravityAgentFiles(repoRoot, 'agents'), /would both install as foo-bar\.md/);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  }));
+
+  results.push(test('every shipped agent reaches Antigravity with a name, a description, mapped tools and a valid model (#1669)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const agents = planAntigravityAgentFiles(repoRoot, 'agents');
+    assert.ok(agents.length > 50, 'the catalog agents are planned');
+    assert.strictEqual(new Set(agents.map(agent => agent.fileName)).size, agents.length, 'no two agents share a file name');
+    for (const agent of agents) {
+      assertAntigravityAgent(repoRoot, agent);
+    }
+  }));
+
+  return { passed: results.filter(Boolean).length, failed: results.filter(result => !result).length };
+}
+
+function runAntigravityCommandTests() {
+  const results = [];
+  results.push(test('an Antigravity command skill keeps the slash name and a quoted description, and drops the Claude-only keys (#1706)', () => {
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: Full audit: scores every dimension.\nargument-hint: [--focus <dimension>]\nagent: reviewer\nsubtask: true\n---\n\n# Audit\n\n**Input**: $ARGUMENTS\n', { name: 'engineering-audit' }),
+      '---\nname: engineering-audit\ndescription: "Full audit: scores every dimension."\n---\n\n# Audit\n\n**Input**: $ARGUMENTS\n'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: "Run: the plan"\nname: other\n---\nbody\n', { name: 'plan' }),
+      '---\nname: plan\ndescription: "Run: the plan"\n---\nbody\n',
+      'the slash name follows the file, and a quoted description is not quoted twice'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('\uFEFF# Title\r\nbody\r\n', { name: 'x' }),
+      '---\nname: x\ndescription: "Title"\n---\n# Title\nbody\n',
+      'a command without frontmatter is described by its first line'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: |\n  First line.\n  Second line.\nagent: x\n---\nbody\n', { name: 'a' }),
+      '---\nname: a\ndescription: "First line.\\nSecond line."\n---\nbody\n',
+      'a literal block description is read whole'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: >-\n  Folded\n  text.\n---\nbody\n', { name: 'a' }),
+      '---\nname: a\ndescription: "Folded text."\n---\nbody\n',
+      'a folded block description is read whole'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: |\n  Run:\n    npm test\n---\nbody\n', { name: 'a' }),
+      '---\nname: a\ndescription: "Run:\\n  npm test"\n---\nbody\n',
+      'a literal block keeps the indentation beyond the common one'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: >\n  First.\n\n  Second.\n---\nbody\n', { name: 'a' }),
+      '---\nname: a\ndescription: "First.\\nSecond."\n---\nbody\n',
+      'a blank line in a folded block keeps a line break'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: "Say \\"hi\\""\n---\nx\n', { name: 'a' }),
+      '---\nname: a\ndescription: "Say \\"hi\\""\n---\nx\n',
+      'double-quoted escapes are decoded before the description is written again'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill("---\ndescription: 'It''s here'\n---\nx\n", { name: 'a' }),
+      '---\nname: a\ndescription: "It\'s here"\n---\nx\n',
+      'a single-quoted description keeps its apostrophe'
+    );
+  }));
+
+  results.push(test('a nested command is named after the same flat name as its skill directory (#1706)', () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-transforms-commands-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'commands', 'foo'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'foo', 'bar.md'), '---\ndescription: d\n---\nx\n');
+      const [command] = planAntigravityCommandFiles(repoRoot, 'commands');
+      assert.strictEqual(command.fileName, 'foo-bar/SKILL.md');
+      const text = plannedFileContent(path.join(repoRoot, command.sourceRelativePath), command.transform).toString('utf8');
+      assert.ok(text.startsWith('---\nname: foo-bar\n'), text);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  }));
+
+  results.push(test('every shipped command becomes an Antigravity skill named after its file, with a description (#1706)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const commands = planAntigravityCommandFiles(repoRoot, 'commands');
+    const listCommands = (directory, prefix = '') => fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+      if (entry.isDirectory()) return listCommands(path.join(directory, entry.name), `${prefix}${entry.name}-`);
+      return entry.isFile() && entry.name.endsWith('.md') && entry.name.toLowerCase() !== 'readme.md' ? [`${prefix}${entry.name.slice(0, -3)}`] : [];
+    });
+    const catalog = listCommands(path.join(repoRoot, 'commands'));
+    assert.deepStrictEqual(commands.map(command => command.fileName).sort(), catalog.map(name => `${name}/SKILL.md`).sort());
+    for (const command of commands) {
+      assert.strictEqual(command.transform, ANTIGRAVITY_COMMAND_SKILL_TRANSFORM);
+      const name = path.posix.dirname(command.fileName);
+      const text = plannedFileContent(path.join(repoRoot, command.sourceRelativePath), command.transform).toString('utf8');
+      const match = /^---\nname: ([^\n]+)\ndescription: ("[^\n]*")\n---\n/.exec(text);
+      assert.ok(match, `${command.sourceRelativePath}: skill frontmatter`);
+      assert.strictEqual(match[1], name, `${command.sourceRelativePath}: name`);
+      assert.ok(JSON.parse(match[2]).length > 0, `${command.sourceRelativePath}: description`);
+    }
+  }));
+
+  return { passed: results.filter(Boolean).length, failed: results.filter(result => !result).length };
 }
 
 if (require.main === module) {

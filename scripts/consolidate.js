@@ -13,7 +13,7 @@ const {
 } = require('./lib/state-consolidate');
 const { isEncryptedBuffer, decryptStateBuffer, encryptStateBuffer } = require('./lib/state-crypto');
 const { withStateFileLockSync } = require('./lib/state-snapshot');
-const { getStateDir, detectBranch, resolveStateRead, resolveStateWrite } = require('./lib/branch-state');
+const { getStateDir, resolveHeadState, resolveStateRead, resolveStateWrite } = require('./lib/branch-state');
 const { loadOrCreateIntegrityKey, writeHmac } = require('./lib/state-integrity');
 
 function showHelp(exitCode = 0) {
@@ -140,13 +140,13 @@ function main() {
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
     const project = path.resolve(options.project || process.cwd());
     const stateDir = getStateDir(homeDir);
-    const branch = detectBranch(project);
-    const readPath = resolveStateRead(stateDir, project, branch).filePath;
+    const { branch, detachedCommit } = resolveHeadState(project);
+    const readPath = resolveStateRead(stateDir, project, branch, detachedCommit).filePath;
     // Same resolveStateWrite() call the MCP server's update_state and the
     // hook-side writers in state-snapshot.js use, so this locks and rewrites
     // the exact file a concurrent update_state would -- not the flat legacy
-    // path, which for a git project it never touches.
-    const stateFile = resolveStateWrite(stateDir, project, branch);
+    // path, which for a git project (branch or detached) it never touches.
+    const stateFile = resolveStateWrite(stateDir, project, branch, detachedCommit);
     const threshold = resolveThreshold(options);
 
     const report = {

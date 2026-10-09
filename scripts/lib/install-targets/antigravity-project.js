@@ -3,7 +3,6 @@ const path = require('node:path');
 const {
   createFlatRuleOperations,
   createInstallTargetAdapter,
-  createManagedScaffoldOperation,
   createRemappedOperation,
   normalizeModulesInput,
   normalizeRelativePath,
@@ -24,6 +23,9 @@ const {
 } = require('../antigravity-settings-hooks');
 const { createAntigravityGuardianOperations } = require('../antigravity-guardian-operations');
 const { resolveProjectHooksJsonPath } = require('../antigravity-guardian-hooks');
+const { planAntigravityCopyOperations, readRecordedDestinations } = require('../antigravity-rules');
+const { isAgentSource, planAntigravityAgentFiles } = require('../antigravity-agents');
+const { dropCommandsShadowedBySkills, isCommandSource, planAntigravityCommandFiles } = require('../antigravity-commands');
 
 const SUPPORTED_SOURCE_PREFIXES = ['rules', 'commands', 'agents', 'skills', '.agents', 'AGENTS.md'];
 const UTILS_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
@@ -130,6 +132,7 @@ module.exports = createInstallTargetAdapter({
       homeDir,
     };
     const targetRoot = adapter.resolveRoot(planningInput);
+    const recordedDestinations = readRecordedDestinations(adapter.getInstallStatePath(planningInput));
 
     const moduleOperations = modules.flatMap(module => {
       const paths = Array.isArray(module.paths) ? module.paths : [];
@@ -145,26 +148,26 @@ module.exports = createInstallTargetAdapter({
             });
           }
 
-          if (sourceRelativePath === 'commands') {
-            return [
-              createManagedScaffoldOperation(
-                module.id,
-                sourceRelativePath,
-                path.join(targetRoot, 'workflows'),
-                'preserve-relative-path'
-              ),
-            ];
+          if (isCommandSource(sourceRelativePath)) {
+            return planAntigravityCopyOperations({
+              adapter,
+              moduleId: module.id,
+              files: planAntigravityCommandFiles(repoRoot, sourceRelativePath),
+              destinationDir: path.join(targetRoot, 'skills'),
+              repoRoot: repoRoot || '',
+              recordedDestinations,
+            });
           }
 
-          if (sourceRelativePath === 'agents') {
-            return [
-              createManagedScaffoldOperation(
-                module.id,
-                sourceRelativePath,
-                path.join(targetRoot, 'skills'),
-                'preserve-relative-path'
-              ),
-            ];
+          if (isAgentSource(sourceRelativePath)) {
+            return planAntigravityCopyOperations({
+              adapter,
+              moduleId: module.id,
+              files: planAntigravityAgentFiles(repoRoot, sourceRelativePath),
+              destinationDir: path.join(targetRoot, 'agents'),
+              repoRoot: repoRoot || '',
+              recordedDestinations,
+            });
           }
 
           // AGY discovers project skills at .agent/skills/<name>/ (flat);
@@ -178,7 +181,7 @@ module.exports = createInstallTargetAdapter({
     // fact-forcing gate, even when no content modules are selected,
     // mirroring Claude Code's always-on hook registration.
     return [
-      ...moduleOperations,
+      ...dropCommandsShadowedBySkills(moduleOperations),
       ...createGateGuardOperations(adapter, targetRoot, projectRoot),
     ];
   },

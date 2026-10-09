@@ -312,9 +312,9 @@ function runTests() {
       assert.ok(plan.warnings.some(warning => warning.includes('files may be overwritten')));
       assert.ok(plan.warnings.some(warning => warning.includes("rules/missing-lang/ does not exist")));
       assert.ok(plan.warnings.some(warning => warning.includes("Invalid language name '../bad'")));
-      assert.ok(operationFor(plan, path.join('custom-rules', 'common', 'coding-style.md')));
-      assert.ok(operationFor(plan, path.join('custom-rules', 'common', 'nested', 'shared.md')));
-      assert.ok(operationFor(plan, path.join('custom-rules', 'typescript', 'testing.md')));
+      assert.ok(operationFor(plan, path.join('custom-rules', 'common-coding-style.md')));
+      assert.ok(operationFor(plan, path.join('custom-rules', 'common-nested-shared.md')));
+      assert.ok(operationFor(plan, path.join('custom-rules', 'typescript-testing.md')));
       assert.ok(!plan.operations.some(operation => operation.sourceRelativePath.includes('node_modules')));
       assert.ok(!plan.operations.some(operation => operation.sourceRelativePath.includes('.git')));
       assert.deepStrictEqual(plan.statePreview.request.legacyLanguages, ['typescript', 'missing-lang', '../bad']);
@@ -328,7 +328,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('plans Gemini legacy rules under the default EGC-managed rules directory', () => {
+  if (test('plans Gemini legacy rules flat under config/rules, where Antigravity reads them (#1668)', () => {
     const sourceRoot = createTempDir('install-executor-source-');
     const homeDir = createTempDir('install-executor-home-');
     const projectRoot = createTempDir('install-executor-project-');
@@ -344,12 +344,41 @@ function runTests() {
         languages: ['typescript'],
       });
 
-      const managedRulesDir = path.join(homeDir, '.gemini', 'rules', 'egc');
-      assert.strictEqual(plan.installRoot, managedRulesDir);
-      assert.ok(operationFor(plan, path.join('.gemini', 'rules', 'egc', 'common', 'coding-style.md')));
-      assert.ok(operationFor(plan, path.join('.gemini', 'rules', 'egc', 'typescript', 'testing.md')));
-      assert.ok(!operationFor(plan, path.join('.gemini', 'rules', 'common', 'coding-style.md')));
+      assert.strictEqual(plan.installRoot, path.join(homeDir, '.gemini', 'config', 'rules'));
+      assert.strictEqual(operationFor(plan, path.join('.gemini', 'config', 'rules', 'common-coding-style.md'))?.transform, 'antigravity-rule-frontmatter');
+      assert.ok(operationFor(plan, path.join('.gemini', 'config', 'rules', 'common-nested-shared.md')));
+      assert.ok(operationFor(plan, path.join('.gemini', 'config', 'rules', 'typescript-testing.md')));
+      assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(homeDir, '.gemini', 'rules') + path.sep)));
       assert.ok(!plan.warnings.some(warning => warning.includes('files may be overwritten')));
+    } finally {
+      cleanup(sourceRoot);
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
+  if (test('a legacy Gemini plan never overwrites a rule the person keeps under config/rules (#1668)', () => {
+    const sourceRoot = createTempDir('install-executor-source-');
+    const homeDir = createTempDir('install-executor-home-');
+    const projectRoot = createTempDir('install-executor-project-');
+    try {
+      writeLegacySourceFixture(sourceRoot);
+      const own = path.join(homeDir, '.gemini', 'config', 'rules', 'common-coding-style.md');
+      writeFile(homeDir, path.join('.gemini', 'config', 'rules', 'common-coding-style.md'), '# mine\n');
+
+      const plan = createLegacyInstallPlan({ sourceRoot, homeDir, projectRoot, target: 'egc', languages: [] });
+      assert.ok(!plan.operations.some(operation => operation.destinationPath === own), 'the person\'s rule is not planned');
+      assert.ok(operationFor(plan, path.join('.gemini', 'config', 'rules', 'common-nested-shared.md')), 'the other rules are planned');
+
+      const statePath = path.join(homeDir, '.gemini', 'egc', 'install-state.json');
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      const recorded = createLegacyInstallPlan({ sourceRoot, homeDir, projectRoot, target: 'egc', languages: [] }).statePreview;
+      recorded.operations.push({ ...recorded.operations[0], destinationPath: own });
+      fs.writeFileSync(statePath, JSON.stringify(recorded, null, 2));
+      assert.ok(
+        createLegacyInstallPlan({ sourceRoot, homeDir, projectRoot, target: 'egc', languages: [] }).operations.some(operation => operation.destinationPath === own),
+        'a rule EGC recorded is planned again'
+      );
     } finally {
       cleanup(sourceRoot);
       cleanup(homeDir);
@@ -438,8 +467,10 @@ function runTests() {
       assert.ok(plan.warnings.some(warning => warning.includes("Invalid language name 'bad/name'")));
       assert.ok(operationFor(plan, path.join('.agents', 'rules', 'common-coding-style.md')));
       assert.ok(operationFor(plan, path.join('.agents', 'rules', 'typescript-testing.md')));
-      assert.ok(operationFor(plan, path.join('.agents', 'workflows', 'plan.md')));
-      assert.ok(operationFor(plan, path.join('.agents', 'skills', 'architect.md')));
+      assert.strictEqual(operationFor(plan, path.join('.agents', 'skills', 'plan', 'SKILL.md'))?.transform, 'antigravity-command-skill');
+      assert.ok(!operationFor(plan, path.join('.agents', 'workflows', 'plan.md')));
+      assert.strictEqual(operationFor(plan, path.join('.agents', 'agents', 'architect.md'))?.transform, 'antigravity-agent-frontmatter');
+      assert.ok(!operationFor(plan, path.join('.agents', 'skills', 'architect.md')));
       assert.ok(operationFor(plan, path.join('.agents', 'skills', 'demo', 'SKILL.md')));
       assert.strictEqual(plan.statePreview.target.id, 'antigravity-project');
     } finally {
@@ -480,12 +511,12 @@ function runTests() {
       assert.ok(!normalizedSources.some(source => source.includes('node_modules')));
       assert.ok(!normalizedSources.some(source => source.includes('.git')));
       // The layout only the retired Gemini CLI read (plugin.json at the
-      // root, skills/egc) is not planned; rules keep the managed rules/egc
-      // namespace and the Antigravity CLI skills are planned.
+      // root, skills/egc) is not planned; rules land flat under config/rules
+      // and the Antigravity CLI skills are planned.
       assert.ok(!plan.operations.some(operation => operation.destinationPath === path.join(homeDir, '.gemini', 'plugin.json')));
       assert.ok(plan.operations.some(operation => (
-        operation.sourceRelativePath === path.join('rules', 'common', 'coding-style.md')
-        && operation.destinationPath === path.join(homeDir, '.gemini', 'rules', 'egc', 'common', 'coding-style.md')
+        operation.sourceRelativePath === 'rules/common/coding-style.md'
+        && operation.destinationPath === path.join(homeDir, '.gemini', 'config', 'rules', 'common-coding-style.md')
       )));
       assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(homeDir, '.gemini', 'skills') + path.sep)));
       assert.ok(plan.operations.some(operation => (
@@ -600,7 +631,7 @@ function runTests() {
       const applied = applyInstallPlan(plan);
 
       assert.strictEqual(applied.applied, true);
-      assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'rules', 'egc', 'common', 'coding-style.md')));
+      assert.ok(fs.readFileSync(path.join(homeDir, '.gemini', 'config', 'rules', 'common-coding-style.md'), 'utf8').startsWith('---\ntrigger: always_on\n'));
       assert.ok(!fs.existsSync(path.join(homeDir, '.gemini', 'skills')), 'the skills/egc namespace of the retired Gemini CLI is not written');
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'config', 'skills', 'demo', 'SKILL.md')));
       assert.ok(fs.existsSync(path.join(homeDir, '.gemini', 'src', 'app.js')));

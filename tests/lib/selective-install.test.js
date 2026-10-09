@@ -578,7 +578,7 @@ function runTests() {
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'skills', 'egc')),
         'The skills/egc namespace of the retired Gemini CLI is not written');
       // Core profile modules should be installed
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'rules', 'common-coding-style.md')),
         'Should install core rules');
 
       // Install state should record include/exclude
@@ -618,7 +618,7 @@ function runTests() {
         'Should not install orchestration skills');
       // Developer profile base modules should be installed, skills where the
       // Antigravity CLI reads them; nothing under the retired skills/egc
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'rules', 'common-coding-style.md')),
         'Should install core rules');
       assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'tdd-workflow', 'SKILL.md')),
         'Should install workflow skills under config/skills');
@@ -660,7 +660,7 @@ function runTests() {
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'skills', 'egc')),
         'The skills/egc namespace of the retired Gemini CLI is not written');
       // A skills component does not drag the rules along
-      assert.ok(!fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'config', 'rules', 'common-coding-style.md')),
         'Should not install rules-core for a skills component');
 
       const statePath = path.join(geminiRoot, 'egc', 'install-state.json');

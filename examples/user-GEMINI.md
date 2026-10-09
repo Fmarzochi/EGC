@@ -41,7 +41,7 @@ Detailed guidelines are in `~/.gemini/rules/`:
 
 ## Available Agents
 
-Located in `~/.gemini/agents/`:
+Located in `~/.gemini/config/agents/`:
 
 | Agent | Purpose |
 |-------|---------|
