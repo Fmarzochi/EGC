@@ -22,12 +22,11 @@ process.env.EGC_GUARDIAN_CLI = cliPath;
 // A blocked command makes the CLI write an audit entry (C49): HOME and
 // USERPROFILE are both pinned to a temp dir for this whole process so that
 // write never lands in the real ~/.egc/audit.log -- os.homedir() ignores
-// HOME on Windows and reads USERPROFILE instead.
-{
-  const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-line-variables-home-'));
-  process.env.HOME = isolatedHome;
-  process.env.USERPROFILE = isolatedHome;
-}
+// HOME on Windows and reads USERPROFILE instead. Removed at the end
+// alongside cwd below: every run() call here is synchronous.
+const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-line-variables-home-'));
+process.env.HOME = isolatedHome;
+process.env.USERPROFILE = isolatedHome;
 const { run } = require('../../scripts/hooks/pre-bash-guardian-validate');
 
 let passed = 0;
@@ -125,6 +124,7 @@ test('a variable set to an ordinary file passes as before', () => {
 });
 
 fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+fs.rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 console.log(`\nPassed: ${passed}`);
 console.log(`Failed: ${failed}`);
 process.exitCode = failed > 0 ? 1 : 0;

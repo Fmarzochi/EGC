@@ -299,6 +299,16 @@ record(test('the command-batch CLI judges an entry in every directory it can run
 
 record(test('the Bash hook judges git in the directory a cd before it leaves the line in', () => {
   process.env.EGC_GUARDIAN_CLI = cli;
+  // callGuardianVerdict spawns the real CLI inheriting process.env as is:
+  // every blocked() call below denies a command, and the CLI now writes
+  // that denial to the audit log (C49). Pinning HOME/USERPROFILE only on
+  // the earlier spawnSync calls in this file left this run()-based path
+  // writing into the real ~/.egc/audit.log, the pollution this PR exists
+  // to avoid.
+  const savedHome = process.env.HOME;
+  const savedUserProfile = process.env.USERPROFILE;
+  process.env.HOME = root;
+  process.env.USERPROFILE = root;
   const { run } = require(path.join(__dirname, '..', 'scripts', 'hooks', 'pre-bash-guardian-validate'));
   const blocked = command => run({ tool_name: 'Bash', tool_input: { command }, cwd: root }).exitCode === 2;
   fs.writeFileSync(at('plain', 's.sh'), 'git status\n');
@@ -321,6 +331,8 @@ record(test('the Bash hook judges git in the directory a cd before it leaves the
   for (const command of ['cd work && git status', 'cd plain && git status', 'cd $EGC_UNSET_DIR && git status']) {
     assert.ok(!blocked(command), command);
   }
+  if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome;
+  if (savedUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = savedUserProfile;
 }));
 
 fs.rmSync(root, { recursive: true, force: true });

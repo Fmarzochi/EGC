@@ -112,19 +112,19 @@ function runPluginHarness(pluginPath, toolEvent) {
     process.stdout.write(JSON.stringify(result));
   `;
   fs.writeFileSync(harnessPath, harnessSource);
+  // A denied command makes the CLI write an audit entry (C49): HOME and
+  // USERPROFILE are both pinned to a temp dir so that write never lands in
+  // the real ~/.egc/audit.log -- os.homedir() ignores HOME on Windows and
+  // reads USERPROFILE instead. Tracked in tempRoots like every other temp
+  // dir this file creates, so cleanupTempRoots() removes it too.
+  const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-amp-plugin-home-'));
+  tempRoots.push(isolatedHome);
   try {
     const result = spawnSync('bun', [harnessPath], {
       encoding: 'utf8',
       // The installed layout carries no Guardian build of its own, so the
       // plugin is pointed at this checkout's, not at one the machine has.
-      // A denied command makes the CLI write an audit entry (C49): HOME
-      // and USERPROFILE are both pinned to a temp dir so that write never
-      // lands in the real ~/.egc/audit.log -- os.homedir() ignores HOME on
-      // Windows and reads USERPROFILE instead.
-      env: (() => {
-        const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-amp-plugin-home-'));
-        return { ...process.env, EGC_ASSUME_EGC_CLI: '1', EGC_GUARDIAN_CLI: guardianBuildPath, HOME: isolatedHome, USERPROFILE: isolatedHome };
-      })(),
+      env: { ...process.env, EGC_ASSUME_EGC_CLI: '1', EGC_GUARDIAN_CLI: guardianBuildPath, HOME: isolatedHome, USERPROFILE: isolatedHome },
       timeout: 15000,
     });
     if (result.error || result.status !== 0) {

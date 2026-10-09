@@ -25,11 +25,10 @@ process.env.EGC_GUARDIAN_CLI = path.join(buildDir, 'guardian-cli.js');
 // for each one (C49), so HOME and USERPROFILE are both pinned to a temp
 // dir for this whole process and never the real ~/.egc/audit.log --
 // os.homedir() ignores HOME on Windows and reads USERPROFILE instead.
-{
-  const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-repo-scripts-home-'));
-  process.env.HOME = isolatedHome;
-  process.env.USERPROFILE = isolatedHome;
-}
+// Removed at the end: every CLI invocation here is spawnSync.
+const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-repo-scripts-home-'));
+process.env.HOME = isolatedHome;
+process.env.USERPROFILE = isolatedHome;
 const writeHook = require('../../scripts/hooks/pre-write-guardian-validate');
 const bashHook = require('../../scripts/hooks/pre-bash-guardian-validate');
 const { validateCommand } = require(path.join(buildDir, 'validator.js'));
@@ -167,6 +166,7 @@ if (test('testing for, reading and listing them is not refused', () => {
   }
 })) passed++; else failed++;
 
+fs.rmSync(isolatedHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 console.log(`\nPassed: ${passed}, Failed: ${failed}\n`);
 // run-all.js reads this file's stdout through a pipe; process.exit() can
 // truncate it before it flushes, losing the summary line it parses.
