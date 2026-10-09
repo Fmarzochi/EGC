@@ -1269,7 +1269,7 @@ function runTests() {
       const chosen = planned.stdout.split('\n')
         .map(line => line.trim())
         .map(line => /^- (.+?) -> (.+)$/.exec(line))
-        .filter(match => match && match[1].startsWith('skills/') && match[2].includes(cliSkills + path.sep))
+        .filter(match => match && /^skills[\\/]/.test(match[1]) && match[2].includes(cliSkills + path.sep))
         .map(match => ({ sourceRelative: match[1], destination: match[2] }))
         .find(entry => entry.destination.split(path.sep).length > cliSkills.split(path.sep).length + 1);
       assert.ok(chosen, 'a skill with a directory of its own is planned');
