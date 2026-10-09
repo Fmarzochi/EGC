@@ -416,6 +416,67 @@ function runTests() {
     assert.ok(/npm link --silent/.test(script), 'source trees must still be able to link the egc command');
   })) passed++; else failed++;
 
+  if (test('a bare invocation (no install-relevant args) refuses to run as root', () => {
+    const sandbox = createTempDir('egc-install-sh-root-bare-');
+    try {
+      const binDir = path.join(sandbox, 'bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      writeExecutable(path.join(binDir, 'id'), '#!/bin/sh\n[ "$1" = "-u" ] && echo 0 || echo root\n');
+      const result = spawnSync('bash', [SCRIPT], {
+        env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}` },
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: CLI_TIMEOUT_MS,
+      });
+      assert.strictEqual(result.status, 1);
+      assert.ok(result.stderr.includes('refusing to install as root'), result.stderr);
+      // The refusal must land before install_deps (npm ci) ever runs: no
+      // "installing root dependencies" line should reach stdout.
+      assert.ok(!result.stdout.includes('installing root dependencies'), result.stdout);
+    } finally {
+      cleanup(sandbox);
+    }
+  })) passed++; else failed++;
+
+  if (test('--dry-run as root is not refused even with no other install-relevant args', () => {
+    const sandbox = createTempDir('egc-install-sh-root-dryrun-');
+    try {
+      const binDir = path.join(sandbox, 'bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      writeExecutable(path.join(binDir, 'id'), '#!/bin/sh\n[ "$1" = "-u" ] && echo 0 || echo root\n');
+      writeExecutable(path.join(binDir, 'node'), '#!/bin/sh\n[ "$1" = "--version" ] && echo v20.18.0 || true\nexit 0\n');
+      writeExecutable(path.join(binDir, 'npm'), '#!/bin/sh\n[ "$1" = "--version" ] && echo 10.8.2 || true\nexit 0\n');
+      writeExecutable(path.join(binDir, 'npx'), '#!/bin/sh\nexit 0\n');
+      const result = spawnSync('bash', [SCRIPT, '--dry-run'], {
+        env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`, CI: '1' },
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: CLI_TIMEOUT_MS,
+      });
+      assert.ok(!result.stderr.includes('refusing to install as root'), result.stderr);
+    } finally {
+      cleanup(sandbox);
+    }
+  })) passed++; else failed++;
+
+  if (test('EGC_ALLOW_ROOT=1 opts a bare root invocation back in past the refusal', () => {
+    const sandbox = createTempDir('egc-install-sh-root-allow-');
+    try {
+      const binDir = path.join(sandbox, 'bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      writeExecutable(path.join(binDir, 'id'), '#!/bin/sh\n[ "$1" = "-u" ] && echo 0 || echo root\n');
+      const result = spawnSync('bash', [SCRIPT], {
+        env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`, EGC_ALLOW_ROOT: '1' },
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: CLI_TIMEOUT_MS,
+      });
+      assert.ok(!result.stderr.includes('refusing to install as root'), result.stderr);
+    } finally {
+      cleanup(sandbox);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
