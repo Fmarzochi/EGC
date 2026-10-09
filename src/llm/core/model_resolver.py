@@ -601,11 +601,16 @@ class ModelResolver:
         if v.startswith("deepseek-"):
             return "deepseek"
         # Native Cohere model IDs: command-a-plus-05-2026, command-r-plus, etc.
-        # The bare alias token "cohere" is excluded — no "-" suffix, resolved
+        # The bare alias token "cohere" is excluded, no "-" suffix, resolved
         # via _ALIASES before _provider_for is ever called.
         if v.startswith("command-"):
             return "cohere"
-        return cls._DEFAULT_PROVIDER
+        # Nothing above recognized the shape (e.g. a native Groq id with no
+        # "/", such as "llama-3.3-70b-versatile"). The caller's own expected
+        # provider is a stronger signal at this point than the global
+        # default, since the id has already been cleared of every other
+        # provider's native shape.
+        return expected or cls._DEFAULT_PROVIDER
 
     # ------------------------------------------------------------------ #
     # Public resolution API

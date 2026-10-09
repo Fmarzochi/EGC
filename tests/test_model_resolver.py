@@ -151,6 +151,13 @@ class TestDefaultModel:
         monkeypatch.setenv("LLM_MODEL", "claude-opus-9")
         assert ModelResolver.default_model("groq") == "openai/gpt-oss-120b"
 
+    def test_env_model_of_an_unregistered_groq_native_id_is_honored(self, monkeypatch):
+        # Not every Groq model id has a "/"; a plain native id (no other
+        # provider's shape rule matches it either) must not default to
+        # gemini just because it fell through every specific shape check.
+        monkeypatch.setenv("LLM_MODEL", "llama-3.3-70b-versatile")
+        assert ModelResolver.default_model("groq") == "llama-3.3-70b-versatile"
+
 
 @pytest.mark.unit
 class TestProviderDetection:
