@@ -1081,7 +1081,7 @@ async function runTraeUserRulesTests() {
       fs.writeFileSync(rule, '# My rule\n', 'utf8');
       const output = run(home);
       assert.strictEqual(fs.readFileSync(rule, 'utf8'), '# My rule\n');
-      assert.ok(output.includes('Trae (.trae): ~/.trae/user_rules/egc-memory.md is a rule of your own, left untouched'), `the conflict is reported, got: ${output}`);
+      assert.ok(output.includes(`Trae (.trae): ${path.join('~', '.trae', 'user_rules', 'egc-memory.md')} is a rule of your own, left untouched`), `the conflict is reported, got: ${output}`);
     } finally {
       cleanup(home);
     }
