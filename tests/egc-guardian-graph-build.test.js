@@ -266,6 +266,54 @@ const bump = file => {
     await store.close();
   });
 
+  await run('withBuildLock removes its own lock on the way out and never a lock another owner has taken', async () => {
+    const db = path.join(tmp, `release-${n++}`, 'g.db');
+    fs.mkdirSync(path.dirname(db), { recursive: true });
+    const lock = `${db}.lock`;
+    const first = await withBuildLock(db, async () => {
+      assert.ok(fs.existsSync(lock), 'held while running');
+      return 'ok';
+    });
+    assert.deepStrictEqual(first, { ran: true, value: 'ok' });
+    assert.ok(!fs.existsSync(lock), 'released after the work');
+
+    const second = await withBuildLock(db, async () => {
+      fs.writeFileSync(lock, 'another-owner-token');
+      return 'ok';
+    });
+    assert.strictEqual(second.ran, true);
+    assert.strictEqual(fs.readFileSync(lock, 'utf8'), 'another-owner-token', 'a lock with a different token is left alone');
+    fs.rmSync(lock, { force: true });
+  });
+
+  await run('a fresh lock moved aside by a stale-lock breaker is put back even where hard links do not work', async () => {
+    const db = path.join(tmp, `restore-${n++}`, 'g.db');
+    fs.mkdirSync(path.dirname(db), { recursive: true });
+    const lock = `${db}.lock`;
+    fs.writeFileSync(lock, 'TOKEN-A');
+    const old = new Date(Date.now() - 60 * 60 * 1000);
+    fs.utimesSync(lock, old, old);
+    const realRead = fs.readFileSync;
+    const realLink = fs.linkSync;
+    // The file the breaker moved aside reads as a different, fresh owner's lock; hard links fail as on FAT/exFAT.
+    fs.readFileSync = (file, ...rest) => (String(file).startsWith(`${lock}.break-`) ? 'TOKEN-FRESH' : realRead(file, ...rest));
+    fs.linkSync = () => {
+      throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+    };
+    let result;
+    try {
+      result = await withBuildLock(db, async () => 'never');
+    } finally {
+      fs.readFileSync = realRead;
+      fs.linkSync = realLink;
+    }
+    assert.strictEqual(result.ran, false, 'the lock was not stale after all');
+    assert.ok(fs.existsSync(lock), 'the lock is back');
+    assert.strictEqual(fs.readFileSync(lock, 'utf8'), 'TOKEN-A');
+    assert.deepStrictEqual(fs.readdirSync(path.dirname(db)).filter(f => f.includes('.break-')), [], 'nothing left behind');
+    fs.rmSync(lock, { force: true });
+  });
+
   await run('deleting a file removes its rows and edges', async () => {
     const root = project({
       'a.js': "import { b } from './b.js';\nexport function a() { return b(); }\n",

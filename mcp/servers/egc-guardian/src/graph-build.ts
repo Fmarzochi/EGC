@@ -367,13 +367,26 @@ function breakStaleLock(lock: string): boolean {
     fs.rmSync(moved, { force: true });
     return true;
   }
-  try {
-    fs.linkSync(moved, lock);
-  } catch {
-    // another process already holds the path
-  }
+  restoreLock(moved, lock);
   fs.rmSync(moved, { force: true });
   return false;
+}
+
+// Puts a lock that was moved aside by mistake back, never over a lock another
+// process has created since. A hard link keeps the original file; a file
+// system without links (FAT, exFAT) gets an exclusive copy instead.
+function restoreLock(moved: string, lock: string): void {
+  try {
+    fs.linkSync(moved, lock);
+    return;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return;
+  }
+  try {
+    fs.copyFileSync(moved, lock, fs.constants.COPYFILE_EXCL);
+  } catch {
+    // another process holds the path
+  }
 }
 
 const LOCK_POLL_MS = 50;

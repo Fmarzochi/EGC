@@ -22,14 +22,22 @@ const { pathToFileURL } = require('node:url');
 
 const USAGE = 'usage: egc context "<query>" [--project <dir>] [--history <file>|-] [--top <n>] [--no-git] [--explain]';
 
+// The value that follows a flag; a missing one is an error to report, not an
+// undefined that fails later as a TypeError.
+function valueOf(argv, i, flag) {
+  const value = argv[i + 1];
+  if (value === undefined || (value.startsWith('--') && value !== '-')) throw new Error(`${flag} needs a value`);
+  return value;
+}
+
 function parse(argv) {
   const opts = { query: null, project: process.cwd(), history: null, top: 10, git: true, explain: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') opts.help = true;
-    else if (a === '--project') opts.project = argv[++i];
-    else if (a === '--history') opts.history = argv[++i];
-    else if (a === '--top') opts.top = Number(argv[++i]);
+    else if (a === '--project') opts.project = valueOf(argv, i++, a);
+    else if (a === '--history') opts.history = valueOf(argv, i++, a);
+    else if (a === '--top') opts.top = Number(valueOf(argv, i++, a));
     else if (a === '--no-git') opts.git = false;
     else if (a === '--explain') opts.explain = true;
     else if (a.startsWith('--')) throw new Error(`unknown option ${a}`);

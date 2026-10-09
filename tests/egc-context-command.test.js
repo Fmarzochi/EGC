@@ -56,6 +56,18 @@ run('egc context refuses a filesystem root and the home directory', () => {
   }
 });
 
+run('a flag without its value is named, with the usage line, and is not a TypeError', () => {
+  for (const flag of ['--project', '--top', '--history']) {
+    const r = spawnSync(process.execPath, [script, 'chargeCard', flag], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 1);
+    assert.ok(r.stderr.includes(`${flag} needs a value`), r.stderr);
+    assert.ok(r.stderr.includes('usage: egc context'), r.stderr);
+    assert.ok(!r.stderr.includes('TypeError'), r.stderr);
+  }
+  const next = spawnSync(process.execPath, [script, 'chargeCard', '--project', '--explain'], { encoding: 'utf8' });
+  assert.ok(next.stderr.includes('--project needs a value'), 'a following flag is not taken for the value');
+});
+
 run('a project that does not exist fails with a one-line message, not a stack trace', () => {
   const r = spawnSync(process.execPath, [script, 'chargeCard', '--project', path.join(tmp, 'missing'), '--no-git'], { encoding: 'utf8' });
   assert.strictEqual(r.status, 1);

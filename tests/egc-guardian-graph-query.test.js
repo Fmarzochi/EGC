@@ -71,6 +71,24 @@ const GRAPH = {
     assert.ok(!r.files.some(f => f.path === 'util.js'));
   });
 
+  await run('the score depends on how rare the matched word is, not only on how many words match', async () => {
+    // One match each. "zebra" appears in one symbol; "item" in many, so a hit on zebra must outrank a hit on item.
+    const fillers = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'].map((suffix, i) => sym(10 + i, 'filler.js', `item${suffix}`, 1, 3));
+    const g = {
+      files: [],
+      symbols: [sym(1, 'a-common.js', 'itemThing', 1, 3), sym(2, 'z-rare.js', 'zebraThing', 1, 3), ...fillers],
+      imports: [],
+      edges: []
+    };
+    const r = await queryGraph('zebra item', g, { readFile: async () => 'line 1\nline 2\nline 3' });
+    assert.strictEqual(r.files[0].snippets[0].symbol, 'zebraThing');
+    const rare = r.files.find(f => f.path === 'z-rare.js');
+    const common = r.files.find(f => f.path === 'a-common.js');
+    assert.ok(rare.score > common.score, `rare ${rare.score} should beat common ${common.score}`);
+    // With the file names ordered the other way the tie-break alone would pick the common word first.
+    assert.ok('a-common.js' < 'z-rare.js');
+  });
+
   await run('hops bound the expansion and each hop decays the score', async () => {
     const chain = {
       files: [{ path: 'c.js', mtimeMs: 1, size: 1, hash: 'h' }],

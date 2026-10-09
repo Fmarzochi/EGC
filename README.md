@@ -56,11 +56,11 @@ Two Cursor tabs, a Claude Code terminal and an Antigravity session share one liv
 
 ### Guardian: A Safety Layer in Front of Every Command
 
-Guardian validates commands before they run, gates risky writes and keeps context from overflowing, in the background, without you invoking anything. Coverage depends on each tool's own hook support; the [Security Assessment](docs/security/SECURITY-ASSESSMENT.md#known-limitations) documents the exception.
+Guardian validates commands before they run, gates risky writes and keeps context from overflowing, in the background, without you invoking anything. Coverage depends on each tool's own hook support; the [Security Assessment](docs/security/SECURITY-ASSESSMENT.md#known-limitations) documents the exception. When a task starts, `orchestrate_task` also returns the code the task is about, found through a local graph of your project; see [Token Optimization](docs/token-optimization.md).
 
 ### Token Crusher: Noise Never Reaches the Model
 
-Before shell output reaches the model, the Token Crusher compresses git logs, test spam, install noise and giant JSON by up to 90 percent while keeping every error and warning. Ask "how much did I save?" in any language and the answer comes straight from your local ledger. Starting a task, EGC also ranks the right files from a local graph of your code; see [Token Optimization](docs/token-optimization.md).
+Before shell output reaches the model, the Token Crusher compresses git logs, test spam, install noise and giant JSON by up to 90 percent while keeping every error and warning. Ask "how much did I save?" in any language and the answer comes straight from your local ledger.
 
 ---
 
