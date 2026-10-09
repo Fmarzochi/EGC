@@ -112,20 +112,31 @@ function findGitDir(startPath: string): string | null {
   }
 }
 
-// O_NOFOLLOW is POSIX-only (undefined in fs.constants on Windows); fall back
-// to a plain open there, where trustedGitPath's canonicalization is the only
-// guard. On POSIX this closes most of the gap between trustedGitPath
-// validating a path and a later fs.readFileSync re-walking it: the open
-// itself refuses a final component that is a symlink, so a link planted
-// there after validation cannot be followed.
+// O_NOFOLLOW/O_NONBLOCK are POSIX-only (undefined in fs.constants on
+// Windows); fall back to a plain blocking open there, where
+// trustedGitPath's canonicalization is the only guard. Same discipline as
+// readRegularNoFollow in scripts/lib/state-integrity.js.
 const NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+const NONBLOCK_FLAG = typeof fs.constants.O_NONBLOCK === 'number' ? fs.constants.O_NONBLOCK : 0;
 
-function readFileNoFollow(filePath: string): string {
-  const fd = fs.openSync(filePath, fs.constants.O_RDONLY | NOFOLLOW_FLAG);
+// Reads a small regular file through a descriptor that never followed a
+// link, or null. On POSIX this closes most of the gap between
+// trustedGitPath validating a path and a later read re-walking it: the open
+// itself refuses a final component that is a symlink, so a link planted
+// there after validation cannot be followed. O_NONBLOCK plus the fstat
+// isFile() check also refuse a FIFO or device planted at the path, which
+// would otherwise block openSync synchronously until a writer appears,
+// freezing the server's event loop on the next get_state/update_state.
+function readFileNoFollow(filePath: string): string | null {
+  let fd: number | undefined;
   try {
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NOFOLLOW_FLAG | NONBLOCK_FLAG);
+    if (!fs.fstatSync(fd).isFile()) return null;
     return fs.readFileSync(fd, 'utf8');
+  } catch {
+    return null;
   } finally {
-    fs.closeSync(fd);
+    if (fd !== undefined) fs.closeSync(fd);
   }
 }
 
@@ -135,21 +146,34 @@ function readFileNoFollow(filePath: string): string {
 // what HEAD says.
 function readHeadLine(projectPath: string): string | null {
   try {
-    const rawGitDir = findGitDir(projectPath);
-    if (!rawGitDir) return null;
-    let gitDir = trustedGitPath(rawGitDir);
-    if (!gitDir) return null;
+    // trustedGitPath canonicalizes (follows symlinks) to decide whether a
+    // path is trustworthy, so its return value is the resolved target, not
+    // the path that was asked about. Using that return value to open a file
+    // would read straight through a symlink planted at gitDir or HEAD to
+    // whatever (trusted-looking) target it leads to -- trustedGitPath is
+    // used here only as a yes/no check; every read below opens the original,
+    // unresolved path with O_NOFOLLOW, which refuses a symlinked final
+    // component outright, including one pointing at another trusted .git.
+    let gitDir = findGitDir(projectPath);
+    if (!gitDir || !trustedGitPath(gitDir)) return null;
+    // Narrows the directory-component case too, though only for gitDir
+    // itself: a link here never reaches the opens below (gitDir is only
+    // used to build headPath/the pointer path, each independently O_NOFOLLOW
+    // protected), so this is a second, cheap layer, not the only one.
     if (fs.lstatSync(gitDir).isSymbolicLink()) return null;
     if (fs.statSync(gitDir).isFile()) {
       // Worktrees and submodules store a pointer file instead of a directory
-      const pointer = readFileNoFollow(gitDir).trim();
+      const rawPointer = readFileNoFollow(gitDir);
+      if (rawPointer === null) return null;
+      const pointer = rawPointer.trim();
       if (!pointer.startsWith('gitdir:')) return null;
-      gitDir = trustedGitPath(path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim()));
-      if (!gitDir) return null;
+      gitDir = path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim());
+      if (!trustedGitPath(gitDir)) return null;
     }
-    const headPath = trustedGitPath(path.resolve(gitDir, 'HEAD'));
-    if (!headPath) return null;
-    return readFileNoFollow(headPath).trim();
+    const headPath = path.resolve(gitDir, 'HEAD');
+    if (!trustedGitPath(headPath)) return null;
+    const head = readFileNoFollow(headPath);
+    return head === null ? null : head.trim();
   } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info available
     return null;
   }

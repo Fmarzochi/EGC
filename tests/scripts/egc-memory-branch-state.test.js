@@ -147,23 +147,27 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('readHeadLine refuses to follow a symlink planted at .git or at HEAD after validation (#1807 TOCTOU narrowing)', () => {
+  if (test('readHeadLine refuses to follow a symlink planted at HEAD after validation, even when the link target is itself a trusted .git path (#1807 TOCTOU narrowing)', () => {
     if (process.platform === 'win32') return; // symlink creation needs elevated privileges on Windows
+    // The victim is a second, otherwise-legitimate repo under the same
+    // trusted root: trustedGitPath's canonicalization would accept a link
+    // to it (the resolved target has a .git segment and sits under the
+    // trusted root too), so the real test of O_NOFOLLOW is exactly this
+    // case, not a link to a path trustedGitPath would reject anyway.
     const repo = makeGitRepo('feature/toctou');
-    const realHead = fs.readFileSync(path.join(repo, '.git', 'HEAD'), 'utf8');
-
+    const victimRepo = makeGitRepo('attacker-controlled');
     const headPath = path.join(repo, '.git', 'HEAD');
-    const victim = path.join(repo, 'victim-head');
-    fs.writeFileSync(victim, 'ref: refs/heads/attacker-controlled\n');
+    const victimHead = path.join(victimRepo, '.git', 'HEAD');
+    const realHead = fs.readFileSync(headPath, 'utf8');
     fs.rmSync(headPath);
-    fs.symlinkSync(victim, headPath);
+    fs.symlinkSync(victimHead, headPath);
 
     try {
-      assert.strictEqual(detectBranch(repo), null, 'a symlinked HEAD must be refused, not followed to the victim file');
+      assert.strictEqual(detectBranch(repo), null, 'a symlinked HEAD must be refused even when its target is itself a trusted .git/HEAD');
     } finally {
       fs.rmSync(headPath);
       fs.writeFileSync(headPath, realHead);
-      fs.rmSync(victim);
+      fs.rmSync(victimRepo, { recursive: true, force: true });
     }
   })) passed++; else failed++;
 
