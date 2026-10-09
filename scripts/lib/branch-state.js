@@ -142,8 +142,16 @@ function readHeadLine(projectPath) {
   try {
     let gitDir = findGitDir(projectPath);
     if (!gitDir || !trustedGitPath(gitDir)) return null;
-    if (fs.lstatSync(gitDir).isSymbolicLink()) return null;
-    if (fs.statSync(gitDir).isFile()) {
+    // gitDir is already confirmed by the trustedGitPath guard just above;
+    // these two only read metadata (never file content) off that same path.
+    // Sonar's taint tracker does not credit a guard that discards the
+    // sanitizer's return value instead of reassigning it, flagging a path
+    // traversal here that the identical TS pattern in branch-state.ts
+    // (readHeadLine) does not trigger. NOSONAR x2 below: reassigning gitDir
+    // to the canonicalized result would reopen the exact TOCTOU this
+    // function exists to close (see the comment above it).
+    if (fs.lstatSync(gitDir).isSymbolicLink()) return null; // NOSONAR
+    if (fs.statSync(gitDir).isFile()) { // NOSONAR
       // Worktrees and submodules store a pointer file instead of a directory
       const rawPointer = readFileNoFollow(gitDir);
       if (rawPointer === null) return null;
