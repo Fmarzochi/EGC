@@ -295,10 +295,10 @@ async function runTests() {
     try {
       // Most filesystems cap a single path component at 255 bytes. The old
       // "${filePath}.tmp-${pid}-${uuid}" suffix added ~45 bytes on top of
-      // the target name, so a legacy branch-state filename near that limit
-      // (branchStateKey keeps up to 120 readable chars plus a 64-char
-      // sha256 digest) could push the temp sibling over it and fail the
-      // write silently. A 240-byte basename reproduces that headroom.
+      // the target name; legacyBranchStateFile preserves full sanitized
+      // branch names, so long legacy names can push the temp sibling over
+      // the component limit and fail the write silently. This 239-byte
+      // basename reproduces that headroom.
       const longName = `${'a'.repeat(236)}.md`;
       assert.ok(longName.length <= 255, 'the target name itself must still be a legal component');
       const stateFilePath = path.join(dir, longName);
