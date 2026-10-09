@@ -71,13 +71,6 @@ const NODES = [
         summary: 'Plans and executes multi-step workflows with optional parallel orchestrator.'
     },
     {
-        id: 'memory:persistent_memory',
-        class: 'ACTIVE',
-        kind: 'registry',
-        path: 'scripts/memory/persistent_memory.py',
-        summary: 'SQLite-backed persistent memory with state.db tee.'
-    },
-    {
         id: 'llm:dispatcher',
         class: 'ACTIVE',
         kind: 'dispatcher',
@@ -237,12 +230,6 @@ const STATIC_EDGES = [
         to: 'llm:cli:prompt',
         relation: 'spawns',
         evidence: 'scripts/gemini.js: spawnSync(pythonBin, ["-m", "llm.cli.prompt", ...])'
-    },
-    {
-        from: 'memory:persistent_memory',
-        to: 'state:sqlite',
-        relation: 'writes',
-        evidence: 'scripts/memory/persistent_memory.py: sqlite3.connect(~/.egc/egc/state.db, or $EGC_DIR/egc/state.db)'
     },
     {
         from: 'node:install-apply',
