@@ -15,7 +15,7 @@ All notable changes to EGC are documented here.
 
 - **The MCP SDK moves to the 1.32 line in the root and in both servers** (#1754, #1753, #1762): `@modelcontextprotocol/sdk` 1.32.0 in the root and Guardian lockfiles and 1.32.1 in the memory server, whose manifest floor rises to `^1.32.0`. `mcp/servers/egc-memory` joins the weekly Dependabot schedule with the minor-and-patch group, so that server receives version updates like the other two manifests (closes #1662). The release workflow pins `anchore/sbom-action` v0.24.3 (#1755).
 - **The guarded path on Windows is a credentials file, not the whole roaming profile**: the Guardian's denied-path list named `%APPDATA%` as a whole on Windows; it now names the Devin Desktop credentials file specifically, leaving `%APPDATA%` itself free for the tools, including EGC's own install targets, that write ordinary config there. A `.codebuddy/models.json` credential store joins the same list, on every platform.
-- **The installer refuses to run as root**: a real install (not `--dry-run`) run as the root user now stops with a clear message before writing anything, since files written as root in a regular user's home cannot be read or updated by that user afterwards. A container image provisioned as root by design opts back in with `EGC_ALLOW_ROOT=1`.
+- **The installer refuses to run as root**: a real install (not `--dry-run`) run as the root user now stops with a clear message before writing anything, since files written as root in a regular user's home cannot be updated or overwritten by that user afterwards. A container image provisioned as root by design opts back in with `EGC_ALLOW_ROOT=1`.
 
 ### Fixed
 

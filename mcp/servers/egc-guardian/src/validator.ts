@@ -1417,6 +1417,15 @@ export function buildDeniedPaths(): string[] {
       // credentials file; its config.json and cli/sessions.db neighbors are
       // not secret.
       path.join(appData, 'devin', 'credentials.toml'),
+      // Windows tools that keep their credentials under %APPDATA% (Roaming)
+      // instead of %USERPROFILE%: the home-joined CREDENTIAL_STORES entries
+      // resolve to %USERPROFILE% and cover only that tree (cubic review,
+      // confidence 8).
+      path.join(appData, 'gcloud'),
+      path.join(appData, 'Composer', 'auth.json'),
+      path.join(appData, 'configstore', 'firebase-tools.json'),
+      path.join(appData, 'stripe', 'config.toml'),
+      path.join(appData, 'supabase', 'access-token'),
       ...browsers,
       path.join(programFiles, 'Git', 'etc'),
       path.join(localAppData, 'Programs', 'Git', 'etc'),

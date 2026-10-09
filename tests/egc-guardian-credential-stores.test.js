@@ -127,6 +127,12 @@ run('Devin Desktop\'s own config.json and session history stay readable next to 
     const denied = buildDeniedPaths();
     assert.ok(denied.includes(path.join(appData, 'devin', 'credentials.toml')), 'the credentials file is denied');
     assert.ok(!denied.some(p => p === path.join(appData, 'devin')), 'the devin directory itself is not denied as a whole');
+    // Read denial is decided by isReadDeniedPath, which layers
+    // PROTECTED_FILE_PATTERNS on top of the denied list; the title's claim
+    // only holds if these neighbors clear that check too (cubic review,
+    // confidence 6).
+    assert.strictEqual(isReadDeniedPath(path.join(appData, 'devin', 'config.json')), false, 'config.json stays readable');
+    assert.strictEqual(isReadDeniedPath(path.join(appData, 'devin', 'cli', 'sessions.db')), false, 'cli/sessions.db stays readable');
   } finally {
     Object.defineProperty(process, 'platform', platform);
     if (saved.APPDATA === undefined) delete process.env.APPDATA; else process.env.APPDATA = saved.APPDATA;

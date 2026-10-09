@@ -401,9 +401,12 @@ function emitInstallResult(options, result) {
 // Writing as root leaves every config file, hook and state directory
 // owned by root in a home that belongs to a regular user; with a default
 // umask the regular user can still read what root wrote (644/755), but
-// cannot update or overwrite it on the next, unprivileged EGC run. On
-// Linux and macOS process.getuid exists and is 0 only for root; on
-// Windows it is undefined and this check is a no-op there. --dry-run
+// cannot update or overwrite it on the next, unprivileged EGC run. The
+// effective UID, not the real one, decides that ownership (a setuid-root
+// launch keeps a non-zero real UID while still writing as root), so this
+// reads process.geteuid, which on Linux and macOS exists and is 0 only
+// for root; on Windows it is undefined and this check is a no-op there
+// (cubic review, confidence 3). --dry-run
 // writes nothing, so it is exempt; EGC_ALLOW_ROOT=1 (exactly that value,
 // so EGC_ALLOW_ROOT=0 or =false cannot opt in by accident) opts out for
 // a container image built and provisioned as root by design.
@@ -415,7 +418,7 @@ function emitInstallResult(options, result) {
 // can cut an in-flight async write short in that case.
 function refuseRootUnlessDryRun(options) {
   if (options.dryRun || process.env.EGC_ALLOW_ROOT === '1') return false;
-  if (typeof process.getuid !== 'function' || process.getuid() !== 0) return false;
+  if (typeof process.geteuid !== 'function' || process.geteuid() !== 0) return false;
   console.error('Error: refusing to install as root.');
   console.error('Files written as root in your home directory cannot be updated or overwritten by your own account afterwards.');
   console.error('Run this installer as the regular user. If this is a container provisioned as root by design, set EGC_ALLOW_ROOT=1.');

@@ -5,6 +5,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } fr
 import { Database } from 'sqlite';
 import { openCompatDatabase, selectedEngine } from './sqlite-compat';
 import path from 'node:path';
+import os from 'node:os';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -522,9 +523,14 @@ function isFilesystemRoot(target: string): boolean {
 
 // The reason a resolved project path is refused, or null when it has one of
 // the accepted shapes.
+// Anchored on os.homedir() rather than resolveHome(): this is the security
+// check that keeps a project_path out of hidden directories under the
+// home where tools keep secrets, and it must not be bypassable by a
+// caller setting HOME or USERPROFILE, which resolveHome() honors by
+// design for the state-location formula (cubic review, confidence 8).
 function projectPathRefusal(resolved: string): string | null {
   const target = canonicalPath(resolved);
-  const underHome = below(target, canonicalPath(resolveHome()));
+  const underHome = below(target, canonicalPath(os.homedir()));
   if (underHome !== null) {
     const first = underHome.split(path.sep)[0];
     return first.startsWith('.') ? `${first} is a hidden directory under the home directory, where tools keep settings and secrets` : null;
