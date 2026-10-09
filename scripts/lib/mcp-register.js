@@ -246,9 +246,8 @@ function multilineDelimiterAfter(line, openDelimiter) {
 // immutable namespace" — and the tool refuses to start on its next launch.
 //
 // The distinction only survives in the raw text: @iarna/toml parses both
-// forms into a plain JS array, so tomlHasActiveServer cannot see it (and
-// @iarna/toml is a devDependency that never ships, so the parse path is not
-// available at install time anyway).
+// forms into a plain JS array, so tomlHasActiveServer cannot see it either
+// way.
 //
 // Mistral Vibe reaches this state on its own: `vibe mcp remove <name>` on
 // the last server rewrites the file with `mcp_servers = []` left behind. A
@@ -574,10 +573,12 @@ function tomlEscape(p) {
     ?? String.raw`\u${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`);
 }
 
-// Whether the text is a TOML document a parser accepts. Without @iarna/toml
-// (a devDependency that never ships) there is nothing to check with, so the
-// answer is true and the guard below behaves exactly as the code did before
-// it existed, rather than refusing every write it cannot verify.
+// Whether the text is a TOML document a parser accepts. @iarna/toml is a
+// runtime dependency (D31 C29), but the require() above still guards it: if
+// it is ever unavailable (a corrupted install, for instance) there is
+// nothing to check with, so the answer is true and the guard below behaves
+// exactly as the code did before it existed, rather than refusing every
+// write it cannot verify.
 function parsesAsToml(text) {
   if (!TOML) return true;
   try {
