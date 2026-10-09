@@ -24,7 +24,7 @@ const {
 } = require('../aider-config-merge');
 const {
   MERGE_MARKDOWN_INDEX_KIND,
-  mergeSkillIndexEntry,
+  nextSkillIndexContent,
 } = require('../warp-agents-merge');
 
 function readJsonObject(filePath, label) {
@@ -96,11 +96,8 @@ function applyMergeMarkdownIndexOperation(operation) {
   const existingContent = fs.existsSync(operation.destinationPath)
     ? fs.readFileSync(operation.destinationPath, 'utf8')
     : null;
-  const nextContent = mergeSkillIndexEntry(existingContent, {
-    name: operation.skillName,
-    description: operation.skillDescription,
-    relativePath: operation.relativePath,
-  });
+  const nextContent = nextSkillIndexContent(existingContent, operation);
+  if (nextContent === null || nextContent === existingContent) return;
   writeManagedText(operation.destinationPath, nextContent);
 }
 
