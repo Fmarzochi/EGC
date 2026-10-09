@@ -294,8 +294,21 @@ export function extractFile(source: string): ExtractResult {
     return out;
   };
 
-  const requireSpecifier = (eq: number): string | null =>
-    isP(toks[eq], '=') && isId(toks[eq + 1], 'require') && isP(toks[eq + 2], '(') && toks[eq + 3]?.t === 'str' ? toks[eq + 3].v : null;
+  // Where a module load starts after `=`: the require or import token, past an await; -1 when it is not one.
+  const moduleLoadAt = (eq: number): number => {
+    if (!isP(toks[eq], '=')) return -1;
+    const k = isId(toks[eq + 1], 'await') ? eq + 2 : eq + 1;
+    return (isId(toks[k], 'require') || isId(toks[k], 'import')) && isP(toks[k + 1], '(') ? k : -1;
+  };
+
+  // `= require(...)`, `= await import(...)`: what is bound comes from another module, whatever the argument is.
+  const loadsAModule = (eq: number): boolean => moduleLoadAt(eq) !== -1;
+
+  // The module's path when it is a plain string: `= require('x')` or `= await import('x')`.
+  const requireSpecifier = (eq: number): string | null => {
+    const k = moduleLoadAt(eq);
+    return k !== -1 && toks[k + 2]?.t === 'str' ? toks[k + 2].v : null;
+  };
 
   const isFunctionInit = (eq: number): boolean => {
     if (!isP(toks[eq], '=')) return false;
@@ -503,7 +516,7 @@ export function extractFile(source: string): ExtractResult {
   const addDeclarator = (name: Tok, at: number, stop: number, exported: boolean, from: number): void => {
     const spec = requireSpecifier(at + 1);
     if (spec !== null) imports.push({ specifier: spec, bindings: [{ local: name.v, imported: '*' }], reexport: false });
-    else addSymbol(name.v, isFunctionInit(at + 1) ? 'function' : 'variable', exported, from, stop);
+    else if (!loadsAModule(at + 1)) addSymbol(name.v, isFunctionInit(at + 1) ? 'function' : 'variable', exported, from, stop);
   };
 
   // The names a destructuring pattern binds, as token indexes: { a, b: c, d = 1, ...rest } and [x, , y = 2, ...z], nested too.
@@ -523,14 +536,6 @@ export function extractFile(source: string): ExtractResult {
       k = stop + 1;
     }
     return names;
-  };
-
-  // `= require(...)`, `= await import(...)`: what is bound comes from another module, whatever the argument is.
-  const loadsAModule = (eq: number): boolean => {
-    if (!isP(toks[eq], '=')) return false;
-    let k = eq + 1;
-    if (isId(toks[k], 'await')) k++;
-    return (isId(toks[k], 'require') || isId(toks[k], 'import')) && isP(toks[k + 1], '(');
   };
 
   const addPatternDeclarator = (open: number, afterPattern: number, stop: number, exported: boolean, from: number): void => {

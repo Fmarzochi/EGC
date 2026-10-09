@@ -252,11 +252,27 @@ run('destructuring declarations bind symbols: objects, arrays, renames, defaults
   assert.strictEqual(required.imports.length, 1);
 });
 
-run('names destructured from require() or import() are imports, whatever the path looks like, and not symbols', () => {
-  const dynamicPath = extractFile("const { validateCommand, isProtectedPath } = require(path.join(buildDir, 'validator.js'));\nconst [first] = require(computed());\nconst { viaImport } = await import(pathToFileURL(file).href);\nconst { plain } = require('./literal.js');\n");
-  assert.deepStrictEqual(dynamicPath.symbols, [], `symbols: ${dynamicPath.symbols.map(s => s.name).join(', ')}`);
-  const computed = extractFile('const { alpha, beta } = compute();\nconst { gamma } = await load();\n');
-  assert.deepStrictEqual(computed.symbols.map(s => s.name), ['alpha', 'beta', 'gamma'], 'a destructured value that is not a module load still binds symbols');
+run('names taken from require() or import() are imports, whatever the path looks like, and never symbols of the file', () => {
+  const importsOf = r => r.imports.map(im => `${im.specifier}:${im.bindings.map(b => `${b.local}=${b.imported}`).join(',')}`);
+
+  // A path computed at run time: nothing to resolve, but nothing the file defines either.
+  const computed = extractFile("const { validateCommand, isProtectedPath } = require(path.join(buildDir, 'validator.js'));\nconst [first] = require(computed());\nconst { viaImport } = await import(pathToFileURL(file).href);\nconst validate = require(path.join(dir, 'validator.js'));\nconst lazy = await import(moduleUrl);\nlet a = require(x), b = 2;\n");
+  assert.deepStrictEqual(computed.symbols.map(s => s.name), ['b'], `symbols: ${computed.symbols.map(s => s.name).join(', ')}`);
+  assert.deepStrictEqual(computed.imports, [], 'a computed path records no import to resolve');
+
+  // A plain string path: an import with the bound names, for require and for a literal dynamic import alike.
+  const literal = extractFile("const { plain, renamed: local } = require('./literal.js');\nconst { fromImport, other: alias } = await import('./mod.js');\nconst whole = require('./whole.js');\nconst ns = await import('./ns.js');\n");
+  assert.deepStrictEqual(literal.symbols, [], 'a literal load is an import too');
+  assert.deepStrictEqual(importsOf(literal), [
+    './literal.js:plain=plain,local=renamed',
+    './mod.js:fromImport=fromImport,alias=other',
+    './whole.js:whole=*',
+    './ns.js:ns=*'
+  ]);
+
+  // Not a module load: still symbols.
+  const computedValue = extractFile('const { alpha, beta } = compute();\nconst { gamma } = await load();\nconst delta = build();\n');
+  assert.deepStrictEqual(computedValue.symbols.map(s => s.name), ['alpha', 'beta', 'gamma', 'delta']);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
