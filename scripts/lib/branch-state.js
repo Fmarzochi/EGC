@@ -161,7 +161,7 @@ function isUnsafeSymlink(p) {
 // openat() to anchor an open to an already-validated directory fd, so this
 // adjacency is the narrowest TOCTOU window achievable without a native
 // binding, not a hermetic close of it. Closing it fully would require an
-// atacker-proof primitive this project does not depend on today.
+// attacker-proof primitive this project does not depend on today.
 function readHeadLine(projectPath) {
   try {
     let gitDir = findGitDir(projectPath);
