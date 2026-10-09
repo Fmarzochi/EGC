@@ -36,7 +36,7 @@ function run(args = [], options = {}) {
   };
 
   try {
-    const stdout = execFileSync('node', [SCRIPT, ...args], {
+    const stdout = execFileSync('node', [...(options.nodeArgs || []), SCRIPT, ...args], {
       cwd: options.cwd,
       env,
       encoding: 'utf8',
@@ -2384,11 +2384,13 @@ function runTests() {
 
   if (process.platform !== 'win32') {
     const asRoot = (args, options = {}) => {
-      const preload = `--require ${path.join(__dirname, '..', 'fixtures', 'simulate-root-uid.js')}`;
-      const inheritedNodeOptions = (options.env && options.env.NODE_OPTIONS) || process.env.NODE_OPTIONS || '';
+      // A node CLI argument, not NODE_OPTIONS: Node splits that env var on
+      // whitespace with no quote-processing, so a checkout path with a
+      // space in it breaks the preload (cubic review, confidence 6).
+      const preloadPath = path.join(__dirname, '..', 'fixtures', 'simulate-root-uid.js');
       return run(args, {
         ...options,
-        env: { ...options.env, NODE_OPTIONS: inheritedNodeOptions ? `${inheritedNodeOptions} ${preload}` : preload },
+        nodeArgs: ['-r', preloadPath],
       });
     };
 

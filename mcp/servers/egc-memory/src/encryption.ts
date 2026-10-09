@@ -12,24 +12,24 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { resolveHome } from './home';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
 const AUTH_TAG_BYTES = 16;
 const MAGIC = 'EGC1:';
 
-// A function, not a module-level constant: os.homedir() must be read fresh
-// on every call. A frozen constant would keep resolving to whatever $HOME
-// was in effect when this module first loaded, even if the MCP server
-// process later observes a different $HOME — silently diverging from
-// getStateDir() (index.ts), which already recomputes os.homedir() per call.
-// That divergence is what let a state file get encrypted under one key and
-// later fail decryption under another, long after the key file itself had
-// stopped changing.
+// A function, not a module-level constant: resolveHome() must be read
+// fresh on every call. A frozen constant would keep resolving to whatever
+// environment was in effect when this module first loaded, even if the
+// MCP server process later observes a different one, silently diverging
+// from getStateDir() (index.ts), which resolves the same way on every
+// call. That divergence is what let a state file get encrypted under one
+// key and later fail decryption under another, long after the key file
+// itself had stopped changing.
 function defaultEncKeyPath(): string {
-  return path.join(os.homedir(), '.egc', 'encryption.key');
+  return path.join(resolveHome(), '.egc', 'encryption.key');
 }
 
 /**

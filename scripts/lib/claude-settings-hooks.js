@@ -1024,11 +1024,16 @@ function createAdapterStdinJsonCopyOperation(createRemappedOperation, targetRoot
 // egc-memory-save.js -> lib/state-snapshot.js -> lib/branch-state.js,
 // lib/state-crypto.js and lib/state-integrity.js (which also needs
 // state-crypto.js); every one is required when the hook loads.
+// state-crypto.js now also requires lib/utils.js for its HOME/USERPROFILE
+// resolution (C06, unifying it with the rest of the package), so utils.js
+// must travel with it here too, the same way it already does in
+// HOOK_LIB_SOURCES above.
 const EGC_MEMORY_SAVE_HOOK_LIB_SOURCES = [
   'scripts/lib/state-snapshot.js',
   'scripts/lib/branch-state.js',
   'scripts/lib/state-crypto.js',
   'scripts/lib/state-integrity.js',
+  'scripts/lib/utils.js',
 ];
 
 function resolveEgcMemorySaveHookScriptDestination(targetRoot) {
