@@ -199,6 +199,54 @@ fs.writeFileSync(path.join(root, 'secrets.js'), 'export const apiKey = "sk-ant-a
     assert.ok(audits.includes('GRAPH_ERROR'));
   });
 
+  await run('a database that opens but is damaged further in is rebuilt once, and other failures are not retried', async () => {
+    const proj = path.join(tmp, 'late-damage');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, 'a.js'), 'export function lateTarget() {\n  return 1;\n}\n');
+    let opened = 0;
+    const damagedOnce = {
+      env,
+      openStore: async dbPath => {
+        const real = await openGraphStore(dbPath);
+        opened++;
+        if (opened > 1) return real;
+        return new Proxy(real, {
+          get(target, prop) {
+            if (prop === 'getFiles') return async () => { throw new Error('database disk image is malformed'); };
+            const value = target[prop];
+            return typeof value === 'function' ? value.bind(target) : value;
+          }
+        });
+      }
+    };
+    const recovered = await buildRelevantContext('change lateTarget', proj, undefined, damagedOnce);
+    assert.strictEqual(recovered.status, 'ok', JSON.stringify(recovered));
+    assert.strictEqual(opened, 2, 'opened once to find the damage and once after removing the database');
+    assert.strictEqual(recovered.files[0].path, 'a.js');
+
+    let attempts = 0;
+    const refused = await buildRelevantContext('change lateTarget', proj, undefined, {
+      env,
+      openStore: async () => {
+        attempts++;
+        throw new Error('EACCES: permission denied');
+      }
+    });
+    assert.strictEqual(refused.status, 'unavailable');
+    assert.strictEqual(attempts, 1, 'a failure that is not damage is not retried');
+
+    let always = 0;
+    const stillDamaged = await buildRelevantContext('change lateTarget', proj, undefined, {
+      env,
+      openStore: async () => {
+        always++;
+        throw new Error('SQLITE_CORRUPT: database disk image is malformed');
+      }
+    });
+    assert.strictEqual(stillDamaged.status, 'unavailable');
+    assert.strictEqual(always, 2, 'damage that comes back is reported after one rebuild, not retried forever');
+  });
+
   await run('transformSnippet is applied to everything returned', async () => {
     const r = await buildRelevantContext('parseHelper', root, undefined, { env, transformSnippet: t => t.replace(/trim\(\)/g, 'HIDDEN') });
     assert.ok(JSON.stringify(r).includes('HIDDEN'));

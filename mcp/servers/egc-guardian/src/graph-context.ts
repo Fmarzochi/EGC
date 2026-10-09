@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { buildGraph, readFileWithin, withBuildLock, type BuildResult } from './graph-build.js';
 import { queryGraph } from './graph-query.js';
-import { graphDbPath, openGraphStoreWithRecovery, type GraphData, type GraphStore } from './graph-store.js';
+import { graphDbPath, isCorruption, openGraphStoreWithRecovery, removeGraphDatabase, type GraphData, type GraphStore } from './graph-store.js';
 
 export interface ContextDeps {
   env?: NodeJS.ProcessEnv;
@@ -58,20 +58,31 @@ async function buildAndLoad(
   const locked = await withBuildLock(
     dbPath,
     async () => {
-      const store = await (deps.openStore ?? openGraphStoreWithRecovery)(dbPath);
-      let result: { build: BuildResult; data: GraphData };
+      const attempt = async (): Promise<{ build: BuildResult; data: GraphData }> => {
+        const store = await (deps.openStore ?? openGraphStoreWithRecovery)(dbPath);
+        let result: { build: BuildResult; data: GraphData };
+        try {
+          const build = await buildGraph(root, store, { isProtectedPath: deps.isIndexExcluded ?? deps.isProtectedPath });
+          result = { build, data: await store.load() };
+        } catch (err) {
+          // The failure that stopped the build is the one to report, not one from closing.
+          await store.close().catch(() => undefined);
+          throw err;
+        }
+        // The portable engine writes the whole graph during close(), so a close
+        // that fails is a graph that was not saved: it must not be reported as ok.
+        await store.close();
+        return result;
+      };
       try {
-        const build = await buildGraph(root, store, { isProtectedPath: deps.isIndexExcluded ?? deps.isProtectedPath });
-        result = { build, data: await store.load() };
+        return await attempt();
       } catch (err) {
-        // The failure that stopped the build is the one to report, not one from closing.
-        await store.close().catch(() => undefined);
-        throw err;
+        // A database can open and still be damaged further in. Rebuild it from the project once;
+        // any other failure, or a second damage, is reported as it is.
+        if (!isCorruption(err)) throw err;
+        removeGraphDatabase(dbPath);
+        return attempt();
       }
-      // The portable engine writes the whole graph during close(), so a close
-      // that fails is a graph that was not saved: it must not be reported as ok.
-      await store.close();
-      return result;
     },
     { waitMs: deps.lockWaitMs ?? LOCK_WAIT_MS }
   );

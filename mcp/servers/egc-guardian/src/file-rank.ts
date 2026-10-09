@@ -77,7 +77,7 @@ export function renderExplain(files: RankedFile[]): string[] {
   for (const f of files) for (const n of Object.keys(f.signals)) if (!names.includes(n)) names.push(n);
   const header = ['#', 'score', ...names, 'path'];
   const rows: string[][] = [header, ...files.map((f, i) => [
-    String(i + 1), f.score.toFixed(2), ...names.map(n => (f.signals[n] ?? 0).toFixed(2)), escapeControl(f.path)
+    String(i + 1), f.score.toFixed(2), ...names.map(n => (f.signals[n] ?? 0).toFixed(2)), safePath(f.path)
   ])];
   const widths = header.map((_, c) => Math.max(...rows.map(r => r[c].length)));
   const out = [`explain: ${files.length} file(s) ranked (signals: ${names.join(', ')})`];

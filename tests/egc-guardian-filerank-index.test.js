@@ -112,7 +112,8 @@ function project(files) {
     // The clock jumps past the deadline as soon as the first file is looked at.
     Date.now = () => realNow() + jump;
     fs.promises.lstat = (...args) => {
-      jump = 10 * 60 * 1000;
+      // Only a source file in the index, not the .gitignore looked up first.
+      if (String(args[0]).endsWith('.ts')) jump = 10 * 60 * 1000;
       return realLstat.apply(fs.promises, args);
     };
     let index;
