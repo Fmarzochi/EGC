@@ -234,13 +234,15 @@ if (test('stop hook passes stdin through unchanged', () => {
 
 console.log('\npost-edit-accumulator: C12 hardening\n=====================================\n');
 
-if (test('the accumulator file is created with mode 0600, not the process umask', () => {
-  cleanAccumFile();
-  accumulator.run(JSON.stringify({ tool_input: { file_path: '/tmp/x.ts' } }));
-  const mode = fs.statSync(getAccumFile()).mode & 0o777;
-  assert.strictEqual(mode, 0o600, `expected 0600, got ${mode.toString(8)}`);
-  cleanAccumFile();
-})) passed++; else failed++;
+if (process.platform !== 'win32') {
+  if (test('the accumulator file is created with mode 0600, not the process umask', () => {
+    cleanAccumFile();
+    accumulator.run(JSON.stringify({ tool_input: { file_path: '/tmp/x.ts' } }));
+    const mode = fs.statSync(getAccumFile()).mode & 0o777;
+    assert.strictEqual(mode, 0o600, `expected 0600, got ${mode.toString(8)}`);
+    cleanAccumFile();
+  })) passed++; else failed++;
+}
 
 if (test('a path containing a newline is dropped instead of injecting an extra entry', () => {
   cleanAccumFile();
