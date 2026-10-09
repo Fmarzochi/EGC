@@ -64,18 +64,21 @@ function readFileNoFollow(filePath) {
 // Appends `line` to filePath, refusing a symlinked final component and
 // refusing a file this process does not own, so a file pre-planted by
 // another user (no O_CREAT race to win, since planting an ordinary file
-// ahead of time needs no symlink at all) is never written through. Mode
-// 0600 is enforced on every call, not only the one that creates the file,
-// so a file left over from an older version of this code, with a wider
-// mode, is tightened rather than trusted. Returns true on success, false
-// on any refusal or failure -- this accumulator is best-effort, so a
-// caller never has to distinguish "symlinked" from "permission denied"
-// from "disk full".
+// ahead of time needs no symlink at all) is never written through. A
+// planted FIFO opened for writing blocks until a reader shows up, which
+// NONBLOCK_FLAG turns into an immediate ENXIO instead -- the same reason
+// readFileNoFollow carries it -- so this call never hangs the post-edit
+// hook (cubic review, confidence 10). Mode 0600 is enforced on every
+// call, not only the one that creates the file, so a file left over from
+// an older version of this code, with a wider mode, is tightened rather
+// than trusted. Returns true on success, false on any refusal or
+// failure -- this accumulator is best-effort, so a caller never has to
+// distinguish "symlinked" from "permission denied" from "disk full".
 function appendLineNoFollow(filePath, line) {
   let fd;
   try {
     if (NOFOLLOW_FLAG === 0 && isSymlink(filePath)) return false;
-    fd = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | NOFOLLOW_FLAG, 0o600);
+    fd = fs.openSync(filePath, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | NOFOLLOW_FLAG | NONBLOCK_FLAG, 0o600);
     const stat = fs.fstatSync(fd);
     if (!stat.isFile()) return false;
     if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) return false;

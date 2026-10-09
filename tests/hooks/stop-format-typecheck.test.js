@@ -239,11 +239,15 @@ if (process.platform !== 'win32') {
     cleanAccumFile();
     accumulator.run(JSON.stringify({ tool_input: { file_path: '/tmp/x.ts' } }));
     const mode = fs.statSync(getAccumFile()).mode & 0o777;
-    // openSync still ANDs the requested 0600 against the process umask, so
-    // a stricter umask (e.g. 0077, or 0777 in some CI sandboxes) yields a
-    // stricter, still-private mode -- 0600 exactly is not guaranteed, no
-    // group/other access is the actual property this test protects.
+    // openSync ANDs the requested 0600 against the process umask, but 0600
+    // already excludes group/other bits, so only a umask that also clears
+    // owner bits (e.g. 0777) narrows the file -- down to 0000, which is not
+    // "still-private" but owner-unreadable, and makes the Stop-side
+    // readFileNoFollow fail so the whole batch is silently dropped (cubic
+    // review, confidence 8). Group/other access must stay zero, and the
+    // owner must still be able to read what was just written.
     assert.strictEqual(mode & 0o077, 0, `expected no group/other access, got ${mode.toString(8)}`);
+    assert.ok(mode & 0o400, `expected the owner to still be able to read the file, got ${mode.toString(8)}`);
     cleanAccumFile();
   })) passed++; else failed++;
 }
