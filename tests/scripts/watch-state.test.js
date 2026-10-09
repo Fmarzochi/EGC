@@ -302,6 +302,38 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('resolveStateFilePath isolates a detached HEAD by commit, never the flat or main.md files', () => {
+    const projectDir = mktemp();
+    const homeDir = mktemp();
+    const originalHomedir = os.homedir;
+    const { detachedStateFile, flatStateFile } = require('../../scripts/lib/branch-state');
+
+    try {
+      os.homedir = () => homeDir;
+      const gitDir = path.join(projectDir, '.git');
+      fs.mkdirSync(gitDir);
+      const commit = 'c'.repeat(40);
+      fs.writeFileSync(path.join(gitDir, 'HEAD'), `${commit}\n`);
+
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      const flatFile = flatStateFile(stateDir, projectDir);
+      fs.mkdirSync(path.dirname(flatFile), { recursive: true });
+      fs.writeFileSync(flatFile, '# Flat state, shared by every other checkout\n');
+
+      // No file for this exact commit yet: never the flat file.
+      assert.strictEqual(resolveStateFilePath(projectDir), null);
+
+      const detachedFile = detachedStateFile(stateDir, projectDir, commit);
+      fs.mkdirSync(path.dirname(detachedFile), { recursive: true });
+      fs.writeFileSync(detachedFile, '# Detached state for this commit\n');
+      assert.strictEqual(resolveStateFilePath(projectDir), detachedFile);
+    } finally {
+      os.homedir = originalHomedir;
+      cleanup(projectDir);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
   if (await test('resolveStateFilePath without branch finds main.md', () => {
     const projectDir = mktemp();
     const homeDir = mktemp();
