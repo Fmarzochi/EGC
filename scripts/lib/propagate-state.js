@@ -607,8 +607,8 @@ function readProjectState(projectPath) {
   if (readers === null) return null;
   const { branchState, stateCrypto } = readers;
   const stateDir = branchState.getStateDir();
-  const branch = branchState.detectBranch(projectPath);
-  const { filePath } = branchState.resolveStateRead(stateDir, projectPath, branch);
+  const { branch, detachedCommit } = branchState.resolveHeadState(projectPath);
+  const { filePath } = branchState.resolveStateRead(stateDir, projectPath, branch, detachedCommit);
   if (fs.lstatSync(filePath).isSymbolicLink()) return null;
   return stateCrypto.readStateFileDecrypted(filePath, stateCrypto.defaultKeyPath());
 }

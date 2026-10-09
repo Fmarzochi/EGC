@@ -7,8 +7,9 @@ const os = require('node:os');
 const { propagateStateContent } = require('./propagate-state');
 const {
   projectSlug,
-  detectBranch,
+  resolveHeadState,
   branchStateFile,
+  detachedStateFile,
   legacyBranchStateFile,
 } = require('./branch-state');
 const { isEncryptedBuffer } = require('./state-crypto');
@@ -137,7 +138,7 @@ function parseBlockToStateContent(block, updatedIso) { // NOSONAR: line-oriented
 function resolveStateFilePath(projectPath) {
   const stateDir = path.join(os.homedir(), '.egc', 'state');
   const slug = projectSlug(projectPath);
-  const branch = detectBranch(projectPath);
+  const { branch, detachedCommit } = resolveHeadState(projectPath);
 
   if (branch) {
     const branchFile = branchStateFile(stateDir, projectPath, branch);
@@ -145,6 +146,14 @@ function resolveStateFilePath(projectPath) {
 
     const legacyBranchFile = legacyBranchStateFile(stateDir, projectPath, branch);
     if (fs.existsSync(legacyBranchFile)) return legacyBranchFile;
+  } else if (detachedCommit) {
+    // A detached HEAD never falls through to the shared flat file below:
+    // every detached checkout of the project used to collide there. Each
+    // commit gets its own file, checked here before the project-wide
+    // defaults.
+    const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
+    if (fs.existsSync(detachedFile)) return detachedFile;
+    return null;
   }
 
   const defaultFile = path.join(stateDir, slug, 'main.md');

@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
-import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
+import { resolveHeadState, resolveStateRead, resolveStateWrite } from './branch-state';
 import { GLOBAL_APPENDIX_SECTIONS, buildGlobalAppendix, globalStateFilePath } from './global-state';
 import {
   announce as busAnnounce,
@@ -863,7 +863,7 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
       { name: "search_history", description: "Keyword search over the decision history with BM25 relevance ranking (SQLite FTS5). Each result includes the decision content, context label, timestamp, and a score normalized to [0, 1] where 1 is the best match in the result set. Use this to find past decisions by topic instead of paging through query_history.", inputSchema: { type: "object", properties: { query: { type: "string", description: "Keywords to search for, e.g. 'authentication jwt'." }, limit: { type: "number", description: "Maximum number of results to return. Defaults to 10." }, min_score: { type: "number", description: "Minimum normalized relevance score between 0 and 1. Defaults to 0." } }, required: ["query"] } },
       {
         name: "get_state",
-        description: "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. State is scoped to the current git branch when the project is a git repository, falling back to the default branch state and then to the legacy flat state file. When user-wide global memory exists (written via update_state with scope 'global'), a deduplicated 'Global Memory' section is appended after the project state; project and branch entries always take precedence. Call this at the START of every session to restore context.",
+        description: "Returns the current project memory: decisions made, preferences established, things to avoid, and what to pick up next. State is scoped to the current git branch when the project is a git repository, falling back to the default branch state and then to the legacy flat state file. A detached HEAD (a bare commit checkout, e.g. CI) is scoped to that exact commit instead, and never inherits the flat or default-branch state. When user-wide global memory exists (written via update_state with scope 'global'), a deduplicated 'Global Memory' section is appended after the project state; project and branch entries always take precedence. Call this at the START of every session to restore context.",
         inputSchema: {
           type: "object",
           properties: {
@@ -873,7 +873,7 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
       },
       {
         name: "update_state",
-        description: "Updates the project memory with decisions made this session. Writes to the state file of the current git branch when the project is a git repository. Call this at the END of every session. Merges with existing state and does not erase previous memory.",
+        description: "Updates the project memory with decisions made this session. Writes to the state file of the current git branch when the project is a git repository, or to that exact commit's own state file on a detached HEAD. Call this at the END of every session. Merges with existing state and does not erase previous memory.",
         inputSchema: {
           type: "object",
           properties: {
@@ -1309,8 +1309,8 @@ async function openSessionRecordBestEffort(db: Database, projPath: string): Prom
 async function handleGetState(db: Database, toolArgs: unknown) {
   const { project_path } = GetStateSchema.parse(toolArgs || {});
   const projPath = resolveProjectPath(project_path);
-  const branch = detectBranch(projPath);
-  const resolved = resolveStateRead(getStateDir(), projPath, branch);
+  const { branch, detachedCommit } = resolveHeadState(projPath);
+  const resolved = resolveStateRead(getStateDir(), projPath, branch, detachedCommit);
 
   await announcePresenceBestEffort(db, projPath);
   await runThrottledMaintenance(db);
@@ -1396,7 +1396,7 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
     return { content: [{ type: "text", text: `Blocked: ${check.reasons.join('; ')}` }] };
   }
   const projPath = resolveProjectPath(args.project_path);
-  const branch = detectBranch(projPath);
+  const { branch, detachedCommit } = resolveHeadState(projPath);
 
   // Implicit bus presence, mirroring get_state: saving memory also refreshes
   // this session's heartbeat so long-running sessions stay visible.
@@ -1425,14 +1425,14 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
     });
   }
 
-  const filePath = resolveStateWrite(getStateDir(), projPath, branch);
+  const filePath = resolveStateWrite(getStateDir(), projPath, branch, detachedCommit);
 
   // Merge from the same file get_state would read, so the first
   // branch-scoped write inherits the pre-existing flat state. The read
   // happens inside the merge lock: reading before acquiring it would
   // reintroduce the lost-update race between concurrent sessions.
   await withStateMergeLock(filePath, () => {
-    const resolved = resolveStateRead(getStateDir(), projPath, branch);
+    const resolved = resolveStateRead(getStateDir(), projPath, branch, detachedCommit);
     const existing = readExistingStateOrRecover(resolved.filePath, args.force, 'project');
 
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
