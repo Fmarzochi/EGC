@@ -395,12 +395,30 @@ function toAntigravityAgentFrontmatter(text) {
   return ['---', ...rewriteAntigravityAgentFrontmatter(parts.frontmatter), '---', ...parts.body].join('\n');
 }
 
+function foldBlockLines(lines) {
+  const paragraphs = [];
+  let current = [];
+  for (const line of lines) {
+    if (line === '') {
+      if (current.length > 0) paragraphs.push(current.join(' '));
+      current = [];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length > 0) paragraphs.push(current.join(' '));
+  return paragraphs.join('\n');
+}
+
 function readBlockScalar(indicator, lines, start) {
   const body = [];
-  for (let index = start; index < lines.length && (lines[index] === '' || /^\s/.test(lines[index])); index += 1) {
-    body.push(lines[index].trim());
+  for (let index = start; index < lines.length && (lines[index].trim() === '' || /^\s/.test(lines[index])); index += 1) {
+    body.push(lines[index]);
   }
-  return indicator.startsWith('>') ? body.filter(Boolean).join(' ') : body.join('\n').trim();
+  const indents = body.filter(line => line.trim() !== '').map(line => line.length - line.trimStart().length);
+  const indent = indents.length > 0 ? Math.min(...indents) : 0;
+  const dedented = body.map(line => (line.trim() === '' ? '' : line.slice(indent).trimEnd()));
+  return indicator.startsWith('>') ? foldBlockLines(dedented) : dedented.join('\n').replace(/^\n+|\n+$/g, '');
 }
 
 function yamlScalar(value) {

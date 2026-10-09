@@ -341,6 +341,16 @@ function runAntigravityCommandTests() {
       'a folded block description is read whole'
     );
     assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: |\n  Run:\n    npm test\n---\nbody\n', { name: 'a' }),
+      '---\nname: a\ndescription: "Run:\\n  npm test"\n---\nbody\n',
+      'a literal block keeps the indentation beyond the common one'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: >\n  First.\n\n  Second.\n---\nbody\n', { name: 'a' }),
+      '---\nname: a\ndescription: "First.\\nSecond."\n---\nbody\n',
+      'a blank line in a folded block keeps a line break'
+    );
+    assert.strictEqual(
       toAntigravityCommandSkill('---\ndescription: "Say \\"hi\\""\n---\nx\n', { name: 'a' }),
       '---\nname: a\ndescription: "Say \\"hi\\""\n---\nx\n',
       'double-quoted escapes are decoded before the description is written again'
