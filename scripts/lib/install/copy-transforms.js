@@ -47,11 +47,34 @@ function parseFlowSequence(value) {
   if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
     return null;
   }
-  return trimmed
-    .slice(1, -1)
-    .split(',')
+  return splitFlowItems(trimmed.slice(1, -1))
     .map(item => stripQuotes(item.trim()))
     .filter(Boolean);
+}
+
+function splitFlowItems(inner) {
+  const items = [];
+  let current = '';
+  let quote = null;
+  let depth = 0;
+  for (const char of inner) {
+    if (quote) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth = Math.max(0, depth - 1);
+    } else if (char === ',' && depth === 0) {
+      items.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  items.push(current);
+  return items;
 }
 
 function stripQuotes(value) {
@@ -211,7 +234,18 @@ function readRuleGlobs(frontmatter) {
     return [];
   }
   const flow = parseFlowSequence(splitFrontmatterLine(frontmatter[index]).value);
-  return flow || collectBlockListItems(frontmatter, index + 1).items;
+  return (flow || collectBlockListItems(frontmatter, index + 1).items).flatMap(expandGlobBraces);
+}
+
+function expandGlobBraces(glob) {
+  const close = glob.indexOf('}');
+  const open = close < 0 ? -1 : glob.lastIndexOf('{', close);
+  if (open < 0) {
+    return [glob];
+  }
+  const head = glob.slice(0, open);
+  const tail = glob.slice(close + 1);
+  return glob.slice(open + 1, close).split(',').flatMap(option => expandGlobBraces(`${head}${option.trim()}${tail}`));
 }
 
 function ruleTrigger(manual, globs) {
@@ -221,16 +255,20 @@ function ruleTrigger(manual, globs) {
   return globs.length > 0 ? 'glob' : 'always_on';
 }
 
-function flattenRuleLinks(line, language) {
-  return line.replaceAll(/\]\((\.\.\/[\w-]+\/|\.\/)?([\w-]+\.md)\)/g, (match, prefix, name) => {
-    if (prefix?.startsWith('../')) {
-      return `](${prefix.slice(3, -1)}-${name})`;
+function flattenRuleLinks(line, directory) {
+  if (directory === null) {
+    return line;
+  }
+  return line.replaceAll(/\]\(([^()\s:#]+\.md)\)/g, (match, link) => {
+    const target = path.posix.normalize(path.posix.join(directory, link));
+    if (link.startsWith('/') || target.startsWith('../')) {
+      return match;
     }
-    return language ? `](${language}-${name})` : match;
+    return `](${target.replaceAll('/', '-')})`;
   });
 }
 
-function toAntigravityRule(text, { manual = false, language = null } = {}) {
+function toAntigravityRule(text, { manual = false, directory = null } = {}) {
   const source = stripByteOrderMark(text);
   const parts = splitFrontmatter(source) || { frontmatter: [], body: source.split(/\r?\n/) };
   const globs = manual ? [] : readRuleGlobs(parts.frontmatter);
@@ -242,22 +280,27 @@ function toAntigravityRule(text, { manual = false, language = null } = {}) {
   if (globs.length > 0) {
     frontmatter.push(`globs: ${JSON.stringify(globs.join(', '))}`);
   }
-  return ['---', ...frontmatter, '---', ...parts.body.map(line => flattenRuleLinks(line, language))].join('\n');
+  return ['---', ...frontmatter, '---', ...parts.body.map(line => flattenRuleLinks(line, directory))].join('\n');
 }
 
-function ruleLanguage(sourcePath) {
-  return sourcePath ? path.basename(path.dirname(sourcePath)) : null;
+function ruleDirectory(sourcePath) {
+  if (!sourcePath) {
+    return null;
+  }
+  const segments = path.resolve(sourcePath).split(path.sep);
+  const rulesIndex = segments.lastIndexOf('rules');
+  return rulesIndex < 0 ? null : segments.slice(rulesIndex + 1, -1).join('/');
 }
 
 const TRANSFORMS = Object.freeze({
   [CLAUDE_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toClaudeAgentFrontmatter(content.toString('utf8')), 'utf8'),
   [OPENCODE_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toOpenCodeAgentFrontmatter(content.toString('utf8')), 'utf8'),
   [ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
-    toAntigravityRule(content.toString('utf8'), { language: ruleLanguage(sourcePath) }),
+    toAntigravityRule(content.toString('utf8'), { directory: ruleDirectory(sourcePath) }),
     'utf8'
   ),
   [ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
-    toAntigravityRule(content.toString('utf8'), { manual: true, language: ruleLanguage(sourcePath) }),
+    toAntigravityRule(content.toString('utf8'), { manual: true, directory: ruleDirectory(sourcePath) }),
     'utf8'
   ),
 });

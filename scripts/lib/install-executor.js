@@ -12,7 +12,7 @@ const {
   resolveInstallPlan,
 } = require('./install-manifests');
 const { getInstallTargetAdapter } = require('./install-targets/registry');
-const { AGY_RULES_SUBDIR, planAntigravityRuleFiles } = require('./antigravity-rules');
+const { AGY_RULES_SUBDIR, isPersonRule, planAntigravityRuleFiles, readRecordedDestinations } = require('./antigravity-rules');
 const { isGeneratedRuntimeSourcePath, isHostPlacedSourcePath, isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-source-filters');
 const { HOOK_OPERATION_KIND } = require('./claude-settings-hooks');
 const { MERGE_YAML_READ_LIST_KIND } = require('./aider-config-merge');
@@ -294,13 +294,19 @@ function planEGCLegacyInstall(context) {
     );
   }
 
+  const recordedDestinations = readRecordedDestinations(installStatePath);
   const addRules = sourceRelativeDir => {
     for (const rule of planAntigravityRuleFiles(context.sourceRoot, sourceRelativeDir)) {
+      const sourcePath = path.join(context.sourceRoot, rule.sourceRelativePath);
+      const destinationPath = path.join(rulesDir, rule.fileName);
+      if (isPersonRule(destinationPath, sourcePath, rule.transform, recordedDestinations)) {
+        continue;
+      }
       operations.push(buildCopyFileOperation({
         moduleId: 'legacy-egc-rules',
-        sourcePath: path.join(context.sourceRoot, rule.sourceRelativePath),
+        sourcePath,
         sourceRelativePath: rule.sourceRelativePath,
-        destinationPath: path.join(rulesDir, rule.fileName),
+        destinationPath,
         strategy: 'flatten-copy',
         transform: rule.transform,
       }));

@@ -357,6 +357,35 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('a legacy Gemini plan never overwrites a rule the person keeps under config/rules (#1668)', () => {
+    const sourceRoot = createTempDir('install-executor-source-');
+    const homeDir = createTempDir('install-executor-home-');
+    const projectRoot = createTempDir('install-executor-project-');
+    try {
+      writeLegacySourceFixture(sourceRoot);
+      const own = path.join(homeDir, '.gemini', 'config', 'rules', 'common-coding-style.md');
+      writeFile(homeDir, path.join('.gemini', 'config', 'rules', 'common-coding-style.md'), '# mine\n');
+
+      const plan = createLegacyInstallPlan({ sourceRoot, homeDir, projectRoot, target: 'egc', languages: [] });
+      assert.ok(!plan.operations.some(operation => operation.destinationPath === own), 'the person\'s rule is not planned');
+      assert.ok(operationFor(plan, path.join('.gemini', 'config', 'rules', 'common-nested-shared.md')), 'the other rules are planned');
+
+      const statePath = path.join(homeDir, '.gemini', 'egc', 'install-state.json');
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      const recorded = createLegacyInstallPlan({ sourceRoot, homeDir, projectRoot, target: 'egc', languages: [] }).statePreview;
+      recorded.operations.push({ ...recorded.operations[0], destinationPath: own });
+      fs.writeFileSync(statePath, JSON.stringify(recorded, null, 2));
+      assert.ok(
+        createLegacyInstallPlan({ sourceRoot, homeDir, projectRoot, target: 'egc', languages: [] }).operations.some(operation => operation.destinationPath === own),
+        'a rule EGC recorded is planned again'
+      );
+    } finally {
+      cleanup(sourceRoot);
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  })) passed++; else failed++;
+
   if (test('plans Cursor legacy assets and JSON merge payloads', () => {
     const sourceRoot = createTempDir('install-executor-source-');
     const projectRoot = createTempDir('install-executor-project-');

@@ -6,8 +6,10 @@ const path = require('node:path');
 const {
   ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
   ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
+  plannedFileContent,
 } = require('./install/copy-transforms');
 const { isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-source-filters');
+const { readInstallStateOrNull } = require('./install-targets/helpers');
 
 const AGY_RULES_SUBDIR = 'config/rules';
 const MANUAL_RULE_LANGUAGES = new Set(['zh']);
@@ -52,7 +54,10 @@ function listRuleSourceFiles(repoRoot, sourceRelativePath) {
 }
 
 function planAntigravityRuleFiles(repoRoot, sourceRelativePath) {
-  return listRuleSourceFiles(repoRoot || '', normalizeRulePath(sourceRelativePath))
+  if (!repoRoot) {
+    return [];
+  }
+  return listRuleSourceFiles(repoRoot, normalizeRulePath(sourceRelativePath))
     .map(sourceRelativeFile => ({
       sourceRelativePath: sourceRelativeFile,
       fileName: ruleFileName(sourceRelativeFile),
@@ -61,8 +66,32 @@ function planAntigravityRuleFiles(repoRoot, sourceRelativePath) {
     .filter(rule => rule.fileName);
 }
 
+function readRecordedDestinations(statePath) {
+  const state = readInstallStateOrNull(statePath);
+  const operations = Array.isArray(state?.operations) ? state.operations : [];
+  return operations.map(operation => path.resolve(String(operation.destinationPath || '')));
+}
+
+function isPersonRule(destinationPath, sourcePath, transform, recordedDestinations) {
+  const stat = fs.lstatSync(destinationPath, { throwIfNoEntry: false });
+  if (!stat || stat.isSymbolicLink()) {
+    return false;
+  }
+  const resolved = path.resolve(destinationPath);
+  if (recordedDestinations?.includes(resolved)) {
+    return false;
+  }
+  try {
+    return !fs.readFileSync(resolved).equals(plannedFileContent(sourcePath, transform));
+  } catch {
+    return true;
+  }
+}
+
 module.exports = {
   AGY_RULES_SUBDIR,
+  isPersonRule,
   isRuleSource,
   planAntigravityRuleFiles,
+  readRecordedDestinations,
 };

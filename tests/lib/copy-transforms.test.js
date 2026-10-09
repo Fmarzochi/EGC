@@ -161,9 +161,42 @@ function runTests() {
   if (test('an Antigravity rule links to the flat names of the rules it extends (#1668)', () => {
     const source = '# Go\n> extends [common/hooks.md](../common/hooks.md), see [git](./git-workflow.md), [perf](performance.md), [site](https://example.com/a.md)\n';
     assert.strictEqual(
-      toAntigravityRule(source, { language: 'web' }),
+      toAntigravityRule(source, { directory: 'web' }),
       '---\ntrigger: always_on\ndescription: "Go"\n---\n# Go\n> extends [common/hooks.md](common-hooks.md), see [git](web-git-workflow.md), [perf](web-performance.md), [site](https://example.com/a.md)\n'
     );
+  })) passed++; else failed++;
+
+  if (test('an Antigravity rule resolves links from its own directory, at any depth (#1668)', () => {
+    assert.strictEqual(
+      toAntigravityRule('# A\n[b](b.md) [c](../common/c.md) [up](../../x.md) [abs](/etc/y.md)\n', { directory: 'zh/sub' }),
+      '---\ntrigger: always_on\ndescription: "A"\n---\n# A\n[b](zh-sub-b.md) [c](zh-common-c.md) [up](x.md) [abs](/etc/y.md)\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('# A\n[b](b.md)\n', { directory: '' }),
+      '---\ntrigger: always_on\ndescription: "A"\n---\n# A\n[b](b.md)\n',
+      'a rule at the top of rules/ links to the top-level flat name'
+    );
+    assert.strictEqual(
+      toAntigravityRule('# A\n[b](../../../out.md)\n', { directory: 'zh' }),
+      '---\ntrigger: always_on\ndescription: "A"\n---\n# A\n[b](../../../out.md)\n',
+      'a link that leaves rules/ is kept as it is'
+    );
+  })) passed++; else failed++;
+
+  if (test('an Antigravity glob rule keeps a quoted comma inside a glob and expands its braces (#1668)', () => {
+    assert.strictEqual(
+      toAntigravityRule('---\npaths: ["**/*.{js,ts}", \'src/**\']\n---\n# X\n'),
+      '---\ntrigger: glob\ndescription: "X"\nglobs: "**/*.js, **/*.ts, src/**"\n---\n# X\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('---\npaths:\n  - "**/*.{c,h}{,pp}"\n---\n# C\n'),
+      '---\ntrigger: glob\ndescription: "C"\nglobs: "**/*.c, **/*.cpp, **/*.h, **/*.hpp"\n---\n# C\n'
+    );
+  })) passed++; else failed++;
+
+  if (test('no rule file is planned without a source root, so nothing depends on the working directory (#1668)', () => {
+    assert.deepStrictEqual(planAntigravityRuleFiles(undefined, 'rules'), []);
+    assert.deepStrictEqual(planAntigravityRuleFiles('', 'rules'), []);
   })) passed++; else failed++;
 
   if (test('every shipped rule reaches Antigravity with a valid trigger and under its 24,000-byte limit (#1668)', () => {

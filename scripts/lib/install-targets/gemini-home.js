@@ -25,8 +25,7 @@ const {
 } = require('../claude-settings-hooks');
 const { createAntigravityGuardianOperations } = require('../antigravity-guardian-operations');
 const { resolveGlobalHooksJsonPath } = require('../antigravity-guardian-hooks');
-const { plannedFileContent } = require('../install/copy-transforms');
-const { AGY_RULES_SUBDIR, isRuleSource, planAntigravityRuleFiles } = require('../antigravity-rules');
+const { AGY_RULES_SUBDIR, isPersonRule, isRuleSource, planAntigravityRuleFiles } = require('../antigravity-rules');
 
 const AGY_SKILLS_SUBDIR = 'config/skills';
 
@@ -46,16 +45,6 @@ function isGeminiCliOnlySource(sourceRelativePath) {
   return GEMINI_CLI_ONLY_SOURCE_PREFIXES.has(normalizeRelativePath(sourceRelativePath).split('/')[0]);
 }
 
-function matchesPlannedRule(operation, sourcePath) {
-  return destination => {
-    try {
-      return fs.readFileSync(destination).equals(plannedFileContent(sourcePath, operation.transform));
-    } catch {
-      return false;
-    }
-  };
-}
-
 function planAntigravityRuleOperations(adapter, moduleId, sourceRelativePath, input, recordedDestinations) {
   const repoRoot = input.repoRoot || '';
   const rulesDir = path.join(adapter.resolveRoot(input), AGY_RULES_SUBDIR);
@@ -64,10 +53,11 @@ function planAntigravityRuleOperations(adapter, moduleId, sourceRelativePath, in
       ...createRemappedOperation(adapter, moduleId, rule.sourceRelativePath, path.join(rulesDir, rule.fileName), { strategy: 'flatten-copy' }),
       transform: rule.transform,
     }))
-    .filter(operation => !isPersonOwned(
+    .filter(operation => !isPersonRule(
       operation.destinationPath,
-      recordedDestinations,
-      matchesPlannedRule(operation, path.join(repoRoot, operation.sourceRelativePath))
+      path.join(repoRoot, operation.sourceRelativePath),
+      operation.transform,
+      recordedDestinations
     ));
 }
 
@@ -217,14 +207,14 @@ function isSameTree(sourcePath, destinationPath) {
   }
 }
 
-function isPersonOwned(destination, recordedDestinations, matchesSource) {
+function isPersonOwned(destination, sourcePath, recordedDestinations) {
   const stat = fs.lstatSync(destination, { throwIfNoEntry: false });
   if (!stat || stat.isSymbolicLink()) return false;
   const resolved = path.resolve(destination);
   if (recordedDestinations?.some(recorded => recorded === resolved || recorded.startsWith(resolved + path.sep))) {
     return false;
   }
-  return !matchesSource(resolved);
+  return !(sourcePath && isSameTree(sourcePath, resolved));
 }
 
 function getAGYManagedDestinationPaths(adapter, sourceRelativePath, input, recordedDestinations = []) {
@@ -241,8 +231,7 @@ function getAGYManagedDestinationPaths(adapter, sourceRelativePath, input, recor
     const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
     const destination = path.join(targetRoot, AGY_SKILLS_SUBDIR, flatRemainder);
     const sourcePath = input.repoRoot ? path.join(input.repoRoot, normalizedSourcePath) : null;
-    const matchesSource = resolved => Boolean(sourcePath) && isSameTree(sourcePath, resolved);
-    return isPersonOwned(destination, recordedDestinations, matchesSource) ? [] : [destination];
+    return isPersonOwned(destination, sourcePath, recordedDestinations) ? [] : [destination];
   }
 
   return null;

@@ -46,7 +46,7 @@ rules/
 
 **Antigravity:** it reads only flat `.md` files with a `trigger` frontmatter in
 `~/.gemini/config/rules/`, which a plain copy does not produce. Use Option 1 for
-Antigravity: the installer writes each rule there as `<language>-<rule>.md` with
+Antigravity: the installer writes each rule there as `<group>-<rule>.md` with
 its trigger. The copy below is for a tool that reads a rules directory as a tree.
 
 > **Important:** Copy entire directories: do NOT flatten with `/*`.
@@ -56,16 +56,19 @@ its trigger. The copy below is for a tool that reads a rules directory as a tree
 > language-specific files.
 
 ```bash
+# The rules directory your tool reads
+RULES_DIR="$HOME/path/to/your-tool/rules"
+
 # Install common rules (required for all projects)
-cp -r rules/common <your-rules-dir>/common
+cp -r rules/common "$RULES_DIR/common"
 
 # Install language-specific rules based on your project's tech stack
-cp -r rules/typescript <your-rules-dir>/typescript
-cp -r rules/python <your-rules-dir>/python
-cp -r rules/golang <your-rules-dir>/golang
-cp -r rules/web <your-rules-dir>/web
-cp -r rules/swift <your-rules-dir>/swift
-cp -r rules/php <your-rules-dir>/php
+cp -r rules/typescript "$RULES_DIR/typescript"
+cp -r rules/python "$RULES_DIR/python"
+cp -r rules/golang "$RULES_DIR/golang"
+cp -r rules/web "$RULES_DIR/web"
+cp -r rules/swift "$RULES_DIR/swift"
+cp -r rules/php "$RULES_DIR/php"
 
 # Attention ! ! ! Configure according to your actual project requirements; the configuration here is for reference only.
 ```
