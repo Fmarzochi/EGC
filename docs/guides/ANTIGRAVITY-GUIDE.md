@@ -24,7 +24,7 @@ egc remaps its component structure to match Antigravity's expected layout:
 | `commands/` | `.agents/workflows/` | Slash commands become Antigravity workflows |
 | `agents/` | `.agents/agents/` | Agent definitions become Antigravity subagents |
 
-> **Note on the repository's `.agents/` vs `agents/`**: The installer maps `rules` → `.agents/rules/`, `commands` → `.agents/workflows/`, `agents` (no dot prefix) → `.agents/agents/` and `skills` → `.agents/skills/<name>/` in your project. The dot-prefixed `.agents/` directory in the egc repository is a **static layout** for Codex skill definitions and `openai.yaml` configs: it is not what the installer deploys.
+> **Note on the repository's `.agents/` vs `agents/`**: The installer maps `rules` → `.agents/rules/`, `commands` → `.agents/workflows/`, `agents` (no dot prefix) → `.agents/agents/` and `skills` → `.agents/skills/<name>/` in your project. The dot-prefixed `.agents/` directory in the egc repository is a **static layout** for Codex skill definitions and `openai.yaml` configs: when a module selects it (`agents-core` does), the default scaffold copies it as it is to `.agents/.agents/` in your project, where Antigravity does not read it. The skills Antigravity uses come from `skills/`.
 
 ### Key differences from the home install (`egc` target)
 
@@ -117,7 +117,7 @@ If you're contributing a new skill and want it available on Antigravity:
 3. Run `node scripts/ci/codex-mirror.js --write`: it creates `.agents/skills/your-skill-name/SKILL.md` (or regenerates it) from your catalog `SKILL.md` with the frontmatter reduced to the keys Codex accepts (`name`, `description`, `license`, `metadata`, `allowed-tools`). Never edit that copy by hand: `tests/ci/codex-mirror-parity.test.js` fails when it differs from the catalog
 4. Mention in your PR that you added Antigravity support
 
-> **Key distinction**: The installer deploys `skills/` → `.agents/skills/<name>/` and `agents/` (no dot) → `.agents/agents/`. The `.agents/` (dot-prefixed) directory of the egc repository is a separate static layout for Codex `openai.yaml` configs and is not deployed by the installer.
+> **Key distinction**: The installer deploys `skills/` → `.agents/skills/<name>/` and `agents/` (no dot) → `.agents/agents/`. The `.agents/` (dot-prefixed) directory of the egc repository is a separate static layout for Codex `openai.yaml` configs; the installer copies it as it is to `.agents/.agents/`, which Antigravity does not read.
 
 See [CONTRIBUTING.md](../../.github/CONTRIBUTING.md) for the full contribution guide.
 

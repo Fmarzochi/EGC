@@ -311,7 +311,24 @@ function toAntigravityToolsBlock(items) {
   return tools.length > 0 ? ['tools:', ...tools.map(tool => `  - ${tool}`)] : [];
 }
 
+function readMultilineFlowSequence(value, lines, index) {
+  let joined = value;
+  let next = index;
+  while (!joined.endsWith(']') && next < lines.length && /^[\s\]]/.test(lines[next])) {
+    joined = `${joined} ${lines[next].trim()}`;
+    next += 1;
+  }
+  const flow = parseFlowSequence(joined);
+  return flow ? { items: flow, next } : null;
+}
+
 function readFrontmatterList(value, lines, index) {
+  if (value.startsWith('[') && !value.endsWith(']')) {
+    const multiline = readMultilineFlowSequence(value, lines, index);
+    if (multiline) {
+      return multiline;
+    }
+  }
   const flow = parseFlowSequence(value);
   if (flow) {
     return { items: flow, next: index };

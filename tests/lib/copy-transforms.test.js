@@ -269,6 +269,11 @@ function runAntigravityAgentTests() {
       '---\nname: a\ndescription: d\n---\nx\n',
       'no mapped tool leaves the default, and a model Antigravity does not name inherits'
     );
+    assert.strictEqual(
+      toAntigravityAgentFrontmatter('---\nname: a\ndescription: d\ntools: [Read,\n  Grep,\n  Bash]\nmodel: pro\n---\nx\n'),
+      '---\nname: a\ndescription: d\ntools:\n  - view_file\n  - grep_search\n  - run_command\nmodel: pro\n---\nx\n',
+      'a flow list over several lines is read whole'
+    );
     assert.strictEqual(toAntigravityAgentFrontmatter('# no frontmatter\n'), '# no frontmatter\n');
   }));
 
