@@ -645,6 +645,9 @@ function _parseEventTimestamp(line, i) {
 function _appendEventPayloadLine(event, line) {
   if (!line.startsWith('  ')) return;
   const content = line.slice(2);
+  // The server emits "  (no payload)" as the placeholder for a null
+  // payload; keep payload null instead of surfacing the marker as content.
+  if (event.payload === null && content === '(no payload)') return;
   event.payload = event.payload === null ? content : `${event.payload}\n${content}`;
 }
 
@@ -696,7 +699,7 @@ function _validateSendParams(p) {
   }
   if (p.toSession !== undefined) {
     if (typeof p.toSession !== 'string') throw Object.assign(new Error('"toSession" must be a string'), { statusCode: 400 });
-    if (!p.toSession) throw Object.assign(new Error('"toSession" must not be empty; omit it to broadcast'), { statusCode: 400 });
+    if (!p.toSession.trim()) throw Object.assign(new Error('"toSession" must not be empty; omit it to broadcast'), { statusCode: 400 });
   }
   if (p.sessionId   !== undefined && typeof p.sessionId   !== 'string') throw Object.assign(new Error('"sessionId" must be a string'),   { statusCode: 400 });
   if (p.projectPath !== undefined && typeof p.projectPath !== 'string') throw Object.assign(new Error('"projectPath" must be a string'), { statusCode: 400 });
