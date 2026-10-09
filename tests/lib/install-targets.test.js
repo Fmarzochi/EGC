@@ -5111,6 +5111,74 @@ function runTests() {
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('crush'), 'Should include crush target');
   }));
+
+  tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'auggie',
+      repoRoot,
+      homeDir,
+      modules: [
+        { id: 'skills-core', paths: ['skills/workflow/tdd-workflow'] },
+        { id: 'commands-core', paths: ['commands'] },
+        { id: 'rules-core', paths: ['rules'] },
+      ],
+    });
+
+    const skillsDir = path.join(homeDir, '.augment', 'skills');
+    const commandsDir = path.join(homeDir, '.augment', 'commands');
+    const rulesDir = path.join(homeDir, '.augment', 'rules');
+
+    assert.ok(
+      plan.operations.some(op => op.destinationPath === path.join(skillsDir, 'tdd-workflow')),
+      'the skill lands flat under ~/.augment/skills, stripped of its category'
+    );
+    assert.ok(
+      plan.operations.some(op => op.destinationPath && op.destinationPath.startsWith(commandsDir + path.sep)),
+      'commands land under ~/.augment/commands'
+    );
+    assert.ok(
+      plan.operations.some(op => op.destinationPath && op.destinationPath.startsWith(rulesDir + path.sep)),
+      'rules land flattened under ~/.augment/rules'
+    );
+    assert.deepStrictEqual(plan.managedRoots, [path.join(homeDir, '.augment')], 'auggie-home manages only its own root, no hooks or shared root');
+  }));
+
+  tally(test('auggie-project installs the same three families under the project .augment', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'auggie-project',
+      repoRoot,
+      projectRoot,
+      modules: [
+        { id: 'skills-core', paths: ['skills/workflow/tdd-workflow'] },
+        { id: 'rules-core', paths: ['rules'] },
+      ],
+    });
+
+    const skillsDir = path.join(projectRoot, '.augment', 'skills');
+    const rulesDir = path.join(projectRoot, '.augment', 'rules');
+
+    assert.ok(
+      plan.operations.some(op => op.destinationPath === path.join(skillsDir, 'tdd-workflow')),
+      'the skill lands flat under the project .augment/skills'
+    );
+    assert.ok(
+      plan.operations.some(op => op.destinationPath && op.destinationPath.startsWith(rulesDir + path.sep)),
+      'rules land flattened under the project .augment/rules'
+    );
+  }));
+
+  tally(test('auggie adapters are included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const ids = adapters.map(a => a.id);
+    assert.ok(ids.includes('auggie-home'), 'Should include auggie-home');
+    assert.ok(ids.includes('auggie-project'), 'Should include auggie-project');
+  }));
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
