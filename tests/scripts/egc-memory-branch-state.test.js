@@ -78,6 +78,7 @@ async function runTests() {
     legacyBranchStateFile,
     resolveStateRead,
     resolveStateWrite,
+    trustedGitPath,
   } = api;
 
   console.log('\n=== Testing egc-memory build/branch-state.js ===\n');
@@ -104,6 +105,19 @@ async function runTests() {
     const repo = makeGitRepo('hotfix/login');
     assert.strictEqual(detectBranch(repo), 'hotfix/login');
     assert.strictEqual(detectBranch(makeTmpDir('egc-memory-norepo-')), null);
+  })) passed++; else failed++;
+
+  if (test('trustedGitPath refuses a .git path outside the home and temp roots (#1802)', () => {
+    const realTmp = fs.realpathSync.native(os.tmpdir());
+    const under = path.join(realTmp, 'egc-trusted', '.git', 'HEAD');
+    assert.strictEqual(
+      trustedGitPath(path.join(os.tmpdir(), 'egc-trusted', 'sub', '..', '.git', 'HEAD')),
+      under,
+      'resolved, normalised and canonical, same as scripts/lib/branch-state.js'
+    );
+    assert.strictEqual(trustedGitPath(path.join(os.tmpdir(), 'egc-trusted', 'HEAD')), null, 'no .git segment');
+    const outside = path.join(path.parse(realTmp).root, 'egc-nowhere', '.git', 'HEAD');
+    assert.strictEqual(trustedGitPath(outside), null, 'outside the home and temp roots');
   })) passed++; else failed++;
 
   if (test('detectDetachedCommit returns the commit on detached HEAD, null on a branch or outside a repo', () => {
