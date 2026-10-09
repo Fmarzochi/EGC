@@ -61,5 +61,11 @@ run('empty and nullish input gives no tokens', () => {
   assert.deepStrictEqual(tokenize(undefined), []);
 });
 
+run('a word that stems to a stop-word is dropped with it, and real words are untouched', () => {
+  assert.deepStrictEqual(tokenize('testing tested specs libs'), []);
+  assert.deepStrictEqual(tokenize('the billing payments'), ['bill', 'payment']);
+  assert.deepStrictEqual(tokenize('testing', { stem: false }), ['testing'], 'without stemming the word is kept');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

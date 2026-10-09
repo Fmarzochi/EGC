@@ -112,22 +112,40 @@ async function branchPaths(projectPath: string): Promise<Set<string>> {
   return new Set((diff ?? '').split('\0').filter(l => l.trim()).map(norm));
 }
 
+// The output of `git log -z --name-only --pretty=format:%H`: each commit is
+// "<hash>\n<first path>", then its other paths, every path ended by NUL, and an
+// empty record between commits. A path cannot be empty or hold a NUL, so the
+// empty record is the one separator no path can imitate (a marker character
+// could be part of a path); the hash is cut at the first newline, and a
+// commit with no paths is the hash alone.
+export function parseLogRecords(raw: string): string[][] {
+  const commits: string[][] = [];
+  let files: string[] | null = null; // null: the next record starts a commit
+  for (const record of raw.split('\0')) {
+    if (record === '') {
+      if (files?.length) commits.push(files);
+      files = null;
+    } else if (files === null) {
+      files = [];
+      const newline = record.indexOf('\n');
+      const first = newline === -1 ? '' : record.slice(newline + 1);
+      if (first.trim()) files.push(norm(first));
+    } else if (record.trim()) {
+      files.push(norm(record));
+    }
+  }
+  if (files?.length) commits.push(files);
+  return commits;
+}
+
 async function recentAndCochange(
   projectPath: string
 ): Promise<{ recent: Map<string, number>; cochange: Map<string, Map<string, number>> }> {
   const recent = new Map<string, number>();
   const cochange = new Map<string, Map<string, number>>();
-  const raw = await runGit(projectPath, ['log', `-${LOG_LIMIT}`, '-z', '--name-only', '--pretty=format:%x01%H', '--no-merges']);
+  const raw = await runGit(projectPath, ['log', `-${LOG_LIMIT}`, '-z', '--name-only', '--pretty=format:%H', '--no-merges']);
   if (!raw) return { recent, cochange };
-
-  // With -z each commit is "\x01<hash>\n" followed by its paths, NUL-separated and unquoted.
-  const commits: string[][] = [];
-  for (const chunk of raw.split('\x01')) {
-    const newline = chunk.indexOf('\n');
-    if (newline === -1) continue;
-    const files = chunk.slice(newline + 1).split('\0').filter(f => f.trim()).map(norm);
-    if (files.length) commits.push(files);
-  }
+  const commits = parseLogRecords(raw);
 
   const n = Math.max(commits.length, 1);
   commits.forEach((files, i) => {
