@@ -63,16 +63,26 @@ function ansiEscape(text: string, at: number): Piece {
   return { value, raw: text.slice(at, at + 2), end: at + 2 };
 }
 
-// The effective text of a $'...' body: every ANSI-C escape decoded to the
-// character it stands for, so a scan over the result sees the real word
-// boundaries (a $'curl\x20-u\x20user:pw' body reads as "curl -u user:pw").
+// Decoded characters that double as shell syntax: re-scanning a decoded
+// quote, substitution opener or separator as literal text would let it be
+// read as real syntax by redactLine below (a decoded apostrophe can open a
+// quoted run that then hides a credential inside it, from the scanner's
+// point of view, as a false quote). Only whitespace escapes are decoded.
+const SYNTACTIC_DECODED_CHARS = new Set(["'", '"', '`', '$', '\\', ';', '|', '&', '(', ')', '<', '>']);
+
+// The effective text of a $'...' body for word-boundary purposes: a
+// whitespace ANSI-C escape decodes to the character it stands for, so a scan
+// over the result sees the real word boundaries (a $'curl\x20-u\x20user:pw'
+// body reads as "curl -u user:pw"). Any other escape is left exactly as
+// written, so it is never re-interpreted as shell syntax by the scan.
 function decodeAnsiCBody(text: string): string {
   let out = '';
   let i = 0;
   while (i < text.length) {
     if (text[i] === '\\' && i + 1 < text.length) {
       const piece = ansiEscape(text, i);
-      out += piece.value;
+      const keepAsWritten = piece.value.length !== 1 || SYNTACTIC_DECODED_CHARS.has(piece.value);
+      out += keepAsWritten ? text.slice(i, piece.end) : piece.value;
       i = piece.end;
     } else {
       out += text[i];
@@ -467,14 +477,24 @@ class CurlRedactor {
   }
 
   // A quoted word that a shell runs as a command line (the operand of sh -c,
-  // bash -lc and the like) is redacted inside its quotes.
+  // bash -lc and the like) is redacted inside its quotes. $'...' (ANSI-C) is
+  // the only form decoded before the scan; $"..." is double-quote
+  // interpolation, not ANSI-C, and must not be run through \x-style decoding.
+  // decodeAnsiCBody only ever decodes whitespace escapes (never a quote,
+  // backslash or separator), so the decoded text can never hand the rescan
+  // below real shell syntax that was not there in the executed command; no
+  // re-encoding back to ANSI-C is needed on the way out. When nothing gets
+  // redacted, the original spelling is kept verbatim.
   private quotedBody(raw: string): string {
     const prefix = raw.startsWith('$') ? 2 : 1;
     const quote = raw[prefix - 1];
     if ((quote !== '"' && quote !== "'") || raw.length < prefix + 1 || !raw.endsWith(quote)) return raw;
     const body = raw.slice(prefix, -1);
-    const effective = prefix === 2 ? decodeAnsiCBody(body) : body;
-    return `${raw.slice(0, prefix)}${this.redact(effective)}${quote}`;
+    const isAnsiC = prefix === 2 && quote === "'";
+    const effective = isAnsiC ? decodeAnsiCBody(body) : body;
+    const redacted = this.redact(effective);
+    if (redacted === effective) return raw;
+    return `${raw.slice(0, prefix)}${redacted}${quote}`;
   }
 
   // The credential as typed, with the password replaced.

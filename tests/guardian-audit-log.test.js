@@ -331,6 +331,33 @@ if (test('redactSecretsInText: an escaped apostrophe inside $\'...\' does not en
   assert.ok(!result.includes('user:pw'), result);
 })) passed++; else failed++;
 
+// ── cubic review on #1805: $"..." is not ANSI-C, and a decoded quote must
+// never be handed back to the scanner as real shell syntax ─────────────────
+
+if (test('redactSecretsInText: $"..." (double-quote) keeps \\x escapes literal, unlike $\'...\' (ANSI-C)', () => {
+  const result = redactSecretsInText('bash -c $"echo a\\x20b; curl -u user:pw http://x"');
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+  assert.ok(result.includes('a\\x20b'), `\\x20 must stay literal inside $"...", not decoded to a real space: ${result}`);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: a $\'...\' body with nothing to redact is emitted unchanged', () => {
+  const input = "bash -c $'echo\\x20hello'";
+  assert.strictEqual(redactSecretsInText(input), input);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: a decoded apostrophe in $\'...\' must not open a quote that hides a later credential from the scan', () => {
+  // \x27 decodes to an apostrophe; decoding it naively and re-scanning the
+  // result as a fresh command line would make "it's" open a quoted run that
+  // swallows "curl -u user:pw" as quoted text, hiding it from the credential
+  // scan (curl must appear on the line for -u to be read as a credential flag
+  // at all, same as every other curl case in this file).
+  const result = redactSecretsInText("bash -c $'echo it\\x27s; curl -u user:pw'");
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+  assert.ok(result.includes("it\\x27s"), `the preserved \\x27 escape must not be corrupted by re-encoding: ${result}`);
+})) passed++; else failed++;
+
 // ── writeAuditEntry ─────────────────────────────────────────────────────────
 
 if (test('writeAuditEntry: appends a valid NDJSON line to audit.log', () => {
