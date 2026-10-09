@@ -8,16 +8,19 @@ const os = require('os');
 const path = require('path');
 
 const {
+  ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM,
   ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
   ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
+  toAntigravityAgentFrontmatter,
   toAntigravityRule,
   toClaudeAgentFrontmatter,
   transformContent,
   toOpenCodeAgentFrontmatter,
 } = require('../../scripts/lib/install/copy-transforms');
 const { planAntigravityRuleFiles } = require('../../scripts/lib/antigravity-rules');
+const { planAntigravityAgentFiles } = require('../../scripts/lib/antigravity-agents');
 
 function test(name, fn) {
   try {
@@ -46,6 +49,22 @@ const AGENT = [
   'tools: ["not", "frontmatter"]',
   '',
 ].join('\n');
+
+const ANTIGRAVITY_TOOLS = new Set(['view_file', 'grep_search', 'run_command', 'write_to_file', 'replace_file_content', 'multi_replace_file_content']);
+
+function assertAntigravityAgent(repoRoot, agent) {
+  assert.strictEqual(agent.transform, ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM, agent.sourceRelativePath);
+  const text = plannedFileContent(path.join(repoRoot, agent.sourceRelativePath), agent.transform).toString('utf8');
+  const frontmatter = text.split('\n---\n')[0];
+  assert.ok(/^---\nname: \S/.test(frontmatter), `${agent.sourceRelativePath}: name`);
+  assert.ok(/\ndescription: \S/.test(frontmatter), `${agent.sourceRelativePath}: description`);
+  for (const [, tool] of frontmatter.matchAll(/\n {2}- (\S+)/g)) {
+    assert.ok(ANTIGRAVITY_TOOLS.has(tool), `${agent.sourceRelativePath}: tool ${tool}`);
+  }
+  const model = /\nmodel: (\S+)/.exec(frontmatter)?.[1];
+  assert.ok(model === undefined || ['inherit', 'flash', 'pro'].includes(model), `${agent.sourceRelativePath}: model ${model}`);
+  assert.ok(!/\n(stack|color):/.test(frontmatter), `${agent.sourceRelativePath}: no stack or color`);
+}
 
 function runTests() {
   console.log('\n=== Testing copy-transforms.js ===\n');
@@ -223,10 +242,47 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  const agentResults = runAntigravityAgentTests();
+  passed += agentResults.passed;
+  failed += agentResults.failed;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failed > 0) {
     process.exit(1);
   }
+}
+
+function runAntigravityAgentTests() {
+  const results = [];
+  results.push(test('an Antigravity subagent names only the tools Antigravity maps, with a model it accepts (#1669)', () => {
+    assert.strictEqual(
+      toAntigravityAgentFrontmatter('---\nname: architect\ndescription: Designs.\ntools: ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "WebFetch", "mcp__context7__query-docs"]\nmodel: gemini-3.1-pro\ncolor: teal\nstack: ["*"]\n---\n\nBody\n'),
+      '---\nname: architect\ndescription: Designs.\ntools:\n  - view_file\n  - grep_search\n  - run_command\n  - replace_file_content\n  - write_to_file\nmodel: pro\n---\n\nBody\n'
+    );
+    assert.strictEqual(
+      toAntigravityAgentFrontmatter('---\nname: a\ndescription: d\ntools:\n  - Read\n  - MultiEdit\nmodel: gemini-3.6-flash\n---\nx\n'),
+      '---\nname: a\ndescription: d\ntools:\n  - view_file\n  - multi_replace_file_content\nmodel: flash\n---\nx\n',
+      'a block list and a flash model'
+    );
+    assert.strictEqual(
+      toAntigravityAgentFrontmatter('---\nname: a\ndescription: d\ntools: ["Glob"]\nmodel: sonnet\n---\nx\n'),
+      '---\nname: a\ndescription: d\n---\nx\n',
+      'no mapped tool leaves the default, and a model Antigravity does not name inherits'
+    );
+    assert.strictEqual(toAntigravityAgentFrontmatter('# no frontmatter\n'), '# no frontmatter\n');
+  }));
+
+  results.push(test('every shipped agent reaches Antigravity with a name, a description, mapped tools and a valid model (#1669)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const agents = planAntigravityAgentFiles(repoRoot, 'agents');
+    assert.ok(agents.length > 50, 'the catalog agents are planned');
+    assert.strictEqual(new Set(agents.map(agent => agent.fileName)).size, agents.length, 'no two agents share a file name');
+    for (const agent of agents) {
+      assertAntigravityAgent(repoRoot, agent);
+    }
+  }));
+
+  return { passed: results.filter(Boolean).length, failed: results.filter(result => !result).length };
 }
 
 if (require.main === module) {

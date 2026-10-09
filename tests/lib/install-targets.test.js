@@ -213,9 +213,17 @@ function runTests() {
 
     const destinations = plan.operations.map(operation => operation.destinationPath);
     const under = prefix => destinations.some(destination => destination === prefix || destination.startsWith(prefix + path.sep));
-    for (const kept of ['AGENTS.md', 'agents', 'commands', path.join('scripts', 'hooks'), path.join('scripts', 'lib'), path.join('scripts', 'setup-package-manager.js')]) {
-      assert.ok(destinations.includes(path.join(root, kept)), `${kept} is still written: Antigravity reads AGENTS.md, its hooks run from scripts/, and agents and commands keep their spot until they move to config/`);
+    for (const kept of ['AGENTS.md', 'commands', path.join('scripts', 'hooks'), path.join('scripts', 'lib'), path.join('scripts', 'setup-package-manager.js')]) {
+      assert.ok(destinations.includes(path.join(root, kept)), `${kept} is still written: Antigravity reads AGENTS.md, its hooks run from scripts/, and commands keep their spot until they move`);
     }
+    const agentOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('agents/'));
+    assert.ok(agentOperations.length > 50, 'every catalog agent is planned');
+    assert.ok(agentOperations.every(operation => (
+      path.dirname(operation.destinationPath) === path.join(root, 'config', 'agents')
+      && operation.transform === 'antigravity-agent-frontmatter'
+    )), 'each agent is one file under config/agents, in the subagent format (#1669)');
+    assert.ok(destinations.includes(path.join(root, 'config', 'agents', 'architect.md')));
+    assert.ok(!under(path.join(root, 'agents')), 'nothing is planned under ~/.gemini/agents any more (#1669)');
     for (const residue of ['.agents', 'hooks', 'mcp-configs']) {
       assert.ok(!under(path.join(root, residue)), `${residue} was the retired Gemini CLI layout: nothing is planned there`);
     }
@@ -649,7 +657,7 @@ function runTests() {
     );
   }));
 
-  tally(test('plans antigravity remaps for workflows, skills, and flat rules', () => {
+  tally(test('plans antigravity remaps for workflows, subagents, and flat rules (#1669)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -680,13 +688,14 @@ function runTests() {
       )),
       'Should remap commands into workflows'
     );
-    assert.ok(
-      plan.operations.some(operation => (
-        operation.sourceRelativePath === 'agents'
-        && operation.destinationPath === path.join(projectRoot, '.agents', 'skills')
-      )),
-      'Should remap agents into skills'
-    );
+    const agentOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('agents/'));
+    assert.ok(agentOperations.length > 50, 'every catalog agent is planned');
+    assert.ok(agentOperations.every(operation => (
+      path.dirname(operation.destinationPath) === path.join(projectRoot, '.agents', 'agents')
+      && operation.transform === 'antigravity-agent-frontmatter'
+    )), 'each agent is one file under .agents/agents, where Antigravity reads workspace subagents');
+    assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(projectRoot, '.agents', 'skills') + path.sep)
+      && normalizedRelativePath(operation.sourceRelativePath).startsWith('agents')), 'no agent lands under .agents/skills any more');
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'rules/common/coding-style.md'

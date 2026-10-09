@@ -12,6 +12,7 @@ const CLAUDE_AGENT_FRONTMATTER_TRANSFORM = 'claude-agent-frontmatter';
 const OPENCODE_AGENT_FRONTMATTER_TRANSFORM = 'opencode-agent-frontmatter';
 const ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM = 'antigravity-rule-frontmatter';
 const ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM = 'antigravity-manual-rule-frontmatter';
+const ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM = 'antigravity-agent-frontmatter';
 
 // Model names Claude Code resolves itself. Anything else in an agent's
 // frontmatter (the catalog's Gemini ids) would be sent to the API as-is and
@@ -283,6 +284,84 @@ function toAntigravityRule(text, { manual = false, directory = null } = {}) {
   return ['---', ...frontmatter, '---', ...parts.body.map(line => flattenRuleLinks(line, directory))].join('\n');
 }
 
+const ANTIGRAVITY_TOOL_NAMES = new Map([
+  ['Read', 'view_file'],
+  ['Grep', 'grep_search'],
+  ['Bash', 'run_command'],
+  ['Write', 'write_to_file'],
+  ['Edit', 'replace_file_content'],
+  ['MultiEdit', 'multi_replace_file_content'],
+]);
+const ANTIGRAVITY_AGENT_DROPPED_KEYS = new Set(['stack', 'color']);
+const ANTIGRAVITY_MODELS = new Set(['inherit', 'flash', 'pro']);
+
+function toAntigravityModel(value) {
+  const model = stripQuotes(value.trim()).toLowerCase();
+  if (ANTIGRAVITY_MODELS.has(model)) {
+    return model;
+  }
+  if (/(^|-)flash($|-)/.test(model)) {
+    return 'flash';
+  }
+  return /(^|-)pro($|-)/.test(model) ? 'pro' : null;
+}
+
+function toAntigravityToolsBlock(items) {
+  const tools = [...new Set(items.map(item => ANTIGRAVITY_TOOL_NAMES.get(stripQuotes(item.trim()))).filter(Boolean))];
+  return tools.length > 0 ? ['tools:', ...tools.map(tool => `  - ${tool}`)] : [];
+}
+
+function readFrontmatterList(value, lines, index) {
+  const flow = parseFlowSequence(value);
+  if (flow) {
+    return { items: flow, next: index };
+  }
+  if (value === '') {
+    return collectBlockListItems(lines, index);
+  }
+  return { items: value.split(','), next: index };
+}
+
+function rewriteAntigravityAgentFrontmatter(lines) {
+  const output = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    const match = splitFrontmatterLine(line);
+    index += 1;
+    if (!match) {
+      output.push(line);
+      continue;
+    }
+    const { key, value } = match;
+    if (ANTIGRAVITY_AGENT_DROPPED_KEYS.has(key)) {
+      index = value === '' ? collectBlockListItems(lines, index).next : index;
+      continue;
+    }
+    if (key === 'model') {
+      const model = toAntigravityModel(value);
+      if (model) output.push(`model: ${model}`);
+      continue;
+    }
+    if (key === 'tools') {
+      const list = readFrontmatterList(value, lines, index);
+      output.push(...toAntigravityToolsBlock(list.items));
+      index = list.next;
+      continue;
+    }
+    output.push(line);
+  }
+  return output;
+}
+
+function toAntigravityAgentFrontmatter(text) {
+  const parts = splitFrontmatter(stripByteOrderMark(text));
+  if (!parts) {
+    return text;
+  }
+  return ['---', ...rewriteAntigravityAgentFrontmatter(parts.frontmatter), '---', ...parts.body].join('\n');
+}
+
 function ruleDirectory(sourcePath) {
   if (!sourcePath) {
     return null;
@@ -299,6 +378,7 @@ const TRANSFORMS = Object.freeze({
     toAntigravityRule(content.toString('utf8'), { directory: ruleDirectory(sourcePath) }),
     'utf8'
   ),
+  [ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toAntigravityAgentFrontmatter(content.toString('utf8')), 'utf8'),
   [ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
     toAntigravityRule(content.toString('utf8'), { manual: true, directory: ruleDirectory(sourcePath) }),
     'utf8'
@@ -321,11 +401,13 @@ function plannedFileContent(sourcePath, transform) {
 }
 
 module.exports = {
+  ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM,
   ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
   ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
   OPENCODE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
+  toAntigravityAgentFrontmatter,
   toAntigravityRule,
   toClaudeAgentFrontmatter,
   toOpenCodeAgentFrontmatter,
