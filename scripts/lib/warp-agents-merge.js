@@ -116,8 +116,20 @@ function removeSkillIndexEntry(existingContent, name) {
   return [...before, ...blockLines, ...after].join('\n');
 }
 
+function nextSkillIndexContent(existingContent, operation) {
+  if (operation.removeEntry) {
+    return existingContent === null ? null : removeSkillIndexEntry(existingContent, operation.skillName);
+  }
+  return mergeSkillIndexEntry(existingContent, {
+    name: operation.skillName,
+    description: operation.skillDescription,
+    relativePath: operation.relativePath,
+  });
+}
+
 module.exports = {
   MERGE_MARKDOWN_INDEX_KIND,
   mergeSkillIndexEntry,
+  nextSkillIndexContent,
   removeSkillIndexEntry,
 };

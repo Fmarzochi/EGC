@@ -37,7 +37,7 @@ const {
 } = require('./aider-config-merge');
 const {
   MERGE_MARKDOWN_INDEX_KIND,
-  mergeSkillIndexEntry,
+  nextSkillIndexContent,
   removeSkillIndexEntry,
 } = require('./warp-agents-merge');
 
@@ -492,11 +492,8 @@ function repairMergeMarkdownIndex(operation) {
   const existingContent = fs.existsSync(operation.destinationPath)
     ? fs.readFileSync(operation.destinationPath, 'utf8')
     : null;
-  const nextContent = mergeSkillIndexEntry(existingContent, {
-    name: operation.skillName,
-    description: operation.skillDescription,
-    relativePath: operation.relativePath,
-  });
+  const nextContent = nextSkillIndexContent(existingContent, operation);
+  if (nextContent === null || nextContent === existingContent) return;
   ensureParentDir(operation.destinationPath);
   replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
 }
@@ -716,12 +713,8 @@ function inspectAiderConfigReadListOperation(operation, destinationPath) {
 
 function inspectWarpAgentsIndexOperation(operation, destinationPath) {
   const existingContent = readFileUtf8(destinationPath);
-  const nextContent = mergeSkillIndexEntry(existingContent, {
-    name: operation.skillName,
-    description: operation.skillDescription,
-    relativePath: operation.relativePath,
-  });
-  if (nextContent !== existingContent) {
+  const nextContent = nextSkillIndexContent(existingContent, operation);
+  if (nextContent !== null && nextContent !== existingContent) {
     return inspectResult('drifted', operation, destinationPath);
   }
   return inspectResult('ok', operation, destinationPath);

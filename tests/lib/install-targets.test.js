@@ -4015,7 +4015,33 @@ function runTests() {
     assert.strictEqual(statePath, path.join(projectRoot, '.warp', 'egc-install-state.json'));
   }));
 
-  tally(test('warp adapter emits a flat skill copy plus a merge-markdown-skill-index operation per skill', () => {
+  tally(test('warns when the warp install state cannot be read, since .warp/skills is then left as the person\'s (#1673)', () => {
+    const fs = require('fs');
+    const adapter = getInstallTargetAdapter('warp');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-warp-unreadable-'));
+    try {
+      const input = { repoRoot: projectRoot, projectRoot };
+      const unreadable = issues => issues.filter(issue => issue.code === 'install-state-unreadable');
+      assert.deepStrictEqual(unreadable(adapter.validate(input)), [], 'no warning without a state file');
+      const statePath = adapter.getInstallStatePath(input);
+      assert.strictEqual(statePath, path.join(projectRoot, '.warp', 'egc-install-state.json'));
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, '{');
+      const warnings = unreadable(adapter.validate(input));
+      assert.strictEqual(warnings.length, 1, 'one warning for an unreadable state');
+      assert.strictEqual(warnings[0].severity, 'warning');
+      assert.ok(warnings[0].message.includes(path.join(projectRoot, '.warp', 'skills')), warnings[0].message);
+      assert.ok(repoRoot, 'the catalog root is not needed to read the state');
+      const withoutProject = adapter.validate({});
+      assert.ok(withoutProject.some(issue => issue.code === 'missing-project-root'), 'validate({}) reports the missing project root instead of throwing');
+      assert.deepStrictEqual(unreadable(withoutProject), [], 'and no state warning without a project');
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  }));
+
+  tally(test('warp adapter copies each skill directory to .warp/skills/<name>/ plus a merge-markdown-skill-index operation (#1673)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -4029,15 +4055,15 @@ function runTests() {
     assert.strictEqual(plan.adapter.id, 'warp-project');
 
     const copyOp = plan.operations.find(op => op.kind === 'copy-path');
-    assert.ok(copyOp, 'Should emit a copy-path operation for the skill file');
-    assert.strictEqual(normalizedRelativePath(copyOp.sourceRelativePath), 'skills/testing/tdd-workflow/SKILL.md');
-    assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.warp', 'skills', 'tdd-workflow.md'));
+    assert.ok(copyOp, 'Should emit a copy-path operation for the skill directory');
+    assert.strictEqual(normalizedRelativePath(copyOp.sourceRelativePath), 'skills/testing/tdd-workflow');
+    assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.warp', 'skills', 'tdd-workflow'), 'Warp discovers <name>/SKILL.md natively');
 
     const mergeOp = plan.operations.find(op => op.kind === 'merge-markdown-skill-index');
     assert.ok(mergeOp, 'Should emit a merge-markdown-skill-index operation for AGENTS.md');
     assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, 'AGENTS.md'));
     assert.strictEqual(mergeOp.skillName, 'tdd-workflow');
-    assert.strictEqual(mergeOp.relativePath, '.warp/skills/tdd-workflow.md');
+    assert.strictEqual(mergeOp.relativePath, '.warp/skills/tdd-workflow/SKILL.md');
     assert.ok(mergeOp.skillDescription.startsWith('Use this skill when writing new features'));
     assert.ok(mergeOp.skillDescription.length <= 110, 'Description should be truncated to the shared max length');
   }));
