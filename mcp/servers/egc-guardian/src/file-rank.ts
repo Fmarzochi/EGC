@@ -22,6 +22,8 @@ import { buildFileIndex } from './file-index.js';
 import { scoreDocuments } from './file-ranker.js';
 import { redactPayload } from './audit-log.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
+import { resolveRoot } from './graph-context.js';
+import { isProtectedPath as isProtectedByDefault } from './validator.js';
 
 export interface RankOptions {
   projectPath: string;
@@ -35,9 +37,17 @@ export interface RankOptions {
 }
 export interface RankedFile { path: string; score: number; signals: Record<string, number> }
 
+// The guard lives here, not in the callers: the MCP tool and `egc context` both
+// come through this function, and neither may rank a filesystem root, the home
+// directory or a protected path, nor read a protected file inside a project.
 export async function rankProjectFiles(opts: RankOptions): Promise<{ ranked: RankedFile[]; explain: string[]; briefing: string }> {
-  const index = await buildFileIndex(opts.projectPath, { isProtectedPath: opts.isProtectedPath });
-  const gitSignal = opts.useGit === false ? null : await collectGitContext(opts.projectPath);
+  const resolved = resolveRoot(opts.projectPath);
+  if ('reason' in resolved) throw new Error(resolved.reason);
+  const isProtected = opts.isProtectedPath ?? isProtectedByDefault;
+  if (isProtected(resolved.root)) throw new Error('project_path must not be a protected path');
+
+  const index = await buildFileIndex(resolved.root, { isProtectedPath: isProtected });
+  const gitSignal = opts.useGit === false ? null : await collectGitContext(resolved.root);
   const scored = scoreDocuments(index.docs, {
     query: opts.query,
     history: opts.history ?? '',

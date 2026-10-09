@@ -86,6 +86,16 @@ fs.writeFileSync(path.join(root, 'unrelated.ts'), 'export const color = "red";\n
     assert.ok(r.briefing.includes('[USER REQUEST]'));
   });
 
+  await run('rankProjectFiles itself refuses a filesystem root, the home directory and a protected root', async () => {
+    await assert.rejects(rankProjectFiles({ projectPath: path.parse(root).root, query: 'x', useGit: false }), /filesystem root/);
+    await assert.rejects(rankProjectFiles({ projectPath: os.homedir(), query: 'x', useGit: false }), /home directory/);
+    await assert.rejects(rankProjectFiles({ projectPath: path.join(tmp, 'missing'), query: 'x', useGit: false }), /does not exist/);
+    await assert.rejects(
+      rankProjectFiles({ projectPath: root, query: 'x', useGit: false, isProtectedPath: p => p === fs.realpathSync(root) }),
+      /protected path/
+    );
+  });
+
   await run('no project files gives an empty ranking', async () => {
     const empty = path.join(tmp, 'empty');
     fs.mkdirSync(empty);

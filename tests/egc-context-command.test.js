@@ -46,6 +46,16 @@ run('prints the three-block briefing on stdout', () => {
   assert.strictEqual(r.stderr.trim(), '', 'no explain output without --explain');
 });
 
+run('egc context refuses a filesystem root and the home directory', () => {
+  for (const [dir, reason] of [[path.parse(root).root, /filesystem root/], [os.homedir(), /home directory/]]) {
+    const r = spawnSync(process.execPath, [script, 'chargeCard', '--project', dir, '--no-git'], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 1, r.stdout);
+    assert.ok(r.stderr.startsWith('egc context:'), r.stderr);
+    assert.match(r.stderr, reason);
+    assert.strictEqual(r.stdout, '', 'nothing from the refused directory is printed');
+  }
+});
+
 run('a project that does not exist fails with a one-line message, not a stack trace', () => {
   const r = spawnSync(process.execPath, [script, 'chargeCard', '--project', path.join(tmp, 'missing'), '--no-git'], { encoding: 'utf8' });
   assert.strictEqual(r.status, 1);
