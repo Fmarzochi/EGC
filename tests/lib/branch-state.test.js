@@ -378,6 +378,27 @@ function runTests() {
     assert.ok(!output.promptForAssistant.includes('FLAT_MARKER_137'));
   }));
 
+  tally(test('egc-memory-load hook injects the detached-commit state, never the flat state', () => {
+    const home = makeTmpDir('egc-branch-state-home4b-');
+    const repo = makeGitRepo(null);
+    git(repo, 'checkout -q --detach');
+    const commit = execSync('git rev-parse HEAD', { cwd: repo, encoding: 'utf8' }).trim();
+    writeState(detachedStateFile(getStateDir(home), repo, commit), 'DETACHED_MARKER_137');
+    writeState(flatStateFile(getStateDir(home), repo), 'FLAT_MARKER_137');
+
+    const result = spawnSync('node', [HOOK_PATH], {
+      input: '{}',
+      encoding: 'utf8',
+      env: Object.assign({}, process.env, { HOME: home, USERPROFILE: home, PWD: repo }),
+      cwd: repo,
+    });
+
+    assert.strictEqual(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    assert.ok(output.promptForAssistant.includes('DETACHED_MARKER_137'));
+    assert.ok(!output.promptForAssistant.includes('FLAT_MARKER_137'));
+  }));
+
   tally(test('egc-memory-load hook falls back to the flat state', () => {
     const home = makeTmpDir('egc-branch-state-home5-');
     const repo = makeGitRepo('feature/auth');
