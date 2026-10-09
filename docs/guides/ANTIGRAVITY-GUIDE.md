@@ -30,7 +30,7 @@ egc remaps its component structure to match Antigravity's expected layout:
 
 - **Rules are flattened**: Antigravity expects a flat `rules/` directory (`~/.gemini/config/rules/` for the home install): the installer names each file `<group>-<rule>.md`.
 - **Commands become workflows**: egc's `/command` files land in `.agents/workflows/`, which is Antigravity's equivalent of slash commands.
-- **Agents become subagents**: egc agent definitions land in `.agents/agents/` (`~/.gemini/config/agents/` for the home install), where Antigravity reads custom subagents, with the frontmatter rewritten to the subagent format: Antigravity tool names, `model: pro`, `flash` or inherited.
+- **Agents become subagents**: egc agent definitions land in `.agents/agents/` (`~/.gemini/config/agents/` for the home install), where Antigravity reads custom subagents, with the frontmatter rewritten to the subagent format: Antigravity tool names, `model: pro`, `flash` or inherited. A tool without a confirmed Antigravity name (`Glob`, `WebSearch`, `WebFetch`, MCP tools) is left out of the subagent's `tools`, since an unmapped name can hang the subagent.
 
 ## Directory Structure After Install
 
@@ -38,10 +38,10 @@ egc remaps its component structure to match Antigravity's expected layout:
 your-project/
 ├── .agents/
 │   ├── rules/
-│   │   ├── coding-standards.md
-│   │   ├── testing.md
-│   │   ├── security.md
-│   │   └── typescript.md          # language-specific rules
+│   │   ├── common-coding-style.md
+│   │   ├── common-testing.md
+│   │   ├── common-security.md
+│   │   └── typescript-coding-style.md   # language-specific rules
 │   ├── workflows/
 │   │   ├── plan.md
 │   │   ├── code-review.md

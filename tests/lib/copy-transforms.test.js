@@ -274,7 +274,24 @@ function runAntigravityAgentTests() {
       '---\nname: a\ndescription: d\ntools:\n  - view_file\n  - grep_search\n  - run_command\nmodel: pro\n---\nx\n',
       'a flow list over several lines is read whole'
     );
+    assert.strictEqual(
+      toAntigravityAgentFrontmatter('---\nname: a\ndescription: d\ntools: [Read, Grep] # read only\nmodel: gemini-3.1-pro # main\n---\nx\n'),
+      '---\nname: a\ndescription: d\ntools:\n  - view_file\n  - grep_search\nmodel: pro\n---\nx\n',
+      'an inline comment does not hide the tools or the model'
+    );
     assert.strictEqual(toAntigravityAgentFrontmatter('# no frontmatter\n'), '# no frontmatter\n');
+  }));
+
+  results.push(test('two agent sources that flatten to the same name are refused instead of overwriting each other (#1669)', () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-transforms-agents-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'agents', 'foo'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'agents', 'foo', 'bar.md'), '---\nname: a\n---\n');
+      fs.writeFileSync(path.join(repoRoot, 'agents', 'foo-bar.md'), '---\nname: b\n---\n');
+      assert.throws(() => planAntigravityAgentFiles(repoRoot, 'agents'), /would both install as foo-bar\.md/);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
   }));
 
   results.push(test('every shipped agent reaches Antigravity with a name, a description, mapped tools and a valid model (#1669)', () => {

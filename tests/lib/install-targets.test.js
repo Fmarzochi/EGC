@@ -217,7 +217,11 @@ function runTests() {
       assert.ok(destinations.includes(path.join(root, kept)), `${kept} is still written: Antigravity reads AGENTS.md, its hooks run from scripts/, and commands keep their spot until they move`);
     }
     const agentOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('agents/'));
-    assert.ok(agentOperations.length > 50, 'every catalog agent is planned');
+    assert.deepStrictEqual(
+      agentOperations.map(operation => normalizedRelativePath(operation.sourceRelativePath)).sort(),
+      require('fs').readdirSync(path.join(repoRoot, 'agents')).filter(name => name.endsWith('.md')).map(name => `agents/${name}`).sort(),
+      'every catalog agent is planned exactly once'
+    );
     assert.ok(agentOperations.every(operation => (
       path.dirname(operation.destinationPath) === path.join(root, 'config', 'agents')
       && operation.transform === 'antigravity-agent-frontmatter'
@@ -689,7 +693,11 @@ function runTests() {
       'Should remap commands into workflows'
     );
     const agentOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('agents/'));
-    assert.ok(agentOperations.length > 50, 'every catalog agent is planned');
+    assert.deepStrictEqual(
+      agentOperations.map(operation => normalizedRelativePath(operation.sourceRelativePath)).sort(),
+      require('fs').readdirSync(path.join(repoRoot, 'agents')).filter(name => name.endsWith('.md')).map(name => `agents/${name}`).sort(),
+      'every catalog agent is planned exactly once'
+    );
     assert.ok(agentOperations.every(operation => (
       path.dirname(operation.destinationPath) === path.join(projectRoot, '.agents', 'agents')
       && operation.transform === 'antigravity-agent-frontmatter'

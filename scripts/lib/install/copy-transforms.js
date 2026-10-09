@@ -339,6 +339,21 @@ function readFrontmatterList(value, lines, index) {
   return { items: value.split(','), next: index };
 }
 
+function stripYamlComment(value) {
+  let quote = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '#' && (index === 0 || /\s/.test(value[index - 1]))) {
+      return value.slice(0, index).trimEnd();
+    }
+  }
+  return value;
+}
+
 function rewriteAntigravityAgentFrontmatter(lines) {
   const output = [];
   let index = 0;
@@ -356,12 +371,12 @@ function rewriteAntigravityAgentFrontmatter(lines) {
       continue;
     }
     if (key === 'model') {
-      const model = toAntigravityModel(value);
+      const model = toAntigravityModel(stripYamlComment(value));
       if (model) output.push(`model: ${model}`);
       continue;
     }
     if (key === 'tools') {
-      const list = readFrontmatterList(value, lines, index);
+      const list = readFrontmatterList(stripYamlComment(value), lines, index);
       output.push(...toAntigravityToolsBlock(list.items));
       index = list.next;
       continue;

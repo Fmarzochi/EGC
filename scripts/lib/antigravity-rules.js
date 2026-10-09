@@ -53,17 +53,29 @@ function listSourceFiles(repoRoot, sourceRelativePath) {
     });
 }
 
+function assertUniqueFileNames(files) {
+  const owners = new Map();
+  for (const file of files) {
+    const owner = owners.get(file.fileName);
+    if (owner) {
+      throw new Error(`${owner} and ${file.sourceRelativePath} would both install as ${file.fileName}`);
+    }
+    owners.set(file.fileName, file.sourceRelativePath);
+  }
+  return files;
+}
+
 function planAntigravityRuleFiles(repoRoot, sourceRelativePath) {
   if (!repoRoot) {
     return [];
   }
-  return listSourceFiles(repoRoot, normalizeSourcePath(sourceRelativePath))
+  return assertUniqueFileNames(listSourceFiles(repoRoot, normalizeSourcePath(sourceRelativePath))
     .map(sourceRelativeFile => ({
       sourceRelativePath: sourceRelativeFile,
       fileName: ruleFileName(sourceRelativeFile),
       transform: ruleTransform(sourceRelativeFile),
     }))
-    .filter(rule => rule.fileName);
+    .filter(rule => rule.fileName));
 }
 
 function readRecordedDestinations(statePath) {
@@ -104,6 +116,7 @@ function planAntigravityCopyOperations({ adapter, moduleId, files, destinationDi
 
 module.exports = {
   AGY_RULES_SUBDIR,
+  assertUniqueFileNames,
   isPersonCopy,
   isRuleSource,
   listSourceFiles,

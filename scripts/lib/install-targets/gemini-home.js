@@ -252,7 +252,7 @@ module.exports = createInstallTargetAdapter({
     return [buildValidationIssue(
       'warning',
       'install-state-unreadable',
-      `The install state at ${adapter.getInstallStatePath(input)} cannot be read: skills already under ${path.join(adapter.resolveRoot(input), AGY_SKILLS_SUBDIR)} and rules already under ${path.join(adapter.resolveRoot(input), AGY_RULES_SUBDIR)} that differ from EGC's are treated as yours and left as they are until it can be read again.`
+      `The install state at ${adapter.getInstallStatePath(input)} cannot be read: skills already under ${path.join(adapter.resolveRoot(input), AGY_SKILLS_SUBDIR)}, and rules and agents already under ${path.join(adapter.resolveRoot(input), AGY_RULES_SUBDIR)} and ${path.join(adapter.resolveRoot(input), AGY_AGENTS_SUBDIR)} that differ from EGC's, are treated as yours and left as they are until it can be read again.`
     )];
   },
   planOperations(input, adapter) {

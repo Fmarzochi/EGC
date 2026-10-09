@@ -3,7 +3,7 @@
 const path = require('node:path');
 
 const { ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM } = require('./install/copy-transforms');
-const { listSourceFiles, normalizeSourcePath } = require('./antigravity-rules');
+const { assertUniqueFileNames, listSourceFiles, normalizeSourcePath } = require('./antigravity-rules');
 
 const AGY_AGENTS_SUBDIR = 'config/agents';
 
@@ -25,13 +25,13 @@ function planAntigravityAgentFiles(repoRoot, sourceRelativePath) {
   if (!repoRoot) {
     return [];
   }
-  return listSourceFiles(repoRoot, normalizeSourcePath(sourceRelativePath))
+  return assertUniqueFileNames(listSourceFiles(repoRoot, normalizeSourcePath(sourceRelativePath))
     .map(sourceRelativeFile => ({
       sourceRelativePath: sourceRelativeFile,
       fileName: agentFileName(sourceRelativeFile),
       transform: ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM,
     }))
-    .filter(agent => agent.fileName);
+    .filter(agent => agent.fileName));
 }
 
 module.exports = {
