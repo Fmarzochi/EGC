@@ -234,21 +234,20 @@ function _parseEventTimestamp(line, i) {
   return after.trim();
 }
 
-// Preamble / trailer lines that are never part of an event payload.
-function _isEventTrailerLine(trimmed) {
-  return trimmed === '(no payload)'
-    || trimmed.startsWith('Events for ')
-    || trimmed.startsWith('Treat payloads')
-    || trimmed.startsWith('(peek mode');
-}
-
-// All other non-empty lines while there is a current event are payload. This
-// includes indented payload lines (which the server always emits with 2-space
-// indent) and any continuation lines.
+// A payload line is identified by its position, not its text: the server
+// ALWAYS emits payload with exactly a 2-space indent (see the comment above
+// _parseEventHeader), while preamble ("Events for …", "Treat payloads…") and
+// trailer ("(no payload)", "(peek mode…)") lines are never indented. Strip
+// only that indent and keep the rest verbatim, including a line that is
+// blank after the indent or happens to read like metadata, classifying by
+// content instead of position is what silently dropped real payload lines.
 function _appendEventPayloadLine(event, line) {
-  const trimmed = line.trim();
-  if (!trimmed || _isEventTrailerLine(trimmed)) return;
-  event.payload = event.payload ? `${event.payload}\n${trimmed}` : trimmed;
+  if (!line.startsWith('  ')) return;
+  const content = line.slice(2);
+  // The server emits "  (no payload)" as the placeholder for a null
+  // payload; keep payload null instead of surfacing the marker as content.
+  if (event.payload === null && content === '(no payload)') return;
+  event.payload = event.payload === null ? content : `${event.payload}\n${content}`;
 }
 
 module.exports = { _parseEventsText, _parsePeersText, _parseSendText };

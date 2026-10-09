@@ -57,7 +57,10 @@ function _validateSendParams(p) {
       { statusCode: 400 }
     );
   }
-  if (p.toSession   !== undefined && typeof p.toSession   !== 'string') throw Object.assign(new Error('"toSession" must be a string'),   { statusCode: 400 });
+  if (p.toSession !== undefined) {
+    if (typeof p.toSession !== 'string') throw Object.assign(new Error('"toSession" must be a string'), { statusCode: 400 });
+    if (!p.toSession.trim()) throw Object.assign(new Error('"toSession" must not be empty; omit it to broadcast'), { statusCode: 400 });
+  }
   if (p.sessionId   !== undefined && typeof p.sessionId   !== 'string') throw Object.assign(new Error('"sessionId" must be a string'),   { statusCode: 400 });
   if (p.projectPath !== undefined && typeof p.projectPath !== 'string') throw Object.assign(new Error('"projectPath" must be a string'), { statusCode: 400 });
   if (p.payload     !== undefined && typeof p.payload     !== 'string') throw Object.assign(new Error('"payload" must be a string'),     { statusCode: 400 });
