@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const crypto = require('node:crypto');
 
 const { propagateStateContent } = require('./propagate-state');
 const {
@@ -135,6 +136,18 @@ function parseBlockToStateContent(block, updatedIso) { // NOSONAR: line-oriented
   return lines.join('\n');
 }
 
+// True only for a plain file sitting directly at `f`: lstat (unlike
+// fs.existsSync/fs.statSync) does not follow a symlink, so a link planted at
+// any candidate path is refused here instead of being picked and later
+// written through to whatever it points at.
+function existsAsPlainFile(f) {
+  try {
+    return fs.lstatSync(f).isFile();
+  } catch {
+    return false;
+  }
+}
+
 function resolveStateFilePath(projectPath) {
   const stateDir = path.join(os.homedir(), '.egc', 'state');
   const slug = projectSlug(projectPath);
@@ -142,32 +155,50 @@ function resolveStateFilePath(projectPath) {
 
   if (branch) {
     const branchFile = branchStateFile(stateDir, projectPath, branch);
-    if (fs.existsSync(branchFile)) return branchFile;
+    if (existsAsPlainFile(branchFile)) return branchFile;
 
     const legacyBranchFile = legacyBranchStateFile(stateDir, projectPath, branch);
-    if (fs.existsSync(legacyBranchFile)) return legacyBranchFile;
+    if (existsAsPlainFile(legacyBranchFile)) return legacyBranchFile;
   } else if (detachedCommit) {
     // A detached HEAD never falls through to the shared flat file below:
     // every detached checkout of the project used to collide there. Each
     // commit gets its own file, checked here before the project-wide
     // defaults.
     const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
-    if (fs.existsSync(detachedFile)) return detachedFile;
+    if (existsAsPlainFile(detachedFile)) return detachedFile;
     return null;
   }
 
   const defaultFile = path.join(stateDir, slug, 'main.md');
-  if (fs.existsSync(defaultFile)) return defaultFile;
+  if (existsAsPlainFile(defaultFile)) return defaultFile;
 
   const flatFile = path.join(stateDir, `${slug}.md`);
-  if (fs.existsSync(flatFile)) return flatFile;
+  if (existsAsPlainFile(flatFile)) return flatFile;
 
   return null;
+}
+
+// Writes atomically via a temp-file-then-rename, matching saveState() in
+// state-snapshot.js: the temp name is exclusive (wx) so it is never written
+// through an existing link, and rename replaces whatever sits at
+// stateFilePath (a plain file or a symlink) instead of following it.
+function writeStateFileAtomic(stateFilePath, content) {
+  const tmpPath = `${stateFilePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+  try {
+    fs.writeFileSync(tmpPath, content, { flag: 'wx', mode: 0o600, encoding: 'utf-8' });
+    fs.renameSync(tmpPath, stateFilePath);
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }
+  }
 }
 
 function mergeBlockIntoStateFile(stateFilePath, block) {
   const parsed = parseBlockToStateContent(block);
   if (!parsed.trim()) return false;
+
+  // Refuse a symlink here too: resolveStateFilePath already screens its own
+  // candidates, but a caller may pass a path directly (as the tests do).
+  if (!existsAsPlainFile(stateFilePath)) return false;
 
   const rawState = fs.readFileSync(stateFilePath);
   // Encrypted state is owned by the memory server: appending plaintext here
@@ -202,7 +233,7 @@ function mergeBlockIntoStateFile(stateFilePath, block) {
 
   if (updated === existing) return false;
 
-  fs.writeFileSync(stateFilePath, updated, 'utf-8');
+  writeStateFileAtomic(stateFilePath, updated);
   return true;
 }
 

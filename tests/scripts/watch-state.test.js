@@ -271,6 +271,53 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('mergeBlockIntoStateFile refuses to write through a symlink at stateFilePath (#1803)', () => {
+    if (process.platform === 'win32') return; // symlink creation needs elevated privileges on Windows
+    const dir = mktemp();
+    try {
+      const victim = path.join(dir, 'victim.md');
+      fs.writeFileSync(victim, 'untouched');
+      const linkPath = path.join(dir, 'state.md');
+      fs.symlinkSync(victim, linkPath);
+
+      const block = '**Context:** attacker-controlled context';
+      const wrote = mergeBlockIntoStateFile(linkPath, block);
+
+      assert.strictEqual(wrote, false, 'merge must refuse a symlinked stateFilePath');
+      assert.strictEqual(fs.readFileSync(victim, 'utf-8'), 'untouched', 'the symlink target must never be written through');
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('resolveStateFilePath never picks a symlinked candidate (#1803)', () => {
+    if (process.platform === 'win32') return; // symlink creation needs elevated privileges on Windows
+    const projectDir = mktemp();
+    const homeDir = mktemp();
+    const originalHomedir = os.homedir;
+    const { branchStateFile } = require('../../scripts/lib/branch-state');
+
+    try {
+      os.homedir = () => homeDir;
+      const gitDir = path.join(projectDir, '.git');
+      fs.mkdirSync(gitDir);
+      fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/feature/auth\n');
+
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      const currentFile = branchStateFile(stateDir, projectDir, 'feature/auth');
+      const victim = path.join(homeDir, 'victim.md');
+      fs.writeFileSync(victim, 'untouched');
+      fs.mkdirSync(path.dirname(currentFile), { recursive: true });
+      fs.symlinkSync(victim, currentFile);
+
+      assert.strictEqual(resolveStateFilePath(projectDir), null, 'a symlinked candidate must never be picked');
+    } finally {
+      os.homedir = originalHomedir;
+      cleanup(projectDir);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
   if (await test('resolveStateFilePath prefers hashed branch state and falls back to legacy', () => {
     const projectDir = mktemp();
     const homeDir = mktemp();
