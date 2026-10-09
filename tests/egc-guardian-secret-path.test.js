@@ -35,13 +35,22 @@ function run(name, fn) {
 }
 
 const proj = path.join(os.tmpdir(), 'egc-secret-path-proj');
+// The cheap checker judges the path as written and isProtectedPath resolves links, so a home
+// folder that is itself a link would make them differ for a reason that is not a defect.
+const isLink = p => {
+  try {
+    return fs.lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
+  }
+};
+const homeLinked = isLink(os.homedir()) || isLink(path.join(os.homedir(), '.ssh')) || isLink(path.join(os.homedir(), '.aws'));
 const SECRETS = [
   path.join(proj, '.env'),
   path.join(proj, 'config', '.env.production'),
   path.join(proj, 'keys', 'server.pem'),
   path.join(proj, '.npmrc'),
-  path.join(os.homedir(), '.ssh', 'config'),
-  path.join(os.homedir(), '.aws', 'credentials')
+  ...(homeLinked ? [] : [path.join(os.homedir(), '.ssh', 'config'), path.join(os.homedir(), '.aws', 'credentials')])
 ];
 const ORDINARY = ['src/index.ts', 'README.md', 'lib/util.js', 'docs/environment.md', 'tests/a.test.js'].map(p => path.join(proj, p));
 
@@ -65,17 +74,29 @@ run('it leaves git control files and hook surfaces to the full check, which guar
 
 run('it reads the home shorthand and surrounding whitespace the way isProtectedPath does', () => {
   const check = secretPathChecker();
-  assert.strictEqual(check('~/.ssh/id_rsa'), true);
+  if (!homeLinked) assert.strictEqual(check('~/.ssh/id_rsa'), true);
   assert.strictEqual(check(`${path.join(proj, '.env')}\n`), true);
 });
 
-run('a checker made once judges thousands of paths in well under a second', () => {
+run('a checker made once makes no file-system lookups for the paths it judges', () => {
   const check = secretPathChecker();
-  const started = Date.now();
-  for (let i = 0; i < 3000; i++) check(path.join(proj, 'pkg', `module-${i}.ts`));
-  const ms = Date.now() - started;
-  // isProtectedPath takes tens of milliseconds a path, so 3000 would take minutes.
-  assert.ok(ms < 1500, `3000 checks took ${ms} ms`);
+  // Counted, not timed: isProtectedPath makes about 180 synchronous lookups a path, which is what made it too slow for a project walk.
+  let lookups = 0;
+  const originals = ['lstatSync', 'realpathSync', 'statSync'].map(name => [name, fs[name]]);
+  for (const [name, real] of originals) {
+    const counting = function (...args) {
+      lookups++;
+      return real.apply(this, args);
+    };
+    counting.native = real.native;
+    fs[name] = counting;
+  }
+  try {
+    for (let i = 0; i < 3000; i++) check(path.join(proj, 'pkg', `module-${i}.ts`));
+  } finally {
+    for (const [name, real] of originals) fs[name] = real;
+  }
+  assert.strictEqual(lookups, 0, `3000 checks made ${lookups} synchronous lookups`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -88,8 +88,9 @@ export async function buildRelevantContext(
   if ('reason' in resolved) return unavailable(resolved.reason);
   const { root } = resolved;
   const audit = deps.audit ?? (() => undefined);
-  if (deps.isProtectedPath?.(root)) return unavailable('project path is protected');
   try {
+    // Inside the boundary: a check that throws is an unavailable graph, not a rejected call.
+    if (deps.isProtectedPath?.(root)) return unavailable('project path is protected');
     const loaded = await buildAndLoad(root, graphDbPath(root, deps.env), deps);
     if (!loaded) {
       audit('GRAPH_BUSY', { waited_ms: deps.lockWaitMs ?? LOCK_WAIT_MS });

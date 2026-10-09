@@ -109,17 +109,32 @@ fs.writeFileSync(path.join(root, 'unrelated.ts'), 'export const color = "red";\n
     assert.ok(rows.every(row => !row.includes('\ny.ts')), 'the explain table escapes the path too');
   });
 
-  await run('ranking a few hundred files with the default protection checks stays fast', async () => {
+  await run('ranking a few hundred files does not run the full protected-path check on every file', async () => {
     const big = path.join(tmp, 'many');
     fs.mkdirSync(big, { recursive: true });
     for (let i = 0; i < 400; i++) fs.writeFileSync(path.join(big, `unit${i}.ts`), `export const unit${i} = ${i};\n`);
     fs.writeFileSync(path.join(big, 'needle.ts'), 'export function findNeedle() { return 1; }\n');
-    const started = Date.now();
-    const r = await rankProjectFiles({ projectPath: big, query: 'findNeedle', useGit: false });
-    const ms = Date.now() - started;
+    // Counted, not timed, so the result does not depend on how busy the machine is.
+    let lookups = 0;
+    const originals = ['lstatSync', 'realpathSync', 'statSync'].map(name => [name, fs[name]]);
+    for (const [name, real] of originals) {
+      const counting = function (...args) {
+        lookups++;
+        return real.apply(this, args);
+      };
+      counting.native = real.native;
+      fs[name] = counting;
+    }
+    let r;
+    try {
+      r = await rankProjectFiles({ projectPath: big, query: 'findNeedle', useGit: false });
+    } finally {
+      for (const [name, real] of originals) fs[name] = real;
+    }
     assert.strictEqual(r.ranked[0].path, 'needle.ts');
-    // The full protected-path check costs tens of milliseconds a file, so using it for every file would take far longer.
-    assert.ok(ms < 10000, `ranking 401 files took ${ms} ms`);
+    // The full check makes about 180 synchronous lookups a path (some 72,000 for 401 files); the cheap one makes none per path,
+    // so the whole run, root check included, costs a few hundred.
+    assert.ok(lookups < 2000, `ranking 401 files made ${lookups} synchronous file-system lookups`);
   });
 
   await run('no project files gives an empty ranking', async () => {

@@ -132,9 +132,33 @@ fs.writeFileSync(path.join(root, 'secrets.js'), 'export const apiKey = "sk-ant-a
     const proj = path.join(tmp, 'tiers-snippet');
     fs.mkdirSync(proj, { recursive: true });
     fs.writeFileSync(path.join(proj, 'guarded.js'), 'export function guardedTarget() {\n  return "GUARDED-CONTENT";\n}\n');
-    const deps = { env, isProtectedPath: p => p.endsWith('guarded.js'), isIndexExcluded: () => false };
+    const asked = [];
+    const deps = {
+      env,
+      isProtectedPath: p => {
+        asked.push(p);
+        return p.endsWith('guarded.js');
+      },
+      isIndexExcluded: () => false
+    };
     const r = await buildRelevantContext('change guardedTarget', proj, undefined, deps);
+    // Not vacuous: the call succeeded and the full check was asked about the file a snippet would come from.
+    assert.strictEqual(r.status, 'ok', JSON.stringify(r));
+    assert.ok(asked.some(p => p.endsWith('guarded.js')), 'the snippet guard was never reached');
     assert.ok(!JSON.stringify(r).includes('GUARDED-CONTENT'), 'the protected file was read for a snippet');
+  });
+
+  await run('a protection check that throws gives an unavailable graph, not a rejected call', async () => {
+    const proj = path.join(tmp, 'tiers-throws');
+    fs.mkdirSync(proj, { recursive: true });
+    const r = await buildRelevantContext('anything', proj, undefined, {
+      env,
+      isProtectedPath: () => {
+        throw new Error('check blew up');
+      }
+    });
+    assert.strictEqual(r.status, 'unavailable');
+    assert.ok(String(r.reason).includes('check blew up'), r.reason);
   });
 
   await run('a protected project root is unavailable', async () => {
