@@ -24,6 +24,7 @@ const { readAll, aggregateBreakdown }  = require('../crusher/metrics');
 const { createStateStore }             = require('../state-store/index');
 const { normalizeParams } = require('./params');
 const { sessionEvents, sessionPeers, sessionSend } = require('./session-bus');
+const { _extractMcpLineResult } = require('./mcp-bridge');
 
 // ---------------------------------------------------------------------------
 // Operation: doctor
@@ -247,4 +248,8 @@ module.exports = {
   // createQueryApi intentionally NOT re-exported: it is a low-level store
   // internal reached via createStateStore(), not part of the operations
   // public surface. Dropped per cubic-dev-ai P3 finding.
+  // _extractMcpLineResult is exported test-only: EGC_BUS_STUB short-circuits
+  // _callBusTool above the raw MCP JSON-RPC line level, so the isError check
+  // (#1797) is otherwise unreachable from a test.
+  _extractMcpLineResult,
 };

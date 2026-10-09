@@ -40,6 +40,10 @@ function _extractMcpLineResult(line) {
   // notification that happens to carry a 'content' array never shadows the
   // real tool result.
   if (parsed.id !== 1) return null;
+  if (parsed.result?.isError) {
+    const message = parsed.result.content?.find(content => content.type === 'text')?.text;
+    throw new Error(message || 'MCP tool call failed');
+  }
   if (parsed.result?.content) {
     for (const content of parsed.result.content) {
       if (content.type === 'text') {
@@ -91,8 +95,8 @@ function _parseMcpResponse(stdout) {
  *
  * Protocol: the MCP SDK's StdioServerTransport requires a proper initialize /
  * notifications/initialized handshake before it will process tool calls.  We
- * send all three messages as JSONL (newline-separated) in one spawnSync write,
- * then scan every output line for the tools/call response (id === 1).
+ * send all three messages as JSONL (newline-separated) in one async spawn
+ * write, then scan every output line for the tools/call response (id === 1).
  *
  * Test hook: set EGC_BUS_STUB to a JSON-encoded value to short-circuit the
  * spawn entirely.  EGC_BUS_STUB=__NOT_BUILT__ simulates the binary being
@@ -199,4 +203,10 @@ async function _callBusTool(toolName, args) {
   return _parseMcpResponse(stdout || '');
 }
 
-module.exports = { _callBusTool };
+module.exports = {
+  _callBusTool,
+  // _extractMcpLineResult is exported test-only: EGC_BUS_STUB short-circuits
+  // _callBusTool above the raw MCP JSON-RPC line level, so the isError check
+  // (#1797) is otherwise unreachable from a test.
+  _extractMcpLineResult,
+};

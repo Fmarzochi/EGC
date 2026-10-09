@@ -63,6 +63,51 @@ function ansiEscape(text: string, at: number): Piece {
   return { value, raw: text.slice(at, at + 2), end: at + 2 };
 }
 
+// Only these two ever need to stay undecoded: a real shell reads a decoded
+// apostrophe or double quote as opening a new quoted run, which can hide
+// everything after it (including a credential) from redactLine below as a
+// false quote -- the one case decoding is actively unsafe.
+const QUOTE_OPENERS = new Set(["'", '"']);
+
+// Bash's default IFS is exactly these three characters; nothing else breaks
+// a word. Decoding an escape that lands on some other \s-matching character
+// (vertical tab, form feed, NBSP, ...) would fabricate a word break the real
+// shell never makes, splitting "curl\v-u\vuser:pw" (one word, passed to
+// nothing a real shell runs) into what looks like a live curl invocation.
+const IFS_WHITESPACE = new Set([' ', '\t', '\n']);
+
+function isSafeToDecode(value: string): boolean {
+  if (value.length !== 1) return false;
+  if (QUOTE_OPENERS.has(value)) return false;
+  return !/\s/.test(value) || IFS_WHITESPACE.has(value);
+}
+
+// The effective text of a $'...' body for word-boundary purposes: every
+// ANSI-C escape is decoded to the character it stands for -- including `$`,
+// backtick, parentheses, command separators (;|&) and backslash, all of
+// which redactLine/wordPiece below already read exactly as a real shell
+// would (a decoded backslash escapes the next character, a decoded $(...)
+// is read as a live substitution and redacted recursively, a decoded ;
+// resets scan state the same way a real separator does) -- except the two
+// quote openers and any whitespace escape that is not real bash IFS, which
+// stay exactly as written so the rescan never fabricates syntax or a word
+// break the real shell does not have.
+function decodeAnsiCBody(text: string): string {
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === '\\' && i + 1 < text.length) {
+      const piece = ansiEscape(text, i);
+      out += isSafeToDecode(piece.value) ? piece.value : text.slice(i, piece.end);
+      i = piece.end;
+    } else {
+      out += text[i];
+      i += 1;
+    }
+  }
+  return out;
+}
+
 function isQuoteOpener(text: string, at: number): boolean {
   const ch = text[at];
   return ch === '"' || ch === "'" || (ch === '$' && (text[at + 1] === '"' || text[at + 1] === "'"));
@@ -97,10 +142,14 @@ function nestedInDoubleQuotes(text: string, i: number, level: number): number {
 
 // The index just past the quoted run whose opening quote is at `at`; the
 // text length when it never closes.
-function quotedRunEnd(text: string, at: number, level = 0): number {
+function quotedRunEnd(text: string, at: number, level = 0, ansi = false): number {
   const quote = text[at];
   let i = at + 1;
   while (i < text.length) {
+    if (ansi && text[i] === '\\' && i + 1 < text.length) {
+      i += 2;
+      continue;
+    }
     if (text[i] === quote) return i + 1;
     const nested = quote === '"' ? nestedInDoubleQuotes(text, i, level) : -1;
     i = nested === -1 ? i + 1 : nested;
@@ -113,7 +162,8 @@ function quotedRunEnd(text: string, at: number, level = 0): number {
 function nestedInSubstitution(text: string, i: number, level: number): number {
   const ch = text[i];
   if (ch === '\\') return i + 2;
-  if (ch === "'" || ch === '"') return quotedRunEnd(text, i, level);
+  if (ch === "'") return quotedRunEnd(text, i, level, text[i - 1] === '$');
+  if (ch === '"') return quotedRunEnd(text, i, level);
   return ch === '`' ? backtickEnd(text, i) : -1;
 }
 
@@ -394,7 +444,7 @@ class CurlRedactor {
       this.secretNext = false;
       return REDACTED;
     }
-    if (SHELL_NAMES.has(basename(word.value).toLowerCase())) {
+    if (SHELL_NAMES.has(basename(word.value).toLowerCase().replace(/\.(?:exe|cmd|bat)$/, ''))) {
       this.sawShell = true;
     } else if (this.sawShell && isCommandStringFlag(word.value)) {
       this.bodyNext = true;
@@ -443,12 +493,24 @@ class CurlRedactor {
   }
 
   // A quoted word that a shell runs as a command line (the operand of sh -c,
-  // bash -lc and the like) is redacted inside its quotes.
+  // bash -lc and the like) is redacted inside its quotes. $'...' (ANSI-C) is
+  // the only form decoded before the scan; $"..." is double-quote
+  // interpolation, not ANSI-C, and must not be run through \x-style decoding.
+  // decodeAnsiCBody only ever decodes whitespace escapes (never a quote,
+  // backslash or separator), so the decoded text can never hand the rescan
+  // below real shell syntax that was not there in the executed command; no
+  // re-encoding back to ANSI-C is needed on the way out. When nothing gets
+  // redacted, the original spelling is kept verbatim.
   private quotedBody(raw: string): string {
     const prefix = raw.startsWith('$') ? 2 : 1;
     const quote = raw[prefix - 1];
     if ((quote !== '"' && quote !== "'") || raw.length < prefix + 1 || !raw.endsWith(quote)) return raw;
-    return `${raw.slice(0, prefix)}${this.redact(raw.slice(prefix, -1))}${quote}`;
+    const body = raw.slice(prefix, -1);
+    const isAnsiC = prefix === 2 && quote === "'";
+    const effective = isAnsiC ? decodeAnsiCBody(body) : body;
+    const redacted = this.redact(effective);
+    if (redacted === effective) return raw;
+    return `${raw.slice(0, prefix)}${redacted}${quote}`;
   }
 
   // The credential as typed, with the password replaced.

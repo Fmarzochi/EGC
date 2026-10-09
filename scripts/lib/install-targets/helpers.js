@@ -540,6 +540,46 @@ function readInstallStateOrNull(statePath) {
   }
 }
 
+function collectRecordedDestinations(adapter, input) {
+  const statePaths = [adapter.getInstallStatePath(input), ...adapter.resolveLegacyInstallStatePaths(input)];
+  const destinations = [];
+  for (const statePath of statePaths) {
+    const state = readInstallStateOrNull(statePath);
+    if (state === UNREADABLE_STATE) return null;
+    const operations = state && Array.isArray(state.operations) ? state.operations : [];
+    destinations.push(...operations.map(operation => path.resolve(String(operation.destinationPath || ''))));
+  }
+  return destinations;
+}
+
+function isSameTree(sourcePath, destinationPath) {
+  try {
+    const source = fs.lstatSync(sourcePath, { throwIfNoEntry: false });
+    const destination = fs.lstatSync(destinationPath, { throwIfNoEntry: false });
+    if (!source || !destination) return false;
+    if (source.isFile() && destination.isFile()) {
+      return fs.readFileSync(sourcePath).equals(fs.readFileSync(destinationPath));
+    }
+    if (!source.isDirectory() || !destination.isDirectory()) return false;
+    const sourceEntries = fs.readdirSync(sourcePath).sort();
+    const destinationEntries = fs.readdirSync(destinationPath).sort();
+    if (sourceEntries.join('\n') !== destinationEntries.join('\n')) return false;
+    return sourceEntries.every(entry => isSameTree(path.join(sourcePath, entry), path.join(destinationPath, entry)));
+  } catch {
+    return false;
+  }
+}
+
+function isPersonOwnedDestination(destination, sourcePath, recordedDestinations) {
+  const stat = fs.lstatSync(destination, { throwIfNoEntry: false });
+  if (!stat || stat.isSymbolicLink()) return false;
+  const resolved = path.resolve(destination);
+  if (recordedDestinations?.some(recorded => recorded === resolved || recorded.startsWith(resolved + path.sep))) {
+    return false;
+  }
+  return !(sourcePath && isSameTree(sourcePath, resolved));
+}
+
 // Destinations a sibling adapter sharing the same trusted root still records
 // as its own managed copies. codex-home, goose-home and openhands-home all
 // write skills into the shared ~/.agents tree, each with its own
@@ -906,6 +946,9 @@ module.exports = {
   planGenericRetirements,
   planHookRetirements,
   readInstallStateOrNull,
+  collectRecordedDestinations,
+  isPersonOwnedDestination,
+  isSameTree,
   resolveAdapterManagedRoots,
   resolveBaseRoot,
   resolveModulesPlan,

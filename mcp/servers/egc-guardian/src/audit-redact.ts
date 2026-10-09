@@ -176,7 +176,10 @@ function isSecretValue(value: string): boolean {
  * the string "[REDACTED]". Nested objects and arrays are walked recursively.
  */
 function redactArrayItem(item: unknown): unknown {
-  if (item !== null && typeof item === 'object' && !Array.isArray(item)) {
+  if (Array.isArray(item)) {
+    return item.map(redactArrayItem);
+  }
+  if (item !== null && typeof item === 'object') {
     return redactPayload(item as Record<string, unknown>);
   }
   if (typeof item === 'string') {

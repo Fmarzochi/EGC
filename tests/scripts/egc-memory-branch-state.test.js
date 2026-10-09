@@ -78,6 +78,7 @@ async function runTests() {
     legacyBranchStateFile,
     resolveStateRead,
     resolveStateWrite,
+    trustedGitPath,
   } = api;
 
   console.log('\n=== Testing egc-memory build/branch-state.js ===\n');
@@ -104,6 +105,70 @@ async function runTests() {
     const repo = makeGitRepo('hotfix/login');
     assert.strictEqual(detectBranch(repo), 'hotfix/login');
     assert.strictEqual(detectBranch(makeTmpDir('egc-memory-norepo-')), null);
+  })) passed++; else failed++;
+
+  if (test('trustedGitPath refuses a .git path outside the home and temp roots (#1802)', () => {
+    const realTmp = fs.realpathSync.native(os.tmpdir());
+    const under = path.join(realTmp, 'egc-trusted', '.git', 'HEAD');
+    assert.strictEqual(
+      trustedGitPath(path.join(os.tmpdir(), 'egc-trusted', 'sub', '..', '.git', 'HEAD')),
+      under,
+      'resolved, normalised and canonical, same as scripts/lib/branch-state.js'
+    );
+    assert.strictEqual(trustedGitPath(path.join(os.tmpdir(), 'egc-trusted', 'HEAD')), null, 'no .git segment');
+    const outside = path.join(path.parse(realTmp).root, 'egc-nowhere', '.git', 'HEAD');
+    assert.strictEqual(trustedGitPath(outside), null, 'outside the home and temp roots');
+
+    if (process.platform !== 'win32') {
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-memory-trusted-link-'));
+      try {
+        // A link at .git pointing outside both roots: the lexical path looks
+        // inside the temp root, the canonical one does not.
+        fs.symlinkSync(path.parse(realTmp).root, path.join(base, '.git'), 'dir');
+        assert.strictEqual(trustedGitPath(path.join(base, '.git', 'HEAD')), null, 'a link leading outside the roots is refused');
+        // A link that stays inside the temp root is followed and accepted.
+        fs.mkdirSync(path.join(base, 'real', '.git'), { recursive: true });
+        fs.symlinkSync(path.join(base, 'real'), path.join(base, 'alias'), 'dir');
+        assert.strictEqual(
+          trustedGitPath(path.join(base, 'alias', '.git', 'HEAD')),
+          path.join(fs.realpathSync.native(base), 'real', '.git', 'HEAD'),
+          'a link inside the roots resolves to its canonical target'
+        );
+        // A link loop cannot be canonicalised: refused.
+        fs.symlinkSync(path.join(base, 'loop'), path.join(base, 'loop'));
+        assert.strictEqual(trustedGitPath(path.join(base, 'loop', '.git', 'HEAD')), null, 'a link loop is refused');
+        // A dangling link on the way is refused too: its target could be
+        // created or moved later and redirect the read past the check.
+        fs.symlinkSync(path.join(base, 'not-yet'), path.join(base, 'dangling'));
+        assert.strictEqual(trustedGitPath(path.join(base, 'dangling', '.git', 'HEAD')), null, 'a dangling link on the way is refused');
+      } finally {
+        fs.rmSync(base, { recursive: true, force: true });
+      }
+    }
+  })) passed++; else failed++;
+
+  if (test('readHeadLine refuses to follow a symlink planted at HEAD after validation, even when the link target is itself a trusted .git path (#1807 TOCTOU narrowing)', () => {
+    if (process.platform === 'win32') return; // symlink creation needs elevated privileges on Windows
+    // The victim is a second, otherwise-legitimate repo under the same
+    // trusted root: trustedGitPath's canonicalization would accept a link
+    // to it (the resolved target has a .git segment and sits under the
+    // trusted root too), so the real test of O_NOFOLLOW is exactly this
+    // case, not a link to a path trustedGitPath would reject anyway.
+    const repo = makeGitRepo('feature/toctou');
+    const victimRepo = makeGitRepo('attacker-controlled');
+    const headPath = path.join(repo, '.git', 'HEAD');
+    const victimHead = path.join(victimRepo, '.git', 'HEAD');
+    const realHead = fs.readFileSync(headPath, 'utf8');
+    fs.rmSync(headPath);
+    fs.symlinkSync(victimHead, headPath);
+
+    try {
+      assert.strictEqual(detectBranch(repo), null, 'a symlinked HEAD must be refused even when its target is itself a trusted .git/HEAD');
+    } finally {
+      fs.rmSync(headPath);
+      fs.writeFileSync(headPath, realHead);
+      fs.rmSync(victimRepo, { recursive: true, force: true });
+    }
   })) passed++; else failed++;
 
   if (test('detectDetachedCommit returns the commit on detached HEAD, null on a branch or outside a repo', () => {

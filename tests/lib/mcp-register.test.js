@@ -2296,6 +2296,15 @@ function runTests() {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     })));
 
+    (tally(test('@iarna/toml is a runtime dependency, not a devDependency (D31 C29)', () => {
+      // scripts/codex/merge-mcp-config.js, merge-codex-config.js and
+      // scripts/lib/mcp-register.js all require it at runtime (Codex TOML
+      // config merging), so `npm ci --omit=dev` must still install it.
+      const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8'));
+      assert.ok(pkg.dependencies['@iarna/toml'], 'must be listed in "dependencies"');
+      assert.ok(!pkg.devDependencies['@iarna/toml'], 'must not also be listed in "devDependencies"');
+    })));
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
