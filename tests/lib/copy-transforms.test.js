@@ -8,12 +8,16 @@ const os = require('os');
 const path = require('path');
 
 const {
+  ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
+  ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
+  toAntigravityRule,
   toClaudeAgentFrontmatter,
   transformContent,
   toOpenCodeAgentFrontmatter,
 } = require('../../scripts/lib/install/copy-transforms');
+const { planAntigravityRuleFiles } = require('../../scripts/lib/antigravity-rules');
 
 function test(name, fn) {
   try {
@@ -118,6 +122,104 @@ function runTests() {
       assert.ok(plannedFileContent(source, CLAUDE_AGENT_FRONTMATTER_TRANSFORM).toString('utf8').includes('tools: Read, Grep, Glob, Bash'));
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('an Antigravity rule with paths becomes a glob rule over them, described by its heading (#1668)', () => {
+    const source = '---\npaths:\n  - "**/*.go"\n  - "**/go.mod"\n---\n# Go Hooks\n\nbody\n';
+    assert.strictEqual(
+      toAntigravityRule(source),
+      '---\ntrigger: glob\ndescription: "Go Hooks"\nglobs: "**/*.go, **/go.mod"\n---\n# Go Hooks\n\nbody\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('---\npaths: ["*.ts", "*.tsx"]\n---\n# TS\n'),
+      '---\ntrigger: glob\ndescription: "TS"\nglobs: "*.ts, *.tsx"\n---\n# TS\n'
+    );
+  })) passed++; else failed++;
+
+  if (test('an Antigravity rule without paths is always_on, and a manual rule never loads by itself (#1668)', () => {
+    assert.strictEqual(
+      toAntigravityRule('# Coding Style\n\nx\n'),
+      '---\ntrigger: always_on\ndescription: "Coding Style"\n---\n# Coding Style\n\nx\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('---\npaths:\n  - "**/*.go"\n---\n# 编码风格\n', { manual: true }),
+      '---\ntrigger: manual\ndescription: "编码风格"\n---\n# 编码风格\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('\uFEFF# T\r\nx\r\n'),
+      '---\ntrigger: always_on\ndescription: "T"\n---\n# T\nx\n',
+      'a byte order mark and CRLF line endings are handled'
+    );
+    assert.strictEqual(
+      toAntigravityRule('no heading\n'),
+      '---\ntrigger: always_on\n---\nno heading\n',
+      'a rule without a heading has no description'
+    );
+  })) passed++; else failed++;
+
+  if (test('an Antigravity rule links to the flat names of the rules it extends (#1668)', () => {
+    const source = '# Go\n> extends [common/hooks.md](../common/hooks.md), see [git](./git-workflow.md), [perf](performance.md), [site](https://example.com/a.md)\n';
+    assert.strictEqual(
+      toAntigravityRule(source, { directory: 'web' }),
+      '---\ntrigger: always_on\ndescription: "Go"\n---\n# Go\n> extends [common/hooks.md](common-hooks.md), see [git](web-git-workflow.md), [perf](web-performance.md), [site](https://example.com/a.md)\n'
+    );
+  })) passed++; else failed++;
+
+  if (test('an Antigravity rule resolves links from its own directory, at any depth (#1668)', () => {
+    assert.strictEqual(
+      toAntigravityRule('# A\n[b](b.md) [c](../common/c.md) [up](../../x.md) [abs](/etc/y.md)\n', { directory: 'zh/sub' }),
+      '---\ntrigger: always_on\ndescription: "A"\n---\n# A\n[b](zh-sub-b.md) [c](zh-common-c.md) [up](x.md) [abs](/etc/y.md)\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('# A\n[b](b.md)\n', { directory: '' }),
+      '---\ntrigger: always_on\ndescription: "A"\n---\n# A\n[b](b.md)\n',
+      'a rule at the top of rules/ links to the top-level flat name'
+    );
+    assert.strictEqual(
+      toAntigravityRule('# A\n[b](../../../out.md)\n', { directory: 'zh' }),
+      '---\ntrigger: always_on\ndescription: "A"\n---\n# A\n[b](../../../out.md)\n',
+      'a link that leaves rules/ is kept as it is'
+    );
+  })) passed++; else failed++;
+
+  if (test('an Antigravity glob rule keeps a quoted comma inside a glob and expands its braces (#1668)', () => {
+    assert.strictEqual(
+      toAntigravityRule('---\npaths: ["**/*.{js,ts}", \'src/**\']\n---\n# X\n'),
+      '---\ntrigger: glob\ndescription: "X"\nglobs: "**/*.js, **/*.ts, src/**"\n---\n# X\n'
+    );
+    assert.strictEqual(
+      toAntigravityRule('---\npaths:\n  - "**/*.{c,h}{,pp}"\n---\n# C\n'),
+      '---\ntrigger: glob\ndescription: "C"\nglobs: "**/*.c, **/*.cpp, **/*.h, **/*.hpp"\n---\n# C\n'
+    );
+  })) passed++; else failed++;
+
+  if (test('no rule file is planned without a source root, so nothing depends on the working directory (#1668)', () => {
+    assert.deepStrictEqual(planAntigravityRuleFiles(undefined, 'rules'), []);
+    assert.deepStrictEqual(planAntigravityRuleFiles('', 'rules'), []);
+  })) passed++; else failed++;
+
+  if (test('every shipped rule reaches Antigravity with a valid trigger and under its 24,000-byte limit (#1668)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const rules = planAntigravityRuleFiles(repoRoot, 'rules');
+    assert.ok(rules.length > 100, 'the catalog rules are planned');
+    assert.strictEqual(new Set(rules.map(rule => rule.fileName)).size, rules.length, 'no two rules share a file name');
+    assert.ok(!rules.some(rule => rule.fileName.toLowerCase() === 'readme.md'), 'the rules README is not a rule');
+    const names = new Set(rules.map(rule => rule.fileName));
+    for (const rule of rules) {
+      const content = plannedFileContent(path.join(repoRoot, rule.sourceRelativePath), rule.transform);
+      const text = content.toString('utf8');
+      const trigger = /^---\ntrigger: (\w+)\n/.exec(text)?.[1];
+      const zh = rule.sourceRelativePath.startsWith('rules/zh/');
+      assert.strictEqual(rule.transform, zh ? ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM : ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM, rule.sourceRelativePath);
+      assert.ok(['always_on', 'glob', 'manual'].includes(trigger), `${rule.sourceRelativePath}: trigger ${trigger}`);
+      if (trigger === 'glob') {
+        assert.ok(/\nglobs: "[^"]+"\n/.test(text), `${rule.sourceRelativePath}: a glob rule names its globs`);
+      }
+      assert.ok(content.length <= 24000, `${rule.sourceRelativePath}: ${content.length} bytes`);
+      for (const [, target] of text.matchAll(/\]\(([^)#:]+\.md)\)/g)) {
+        assert.ok(names.has(target), `${rule.sourceRelativePath}: the link to ${target} reaches a planned rule`);
+      }
     }
   })) passed++; else failed++;
 

@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const path = require('node:path');
 
 // A copy transform rewrites the bytes of one planned file on the way to its
 // destination. The plan names it (operation.transform); the executor writes
@@ -9,6 +10,8 @@ const fs = require('node:fs');
 
 const CLAUDE_AGENT_FRONTMATTER_TRANSFORM = 'claude-agent-frontmatter';
 const OPENCODE_AGENT_FRONTMATTER_TRANSFORM = 'opencode-agent-frontmatter';
+const ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM = 'antigravity-rule-frontmatter';
+const ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM = 'antigravity-manual-rule-frontmatter';
 
 // Model names Claude Code resolves itself. Anything else in an agent's
 // frontmatter (the catalog's Gemini ids) would be sent to the API as-is and
@@ -44,11 +47,34 @@ function parseFlowSequence(value) {
   if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
     return null;
   }
-  return trimmed
-    .slice(1, -1)
-    .split(',')
+  return splitFlowItems(trimmed.slice(1, -1))
     .map(item => stripQuotes(item.trim()))
     .filter(Boolean);
+}
+
+function splitFlowItems(inner) {
+  const items = [];
+  let current = '';
+  let quote = null;
+  let depth = 0;
+  for (const char of inner) {
+    if (quote) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth = Math.max(0, depth - 1);
+    } else if (char === ',' && depth === 0) {
+      items.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  items.push(current);
+  return items;
 }
 
 function stripQuotes(value) {
@@ -202,30 +228,105 @@ function toOpenCodeAgentFrontmatter(text) {
   return ['---', ...frontmatter, '---', ...parts.body].join('\n');
 }
 
+function readRuleGlobs(frontmatter) {
+  const index = frontmatter.findIndex(line => splitFrontmatterLine(line)?.key === 'paths');
+  if (index < 0) {
+    return [];
+  }
+  const flow = parseFlowSequence(splitFrontmatterLine(frontmatter[index]).value);
+  return (flow || collectBlockListItems(frontmatter, index + 1).items).flatMap(expandGlobBraces);
+}
+
+function expandGlobBraces(glob) {
+  const close = glob.indexOf('}');
+  const open = close < 0 ? -1 : glob.lastIndexOf('{', close);
+  if (open < 0) {
+    return [glob];
+  }
+  const head = glob.slice(0, open);
+  const tail = glob.slice(close + 1);
+  return glob.slice(open + 1, close).split(',').flatMap(option => expandGlobBraces(`${head}${option.trim()}${tail}`));
+}
+
+function ruleTrigger(manual, globs) {
+  if (manual) {
+    return 'manual';
+  }
+  return globs.length > 0 ? 'glob' : 'always_on';
+}
+
+function flattenRuleLinks(line, directory) {
+  if (directory === null) {
+    return line;
+  }
+  return line.replaceAll(/\]\(([^()\s:#]+\.md)\)/g, (match, link) => {
+    const target = path.posix.normalize(path.posix.join(directory, link));
+    if (link.startsWith('/') || target.startsWith('../')) {
+      return match;
+    }
+    return `](${target.replaceAll('/', '-')})`;
+  });
+}
+
+function toAntigravityRule(text, { manual = false, directory = null } = {}) {
+  const source = stripByteOrderMark(text);
+  const parts = splitFrontmatter(source) || { frontmatter: [], body: source.split(/\r?\n/) };
+  const globs = manual ? [] : readRuleGlobs(parts.frontmatter);
+  const heading = parts.body.find(line => line.startsWith('# '));
+  const frontmatter = [`trigger: ${ruleTrigger(manual, globs)}`];
+  if (heading) {
+    frontmatter.push(`description: ${JSON.stringify(heading.slice(2).trim())}`);
+  }
+  if (globs.length > 0) {
+    frontmatter.push(`globs: ${JSON.stringify(globs.join(', '))}`);
+  }
+  return ['---', ...frontmatter, '---', ...parts.body.map(line => flattenRuleLinks(line, directory))].join('\n');
+}
+
+function ruleDirectory(sourcePath) {
+  if (!sourcePath) {
+    return null;
+  }
+  const segments = path.resolve(sourcePath).split(path.sep);
+  const rulesIndex = segments.lastIndexOf('rules');
+  return rulesIndex < 0 ? null : segments.slice(rulesIndex + 1, -1).join('/');
+}
+
 const TRANSFORMS = Object.freeze({
   [CLAUDE_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toClaudeAgentFrontmatter(content.toString('utf8')), 'utf8'),
   [OPENCODE_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toOpenCodeAgentFrontmatter(content.toString('utf8')), 'utf8'),
+  [ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
+    toAntigravityRule(content.toString('utf8'), { directory: ruleDirectory(sourcePath) }),
+    'utf8'
+  ),
+  [ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
+    toAntigravityRule(content.toString('utf8'), { manual: true, directory: ruleDirectory(sourcePath) }),
+    'utf8'
+  ),
 });
 
-function transformContent(content, transform) {
+function transformContent(content, transform, sourcePath = null) {
   const apply = TRANSFORMS[transform];
   if (typeof apply !== 'function') {
     throw new TypeError(`Unknown copy transform: ${transform}`);
   }
-  return apply(content);
+  return apply(content, sourcePath);
 }
 
 // The bytes a planned copy leaves at its destination: the source as-is, or
 // the source through the operation's transform.
 function plannedFileContent(sourcePath, transform) {
   const content = fs.readFileSync(sourcePath);
-  return transform ? transformContent(content, transform) : content;
+  return transform ? transformContent(content, transform, sourcePath) : content;
 }
 
 module.exports = {
+  ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
+  ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
   OPENCODE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
+  toAntigravityRule,
   toClaudeAgentFrontmatter,
   toOpenCodeAgentFrontmatter,
   transformContent,

@@ -131,7 +131,7 @@ function runTests() {
     }
   }));
 
-  tally(test('plans egc skills where the Antigravity CLI, IDE and 2.0 read them, and rules under the managed rules/egc namespace', () => {
+  tally(test('plans egc skills where the Antigravity CLI, IDE and 2.0 read them, and rules flat under config/rules with a trigger (#1668)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -175,13 +175,23 @@ function runTests() {
       !under(path.join(homeDir, '.gemini', 'skills')),
       'skills/egc was the retired Gemini CLI layout: nothing is planned under ~/.gemini/skills'
     );
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'rules'
-        && operation.destinationPath === path.join(homeDir, '.gemini', 'rules', 'egc')
-      )),
-      'rules keep the managed rules/egc namespace until they move to config/rules, where Antigravity reads them'
-    );
+    const { plannedFileContent } = require('../../scripts/lib/install/copy-transforms');
+    const configRules = path.join(homeDir, '.gemini', 'config', 'rules');
+    const ruleOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('rules/'));
+    assert.ok(ruleOperations.length > 100, 'every catalog rule is planned');
+    assert.ok(ruleOperations.every(operation => path.dirname(operation.destinationPath) === configRules), 'each rule is one flat file under config/rules');
+    assert.strictEqual(new Set(ruleOperations.map(operation => operation.destinationPath)).size, ruleOperations.length, 'no two languages share a file name');
+    assert.ok(!under(path.join(homeDir, '.gemini', 'rules')), 'the rules/egc tree is not written any more');
+    assert.ok(!destinations.includes(path.join(configRules, 'README.md')), 'the rules README is not a rule');
+    const planned = (source, destination) => {
+      const operation = ruleOperations.find(candidate => normalizedRelativePath(candidate.sourceRelativePath) === source);
+      assert.ok(operation, `${source} is planned`);
+      assert.strictEqual(operation.destinationPath, path.join(configRules, destination));
+      return plannedFileContent(path.join(repoRoot, source), operation.transform).toString('utf8');
+    };
+    assert.ok(planned('rules/golang/coding-style.md', 'golang-coding-style.md').startsWith('---\ntrigger: glob\n'), 'a rule with paths is a glob rule');
+    assert.ok(planned('rules/common/coding-style.md', 'common-coding-style.md').startsWith('---\ntrigger: always_on\n'), 'a common rule is always on');
+    assert.ok(planned('rules/zh/coding-style.md', 'zh-coding-style.md').startsWith('---\ntrigger: manual\n'), 'the Chinese translation of the common rules is manual, so the same rule never loads twice');
   }));
 
   tally(test('the egc target plans nothing that only the retired Gemini CLI read', () => {
