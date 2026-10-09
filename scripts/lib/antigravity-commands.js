@@ -36,12 +36,15 @@ function planAntigravityCommandFiles(repoRoot, sourceRelativePath) {
 }
 
 function dropCommandsShadowedBySkills(operations) {
-  const skillDirectories = new Set(operations
+  const skillDestinations = operations
     .filter(operation => normalizeSourcePath(operation.sourceRelativePath).startsWith('skills/'))
-    .map(operation => path.resolve(operation.destinationPath)));
+    .map(operation => path.resolve(operation.destinationPath));
+  const isShadowed = directory => skillDestinations.some(destination => (
+    destination === directory || destination.startsWith(directory + path.sep)
+  ));
   return operations.filter(operation => !(
     operation.transform === ANTIGRAVITY_COMMAND_SKILL_TRANSFORM
-    && skillDirectories.has(path.resolve(path.dirname(operation.destinationPath)))
+    && isShadowed(path.resolve(path.dirname(operation.destinationPath)))
   ));
 }
 

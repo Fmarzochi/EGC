@@ -198,17 +198,21 @@ function runTests() {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
-    const modules = [
-      { id: 'commands-core', paths: ['commands'] },
-      { id: 'security', paths: ['skills/security/security-scan'] },
+    const selections = [
+      [{ id: 'commands-core', paths: ['commands'] }, { id: 'security', paths: ['skills/security/security-scan'] }],
+      [{ id: 'commands-core', paths: ['commands'] }, { id: 'security', paths: ['skills/security/security-scan/SKILL.md'] }],
     ];
-    for (const [target, skillsRoot] of [['egc', path.join(homeDir, '.gemini', 'config', 'skills')], ['antigravity', path.join(projectRoot, '.agents', 'skills')]]) {
+    const cases = selections.flatMap(modules => [
+      ['egc', path.join(homeDir, '.gemini', 'config', 'skills'), modules],
+      ['antigravity', path.join(projectRoot, '.agents', 'skills'), modules],
+    ]);
+    for (const [target, skillsRoot, modules] of cases) {
       const plan = planInstallTargetScaffold({ target, repoRoot, homeDir, projectRoot, modules });
       const shadowed = plan.operations.filter(operation => (
         operation.destinationPath === path.join(skillsRoot, 'security-scan')
         || operation.destinationPath.startsWith(path.join(skillsRoot, 'security-scan') + path.sep)
       ));
-      assert.deepStrictEqual(shadowed.map(operation => normalizedRelativePath(operation.sourceRelativePath)), ['skills/security/security-scan'], `${target}: the skill answers /security-scan, the command is not written over it`);
+      assert.deepStrictEqual(shadowed.map(operation => normalizedRelativePath(operation.sourceRelativePath)), [modules[1].paths[0]], `${target}: the skill answers /security-scan, the command is not written over it (${modules[1].paths[0]})`);
       assert.ok(plan.operations.some(operation => operation.destinationPath === path.join(skillsRoot, 'plan', 'SKILL.md')), `${target}: the other commands are planned`);
     }
   }));

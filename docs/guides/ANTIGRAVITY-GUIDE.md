@@ -56,7 +56,7 @@ your-project/
 
 ## The `openai.yaml` Agent Config
 
-Each skill directory under `.agents/skills/` contains an `agents/openai.yaml` file at the path `.agents/skills/<skill-name>/agents/openai.yaml` that configures the skill for Antigravity:
+Each skill directory under the egc repository's own `.agents/skills/` (the Codex mirror, not what the installer writes in your project) contains an `agents/openai.yaml` file at the path `.agents/skills/<skill-name>/agents/openai.yaml`. The skills the installer writes, the command skills included, carry only their `SKILL.md` and the files of the catalog skill:
 
 ```yaml
 interface:

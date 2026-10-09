@@ -395,10 +395,33 @@ function toAntigravityAgentFrontmatter(text) {
   return ['---', ...rewriteAntigravityAgentFrontmatter(parts.frontmatter), '---', ...parts.body].join('\n');
 }
 
+function readBlockScalar(indicator, lines, start) {
+  const body = [];
+  for (let index = start; index < lines.length && (lines[index] === '' || /^\s/.test(lines[index])); index += 1) {
+    body.push(lines[index].trim());
+  }
+  return indicator.startsWith('>') ? body.filter(Boolean).join(' ') : body.join('\n').trim();
+}
+
+function yamlScalar(value) {
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).replaceAll("''", "'");
+  }
+  return value;
+}
+
 function commandDescription(parts) {
-  const declared = parts.frontmatter.map(splitFrontmatterLine).find(match => match?.key === 'description');
-  if (declared) {
-    return stripQuotes(stripYamlComment(declared.value));
+  const index = parts.frontmatter.findIndex(line => splitFrontmatterLine(line)?.key === 'description');
+  if (index >= 0) {
+    const value = stripYamlComment(splitFrontmatterLine(parts.frontmatter[index]).value);
+    return /^[|>][+-]?$/.test(value) ? readBlockScalar(value, parts.frontmatter, index + 1) : yamlScalar(value);
   }
   const firstLine = parts.body.find(line => line.trim() !== '');
   return firstLine ? firstLine.replace(/^#+\s*/, '').trim() : null;
@@ -419,7 +442,13 @@ function toAntigravityCommandSkill(text, { name = null } = {}) {
 }
 
 function commandName(sourcePath) {
-  return sourcePath ? path.basename(sourcePath, '.md') : null;
+  if (!sourcePath) {
+    return null;
+  }
+  const segments = path.resolve(sourcePath).split(path.sep);
+  const commandsIndex = segments.lastIndexOf('commands');
+  const relative = commandsIndex < 0 ? segments.slice(-1) : segments.slice(commandsIndex + 1);
+  return relative.join('-').replace(/\.md$/, '');
 }
 
 function ruleDirectory(sourcePath) {

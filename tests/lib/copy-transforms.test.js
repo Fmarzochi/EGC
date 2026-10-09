@@ -330,6 +330,40 @@ function runAntigravityCommandTests() {
       '---\nname: x\ndescription: "Title"\n---\n# Title\nbody\n',
       'a command without frontmatter is described by its first line'
     );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: |\n  First line.\n  Second line.\nagent: x\n---\nbody\n', { name: 'a' }),
+      '---\nname: a\ndescription: "First line.\\nSecond line."\n---\nbody\n',
+      'a literal block description is read whole'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: >-\n  Folded\n  text.\n---\nbody\n', { name: 'a' }),
+      '---\nname: a\ndescription: "Folded text."\n---\nbody\n',
+      'a folded block description is read whole'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: "Say \\"hi\\""\n---\nx\n', { name: 'a' }),
+      '---\nname: a\ndescription: "Say \\"hi\\""\n---\nx\n',
+      'double-quoted escapes are decoded before the description is written again'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill("---\ndescription: 'It''s here'\n---\nx\n", { name: 'a' }),
+      '---\nname: a\ndescription: "It\'s here"\n---\nx\n',
+      'a single-quoted description keeps its apostrophe'
+    );
+  }));
+
+  results.push(test('a nested command is named after the same flat name as its skill directory (#1706)', () => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-transforms-commands-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'commands', 'foo'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'foo', 'bar.md'), '---\ndescription: d\n---\nx\n');
+      const [command] = planAntigravityCommandFiles(repoRoot, 'commands');
+      assert.strictEqual(command.fileName, 'foo-bar/SKILL.md');
+      const text = plannedFileContent(path.join(repoRoot, command.sourceRelativePath), command.transform).toString('utf8');
+      assert.ok(text.startsWith('---\nname: foo-bar\n'), text);
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
   }));
 
   results.push(test('every shipped command becomes an Antigravity skill named after its file, with a description (#1706)', () => {
