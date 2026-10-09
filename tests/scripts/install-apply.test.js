@@ -689,6 +689,90 @@ function runTests() {
     }
   }));
 
+  tally(test('an upgrade moves the managed Zed skills from ~/.config/zed/skills to the shared ~/.agents/skills and keeps the person\'s files (#1654)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const args = ['--target', 'zed', '--profile', 'core', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const sharedSkills = path.join(homeDir, '.agents', 'skills');
+      const zedSkills = path.join(homeDir, '.config', 'zed', 'skills');
+      const statePath = path.join(homeDir, '.config', 'zed', 'egc', 'install-state.json');
+      assert.ok(!fs.existsSync(zedSkills), 'a fresh install writes nothing under ~/.config/zed/skills');
+      const state = readJson(statePath);
+      const moved = [];
+      for (const operation of state.operations) {
+        if (!operation.destinationPath.startsWith(sharedSkills + path.sep)) continue;
+        const legacy = path.join(zedSkills, path.relative(sharedSkills, operation.destinationPath));
+        fs.mkdirSync(path.dirname(legacy), { recursive: true });
+        fs.copyFileSync(path.join(repoRoot, operation.sourceRelativePath), legacy);
+        moved.push({ current: operation.destinationPath, legacy });
+        operation.destinationPath = legacy;
+        delete operation.contentSha256;
+      }
+      assert.ok(moved.length > 10, 'the core profile installs skills');
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      fs.rmSync(sharedSkills, { recursive: true, force: true });
+      const [edited, ...untouched] = moved;
+      fs.writeFileSync(edited.legacy, 'edited by hand');
+      const ownLegacy = path.join(zedSkills, 'my-skill', 'SKILL.md');
+      fs.mkdirSync(path.dirname(ownLegacy), { recursive: true });
+      fs.writeFileSync(ownLegacy, '# mine');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      for (const { current } of moved) {
+        assert.ok(fs.existsSync(current), `${current} is written under ~/.agents/skills`);
+      }
+      for (const { legacy } of untouched) {
+        assert.ok(!fs.existsSync(legacy), `the managed ${legacy} is retired`);
+      }
+      assert.strictEqual(fs.readFileSync(edited.legacy, 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      assert.strictEqual(fs.readFileSync(ownLegacy, 'utf8'), '# mine', 'the person\'s own skill under ~/.config/zed/skills stays');
+      const recorded = readJson(statePath).operations.map(operation => operation.destinationPath);
+      assert.ok(recorded.some(destination => destination.startsWith(sharedSkills + path.sep)), 'the state records the ~/.agents/skills copies');
+      assert.ok(!recorded.some(destination => destination.startsWith(zedSkills + path.sep)), 'and no ~/.config/zed/skills copy any more');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('uninstalling Zed keeps the shared ~/.agents/skills files Codex still records (#1654)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      for (const target of ['codex', 'zed']) {
+        const result = run(['--target', target, '--profile', 'core', '--allow-undetected'], { cwd: projectDir, homeDir, env });
+        assert.strictEqual(result.code, 0, `${target}: ${result.stderr}`);
+      }
+      const shared = path.join(homeDir, '.agents', 'skills', 'tdd-workflow', 'SKILL.md');
+      const zedState = path.join(homeDir, '.config', 'zed', 'egc', 'install-state.json');
+      const codexRecorded = readJson(path.join(homeDir, '.agents', 'egc', 'codex-install-state.json')).operations.map(operation => operation.destinationPath);
+      assert.ok(codexRecorded.includes(shared), 'codex records the shared skill');
+      assert.ok(readJson(zedState).operations.some(operation => operation.destinationPath === shared), 'zed records it too');
+
+      const { uninstallInstalledStates } = require('../../scripts/lib/install-lifecycle');
+      const report = uninstallInstalledStates({ homeDir, projectRoot: projectDir, targets: ['zed'] });
+      const zed = report.results.find(entry => entry.adapter.id === 'zed-home');
+      assert.strictEqual(zed.status, 'uninstalled');
+      assert.ok(fs.existsSync(shared), 'the skill codex still records stays');
+      assert.ok(zed.keptPaths.includes(shared), 'and is reported as kept');
+      assert.ok(!fs.existsSync(zedState), 'the zed install state goes');
+      assert.ok(fs.existsSync(path.join(homeDir, '.agents', 'egc', 'codex-install-state.json')), 'the codex install state stays');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
   tally(test('a skill the person keeps under config/skills with the name of an EGC command is never overwritten (#1706)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');

@@ -178,8 +178,8 @@ function runTests() {
       }
     })) passed++; else failed++;
 
-    if (test('targets that share the ~/.agents root plan one source per destination (Codex, Crush, Goose, OpenHands)', () => {
-      const sharedTargets = ['codex', 'crush', 'goose', 'openhands'];
+    if (test('targets that share the ~/.agents root plan one source per destination (Codex, Crush, Goose, OpenHands, Zed)', () => {
+      const sharedTargets = ['codex', 'crush', 'goose', 'openhands', 'zed'];
       const plans = {};
       for (const target of sharedTargets) {
         const plan = createManifestInstallPlan({ sourceRoot: REPO_ROOT, projectRoot, homeDir, target, profileId: 'full' });
