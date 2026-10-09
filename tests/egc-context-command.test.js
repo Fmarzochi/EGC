@@ -62,12 +62,15 @@ run('a second positional argument is refused, and a copy without a Guardian buil
   assert.strictEqual(extra.status, 1);
   assert.ok(extra.stderr.includes('unexpected argument second'), extra.stderr);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-context-unbuilt-'));
-  fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
-  fs.copyFileSync(script, path.join(dir, 'scripts', 'context.js'));
-  const unbuilt = spawnSync(process.execPath, [path.join(dir, 'scripts', 'context.js'), 'anything', '--project', root, '--no-git'], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
-  assert.strictEqual(unbuilt.status, 2, unbuilt.stderr);
-  assert.ok(unbuilt.stderr.includes('guardian build not found'), unbuilt.stderr);
-  fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+    fs.copyFileSync(script, path.join(dir, 'scripts', 'context.js'));
+    const unbuilt = spawnSync(process.execPath, [path.join(dir, 'scripts', 'context.js'), 'anything', '--project', root, '--no-git'], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
+    assert.strictEqual(unbuilt.status, 2, unbuilt.stderr);
+    assert.ok(unbuilt.stderr.includes('guardian build not found'), unbuilt.stderr);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 run('a flag without its value is named, with the usage line, and is not a TypeError', () => {

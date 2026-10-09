@@ -36,19 +36,25 @@ function parse(argv) {
   return opts;
 }
 
+// Every failure names the file: a missing file, text that is not JSON, an empty
+// list and a malformed task all read as "<file>: <what is wrong>".
 function loadTasks(file) {
-  const spec = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (!Array.isArray(spec.tasks) || spec.tasks.length === 0) throw new Error(`no tasks in ${file}`);
-  for (const t of spec.tasks) {
-    const wellFormed = typeof t?.id === 'string' && t.id.trim() !== '' &&
-      typeof t.query === 'string' && t.query.trim() !== '' &&
-      Array.isArray(t.expected) && t.expected.length > 0 &&
-      t.expected.every(p => typeof p === 'string' && p.trim() !== '');
-    if (!wellFormed) {
-      throw new Error(`task needs a text id, a text query and a non-empty list of expected paths: ${JSON.stringify(t)}`);
+  try {
+    const spec = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!Array.isArray(spec.tasks) || spec.tasks.length === 0) throw new Error('no tasks');
+    for (const t of spec.tasks) {
+      const wellFormed = typeof t?.id === 'string' && t.id.trim() !== '' &&
+        typeof t.query === 'string' && t.query.trim() !== '' &&
+        Array.isArray(t.expected) && t.expected.length > 0 &&
+        t.expected.every(p => typeof p === 'string' && p.trim() !== '');
+      if (!wellFormed) {
+        throw new Error(`task needs a text id, a text query and a non-empty list of expected paths: ${JSON.stringify(t)}`);
+      }
     }
+    return spec.tasks;
+  } catch (err) {
+    throw new Error(`${file}: ${err.message}`, { cause: err });
   }
-  return spec.tasks;
 }
 
 function wholeFileChars(projectRoot, rels) {

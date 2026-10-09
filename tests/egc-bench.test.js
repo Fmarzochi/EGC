@@ -135,21 +135,55 @@ function unbuiltCopy() {
 
 run('without a Guardian build it says so and exits 2', () => {
   const dir = unbuiltCopy();
-  const r = spawnSync(process.execPath, [path.join(dir, 'scripts', 'bench', 'run.js')], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
-  assert.strictEqual(r.status, 2, r.stderr);
-  assert.ok(r.stderr.includes('guardian build not found'), r.stderr);
-  fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    const r = spawnSync(process.execPath, [path.join(dir, 'scripts', 'bench', 'run.js')], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
+    assert.strictEqual(r.status, 2, r.stderr);
+    assert.ok(r.stderr.includes('guardian build not found'), r.stderr);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
-run('a failure after the arguments are read is one line on stderr and exit 1, not an unhandled rejection', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bench-reject-'));
-  const broken = path.join(dir, 'tasks.json');
-  fs.writeFileSync(broken, '{ not json');
-  const r = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--tasks', broken], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
-  assert.strictEqual(r.status, 1, r.stdout);
-  assert.ok(r.stderr.startsWith('egc bench:'), r.stderr);
-  assert.ok(!r.stderr.includes('    at '), 'no stack trace');
-  fs.rmSync(dir, { recursive: true, force: true });
+// main() checks for the Guardian build before it reads the tasks, so reaching the rejection handler needs one.
+if (!fs.existsSync(buildPath)) {
+  console.log('  SKIP rejection handler (guardian build not found)');
+} else {
+  run('a failure after the arguments are read is one line on stderr and exit 1, not an unhandled rejection', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bench-reject-'));
+    try {
+      const broken = path.join(dir, 'tasks.json');
+      fs.writeFileSync(broken, '{ not json');
+      const r = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--tasks', broken], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
+      assert.strictEqual(r.status, 1, r.stdout);
+      assert.ok(r.stderr.startsWith('egc bench:'), r.stderr);
+      assert.ok(r.stderr.includes(broken), 'the error names the file');
+      assert.ok(!r.stderr.includes('    at '), 'no stack trace');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+run('loadTasks names the file in every error: missing, not JSON, empty and malformed', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bench-names-'));
+  try {
+    const write = (name, text) => {
+      const file = path.join(dir, name);
+      fs.writeFileSync(file, text);
+      return file;
+    };
+    const cases = [
+      [path.join(dir, 'missing.json'), /ENOENT/],
+      [write("notjson.json", "{ not json"), /JSON|Expected|Unexpected/],
+      [write('empty.json', JSON.stringify({ tasks: [] })), /no tasks/],
+      [write('bad.json', JSON.stringify({ tasks: [{ id: 'x' }] })), /task needs/]
+    ];
+    for (const [file, what] of cases) {
+      assert.throws(() => loadTasks(file), err => err.message.startsWith(`${file}: `) && what.test(err.message), file);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 run('a flag without its value is named in the error', () => {
