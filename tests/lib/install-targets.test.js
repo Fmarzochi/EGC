@@ -5143,7 +5143,7 @@ function runTests() {
       plan.operations.some(op => op.destinationPath && op.destinationPath.startsWith(rulesDir + path.sep)),
       'rules land flattened under ~/.augment/rules'
     );
-    assert.deepStrictEqual(plan.managedRoots, [path.join(homeDir, '.augment')], 'auggie-home manages only its own root, no hooks or shared root');
+    assert.deepStrictEqual(plan.managedRoots, [path.resolve(homeDir, '.augment')], 'auggie-home manages only its own root, no hooks or shared root');
   }));
 
   tally(test('auggie-project installs the same three families under the project .augment', () => {
