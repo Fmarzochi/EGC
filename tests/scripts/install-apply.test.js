@@ -462,9 +462,10 @@ function runTests() {
       const first = run(args, { cwd: projectDir, homeDir });
       assert.strictEqual(first.code, 0, first.stderr);
 
-      const projectAgents = path.join(projectDir, '.agents', 'agents');
-      const legacyAgents = path.join(projectDir, '.agents', 'skills');
-      const statePath = path.join(projectDir, '.agents', 'egc-install-state.json');
+      const projectRoot = fs.realpathSync(projectDir);
+      const projectAgents = path.join(projectRoot, '.agents', 'agents');
+      const legacyAgents = path.join(projectRoot, '.agents', 'skills');
+      const statePath = path.join(projectRoot, '.agents', 'egc-install-state.json');
       const moved = moveAgentsBack({ statePath, fromDir: projectAgents, toDir: legacyAgents });
       assert.ok(moved.length > 50, 'the core profile installs the agents');
       fs.writeFileSync(moved[0].legacy, 'edited by hand');
