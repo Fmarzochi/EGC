@@ -97,7 +97,7 @@ export class Bm25Index {
     const avgdl = n ? docLen.reduce((a, b) => a + b, 0) / n : 0;
     const idf = new Map<string, number>();
     for (const [t, c] of df) idf.set(t, Math.log(1 + (n - c + 0.5) / (c + 0.5)));
-    return new Bm25Index(docTf, docLen, avgdl, idf, [...df.keys()].sort());
+    return new Bm25Index(docTf, docLen, avgdl, idf, [...df.keys()].sort((a, b) => a.localeCompare(b)));
   }
 
   expand(terms: string[]): Array<[string, number]> {
