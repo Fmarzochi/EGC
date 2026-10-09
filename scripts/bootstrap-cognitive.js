@@ -481,19 +481,43 @@ function retireLegacyTraeMemory(legacyFile, label) {
   console.log(`  [cognitive] ${label}: retired the old protocol copy Trae does not read (${legacyFile.replace(HOME, '~')})`);
 }
 
+function injectTraeUserRule(filepath, label, content) {
+  if (!fs.existsSync(filepath)) {
+    injectStandaloneProtocol(filepath, label, content);
+    return;
+  }
+  const raw = fs.readFileSync(filepath, 'utf8');
+  const blockMatch = raw.match(MARKER_BLOCK_RE);
+  if (!blockMatch) {
+    console.log(`  [cognitive] ${label}: ${filepath.replace(HOME, '~')} is a rule of your own, left untouched; the memory protocol was not installed`);
+    return;
+  }
+  const installedVersion = resolveInstalledVersion(blockMatch, 0);
+  if (installedVersion >= PROTOCOL_VERSION) {
+    console.log(`  [cognitive] ${label}: already configured (v${installedVersion})`);
+    return;
+  }
+  fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
+  fs.writeFileSync(filepath, raw.replace(MARKER_BLOCK_RE, () => content), 'utf8');
+  console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION} (${filepath.replace(HOME, '~')})`);
+}
+
 // ── Trae (~/.trae/user_rules/egc-memory.md and ~/.trae-cn/user_rules/egc-memory.md) ──
 (function bootstrapTrae() {
-  try {
-    for (const dir of ['.trae', '.trae-cn']) {
+  for (const dir of ['.trae', '.trae-cn']) {
+    const label = `Trae (${dir})`;
+    try {
       const traeDir = path.join(HOME, dir);
       if (!fs.existsSync(traeDir)) continue;
-      const label = `Trae (${dir})`;
-      const target = path.join(traeDir, 'user_rules', 'egc-memory.md');
-      injectStandaloneProtocol(target, label, markdownProtocolBody('EGC Session Memory'));
-      retireLegacyTraeMemory(path.join(traeDir, 'MEMORY.md'), label);
+      injectTraeUserRule(path.join(traeDir, 'user_rules', 'egc-memory.md'), label, markdownProtocolBody('EGC Session Memory'));
+    } catch (e) {
+      console.log(`  [cognitive] ${label}: unexpected error: ${e.message}`);
     }
-  } catch (e) {
-    console.log(`  [cognitive] Trae: unexpected error: ${e.message}`);
+    try {
+      retireLegacyTraeMemory(path.join(HOME, dir, 'MEMORY.md'), label);
+    } catch (e) {
+      console.log(`  [cognitive] ${label}: unable to retire the old MEMORY.md: ${e.message}`);
+    }
   }
 })();
 
