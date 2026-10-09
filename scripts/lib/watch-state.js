@@ -8,7 +8,9 @@ const { propagateStateContent } = require('./propagate-state');
 const {
   projectSlug,
   detectBranch,
+  detectDetachedCommit,
   branchStateFile,
+  detachedStateFile,
   legacyBranchStateFile,
 } = require('./branch-state');
 const { isEncryptedBuffer } = require('./state-crypto');
@@ -145,6 +147,17 @@ function resolveStateFilePath(projectPath) {
 
     const legacyBranchFile = legacyBranchStateFile(stateDir, projectPath, branch);
     if (fs.existsSync(legacyBranchFile)) return legacyBranchFile;
+  } else {
+    // A detached HEAD never falls through to the shared flat file below:
+    // every detached checkout of the project used to collide there. Each
+    // commit gets its own file, checked here before the project-wide
+    // defaults.
+    const detachedCommit = detectDetachedCommit(projectPath);
+    if (detachedCommit) {
+      const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
+      if (fs.existsSync(detachedFile)) return detachedFile;
+      return null;
+    }
   }
 
   const defaultFile = path.join(stateDir, slug, 'main.md');

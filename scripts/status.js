@@ -3,7 +3,7 @@
 
 const os = require('node:os');
 const { createStateStore } = require('./lib/state-store');
-const { getStateDir, projectSlug, detectBranch, resolveStateRead } = require('./lib/branch-state');
+const { getStateDir, projectSlug, detectBranch, detectDetachedCommit, resolveStateRead } = require('./lib/branch-state');
 
 function showHelp(exitCode = 0) {
   console.log(`
@@ -107,7 +107,8 @@ function printInstallHealth(section) {
 function collectMemoryState(projectPath, homeDir) {
   const stateDir = getStateDir(homeDir);
   const branch = detectBranch(projectPath);
-  const resolved = resolveStateRead(stateDir, projectPath, branch);
+  const detachedCommit = branch ? null : detectDetachedCommit(projectPath);
+  const resolved = resolveStateRead(stateDir, projectPath, branch, detachedCommit);
 
   return {
     projectPath,

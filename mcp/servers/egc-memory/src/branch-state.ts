@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 export const DEFAULT_BRANCH_FILE = 'main.md';
 const BRANCH_FILE_PREFIX_LENGTH = 120;
 
-export type StateSource = 'branch' | 'default-branch' | 'flat' | 'none';
+export type StateSource = 'branch' | 'default-branch' | 'flat' | 'detached' | 'none';
 
 export interface ResolvedState {
   filePath: string;
@@ -44,7 +44,10 @@ function findGitDir(startPath: string): string | null {
   }
 }
 
-export function detectBranch(projectPath: string): string | null {
+// Reads the raw, trimmed content of .git/HEAD, resolving worktree and
+// submodule pointer files. Shared by detectBranch and detectDetachedCommit
+// so both agree on exactly what HEAD says.
+function readHeadLine(projectPath: string): string | null {
   try {
     let gitDir = findGitDir(projectPath);
     if (!gitDir) return null;
@@ -54,14 +57,31 @@ export function detectBranch(projectPath: string): string | null {
       if (!pointer.startsWith('gitdir:')) return null;
       gitDir = path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim());
     }
-    const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
-    const refPrefix = 'ref: refs/heads/';
-    // Detached HEAD stores a bare commit hash; treat it as no branch
-    if (!head.startsWith(refPrefix)) return null;
-    return head.slice(refPrefix.length) || null;
+    return fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
   } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info
     return null;
   }
+}
+
+export function detectBranch(projectPath: string): string | null {
+  const head = readHeadLine(projectPath);
+  if (!head) return null;
+  const refPrefix = 'ref: refs/heads/';
+  // Detached HEAD stores a bare commit hash; treat it as no branch
+  if (!head.startsWith(refPrefix)) return null;
+  return head.slice(refPrefix.length) || null;
+}
+
+const DETACHED_COMMIT_PATTERN = /^[0-9a-f]{4,40}$/i;
+
+// The commit a detached HEAD points at, or null when HEAD is on a branch,
+// outside a git repo, or its content does not look like a commit hash (a
+// corrupted .git/HEAD is treated as no detached state, never used as a path
+// component).
+export function detectDetachedCommit(projectPath: string): string | null {
+  const head = readHeadLine(projectPath);
+  if (!head || head.startsWith('ref: refs/heads/')) return null;
+  return DETACHED_COMMIT_PATTERN.test(head) ? head.toLowerCase() : null;
 }
 
 export function flatStateFile(stateDir: string, projectPath: string): string {
@@ -72,11 +92,22 @@ export function branchStateFile(stateDir: string, projectPath: string, branch: s
   return path.join(stateDir, projectSlug(projectPath), `${branchStateKey(branch)}.md`);
 }
 
+// A detached HEAD gets its own file keyed by the exact commit, never the
+// legacy flat file every detached checkout of the project used to share.
+export function detachedStateFile(stateDir: string, projectPath: string, commit: string): string {
+  return path.join(stateDir, projectSlug(projectPath), `detached--${commit}.md`);
+}
+
 export function legacyBranchStateFile(stateDir: string, projectPath: string, branch: string): string {
   return path.join(stateDir, projectSlug(projectPath), `${sanitizeBranchName(branch)}.md`);
 }
 
-export function resolveStateRead(stateDir: string, projectPath: string, branch: string | null): ResolvedState {
+export function resolveStateRead(
+  stateDir: string,
+  projectPath: string,
+  branch: string | null,
+  detachedCommit: string | null = null
+): ResolvedState {
   if (branch) {
     const branchFile = branchStateFile(stateDir, projectPath, branch);
     if (fs.existsSync(branchFile)) {
@@ -99,6 +130,21 @@ export function resolveStateRead(stateDir: string, projectPath: string, branch: 
     }
   }
 
+  // A detached HEAD never falls through to the flat file: every detached
+  // checkout of the same project used to share that one file, so one
+  // worktree's or CI run's state could leak into, or be overwritten by,
+  // another's. Each commit gets its own file instead; a different commit
+  // never sees it and is reported as 'none', same as a branch with no
+  // state yet.
+  if (detachedCommit) {
+    const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
+    return {
+      filePath: detachedFile,
+      source: fs.existsSync(detachedFile) ? 'detached' : 'none',
+      branch: null,
+    };
+  }
+
   const flatFile = flatStateFile(stateDir, projectPath);
   if (fs.existsSync(flatFile)) {
     return { filePath: flatFile, source: 'flat', branch: branch || null };
@@ -111,7 +157,13 @@ export function resolveStateRead(stateDir: string, projectPath: string, branch: 
   };
 }
 
-export function resolveStateWrite(stateDir: string, projectPath: string, branch: string | null): string {
+export function resolveStateWrite(
+  stateDir: string,
+  projectPath: string,
+  branch: string | null,
+  detachedCommit: string | null = null
+): string {
   if (branch) return branchStateFile(stateDir, projectPath, branch);
+  if (detachedCommit) return detachedStateFile(stateDir, projectPath, detachedCommit);
   return flatStateFile(stateDir, projectPath);
 }

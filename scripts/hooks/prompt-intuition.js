@@ -30,7 +30,7 @@ const {
   loadState, saveState, appendToSection, extractSection,
   writeSnapshotToDisk, applyMinedMemory, withStateFileLockSync,
 } = require('../lib/state-snapshot');
-const { getStateDir, detectBranch, resolveStateWrite } = require('../lib/branch-state');
+const { getStateDir, detectBranch, detectDetachedCommit, resolveStateWrite } = require('../lib/branch-state');
 
 const INTENT_TIMEOUT_MS = 6000;
 const MINE_TIMEOUT_MS = 15000;
@@ -75,8 +75,9 @@ function handleSessionResume(projectPath) {
 
 function handleRemember(projectPath, prompt) {
   const branch = detectBranch(projectPath);
+  const detachedCommit = branch ? null : detectDetachedCommit(projectPath);
   const stateDir = getStateDir(process.env.HOME);
-  const filePath = resolveStateWrite(stateDir, projectPath, branch);
+  const filePath = resolveStateWrite(stateDir, projectPath, branch, detachedCommit);
 
   const saved = withStateFileLockSync(filePath, () => {
     const state = loadState(projectPath);

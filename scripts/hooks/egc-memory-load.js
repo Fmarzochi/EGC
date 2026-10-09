@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
-const { getStateDir, detectBranch, resolveStateRead } = require('../lib/branch-state');
+const { getStateDir, detectBranch, detectDetachedCommit, resolveStateRead } = require('../lib/branch-state');
 
 function tryRequire(modulePath) {
   try {
@@ -34,7 +34,8 @@ function main() {
   try {
     const projectPath = process.env.PWD || process.cwd();
     const branch = detectBranch(projectPath);
-    const resolved = resolveStateRead(getStateDir(), projectPath, branch);
+    const detachedCommit = branch ? null : detectDetachedCommit(projectPath);
+    const resolved = resolveStateRead(getStateDir(), projectPath, branch, detachedCommit);
 
     const content = resolved.source === 'none' ? '' : fs.readFileSync(resolved.filePath, 'utf8');
     const appendix = globalState ? globalState.readGlobalAppendix(content, stateCrypto) : null;

@@ -12,8 +12,10 @@ const {
   sanitizeBranchName,
   branchStateKey,
   detectBranch,
+  detectDetachedCommit,
   flatStateFile,
   branchStateFile,
+  detachedStateFile,
   legacyBranchStateFile,
   resolveStateRead,
   resolveStateWrite,
@@ -166,6 +168,47 @@ function runTests() {
     const repo = makeGitRepo(null);
     git(repo, 'checkout -q --detach');
     assert.strictEqual(detectBranch(repo), null);
+  }));
+
+  tally(test('detectDetachedCommit returns the commit on detached HEAD, null on a branch or outside a repo', () => {
+    const onBranch = makeGitRepo('feature/auth');
+    assert.strictEqual(detectDetachedCommit(onBranch), null);
+
+    const repo = makeGitRepo(null);
+    git(repo, 'checkout -q --detach');
+    const commit = execSync('git rev-parse HEAD', { cwd: repo, encoding: 'utf8' }).trim();
+    assert.strictEqual(detectDetachedCommit(repo), commit);
+
+    const dir = makeTmpDir('egc-branch-state-norepo-');
+    assert.strictEqual(detectDetachedCommit(dir), null);
+  }));
+
+  tally(test('resolveStateRead and resolveStateWrite isolate detached HEAD by commit, never the shared flat file', () => {
+    const stateDir = makeTmpDir('egc-branch-state-detached-');
+    const project = '/home/user/Projects/my-app';
+    const commitA = 'a'.repeat(40);
+    const commitB = 'b'.repeat(40);
+
+    assert.strictEqual(
+      resolveStateWrite(stateDir, project, null, commitA),
+      detachedStateFile(stateDir, project, commitA)
+    );
+    assert.notStrictEqual(detachedStateFile(stateDir, project, commitA), flatStateFile(stateDir, project));
+    assert.notStrictEqual(detachedStateFile(stateDir, project, commitA), detachedStateFile(stateDir, project, commitB));
+
+    writeState(flatStateFile(stateDir, project), 'flat state, shared by every non-branch checkout');
+    writeState(detachedStateFile(stateDir, project, commitA), 'detached state for commit A');
+
+    const resolvedA = resolveStateRead(stateDir, project, null, commitA);
+    assert.strictEqual(resolvedA.source, 'detached');
+    assert.strictEqual(resolvedA.filePath, detachedStateFile(stateDir, project, commitA));
+
+    const resolvedB = resolveStateRead(stateDir, project, null, commitB);
+    assert.strictEqual(resolvedB.source, 'none', 'a different detached commit never inherits another one\'s state');
+    assert.strictEqual(resolvedB.filePath, detachedStateFile(stateDir, project, commitB));
+
+    const withoutDetached = resolveStateRead(stateDir, project, null);
+    assert.strictEqual(withoutDetached.source, 'flat', 'omitting detachedCommit keeps reading the flat file, e.g. outside any git repo');
   }));
 
   tally(test('flatStateFile and branchStateFile build expected paths', () => {

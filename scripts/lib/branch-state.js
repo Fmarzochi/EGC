@@ -108,7 +108,11 @@ function findGitDir(startPath) {
   }
 }
 
-function detectBranch(projectPath) {
+// Reads the raw, trimmed content of .git/HEAD, resolving worktree and
+// submodule pointer files and refusing anything outside the trusted roots.
+// Shared by detectBranch and detectDetachedCommit so both agree on exactly
+// what HEAD says.
+function readHeadLine(projectPath) {
   try {
     const rawGitDir = findGitDir(projectPath);
     if (!rawGitDir) return null;
@@ -123,14 +127,31 @@ function detectBranch(projectPath) {
     }
     const headPath = trustedGitPath(path.resolve(gitDir, 'HEAD'));
     if (!headPath) return null;
-    const head = fs.readFileSync(headPath, 'utf8').trim();
-    const refPrefix = 'ref: refs/heads/';
-    // Detached HEAD stores a bare commit hash; treat it as no branch
-    if (!head.startsWith(refPrefix)) return null;
-    return head.slice(refPrefix.length) || null;
+    return fs.readFileSync(headPath, 'utf8').trim();
   } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info available
     return null;
   }
+}
+
+function detectBranch(projectPath) {
+  const head = readHeadLine(projectPath);
+  if (!head) return null;
+  const refPrefix = 'ref: refs/heads/';
+  // Detached HEAD stores a bare commit hash; treat it as no branch
+  if (!head.startsWith(refPrefix)) return null;
+  return head.slice(refPrefix.length) || null;
+}
+
+const DETACHED_COMMIT_PATTERN = /^[0-9a-f]{4,40}$/i;
+
+// The commit a detached HEAD points at, or null when HEAD is on a branch,
+// outside a git repo, or its content does not look like a commit hash
+// (a corrupted .git/HEAD is treated as no detached state, never used as a
+// path component).
+function detectDetachedCommit(projectPath) {
+  const head = readHeadLine(projectPath);
+  if (!head || head.startsWith('ref: refs/heads/')) return null;
+  return DETACHED_COMMIT_PATTERN.test(head) ? head.toLowerCase() : null;
 }
 
 function flatStateFile(stateDir, projectPath) {
@@ -141,11 +162,19 @@ function branchStateFile(stateDir, projectPath, branch) {
   return path.join(stateDir, projectSlug(projectPath), `${branchStateKey(branch)}.md`);
 }
 
+// A detached HEAD gets its own file keyed by the exact commit, never the
+// branch's hashed key scheme (irrelevant here, the commit is already a safe
+// fixed-length token) and never the legacy flat file, which every detached
+// checkout of the project used to share.
+function detachedStateFile(stateDir, projectPath, commit) {
+  return path.join(stateDir, projectSlug(projectPath), `detached--${commit}.md`);
+}
+
 function legacyBranchStateFile(stateDir, projectPath, branch) {
   return path.join(stateDir, projectSlug(projectPath), `${sanitizeBranchName(branch)}.md`);
 }
 
-function resolveStateRead(stateDir, projectPath, branch) {
+function resolveStateRead(stateDir, projectPath, branch, detachedCommit) {
   if (branch) {
     const branchFile = branchStateFile(stateDir, projectPath, branch);
     if (fs.existsSync(branchFile)) {
@@ -168,6 +197,21 @@ function resolveStateRead(stateDir, projectPath, branch) {
     }
   }
 
+  // A detached HEAD never falls through to the flat file: every detached
+  // checkout of the same project used to share that one file, so one
+  // worktree's or CI run's state could leak into, or be overwritten by,
+  // another's. Each commit gets its own file instead; a different commit
+  // never sees it and is reported as 'none', same as a branch with no state
+  // yet.
+  if (detachedCommit) {
+    const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
+    return {
+      filePath: detachedFile,
+      source: fs.existsSync(detachedFile) ? 'detached' : 'none',
+      branch: null,
+    };
+  }
+
   const flatFile = flatStateFile(stateDir, projectPath);
   if (fs.existsSync(flatFile)) {
     return { filePath: flatFile, source: 'flat', branch: branch || null };
@@ -180,8 +224,9 @@ function resolveStateRead(stateDir, projectPath, branch) {
   };
 }
 
-function resolveStateWrite(stateDir, projectPath, branch) {
+function resolveStateWrite(stateDir, projectPath, branch, detachedCommit) {
   if (branch) return branchStateFile(stateDir, projectPath, branch);
+  if (detachedCommit) return detachedStateFile(stateDir, projectPath, detachedCommit);
   return flatStateFile(stateDir, projectPath);
 }
 
@@ -192,9 +237,11 @@ module.exports = {
   sanitizeBranchName,
   branchStateKey,
   detectBranch,
+  detectDetachedCommit,
   trustedGitPath,
   flatStateFile,
   branchStateFile,
+  detachedStateFile,
   legacyBranchStateFile,
   resolveStateRead,
   resolveStateWrite,

@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
-import { detectBranch, resolveStateRead, resolveStateWrite } from './branch-state';
+import { detectBranch, detectDetachedCommit, resolveStateRead, resolveStateWrite } from './branch-state';
 import { GLOBAL_APPENDIX_SECTIONS, buildGlobalAppendix, globalStateFilePath } from './global-state';
 import {
   announce as busAnnounce,
@@ -1310,7 +1310,8 @@ async function handleGetState(db: Database, toolArgs: unknown) {
   const { project_path } = GetStateSchema.parse(toolArgs || {});
   const projPath = resolveProjectPath(project_path);
   const branch = detectBranch(projPath);
-  const resolved = resolveStateRead(getStateDir(), projPath, branch);
+  const detachedCommit = branch ? null : detectDetachedCommit(projPath);
+  const resolved = resolveStateRead(getStateDir(), projPath, branch, detachedCommit);
 
   await announcePresenceBestEffort(db, projPath);
   await runThrottledMaintenance(db);
@@ -1397,6 +1398,7 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
   }
   const projPath = resolveProjectPath(args.project_path);
   const branch = detectBranch(projPath);
+  const detachedCommit = branch ? null : detectDetachedCommit(projPath);
 
   // Implicit bus presence, mirroring get_state: saving memory also refreshes
   // this session's heartbeat so long-running sessions stay visible.
@@ -1425,14 +1427,14 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
     });
   }
 
-  const filePath = resolveStateWrite(getStateDir(), projPath, branch);
+  const filePath = resolveStateWrite(getStateDir(), projPath, branch, detachedCommit);
 
   // Merge from the same file get_state would read, so the first
   // branch-scoped write inherits the pre-existing flat state. The read
   // happens inside the merge lock: reading before acquiring it would
   // reintroduce the lost-update race between concurrent sessions.
   await withStateMergeLock(filePath, () => {
-    const resolved = resolveStateRead(getStateDir(), projPath, branch);
+    const resolved = resolveStateRead(getStateDir(), projPath, branch, detachedCommit);
     const existing = readExistingStateOrRecover(resolved.filePath, args.force, 'project');
 
     fs.mkdirSync(path.dirname(filePath), { recursive: true });

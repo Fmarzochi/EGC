@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getStateDir, detectBranch, resolveStateRead, resolveStateWrite } = require('./branch-state');
+const { getStateDir, detectBranch, detectDetachedCommit, resolveStateRead, resolveStateWrite } = require('./branch-state');
 const { isEncryptedBuffer, decryptStateBuffer, encryptStateBuffer } = require('./state-crypto');
 const { loadOrCreateIntegrityKey, writeHmac } = require('./state-integrity');
 
@@ -119,9 +119,10 @@ function buildSkeleton(projectPath, branch, ts) {
 // loss" rule for the same failure.
 function loadState(projectPath) {
   const branch = detectBranch(projectPath);
+  const detachedCommit = branch ? null : detectDetachedCommit(projectPath);
   const stateDir = getStateDir(process.env.HOME);
-  const resolved = resolveStateRead(stateDir, projectPath, branch);
-  const filePath = resolveStateWrite(stateDir, projectPath, branch);
+  const resolved = resolveStateRead(stateDir, projectPath, branch, detachedCommit);
+  const filePath = resolveStateWrite(stateDir, projectPath, branch, detachedCommit);
   const ts = new Date().toISOString();
 
   if (resolved.source === 'none' || !fs.existsSync(resolved.filePath)) {
@@ -168,8 +169,9 @@ function saveState(filePath, content) {
 
 function writeSnapshotToDisk(projectPath = process.env.PWD || process.cwd()) {
   const branch = detectBranch(projectPath);
+  const detachedCommit = branch ? null : detectDetachedCommit(projectPath);
   const stateDir = getStateDir(process.env.HOME);
-  const filePath = resolveStateWrite(stateDir, projectPath, branch);
+  const filePath = resolveStateWrite(stateDir, projectPath, branch, detachedCommit);
   return withStateFileLockSync(filePath, () => {
     const state = loadState(projectPath);
     if (state.undecryptable) return state.filePath;
@@ -228,8 +230,9 @@ function minedToLines(items) {
 
 function applyMinedMemory(projectPath, mined) {
   const branch = detectBranch(projectPath);
+  const detachedCommit = branch ? null : detectDetachedCommit(projectPath);
   const stateDir = getStateDir(process.env.HOME);
-  const filePath = resolveStateWrite(stateDir, projectPath, branch);
+  const filePath = resolveStateWrite(stateDir, projectPath, branch, detachedCommit);
 
   return withStateFileLockSync(filePath, () => {
     const state = loadState(projectPath);
