@@ -391,17 +391,20 @@ function planFlatSkillOperation(adapter, moduleId, sourceRelativePath, planningI
  *
  * Signature matches config.planOperations(input, adapter) so it can be
  * assigned directly (e.g. `planOperations: createFlatSkillPlanOperations`)
- * without a wrapper closure in each adapter file.
+ * without a wrapper closure in each adapter file. `options.skillsDir`,
+ * given the planning input, names a skills directory outside the root
+ * (Zed: the shared ~/.agents/skills).
  */
-function createFlatSkillPlanOperations(rawInput, adapter) {
+function createFlatSkillPlanOperations(rawInput, adapter, options = {}) {
   const input = rawInput ?? {};
   const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
+  const skillsDir = typeof options.skillsDir === 'function' ? options.skillsDir(planningInput) : null;
 
   return modules.flatMap(module => {
     const paths = Array.isArray(module.paths) ? module.paths : [];
     return paths
       .filter(p => !isForeignPlatformPath(p, adapter.target))
-      .map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot));
+      .map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot, skillsDir));
   });
 }
 
