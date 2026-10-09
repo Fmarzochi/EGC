@@ -2218,6 +2218,25 @@ function runTests() {
     assert.strictEqual(statePath, path.join(homeDir, '.github', 'egc', 'install-state.json'));
   }));
 
+  tally(test('warns when the copilot install state cannot be read, since ~/.copilot/skills is then left as the person\'s (#1672)', () => {
+    const fs = require('fs');
+    const adapter = getInstallTargetAdapter('copilot');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-copilot-unreadable-'));
+    try {
+      const unreadable = issues => issues.filter(issue => issue.code === 'install-state-unreadable');
+      assert.deepStrictEqual(unreadable(adapter.validate({ homeDir, repoRoot })), [], 'no warning without a state file');
+      const statePath = adapter.getInstallStatePath({ homeDir, repoRoot });
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, '{');
+      const warnings = unreadable(adapter.validate({ homeDir, repoRoot }));
+      assert.strictEqual(warnings.length, 1);
+      assert.ok(warnings[0].message.includes(path.join(homeDir, '.copilot', 'skills')), warnings[0].message);
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('copilot adapter strips category from skill paths and installs flat', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
@@ -2238,9 +2257,19 @@ function runTests() {
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
-        && operation.destinationPath === path.join(homeDir, '.github', 'skills', 'tdd-workflow')
+        && operation.destinationPath === path.join(homeDir, '.copilot', 'skills', 'tdd-workflow')
       )),
-      'Should strip category and install skill flat under ~/.github/skills/'
+      'Should strip category and install skill flat under ~/.copilot/skills/, where VS Code reads personal skills (#1672)'
+    );
+    assert.ok(
+      !plan.operations.some(operation => operation.destinationPath.startsWith(path.join(homeDir, '.github', 'skills'))),
+      'nothing is planned under ~/.github/skills, which VS Code does not read'
+    );
+    const adapter = getInstallTargetAdapter('copilot');
+    assert.deepStrictEqual(
+      adapter.resolveManagedRoots({ homeDir }, adapter),
+      [path.join(homeDir, '.github'), path.join(homeDir, '.copilot')],
+      'retirement and uninstall may touch ~/.copilot, where the skills and the hooks live'
     );
   }));
 

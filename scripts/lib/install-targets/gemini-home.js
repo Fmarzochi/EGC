@@ -1,15 +1,14 @@
-const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
 const {
-  UNREADABLE_STATE,
   buildValidationIssue,
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
+  collectRecordedDestinations,
+  isPersonOwnedDestination,
   normalizeRelativePath,
-  readInstallStateOrNull,
   resolveModulesPlan,
 } = require('./helpers');
 const {
@@ -194,46 +193,6 @@ function dedupeCopyOperations(operations) {
   });
 }
 
-function collectRecordedDestinations(adapter, input) {
-  const statePaths = [adapter.getInstallStatePath(input), ...adapter.resolveLegacyInstallStatePaths(input)];
-  const destinations = [];
-  for (const statePath of statePaths) {
-    const state = readInstallStateOrNull(statePath);
-    if (state === UNREADABLE_STATE) return null;
-    const operations = state && Array.isArray(state.operations) ? state.operations : [];
-    destinations.push(...operations.map(operation => path.resolve(String(operation.destinationPath || ''))));
-  }
-  return destinations;
-}
-
-function isSameTree(sourcePath, destinationPath) {
-  try {
-    const source = fs.lstatSync(sourcePath, { throwIfNoEntry: false });
-    const destination = fs.lstatSync(destinationPath, { throwIfNoEntry: false });
-    if (!source || !destination) return false;
-    if (source.isFile() && destination.isFile()) {
-      return fs.readFileSync(sourcePath).equals(fs.readFileSync(destinationPath));
-    }
-    if (!source.isDirectory() || !destination.isDirectory()) return false;
-    const sourceEntries = fs.readdirSync(sourcePath).sort();
-    const destinationEntries = fs.readdirSync(destinationPath).sort();
-    if (sourceEntries.join('\n') !== destinationEntries.join('\n')) return false;
-    return sourceEntries.every(entry => isSameTree(path.join(sourcePath, entry), path.join(destinationPath, entry)));
-  } catch {
-    return false;
-  }
-}
-
-function isPersonOwned(destination, sourcePath, recordedDestinations) {
-  const stat = fs.lstatSync(destination, { throwIfNoEntry: false });
-  if (!stat || stat.isSymbolicLink()) return false;
-  const resolved = path.resolve(destination);
-  if (recordedDestinations?.some(recorded => recorded === resolved || recorded.startsWith(resolved + path.sep))) {
-    return false;
-  }
-  return !(sourcePath && isSameTree(sourcePath, resolved));
-}
-
 function getAGYManagedDestinationPaths(adapter, sourceRelativePath, input, recordedDestinations = []) {
   const normalizedSourcePath = normalizeRelativePath(sourceRelativePath);
   const targetRoot = adapter.resolveRoot(input);
@@ -248,7 +207,7 @@ function getAGYManagedDestinationPaths(adapter, sourceRelativePath, input, recor
     const flatRemainder = parts.length >= 2 ? parts.slice(1).join('/') : parts.join('/');
     const destination = path.join(targetRoot, AGY_SKILLS_SUBDIR, flatRemainder);
     const sourcePath = input.repoRoot ? path.join(input.repoRoot, normalizedSourcePath) : null;
-    return isPersonOwned(destination, sourcePath, recordedDestinations) ? [] : [destination];
+    return isPersonOwnedDestination(destination, sourcePath, recordedDestinations) ? [] : [destination];
   }
 
   return null;

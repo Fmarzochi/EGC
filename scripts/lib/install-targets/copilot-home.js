@@ -2,9 +2,15 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
-  createFlatSkillPlanOperations,
+  buildValidationIssue,
+  collectRecordedDestinations,
   createInstallTargetAdapter,
   createRemappedOperation,
+  isForeignPlatformPath,
+  isPersonOwnedDestination,
+  normalizeRelativePath,
+  planFlatSkillOperation,
+  resolveModulesPlan,
 } = require('./helpers');
 const {
   GATEGUARD_HOOK_MODULE_ID,
@@ -20,6 +26,26 @@ const {
 } = require('../copilot-settings-hooks');
 
 const UTILS_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
+
+function resolveCopilotHome(input) {
+  const home = typeof input === 'string' ? input : input?.homeDir;
+  return path.join(home || os.homedir(), '.copilot');
+}
+
+function planCopilotSkillOperations(input, adapter) {
+  const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
+  const skillsDir = path.join(resolveCopilotHome(planningInput), 'skills');
+  const recordedDestinations = collectRecordedDestinations(adapter, input);
+  return modules.flatMap(module => (Array.isArray(module.paths) ? module.paths : [])
+    .filter(sourceRelativePath => !isForeignPlatformPath(sourceRelativePath, adapter.target))
+    .map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot, skillsDir))
+    .filter(operation => {
+      const source = normalizeRelativePath(operation.sourceRelativePath);
+      if (!source.startsWith('skills/')) return true;
+      const sourcePath = planningInput.repoRoot ? path.join(planningInput.repoRoot, source) : null;
+      return !isPersonOwnedDestination(operation.destinationPath, sourcePath, recordedDestinations);
+    }));
+}
 
 function resolveUtilsScriptDestination(targetRoot) {
   return path.join(targetRoot, 'scripts', 'lib', 'utils.js');
@@ -82,8 +108,19 @@ module.exports = createInstallTargetAdapter({
   rootSegments: ['.github'],
   installStatePathSegments: ['egc', 'install-state.json'],
   nativeRootRelativePath: '.github',
+  resolveManagedRoots(input, adapter) {
+    return [adapter.resolveRoot(input), resolveCopilotHome(input)];
+  },
+  validateMore(input, adapter) {
+    if (collectRecordedDestinations(adapter, input)) return [];
+    return [buildValidationIssue(
+      'warning',
+      'install-state-unreadable',
+      `The install state at ${adapter.getInstallStatePath(input)} cannot be read: skills already under ${path.join(resolveCopilotHome(input), 'skills')} that differ from EGC's are treated as yours and left as they are until it can be read again.`
+    )];
+  },
   planOperations(input, adapter) {
-    const moduleOperations = createFlatSkillPlanOperations(input, adapter);
+    const moduleOperations = planCopilotSkillOperations(input, adapter);
     const planningInput = {
       repoRoot: input.repoRoot,
       projectRoot: input.projectRoot,
