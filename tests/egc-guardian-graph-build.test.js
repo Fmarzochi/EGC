@@ -16,7 +16,7 @@ if (!fs.existsSync(path.join(buildDir, 'graph-build.js'))) {
   console.log('[SKIP] build not found. Run npm run build in mcp/servers/egc-guardian first.');
   process.exit(0);
 }
-const { buildGraph, makeIgnore, resolveSpecifier, withBuildLock } = require(path.join(buildDir, 'graph-build.js'));
+const { buildGraph, makeIgnore, readFileWithin, resolveSpecifier, withBuildLock } = require(path.join(buildDir, 'graph-build.js'));
 const { openGraphStore } = require(path.join(buildDir, 'graph-store.js'));
 
 let passed = 0;
@@ -138,6 +138,82 @@ const bump = file => {
     assert.strictEqual(row.hash, require('node:crypto').createHash('sha256').update(text).digest('hex'));
     assert.strictEqual(row.hash.length, 64);
     await store.close();
+  });
+
+  await run('readFileWithin reads a regular file inside the root and nothing else', async () => {
+    const root = fs.realpathSync(project({ 'src/a.js': 'export const a = 1;\n', 'big.js': 'x'.repeat(64) }));
+    assert.strictEqual(await readFileWithin(root, 'src/a.js', 1024), 'export const a = 1;\n');
+    assert.strictEqual(await readFileWithin(root, '../escape.js', 1024), null, 'a path that climbs out of the root');
+    assert.strictEqual(await readFileWithin(root, 'src/../../escape.js', 1024), null);
+    assert.strictEqual(await readFileWithin(root, path.join(os.tmpdir(), 'anything'), 1024), null, 'an absolute path');
+    assert.strictEqual(await readFileWithin(root, 'src', 1024), null, 'a directory');
+    assert.strictEqual(await readFileWithin(root, 'missing.js', 1024), null);
+    assert.strictEqual(await readFileWithin(root, 'big.js', 63), null, 'a file over the limit');
+    assert.strictEqual(await readFileWithin(root, 'big.js', 64), 'x'.repeat(64), 'a file exactly at the limit');
+  });
+
+  await run('readFileWithin refuses a symbolic link, to a file or as a directory on the way', async () => {
+    const root = fs.realpathSync(project({ 'real/a.js': 'export const a = 1;\n' }));
+    const outside = fs.mkdtempSync(path.join(tmp, 'outside-'));
+    fs.writeFileSync(path.join(outside, 'secret.txt'), 'TOP-SECRET\n');
+    fs.writeFileSync(path.join(outside, 'a.js'), 'export const stolen = 1;\n');
+    let fileLinked = true;
+    try {
+      fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(root, 'link.js'), 'file');
+    } catch {
+      fileLinked = false;
+    }
+    if (fileLinked) assert.strictEqual(await readFileWithin(root, 'link.js', 1024), null, 'a file symlink');
+    else console.log('    - file symlinks not available here (EPERM); directory link only');
+    // A junction needs no privilege on Windows; elsewhere it is a plain directory symlink.
+    fs.symlinkSync(outside, path.join(root, 'linked-dir'), 'junction');
+    assert.strictEqual(await readFileWithin(root, 'linked-dir/a.js', 1024), null, 'a file reached through a linked directory');
+    assert.strictEqual(await readFileWithin(root, 'real/a.js', 1024), 'export const a = 1;\n', 'the real file still reads');
+  });
+
+  await run('a build that dies after the file rows but before the edges is repaired by the next build', async () => {
+    const root = project({ 'a.js': 'export function a() { return 1; }\n', 'b.js': "import { a } from './a.js';\nexport function b() { return a(); }\n" });
+    const real = await open();
+    let failEdgesOnce = true;
+    const flaky = new Proxy(real, {
+      get(target, prop) {
+        if (prop === 'replaceEdges') {
+          return async edges => {
+            if (failEdgesOnce) {
+              failEdgesOnce = false;
+              throw new Error('disk full');
+            }
+            return target.replaceEdges(edges);
+          };
+        }
+        const value = target[prop];
+        return typeof value === 'function' ? value.bind(target) : value;
+      }
+    });
+    await assert.rejects(buildGraph(root, flaky), /disk full/);
+    assert.strictEqual((await real.load()).edges.length, 0, 'the files are in, the edges are not');
+    assert.strictEqual(await real.edgesDirty(), true, 'the graph says it is not linked');
+
+    const second = await buildGraph(root, real);
+    assert.strictEqual(second.refreshed, 0, 'no file changed since the failed build');
+    const data = await real.load();
+    assert.ok(data.edges.some(e => e.kind === 'import' && e.src === 'f:b.js' && e.dst === 'f:a.js'), 'the next build links what the failed one stored');
+    assert.strictEqual(await real.edgesDirty(), false);
+    await real.close();
+  });
+
+  await run('withBuildLock can wait for its turn and still refuses when the wait runs out', async () => {
+    const db = path.join(tmp, `lockwait-${n++}`, 'g.db');
+    fs.mkdirSync(path.dirname(db), { recursive: true });
+    let release;
+    const holder = withBuildLock(db, () => new Promise(resolve => { release = resolve; }));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const refused = await withBuildLock(db, async () => 'late', { waitMs: 150 });
+    assert.strictEqual(refused.ran, false, 'the holder is still running');
+    setTimeout(() => release('done'), 100);
+    const waited = await withBuildLock(db, async () => 'second', { waitMs: 2000 });
+    assert.deepStrictEqual(waited, { ran: true, value: 'second' });
+    assert.deepStrictEqual(await holder, { ran: true, value: 'done' });
   });
 
   await run('deleting a file removes its rows and edges', async () => {

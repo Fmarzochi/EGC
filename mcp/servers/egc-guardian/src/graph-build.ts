@@ -176,13 +176,33 @@ export async function walkFiles(
   return { files, truncated: false };
 }
 
-async function readText(abs: string, maxBytes: number): Promise<string | null> {
+// Reads a regular file that lies inside root, or null. Null for: a path that
+// leaves the root, a symbolic link as the file or as any directory on the way
+// (also a Windows junction), a file that is swapped for another between the
+// checks and the open, and a file larger than maxBytes, including one that
+// grows while it is read. The graph reads project files at index time and again
+// when it returns a snippet, and both must stay inside the project.
+export async function readFileWithin(root: string, rel: string, maxBytes: number): Promise<string | null> {
+  const abs = path.resolve(root, rel);
+  const inside = path.relative(root, abs);
+  if (inside === '' || inside.startsWith('..') || path.isAbsolute(inside)) return null;
   let handle: fs.promises.FileHandle | undefined;
   try {
-    handle = await fs.promises.open(abs, 'r');
+    const before = await fs.promises.lstat(abs);
+    if (!before.isFile()) return null;
+    if (path.relative(root, await fs.promises.realpath(abs)) !== inside) return null;
+    handle = await fs.promises.open(abs, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
     const st = await handle.stat();
     if (!st.isFile() || st.size > maxBytes) return null;
-    return await handle.readFile({ encoding: 'utf8' });
+    if (st.ino !== 0 && before.ino !== 0 && (st.ino !== before.ino || st.dev !== before.dev)) return null;
+    const buffer = Buffer.alloc(st.size + 1);
+    let filled = 0;
+    while (filled < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, filled, buffer.length - filled, filled); // NOSONAR: reads must follow each other, each starts where the last ended
+      if (bytesRead === 0) break;
+      filled += bytesRead;
+    }
+    return filled > st.size ? null : buffer.toString('utf8', 0, filled);
   } catch {
     return null;
   } finally {
@@ -200,7 +220,8 @@ async function indexFile(
   prev: { mtimeMs: number; size: number; hash: string } | undefined,
   store: GraphStore,
   opts: BuildOptions,
-  maxFileBytes: number
+  maxFileBytes: number,
+  markEdgesDirty: () => Promise<void>
 ): Promise<IndexOutcome> {
   const abs = path.join(root, rel);
   if (opts.isProtectedPath?.(abs)) return 'skipped';
@@ -213,13 +234,14 @@ async function indexFile(
   if (!st.isFile() || st.size > maxFileBytes) return 'skipped';
   if (prev && prev.mtimeMs === st.mtimeMs && prev.size === st.size) return 'kept';
 
-  const text = await readText(abs, maxFileBytes);
+  const text = await readFileWithin(root, rel, maxFileBytes);
   if (text === null) return 'skipped';
   const row = { path: rel, mtimeMs: st.mtimeMs, size: st.size, hash: crypto.createHash('sha256').update(text).digest('hex') };
   if (prev && prev.hash === row.hash) {
     await store.touchFile(row);
     return 'kept';
   }
+  await markEdgesDirty();
   await store.replaceFile(row, extractFile(text));
   return 'refreshed';
 }
@@ -244,6 +266,15 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
   const wanted = new Set<string>();
   let refreshed = 0;
   let truncated = walked.truncated;
+  // File rows commit one by one and the edges last. The flag is set before the
+  // first write and cleared by the same commit that replaces the edges, so a
+  // build that dies in between leaves it set and the next build re-links.
+  let edgesDirty = await store.edgesDirty();
+  const markEdgesDirty = async (): Promise<void> => {
+    if (edgesDirty) return;
+    await store.markEdgesDirty();
+    edgesDirty = true;
+  };
 
   for (let k = 0; k < walked.files.length; k++) {
     const rel = walked.files[k];
@@ -252,16 +283,19 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
       for (const rest of walked.files.slice(k)) if (known.has(rest)) wanted.add(rest);
       break;
     }
-    const outcome = await indexFile(root, rel, known.get(rel), store, opts, maxFileBytes);
+    const outcome = await indexFile(root, rel, known.get(rel), store, opts, maxFileBytes, markEdgesDirty);
     if (outcome !== 'skipped') wanted.add(rel);
     if (outcome === 'refreshed') refreshed++;
   }
 
   const walkedSet = new Set(walked.files);
   const removable = [...known.keys()].filter(p => !wanted.has(p) && (!walked.truncated || walkedSet.has(p)));
-  if (removable.length > 0) await store.removeFiles(removable);
+  if (removable.length > 0) {
+    await markEdgesDirty();
+    await store.removeFiles(removable);
+  }
 
-  if (refreshed > 0 || removable.length > 0) {
+  if (edgesDirty) {
     const data = await store.load();
     await store.replaceEdges(computeEdges(data));
   }
@@ -282,8 +316,13 @@ function acquireLock(lock: string, token: string): number | null {
     const fd = fs.openSync(lock, 'wx');
     fs.writeSync(fd, token);
     return fd;
-  } catch {
-    return null;
+  } catch (err) {
+    // Only a lock that already exists means another process holds it; any
+    // other failure (no directory, no permission) must not pass for "busy".
+    // Windows also refuses a create while a delete of the old lock is pending.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'EEXIST' || (process.platform === 'win32' && (code === 'EPERM' || code === 'EBUSY'))) return null;
+    throw err;
   }
 }
 
@@ -323,11 +362,25 @@ function breakStaleLock(lock: string): boolean {
   return false;
 }
 
-export async function withBuildLock<T>(dbPath: string, fn: () => Promise<T>): Promise<{ ran: true; value: T } | { ran: false }> {
+const LOCK_POLL_MS = 50;
+
+// Runs fn while holding the lock beside the database. With waitMs the caller
+// waits for its turn that long before giving up with { ran: false }.
+export async function withBuildLock<T>(
+  dbPath: string,
+  fn: () => Promise<T>,
+  opts: { waitMs?: number } = {}
+): Promise<{ ran: true; value: T } | { ran: false }> {
   const lock = `${dbPath}.lock`;
   const token = `${process.pid}-${crypto.randomBytes(8).toString('hex')}`;
+  const giveUpAt = Date.now() + (opts.waitMs ?? 0);
   let fd = acquireLock(lock, token);
   if (fd === null && breakStaleLock(lock)) fd = acquireLock(lock, token);
+  while (fd === null && Date.now() < giveUpAt) {
+    await new Promise(resolve => setTimeout(resolve, LOCK_POLL_MS)); // NOSONAR: polling for the lock, one attempt per interval
+    fd = acquireLock(lock, token);
+    if (fd === null && breakStaleLock(lock)) fd = acquireLock(lock, token);
+  }
   if (fd === null) return { ran: false };
   try {
     return { ran: true, value: await fn() };

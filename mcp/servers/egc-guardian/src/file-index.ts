@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { extractFile, type ExtractedImport } from './graph-extract.js';
-import { makeIgnore, resolveSpecifier, TEXT_EXT, walkFiles } from './graph-build.js';
+import { makeIgnore, readFileWithin, resolveSpecifier, TEXT_EXT, walkFiles } from './graph-build.js';
 import { tokenize, type FileDoc, type ImportEdge } from './file-ranker.js';
 
 export const MAX_FILE_BYTES = 256 * 1024;
@@ -33,17 +33,6 @@ export interface FileIndexOptions {
   isProtectedPath?: (absPath: string) => boolean;
 }
 
-// The text of a file small enough to index; null for a large, unreadable or binary one.
-async function readIndexedText(abs: string, size: number): Promise<string | null> {
-  if (size > MAX_FILE_BYTES) return null;
-  try {
-    const text = await fs.promises.readFile(abs, 'utf8');
-    return text.includes('\u0000') ? null : text;
-  } catch {
-    return null;
-  }
-}
-
 // One document per file, with the imports found by the single extraction of a
 // JS/TS file. null when the file is protected or is not a regular file.
 async function indexFile(
@@ -55,14 +44,16 @@ async function indexFile(
   if (opts.isProtectedPath?.(abs)) return null;
   let st: fs.Stats;
   try {
-    st = await fs.promises.stat(abs);
+    st = await fs.promises.lstat(abs);
   } catch {
     return null;
   }
   if (!st.isFile()) return null;
 
   const pathTokens = tokenize(rel);
-  const text = await readIndexedText(abs, st.size);
+  // A large, unreadable or binary file is indexed by its path alone.
+  const raw = st.size > MAX_FILE_BYTES ? null : await readFileWithin(root, rel, MAX_FILE_BYTES);
+  const text = raw?.includes(String.fromCharCode(0)) ? null : raw;
   if (text === null) return { doc: { path: rel, fields: { path: pathTokens, symbols: [], keywords: [], summary: [] } }, imports: [] };
 
   const summary = tokenize(summaryOf(text));

@@ -18,6 +18,7 @@ if (!fs.existsSync(path.join(buildDir, 'graph-context.js'))) {
 }
 const { buildRelevantContext } = require(path.join(buildDir, 'graph-context.js'));
 const { graphDbPath } = require(path.join(buildDir, 'graph-store.js'));
+const { withBuildLock } = require(path.join(buildDir, 'graph-build.js'));
 
 let passed = 0;
 let failed = 0;
@@ -59,6 +60,46 @@ fs.writeFileSync(path.join(root, 'secrets.js'), 'export const apiKey = "sk-ant-a
     const events = audits.map(a => a.action);
     assert.ok(events.includes('GRAPH_QUERY'));
     assert.ok(!JSON.stringify(audits).includes('trim()'), 'audit events carry no snippet text');
+  });
+
+  await run('a directory swapped for a link after the build never leaks what is outside the project', async () => {
+    const proj = path.join(tmp, 'swap');
+    fs.mkdirSync(path.join(proj, 'lib'), { recursive: true });
+    fs.writeFileSync(path.join(proj, 'lib', 'helper.js'), 'export function leakTarget() {\n  return 1;\n}\n');
+    const outside = path.join(tmp, 'outside-swap');
+    fs.mkdirSync(outside, { recursive: true });
+    fs.writeFileSync(path.join(outside, 'helper.js'), 'export function leakTarget() {\n  return "TOP-SECRET-OUTSIDE";\n}\n');
+    const deps = {
+      env,
+      // After the build has indexed lib/helper.js and before the snippets are read.
+      audit: action => {
+        if (action !== 'GRAPH_BUILD') return;
+        fs.rmSync(path.join(proj, 'lib'), { recursive: true, force: true });
+        fs.symlinkSync(outside, path.join(proj, 'lib'), 'junction');
+      }
+    };
+    const r = await buildRelevantContext('change leakTarget', proj, undefined, deps);
+    assert.ok(!JSON.stringify(r).includes('TOP-SECRET-OUTSIDE'), 'content from outside the project was returned');
+  });
+
+  await run('a build held by another process is reported unavailable after the wait, then works once it ends', async () => {
+    const proj = path.join(tmp, 'busy');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, 'a.js'), 'export function busyTarget() {\n  return 1;\n}\n');
+    const dbPath = graphDbPath(fs.realpathSync(proj), env);
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    let release;
+    const holder = withBuildLock(dbPath, () => new Promise(resolve => { release = resolve; }));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const busy = await buildRelevantContext('change busyTarget', proj, undefined, { env, lockWaitMs: 120 });
+    assert.strictEqual(busy.status, 'unavailable', JSON.stringify(busy));
+    assert.ok(String(busy.reason).includes('another process'), busy.reason);
+    assert.ok(!fs.existsSync(dbPath), 'a caller without the lock opens no store, so it cannot write a stale copy back');
+    release();
+    await holder;
+    const after = await buildRelevantContext('change busyTarget', proj, undefined, { env });
+    assert.strictEqual(after.status, 'ok', JSON.stringify(after));
+    assert.strictEqual(after.files[0].path, 'a.js');
   });
 
   await run('transformSnippet is applied to everything returned', async () => {

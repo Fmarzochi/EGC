@@ -20,6 +20,8 @@ export interface GraphStore {
   touchFile(file: FileRow): Promise<void>;
   removeFiles(paths: string[]): Promise<void>;
   replaceEdges(edges: EdgeRow[]): Promise<void>;
+  edgesDirty(): Promise<boolean>;
+  markEdgesDirty(): Promise<void>;
   load(): Promise<GraphData>;
   close(): Promise<void>;
 }
@@ -110,7 +112,16 @@ export async function openGraphStore(dbPath: string): Promise<GraphStore> {
       await inTransaction(db, async () => {
         await db.run('DELETE FROM edges');
         for (const e of edges) await db.run('INSERT INTO edges(src, dst, kind) VALUES (?, ?, ?)', e.src, e.dst, e.kind);
+        await db.run("INSERT OR REPLACE INTO meta(key, value) VALUES ('edges_dirty', '0')");
       });
+    },
+    // A graph with no recorded flag (new, or written before the flag existed) is dirty.
+    async edgesDirty() {
+      const row = await db.get<{ value: string }>("SELECT value FROM meta WHERE key = 'edges_dirty'");
+      return !row || row.value !== '0';
+    },
+    async markEdgesDirty() {
+      await db.run("INSERT OR REPLACE INTO meta(key, value) VALUES ('edges_dirty', '1')");
     },
     async load() {
       const files = (await db.all<{ path: string; mtime_ms: number; size: number; hash: string }[]>('SELECT path, mtime_ms, size, hash FROM files ORDER BY path'))

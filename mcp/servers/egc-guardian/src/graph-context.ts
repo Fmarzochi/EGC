@@ -1,15 +1,17 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildGraph, withBuildLock } from './graph-build.js';
+import { buildGraph, readFileWithin, withBuildLock, type BuildResult } from './graph-build.js';
 import { queryGraph } from './graph-query.js';
-import { graphDbPath, openGraphStoreWithRecovery } from './graph-store.js';
+import { graphDbPath, openGraphStoreWithRecovery, type GraphData } from './graph-store.js';
 
 export interface ContextDeps {
   env?: NodeJS.ProcessEnv;
   isProtectedPath?: (absPath: string) => boolean;
   transformSnippet?: (text: string) => string | null;
   audit?: (action: string, details: Record<string, unknown>) => void;
+  // How long to wait for another process's build; defaults to LOCK_WAIT_MS.
+  lockWaitMs?: number;
 }
 
 const unavailable = (reason: string): Record<string, unknown> => ({ status: 'unavailable', reason });
@@ -34,19 +36,34 @@ export function resolveRoot(projectPath: string | undefined): { root: string } |
   return { root };
 }
 
-async function readProjectFile(root: string, rel: string): Promise<string | null> {
-  const abs = path.join(root, rel);
-  let handle: fs.promises.FileHandle | undefined;
-  try {
-    handle = await fs.promises.open(abs, 'r');
-    const st = await handle.stat();
-    if (!st.isFile() || st.size > 1024 * 1024) return null;
-    return await handle.readFile({ encoding: 'utf8' });
-  } catch {
-    return null;
-  } finally {
-    await handle?.close().catch(() => undefined);
-  }
+const MAX_SNIPPET_FILE_BYTES = 1024 * 1024;
+// How long a caller waits for another process's build before the graph is reported unavailable.
+const LOCK_WAIT_MS = 5000;
+
+// The store is opened, built, read and closed while this process holds the
+// build lock. The portable SQL engine keeps the whole database in memory and
+// writes it back whole on close, so a handle opened before the lock could be
+// a stale copy that overwrites what another process saved in the meantime.
+async function buildAndLoad(
+  root: string,
+  dbPath: string,
+  deps: ContextDeps
+): Promise<{ build: BuildResult; data: GraphData } | null> {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const locked = await withBuildLock(
+    dbPath,
+    async () => {
+      const store = await openGraphStoreWithRecovery(dbPath);
+      try {
+        const build = await buildGraph(root, store, { isProtectedPath: deps.isProtectedPath });
+        return { build, data: await store.load() };
+      } finally {
+        await store.close().catch(() => undefined);
+      }
+    },
+    { waitMs: deps.lockWaitMs ?? LOCK_WAIT_MS }
+  );
+  return locked.ran ? locked.value : null;
 }
 
 export async function buildRelevantContext(
@@ -59,25 +76,25 @@ export async function buildRelevantContext(
   if ('reason' in resolved) return unavailable(resolved.reason);
   const { root } = resolved;
   const audit = deps.audit ?? (() => undefined);
-  let store: Awaited<ReturnType<typeof openGraphStoreWithRecovery>> | undefined;
   try {
-    const dbPath = graphDbPath(root, deps.env);
-    store = await openGraphStoreWithRecovery(dbPath);
-    const locked = await withBuildLock(dbPath, () => buildGraph(root, store as NonNullable<typeof store>, { isProtectedPath: deps.isProtectedPath }));
-    const build = locked.ran ? locked.value : null;
-    if (build) audit('GRAPH_BUILD', { status: build.status, files: build.files, refreshed: build.refreshed, removed: build.removed, build_ms: build.buildMs });
+    const loaded = await buildAndLoad(root, graphDbPath(root, deps.env), deps);
+    if (!loaded) {
+      audit('GRAPH_BUSY', { waited_ms: deps.lockWaitMs ?? LOCK_WAIT_MS });
+      return unavailable('the code graph is being built by another process; try again shortly');
+    }
+    const { build, data } = loaded;
+    audit('GRAPH_BUILD', { status: build.status, files: build.files, refreshed: build.refreshed, removed: build.removed, build_ms: build.buildMs });
 
-    const data = await store.load();
     const result = await queryGraph(prompt, data, {
       budgetTokens,
-      readFile: rel => readProjectFile(root, rel),
+      readFile: rel => readFileWithin(root, rel, MAX_SNIPPET_FILE_BYTES),
       transformSnippet: deps.transformSnippet
     });
     const snippets = result.files.reduce((sum, f) => sum + f.snippets.length, 0);
     audit('GRAPH_QUERY', { files: result.files.length, snippets, tokens_estimated: result.tokensEstimated, dropped: result.dropped });
 
     return {
-      status: build?.status === 'partial' ? 'partial' : 'ok',
+      status: build.status === 'partial' ? 'partial' : 'ok',
       files: result.files.map(f => ({
         path: f.path,
         score: f.score,
@@ -87,13 +104,11 @@ export async function buildRelevantContext(
       tokens_estimated: result.tokensEstimated,
       truncated: result.truncated,
       dropped: result.dropped,
-      graph: { files: data.files.length, refreshed: build?.refreshed ?? 0, build_ms: build?.buildMs ?? 0, build: build ? 'ran' : 'busy' }
+      graph: { files: data.files.length, refreshed: build.refreshed, build_ms: build.buildMs, build: 'ran' }
     };
   } catch (err) {
     const reason = (err instanceof Error ? err.message : String(err)).slice(0, 200);
     audit('GRAPH_ERROR', { reason });
     return unavailable(reason);
-  } finally {
-    await store?.close().catch(() => undefined);
   }
 }
