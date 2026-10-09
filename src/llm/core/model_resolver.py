@@ -861,7 +861,7 @@ class ModelResolver:
         ``Model: gemini-2.0-flash``` as if it were pinned.
         """
         resolved = cls.resolve(model_hint, provider)
-        prov = cls._provider_for(resolved)
+        prov = cls._provider_for(resolved, expected=provider)
         provider_label = {
             "gemini": "Google Gemini",
             "claude": "Anthropic Claude",
@@ -873,7 +873,7 @@ class ModelResolver:
 
         env_model = _first_env(*_MODEL_ENV_VARS)
         env_resolved = cls._ALIASES.get(env_model.lower(), env_model) if env_model else None
-        env_pinned = (not model_hint) and env_resolved is not None and cls._provider_for(env_resolved) == prov
+        env_pinned = (not model_hint) and env_resolved is not None and cls._provider_for(env_resolved, expected=provider) == prov
         explicit = bool(model_hint) and (
             model_hint.strip().lower() in cls._REGISTRY
             or cls._looks_like_real_id(model_hint.strip())

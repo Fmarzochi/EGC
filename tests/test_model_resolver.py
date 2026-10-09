@@ -341,6 +341,16 @@ class TestDescribeStrategy:
         assert info["strategy"] == "Pinned via environment"
         assert info["resolved_model"] == "gemini-2.5-flash"
 
+    def test_reports_the_real_provider_for_an_unregistered_groq_native_id(self, monkeypatch):
+        # Regression: describe_strategy used to report "gemini" for a model
+        # that default_model had already correctly pinned to groq, because
+        # the provider hint never reached the second _provider_for call.
+        monkeypatch.setenv("LLM_MODEL", "llama-3.3-70b-versatile")
+        info = ModelResolver.describe_strategy(provider="groq")
+        assert info["provider_id"] == "groq"
+        assert info["resolved_model"] == "llama-3.3-70b-versatile"
+        assert info["strategy"] == "Pinned via environment"
+
     def test_preferred_capability_code_and_general(self, monkeypatch):
         monkeypatch.setattr(ModelResolver, "_REGISTRY", {
             "gemini-code-only": {"provider": "gemini", "capabilities": [ModelCapability.CODE]},
