@@ -7,7 +7,10 @@ import { graphDbPath, openGraphStoreWithRecovery, type GraphData } from './graph
 
 export interface ContextDeps {
   env?: NodeJS.ProcessEnv;
+  // The full check, for the project root and for every file a snippet is read from.
   isProtectedPath?: (absPath: string) => boolean;
+  // The cheap check applied to every file while the graph is built; defaults to isProtectedPath.
+  isIndexExcluded?: (absPath: string) => boolean;
   transformSnippet?: (text: string) => string | null;
   audit?: (action: string, details: Record<string, unknown>) => void;
   // How long to wait for another process's build; defaults to LOCK_WAIT_MS.
@@ -55,7 +58,7 @@ async function buildAndLoad(
     async () => {
       const store = await openGraphStoreWithRecovery(dbPath);
       try {
-        const build = await buildGraph(root, store, { isProtectedPath: deps.isProtectedPath });
+        const build = await buildGraph(root, store, { isProtectedPath: deps.isIndexExcluded ?? deps.isProtectedPath });
         return { build, data: await store.load() };
       } finally {
         await store.close().catch(() => undefined);
@@ -76,6 +79,7 @@ export async function buildRelevantContext(
   if ('reason' in resolved) return unavailable(resolved.reason);
   const { root } = resolved;
   const audit = deps.audit ?? (() => undefined);
+  if (deps.isProtectedPath?.(root)) return unavailable('project path is protected');
   try {
     const loaded = await buildAndLoad(root, graphDbPath(root, deps.env), deps);
     if (!loaded) {
@@ -87,7 +91,8 @@ export async function buildRelevantContext(
 
     const result = await queryGraph(prompt, data, {
       budgetTokens,
-      readFile: rel => readFileWithin(root, rel, MAX_SNIPPET_FILE_BYTES),
+      // Only the few files a snippet is cut from reach the full check.
+      readFile: rel => (deps.isProtectedPath?.(path.join(root, rel)) ? Promise.resolve(null) : readFileWithin(root, rel, MAX_SNIPPET_FILE_BYTES)),
       transformSnippet: deps.transformSnippet
     });
     const snippets = result.files.reduce((sum, f) => sum + f.snippets.length, 0);

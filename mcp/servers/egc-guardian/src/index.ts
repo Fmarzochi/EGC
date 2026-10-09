@@ -17,7 +17,7 @@ function hideEgcRootOnWindows(): void {
   spawnSync(attribPath, ['+h', egcRoot], { stdio: 'ignore', shell: false });
 }
 import { z } from 'zod';
-import { validateCommand, validateWrite, isProtectedPath, resolveWriteTarget } from './validator.js';
+import { validateCommand, validateWrite, isProtectedPath, secretPathChecker, resolveWriteTarget } from './validator.js';
 import { redactPayload, writeAuditEntry } from './audit-log.js';
 import { scanVolatile } from './egc-volatile-scanner.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
@@ -516,7 +516,6 @@ async function handleRankFiles(toolArgs: unknown) {
   }
   const result = await rankProjectFiles({
     projectPath: resolved.root,
-    isProtectedPath: p => isProtectedPath(p),
     query: parsed.query,
     history: parsed.history ? String(redactPayload({ text: parsed.history }).text) : '',
     topN: parsed.top_n,
@@ -561,6 +560,7 @@ async function handleOrchestrateTask(toolArgs: unknown) {
 
   const relevantContext = await buildRelevantContext(prompt, parsed.project_path, parsed.context_budget_tokens, {
     isProtectedPath: p => isProtectedPath(p),
+    isIndexExcluded: secretPathChecker(),
     transformSnippet: text => {
       if (scanForInjection(text).length > 0) return null;
       return String(redactPayload({ text }).text);

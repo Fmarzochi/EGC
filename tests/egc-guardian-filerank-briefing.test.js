@@ -109,6 +109,19 @@ fs.writeFileSync(path.join(root, 'unrelated.ts'), 'export const color = "red";\n
     assert.ok(rows.every(row => !row.includes('\ny.ts')), 'the explain table escapes the path too');
   });
 
+  await run('ranking a few hundred files with the default protection checks stays fast', async () => {
+    const big = path.join(tmp, 'many');
+    fs.mkdirSync(big, { recursive: true });
+    for (let i = 0; i < 400; i++) fs.writeFileSync(path.join(big, `unit${i}.ts`), `export const unit${i} = ${i};\n`);
+    fs.writeFileSync(path.join(big, 'needle.ts'), 'export function findNeedle() { return 1; }\n');
+    const started = Date.now();
+    const r = await rankProjectFiles({ projectPath: big, query: 'findNeedle', useGit: false });
+    const ms = Date.now() - started;
+    assert.strictEqual(r.ranked[0].path, 'needle.ts');
+    // The full protected-path check costs tens of milliseconds a file, so using it for every file would take far longer.
+    assert.ok(ms < 10000, `ranking 401 files took ${ms} ms`);
+  });
+
   await run('no project files gives an empty ranking', async () => {
     const empty = path.join(tmp, 'empty');
     fs.mkdirSync(empty);

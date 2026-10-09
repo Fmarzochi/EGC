@@ -1801,6 +1801,26 @@ export function isProtectedPath(p: string, baseDir: string = process.cwd()): boo
   return isGitControlFile(candidate, isRegularFile(normalizedP)) || isConfiguredHook(normalizedP, baseDir) || isToolHookSurface(p, baseDir);
 }
 
+// The cheap half of isProtectedPath, for a whole project walk: the denied
+// directories and the secret-file patterns, judged on the path as given.
+// isProtectedPath looks every denied directory up on disk and resolves hook
+// configuration with dozens of synchronous file-system calls, about 50 ms a
+// path, which a walk over thousands of files cannot afford. This checker looks
+// the denied directories up once, when it is made, so make a new one for each
+// run and nothing outlives it. It resolves no links in the candidate, so it is
+// for callers that have already ruled links out (the project indexers read
+// only regular files inside the project). Use isProtectedPath for the project
+// root and for any file whose content is handed back.
+export function secretPathChecker(): (p: string) => boolean {
+  const denied = DENIED_PATHS.map(parent => ({ parent, real: resolveRealOrLexical(parent) }));
+  return p => {
+    const normalizedP = path.resolve(expandHome(p.trim()));
+    if (denied.some(d => isUnderResolved(normalizedP, d.parent, d.real))) return true;
+    const candidate = foldCase(normalizedP);
+    return PROTECTED_FILE_PATTERNS.some(pattern => pattern.test(candidate));
+  };
+}
+
 // Reading and writing carry different risk, and treating them alike is what
 // made the guardian deny `cat ~/.egc/bin/manifest.json`, `ls ~/.egc/bin` or
 // `cat /etc/systemd/oomd.conf` -- none of which expose a secret, all of
@@ -1859,8 +1879,13 @@ function withoutDrive(p: string): string {
 // from its own root, and Node resolves it below whichever drive is current,
 // so there it is matched below any drive.
 function isUnder(candidate: string, parent: string): boolean {
+  return isUnderResolved(candidate, parent, resolveRealOrLexical(parent));
+}
+
+// isUnder with the parent's real location already looked up.
+function isUnderResolved(candidate: string, parent: string, realParent: string): boolean {
   const driveless = process.platform === 'win32' && parent.startsWith('/');
-  const resolvedParent = foldCase(resolveRealOrLexical(parent));
+  const resolvedParent = foldCase(realParent);
   const folded = foldCase(candidate);
   const [inside, above] = driveless ? [withoutDrive(folded), withoutDrive(resolvedParent)] : [folded, resolvedParent];
   return inside === above || inside.startsWith(above + path.sep);

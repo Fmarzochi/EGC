@@ -102,6 +102,42 @@ fs.writeFileSync(path.join(root, 'secrets.js'), 'export const apiKey = "sk-ant-a
     assert.strictEqual(after.files[0].path, 'a.js');
   });
 
+  await run('the full protection check runs on the root and on snippet files only; the cheap one covers every file', async () => {
+    const proj = path.join(tmp, 'tiers');
+    fs.mkdirSync(proj, { recursive: true });
+    const FILES = 25;
+    for (let i = 0; i < FILES; i++) fs.writeFileSync(path.join(proj, `m${i}.js`), `export function tiered${i}() {\n  return ${i};\n}\n`);
+    const full = [];
+    const cheap = [];
+    const deps = {
+      env,
+      isProtectedPath: p => { full.push(p); return false; },
+      isIndexExcluded: p => { cheap.push(p); return false; }
+    };
+    const r = await buildRelevantContext('change tiered3', proj, undefined, deps);
+    assert.strictEqual(r.status, 'ok', JSON.stringify(r));
+    assert.ok(cheap.length >= FILES, `the cheap check saw ${cheap.length} paths`);
+    assert.ok(full.length <= 1 + r.files.reduce((n, f) => n + f.snippets.length, 0), `the full check ran ${full.length} times`);
+    assert.ok(full.length < FILES, 'the full check did not run for every file');
+  });
+
+  await run('a file the full check protects is never read for a snippet, even though the cheap check let it be indexed', async () => {
+    const proj = path.join(tmp, 'tiers-snippet');
+    fs.mkdirSync(proj, { recursive: true });
+    fs.writeFileSync(path.join(proj, 'guarded.js'), 'export function guardedTarget() {\n  return "GUARDED-CONTENT";\n}\n');
+    const deps = { env, isProtectedPath: p => p.endsWith('guarded.js'), isIndexExcluded: () => false };
+    const r = await buildRelevantContext('change guardedTarget', proj, undefined, deps);
+    assert.ok(!JSON.stringify(r).includes('GUARDED-CONTENT'), 'the protected file was read for a snippet');
+  });
+
+  await run('a protected project root is unavailable', async () => {
+    const proj = path.join(tmp, 'tiers-root');
+    fs.mkdirSync(proj, { recursive: true });
+    const r = await buildRelevantContext('anything', proj, undefined, { env, isProtectedPath: () => true });
+    assert.strictEqual(r.status, 'unavailable');
+    assert.ok(String(r.reason).includes('protected'), r.reason);
+  });
+
   await run('transformSnippet is applied to everything returned', async () => {
     const r = await buildRelevantContext('parseHelper', root, undefined, { env, transformSnippet: t => t.replace(/trim\(\)/g, 'HIDDEN') });
     assert.ok(JSON.stringify(r).includes('HIDDEN'));

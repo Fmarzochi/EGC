@@ -23,7 +23,7 @@ import { scoreDocuments } from './file-ranker.js';
 import { redactPayload } from './audit-log.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
 import { resolveRoot } from './graph-context.js';
-import { isProtectedPath as isProtectedByDefault } from './validator.js';
+import { isProtectedPath as isProtectedByDefault, secretPathChecker } from './validator.js';
 
 export interface RankOptions {
   projectPath: string;
@@ -43,10 +43,10 @@ export interface RankedFile { path: string; score: number; signals: Record<strin
 export async function rankProjectFiles(opts: RankOptions): Promise<{ ranked: RankedFile[]; explain: string[]; briefing: string }> {
   const resolved = resolveRoot(opts.projectPath);
   if ('reason' in resolved) throw new Error(resolved.reason);
-  const isProtected = opts.isProtectedPath ?? isProtectedByDefault;
-  if (isProtected(resolved.root)) throw new Error('project_path must not be a protected path');
+  // The full check once, on the root; the cheap one on every file of the project.
+  if ((opts.isProtectedPath ?? isProtectedByDefault)(resolved.root)) throw new Error('project_path must not be a protected path');
 
-  const index = await buildFileIndex(resolved.root, { isProtectedPath: isProtected });
+  const index = await buildFileIndex(resolved.root, { isProtectedPath: opts.isProtectedPath ?? secretPathChecker() });
   const gitSignal = opts.useGit === false ? null : await collectGitContext(resolved.root);
   const scored = scoreDocuments(index.docs, {
     query: opts.query,
