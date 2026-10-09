@@ -252,5 +252,12 @@ run('destructuring declarations bind symbols: objects, arrays, renames, defaults
   assert.strictEqual(required.imports.length, 1);
 });
 
+run('names destructured from require() or import() are imports, whatever the path looks like, and not symbols', () => {
+  const dynamicPath = extractFile("const { validateCommand, isProtectedPath } = require(path.join(buildDir, 'validator.js'));\nconst [first] = require(computed());\nconst { viaImport } = await import(pathToFileURL(file).href);\nconst { plain } = require('./literal.js');\n");
+  assert.deepStrictEqual(dynamicPath.symbols, [], `symbols: ${dynamicPath.symbols.map(s => s.name).join(', ')}`);
+  const computed = extractFile('const { alpha, beta } = compute();\nconst { gamma } = await load();\n');
+  assert.deepStrictEqual(computed.symbols.map(s => s.name), ['alpha', 'beta', 'gamma'], 'a destructured value that is not a module load still binds symbols');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
