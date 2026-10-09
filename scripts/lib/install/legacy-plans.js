@@ -7,6 +7,7 @@ const { LEGACY_INSTALL_TARGETS } = require('./request');
 const { getInstallTargetAdapter } = require('../install-targets/registry');
 const { AGY_RULES_SUBDIR, isPersonCopy, planAntigravityRuleFiles, readRecordedDestinations } = require('../antigravity-rules');
 const { planAntigravityAgentFiles } = require('../antigravity-agents');
+const { planAntigravityCommandFiles } = require('../antigravity-commands');
 const {
   addFileCopyOperation,
   addJsonMergeOperation,
@@ -235,26 +236,24 @@ function planAntigravityLegacyInstall(context) {
     });
   }
 
-  addRecursiveCopyOperations(operations, {
-    moduleId: 'legacy-antigravity-install',
-    sourceRoot: context.sourceRoot,
-    sourceRelativeDir: 'commands',
-    destinationDir: path.join(targetRoot, 'workflows'),
-  });
   const recordedDestinations = readRecordedDestinations(installStatePath);
-  for (const agent of planAntigravityAgentFiles(context.sourceRoot, 'agents')) {
-    const sourcePath = path.join(context.sourceRoot, agent.sourceRelativePath);
-    const destinationPath = path.join(targetRoot, 'agents', agent.fileName);
-    if (isPersonCopy(destinationPath, sourcePath, agent.transform, recordedDestinations)) {
+  const libraryFiles = [
+    ...planAntigravityCommandFiles(context.sourceRoot, 'commands').map(file => ({ ...file, directory: 'skills' })),
+    ...planAntigravityAgentFiles(context.sourceRoot, 'agents').map(file => ({ ...file, directory: 'agents' })),
+  ];
+  for (const file of libraryFiles) {
+    const sourcePath = path.join(context.sourceRoot, file.sourceRelativePath);
+    const destinationPath = path.join(targetRoot, file.directory, file.fileName);
+    if (isPersonCopy(destinationPath, sourcePath, file.transform, recordedDestinations)) {
       continue;
     }
     operations.push(buildCopyFileOperation({
       moduleId: 'legacy-antigravity-install',
       sourcePath,
-      sourceRelativePath: agent.sourceRelativePath,
+      sourceRelativePath: file.sourceRelativePath,
       destinationPath,
       strategy: 'flatten-copy',
-      transform: agent.transform,
+      transform: file.transform,
     }));
   }
   addRecursiveCopyOperations(operations, {

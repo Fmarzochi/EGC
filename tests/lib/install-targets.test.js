@@ -194,6 +194,53 @@ function runTests() {
     assert.ok(planned('rules/zh/coding-style.md', 'zh-coding-style.md').startsWith('---\ntrigger: manual\n'), 'the Chinese translation of the common rules is manual, so the same rule never loads twice');
   }));
 
+  tally(test('a bundled skill wins over a command of the same name, at home and in the project (#1706)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+    const selections = [
+      [{ id: 'commands-core', paths: ['commands'] }, { id: 'security', paths: ['skills/security/security-scan'] }],
+      [{ id: 'commands-core', paths: ['commands'] }, { id: 'security', paths: ['skills/security/security-scan/SKILL.md'] }],
+    ];
+    const cases = selections.flatMap(modules => [
+      ['egc', path.join(homeDir, '.gemini', 'config', 'skills'), modules],
+      ['antigravity', path.join(projectRoot, '.agents', 'skills'), modules],
+    ]);
+    for (const [target, skillsRoot, modules] of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, homeDir, projectRoot, modules });
+      const shadowed = plan.operations.filter(operation => (
+        operation.destinationPath === path.join(skillsRoot, 'security-scan')
+        || operation.destinationPath.startsWith(path.join(skillsRoot, 'security-scan') + path.sep)
+      ));
+      assert.deepStrictEqual(shadowed.map(operation => normalizedRelativePath(operation.sourceRelativePath)), [modules[1].paths[0]], `${target}: the skill answers /security-scan, the command is not written over it (${modules[1].paths[0]})`);
+      assert.ok(plan.operations.some(operation => operation.destinationPath === path.join(skillsRoot, 'plan', 'SKILL.md')), `${target}: the other commands are planned`);
+    }
+  }));
+
+  tally(test('two selected command paths that would install as one skill are refused (#1706)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-command-collision-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'commands', 'foo'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'foo', 'bar.md'), '---\ndescription: a\n---\n');
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'foo-bar.md'), '---\ndescription: b\n---\n');
+      for (const target of ['egc', 'antigravity']) {
+        assert.throws(() => planInstallTargetScaffold({
+          target,
+          repoRoot,
+          homeDir: '/Users/example',
+          projectRoot: '/workspace/app',
+          modules: [
+            { id: 'one', paths: ['commands/foo/bar.md'] },
+            { id: 'two', paths: ['commands/foo-bar.md'] },
+          ],
+        }), /would both install as/, `${target}: one slash skill never replaces another`);
+      }
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('the egc target plans nothing that only the retired Gemini CLI read', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
@@ -213,9 +260,18 @@ function runTests() {
 
     const destinations = plan.operations.map(operation => operation.destinationPath);
     const under = prefix => destinations.some(destination => destination === prefix || destination.startsWith(prefix + path.sep));
-    for (const kept of ['AGENTS.md', 'commands', path.join('scripts', 'hooks'), path.join('scripts', 'lib'), path.join('scripts', 'setup-package-manager.js')]) {
-      assert.ok(destinations.includes(path.join(root, kept)), `${kept} is still written: Antigravity reads AGENTS.md, its hooks run from scripts/, and commands keep their spot until they move`);
+    for (const kept of ['AGENTS.md', path.join('scripts', 'hooks'), path.join('scripts', 'lib'), path.join('scripts', 'setup-package-manager.js')]) {
+      assert.ok(destinations.includes(path.join(root, kept)), `${kept} is still written: Antigravity reads AGENTS.md and its hooks run from scripts/`);
     }
+    const commandOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('commands/'));
+    assert.deepStrictEqual(
+      commandOperations.map(operation => operation.destinationPath).sort(),
+      require('fs').readdirSync(path.join(repoRoot, 'commands')).filter(name => name.endsWith('.md'))
+        .map(name => path.join(root, 'config', 'skills', name.slice(0, -3), 'SKILL.md')).sort(),
+      'each command is a skill under config/skills, invoked as /<name> (#1706)'
+    );
+    assert.ok(commandOperations.every(operation => operation.transform === 'antigravity-command-skill'));
+    assert.ok(!under(path.join(root, 'commands')), 'nothing is planned under ~/.gemini/commands any more (#1706)');
     const agentOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('agents/'));
     assert.deepStrictEqual(
       agentOperations.map(operation => normalizedRelativePath(operation.sourceRelativePath)).sort(),
@@ -685,13 +741,14 @@ function runTests() {
       ],
     });
 
-    assert.ok(
-      plan.operations.some(operation => (
-        operation.sourceRelativePath === 'commands'
-        && operation.destinationPath === path.join(projectRoot, '.agents', 'workflows')
-      )),
-      'Should remap commands into workflows'
+    const commandOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('commands/'));
+    assert.deepStrictEqual(
+      commandOperations.map(operation => operation.destinationPath).sort(),
+      require('fs').readdirSync(path.join(repoRoot, 'commands')).filter(name => name.endsWith('.md'))
+        .map(name => path.join(projectRoot, '.agents', 'skills', name.slice(0, -3), 'SKILL.md')).sort(),
+      'each command is a workspace skill, since Antigravity stops running workflows (#1706)'
     );
+    assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(projectRoot, '.agents', 'workflows'))), 'nothing is planned under .agents/workflows');
     const agentOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('agents/'));
     assert.deepStrictEqual(
       agentOperations.map(operation => normalizedRelativePath(operation.sourceRelativePath)).sort(),
