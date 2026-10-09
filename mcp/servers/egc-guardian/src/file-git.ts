@@ -51,12 +51,13 @@ function runGit(projectPath: string, args: string[]): Promise<string | null> {
   });
 }
 
-const norm = (p: string): string => p.replace(/\\/g, '/').trim().replace(/^\.\/+/, '');
+const norm = (p: string): string => p.replaceAll('\\', '/').trim().replace(/^\.\/+/, '');
 
+// -uall lists the files inside an untracked directory, not just the directory.
 // With -z a rename or copy record is followed by one more, bare record that
 // holds the original path; it has no status prefix and is skipped.
 async function changedPaths(projectPath: string): Promise<Set<string>> {
-  const out = await runGit(projectPath, ['status', '--porcelain', '-z']);
+  const out = await runGit(projectPath, ['status', '--porcelain', '-z', '-uall']);
   const paths = new Set<string>();
   if (!out) return paths;
   const entries = out.split('\0');
@@ -81,8 +82,9 @@ async function branchPaths(projectPath: string): Promise<Set<string>> {
   if (!base) return new Set();
   const head = await runGit(projectPath, ['rev-parse', 'HEAD']);
   if (head && head.trim() === base) return new Set();
-  const diff = await runGit(projectPath, ['diff', '--name-only', `${base}...HEAD`]);
-  return new Set((diff ?? '').split('\n').filter(l => l.trim()).map(norm));
+  // -z: names come NUL-separated and unquoted, whatever characters they hold.
+  const diff = await runGit(projectPath, ['diff', '-z', '--name-only', `${base}...HEAD`]);
+  return new Set((diff ?? '').split('\0').filter(l => l.trim()).map(norm));
 }
 
 async function recentAndCochange(
@@ -90,20 +92,17 @@ async function recentAndCochange(
 ): Promise<{ recent: Map<string, number>; cochange: Map<string, Map<string, number>> }> {
   const recent = new Map<string, number>();
   const cochange = new Map<string, Map<string, number>>();
-  const raw = await runGit(projectPath, ['log', `-${LOG_LIMIT}`, '--name-only', '--pretty=format:%x01%H', '--no-merges']);
+  const raw = await runGit(projectPath, ['log', `-${LOG_LIMIT}`, '-z', '--name-only', '--pretty=format:%x01%H', '--no-merges']);
   if (!raw) return { recent, cochange };
 
+  // With -z each commit is "\x01<hash>\n" followed by its paths, NUL-separated and unquoted.
   const commits: string[][] = [];
-  let current: string[] = [];
-  for (const line of raw.split('\n')) {
-    if (line.startsWith('\x01')) {
-      if (current.length) commits.push(current);
-      current = [];
-    } else if (line.trim()) {
-      current.push(norm(line));
-    }
+  for (const chunk of raw.split('\x01')) {
+    const newline = chunk.indexOf('\n');
+    if (newline === -1) continue;
+    const files = chunk.slice(newline + 1).split('\0').filter(f => f.trim()).map(norm);
+    if (files.length) commits.push(files);
   }
-  if (current.length) commits.push(current);
 
   const n = Math.max(commits.length, 1);
   commits.forEach((files, i) => {
@@ -137,9 +136,22 @@ export async function collectGitContext(projectPath: string): Promise<GitContext
   return { changed, branch, recent, cochange };
 }
 
+interface GitKeys { changed: string[]; branch: string[]; recent: string[]; cochange: string[] }
+const KEYS = new WeakMap<GitContextLike, GitKeys>();
+
+// The key lists are copied once per git context, not once per document scored.
+function keysOf(git: GitContextLike): GitKeys {
+  let keys = KEYS.get(git);
+  if (!keys) {
+    keys = { changed: [...git.changed], branch: [...git.branch], recent: [...git.recent.keys()], cochange: [...git.cochange.keys()] };
+    KEYS.set(git, keys);
+  }
+  return keys;
+}
+
 export function matchPath(docPath: string, keys: Iterable<string>): string | undefined {
   const d = norm(docPath);
-  const list = [...keys];
+  const list = Array.isArray(keys) ? (keys as string[]) : [...keys];
   if (list.includes(d)) return d;
   return list.find(k => k.endsWith('/' + d) || d.endsWith('/' + k));
 }
@@ -148,11 +160,12 @@ signal('git', 1.0, (doc: FileDoc, ctx: ScoreContext) => {
   const git = ctx.extras.gitSignal;
   if (!git) return 0;
   let score = 0;
-  if (matchPath(doc.path, git.changed)) score += W_CHANGED;
-  if (matchPath(doc.path, git.branch)) score += W_BRANCH;
-  const rk = matchPath(doc.path, git.recent.keys());
+  const keys = keysOf(git);
+  if (matchPath(doc.path, keys.changed)) score += W_CHANGED;
+  if (matchPath(doc.path, keys.branch)) score += W_BRANCH;
+  const rk = matchPath(doc.path, keys.recent);
   if (rk) score += W_RECENT * (git.recent.get(rk) ?? 0);
-  const ck = matchPath(doc.path, git.cochange.keys());
+  const ck = matchPath(doc.path, keys.cochange);
   if (ck && git.changed.size > 0) {
     const bucket = git.cochange.get(ck) ?? new Map<string, number>();
     let hits = 0;

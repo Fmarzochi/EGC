@@ -126,6 +126,58 @@ if (gitAvailable) {
     assert.deepStrictEqual([...ctx.changed], ['billing/returns.ts']);
   });
 
+  await run('files inside a new, untracked directory are reported, not just the directory', async () => {
+    const fresh = path.join(tmp, 'untracked');
+    fs.mkdirSync(fresh, { recursive: true });
+    git(fresh, 'init', '-q');
+    git(fresh, 'config', 'user.email', 't@example.com');
+    git(fresh, 'config', 'user.name', 'test');
+    fs.writeFileSync(path.join(fresh, 'tracked.ts'), 'export const t = 1;\n');
+    git(fresh, 'add', '.');
+    git(fresh, 'commit', '-q', '-m', 'init');
+    fs.mkdirSync(path.join(fresh, 'feature', 'deep'), { recursive: true });
+    fs.writeFileSync(path.join(fresh, 'feature', 'deep', 'new.ts'), 'export const n = 1;\n');
+    const ctx = await collectGitContext(fresh);
+    assert.ok(ctx.changed.has('feature/deep/new.ts'), [...ctx.changed].join(', '));
+  });
+
+  await run('names with spaces and non-ASCII letters arrive unquoted in the branch and recent signals', async () => {
+    const names = path.join(tmp, 'names');
+    fs.mkdirSync(names, { recursive: true });
+    git(names, 'init', '-q');
+    git(names, 'config', 'user.email', 't@example.com');
+    git(names, 'config', 'user.name', 'test');
+    git(names, 'checkout', '-q', '-b', 'main');
+    fs.writeFileSync(path.join(names, 'base.ts'), 'export const b = 1;\n');
+    git(names, 'add', '.');
+    git(names, 'commit', '-q', '-m', 'init');
+    git(names, 'checkout', '-q', '-b', 'feature');
+    fs.writeFileSync(path.join(names, 'sp ace.ts'), 'export const s = 1;\n');
+    fs.writeFileSync(path.join(names, 'ünï.ts'), 'export const u = 1;\n');
+    git(names, 'add', '.');
+    git(names, 'commit', '-q', '-m', 'names');
+    const ctx = await collectGitContext(names);
+    for (const name of ['sp ace.ts', 'ünï.ts']) {
+      assert.ok(ctx.branch.has(name), `branch: ${[...ctx.branch].join(' | ')}`);
+      assert.ok(ctx.recent.has(name), `recent: ${[...ctx.recent.keys()].join(' | ')}`);
+    }
+    assert.strictEqual(ctx.cochange.get('sp ace.ts').get('ünï.ts'), 1);
+  });
+
+  await run('the git key lists are copied once per run, not once per scored file', () => {
+    let iterations = 0;
+    class Counting extends Set {
+      [Symbol.iterator]() {
+        iterations++;
+        return super[Symbol.iterator]();
+      }
+    }
+    const gitSignal = { changed: new Counting(['a/x.ts']), branch: new Counting(['a/y.ts']), recent: new Map(), cochange: new Map() };
+    const docs = Array.from({ length: 60 }, (_, i) => ({ path: `pkg/f${i}.ts`, fields: { path: tokenize(`pkg/f${i}.ts`), symbols: [], keywords: [], summary: [] } }));
+    scoreDocuments(docs, { query: 'pkg', history: '', edges: [], extras: { gitSignal } }, { signals: ['git'], propagators: [] });
+    assert.ok(iterations <= 2, `the sets were iterated ${iterations} times for ${docs.length} documents`);
+  });
+
   await run('an unborn or detached HEAD does not throw', async () => {
     const detached = path.join(tmp, 'detached');
     fs.mkdirSync(detached);

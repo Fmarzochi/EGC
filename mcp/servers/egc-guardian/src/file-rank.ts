@@ -77,7 +77,7 @@ export function renderExplain(files: RankedFile[]): string[] {
   for (const f of files) for (const n of Object.keys(f.signals)) if (!names.includes(n)) names.push(n);
   const header = ['#', 'score', ...names, 'path'];
   const rows: string[][] = [header, ...files.map((f, i) => [
-    String(i + 1), f.score.toFixed(2), ...names.map(n => (f.signals[n] ?? 0).toFixed(2)), f.path
+    String(i + 1), f.score.toFixed(2), ...names.map(n => (f.signals[n] ?? 0).toFixed(2)), escapeControl(f.path)
   ])];
   const widths = header.map((_, c) => Math.max(...rows.map(r => r[c].length)));
   const out = [`explain: ${files.length} file(s) ranked (signals: ${names.join(', ')})`];
@@ -86,6 +86,21 @@ export function renderExplain(files: RankedFile[]): string[] {
     out.push('  ' + [...cells, r[r.length - 1]].join('  '));
   }
   return out;
+}
+
+// A path comes from the repository, so it is data, not text to trust: control
+// characters (a newline would start a fake block) are written out, and a path
+// that reads as an instruction or holds a secret is withheld or redacted.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f\u2028\u2029]/g;
+function escapeControl(text: string): string {
+  return text.replace(CONTROL_CHARS, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+function safePath(p: string): string {
+  const shown = escapeControl(p);
+  if (scanForInjection(shown).length > 0) return '[path omitted: flagged by prompt-injection scan]';
+  return String(redactPayload({ text: shown }).text);
 }
 
 function safeText(text: string): string {
@@ -97,7 +112,7 @@ export function renderBriefing(query: string, history: string, files: RankedFile
   const historyBlock = history.trim() ? safeText(history.trim()) : '(no session history found)';
   const codeBlock = files.length === 0
     ? '(no relevant files found)'
-    : files.map(f => `--- ${f.path} ---`).join('\n');
+    : files.map(f => `--- ${safePath(f.path)} ---`).join('\n');
   return [
     '[PROJECT HISTORY]',
     historyBlock,

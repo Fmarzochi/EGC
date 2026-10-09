@@ -81,13 +81,20 @@ export async function buildFileIndex(
 ): Promise<{ docs: FileDoc[]; edges: ImportEdge[]; skipped: number }> {
   const root = await fs.promises.realpath(projectRoot);
   const ignore = await loadIgnore(root);
-  const walked = await walkFiles(root, ignore, name => TEXT_EXT.test(name), MAX_FILES, Date.now() + DEADLINE_MS);
+  const deadline = Date.now() + DEADLINE_MS;
+  const walked = await walkFiles(root, ignore, name => TEXT_EXT.test(name), MAX_FILES, deadline);
   const fileSet = new Set<string>(walked.files);
   const docs: FileDoc[] = [];
   const importsByFile: Array<[string, ExtractedImport[]]> = [];
   let skipped = 0;
 
-  for (const rel of walked.files) {
+  for (let k = 0; k < walked.files.length; k++) {
+    // The deadline bounds the whole index, not only the directory walk.
+    if (Date.now() > deadline) {
+      skipped += walked.files.length - k;
+      break;
+    }
+    const rel = walked.files[k];
     const indexed = await indexFile(root, rel, opts); // NOSONAR: one file at a time keeps memory and open handles bounded
     if (!indexed) {
       skipped++;

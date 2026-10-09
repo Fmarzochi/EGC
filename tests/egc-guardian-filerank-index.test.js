@@ -104,6 +104,28 @@ function project(files) {
     assert.deepStrictEqual(await buildFileIndex(root), { docs: [], edges: [], skipped: 0 });
   });
 
+  await run('the deadline bounds the whole index: files left when it passes are skipped, not indexed', async () => {
+    const root = project({ 'a.ts': 'export const a = 1;\n', 'b.ts': 'export const b = 1;\n', 'c.ts': 'export const c = 1;\n' });
+    const realNow = Date.now;
+    const realLstat = fs.promises.lstat;
+    let jump = 0;
+    // The clock jumps past the deadline as soon as the first file is looked at.
+    Date.now = () => realNow() + jump;
+    fs.promises.lstat = (...args) => {
+      jump = 10 * 60 * 1000;
+      return realLstat.apply(fs.promises, args);
+    };
+    let index;
+    try {
+      index = await buildFileIndex(root);
+    } finally {
+      Date.now = realNow;
+      fs.promises.lstat = realLstat;
+    }
+    assert.strictEqual(index.docs.length, 1, 'only the file in hand when the deadline passed');
+    assert.strictEqual(index.skipped, 2);
+  });
+
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
