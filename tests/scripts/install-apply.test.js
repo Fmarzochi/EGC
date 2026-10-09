@@ -626,6 +626,43 @@ function runTests() {
     }
   }));
 
+  if (process.platform !== 'win32') {
+    tally(test('a linked skill or a linked ~/.copilot/skills is left alone and the Copilot install still completes (#1672)', () => {
+      for (const scenario of ['skill', 'directory']) {
+        const homeDir = createTempDir('install-apply-home-');
+        const projectDir = createTempDir('install-apply-project-');
+        const outside = createTempDir('install-apply-outside-');
+        try {
+          const copilotSkills = path.join(homeDir, '.copilot', 'skills');
+          fs.mkdirSync(path.join(homeDir, '.copilot'), { recursive: true });
+          if (scenario === 'skill') {
+            fs.mkdirSync(copilotSkills, { recursive: true });
+            fs.mkdirSync(path.join(outside, 'tdd-workflow'));
+            fs.writeFileSync(path.join(outside, 'tdd-workflow', 'SKILL.md'), '# mine');
+            fs.symlinkSync(path.join(outside, 'tdd-workflow'), path.join(copilotSkills, 'tdd-workflow'), 'dir');
+          } else {
+            fs.symlinkSync(outside, copilotSkills, 'dir');
+          }
+
+          const result = run(['--target', 'copilot', '--profile', 'core', '--allow-undetected'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+          assert.strictEqual(result.code, 0, `${scenario}: ${result.stderr}`);
+          assert.ok(fs.lstatSync(scenario === 'skill' ? path.join(copilotSkills, 'tdd-workflow') : copilotSkills).isSymbolicLink(), `${scenario}: the link stays a link`);
+          if (scenario === 'skill') {
+            assert.strictEqual(fs.readFileSync(path.join(outside, 'tdd-workflow', 'SKILL.md'), 'utf8'), '# mine', 'what the link points at is untouched');
+            assert.ok(fs.readdirSync(copilotSkills).length > 1, 'the other skills are installed');
+          } else {
+            assert.deepStrictEqual(fs.readdirSync(outside), [], 'nothing is written through the linked directory');
+          }
+          assert.ok(fs.existsSync(path.join(homeDir, '.copilot', 'hooks', 'hooks.json')), `${scenario}: the rest of the install completes`);
+        } finally {
+          cleanup(homeDir);
+          cleanup(projectDir);
+          cleanup(outside);
+        }
+      }
+    }));
+  }
+
   tally(test('a skill the person keeps under ~/.copilot/skills with the name of an EGC skill is never overwritten (#1672)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');

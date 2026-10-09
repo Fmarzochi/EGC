@@ -1,3 +1,4 @@
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
@@ -32,16 +33,31 @@ function resolveCopilotHome(input) {
   return path.join(home || os.homedir(), '.copilot');
 }
 
+function isSymbolicLink(target) {
+  try {
+    return fs.lstatSync(target).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function linkedSkillsPath(input) {
+  const copilotHome = resolveCopilotHome(input);
+  return [copilotHome, path.join(copilotHome, 'skills')].find(isSymbolicLink) || null;
+}
+
 function planCopilotSkillOperations(input, adapter) {
   const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
   const skillsDir = path.join(resolveCopilotHome(planningInput), 'skills');
   const recordedDestinations = collectRecordedDestinations(adapter, input);
+  const skillsDirLinked = Boolean(linkedSkillsPath(planningInput));
   return modules.flatMap(module => (Array.isArray(module.paths) ? module.paths : [])
     .filter(sourceRelativePath => !isForeignPlatformPath(sourceRelativePath, adapter.target))
     .map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot, skillsDir))
     .filter(operation => {
       const source = normalizeRelativePath(operation.sourceRelativePath);
       if (!source.startsWith('skills/')) return true;
+      if (skillsDirLinked || isSymbolicLink(operation.destinationPath)) return false;
       const sourcePath = planningInput.repoRoot ? path.join(planningInput.repoRoot, source) : null;
       return !isPersonOwnedDestination(operation.destinationPath, sourcePath, recordedDestinations);
     }));
@@ -112,12 +128,23 @@ module.exports = createInstallTargetAdapter({
     return [adapter.resolveRoot(input), resolveCopilotHome(input)];
   },
   validateMore(input, adapter) {
-    if (collectRecordedDestinations(adapter, input)) return [];
-    return [buildValidationIssue(
-      'warning',
-      'install-state-unreadable',
-      `The install state at ${adapter.getInstallStatePath(input)} cannot be read: skills already under ${path.join(resolveCopilotHome(input), 'skills')} that differ from EGC's are treated as yours and left as they are until it can be read again.`
-    )];
+    const issues = [];
+    if (!collectRecordedDestinations(adapter, input)) {
+      issues.push(buildValidationIssue(
+        'warning',
+        'install-state-unreadable',
+        `The install state at ${adapter.getInstallStatePath(input)} cannot be read: skills already under ${path.join(resolveCopilotHome(input), 'skills')} that differ from EGC's are treated as yours and left as they are until it can be read again.`
+      ));
+    }
+    const linked = linkedSkillsPath(input);
+    if (linked) {
+      issues.push(buildValidationIssue(
+        'warning',
+        'copilot-skills-linked',
+        `${linked} is a symbolic link: EGC never writes through a link, so the skills are not installed for VS Code Copilot. Make it a real directory and run the install again to get them.`
+      ));
+    }
+    return issues;
   },
   planOperations(input, adapter) {
     const moduleOperations = planCopilotSkillOperations(input, adapter);

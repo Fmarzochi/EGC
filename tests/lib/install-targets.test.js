@@ -2232,6 +2232,18 @@ function runTests() {
       const warnings = unreadable(adapter.validate({ homeDir, repoRoot }));
       assert.strictEqual(warnings.length, 1);
       assert.ok(warnings[0].message.includes(path.join(homeDir, '.copilot', 'skills')), warnings[0].message);
+      fs.rmSync(statePath);
+      if (process.platform !== 'win32') {
+        const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-copilot-outside-'));
+        try {
+          fs.mkdirSync(path.join(homeDir, '.copilot'), { recursive: true });
+          fs.symlinkSync(outside, path.join(homeDir, '.copilot', 'skills'), 'dir');
+          const linked = adapter.validate({ homeDir, repoRoot }).filter(issue => issue.code === 'copilot-skills-linked');
+          assert.strictEqual(linked.length, 1, 'a linked ~/.copilot/skills is reported, since the skills are then not installed');
+        } finally {
+          fs.rmSync(outside, { recursive: true, force: true });
+        }
+      }
     } finally {
       fs.rmSync(homeDir, { recursive: true, force: true });
     }
