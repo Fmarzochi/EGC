@@ -7,8 +7,7 @@ const os = require('node:os');
 const { propagateStateContent } = require('./propagate-state');
 const {
   projectSlug,
-  detectBranch,
-  detectDetachedCommit,
+  resolveHeadState,
   branchStateFile,
   detachedStateFile,
   legacyBranchStateFile,
@@ -139,7 +138,7 @@ function parseBlockToStateContent(block, updatedIso) { // NOSONAR: line-oriented
 function resolveStateFilePath(projectPath) {
   const stateDir = path.join(os.homedir(), '.egc', 'state');
   const slug = projectSlug(projectPath);
-  const branch = detectBranch(projectPath);
+  const { branch, detachedCommit } = resolveHeadState(projectPath);
 
   if (branch) {
     const branchFile = branchStateFile(stateDir, projectPath, branch);
@@ -152,7 +151,6 @@ function resolveStateFilePath(projectPath) {
     // every detached checkout of the project used to collide there. Each
     // commit gets its own file, checked here before the project-wide
     // defaults.
-    const detachedCommit = detectDetachedCommit(projectPath);
     if (detachedCommit) {
       const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
       if (fs.existsSync(detachedFile)) return detachedFile;

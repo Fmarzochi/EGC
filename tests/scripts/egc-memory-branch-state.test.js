@@ -71,6 +71,7 @@ async function runTests() {
     branchStateKey,
     detectBranch,
     detectDetachedCommit,
+    resolveHeadState,
     flatStateFile,
     branchStateFile,
     detachedStateFile,
@@ -115,6 +116,27 @@ async function runTests() {
     assert.strictEqual(detectDetachedCommit(repo), commit);
 
     assert.strictEqual(detectDetachedCommit(makeTmpDir('egc-memory-norepo-')), null);
+  })) passed++; else failed++;
+
+  if (test('detectDetachedCommit accepts a SHA-256 repository commit (64 hex characters)', () => {
+    const repo = makeTmpDir('egc-memory-sha256-');
+    const git = (args) => execSync(`git ${args}`, { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+    git('init -q --object-format=sha256');
+    git('-c user.email=test@test -c user.name=test -c commit.gpgsign=false commit -q -m initial --allow-empty');
+    git('checkout -q --detach');
+    const commit = execSync('git rev-parse HEAD', { cwd: repo, encoding: 'utf8' }).trim();
+    assert.strictEqual(commit.length, 64);
+    assert.strictEqual(detectDetachedCommit(repo), commit);
+  })) passed++; else failed++;
+
+  if (test('resolveHeadState pairs branch and detachedCommit consistently', () => {
+    const onBranch = makeGitRepo('hotfix/login');
+    assert.deepStrictEqual(resolveHeadState(onBranch), { branch: 'hotfix/login', detachedCommit: null });
+
+    const repo = makeGitRepo(null);
+    execSync('git checkout -q --detach', { cwd: repo });
+    const commit = execSync('git rev-parse HEAD', { cwd: repo, encoding: 'utf8' }).trim();
+    assert.deepStrictEqual(resolveHeadState(repo), { branch: null, detachedCommit: commit });
   })) passed++; else failed++;
 
   if (test('resolveStateRead and resolveStateWrite isolate detached HEAD by commit, never the shared flat file', () => {

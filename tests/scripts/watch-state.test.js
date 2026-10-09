@@ -319,8 +319,12 @@ async function runTests() {
       const flatFile = flatStateFile(stateDir, projectDir);
       fs.mkdirSync(path.dirname(flatFile), { recursive: true });
       fs.writeFileSync(flatFile, '# Flat state, shared by every other checkout\n');
+      const slug = require('../../scripts/lib/branch-state').projectSlug(projectDir);
+      const mainMd = path.join(stateDir, slug, 'main.md');
+      fs.mkdirSync(path.dirname(mainMd), { recursive: true });
+      fs.writeFileSync(mainMd, '# Default branch state\n');
 
-      // No file for this exact commit yet: never the flat file.
+      // No file for this exact commit yet: never the flat file, never main.md.
       assert.strictEqual(resolveStateFilePath(projectDir), null);
 
       const detachedFile = detachedStateFile(stateDir, projectDir, commit);

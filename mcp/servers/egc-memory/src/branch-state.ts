@@ -72,7 +72,8 @@ export function detectBranch(projectPath: string): string | null {
   return head.slice(refPrefix.length) || null;
 }
 
-const DETACHED_COMMIT_PATTERN = /^[0-9a-f]{4,40}$/i;
+// Git object IDs are 40 hex characters (SHA-1) or 64 (SHA-256 repositories).
+const DETACHED_COMMIT_PATTERN = /^[0-9a-f]{4,64}$/i;
 
 // The commit a detached HEAD points at, or null when HEAD is on a branch,
 // outside a git repo, or its content does not look like a commit hash (a
@@ -82,6 +83,21 @@ export function detectDetachedCommit(projectPath: string): string | null {
   const head = readHeadLine(projectPath);
   if (!head || head.startsWith('ref: refs/heads/')) return null;
   return DETACHED_COMMIT_PATTERN.test(head) ? head.toLowerCase() : null;
+}
+
+export interface HeadState {
+  branch: string | null;
+  detachedCommit: string | null;
+}
+
+// detectBranch and detectDetachedCommit each read HEAD; pairing them by
+// hand at every call site is the exact two-line dance that broke once
+// already (scripts/lib/session-context-loader.js kept only half of it).
+// Every resolveStateRead/resolveStateWrite call site should get both from
+// here instead.
+export function resolveHeadState(projectPath: string): HeadState {
+  const branch = detectBranch(projectPath);
+  return { branch, detachedCommit: branch ? null : detectDetachedCommit(projectPath) };
 }
 
 export function flatStateFile(stateDir: string, projectPath: string): string {

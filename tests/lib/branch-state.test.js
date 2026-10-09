@@ -183,6 +183,16 @@ function runTests() {
     assert.strictEqual(detectDetachedCommit(dir), null);
   }));
 
+  tally(test('detectDetachedCommit accepts a SHA-256 repository commit (64 hex characters)', () => {
+    const repo = makeTmpDir('egc-branch-state-sha256-');
+    execSync('git init -q --object-format=sha256', { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+    git(repo, '-c user.email=test@test -c user.name=test -c commit.gpgsign=false commit -q -m initial --allow-empty');
+    git(repo, 'checkout -q --detach');
+    const commit = execSync('git rev-parse HEAD', { cwd: repo, encoding: 'utf8' }).trim();
+    assert.strictEqual(commit.length, 64);
+    assert.strictEqual(detectDetachedCommit(repo), commit);
+  }));
+
   tally(test('resolveStateRead and resolveStateWrite isolate detached HEAD by commit, never the shared flat file', () => {
     const stateDir = makeTmpDir('egc-branch-state-detached-');
     const project = '/home/user/Projects/my-app';

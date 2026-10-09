@@ -13,7 +13,7 @@ const {
 } = require('./lib/state-consolidate');
 const { isEncryptedBuffer, decryptStateBuffer, encryptStateBuffer } = require('./lib/state-crypto');
 const { withStateFileLockSync } = require('./lib/state-snapshot');
-const { getStateDir, detectBranch, detectDetachedCommit, resolveStateRead, resolveStateWrite } = require('./lib/branch-state');
+const { getStateDir, resolveHeadState, resolveStateRead, resolveStateWrite } = require('./lib/branch-state');
 const { loadOrCreateIntegrityKey, writeHmac } = require('./lib/state-integrity');
 
 function showHelp(exitCode = 0) {
@@ -140,8 +140,7 @@ function main() {
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
     const project = path.resolve(options.project || process.cwd());
     const stateDir = getStateDir(homeDir);
-    const branch = detectBranch(project);
-    const detachedCommit = branch ? null : detectDetachedCommit(project);
+    const { branch, detachedCommit } = resolveHeadState(project);
     const readPath = resolveStateRead(stateDir, project, branch, detachedCommit).filePath;
     // Same resolveStateWrite() call the MCP server's update_state and the
     // hook-side writers in state-snapshot.js use, so this locks and rewrites

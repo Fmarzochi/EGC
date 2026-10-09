@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
-import { detectBranch, detectDetachedCommit, resolveStateRead, resolveStateWrite } from './branch-state';
+import { resolveHeadState, resolveStateRead, resolveStateWrite } from './branch-state';
 import { GLOBAL_APPENDIX_SECTIONS, buildGlobalAppendix, globalStateFilePath } from './global-state';
 import {
   announce as busAnnounce,
@@ -1309,8 +1309,7 @@ async function openSessionRecordBestEffort(db: Database, projPath: string): Prom
 async function handleGetState(db: Database, toolArgs: unknown) {
   const { project_path } = GetStateSchema.parse(toolArgs || {});
   const projPath = resolveProjectPath(project_path);
-  const branch = detectBranch(projPath);
-  const detachedCommit = branch ? null : detectDetachedCommit(projPath);
+  const { branch, detachedCommit } = resolveHeadState(projPath);
   const resolved = resolveStateRead(getStateDir(), projPath, branch, detachedCommit);
 
   await announcePresenceBestEffort(db, projPath);
@@ -1397,8 +1396,7 @@ async function handleUpdateState(db: Database, toolArgs: unknown) {
     return { content: [{ type: "text", text: `Blocked: ${check.reasons.join('; ')}` }] };
   }
   const projPath = resolveProjectPath(args.project_path);
-  const branch = detectBranch(projPath);
-  const detachedCommit = branch ? null : detectDetachedCommit(projPath);
+  const { branch, detachedCommit } = resolveHeadState(projPath);
 
   // Implicit bus presence, mirroring get_state: saving memory also refreshes
   // this session's heartbeat so long-running sessions stay visible.

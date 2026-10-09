@@ -3,7 +3,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getStateDir, detectBranch, detectDetachedCommit, resolveStateRead, resolveStateWrite } = require('./branch-state');
+const { getStateDir, resolveHeadState, resolveStateRead, resolveStateWrite } = require('./branch-state');
 const { isEncryptedBuffer, decryptStateBuffer, encryptStateBuffer } = require('./state-crypto');
 const { loadOrCreateIntegrityKey, writeHmac } = require('./state-integrity');
 
@@ -117,9 +117,13 @@ function buildSkeleton(projectPath, branch, ts) {
 // not treat that as "empty" and overwrite it; skipping the write is the
 // only safe response, matching update_state's own "abort to prevent data
 // loss" rule for the same failure.
-function loadState(projectPath) {
-  const branch = detectBranch(projectPath);
-  const detachedCommit = branch ? null : detectDetachedCommit(projectPath);
+// headState lets a caller that already resolved {branch, detachedCommit}
+// (to lock and hold a filePath, for instance) pass the exact same pair in,
+// instead of this function reading HEAD again on its own: a HEAD that
+// changes between the two reads (a concurrent checkout) would otherwise
+// make the caller lock one commit's file while loading another's.
+function loadState(projectPath, headState) {
+  const { branch, detachedCommit } = headState || resolveHeadState(projectPath);
   const stateDir = getStateDir(process.env.HOME);
   const resolved = resolveStateRead(stateDir, projectPath, branch, detachedCommit);
   const filePath = resolveStateWrite(stateDir, projectPath, branch, detachedCommit);
@@ -168,12 +172,11 @@ function saveState(filePath, content) {
 }
 
 function writeSnapshotToDisk(projectPath = process.env.PWD || process.cwd()) {
-  const branch = detectBranch(projectPath);
-  const detachedCommit = branch ? null : detectDetachedCommit(projectPath);
+  const headState = resolveHeadState(projectPath);
   const stateDir = getStateDir(process.env.HOME);
-  const filePath = resolveStateWrite(stateDir, projectPath, branch, detachedCommit);
+  const filePath = resolveStateWrite(stateDir, projectPath, headState.branch, headState.detachedCommit);
   return withStateFileLockSync(filePath, () => {
-    const state = loadState(projectPath);
+    const state = loadState(projectPath, headState);
     if (state.undecryptable) return state.filePath;
     let content = updateTimestamp(state.content, state.ts);
     content = injectSessionMarker(content, state.ts);
@@ -229,13 +232,12 @@ function minedToLines(items) {
 }
 
 function applyMinedMemory(projectPath, mined) {
-  const branch = detectBranch(projectPath);
-  const detachedCommit = branch ? null : detectDetachedCommit(projectPath);
+  const headState = resolveHeadState(projectPath);
   const stateDir = getStateDir(process.env.HOME);
-  const filePath = resolveStateWrite(stateDir, projectPath, branch, detachedCommit);
+  const filePath = resolveStateWrite(stateDir, projectPath, headState.branch, headState.detachedCommit);
 
   return withStateFileLockSync(filePath, () => {
-    const state = loadState(projectPath);
+    const state = loadState(projectPath, headState);
     if (state.undecryptable) return { filePath: state.filePath, added: 0 };
 
     let content = updateTimestamp(state.content, state.ts);

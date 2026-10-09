@@ -115,6 +115,34 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('resolves a detached HEAD to its own commit-scoped state, never the shared flat file', () => {
+    const homeDir = createTempDir('session-context-loader-home-');
+    const projectDir = createTempDir('session-context-loader-detached-');
+    const { execFileSync } = require('child_process');
+    const { detachedStateFile } = require('../../scripts/lib/branch-state');
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: projectDir });
+      fs.writeFileSync(path.join(projectDir, 'README.md'), 'detached test repo\n');
+      execFileSync('git', ['add', 'README.md'], { cwd: projectDir });
+      execFileSync('git', ['-c', 'user.email=test@test', '-c', 'user.name=test', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'initial'], { cwd: projectDir });
+      execFileSync('git', ['checkout', '-q', '--detach'], { cwd: projectDir });
+      const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: projectDir, encoding: 'utf8' }).trim();
+
+      writeState(homeDir, projectDir, '# Project State\n- FLAT_SHARED_MARKER\n');
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      const detachedFile = detachedStateFile(stateDir, projectDir, commit);
+      fs.mkdirSync(path.dirname(detachedFile), { recursive: true });
+      fs.writeFileSync(detachedFile, '# Project State\n- DETACHED_COMMIT_MARKER\n', 'utf8');
+
+      const result = runLoader(homeDir, projectDir, 'claude');
+      assert.match(result.context, /DETACHED_COMMIT_MARKER/);
+      assert.doesNotMatch(result.context, /FLAT_SHARED_MARKER/);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  })) passed++; else failed++;
+
   if (test('adds a stack briefing independently of the host adapter', () => {
     const homeDir = createTempDir('session-context-loader-home-');
     const projectDir = createTempDir('session-context-loader-project-');
