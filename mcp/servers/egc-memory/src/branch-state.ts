@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { createHash } from 'node:crypto';
 
 export const DEFAULT_BRANCH_FILE = 'main.md';
@@ -31,6 +32,73 @@ export function branchStateKey(branch: string): string {
   return `${readablePrefix}--${digest}`;
 }
 
+// What sits at a path that does not resolve: 'absent' (nothing there, or
+// a parent that is not a directory), 'link' (a link, a dangling one
+// included: never appended lexically, since a target created or moved
+// later would redirect it past the check), or 'unknown' when the path
+// cannot be inspected at all, which the caller treats like a link.
+function unresolvedComponent(p: string): 'absent' | 'link' | 'plain' | 'unknown' {
+  try {
+    return fs.lstatSync(p).isSymbolicLink() ? 'link' : 'plain';
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' || code === 'ENOTDIR' ? 'absent' : 'unknown';
+  }
+}
+
+// The canonical absolute form of a path: links are resolved through the
+// nearest existing ancestor and the rest is appended lexically, so a link
+// planted at .git or above it cannot lead a read outside the trusted roots
+// while the lexical path still looks inside them. A path that cannot be
+// canonicalised (a link loop, a dangling link on the way, a parent that
+// cannot be inspected) is null.
+function canonicalPath(p: string): string | null {
+  let existing = path.resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      const real = fs.realpathSync.native(existing);
+      return tail.length > 0 ? path.join(real, ...tail) : real;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTDIR') return null;
+    }
+    const component = unresolvedComponent(existing);
+    if (component === 'link' || component === 'unknown') return null;
+    const parent = path.dirname(existing);
+    if (parent === existing) return null;
+    tail.unshift(path.basename(existing));
+    existing = parent;
+  }
+}
+
+function withTrailingSeparator(dir: string): string {
+  return dir.endsWith(path.sep) ? dir : dir + path.sep;
+}
+
+function trustedRoot(dir: string): string {
+  try {
+    return withTrailingSeparator(fs.realpathSync.native(dir));
+  } catch {
+    return withTrailingSeparator(path.resolve(dir));
+  }
+}
+
+// The canonical absolute form of a git path when it sits under a trusted
+// root (the home directory or the temp directory, untainted system values)
+// and carries '.git' as a path segment; null otherwise. The value returned
+// here is the one every read below uses, so a path handed in by a hook
+// payload or a CLI argument never reaches the filesystem unchecked, and a
+// traversal or a link leading to an unrelated location is refused before
+// any read.
+export function trustedGitPath(p: string): string | null {
+  const canonical = canonicalPath(p);
+  if (!canonical) return null;
+  const underTrustedRoot = canonical.startsWith(trustedRoot(os.homedir())) || canonical.startsWith(trustedRoot(os.tmpdir()));
+  const hasGitSegment = canonical.split(path.sep).includes('.git');
+  return underTrustedRoot && hasGitSegment ? canonical : null;
+}
+
 // Branch detection reads .git/HEAD instead of spawning git: no PATH
 // lookup and it works on machines without git installed.
 function findGitDir(startPath: string): string | null {
@@ -44,21 +112,69 @@ function findGitDir(startPath: string): string | null {
   }
 }
 
+// O_NOFOLLOW/O_NONBLOCK are POSIX-only (undefined in fs.constants on
+// Windows); fall back to a plain blocking open there, where
+// trustedGitPath's canonicalization is the only guard. Same discipline as
+// readRegularNoFollow in scripts/lib/state-integrity.js.
+const NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+const NONBLOCK_FLAG = typeof fs.constants.O_NONBLOCK === 'number' ? fs.constants.O_NONBLOCK : 0;
+
+// Reads a small regular file through a descriptor that never followed a
+// link, or null. On POSIX this closes most of the gap between
+// trustedGitPath validating a path and a later read re-walking it: the open
+// itself refuses a final component that is a symlink, so a link planted
+// there after validation cannot be followed. O_NONBLOCK plus the fstat
+// isFile() check also refuse a FIFO or device planted at the path, which
+// would otherwise block openSync synchronously until a writer appears,
+// freezing the server's event loop on the next get_state/update_state.
+function readFileNoFollow(filePath: string): string | null {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NOFOLLOW_FLAG | NONBLOCK_FLAG);
+    if (!fs.fstatSync(fd).isFile()) return null;
+    return fs.readFileSync(fd, 'utf8');
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
 // Reads the raw, trimmed content of .git/HEAD, resolving worktree and
-// submodule pointer files. Shared by detectBranch and detectDetachedCommit
-// so both agree on exactly what HEAD says.
+// submodule pointer files and refusing anything outside the trusted roots.
+// Shared by detectBranch and detectDetachedCommit so both agree on exactly
+// what HEAD says.
 function readHeadLine(projectPath: string): string | null {
   try {
+    // trustedGitPath canonicalizes (follows symlinks) to decide whether a
+    // path is trustworthy, so its return value is the resolved target, not
+    // the path that was asked about. Using that return value to open a file
+    // would read straight through a symlink planted at gitDir or HEAD to
+    // whatever (trusted-looking) target it leads to -- trustedGitPath is
+    // used here only as a yes/no check; every read below opens the original,
+    // unresolved path with O_NOFOLLOW, which refuses a symlinked final
+    // component outright, including one pointing at another trusted .git.
     let gitDir = findGitDir(projectPath);
-    if (!gitDir) return null;
+    if (!gitDir || !trustedGitPath(gitDir)) return null;
+    // Narrows the directory-component case too, though only for gitDir
+    // itself: a link here never reaches the opens below (gitDir is only
+    // used to build headPath/the pointer path, each independently O_NOFOLLOW
+    // protected), so this is a second, cheap layer, not the only one.
+    if (fs.lstatSync(gitDir).isSymbolicLink()) return null;
     if (fs.statSync(gitDir).isFile()) {
       // Worktrees and submodules store a pointer file instead of a directory
-      const pointer = fs.readFileSync(gitDir, 'utf8').trim();
+      const rawPointer = readFileNoFollow(gitDir);
+      if (rawPointer === null) return null;
+      const pointer = rawPointer.trim();
       if (!pointer.startsWith('gitdir:')) return null;
       gitDir = path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim());
+      if (!trustedGitPath(gitDir)) return null;
     }
-    return fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
-  } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info
+    const headPath = path.resolve(gitDir, 'HEAD');
+    if (!trustedGitPath(headPath)) return null;
+    const head = readFileNoFollow(headPath);
+    return head === null ? null : head.trim();
+  } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info available
     return null;
   }
 }
