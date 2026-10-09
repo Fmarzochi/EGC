@@ -473,14 +473,24 @@ const CODEX_SKIP_MESSAGES = {
   }
 })();
 
-// ── Trae (~/.trae/MEMORY.md and ~/.trae-cn/MEMORY.md) ────────────────────────
+function retireLegacyTraeMemory(legacyFile, label) {
+  if (!fs.existsSync(legacyFile) || !fs.lstatSync(legacyFile).isFile()) return;
+  const raw = fs.readFileSync(legacyFile, 'utf8');
+  if (!MARKER_BLOCK_RE.test(raw) || raw.replace(MARKER_BLOCK_RE, '').trim() !== '') return;
+  fs.unlinkSync(legacyFile);
+  console.log(`  [cognitive] ${label}: retired the old protocol copy Trae does not read (${legacyFile.replace(HOME, '~')})`);
+}
+
+// ── Trae (~/.trae/user_rules/egc-memory.md and ~/.trae-cn/user_rules/egc-memory.md) ──
 (function bootstrapTrae() {
   try {
     for (const dir of ['.trae', '.trae-cn']) {
       const traeDir = path.join(HOME, dir);
       if (!fs.existsSync(traeDir)) continue;
-      const target = path.join(traeDir, 'MEMORY.md');
-      injectStandaloneProtocol(target, `Trae (${dir})`, markdownProtocolBody('EGC Session Memory'));
+      const label = `Trae (${dir})`;
+      const target = path.join(traeDir, 'user_rules', 'egc-memory.md');
+      injectStandaloneProtocol(target, label, markdownProtocolBody('EGC Session Memory'));
+      retireLegacyTraeMemory(path.join(traeDir, 'MEMORY.md'), label);
     }
   } catch (e) {
     console.log(`  [cognitive] Trae: unexpected error: ${e.message}`);
