@@ -136,6 +136,31 @@ function parseBlockToStateContent(block, updatedIso) { // NOSONAR: line-oriented
   return lines.join('\n');
 }
 
+function resolveRealpathOrNull(p) {
+  try {
+    return fs.realpathSync.native(p);
+  } catch {
+    return null;
+  }
+}
+
+// True only when the candidate's parent directory resolves, through any
+// intermediate symlinks, to somewhere at or under stateDir: lstat on the
+// final component alone (existsAsPlainFile) does not catch a symlinked
+// ancestor, since the kernel still follows a linked parent directory to
+// open a path through it. Comparing realpaths here closes that gap.
+// Scoped to resolveStateFilePath, which alone knows the real stateDir a
+// candidate must stay under; mergeBlockIntoStateFile accepts a path
+// directly and cannot assume one.
+function hasTrustedAncestry(candidatePath, stateDir) {
+  const realStateDir = resolveRealpathOrNull(stateDir);
+  if (!realStateDir) return false;
+  const realParent = resolveRealpathOrNull(path.dirname(candidatePath));
+  if (!realParent) return false;
+  const prefix = realStateDir.endsWith(path.sep) ? realStateDir : realStateDir + path.sep;
+  return realParent === realStateDir || realParent.startsWith(prefix);
+}
+
 // True only for a plain file sitting directly at `f`: lstat (unlike
 // fs.existsSync/fs.statSync) does not follow a symlink, so a link planted at
 // any candidate path is refused here instead of being picked and later
@@ -148,6 +173,15 @@ function existsAsPlainFile(f) {
   }
 }
 
+// A resolveStateFilePath candidate is accepted only when it is a plain file
+// (existsAsPlainFile) reached entirely through stateDir, with no symlink at
+// the final component or at any ancestor directory in between
+// (hasTrustedAncestry): a linked ~/.egc/state/<slug> would otherwise pass
+// the plain-file check on every file inside it.
+function isTrustedStateCandidate(f, stateDir) {
+  return existsAsPlainFile(f) && hasTrustedAncestry(f, stateDir);
+}
+
 function resolveStateFilePath(projectPath) {
   const stateDir = path.join(os.homedir(), '.egc', 'state');
   const slug = projectSlug(projectPath);
@@ -155,35 +189,39 @@ function resolveStateFilePath(projectPath) {
 
   if (branch) {
     const branchFile = branchStateFile(stateDir, projectPath, branch);
-    if (existsAsPlainFile(branchFile)) return branchFile;
+    if (isTrustedStateCandidate(branchFile, stateDir)) return branchFile;
 
     const legacyBranchFile = legacyBranchStateFile(stateDir, projectPath, branch);
-    if (existsAsPlainFile(legacyBranchFile)) return legacyBranchFile;
+    if (isTrustedStateCandidate(legacyBranchFile, stateDir)) return legacyBranchFile;
   } else if (detachedCommit) {
     // A detached HEAD never falls through to the shared flat file below:
     // every detached checkout of the project used to collide there. Each
     // commit gets its own file, checked here before the project-wide
     // defaults.
     const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
-    if (existsAsPlainFile(detachedFile)) return detachedFile;
+    if (isTrustedStateCandidate(detachedFile, stateDir)) return detachedFile;
     return null;
   }
 
   const defaultFile = path.join(stateDir, slug, 'main.md');
-  if (existsAsPlainFile(defaultFile)) return defaultFile;
+  if (isTrustedStateCandidate(defaultFile, stateDir)) return defaultFile;
 
   const flatFile = path.join(stateDir, `${slug}.md`);
-  if (existsAsPlainFile(flatFile)) return flatFile;
+  if (isTrustedStateCandidate(flatFile, stateDir)) return flatFile;
 
   return null;
 }
 
 // Writes atomically via a temp-file-then-rename, matching saveState() in
-// state-snapshot.js: the temp name is exclusive (wx) so it is never written
-// through an existing link, and rename replaces whatever sits at
-// stateFilePath (a plain file or a symlink) instead of following it.
+// state-snapshot.js: the temp name is short and random, in the same
+// directory as the target rather than built from its full name, so a long
+// legacy branch-state filename plus the temp suffix cannot exceed the
+// filesystem's component-length limit (the watcher would otherwise fail the
+// write silently). It is exclusive (wx) so it is never written through an
+// existing link, and rename replaces whatever sits at stateFilePath (a
+// plain file or a symlink) instead of following it.
 function writeStateFileAtomic(stateFilePath, content) {
-  const tmpPath = `${stateFilePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+  const tmpPath = path.join(path.dirname(stateFilePath), `.egc-tmp-${crypto.randomBytes(8).toString('hex')}`);
   try {
     fs.writeFileSync(tmpPath, content, { flag: 'wx', mode: 0o600, encoding: 'utf-8' });
     fs.renameSync(tmpPath, stateFilePath);

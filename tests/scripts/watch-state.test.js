@@ -290,6 +290,30 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('mergeBlockIntoStateFile writes through a temp name short enough to stay under the filesystem component limit, even for a long target name (#1803 cubic P2)', () => {
+    const dir = mktemp();
+    try {
+      // Most filesystems cap a single path component at 255 bytes. The old
+      // "${filePath}.tmp-${pid}-${uuid}" suffix added ~45 bytes on top of
+      // the target name, so a legacy branch-state filename near that limit
+      // (branchStateKey keeps up to 120 readable chars plus a 64-char
+      // sha256 digest) could push the temp sibling over it and fail the
+      // write silently. A 240-byte basename reproduces that headroom.
+      const longName = `${'a'.repeat(236)}.md`;
+      assert.ok(longName.length <= 255, 'the target name itself must still be a legal component');
+      const stateFilePath = path.join(dir, longName);
+      fs.writeFileSync(stateFilePath, '# Project State\n\n## Context\nOld\n');
+
+      const block = '**Context:** New context';
+      const wrote = mergeBlockIntoStateFile(stateFilePath, block);
+
+      assert.strictEqual(wrote, true, 'the write must not silently fail for a long target name');
+      assert.ok(fs.readFileSync(stateFilePath, 'utf-8').includes('New context'));
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   if (await test('resolveStateFilePath never picks a symlinked candidate (#1803)', () => {
     if (process.platform === 'win32') return; // symlink creation needs elevated privileges on Windows
     const projectDir = mktemp();
@@ -311,6 +335,45 @@ async function runTests() {
       fs.symlinkSync(victim, currentFile);
 
       assert.strictEqual(resolveStateFilePath(projectDir), null, 'a symlinked candidate must never be picked');
+    } finally {
+      os.homedir = originalHomedir;
+      cleanup(projectDir);
+      cleanup(homeDir);
+    }
+  })) passed++; else failed++;
+
+  if (await test('resolveStateFilePath refuses a candidate whose slug directory itself is a symlink, not just a symlinked file (#1803 cubic P1)', () => {
+    if (process.platform === 'win32') return; // symlink creation needs elevated privileges on Windows
+    const projectDir = mktemp();
+    const homeDir = mktemp();
+    const originalHomedir = os.homedir;
+    const { branchStateFile } = require('../../scripts/lib/branch-state');
+
+    try {
+      os.homedir = () => homeDir;
+      const gitDir = path.join(projectDir, '.git');
+      fs.mkdirSync(gitDir);
+      fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/feature/auth\n');
+
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      const currentFile = branchStateFile(stateDir, projectDir, 'feature/auth');
+      const slugDir = path.dirname(currentFile);
+
+      // The victim directory lives outside stateDir entirely; the slug
+      // directory itself is a symlink to it, so a plain file sitting
+      // directly at currentFile (lstat sees a regular file, not a link)
+      // still gets there only by crossing a symlinked ancestor.
+      const victimDir = path.join(homeDir, 'victim-dir');
+      fs.mkdirSync(victimDir, { recursive: true });
+      fs.writeFileSync(path.join(victimDir, path.basename(currentFile)), 'attacker-controlled');
+      fs.mkdirSync(path.dirname(slugDir), { recursive: true });
+      fs.symlinkSync(victimDir, slugDir, 'dir');
+
+      assert.strictEqual(
+        resolveStateFilePath(projectDir),
+        null,
+        'a candidate reached only through a symlinked ancestor directory must be refused'
+      );
     } finally {
       os.homedir = originalHomedir;
       cleanup(projectDir);
