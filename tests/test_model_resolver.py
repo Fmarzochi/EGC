@@ -140,6 +140,17 @@ class TestDefaultModel:
         monkeypatch.setenv("LLM_MODEL", "gpt-5")
         assert ModelResolver.resolve(None, "openai") == "gpt-5"
 
+    def test_env_model_of_an_unregistered_groq_vendor_model_is_honored(self, monkeypatch):
+        # Groq and OpenRouter both host "vendor/model" IDs; a Groq model not
+        # yet in the registry must not be mistaken for an OpenRouter one and
+        # silently dropped in favor of the provider default.
+        monkeypatch.setenv("LLM_MODEL", "openai/gpt-oss-20b")
+        assert ModelResolver.default_model("groq") == "openai/gpt-oss-20b"
+
+    def test_env_model_of_another_provider_is_still_ignored_for_groq(self, monkeypatch):
+        monkeypatch.setenv("LLM_MODEL", "claude-opus-9")
+        assert ModelResolver.default_model("groq") == "openai/gpt-oss-120b"
+
 
 @pytest.mark.unit
 class TestProviderDetection:

@@ -564,19 +564,28 @@ class ModelResolver:
             or ("/" in v and not v.startswith("/"))  # OpenRouter "vendor/model" style
         )
 
+    # Providers whose native model IDs also use the "vendor/model" shape,
+    # the same shape OpenRouter uses for every model it brokers. An
+    # unregistered ID in that shape is ambiguous between them on the string
+    # alone.
+    _VENDOR_SLASH_PROVIDERS = frozenset({"groq", "openrouter"})
+
     @classmethod
-    def _provider_for(cls, model_id: str) -> str:
+    def _provider_for(cls, model_id: str, expected: Optional[str] = None) -> str:
         info = cls._REGISTRY.get(model_id)
         if info and info.get("provider"):
             return str(info["provider"])
         v = model_id.lower()
         # OpenRouter brokers everything under "vendor/model" IDs. Note: this is
-        # no longer exclusive to OpenRouter — Groq also hosts "vendor/model"
-        # IDs (e.g. "openai/gpt-oss-120b", registered above). Any *unregistered*
-        # Groq model with a "/" (e.g. a newer "openai/gpt-oss-20b") will still
-        # misroute to "openrouter" here; only registered IDs are exempt via the
-        # _REGISTRY lookup above.
+        # no longer exclusive to OpenRouter, Groq also hosts "vendor/model"
+        # IDs (e.g. "openai/gpt-oss-120b", registered above). An unregistered
+        # Groq model with a "/" (e.g. a newer "openai/gpt-oss-20b") is
+        # ambiguous from the string alone; trust the caller's own intended
+        # provider when it names one of the two that use this shape, instead
+        # of always guessing "openrouter".
         if "/" in v and not v.startswith("/") and "/models/" not in v:
+            if expected in cls._VENDOR_SLASH_PROVIDERS:
+                return expected
             return "openrouter"
         if "claude-" in v:
             return "claude"
@@ -633,7 +642,7 @@ class ModelResolver:
             resolved = cls._ALIASES.get(env_model.lower(), env_model)
             # Only honor the env override when it actually belongs to the
             # provider being resolved (selector.py writes PROVIDER+MODEL together).
-            if cls._provider_for(resolved) == prov:
+            if cls._provider_for(resolved, expected=prov) == prov:
                 return resolved
         return cls._PROVIDER_DEFAULTS.get(prov, cls._PROVIDER_DEFAULTS[cls._DEFAULT_PROVIDER])
 
