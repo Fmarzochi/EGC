@@ -88,6 +88,19 @@ for _arg in "$@"; do
   [[ "$_arg" = "--dry-run" ]] && DRY_RUN=true && break
 done
 
+# Mirrors refuseRootUnlessDryRun() in install-apply.js. That guard only runs
+# once this script delegates to install-apply.js below, which happens only
+# when an install-relevant flag or positional arg is present; a bare `sh
+# scripts/install.sh` never delegates and went straight into install_deps,
+# npm link, and the MCP server builds below with no root check at all. This
+# check sits before every write this script makes, delegating or not.
+if [[ "$DRY_RUN" = false && "${EGC_ALLOW_ROOT:-}" != "1" && "$(id -u 2>/dev/null)" = "0" ]]; then
+  echo "Error: refusing to install as root." >&2
+  echo "Files written as root in your home directory cannot be updated or overwritten by your own account afterwards." >&2
+  echo "Run this installer as the regular user. If this is a container provisioned as root by design, set EGC_ALLOW_ROOT=1." >&2
+  exit 1
+fi
+
 # The prompt library (agents, skills, commands, rules) is opt-in: the bare
 # install sets up the engine and asks about the library only at an
 # interactive terminal, default no. --prompt-library adds it without
