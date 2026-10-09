@@ -89,6 +89,22 @@ const GRAPH = {
     assert.ok('a-common.js' < 'z-rare.js');
   });
 
+  await run('a symbol in the part of a trimmed snippet that was cut away is still shown', async () => {
+    const sixty = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n');
+    const g = {
+      files: [],
+      symbols: [sym(1, 'a.js', 'outerWidget', 1, 60), sym(2, 'a.js', 'innerWidget', 55, 58)],
+      imports: [],
+      edges: []
+    };
+    // A small budget, so the long outer symbol is cut well short of line 55.
+    const r = await queryGraph('outerWidget innerWidget', g, { readFile: async () => sixty, budgetTokens: 200 });
+    const shown = r.files.flatMap(f => f.snippets);
+    const outer = shown.find(s => s.symbol === 'outerWidget');
+    assert.ok(outer && outer.truncated && outer.endLine < 55, `the outer snippet was not cut short of line 55: ${JSON.stringify(outer)}`);
+    assert.ok(shown.some(s => s.symbol === 'innerWidget'), 'the symbol in the cut-away part was dropped as if it had been shown');
+  });
+
   await run('hops bound the expansion and each hop decays the score', async () => {
     const chain = {
       files: [{ path: 'c.js', mtimeMs: 1, size: 1, hash: 'h' }],

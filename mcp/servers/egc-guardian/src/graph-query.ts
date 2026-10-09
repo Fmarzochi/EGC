@@ -209,7 +209,9 @@ async function cutSnippets(
       continue;
     }
     used += tokens;
-    ranges.push([c.s.startLine, c.s.endLine]);
+    // The lines the reader was given, not the whole symbol: a snippet that was cut short must not hide
+    // a symbol that sits in the part that was cut away.
+    ranges.push([c.s.startLine, c.s.startLine + fitted.lines.length - 1]);
     taken.set(c.s.file, ranges);
     const entry = perFile.get(c.s.file) ?? { score: c.score, why: new Set<string>(), snippets: [] };
     entry.score = Math.max(entry.score, c.score);

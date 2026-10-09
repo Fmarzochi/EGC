@@ -48,7 +48,10 @@ export function tokenize(text: string | undefined, opts: { stem?: boolean } = {}
     for (const raw of parts) {
       const p = raw.toLowerCase();
       if (p.length < 2 || STOP.has(p)) continue;
-      out.push(useStem ? stem(p) : p);
+      const term = useStem ? stem(p) : p;
+      // "testing" and "specs" stem to the stop-words "test" and "spec" and are dropped with them.
+      if (STOP.has(term)) continue;
+      out.push(term);
     }
   }
   return out;
