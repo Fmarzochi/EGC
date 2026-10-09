@@ -298,12 +298,37 @@ if (test('redactPayload: walks nested objects one level deep', () => {
   assert.strictEqual(result.meta.tool, 'bash');
 })) passed++; else failed++;
 
-if (test('redactPayload: arrays are walked — non-secret strings pass through, secret strings are redacted', () => {
+if (test('redactPayload: arrays are walked, non-secret strings pass through, secret strings are redacted', () => {
   const result = redactPayload({ files: ['/tmp/a', '/tmp/b'] });
   assert.deepStrictEqual(result.files, ['/tmp/a', '/tmp/b']);
   const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMTIzIn0.SomeSignatureHere1234567';
   const result2 = redactPayload({ headers: [{ authorization: jwt }] });
   assert.strictEqual(result2.headers[0].authorization, '[REDACTED]');
+})) passed++; else failed++;
+
+// ── #1782: redaction gaps found by the review bots on #1781 ────────────────
+
+if (test('redactPayload: walks nested arrays, not just one level of array items', () => {
+  const result = redactPayload({ a: [[{ token: 'secret-value-1234' }]] });
+  assert.strictEqual(result.a[0][0].token, '[REDACTED]');
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: recognizes a shell by name even with a Windows .exe suffix', () => {
+  const result = redactSecretsInText('bash.exe -c "curl -u user:pw http://x"');
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: decodes an ANSI-C $\'...\' shell -c body before scanning it', () => {
+  const result = redactSecretsInText("bash -c $'curl\\x20-u\\x20user:pw'");
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: an escaped apostrophe inside $\'...\' does not end the substitution early', () => {
+  const result = redactSecretsInText("echo $(printf $'a\\')') curl -u user:pw http://x");
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
 })) passed++; else failed++;
 
 // ── writeAuditEntry ─────────────────────────────────────────────────────────

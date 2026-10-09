@@ -63,6 +63,25 @@ function ansiEscape(text: string, at: number): Piece {
   return { value, raw: text.slice(at, at + 2), end: at + 2 };
 }
 
+// The effective text of a $'...' body: every ANSI-C escape decoded to the
+// character it stands for, so a scan over the result sees the real word
+// boundaries (a $'curl\x20-u\x20user:pw' body reads as "curl -u user:pw").
+function decodeAnsiCBody(text: string): string {
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === '\\' && i + 1 < text.length) {
+      const piece = ansiEscape(text, i);
+      out += piece.value;
+      i = piece.end;
+    } else {
+      out += text[i];
+      i += 1;
+    }
+  }
+  return out;
+}
+
 function isQuoteOpener(text: string, at: number): boolean {
   const ch = text[at];
   return ch === '"' || ch === "'" || (ch === '$' && (text[at + 1] === '"' || text[at + 1] === "'"));
@@ -97,10 +116,14 @@ function nestedInDoubleQuotes(text: string, i: number, level: number): number {
 
 // The index just past the quoted run whose opening quote is at `at`; the
 // text length when it never closes.
-function quotedRunEnd(text: string, at: number, level = 0): number {
+function quotedRunEnd(text: string, at: number, level = 0, ansi = false): number {
   const quote = text[at];
   let i = at + 1;
   while (i < text.length) {
+    if (ansi && text[i] === '\\' && i + 1 < text.length) {
+      i += 2;
+      continue;
+    }
     if (text[i] === quote) return i + 1;
     const nested = quote === '"' ? nestedInDoubleQuotes(text, i, level) : -1;
     i = nested === -1 ? i + 1 : nested;
@@ -113,7 +136,8 @@ function quotedRunEnd(text: string, at: number, level = 0): number {
 function nestedInSubstitution(text: string, i: number, level: number): number {
   const ch = text[i];
   if (ch === '\\') return i + 2;
-  if (ch === "'" || ch === '"') return quotedRunEnd(text, i, level);
+  if (ch === "'") return quotedRunEnd(text, i, level, text[i - 1] === '$');
+  if (ch === '"') return quotedRunEnd(text, i, level);
   return ch === '`' ? backtickEnd(text, i) : -1;
 }
 
@@ -394,7 +418,7 @@ class CurlRedactor {
       this.secretNext = false;
       return REDACTED;
     }
-    if (SHELL_NAMES.has(basename(word.value).toLowerCase())) {
+    if (SHELL_NAMES.has(basename(word.value).toLowerCase().replace(/\.(?:exe|cmd|bat)$/, ''))) {
       this.sawShell = true;
     } else if (this.sawShell && isCommandStringFlag(word.value)) {
       this.bodyNext = true;
@@ -448,7 +472,9 @@ class CurlRedactor {
     const prefix = raw.startsWith('$') ? 2 : 1;
     const quote = raw[prefix - 1];
     if ((quote !== '"' && quote !== "'") || raw.length < prefix + 1 || !raw.endsWith(quote)) return raw;
-    return `${raw.slice(0, prefix)}${this.redact(raw.slice(prefix, -1))}${quote}`;
+    const body = raw.slice(prefix, -1);
+    const effective = prefix === 2 ? decodeAnsiCBody(body) : body;
+    return `${raw.slice(0, prefix)}${this.redact(effective)}${quote}`;
   }
 
   // The credential as typed, with the password replaced.
