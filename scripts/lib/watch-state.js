@@ -146,16 +146,14 @@ function resolveStateFilePath(projectPath) {
 
     const legacyBranchFile = legacyBranchStateFile(stateDir, projectPath, branch);
     if (fs.existsSync(legacyBranchFile)) return legacyBranchFile;
-  } else {
+  } else if (detachedCommit) {
     // A detached HEAD never falls through to the shared flat file below:
     // every detached checkout of the project used to collide there. Each
     // commit gets its own file, checked here before the project-wide
     // defaults.
-    if (detachedCommit) {
-      const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
-      if (fs.existsSync(detachedFile)) return detachedFile;
-      return null;
-    }
+    const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
+    if (fs.existsSync(detachedFile)) return detachedFile;
+    return null;
   }
 
   const defaultFile = path.join(stateDir, slug, 'main.md');
