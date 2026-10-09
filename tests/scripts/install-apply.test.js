@@ -839,6 +839,57 @@ function runTests() {
     }
   }));
 
+  tally(test('a skill EGC indexed that is now the person\'s loses its stale AGENTS.md entry (#1673)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const args = ['--target', 'warp', '--profile', 'core'];
+      const first = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const projectRoot = fs.realpathSync(projectDir);
+      const warpSkills = path.join(projectRoot, '.warp', 'skills');
+      const statePath = path.join(projectRoot, '.warp', 'egc-install-state.json');
+      const agentsPath = path.join(projectRoot, 'AGENTS.md');
+      const skillDir = path.join(warpSkills, 'tdd-workflow');
+      const legacy = path.join(warpSkills, 'tdd-workflow.md');
+      const state = readJson(statePath);
+      let source = null;
+      state.operations = state.operations.filter(operation => {
+        if (operation.kind !== 'copy-file' || !operation.destinationPath.startsWith(skillDir + path.sep)) return true;
+        if (path.basename(operation.destinationPath) !== 'SKILL.md') return false;
+        source = operation.sourceRelativePath;
+        operation.destinationPath = legacy;
+        delete operation.contentSha256;
+        return true;
+      });
+      assert.ok(source, 'the core profile installs tdd-workflow for Warp');
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      fs.rmSync(skillDir, { recursive: true, force: true });
+      fs.copyFileSync(path.join(repoRoot, source), legacy);
+      fs.writeFileSync(agentsPath, fs.readFileSync(agentsPath, 'utf8').replace('.warp/skills/tdd-workflow/SKILL.md', '.warp/skills/tdd-workflow.md'));
+      fs.mkdirSync(skillDir);
+      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '# mine');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assert.strictEqual(fs.readFileSync(path.join(skillDir, 'SKILL.md'), 'utf8'), '# mine', 'the person\'s tdd-workflow stays theirs');
+      assert.ok(!fs.existsSync(legacy), 'the managed flat copy is retired');
+      const agents = fs.readFileSync(agentsPath, 'utf8');
+      assert.ok(!agents.includes('**tdd-workflow**'), 'no index entry is left pointing at the retired copy or claiming the person\'s skill');
+      assert.ok(agents.includes('/SKILL.md`)'), 'the other entries stay');
+
+      const again = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(again.code, 0, again.stderr);
+      assert.ok(!fs.readFileSync(agentsPath, 'utf8').includes('**tdd-workflow**'), 'a later install leaves the entry out too');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
   tally(test('a Warp skill the person keeps, as a directory or a link, is never overwritten or indexed (#1673)', () => {
     const scenarios = process.platform === 'win32' ? ['directory'] : ['directory', 'link'];
     for (const scenario of scenarios) {

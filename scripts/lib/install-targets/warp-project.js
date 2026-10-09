@@ -10,6 +10,7 @@ const {
   isForeignPlatformPath,
   isPersonOwnedDestination,
   normalizeRelativePath,
+  readInstallStateOrNull,
 } = require('./helpers');
 const { MERGE_MARKDOWN_INDEX_KIND } = require('../warp-agents-merge');
 
@@ -88,6 +89,10 @@ function createWarpPlanOperations(input, adapter) {
   const projectRoot = input.projectRoot || input.repoRoot;
   const agentsFilePath = path.join(projectRoot, 'AGENTS.md');
   const recordedDestinations = collectRecordedDestinations(adapter, planningInput);
+  const previousState = readInstallStateOrNull(adapter.getInstallStatePath(planningInput));
+  const indexedSkillNames = new Set((Array.isArray(previousState?.operations) ? previousState.operations : [])
+    .filter(operation => operation.kind === MERGE_MARKDOWN_INDEX_KIND && !operation.removeEntry && operation.skillName)
+    .map(operation => operation.skillName));
 
   return modules.flatMap(module => {
     const paths = Array.isArray(module.paths) ? module.paths : [];
@@ -101,7 +106,17 @@ function createWarpPlanOperations(input, adapter) {
           const skillDir = path.join(targetRoot, 'skills', skillName);
           const sourceSkillDir = input.repoRoot ? path.join(input.repoRoot, normalized) : null;
           if (isSymbolicLink(skillDir) || isPersonOwnedDestination(skillDir, sourceSkillDir, recordedDestinations)) {
-            return [];
+            return indexedSkillNames.has(skillName) ? [{
+              kind: MERGE_MARKDOWN_INDEX_KIND,
+              moduleId: module.id,
+              sourceRelativePath: path.join(normalized, 'SKILL.md'),
+              destinationPath: agentsFilePath,
+              strategy: MERGE_MARKDOWN_INDEX_KIND,
+              ownership: 'managed',
+              scaffoldOnly: false,
+              skillName,
+              removeEntry: true,
+            }] : [];
           }
           const sourceSkillPath = path.join(input.repoRoot || '', normalized, 'SKILL.md');
 
