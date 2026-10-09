@@ -122,6 +122,7 @@ const MEMORY_SOURCE_LABELS = {
   branch: 'branch state',
   'default-branch': 'default branch state (main.md)',
   flat: 'flat state (legacy)',
+  detached: 'detached commit state',
 };
 
 function printMemoryState(section) {

@@ -72,8 +72,11 @@ export function detectBranch(projectPath: string): string | null {
   return head.slice(refPrefix.length) || null;
 }
 
-// Git object IDs are 40 hex characters (SHA-1) or 64 (SHA-256 repositories).
-const DETACHED_COMMIT_PATTERN = /^[0-9a-f]{4,64}$/i;
+// Git object IDs are exactly 40 hex characters (SHA-1) or 64 (SHA-256
+// repositories); nothing in between is a real one, so a truncated or
+// otherwise corrupted HEAD (e.g. from an interrupted checkout) is refused
+// rather than used as a path component.
+const DETACHED_COMMIT_PATTERN = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
 
 // The commit a detached HEAD points at, or null when HEAD is on a branch,
 // outside a git repo, or its content does not look like a commit hash (a
@@ -96,8 +99,13 @@ export interface HeadState {
 // Every resolveStateRead/resolveStateWrite call site should get both from
 // here instead.
 export function resolveHeadState(projectPath: string): HeadState {
-  const branch = detectBranch(projectPath);
-  return { branch, detachedCommit: branch ? null : detectDetachedCommit(projectPath) };
+  const head = readHeadLine(projectPath);
+  if (!head) return { branch: null, detachedCommit: null };
+  const refPrefix = 'ref: refs/heads/';
+  if (head.startsWith(refPrefix)) {
+    return { branch: head.slice(refPrefix.length) || null, detachedCommit: null };
+  }
+  return { branch: null, detachedCommit: DETACHED_COMMIT_PATTERN.test(head) ? head.toLowerCase() : null };
 }
 
 export function flatStateFile(stateDir: string, projectPath: string): string {

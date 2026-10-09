@@ -13,6 +13,7 @@ const {
   branchStateKey,
   detectBranch,
   detectDetachedCommit,
+  resolveHeadState,
   flatStateFile,
   branchStateFile,
   detachedStateFile,
@@ -181,6 +182,32 @@ function runTests() {
 
     const dir = makeTmpDir('egc-branch-state-norepo-');
     assert.strictEqual(detectDetachedCommit(dir), null);
+
+    // A truncated or otherwise corrupted HEAD (interrupted checkout, disk
+    // error) must never be treated as a real commit, length in between the
+    // two real object-id sizes included.
+    const corrupted = makeGitRepo(null);
+    git(corrupted, 'checkout -q --detach');
+    fs.writeFileSync(path.join(corrupted, '.git', 'HEAD'), 'a1b2c3d4e5\n');
+    assert.strictEqual(detectDetachedCommit(corrupted), null);
+  }));
+
+  tally(test('resolveHeadState reads .git/HEAD exactly once (one snapshot, not two)', () => {
+    const repo = makeGitRepo(null);
+    git(repo, 'checkout -q --detach');
+    const headPath = path.join(repo, '.git', 'HEAD');
+    const originalRead = fs.readFileSync;
+    let headReads = 0;
+    fs.readFileSync = function patched(target, ...rest) {
+      if (typeof target === 'string' && path.resolve(target) === headPath) headReads += 1;
+      return originalRead.call(fs, target, ...rest);
+    };
+    try {
+      resolveHeadState(repo);
+    } finally {
+      fs.readFileSync = originalRead;
+    }
+    assert.strictEqual(headReads, 1, 'detectBranch and detectDetachedCommit must not each read HEAD on their own');
   }));
 
   tally(test('detectDetachedCommit accepts a SHA-256 repository commit (64 hex characters)', () => {

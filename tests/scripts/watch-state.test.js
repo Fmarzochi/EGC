@@ -352,7 +352,7 @@ async function runTests() {
       fs.mkdirSync(slugDir, { recursive: true });
       fs.writeFileSync(mainMd, '# State\n');
       const result = resolveStateFilePath(projectDir);
-      assert.strictEqual(result, mainMd, 'should resolve to main.md when no branch (detached HEAD or non-git dir)');
+      assert.strictEqual(result, mainMd, 'should resolve to main.md outside a git repo (a detached HEAD no longer falls here, see the test above)');
     } finally {
       os.homedir = originalHomedir;
       cleanup(projectDir);
