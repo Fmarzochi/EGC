@@ -316,6 +316,7 @@ module.exports = {
   addJsonMergeOperation,
   addMatchingRuleOperations,
   addRecursiveCopyOperations,
+  buildCopyFileOperation,
   dedupeCopyFileDestinations,
   isDirectoryNonEmpty,
   listFilesRecursive,

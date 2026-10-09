@@ -33,7 +33,7 @@ function getManifestVersion(sourceRoot) {
 
 function getRepoCommit(sourceRoot) {
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { // NOSONAR typescript:S4036 -- resolving git through PATH is the standard contract in developer environments, matching every other git invocation in this repo
       cwd: sourceRoot,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],

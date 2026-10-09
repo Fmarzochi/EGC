@@ -5,11 +5,14 @@ const path = require('node:path');
 const { toCursorAgentRelativePath } = require('../cursor-agent-names');
 const { LEGACY_INSTALL_TARGETS } = require('./request');
 const { getInstallTargetAdapter } = require('../install-targets/registry');
+const { AGY_RULES_SUBDIR, isPersonCopy, planAntigravityRuleFiles, readRecordedDestinations } = require('../antigravity-rules');
+const { planAntigravityAgentFiles } = require('../antigravity-agents');
 const {
   addFileCopyOperation,
   addJsonMergeOperation,
   addMatchingRuleOperations,
   addRecursiveCopyOperations,
+  buildCopyFileOperation,
   isDirectoryNonEmpty,
 } = require('./plan-operations');
 const {
@@ -24,7 +27,6 @@ const {
 // antigravity targets.
 
 const LANGUAGE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
-const GEMINI_EGC_NAMESPACE = 'egc';
 
 function validateLegacyTarget(target) {
   if (!LEGACY_INSTALL_TARGETS.includes(target)) {
@@ -37,7 +39,7 @@ function validateLegacyTarget(target) {
 function planEGCLegacyInstall(context) {
   const adapter = getInstallTargetAdapter('egc');
   const targetRoot = adapter.resolveRoot({ homeDir: context.homeDir });
-  const rulesDir = context.geminiRulesDir || path.join(targetRoot, 'rules', GEMINI_EGC_NAMESPACE);
+  const rulesDir = context.geminiRulesDir || path.join(targetRoot, AGY_RULES_SUBDIR);
   const installStatePath = adapter.getInstallStatePath({ homeDir: context.homeDir });
   const operations = [];
   const warnings = [];
@@ -48,12 +50,26 @@ function planEGCLegacyInstall(context) {
     );
   }
 
-  addRecursiveCopyOperations(operations, {
-    moduleId: 'legacy-egc-rules',
-    sourceRoot: context.sourceRoot,
-    sourceRelativeDir: path.join('rules', 'common'),
-    destinationDir: path.join(rulesDir, 'common'),
-  });
+  const recordedDestinations = readRecordedDestinations(installStatePath);
+  const addRules = sourceRelativeDir => {
+    for (const rule of planAntigravityRuleFiles(context.sourceRoot, sourceRelativeDir)) {
+      const sourcePath = path.join(context.sourceRoot, rule.sourceRelativePath);
+      const destinationPath = path.join(rulesDir, rule.fileName);
+      if (isPersonCopy(destinationPath, sourcePath, rule.transform, recordedDestinations)) {
+        continue;
+      }
+      operations.push(buildCopyFileOperation({
+        moduleId: 'legacy-egc-rules',
+        sourcePath,
+        sourceRelativePath: rule.sourceRelativePath,
+        destinationPath,
+        strategy: 'flatten-copy',
+        transform: rule.transform,
+      }));
+    }
+  };
+
+  addRules('rules/common');
 
   for (const language of context.languages) {
     if (!LANGUAGE_NAME_PATTERN.test(language)) {
@@ -69,12 +85,7 @@ function planEGCLegacyInstall(context) {
       continue;
     }
 
-    addRecursiveCopyOperations(operations, {
-      moduleId: 'legacy-egc-rules',
-      sourceRoot: context.sourceRoot,
-      sourceRelativeDir: path.join('rules', language),
-      destinationDir: path.join(rulesDir, language),
-    });
+    addRules(`rules/${language}`);
   }
 
   return {
@@ -230,12 +241,22 @@ function planAntigravityLegacyInstall(context) {
     sourceRelativeDir: 'commands',
     destinationDir: path.join(targetRoot, 'workflows'),
   });
-  addRecursiveCopyOperations(operations, {
-    moduleId: 'legacy-antigravity-install',
-    sourceRoot: context.sourceRoot,
-    sourceRelativeDir: 'agents',
-    destinationDir: path.join(targetRoot, 'skills'),
-  });
+  const recordedDestinations = readRecordedDestinations(installStatePath);
+  for (const agent of planAntigravityAgentFiles(context.sourceRoot, 'agents')) {
+    const sourcePath = path.join(context.sourceRoot, agent.sourceRelativePath);
+    const destinationPath = path.join(targetRoot, 'agents', agent.fileName);
+    if (isPersonCopy(destinationPath, sourcePath, agent.transform, recordedDestinations)) {
+      continue;
+    }
+    operations.push(buildCopyFileOperation({
+      moduleId: 'legacy-antigravity-install',
+      sourcePath,
+      sourceRelativePath: agent.sourceRelativePath,
+      destinationPath,
+      strategy: 'flatten-copy',
+      transform: agent.transform,
+    }));
+  }
   addRecursiveCopyOperations(operations, {
     moduleId: 'legacy-antigravity-install',
     sourceRoot: context.sourceRoot,
