@@ -17,7 +17,7 @@ if (!fs.existsSync(path.join(buildDir, 'file-git.js'))) {
   console.log('[SKIP] build not found. Run npm run build in mcp/servers/egc-guardian first.');
   process.exit(0);
 }
-const { collectGitContext, matchPath } = require(path.join(buildDir, 'file-git.js'));
+const { collectGitContext, matchPath, parseLogRecords } = require(path.join(buildDir, 'file-git.js'));
 const { scoreDocuments, tokenize, registeredSignals } = require(path.join(buildDir, 'file-ranker.js'));
 
 let passed = 0;
@@ -64,6 +64,24 @@ await run('matchPath does not match two different files that only share a name',
   const keys = new Set(['src/billing/index.ts', 'src/auth/index.ts']);
   assert.strictEqual(matchPath('lib/other/index.ts', keys), undefined);
   assert.strictEqual(matchPath('index.ts', keys), 'src/billing/index.ts', 'a bare name still matches as a path suffix');
+});
+
+await run('the log parser keeps every path of a commit, whatever characters a path holds', () => {
+  const hash = n => `${String(n).repeat(40)}`;
+  // A path with the old marker character in it, one with a newline, a commit with no paths, a commit after it.
+  const raw = [
+    `${hash(1)}\nsrc/a\u0001b.ts`, 'src/c.ts', '',
+    `${hash(2)}\nline\nbreak.ts`, 'plain.ts', '',
+    hash(3), '',
+    `${hash(4)}\nlast.ts`, ''
+  ].join('\0');
+  assert.deepStrictEqual(parseLogRecords(raw), [
+    ['src/a\u0001b.ts', 'src/c.ts'],
+    ['line\nbreak.ts', 'plain.ts'],
+    ['last.ts']
+  ]);
+  assert.deepStrictEqual(parseLogRecords(''), []);
+  assert.deepStrictEqual(parseLogRecords(`${hash(5)}\nonly.ts`), [['only.ts']], 'the last commit needs no closing separator');
 });
 
 await run('registers the git signal with weight 1.0', async () => {
