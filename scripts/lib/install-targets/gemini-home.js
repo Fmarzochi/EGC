@@ -32,6 +32,7 @@ const {
   planAntigravityRuleFiles,
 } = require('../antigravity-rules');
 const { AGY_AGENTS_SUBDIR, isAgentSource, planAntigravityAgentFiles } = require('../antigravity-agents');
+const { dropCommandsShadowedBySkills, isCommandSource, planAntigravityCommandFiles } = require('../antigravity-commands');
 
 const AGY_SKILLS_SUBDIR = 'config/skills';
 
@@ -42,24 +43,36 @@ const AGY_SKILLS_SUBDIR = 'config/skills';
 // tree here. What an earlier install wrote for them is retired on the next
 // apply, file by file and only when byte-identical to what EGC copied
 // (helpers.js, planGenericRetirements); a file the person edited stays.
-// commands/ keeps its current spot until it moves to what Antigravity reads;
-// the same retirement collects the old copies then, as it does for the
-// rules/egc tree and the agents/ copies.
+// The same retirement collects the rules/egc tree and the agents/ and
+// commands/ copies, now that those families install under config/.
 const GEMINI_CLI_ONLY_SOURCE_PREFIXES = new Set(['.agents', 'hooks', 'mcp-configs', '.gemini-plugin']);
 
 function isGeminiCliOnlySource(sourceRelativePath) {
   return GEMINI_CLI_ONLY_SOURCE_PREFIXES.has(normalizeRelativePath(sourceRelativePath).split('/')[0]);
 }
 
+function isLibrarySource(sourceRelativePath) {
+  return isRuleSource(sourceRelativePath) || isAgentSource(sourceRelativePath) || isCommandSource(sourceRelativePath);
+}
+
+function libraryFamily(repoRoot, sourceRelativePath) {
+  if (isRuleSource(sourceRelativePath)) {
+    return { files: planAntigravityRuleFiles(repoRoot, sourceRelativePath), subdir: AGY_RULES_SUBDIR };
+  }
+  if (isAgentSource(sourceRelativePath)) {
+    return { files: planAntigravityAgentFiles(repoRoot, sourceRelativePath), subdir: AGY_AGENTS_SUBDIR };
+  }
+  return { files: planAntigravityCommandFiles(repoRoot, sourceRelativePath), subdir: AGY_SKILLS_SUBDIR };
+}
+
 function planAntigravityLibraryOperations(adapter, moduleId, sourceRelativePath, input, recordedDestinations) {
   const repoRoot = input.repoRoot || '';
-  const targetRoot = adapter.resolveRoot(input);
-  const isRule = isRuleSource(sourceRelativePath);
+  const family = libraryFamily(repoRoot, sourceRelativePath);
   return planAntigravityCopyOperations({
     adapter,
     moduleId,
-    files: isRule ? planAntigravityRuleFiles(repoRoot, sourceRelativePath) : planAntigravityAgentFiles(repoRoot, sourceRelativePath),
-    destinationDir: path.join(targetRoot, isRule ? AGY_RULES_SUBDIR : AGY_AGENTS_SUBDIR),
+    files: family.files,
+    destinationDir: path.join(adapter.resolveRoot(input), family.subdir),
     repoRoot,
     recordedDestinations,
   });
@@ -265,7 +278,7 @@ module.exports = createInstallTargetAdapter({
       return paths
         .filter(p => !isForeignPlatformPath(p, adapter.target) && !isGeminiCliOnlySource(p))
         .flatMap(sourceRelativePath => {
-          if (isRuleSource(sourceRelativePath) || isAgentSource(sourceRelativePath)) {
+          if (isLibrarySource(sourceRelativePath)) {
             return planAntigravityLibraryOperations(adapter, module.id, sourceRelativePath, planningInput, recordedDestinations);
           }
           const managedDestinationPaths = getAGYManagedDestinationPaths(
@@ -297,7 +310,7 @@ module.exports = createInstallTargetAdapter({
     // fact-forcing gate for Antigravity's global hooks.json, even when no
     // content modules are selected.
     return dedupeCopyOperations([
-      ...moduleOperations,
+      ...dropCommandsShadowedBySkills(moduleOperations),
       ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, remap),
       ...createAntigravityGlobalCrusherOperations(targetRoot, homeDir, remap),
       ...createAntigravityGlobalGuardianOperations(targetRoot, homeDir, remap),

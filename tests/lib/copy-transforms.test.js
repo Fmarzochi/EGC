@@ -9,11 +9,13 @@ const path = require('path');
 
 const {
   ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM,
+  ANTIGRAVITY_COMMAND_SKILL_TRANSFORM,
   ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
   ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
   toAntigravityAgentFrontmatter,
+  toAntigravityCommandSkill,
   toAntigravityRule,
   toClaudeAgentFrontmatter,
   transformContent,
@@ -21,6 +23,7 @@ const {
 } = require('../../scripts/lib/install/copy-transforms');
 const { planAntigravityRuleFiles } = require('../../scripts/lib/antigravity-rules');
 const { planAntigravityAgentFiles } = require('../../scripts/lib/antigravity-agents');
+const { planAntigravityCommandFiles } = require('../../scripts/lib/antigravity-commands');
 
 function test(name, fn) {
   try {
@@ -245,6 +248,9 @@ function runTests() {
   const agentResults = runAntigravityAgentTests();
   passed += agentResults.passed;
   failed += agentResults.failed;
+  const commandResults = runAntigravityCommandTests();
+  passed += commandResults.passed;
+  failed += commandResults.failed;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   if (failed > 0) {
@@ -301,6 +307,44 @@ function runAntigravityAgentTests() {
     assert.strictEqual(new Set(agents.map(agent => agent.fileName)).size, agents.length, 'no two agents share a file name');
     for (const agent of agents) {
       assertAntigravityAgent(repoRoot, agent);
+    }
+  }));
+
+  return { passed: results.filter(Boolean).length, failed: results.filter(result => !result).length };
+}
+
+function runAntigravityCommandTests() {
+  const results = [];
+  results.push(test('an Antigravity command skill keeps the slash name and a quoted description, and drops the Claude-only keys (#1706)', () => {
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: Full audit: scores every dimension.\nargument-hint: [--focus <dimension>]\nagent: reviewer\nsubtask: true\n---\n\n# Audit\n\n**Input**: $ARGUMENTS\n', { name: 'engineering-audit' }),
+      '---\nname: engineering-audit\ndescription: "Full audit: scores every dimension."\n---\n\n# Audit\n\n**Input**: $ARGUMENTS\n'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('---\ndescription: "Run: the plan"\nname: other\n---\nbody\n', { name: 'plan' }),
+      '---\nname: plan\ndescription: "Run: the plan"\n---\nbody\n',
+      'the slash name follows the file, and a quoted description is not quoted twice'
+    );
+    assert.strictEqual(
+      toAntigravityCommandSkill('\uFEFF# Title\r\nbody\r\n', { name: 'x' }),
+      '---\nname: x\ndescription: "Title"\n---\n# Title\nbody\n',
+      'a command without frontmatter is described by its first line'
+    );
+  }));
+
+  results.push(test('every shipped command becomes an Antigravity skill named after its file, with a description (#1706)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const commands = planAntigravityCommandFiles(repoRoot, 'commands');
+    const catalog = fs.readdirSync(path.join(repoRoot, 'commands')).filter(name => name.endsWith('.md'));
+    assert.deepStrictEqual(commands.map(command => command.fileName).sort(), catalog.map(name => `${name.slice(0, -3)}/SKILL.md`).sort());
+    for (const command of commands) {
+      assert.strictEqual(command.transform, ANTIGRAVITY_COMMAND_SKILL_TRANSFORM);
+      const name = path.posix.dirname(command.fileName);
+      const text = plannedFileContent(path.join(repoRoot, command.sourceRelativePath), command.transform).toString('utf8');
+      const match = /^---\nname: ([^\n]+)\ndescription: ("[^\n]*")\n---\n/.exec(text);
+      assert.ok(match, `${command.sourceRelativePath}: skill frontmatter`);
+      assert.strictEqual(match[1], name, `${command.sourceRelativePath}: name`);
+      assert.ok(JSON.parse(match[2]).length > 0, `${command.sourceRelativePath}: description`);
     }
   }));
 

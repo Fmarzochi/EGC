@@ -21,15 +21,15 @@ egc remaps its component structure to match Antigravity's expected layout:
 | egc Source | Antigravity Destination | What It Contains |
 |------------|------------------------|------------------|
 | `rules/` | `.agents/rules/` | Language rules and coding standards (flattened) |
-| `commands/` | `.agents/workflows/` | Slash commands become Antigravity workflows |
+| `commands/` | `.agents/skills/<name>/SKILL.md` | Each command becomes a skill, invoked as `/<name>` |
 | `agents/` | `.agents/agents/` | Agent definitions become Antigravity subagents |
 
-> **Note on the repository's `.agents/` vs `agents/`**: The installer maps `rules` → `.agents/rules/`, `commands` → `.agents/workflows/`, `agents` (no dot prefix) → `.agents/agents/` and `skills` → `.agents/skills/<name>/` in your project. The dot-prefixed `.agents/` directory in the egc repository is a **static layout** for Codex skill definitions and `openai.yaml` configs: when a module selects it (`agents-core` does), the default scaffold copies it as it is to `.agents/.agents/` in your project, where Antigravity does not read it. The skills Antigravity uses come from `skills/`.
+> **Note on the repository's `.agents/` vs `agents/`**: The installer maps `rules` → `.agents/rules/`, `commands` → `.agents/skills/<name>/`, `agents` (no dot prefix) → `.agents/agents/` and `skills` → `.agents/skills/<name>/` in your project. The dot-prefixed `.agents/` directory in the egc repository is a **static layout** for Codex skill definitions and `openai.yaml` configs: when a module selects it (`agents-core` does), the default scaffold copies it as it is to `.agents/.agents/` in your project, where Antigravity does not read it. The skills Antigravity uses come from `skills/`.
 
 ### Key differences from the home install (`egc` target)
 
 - **Rules are flattened**: Antigravity expects a flat `rules/` directory (`~/.gemini/config/rules/` for the home install): the installer names each file `<group>-<rule>.md`.
-- **Commands become workflows**: egc's `/command` files land in `.agents/workflows/`, which is Antigravity's equivalent of slash commands.
+- **Commands become skills**: Antigravity stops running workflows on 19 October 2026, so each egc `/command` lands as a skill in `.agents/skills/<name>/SKILL.md` (`~/.gemini/config/skills/<name>/` for the home install) and is still invoked as `/<name>`. A bundled skill with the same name wins, since it already answers that command.
 - **Agents become subagents**: egc agent definitions land in `.agents/agents/` (`~/.gemini/config/agents/` for the home install), where Antigravity reads custom subagents, with the frontmatter rewritten to the subagent format: Antigravity tool names, `model: pro`, `flash` or inherited. A tool without a confirmed Antigravity name (`Glob`, `WebSearch`, `WebFetch`, MCP tools) is left out of the subagent's `tools`, since an unmapped name can hang the subagent.
 
 ## Directory Structure After Install
@@ -42,11 +42,6 @@ your-project/
 │   │   ├── common-testing.md
 │   │   ├── common-security.md
 │   │   └── typescript-coding-style.md   # language-specific rules
-│   ├── workflows/
-│   │   ├── plan.md
-│   │   ├── code-review.md
-│   │   ├── tdd.md
-│   │   └── ...
 │   ├── agents/
 │   │   ├── planner.md
 │   │   ├── code-reviewer.md
@@ -54,6 +49,7 @@ your-project/
 │   │   └── ...
 │   ├── skills/
 │   │   ├── tdd-workflow/SKILL.md
+│   │   ├── plan/SKILL.md            # from commands/plan.md, invoked as /plan
 │   │   └── ...
 │   └── egc-install-state.json     # tracks what egc installed
 ```
@@ -129,7 +125,7 @@ See [CONTRIBUTING.md](../../.github/CONTRIBUTING.md) for the full contribution g
 | Config root | `~/.gemini/` | `.cursor/` | `~/.codex/` | `.agents/` |
 | Scope | User-level | Project-level | User-level | Project-level |
 | Rules format | Flat (`config/rules/`) | Flat | Flat | Flat |
-| Commands | `commands/` | N/A | N/A | `workflows/` |
+| Commands | `config/skills/` | N/A | N/A | `skills/` |
 | Agents | `config/agents/` | N/A | N/A | `agents/` |
 | Install state | `egc-install-state.json` | `egc-install-state.json` | `egc-install-state.json` | `egc-install-state.json` |
 
@@ -146,10 +142,10 @@ See [CONTRIBUTING.md](../../.github/CONTRIBUTING.md) for the full contribution g
 - Rules must be in `.agents/rules/`, not nested in subdirectories
 - Run `node scripts/doctor.js --target antigravity` to verify the install
 
-### Workflows not available
+### Commands not available
 
-- Antigravity looks for workflows in `.agents/workflows/`, not `commands/`
-- If you manually copied egc commands, rename the directory
+- Each command is a skill in `.agents/skills/<name>/SKILL.md`: Antigravity stops running `.agents/workflows/` on 19 October 2026
+- Run the installer again: it moves the command files it wrote there and leaves your own files alone
 
 ## Related Resources
 

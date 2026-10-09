@@ -72,10 +72,11 @@ function parentOf(filePath) {
 }
 
 // Where each target keeps its agent and command files: agents/ and
-// commands/ everywhere, except that Antigravity reads commands from
-// workflows/. Cursor prefixes the agent file name with egc-.
+// commands/ everywhere, except that Antigravity takes each command as a
+// skill, invoked as /<name>. Cursor prefixes the agent file name with egc-.
 const AGENT_DIRS = { default: ['agents'] };
-const COMMAND_DIRS = { default: ['commands', 'command'], antigravity: ['workflows'] };
+const COMMAND_DIRS = { default: ['commands', 'command'] };
+const COMMANDS_AS_SKILLS = new Set(['antigravity', 'egc']);
 
 // What lands in the tool, indexed the way each family is discovered: an
 // agent or command by its file name, a skill by its directory (or its flat
@@ -101,6 +102,7 @@ function plannedDestinations(target, homeDir, projectRoot) {
     const stem = stemOf(destination);
     if (agentDirs.includes(parent)) index.agents.add(stem.replace(/^egc-/, ''));
     if (commandDirs.includes(parent)) index.commands.add(stem);
+    if (COMMANDS_AS_SKILLS.has(target) && path.posix.basename(destination) === 'SKILL.md') index.commands.add(parent);
     if (path.posix.basename(destination) === 'SKILL.md') index.skills.add(parent);
     if (parent === 'skills') index.skills.add(stem);
     if (destination.includes('/rules/') || destination.includes('/.clinerules/')) {

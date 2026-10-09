@@ -13,6 +13,7 @@ const OPENCODE_AGENT_FRONTMATTER_TRANSFORM = 'opencode-agent-frontmatter';
 const ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM = 'antigravity-rule-frontmatter';
 const ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM = 'antigravity-manual-rule-frontmatter';
 const ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM = 'antigravity-agent-frontmatter';
+const ANTIGRAVITY_COMMAND_SKILL_TRANSFORM = 'antigravity-command-skill';
 
 // Model names Claude Code resolves itself. Anything else in an agent's
 // frontmatter (the catalog's Gemini ids) would be sent to the API as-is and
@@ -394,6 +395,33 @@ function toAntigravityAgentFrontmatter(text) {
   return ['---', ...rewriteAntigravityAgentFrontmatter(parts.frontmatter), '---', ...parts.body].join('\n');
 }
 
+function commandDescription(parts) {
+  const declared = parts.frontmatter.map(splitFrontmatterLine).find(match => match?.key === 'description');
+  if (declared) {
+    return stripQuotes(stripYamlComment(declared.value));
+  }
+  const firstLine = parts.body.find(line => line.trim() !== '');
+  return firstLine ? firstLine.replace(/^#+\s*/, '').trim() : null;
+}
+
+function toAntigravityCommandSkill(text, { name = null } = {}) {
+  const source = stripByteOrderMark(text);
+  const parts = splitFrontmatter(source) || { frontmatter: [], body: source.split(/\r?\n/) };
+  const description = commandDescription(parts);
+  const frontmatter = [];
+  if (name) {
+    frontmatter.push(`name: ${name}`);
+  }
+  if (description) {
+    frontmatter.push(`description: ${JSON.stringify(description)}`);
+  }
+  return ['---', ...frontmatter, '---', ...parts.body].join('\n');
+}
+
+function commandName(sourcePath) {
+  return sourcePath ? path.basename(sourcePath, '.md') : null;
+}
+
 function ruleDirectory(sourcePath) {
   if (!sourcePath) {
     return null;
@@ -411,6 +439,10 @@ const TRANSFORMS = Object.freeze({
     'utf8'
   ),
   [ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toAntigravityAgentFrontmatter(content.toString('utf8')), 'utf8'),
+  [ANTIGRAVITY_COMMAND_SKILL_TRANSFORM]: (content, sourcePath) => Buffer.from(
+    toAntigravityCommandSkill(content.toString('utf8'), { name: commandName(sourcePath) }),
+    'utf8'
+  ),
   [ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
     toAntigravityRule(content.toString('utf8'), { manual: true, directory: ruleDirectory(sourcePath) }),
     'utf8'
@@ -434,12 +466,14 @@ function plannedFileContent(sourcePath, transform) {
 
 module.exports = {
   ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM,
+  ANTIGRAVITY_COMMAND_SKILL_TRANSFORM,
   ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
   ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
   OPENCODE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
   toAntigravityAgentFrontmatter,
+  toAntigravityCommandSkill,
   toAntigravityRule,
   toClaudeAgentFrontmatter,
   toOpenCodeAgentFrontmatter,
