@@ -25,12 +25,13 @@ function sanitizeSnapshotName(value, fallback = 'session') {
     return sanitized;
   }
   if (sanitized && isWindowsReservedBasename(sanitized)) {
-    const firstDotIndex = sanitized.indexOf('.');
+    const capped = sanitized.length > 87 ? sanitized.slice(0, 87) : sanitized;
+    const firstDotIndex = capped.indexOf('.');
     const hashSuffix = hashString(raw).slice(0, 8);
     if (firstDotIndex === -1) {
-      return `${sanitized}-${hashSuffix}`;
+      return `${capped}-${hashSuffix}`;
     }
-    return `${sanitized.slice(0, firstDotIndex)}-${hashSuffix}${sanitized.slice(firstDotIndex)}`;
+    return `${capped.slice(0, firstDotIndex)}-${hashSuffix}${capped.slice(firstDotIndex)}`;
   }
 
   const prefix = sanitized ? sanitized.slice(0, 48).replace(/[._-]+$/g, '') : fallback; // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
@@ -39,7 +40,7 @@ function sanitizeSnapshotName(value, fallback = 'session') {
 
 function atomicWriteJson(filePath, payload) {
   const data = JSON.stringify(payload, null, 2) + '\n';
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   fs.writeFileSync(tempPath, data, 'utf8');
   try {
     fs.renameSync(tempPath, filePath);
@@ -69,8 +70,9 @@ function getSnapshotPath(outputDir, session, usedNames) {
       suffix = `-${hashSuffix}${innerSuffix}`;
     }
     const fileName = `${baseName}${suffix}.json`;
-    if (!usedNames.has(fileName)) {
-      usedNames.add(fileName);
+    const usedKey = fileName.toLowerCase();
+    if (!usedNames.has(usedKey)) {
+      usedNames.add(usedKey);
       return path.join(outputDir, fileName);
     }
     attempt += 1;

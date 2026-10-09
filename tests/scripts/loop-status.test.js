@@ -678,6 +678,81 @@ function runTests() {
     }
   }));
 
+  tally(test('caps the generated name at 96 characters when a reserved basename carries a long suffix', () => {
+    const homeDir = createTempHome();
+    const snapshotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-loop-status-reserved-long-'));
+    const longSessionId = `con.${'a'.repeat(200)}`;
+
+    try {
+      writeTranscript(homeDir, '-Users-affoon-project-reserved-long', 'con-long.jsonl', [
+        assistantMessage('2026-04-30T09:55:00.000Z', longSessionId, 'Loop checkpoint.'),
+      ]);
+
+      const result = run([
+        '--home',
+        homeDir,
+        '--now',
+        NOW,
+        '--json',
+        '--write-dir',
+        snapshotDir,
+      ]);
+
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      const indexPath = path.join(snapshotDir, 'index.json');
+      const indexPayload = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+      assert.strictEqual(indexPayload.sessions.length, 1);
+
+      const snapshotName = path.basename(indexPayload.sessions[0].snapshotPath, '.json');
+      assert.ok(snapshotName.length <= 96, `expected <= 96 chars, got ${snapshotName.length}`);
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      fs.rmSync(snapshotDir, { recursive: true, force: true });
+    }
+  }));
+
+  tally(test('treats snapshot names as colliding case-insensitively, matching Windows filesystem behavior', () => {
+    const homeDir = createTempHome();
+    const snapshotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-loop-status-case-collision-'));
+
+    try {
+      writeTranscript(homeDir, '-Users-affoon-project-case-collision', 'upper.jsonl', [
+        assistantMessage('2026-04-30T09:55:00.000Z', 'DupName', 'Loop checkpoint.'),
+      ]);
+      writeTranscript(homeDir, '-Users-affoon-project-case-collision', 'lower.jsonl', [
+        assistantMessage('2026-04-30T09:56:00.000Z', 'dupname', 'Loop checkpoint.'),
+      ]);
+
+      const result = run([
+        '--home',
+        homeDir,
+        '--now',
+        NOW,
+        '--json',
+        '--write-dir',
+        snapshotDir,
+      ]);
+
+      assert.strictEqual(result.code, 0, result.stderr);
+
+      const indexPath = path.join(snapshotDir, 'index.json');
+      const indexPayload = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+      assert.strictEqual(indexPayload.sessions.length, 2);
+
+      const names = indexPayload.sessions.map(session => path.basename(session.snapshotPath));
+      assert.notStrictEqual(names[0].toLowerCase(), names[1].toLowerCase());
+
+      for (const sessionIndex of indexPayload.sessions) {
+        const snapshotPayload = JSON.parse(fs.readFileSync(sessionIndex.snapshotPath, 'utf8'));
+        assert.strictEqual(snapshotPayload.session.sessionId, sessionIndex.sessionId);
+      }
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      fs.rmSync(snapshotDir, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('cleans temporary snapshot files when atomic rename fails', () => {
     const snapshotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-loop-status-rename-failure-'));
     const originalRenameSync = fs.renameSync;
