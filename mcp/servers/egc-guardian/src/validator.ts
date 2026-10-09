@@ -1419,8 +1419,7 @@ export function buildDeniedPaths(): string[] {
       path.join(appData, 'devin', 'credentials.toml'),
       // Windows tools that keep their credentials under %APPDATA% (Roaming)
       // instead of %USERPROFILE%: the home-joined CREDENTIAL_STORES entries
-      // resolve to %USERPROFILE% and cover only that tree (cubic review,
-      // confidence 8).
+      // resolve to %USERPROFILE% and cover only that tree.
       path.join(appData, 'gcloud'),
       path.join(appData, 'Composer', 'auth.json'),
       path.join(appData, 'configstore', 'firebase-tools.json'),

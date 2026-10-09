@@ -405,8 +405,8 @@ function emitInstallResult(options, result) {
 // effective UID, not the real one, decides that ownership (a setuid-root
 // launch keeps a non-zero real UID while still writing as root), so this
 // reads process.geteuid, which on Linux and macOS exists and is 0 only
-// for root; on Windows it is undefined and this check is a no-op there
-// (cubic review, confidence 3). --dry-run
+// for root; on Windows it is undefined and this check is a no-op there.
+// --dry-run
 // writes nothing, so it is exempt; EGC_ALLOW_ROOT=1 (exactly that value,
 // so EGC_ALLOW_ROOT=0 or =false cannot opt in by accident) opts out for
 // a container image built and provisioned as root by design.
