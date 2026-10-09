@@ -2316,7 +2316,7 @@ function runTests() {
     assert.ok(byTarget.supports('zed-home'));
   }));
 
-  tally(test('zed adapter strips category from skill paths and installs flat under ~/.config/zed/skills/', () => {
+  tally(test('zed adapter strips category from skill paths and installs flat under the shared ~/.agents/skills/ (#1654)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -2333,9 +2333,16 @@ function runTests() {
     assert.ok(
       plan.operations.some(op =>
         normalizedRelativePath(op.sourceRelativePath) === 'skills/workflow/tdd-workflow'
-        && op.destinationPath === path.join(homeDir, '.config', 'zed', 'skills', 'tdd-workflow')
+        && op.destinationPath === path.join(homeDir, '.agents', 'skills', 'tdd-workflow')
       ),
-      'Should strip category and install skill flat under ~/.config/zed/skills/'
+      'Should strip category and install skill flat under ~/.agents/skills/, the only global directory Zed reads'
+    );
+    assert.ok(!plan.operations.some(op => op.destinationPath.startsWith(path.join(homeDir, '.config', 'zed', 'skills'))), 'nothing is planned under ~/.config/zed/skills');
+    const adapter = getInstallTargetAdapter('zed');
+    assert.deepStrictEqual(
+      adapter.resolveManagedRoots({ homeDir }, adapter),
+      [path.join(homeDir, '.config', 'zed'), path.join(homeDir, '.agents')],
+      'the shared ~/.agents root is managed, so retirement and uninstall reach it and see the siblings that share it'
     );
   }));
 
@@ -2353,7 +2360,7 @@ function runTests() {
     assert.ok(
       plan.operations.some(op =>
         normalizedRelativePath(op.sourceRelativePath) === 'skills/tdd-workflow'
-        && op.destinationPath === path.join(homeDir, '.config', 'zed', 'skills', 'tdd-workflow')
+        && op.destinationPath === path.join(homeDir, '.agents', 'skills', 'tdd-workflow')
       ),
       'Should handle already-flat skill path without stripping anything'
     );
