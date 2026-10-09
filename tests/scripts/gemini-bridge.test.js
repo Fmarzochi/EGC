@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const BRIDGE = path.join(REPO_ROOT, 'scripts', 'gemini.js');
@@ -147,6 +148,31 @@ function runTests() {
         result.status,
         0,
         `bridge with no -p flag should exit non-zero; got status=${result.status}, stdout=${result.stdout}, stderr=${result.stderr}`
+      );
+    }));
+  }
+
+  if (!venvAvailable()) {
+    record(skip('bridge accepts the prompt positionally, without -p (D31 C22)', `${VENV_PYTHON} not present`));
+  } else {
+    record(test('bridge accepts the prompt positionally, without -p (D31 C22)', () => {
+      const env = { ...process.env };
+      delete env.GEMINI_API_KEY;
+      delete env.GOOGLE_API_KEY;
+      delete env.ANTHROPIC_API_KEY;
+      delete env.OPENAI_API_KEY;
+
+      const result = spawnSync('node', [BRIDGE, 'hello world'], {
+        cwd: REPO_ROOT,
+        env,
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: CLI_TIMEOUT_MS,
+      });
+
+      assert.ok(
+        !/(prompt is required|unrecognized arguments|arguments are required)/i.test(result.stderr),
+        `a positional prompt must not trigger any argparse rejection (old "-p/--prompt required" or "unrecognized arguments" included); got stderr: ${result.stderr}`
       );
     }));
   }
