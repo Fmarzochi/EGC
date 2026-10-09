@@ -178,6 +178,59 @@ if (gitAvailable) {
     assert.ok(iterations <= 2, `the sets were iterated ${iterations} times for ${docs.length} documents`);
   });
 
+  // A repository is not trusted: its own .git/config can name commands that git runs by itself.
+  // Each case plants a command that writes a marker file; the marker must never appear.
+  function hostileRepo(name, plant) {
+    const dir = path.join(tmp, name);
+    const repo = path.join(dir, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    const marker = path.join(dir, 'RAN.txt');
+    const hook = path.join(dir, 'hook.js');
+    fs.writeFileSync(hook, `require('fs').writeFileSync(${JSON.stringify(marker)}, 'ran'); process.stdin.pipe(process.stdout);\n`);
+    const command = `"${process.execPath.replace(/\\/g, '/')}" "${hook.replace(/\\/g, '/')}"`;
+    git(repo, 'init', '-q');
+    git(repo, 'config', 'user.email', 't@example.com');
+    git(repo, 'config', 'user.name', 'test');
+    fs.writeFileSync(path.join(repo, 'a.txt'), 'one');
+    git(repo, 'add', '.');
+    git(repo, 'commit', '-q', '-m', 'init');
+    plant(repo, command);
+    return { repo, marker };
+  }
+
+  await run('a repository that names a core.fsmonitor command does not get it run', async () => {
+    const { repo, marker } = hostileRepo('hostile-fsmonitor', (r, command) => {
+      git(r, 'config', 'core.fsmonitor', command);
+      fs.writeFileSync(path.join(r, 'b.txt'), 'new file');
+    });
+    const ctx = await collectGitContext(repo);
+    assert.ok(!fs.existsSync(marker), 'the repository config ran a command');
+    assert.ok(ctx && ctx.recent.has('a.txt'), 'the commit signals are still produced');
+  });
+
+  await run('a repository that attaches a clean filter to its files does not get it run', async () => {
+    const { repo, marker } = hostileRepo('hostile-filter', (r, command) => {
+      fs.writeFileSync(path.join(r, '.gitattributes'), '*.txt filter=probe\n');
+      git(r, 'config', 'filter.probe.clean', command);
+      // The same size, so git has to read the content to know it changed.
+      fs.writeFileSync(path.join(r, 'a.txt'), 'two');
+    });
+    const ctx = await collectGitContext(repo);
+    assert.ok(!fs.existsSync(marker), 'a clean filter from the repository config ran');
+    assert.ok(ctx && ctx.recent.has('a.txt'), 'the commit signals are still produced');
+    assert.strictEqual(ctx.changed.size, 0, 'the working tree is not read when the repository config carries a filter');
+  });
+
+  await run('a repository with ordinary local settings still reports what is uncommitted', async () => {
+    const { repo } = hostileRepo('ordinary-config', r => {
+      git(r, 'config', 'core.autocrlf', 'false');
+      git(r, 'config', 'pull.rebase', 'true');
+      fs.writeFileSync(path.join(r, 'c.txt'), 'uncommitted');
+    });
+    const ctx = await collectGitContext(repo);
+    assert.ok(ctx.changed.has('c.txt'), [...ctx.changed].join(', '));
+  });
+
   await run('an unborn or detached HEAD does not throw', async () => {
     const detached = path.join(tmp, 'detached');
     fs.mkdirSync(detached);
