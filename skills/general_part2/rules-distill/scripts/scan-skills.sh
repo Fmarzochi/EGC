@@ -3,22 +3,28 @@
 # Usage: scan-skills.sh [CWD_SKILLS_DIR]
 # Output: JSON to stdout
 #
-# When CWD_SKILLS_DIR is omitted, defaults to $PWD/.gemini/skills so the
-# script always picks up project-level skills without relying on the caller.
+# When CWD_SKILLS_DIR is omitted, defaults to the project skills folder:
+# $PWD/.agents/skills, or the first of the other project tool folders
+# (fixed order, not the tool the session runs inside) that has one.
 #
 # Environment:
-#   RULES_DISTILL_GLOBAL_DIR   Override ~/.gemini/skills (for testing only;
+#   RULES_DISTILL_GLOBAL_DIR   Override the global skills folder of the EGC
+#                              directory in use (for testing only;
 #                              do not set in production: intended for bats tests)
 #   RULES_DISTILL_PROJECT_DIR  Override project dir detection (for testing only)
 
 set -euo pipefail
 
-GLOBAL_DIR="${RULES_DISTILL_GLOBAL_DIR:-$HOME/.gemini/skills}"
-CWD_SKILLS_DIR="${RULES_DISTILL_PROJECT_DIR:-${1:-$PWD/.gemini/skills}}"
-# Validate CWD_SKILLS_DIR looks like a .gemini/skills path (defense-in-depth).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=egc-paths.sh
+source "$SCRIPT_DIR/egc-paths.sh"
+
+GLOBAL_DIR="${RULES_DISTILL_GLOBAL_DIR:-$(egc_global_skills_dir "$SCRIPT_DIR")}"
+CWD_SKILLS_DIR="${RULES_DISTILL_PROJECT_DIR:-${1:-$(egc_project_skills_dir "$PWD")}}"
+# Validate CWD_SKILLS_DIR looks like a skills path (defense-in-depth).
 # Only warn when the path exists: a nonexistent path poses no traversal risk.
-if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "$CWD_SKILLS_DIR" != */.gemini/skills* ]]; then
-  echo "Warning: CWD_SKILLS_DIR does not look like a .gemini/skills path: $CWD_SKILLS_DIR" >&2
+if [[ -n "$CWD_SKILLS_DIR" && -d "$CWD_SKILLS_DIR" && "${CWD_SKILLS_DIR%/}" != */skills ]]; then
+  echo "Warning: CWD_SKILLS_DIR does not look like a skills path: $CWD_SKILLS_DIR" >&2
 fi
 
 # Extract a frontmatter field (handles both quoted and unquoted single-line values).

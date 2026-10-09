@@ -573,12 +573,12 @@ function runTests() {
 
       const geminiRoot = path.join(homeDir, '.gemini');
       // Security skill should be installed (from --with)
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'security-review', 'SKILL.md')),
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'security-review', 'SKILL.md')),
         'Should install security-review skill from --with, where the Antigravity CLI reads it');
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'skills', 'egc')),
         'The skills/egc namespace of the retired Gemini CLI is not written');
       // Core profile modules should be installed
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'rules', 'common-coding-style.md')),
         'Should install core rules');
 
       // Install state should record include/exclude
@@ -614,14 +614,14 @@ function runTests() {
 
       const geminiRoot = path.join(homeDir, '.gemini');
       // Orchestration skills should NOT be installed (from --without)
-      assert.ok(!fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'dmux-workflows', 'SKILL.md')),
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'dmux-workflows', 'SKILL.md')),
         'Should not install orchestration skills');
       // Developer profile base modules should be installed, skills where the
       // Antigravity CLI reads them; nothing under the retired skills/egc
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'rules', 'common-coding-style.md')),
         'Should install core rules');
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'tdd-workflow', 'SKILL.md')),
-        'Should install workflow skills under antigravity-cli/skills');
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'tdd-workflow', 'SKILL.md')),
+        'Should install workflow skills under config/skills');
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'skills', 'egc')),
         'The skills/egc namespace of the retired Gemini CLI is not written');
 
@@ -655,12 +655,12 @@ function runTests() {
 
       const geminiRoot = path.join(homeDir, '.gemini');
       // framework-language skill (from lang:typescript) should be installed
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'skills', 'coding-standards', 'SKILL.md')),
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'skills', 'coding-standards', 'SKILL.md')),
         'Should install framework-language skills where the Antigravity CLI reads them');
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'skills', 'egc')),
         'The skills/egc namespace of the retired Gemini CLI is not written');
       // A skills component does not drag the rules along
-      assert.ok(!fs.existsSync(path.join(geminiRoot, 'rules', 'egc', 'common', 'coding-style.md')),
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'config', 'rules', 'common-coding-style.md')),
         'Should not install rules-core for a skills component');
 
       const statePath = path.join(geminiRoot, 'egc', 'install-state.json');

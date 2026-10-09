@@ -12,8 +12,11 @@ const {
   sanitizeBranchName,
   branchStateKey,
   detectBranch,
+  detectDetachedCommit,
+  resolveHeadState,
   flatStateFile,
   branchStateFile,
+  detachedStateFile,
   legacyBranchStateFile,
   resolveStateRead,
   resolveStateWrite,
@@ -166,6 +169,86 @@ function runTests() {
     const repo = makeGitRepo(null);
     git(repo, 'checkout -q --detach');
     assert.strictEqual(detectBranch(repo), null);
+  }));
+
+  tally(test('detectDetachedCommit returns the commit on detached HEAD, null on a branch or outside a repo', () => {
+    const onBranch = makeGitRepo('feature/auth');
+    assert.strictEqual(detectDetachedCommit(onBranch), null);
+
+    const repo = makeGitRepo(null);
+    git(repo, 'checkout -q --detach');
+    const commit = execSync('git rev-parse HEAD', { cwd: repo, encoding: 'utf8' }).trim();
+    assert.strictEqual(detectDetachedCommit(repo), commit);
+
+    const dir = makeTmpDir('egc-branch-state-norepo-');
+    assert.strictEqual(detectDetachedCommit(dir), null);
+
+    // A truncated or otherwise corrupted HEAD (interrupted checkout, disk
+    // error) must never be treated as a real commit, length in between the
+    // two real object-id sizes included.
+    const corrupted = makeGitRepo(null);
+    git(corrupted, 'checkout -q --detach');
+    fs.writeFileSync(path.join(corrupted, '.git', 'HEAD'), 'a1b2c3d4e5\n');
+    assert.strictEqual(detectDetachedCommit(corrupted), null);
+  }));
+
+  tally(test('resolveHeadState reads .git/HEAD exactly once (one snapshot, not two)', () => {
+    const repo = makeGitRepo(null);
+    git(repo, 'checkout -q --detach');
+    const originalRead = fs.readFileSync;
+    let headReads = 0;
+    fs.readFileSync = function patched(target, ...rest) {
+      // trustedGitPath canonicalizes through realpathSync.native, so on a
+      // host where the temp root itself is a symlink (macOS: /tmp ->
+      // /private/tmp) the path actually read differs from the lexical one
+      // built from `repo`. Matching by basename is immune to that.
+      if (typeof target === 'string' && path.basename(target) === 'HEAD') headReads += 1;
+      return originalRead.call(fs, target, ...rest);
+    };
+    try {
+      resolveHeadState(repo);
+    } finally {
+      fs.readFileSync = originalRead;
+    }
+    assert.strictEqual(headReads, 1, 'detectBranch and detectDetachedCommit must not each read HEAD on their own');
+  }));
+
+  tally(test('detectDetachedCommit accepts a SHA-256 repository commit (64 hex characters)', () => {
+    const repo = makeTmpDir('egc-branch-state-sha256-');
+    execSync('git init -q --object-format=sha256', { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+    git(repo, '-c user.email=test@test -c user.name=test -c commit.gpgsign=false commit -q -m initial --allow-empty');
+    git(repo, 'checkout -q --detach');
+    const commit = execSync('git rev-parse HEAD', { cwd: repo, encoding: 'utf8' }).trim();
+    assert.strictEqual(commit.length, 64);
+    assert.strictEqual(detectDetachedCommit(repo), commit);
+  }));
+
+  tally(test('resolveStateRead and resolveStateWrite isolate detached HEAD by commit, never the shared flat file', () => {
+    const stateDir = makeTmpDir('egc-branch-state-detached-');
+    const project = '/home/user/Projects/my-app';
+    const commitA = 'a'.repeat(40);
+    const commitB = 'b'.repeat(40);
+
+    assert.strictEqual(
+      resolveStateWrite(stateDir, project, null, commitA),
+      detachedStateFile(stateDir, project, commitA)
+    );
+    assert.notStrictEqual(detachedStateFile(stateDir, project, commitA), flatStateFile(stateDir, project));
+    assert.notStrictEqual(detachedStateFile(stateDir, project, commitA), detachedStateFile(stateDir, project, commitB));
+
+    writeState(flatStateFile(stateDir, project), 'flat state, shared by every non-branch checkout');
+    writeState(detachedStateFile(stateDir, project, commitA), 'detached state for commit A');
+
+    const resolvedA = resolveStateRead(stateDir, project, null, commitA);
+    assert.strictEqual(resolvedA.source, 'detached');
+    assert.strictEqual(resolvedA.filePath, detachedStateFile(stateDir, project, commitA));
+
+    const resolvedB = resolveStateRead(stateDir, project, null, commitB);
+    assert.strictEqual(resolvedB.source, 'none', 'a different detached commit never inherits another one\'s state');
+    assert.strictEqual(resolvedB.filePath, detachedStateFile(stateDir, project, commitB));
+
+    const withoutDetached = resolveStateRead(stateDir, project, null);
+    assert.strictEqual(withoutDetached.source, 'flat', 'omitting detachedCommit keeps reading the flat file, e.g. outside any git repo');
   }));
 
   tally(test('flatStateFile and branchStateFile build expected paths', () => {
@@ -322,6 +405,27 @@ function runTests() {
     assert.strictEqual(result.status, 0);
     const output = JSON.parse(result.stdout);
     assert.ok(output.promptForAssistant.includes('BRANCH_MARKER_137'));
+    assert.ok(!output.promptForAssistant.includes('FLAT_MARKER_137'));
+  }));
+
+  tally(test('egc-memory-load hook injects the detached-commit state, never the flat state', () => {
+    const home = makeTmpDir('egc-branch-state-home4b-');
+    const repo = makeGitRepo(null);
+    git(repo, 'checkout -q --detach');
+    const commit = execSync('git rev-parse HEAD', { cwd: repo, encoding: 'utf8' }).trim();
+    writeState(detachedStateFile(getStateDir(home), repo, commit), 'DETACHED_MARKER_137');
+    writeState(flatStateFile(getStateDir(home), repo), 'FLAT_MARKER_137');
+
+    const result = spawnSync('node', [HOOK_PATH], {
+      input: '{}',
+      encoding: 'utf8',
+      env: Object.assign({}, process.env, { HOME: home, USERPROFILE: home, PWD: repo }),
+      cwd: repo,
+    });
+
+    assert.strictEqual(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    assert.ok(output.promptForAssistant.includes('DETACHED_MARKER_137'));
     assert.ok(!output.promptForAssistant.includes('FLAT_MARKER_137'));
   }));
 

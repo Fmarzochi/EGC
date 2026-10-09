@@ -10,12 +10,20 @@ function resolveProjectRoot(options = {}) {
   return path.resolve(options.projectRoot || options.cwd || process.cwd());
 }
 
+// The telemetry of a project lives in its .egc folder, the tool-neutral
+// home of what EGC writes next to the code.
 function getSkillTelemetryRoot(options = {}) {
-  return path.join(resolveProjectRoot(options), '.gemini', 'egc', 'skills');
+  return path.join(resolveProjectRoot(options), '.egc', 'skills');
 }
 
 function getSkillObservationsPath(options = {}) {
   return path.join(getSkillTelemetryRoot(options), 'observations.jsonl');
+}
+
+// Observations recorded before the folder moved out of the fixed .gemini
+// are read from there and never written again.
+function getLegacySkillObservationsPath(options = {}) {
+  return path.join(resolveProjectRoot(options), '.gemini', 'egc', 'skills', 'observations.jsonl');
 }
 
 function ensureString(value, label) {
@@ -78,13 +86,16 @@ function appendSkillObservation(observation, options = {}) {
   return outputPath;
 }
 
-function readSkillObservations(options = {}) {
-  const observationPath = path.resolve(options.observationsPath || getSkillObservationsPath(options));
-  if (!fs.existsSync(observationPath)) {
+function readObservationFile(observationPath) {
+  let content;
+  try {
+    content = fs.readFileSync(observationPath, 'utf8');
+  } catch {
+    // A missing, unreadable or stale file means no observations, not a crash.
     return [];
   }
 
-  return fs.readFileSync(observationPath, 'utf8')
+  return content
     .split(/\r?\n/)
     .filter(Boolean)
     .map(line => {
@@ -95,6 +106,34 @@ function readSkillObservations(options = {}) {
       }
     })
     .filter(record => record?.schemaVersion === OBSERVATION_SCHEMA_VERSION);
+}
+
+// A record copied from the old file into the new one counts once; the first
+// occurrence (the older file) wins.
+function dedupeObservations(records) {
+  const seen = new Set();
+  return records.filter(record => {
+    const key = typeof record.observationId === 'string' ? record.observationId : null;
+    if (key === null) {
+      return true;
+    }
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function readSkillObservations(options = {}) {
+  if (options.observationsPath) {
+    return readObservationFile(path.resolve(options.observationsPath));
+  }
+
+  return dedupeObservations([
+    ...readObservationFile(getLegacySkillObservationsPath(options)),
+    ...readObservationFile(getSkillObservationsPath(options))
+  ]);
 }
 
 module.exports = {

@@ -2,7 +2,7 @@
   "min_session_length": 10,
   "extraction_threshold": "medium",
   "auto_approve": false,
-  "learned_skills_path": "~/.gemini/skills/learned/",
+  "learned_skills_path": null,
   "patterns_to_detect": [
     "error_resolution",
     "user_corrections",

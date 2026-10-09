@@ -2,8 +2,10 @@ const { createInstallTargetAdapter, createRemappedOperation } = require('./helpe
 const { createOpenHandsGuardianOperations } = require('../openhands-guardian-operations');
 
 // EGC-498 (corrected): confirmed against OpenHands/docs' own hooks.mdx
-// that .openhands/hooks.json is project-only (no global/home path
-// documented) -- this adapter installs ONLY the Guardian hook there. No
+// that hooks live in .openhands/hooks.json; OpenHands also reads a global
+// ~/.openhands/hooks.json when the project has none, which EGC does not
+// write yet (see docs/spec/integration-tiers.md). This adapter installs
+// ONLY the Guardian hook in the project file. No
 // skill scaffold here: OpenHands skill discovery already happens via
 // openhands-home.js's shared ~/.agents/skills/ root, and inventing a
 // second, project-scoped skill path was never part of this integration's

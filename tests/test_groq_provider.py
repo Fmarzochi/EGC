@@ -145,6 +145,19 @@ def test_get_default_model_returns_groq_model_when_resolver_bleeds(monkeypatch: 
 
 
 @pytest.mark.unit
+def test_get_default_model_honors_an_unregistered_groq_vendor_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Groq model not yet in the registry (vendor/model shape, same as
+    OpenRouter's) must still be returned, not silently replaced by the
+    hardcoded default."""
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.setenv("LLM_MODEL", "openai/gpt-oss-20b")
+    with patch("llm.providers.groq.OpenAI") as mock_openai:
+        mock_openai.return_value = MagicMock()
+        p = GroqProvider()
+    assert p.get_default_model() == "openai/gpt-oss-20b"
+
+
+@pytest.mark.unit
 def test_native_sdk_exception_is_retagged_as_groq(provider: GroqProvider) -> None:
     """Raw SDK exceptions that bypass OpenAIProvider wrapping must still
     surface as LLMError with provider=GROQ, not as bare SDK errors."""

@@ -140,6 +140,24 @@ class TestDefaultModel:
         monkeypatch.setenv("LLM_MODEL", "gpt-5")
         assert ModelResolver.resolve(None, "openai") == "gpt-5"
 
+    def test_env_model_of_an_unregistered_groq_vendor_model_is_honored(self, monkeypatch):
+        # Groq and OpenRouter both host "vendor/model" IDs; a Groq model not
+        # yet in the registry must not be mistaken for an OpenRouter one and
+        # silently dropped in favor of the provider default.
+        monkeypatch.setenv("LLM_MODEL", "openai/gpt-oss-20b")
+        assert ModelResolver.default_model("groq") == "openai/gpt-oss-20b"
+
+    def test_env_model_of_another_provider_is_still_ignored_for_groq(self, monkeypatch):
+        monkeypatch.setenv("LLM_MODEL", "claude-opus-9")
+        assert ModelResolver.default_model("groq") == "openai/gpt-oss-120b"
+
+    def test_env_model_of_an_unregistered_groq_native_id_is_honored(self, monkeypatch):
+        # Not every Groq model id has a "/"; a plain native id (no other
+        # provider's shape rule matches it either) must not default to
+        # gemini just because it fell through every specific shape check.
+        monkeypatch.setenv("LLM_MODEL", "llama-3.3-70b-versatile")
+        assert ModelResolver.default_model("groq") == "llama-3.3-70b-versatile"
+
 
 @pytest.mark.unit
 class TestProviderDetection:
@@ -322,6 +340,16 @@ class TestDescribeStrategy:
         info = ModelResolver.describe_strategy()
         assert info["strategy"] == "Pinned via environment"
         assert info["resolved_model"] == "gemini-2.5-flash"
+
+    def test_reports_the_real_provider_for_an_unregistered_groq_native_id(self, monkeypatch):
+        # Regression: describe_strategy used to report "gemini" for a model
+        # that default_model had already correctly pinned to groq, because
+        # the provider hint never reached the second _provider_for call.
+        monkeypatch.setenv("LLM_MODEL", "llama-3.3-70b-versatile")
+        info = ModelResolver.describe_strategy(provider="groq")
+        assert info["provider_id"] == "groq"
+        assert info["resolved_model"] == "llama-3.3-70b-versatile"
+        assert info["strategy"] == "Pinned via environment"
 
     def test_preferred_capability_code_and_general(self, monkeypatch):
         monkeypatch.setattr(ModelResolver, "_REGISTRY", {

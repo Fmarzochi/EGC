@@ -72,10 +72,9 @@ function parentOf(filePath) {
 }
 
 // Where each target keeps its agent and command files: agents/ and
-// commands/ everywhere, except that Antigravity reads agents from its flat
-// skills folder and commands from workflows/. Cursor prefixes the agent
-// file name with egc-.
-const AGENT_DIRS = { default: ['agents'], antigravity: ['skills'] };
+// commands/ everywhere, except that Antigravity reads commands from
+// workflows/. Cursor prefixes the agent file name with egc-.
+const AGENT_DIRS = { default: ['agents'] };
 const COMMAND_DIRS = { default: ['commands', 'command'], antigravity: ['workflows'] };
 
 // What lands in the tool, indexed the way each family is discovered: an

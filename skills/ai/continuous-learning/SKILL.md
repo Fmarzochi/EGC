@@ -12,7 +12,7 @@ Automatically evaluates AI coding sessions on end to extract reusable patterns t
 
 - Setting up automatic pattern extraction from AI coding sessions
 - Configuring the Stop hook for session evaluation
-- Reviewing or curating learned skills in `~/.gemini/skills/learned/`
+- Reviewing or curating learned skills in `skills/learned/` of the EGC directory in use (`~/.claude/skills/learned/` inside Claude Code)
 - Adjusting extraction thresholds or pattern categories
 - Comparing v1 (this) vs v2 (instinct-based) approaches
 
@@ -26,18 +26,18 @@ This skill runs as a **Stop hook** at the end of each session:
 
 1. **Session Evaluation**: Checks if session has enough messages (default: 10+)
 2. **Pattern Detection**: Identifies extractable patterns from the session
-3. **Skill Extraction**: Saves useful patterns to `~/.gemini/skills/learned/`
+3. **Skill Extraction**: Saves useful patterns to `skills/learned/` of the EGC directory in use
 
 ## Configuration
 
-Edit `config.json` to customize:
+Edit `config.json` to customize. `learned_skills_path` is `null` by default: the skills land in `skills/learned/` of the EGC directory in use (`EGC_DIR`, else the directory of the tool the hook runs inside); set it to a path to pin one folder for every tool.
 
 ```json
 {
   "min_session_length": 10,
   "extraction_threshold": "medium",
   "auto_approve": false,
-  "learned_skills_path": "~/.gemini/skills/learned/",
+  "learned_skills_path": null,
   "patterns_to_detect": [
     "error_resolution",
     "user_corrections",
@@ -65,7 +65,7 @@ Edit `config.json` to customize:
 
 ## Hook Setup
 
-Add to your `~/.gemini/settings.json`:
+Add to the hook settings of your tool, with the path the skill was installed under (example for Claude Code, `~/.claude/settings.json`):
 
 ```json
 {
@@ -74,7 +74,7 @@ Add to your `~/.gemini/settings.json`:
       "matcher": "*",
       "hooks": [{
         "type": "command",
-        "command": "~/.gemini/skills/continuous-learning/evaluate-session.sh"
+        "command": "~/.claude/skills/continuous-learning/evaluate-session.sh"
       }]
     }]
   }

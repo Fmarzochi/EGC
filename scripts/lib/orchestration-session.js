@@ -263,12 +263,43 @@ function resolveSnapshotTarget(targetPath, cwd = process.cwd()) {
     };
   }
 
+  const coordinationDir = resolveSessionCoordinationDir(targetPath, cwd);
+  if (coordinationDir === null) {
+    throw new Error(`session name "${targetPath}" must be a plain folder name`);
+  }
+
   return {
     sessionName: targetPath,
-    coordinationDir: path.join(cwd, '.gemini', 'orchestration', targetPath),
+    coordinationDir,
     repoRoot: cwd,
     targetType: 'session'
   };
+}
+
+// A session name is one folder name: no separators, no traversal, so it can
+// never leave the coordination root.
+function isPlainSessionName(sessionName) {
+  return typeof sessionName === 'string'
+    && sessionName.length > 0
+    && sessionName !== '.'
+    && sessionName !== '..'
+    && path.basename(sessionName) === sessionName;
+}
+
+// A session named on the command line lives under the root the orchestrator
+// writes (.orchestration, or EGC_ARTIFACTS_DIR when it is set, joined to the
+// repository as tmux-worktree-orchestrator.js joins it). A session written
+// before that root moved out of the fixed .gemini is still found where it
+// is. Null when the name is not a plain folder name.
+function resolveSessionCoordinationDir(sessionName, cwd = process.cwd()) {
+  if (!isPlainSessionName(sessionName)) {
+    return null;
+  }
+
+  const root = process.env.EGC_ARTIFACTS_DIR || '.orchestration';
+  const current = path.resolve(path.join(cwd, root, sessionName));
+  const legacy = path.resolve(path.join(cwd, '.gemini', 'orchestration', sessionName));
+  return !fs.existsSync(current) && fs.existsSync(legacy) ? legacy : current;
 }
 
 function collectSessionSnapshot(targetPath, cwd = process.cwd()) {
@@ -296,5 +327,6 @@ module.exports = {
   parseWorkerHandoff,
   parseWorkerStatus,
   parseWorkerTask,
+  resolveSessionCoordinationDir,
   resolveSnapshotTarget
 };
