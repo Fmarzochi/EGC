@@ -1354,6 +1354,9 @@ const CREDENTIAL_STORES = [
   '.local/share/com.vercel.cli', '.config/configstore/firebase-tools.json', '.cache/huggingface/token',
   '.huggingface/token', '.config/composer/auth.json', '.composer/auth.json', '.kaggle', '.oci',
   '.pulumi/credentials.json', '.config/ngrok', '.config/stripe', '.config/sops/age', '.supabase/access-token', '.railway',
+  // CodeBuddy keeps the API key of each configured model in models.json; its
+  // settings.json neighbor (hooks, non-secret preferences) stays free.
+  '.codebuddy/models.json',
   // Browser profiles: saved passwords and session cookies.
   '.mozilla/firefox', '.config/google-chrome', '.config/chromium', '.config/BraveSoftware', '.config/microsoft-edge',
   // macOS: the keychains, and the same tools and browsers under Application Support.
@@ -1406,7 +1409,11 @@ export function buildDeniedPaths(): string[] {
     paths.push(
       path.join(userProfile, '.ssh'),
       path.join(userProfile, '.aws'),
-      appData,
+      // %APPDATA% is shared by many unrelated apps, including EGC's own
+      // targets (Antigravity, VS Code Copilot). Deny only the Devin Desktop
+      // credentials file; its config.json and cli/sessions.db neighbors are
+      // not secret.
+      path.join(appData, 'devin', 'credentials.toml'),
       ...browsers,
       path.join(programFiles, 'Git', 'etc'),
       path.join(localAppData, 'Programs', 'Git', 'etc'),

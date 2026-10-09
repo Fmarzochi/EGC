@@ -398,6 +398,22 @@ function emitInstallResult(options, result) {
   }
 }
 
+// Writing as root leaves every config file, hook and state directory
+// owned by root in a home that belongs to a regular user; the next
+// EGC run (not elevated) cannot read or overwrite what this one wrote.
+// On Linux and macOS process.getuid exists and is 0 only for root; on
+// Windows it is undefined and this check is a no-op there. --dry-run
+// writes nothing, so it is exempt; EGC_ALLOW_ROOT opts out for a
+// container image built and provisioned as root by design.
+function refuseRootUnlessDryRun(options) {
+  if (options.dryRun || process.env.EGC_ALLOW_ROOT) return;
+  if (typeof process.getuid !== 'function' || process.getuid() !== 0) return;
+  console.error('Error: refusing to install as root.');
+  console.error('Files written as root are owned by root in your home directory; your own account cannot read or update them afterwards.');
+  console.error('Run this installer as the regular user. If this is a container provisioned as root by design, set EGC_ALLOW_ROOT=1.');
+  process.exit(1);
+}
+
 function main() {
   try {
     const options = parseInstallArgs(process.argv);
@@ -405,6 +421,8 @@ function main() {
     if (options.help) {
       showHelp(0);
     }
+
+    refuseRootUnlessDryRun(options);
 
     const {
       findDefaultInstallConfigPath,
