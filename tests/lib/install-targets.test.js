@@ -2241,7 +2241,7 @@ function runTests() {
     assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(projectRoot, '.amp', 'skills'))), 'nothing is planned under .amp/skills');
     assert.deepStrictEqual(
       plan.managedRoots,
-      [path.join(projectRoot, '.amp'), path.join(projectRoot, '.agents')],
+      [path.resolve(projectRoot, '.amp'), path.resolve(projectRoot, '.agents')],
       'the project .agents root is managed, shared with the antigravity project target'
     );
   }));
