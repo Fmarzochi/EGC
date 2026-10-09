@@ -442,10 +442,14 @@ if (fs.existsSync(cliPath)) {
   const { spawnSync } = require('node:child_process');
 
   function runCli(mode, input, home) {
+    // os.homedir() (the plain, un-wrapped call writeAuditEntry and the
+    // validator both make) ignores HOME on Windows and reads USERPROFILE
+    // instead; setting only HOME here made every write land in the real
+    // runner profile rather than this temp dir, so both must be pinned.
     const result = spawnSync(process.execPath, [cliPath, mode], {
       input,
       encoding: 'utf8',
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, USERPROFILE: home },
       timeout: 15000,
     });
     return { stdout: result.stdout, auditLog: path.join(home, '.egc', 'audit.log') };
