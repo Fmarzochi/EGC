@@ -568,6 +568,127 @@ function runTests() {
     }
   }));
 
+  tally(test('an upgrade moves the managed Copilot skills from ~/.github/skills to ~/.copilot/skills and keeps the person\'s files (#1672)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const args = ['--target', 'copilot', '--profile', 'core', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const copilotSkills = path.join(homeDir, '.copilot', 'skills');
+      const githubSkills = path.join(homeDir, '.github', 'skills');
+      const statePath = path.join(homeDir, '.github', 'egc', 'install-state.json');
+      assert.ok(!fs.existsSync(githubSkills), 'a fresh install writes nothing under ~/.github/skills');
+      const state = readJson(statePath);
+      const moved = [];
+      for (const operation of state.operations) {
+        if (!operation.destinationPath.startsWith(copilotSkills + path.sep)) continue;
+        const legacy = path.join(githubSkills, path.relative(copilotSkills, operation.destinationPath));
+        fs.mkdirSync(path.dirname(legacy), { recursive: true });
+        fs.copyFileSync(path.join(repoRoot, operation.sourceRelativePath), legacy);
+        moved.push({ current: operation.destinationPath, legacy });
+        operation.destinationPath = legacy;
+        delete operation.contentSha256;
+      }
+      assert.ok(moved.length > 10, 'the core profile installs skills');
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      fs.rmSync(copilotSkills, { recursive: true, force: true });
+      const [edited, ...untouched] = moved;
+      fs.writeFileSync(edited.legacy, 'edited by hand');
+      const ownLegacy = path.join(githubSkills, 'my-skill', 'SKILL.md');
+      fs.mkdirSync(path.dirname(ownLegacy), { recursive: true });
+      fs.writeFileSync(ownLegacy, '# mine');
+      const ownCurrent = path.join(copilotSkills, 'mine', 'SKILL.md');
+      fs.mkdirSync(path.dirname(ownCurrent), { recursive: true });
+      fs.writeFileSync(ownCurrent, '---\nname: mine\ndescription: mine\n---\n');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      for (const { current } of moved) {
+        assert.ok(fs.existsSync(current), `${current} is written under ~/.copilot/skills`);
+      }
+      for (const { legacy } of untouched) {
+        assert.ok(!fs.existsSync(legacy), `the managed ${legacy} is retired`);
+      }
+      assert.strictEqual(fs.readFileSync(edited.legacy, 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      assert.strictEqual(fs.readFileSync(ownLegacy, 'utf8'), '# mine', 'the person\'s own skill under ~/.github/skills stays');
+      assert.strictEqual(fs.readFileSync(ownCurrent, 'utf8'), '---\nname: mine\ndescription: mine\n---\n', 'the person\'s own skill under ~/.copilot/skills stays');
+      const recorded = readJson(statePath).operations.map(operation => operation.destinationPath);
+      assert.ok(recorded.some(destination => destination.startsWith(copilotSkills + path.sep)), 'the state records the ~/.copilot/skills copies');
+      assert.ok(!recorded.some(destination => destination.startsWith(githubSkills + path.sep)), 'and no ~/.github/skills copy any more');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  if (process.platform !== 'win32') {
+    tally(test('a linked skill or a linked ~/.copilot/skills is left alone and the Copilot install still completes (#1672)', () => {
+      for (const scenario of ['skill', 'directory']) {
+        const homeDir = createTempDir('install-apply-home-');
+        const projectDir = createTempDir('install-apply-project-');
+        const outside = createTempDir('install-apply-outside-');
+        try {
+          const copilotSkills = path.join(homeDir, '.copilot', 'skills');
+          fs.mkdirSync(path.join(homeDir, '.copilot'), { recursive: true });
+          if (scenario === 'skill') {
+            fs.mkdirSync(copilotSkills, { recursive: true });
+            fs.mkdirSync(path.join(outside, 'tdd-workflow'));
+            fs.writeFileSync(path.join(outside, 'tdd-workflow', 'SKILL.md'), '# mine');
+            fs.symlinkSync(path.join(outside, 'tdd-workflow'), path.join(copilotSkills, 'tdd-workflow'), 'dir');
+          } else {
+            fs.symlinkSync(outside, copilotSkills, 'dir');
+          }
+
+          const result = run(['--target', 'copilot', '--profile', 'core', '--allow-undetected'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+          assert.strictEqual(result.code, 0, `${scenario}: ${result.stderr}`);
+          assert.ok(fs.lstatSync(scenario === 'skill' ? path.join(copilotSkills, 'tdd-workflow') : copilotSkills).isSymbolicLink(), `${scenario}: the link stays a link`);
+          if (scenario === 'skill') {
+            assert.strictEqual(fs.readFileSync(path.join(outside, 'tdd-workflow', 'SKILL.md'), 'utf8'), '# mine', 'what the link points at is untouched');
+            assert.ok(fs.readdirSync(copilotSkills).length > 1, 'the other skills are installed');
+          } else {
+            assert.deepStrictEqual(fs.readdirSync(outside), [], 'nothing is written through the linked directory');
+          }
+          assert.ok(fs.existsSync(path.join(homeDir, '.copilot', 'hooks', 'hooks.json')), `${scenario}: the rest of the install completes`);
+        } finally {
+          cleanup(homeDir);
+          cleanup(projectDir);
+          cleanup(outside);
+        }
+      }
+    }));
+  }
+
+  tally(test('a skill the person keeps under ~/.copilot/skills with the name of an EGC skill is never overwritten (#1672)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'copilot', '--profile', 'core', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const copilotSkills = path.join(homeDir, '.copilot', 'skills');
+      const own = path.join(copilotSkills, 'tdd-workflow', 'SKILL.md');
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, '# mine');
+
+      for (const pass of ['install', 'reinstall']) {
+        const result = run(args, { cwd: projectDir, homeDir, env });
+        assert.strictEqual(result.code, 0, `${pass}: ${result.stderr}`);
+        assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', `${pass}: the person's tdd-workflow stays theirs`);
+      }
+      const recorded = readJson(path.join(homeDir, '.github', 'egc', 'install-state.json')).operations.map(operation => operation.destinationPath);
+      assert.ok(!recorded.some(destination => destination.startsWith(path.join(copilotSkills, 'tdd-workflow') + path.sep)), 'the person\'s skill is never recorded as managed');
+      assert.ok(recorded.some(destination => destination.startsWith(copilotSkills + path.sep)), 'the other skills still land under ~/.copilot/skills');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
   tally(test('a skill the person keeps under config/skills with the name of an EGC command is never overwritten (#1706)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');

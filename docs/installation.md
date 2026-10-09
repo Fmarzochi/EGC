@@ -28,7 +28,7 @@ npm install -g @egchq/egc
 egc install --target copilot
 ```
 
-The Copilot target installs EGC skills under `~/.github/skills/`. VS Code Copilot discovers that directory automatically.
+The Copilot target installs EGC skills under `~/.copilot/skills/`, one of the directories VS Code Copilot reads personal skills from, so it discovers them automatically. An install made before this change left them under `~/.github/skills/`, which VS Code does not read; the next `egc install --target copilot` (or `egc auto-update`) moves the copies EGC wrote and leaves your own files there alone.
 
 Memory is shared across EGC targets. Context saved while using Copilot is the same state used by Claude Code, Cursor, Antigravity, Devin Desktop, and the rest of the supported tools.
 
