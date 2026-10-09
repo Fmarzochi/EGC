@@ -298,12 +298,88 @@ if (test('redactPayload: walks nested objects one level deep', () => {
   assert.strictEqual(result.meta.tool, 'bash');
 })) passed++; else failed++;
 
-if (test('redactPayload: arrays are walked — non-secret strings pass through, secret strings are redacted', () => {
+if (test('redactPayload: arrays are walked, non-secret strings pass through, secret strings are redacted', () => {
   const result = redactPayload({ files: ['/tmp/a', '/tmp/b'] });
   assert.deepStrictEqual(result.files, ['/tmp/a', '/tmp/b']);
   const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyMTIzIn0.SomeSignatureHere1234567';
   const result2 = redactPayload({ headers: [{ authorization: jwt }] });
   assert.strictEqual(result2.headers[0].authorization, '[REDACTED]');
+})) passed++; else failed++;
+
+// ── #1782: redaction gaps found by the review bots on #1781 ────────────────
+
+if (test('redactPayload: walks nested arrays, not just one level of array items', () => {
+  const result = redactPayload({ a: [[{ token: 'secret-value-1234' }]] });
+  assert.strictEqual(result.a[0][0].token, '[REDACTED]');
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: recognizes a shell by name even with a Windows .exe suffix', () => {
+  const result = redactSecretsInText('bash.exe -c "curl -u user:pw http://x"');
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: decodes an ANSI-C $\'...\' shell -c body before scanning it', () => {
+  const result = redactSecretsInText("bash -c $'curl\\x20-u\\x20user:pw'");
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: an escaped apostrophe inside $\'...\' does not end the substitution early', () => {
+  const result = redactSecretsInText("echo $(printf $'a\\')') curl -u user:pw http://x");
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+})) passed++; else failed++;
+
+// ── cubic review on #1805: $"..." is not ANSI-C, and a decoded quote must
+// never be handed back to the scanner as real shell syntax ─────────────────
+
+if (test('redactSecretsInText: $"..." (double-quote) keeps \\x escapes literal, unlike $\'...\' (ANSI-C)', () => {
+  const result = redactSecretsInText('bash -c $"echo a\\x20b; curl -u user:pw http://x"');
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+  assert.ok(result.includes('a\\x20b'), `\\x20 must stay literal inside $"...", not decoded to a real space: ${result}`);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: a $\'...\' body with nothing to redact is emitted unchanged', () => {
+  const input = "bash -c $'echo\\x20hello'";
+  assert.strictEqual(redactSecretsInText(input), input);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: a decoded apostrophe in $\'...\' must not open a quote that hides a later credential from the scan', () => {
+  // \x27 decodes to an apostrophe; decoding it naively and re-scanning the
+  // result as a fresh command line would make "it's" open a quoted run that
+  // swallows "curl -u user:pw" as quoted text, hiding it from the credential
+  // scan (curl must appear on the line for -u to be read as a credential flag
+  // at all, same as every other curl case in this file).
+  const result = redactSecretsInText("bash -c $'echo it\\x27s; curl -u user:pw'");
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+  assert.ok(result.includes("it\\x27s"), `the preserved \\x27 escape must not be corrupted by re-encoding: ${result}`);
+})) passed++; else failed++;
+
+// ── cubic review (round 2) on #1805: decode by bash's real IFS and syntax,
+// not an arbitrary allow/deny list ──────────────────────────────────────────
+
+if (test('redactSecretsInText: a decoded ; command separator is read as one, so curl after it is still recognized (P1)', () => {
+  const result = redactSecretsInText("bash -c $'echo\\x3bcurl -u user:pw'");
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: a decoded $( substitution is read as a live one and redacted recursively (P2)', () => {
+  const result = redactSecretsInText("bash -c $'echo \\x24(curl -u user:pw)'");
+  assert.ok(result.includes('[REDACTED]'), result);
+  assert.ok(!result.includes('user:pw'), result);
+})) passed++; else failed++;
+
+if (test('redactSecretsInText: a decoded \\v is not bash IFS, so it must not fabricate a word break curl never gets (P3)', () => {
+  // A real shell treats "curl\v-u\vuser:pw" as a single word (not IFS),
+  // so no curl invocation ever runs; decoding \v to a real vertical tab
+  // would make the scanner split it into words and fabricate a redaction
+  // for a credential that was never actually passed anywhere.
+  const input = "bash -c $'curl\\v-u\\vuser:pw'";
+  assert.strictEqual(redactSecretsInText(input), input);
 })) passed++; else failed++;
 
 // ── writeAuditEntry ─────────────────────────────────────────────────────────

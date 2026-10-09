@@ -107,10 +107,10 @@ function fromMcpConfigs() {
 
 // Codex CLI (~/.codex/config.toml) is the only supported target that
 // registers MCP servers in TOML, not JSON (scripts/lib/mcp-register.js's
-// registerToml()). @iarna/toml is a devDependency only -- it never ships in
-// the published package -- and this file is copied standalone into install
-// targets with no node_modules of its own (createBashGuardianScriptCopyOperations),
-// so it cannot require() any TOML library. This is a minimal, hand-rolled
+// registerToml()). @iarna/toml is a runtime dependency now (D31 C29), but
+// this file is still copied standalone into install targets with no
+// node_modules of its own (createBashGuardianScriptCopyOperations), so it
+// still cannot require() any TOML library there. This is a minimal, hand-rolled
 // reader scoped to exactly the shape registerToml() writes: repeated
 // [[mcp_servers]] blocks with name/command/args keys. It is not a general
 // TOML parser -- unrecognized syntax is simply skipped, never thrown, so a
