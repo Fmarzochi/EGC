@@ -23,6 +23,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { findProjectRoot, detectFormatter, resolveFormatterBin } = require('../lib/resolve-formatter');
+const { readFileNoFollow } = require('../lib/no-follow-accumulator');
 
 const MAX_STDIN = 1024 * 1024;
 // Total ms budget reserved for all batches (leaves headroom below the 300s Stop timeout)
@@ -161,31 +162,16 @@ function groupByTsConfigDir(files) {
   return byTsConfigDir;
 }
 
-// Opens the exact accumulator path with O_NOFOLLOW (a no-op on Windows,
-// where the flag does not exist) so a symlink planted at that predictable
-// path in the shared temp dir is refused instead of read through, mirroring
-// the write-side guard in post-edit-accumulator.js.
-const NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
-
-function readAccumulatorNoFollow(accumFile) {
-  let fd;
-  try {
-    fd = fs.openSync(accumFile, fs.constants.O_RDONLY | NOFOLLOW_FLAG);
-    return fs.readFileSync(fd, 'utf8');
-  } finally {
-    if (fd !== undefined) fs.closeSync(fd);
-  }
-}
-
 function main() {
   const accumFile = getAccumFile();
 
-  let raw;
-  try {
-    raw = readAccumulatorNoFollow(accumFile);
-  } catch {
-    return;
-  }
+  // Refuses a symlinked final component and a non-regular object planted
+  // at the path (mirroring the write-side guard in
+  // post-edit-accumulator.js), returning null for a missing file exactly
+  // like every other failure, so a Stop call with nothing to process is
+  // indistinguishable from one that refused an unsafe accumulator.
+  const raw = readFileNoFollow(accumFile);
+  if (raw === null) return;
 
   try { fs.unlinkSync(accumFile); } catch {
     // Intentional: accumulator file may already be gone if another runner consumed it.

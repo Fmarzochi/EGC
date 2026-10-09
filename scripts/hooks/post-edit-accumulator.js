@@ -15,9 +15,9 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { appendLineNoFollow } = require('../lib/no-follow-accumulator');
 
 const MAX_STDIN = 1024 * 1024;
 
@@ -38,32 +38,20 @@ function getAccumFile() {
  */
 const JS_TS_EXT = /\.(ts|tsx|js|jsx)$/;
 
-const NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
-
 // The accumulator's name is predictable (derived from EGC_SESSION_ID or a
 // hash of cwd) and lives in the world-writable system temp dir, so another
 // local process could plant a symlink at that path ahead of the first
-// write, redirecting every append into a file this process never intended
-// to touch. O_NOFOLLOW refuses that outright (a no-op on Windows, where the
-// flag is unsupported and symlink planting in %TEMP% is not the same
-// threat model); the explicit 0o600 mode does not rely on the process
-// umask to keep the list of edited paths private. A path containing a
-// newline is dropped rather than written: stop-format-typecheck.js parses
-// the accumulator one path per line, so embedding one would let a single
-// malformed path masquerade as two, injecting an arbitrary extra entry
-// that the Stop hook would later run the formatter's --write against.
+// write, or simply pre-create it as an ordinary file (no O_CREAT race to
+// win for that), redirecting or exposing every append. appendLineNoFollow
+// refuses both: a symlinked final component, and (via its uid check) a
+// file this process does not own. A path containing a newline is dropped
+// rather than written: stop-format-typecheck.js parses the accumulator one
+// path per line, so embedding one would let a single malformed path
+// masquerade as two, injecting an arbitrary extra entry that the Stop hook
+// would later run the formatter's --write against.
 function appendPath(filePath) {
   if (!filePath || !JS_TS_EXT.test(filePath) || /[\r\n]/.test(filePath)) return;
-  let fd;
-  try {
-    fd = fs.openSync(getAccumFile(), fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | NOFOLLOW_FLAG, 0o600);
-    fs.writeSync(fd, filePath + '\n', null, 'utf8');
-  } catch {
-    // Best-effort accumulator: a symlinked path, a permission error or a
-    // full disk should never block the edit this hook is piggybacking on.
-  } finally {
-    if (fd !== undefined) fs.closeSync(fd);
-  }
+  appendLineNoFollow(getAccumFile(), filePath + '\n');
 }
 
 /**

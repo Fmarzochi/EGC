@@ -235,11 +235,15 @@ if (test('stop hook passes stdin through unchanged', () => {
 console.log('\npost-edit-accumulator: C12 hardening\n=====================================\n');
 
 if (process.platform !== 'win32') {
-  if (test('the accumulator file is created with mode 0600, not the process umask', () => {
+  if (test('the accumulator file is created with no group/other access, not the process umask', () => {
     cleanAccumFile();
     accumulator.run(JSON.stringify({ tool_input: { file_path: '/tmp/x.ts' } }));
     const mode = fs.statSync(getAccumFile()).mode & 0o777;
-    assert.strictEqual(mode, 0o600, `expected 0600, got ${mode.toString(8)}`);
+    // openSync still ANDs the requested 0600 against the process umask, so
+    // a stricter umask (e.g. 0077, or 0777 in some CI sandboxes) yields a
+    // stricter, still-private mode -- 0600 exactly is not guaranteed, no
+    // group/other access is the actual property this test protects.
+    assert.strictEqual(mode & 0o077, 0, `expected no group/other access, got ${mode.toString(8)}`);
     cleanAccumFile();
   })) passed++; else failed++;
 }
