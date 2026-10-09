@@ -216,6 +216,21 @@ const bump = file => {
     assert.deepStrictEqual(await holder, { ran: true, value: 'done' });
   });
 
+  await run('an import of an export alias or a default resolves to the real symbol, not just the file', async () => {
+    const root = project({
+      'lib.js': 'function foo() { return 1; }\nexport { foo as bar };\nexport default function make() { return 2; }\n',
+      'main.js': "import { bar } from './lib.js';\nimport made from './lib.js';\nexport function run() { return bar() + made(); }\n"
+    });
+    const store = await open();
+    await buildGraph(root, store);
+    const data = await store.load();
+    const id = name => data.symbols.find(s => s.name === name).id;
+    const hasRef = (from, to) => data.edges.some(e => e.kind === 'ref' && e.src === `s:${id(from)}` && e.dst === `s:${id(to)}`);
+    assert.ok(hasRef('run', 'foo'), 'bar should lead to foo');
+    assert.ok(hasRef('run', 'make'), 'the default import should lead to make');
+    await store.close();
+  });
+
   await run('deleting a file removes its rows and edges', async () => {
     const root = project({
       'a.js': "import { b } from './b.js';\nexport function a() { return b(); }\n",

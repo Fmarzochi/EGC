@@ -45,7 +45,8 @@ const ES = [
 
 run('ES imports and re-exports', () => {
   const r = extractFile(ES);
-  assert.deepStrictEqual(r.imports.map(i => i.specifier), ['./mod.js', '../lib/util', './side-effect', './re', './all']);
+  // The last record, with an empty specifier, is the default alias of `export default class Widget`.
+  assert.deepStrictEqual(r.imports.map(i => i.specifier), ['./mod.js', '../lib/util', './side-effect', './re', './all', '']);
   assert.deepStrictEqual(r.imports[0].bindings, [
     { local: 'def', imported: 'default' },
     { local: 'a', imported: 'a' },
@@ -142,6 +143,59 @@ run('malformed input never throws', () => {
     const r = extractFile(src);
     assert.ok(Array.isArray(r.symbols) && Array.isArray(r.imports));
   }
+});
+
+run('a regex literal after the ) of an if is a regex, so what is inside it declares nothing', () => {
+  const r = extractFile('if (ok) /export function fake() {}/.test(text);\nexport function real() {}\n');
+  assert.ok(sym(r, 'real'));
+  assert.ok(!sym(r, 'fake'), 'a declaration inside a regex literal reached the graph');
+  const loops = extractFile('while (more) /export const hidden = 1/.exec(s);\nfor (;;) /export class Ghost {}/.exec(s);\nexport const seen = 1;\n');
+  assert.ok(sym(loops, 'seen') && !sym(loops, 'hidden') && !sym(loops, 'Ghost'));
+});
+
+run('a JSX closing tag is not a regex, so the rest of its line is still read', () => {
+  const r = extractFile('const el = <b>x</b>; export function after() {}\n');
+  assert.ok(sym(r, 'after'), 'the declaration after </b> was swallowed');
+});
+
+run('CommonJS default function and class exports become symbols', () => {
+  const named = extractFile('module.exports = function build(a) { return a + 1; };\n');
+  assert.ok(sym(named, 'build') && sym(named, 'build').exported);
+  const anonymous = extractFile('module.exports = async function () { return 1; };\n');
+  assert.ok(sym(anonymous, 'default') && sym(anonymous, 'default').exported);
+  const klass = extractFile('module.exports = class Service { run() { return 1; } };\n');
+  assert.ok(sym(klass, 'Service') && sym(klass, 'Service.run'));
+});
+
+run('an export alias keeps its public name as a re-export of this file', () => {
+  const r = extractFile('function foo() { return 1; }\nexport { foo as bar, baz };\nconst baz = 2;\n');
+  assert.ok(sym(r, 'foo').exported);
+  const alias = r.imports.find(im => im.specifier === '' && im.bindings.some(b => b.local === 'bar'));
+  assert.ok(alias && alias.reexport, 'no alias record for bar');
+  assert.deepStrictEqual(alias.bindings, [{ local: 'bar', imported: 'foo' }]);
+  assert.ok(!r.imports.some(im => im.bindings.some(b => b.local === 'baz' && im.specifier === '')), 'a name that is not renamed needs no alias');
+});
+
+run('a named default declaration is reachable as the default export', () => {
+  const fn = extractFile('export default function make() { return 1; }\n');
+  assert.ok(sym(fn, 'make'));
+  assert.ok(fn.imports.some(im => im.specifier === '' && im.bindings.some(b => b.local === 'default' && b.imported === 'make')));
+  const klass = extractFile('export default class Widget {}\n');
+  assert.ok(klass.imports.some(im => im.specifier === '' && im.bindings.some(b => b.local === 'default' && b.imported === 'Widget')));
+  const named = extractFile('class Thing {}\nexport default Thing;\n');
+  assert.ok(named.imports.some(im => im.specifier === '' && im.bindings.some(b => b.local === 'default' && b.imported === 'Thing')));
+});
+
+run('every declarator of one variable statement is a symbol', () => {
+  const r = extractFile('export const first = 1, second = (a, b) => a + b, third = [1, 2], fourth = require("./t");\n');
+  for (const name of ['first', 'second', 'third']) assert.ok(sym(r, name) && sym(r, name).exported, name);
+  assert.strictEqual(sym(r, 'second').kind, 'function');
+  assert.ok(!sym(r, 'fourth'), 'a require is an import, not a symbol');
+  assert.ok(r.imports.some(im => im.specifier === './t' && im.bindings[0].local === 'fourth'));
+  assert.ok(!sym(r, 'b'), 'a comma inside parentheses is not a declarator');
+  const typed = extractFile('const typed: Map<string, number> = make(), plain = 1;\n');
+  assert.ok(sym(typed, 'typed') && sym(typed, 'plain'));
+  assert.ok(!sym(typed, 'number'), 'a comma inside a type argument is not a declarator');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

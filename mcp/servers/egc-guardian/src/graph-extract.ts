@@ -12,12 +12,14 @@ export interface ImportBinding { local: string; imported: string }
 export interface ExtractedImport { specifier: string; bindings: ImportBinding[]; reexport: boolean }
 export interface ExtractResult { symbols: ExtractedSymbol[]; imports: ExtractedImport[] }
 
-interface Tok { t: 'id' | 'str' | 'lit' | 'p'; v: string; line: number }
+// ctl marks a ) that closes the head of if, for, while or with: a regex literal may follow it.
+interface Tok { t: 'id' | 'str' | 'lit' | 'p'; v: string; line: number; ctl?: boolean }
 
 const MAX_SYMBOLS = 2000;
 const MAX_REFS = 200;
 
 const REGEX_AFTER_KEYWORD = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
+const CONTROL_HEAD = new Set(['if', 'for', 'while', 'with']);
 const DECL_START = new Set(['export', 'import', 'const', 'let', 'var', 'function', 'class', 'interface', 'type', 'enum', 'abstract', 'declare', 'async', 'module', 'exports', 'namespace']);
 const DECL_MODIFIERS = new Set(['declare', 'abstract', 'async']);
 const CONTINUATION = new Set(['=', '+', '-', '*', '/', '%', '&', '|', '^', '?', ':', ',', '.', '<', '>', '!', '~', '(', '[', '{']);
@@ -38,7 +40,9 @@ function regexAllowed(prev: Tok | undefined): boolean {
   if (!prev) return true;
   if (prev.t === 'id') return REGEX_AFTER_KEYWORD.has(prev.v);
   if (prev.t === 'str' || prev.t === 'lit') return false;
-  return prev.v !== ')' && prev.v !== ']' && prev.v !== '}';
+  if (prev.v === ')') return prev.ctl === true;
+  // A / right after < is a JSX closing tag, not a regex.
+  return prev.v !== ']' && prev.v !== '}' && prev.v !== '<';
 }
 
 export function tokenize(src: string): Tok[] {
@@ -134,6 +138,19 @@ export function tokenize(src: string): Tok[] {
     return j;
   }
 
+  const parens: boolean[] = [];
+  function pushPunct(c: string): void {
+    const tk: Tok = { t: 'p', v: c, line };
+    if (c === '(') {
+      const prev = toks[toks.length - 1];
+      parens.push(prev?.t === 'id' && CONTROL_HEAD.has(prev.v));
+    } else if (c === ')') {
+      tk.ctl = parens.pop() === true;
+    }
+    toks.push(tk);
+    i++;
+  }
+
   while (i < n) {
     const c = src[i];
     if (skipTrivia(c)) continue;
@@ -155,8 +172,7 @@ export function tokenize(src: string): Tok[] {
       toks.push({ t: 'lit', v: '', line });
       i = j;
     } else {
-      toks.push({ t: 'p', v: c, line });
-      i++;
+      pushPunct(c);
     }
   }
   return toks;
@@ -204,6 +220,13 @@ export function extractFile(source: string): ExtractResult {
       if (isP(toks[k + 1], '.') && isId(toks[k + 2])) refs.add(tk.v + '.' + toks[k + 2].v);
     }
     return [...refs];
+  };
+
+  // `export { foo as bar }` and a named default declaration give a symbol a
+  // second, public name. It is kept as a re-export of this very file (empty
+  // specifier), so an import of the public name resolves to the symbol.
+  const addExportAlias = (publicName: string, local: string): void => {
+    imports.push({ specifier: '', bindings: [{ local: publicName, imported: local }], reexport: true });
   };
 
   const addSymbol = (name: string, kind: SymbolKind, exported: boolean, startIdx: number, endIdx: number, selfName: string = name): void => {
@@ -332,6 +355,9 @@ export function extractFile(source: string): ExtractResult {
           }
           k = isOpen(tk) ? close(k) + 1 : k + 1;
         }
+      } else if (isId(toks[rhs], 'function') || isId(toks[rhs], 'class') || (isId(toks[rhs], 'async') && isId(toks[rhs + 1], 'function'))) {
+        // module.exports = function () {} / class Foo {}: the implementation is the module's export.
+        return parseDeclaration(i, isId(toks[rhs], 'async') ? rhs + 1 : rhs, true, true);
       } else if (isId(toks[rhs]) && (isP(toks[rhs + 1], ';') || toks[rhs + 1] === undefined || toks[rhs + 1].line > toks[rhs].line)) {
         exportedNames.add(toks[rhs].v);
       }
@@ -367,7 +393,10 @@ export function extractFile(source: string): ExtractResult {
       imports.push({ specifier: toks[k + 1].v, bindings: names, reexport: true });
       return k + 2;
     }
-    names.forEach(b => exportedNames.add(b.imported));
+    for (const b of names) {
+      exportedNames.add(b.imported);
+      if (b.local !== b.imported) addExportAlias(b.local, b.imported);
+    }
     return k;
   };
 
@@ -392,6 +421,7 @@ export function extractFile(source: string): ExtractResult {
     const end = isP(toks[b], '{') ? close(b) : Math.min(b, last);
     const name = nameTok ? nameTok.v : isDefault ? 'default' : null;
     if (name) addSymbol(name, 'function', exported, i, end);
+    if (name && nameTok && isDefault) addExportAlias('default', name);
     return end + 1;
   };
 
@@ -406,17 +436,38 @@ export function extractFile(source: string): ExtractResult {
     if (name) {
       addSymbol(name, keyword === 'class' ? 'class' : 'type', exported, i, end);
       if (keyword === 'class' && b <= last) addMethods(name, b, exported);
+      if (nameTok && isDefault) addExportAlias('default', name);
     }
     return end + 1;
+  };
+
+  const declaratorFollows = (tk: Tok | undefined): boolean =>
+    tk === undefined || isP(tk, '=') || isP(tk, ',') || isP(tk, ';') || isP(tk, ':');
+
+  // `const first = 1, second = 2`: the names that start a declarator after a top-level comma.
+  const extraDeclarators = (from: number, end: number): number[] => {
+    const starts: number[] = [];
+    for (let k = from; k <= end; ) {
+      const tk = toks[k];
+      if (isP(tk, ',') && isId(toks[k + 1]) && declaratorFollows(toks[k + 2])) starts.push(k + 1);
+      k = isOpen(tk) ? close(k) + 1 : k + 1;
+    }
+    return starts;
+  };
+
+  const addDeclarator = (name: Tok, at: number, stop: number, exported: boolean, from: number): void => {
+    const spec = requireSpecifier(at + 1);
+    if (spec !== null) imports.push({ specifier: spec, bindings: [{ local: name.v, imported: '*' }], reexport: false });
+    else addSymbol(name.v, isFunctionInit(at + 1) ? 'function' : 'variable', exported, from, stop);
   };
 
   const parseVariableDecl = (i: number, j: number, exported: boolean): number => {
     const end = statementEnd(j);
     const nameTok = toks[j + 1];
     if (isId(nameTok)) {
-      const spec = requireSpecifier(j + 2);
-      if (spec !== null) imports.push({ specifier: spec, bindings: [{ local: nameTok.v, imported: '*' }], reexport: false });
-      else addSymbol(nameTok.v, isFunctionInit(j + 2) ? 'function' : 'variable', exported, i, end);
+      const starts = extraDeclarators(j + 2, end);
+      addDeclarator(nameTok, j + 1, starts.length > 0 ? starts[0] - 2 : end, exported, i);
+      starts.forEach((at, n) => addDeclarator(toks[at], at, starts[n + 1] !== undefined ? starts[n + 1] - 2 : end, exported, at));
     } else if (isP(nameTok, '{')) {
       const spec = requireSpecifier(close(j + 1) + 1);
       if (spec !== null) imports.push({ specifier: spec, bindings: readBraceBindings(j + 1, ':'), reexport: false });
@@ -439,8 +490,12 @@ export function extractFile(source: string): ExtractResult {
     if (isId(d, 'const') || isId(d, 'let') || isId(d, 'var')) return parseVariableDecl(i, j, exported);
     if (isDefault) {
       const end = statementEnd(j);
-      if (isId(d) && end <= j + 1) exportedNames.add(d.v);
-      else addSymbol('default', 'variable', true, i, end);
+      if (isId(d) && end <= j + 1) {
+        exportedNames.add(d.v);
+        addExportAlias('default', d.v);
+      } else {
+        addSymbol('default', 'variable', true, i, end);
+      }
       return end + 1;
     }
     return isOpen(toks[i]) ? close(i) + 1 : i + 1;

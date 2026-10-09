@@ -86,7 +86,8 @@ export function computeEdges(data: Pick<GraphData, 'files' | 'symbols' | 'import
     if (depth >= 3) return null;
     for (const im of importsByFile.get(file) ?? []) {
       if (!im.reexport) continue;
-      const target = resolveSpecifier(file, im.specifier, fileSet);
+      // An empty specifier is an alias of a symbol in this very file (export { a as b }).
+      const target = im.specifier === '' ? file : resolveSpecifier(file, im.specifier, fileSet);
       if (!target) continue;
       for (const b of im.bindings) {
         let hit: string | null = null;
