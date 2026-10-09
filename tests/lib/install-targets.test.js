@@ -4015,6 +4015,28 @@ function runTests() {
     assert.strictEqual(statePath, path.join(projectRoot, '.warp', 'egc-install-state.json'));
   }));
 
+  tally(test('warns when the warp install state cannot be read, since .warp/skills is then left as the person\'s (#1673)', () => {
+    const fs = require('fs');
+    const adapter = getInstallTargetAdapter('warp');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-warp-unreadable-'));
+    try {
+      const input = { repoRoot: projectRoot, projectRoot };
+      const unreadable = issues => issues.filter(issue => issue.code === 'install-state-unreadable');
+      assert.deepStrictEqual(unreadable(adapter.validate(input)), [], 'no warning without a state file');
+      const statePath = adapter.getInstallStatePath(input);
+      assert.strictEqual(statePath, path.join(projectRoot, '.warp', 'egc-install-state.json'));
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, '{');
+      const warnings = unreadable(adapter.validate(input));
+      assert.strictEqual(warnings.length, 1, 'one warning for an unreadable state');
+      assert.ok(warnings[0].message.includes(path.join(projectRoot, '.warp', 'skills')), warnings[0].message);
+      assert.ok(repoRoot, 'the catalog root is not needed to read the state');
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('warp adapter copies each skill directory to .warp/skills/<name>/ plus a merge-markdown-skill-index operation (#1673)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';

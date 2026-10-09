@@ -3,6 +3,7 @@ const path = require('node:path');
 const yaml = require('js-yaml');
 
 const {
+  buildValidationIssue,
   collectRecordedDestinations,
   createInstallTargetAdapter,
   createManagedOperation,
@@ -179,5 +180,13 @@ module.exports = createInstallTargetAdapter({
   rootSegments: ['.warp'],
   installStatePathSegments: ['egc-install-state.json'],
   nativeRootRelativePath: '.warp',
+  validateMore(input, adapter) {
+    if (collectRecordedDestinations(adapter, input)) return [];
+    return [buildValidationIssue(
+      'warning',
+      'install-state-unreadable',
+      `The install state at ${adapter.getInstallStatePath(input)} cannot be read: skills already under ${path.join(adapter.resolveRoot(input), 'skills')} that differ from EGC's are treated as yours and left as they are until it can be read again.`
+    )];
+  },
   planOperations: createWarpPlanOperations,
 });
