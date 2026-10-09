@@ -111,7 +111,27 @@ function runTests() {
     assert.strictEqual(statePath, path.join(homeDir, '.gemini', 'egc', 'install-state.json'));
   }));
 
-  tally(test('plans egc skills only where the Antigravity CLI reads them, and rules under the managed rules/egc namespace', () => {
+  tally(test('warns when the egc install state cannot be read, since config/skills is then left as the person\'s (#1705)', () => {
+    const fs = require('fs');
+    const adapter = getInstallTargetAdapter('egc');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-unreadable-state-'));
+    try {
+      const unreadable = issues => issues.filter(issue => issue.code === 'install-state-unreadable');
+      assert.deepStrictEqual(unreadable(adapter.validate({ homeDir, repoRoot })), [], 'no warning without a state file');
+      const statePath = adapter.getInstallStatePath({ homeDir, repoRoot });
+      fs.mkdirSync(path.dirname(statePath), { recursive: true });
+      fs.writeFileSync(statePath, '{');
+      const warnings = unreadable(adapter.validate({ homeDir, repoRoot }));
+      assert.strictEqual(warnings.length, 1, 'one warning for an unreadable state');
+      assert.strictEqual(warnings[0].severity, 'warning');
+      assert.ok(warnings[0].message.includes(path.join(homeDir, '.gemini', 'config', 'skills')), warnings[0].message);
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  }));
+
+  tally(test('plans egc skills where the Antigravity CLI, IDE and 2.0 read them, and rules flat under config/rules with a trigger (#1668)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -136,21 +156,89 @@ function runTests() {
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'skills/tdd-workflow'
-        && operation.destinationPath === path.join(homeDir, '.gemini', 'antigravity-cli', 'skills', 'tdd-workflow')
+        && operation.destinationPath === path.join(homeDir, '.gemini', 'config', 'skills', 'tdd-workflow')
       )),
-      'Should install bundled skills under antigravity-cli/skills, where the Antigravity CLI reads them'
+      'Should install bundled skills under config/skills, where every Antigravity surface reads them'
+    );
+    const skillDestinations = plan.operations
+      .filter(operation => normalizedRelativePath(operation.sourceRelativePath) === 'skills/tdd-workflow')
+      .map(operation => operation.destinationPath)
+      .sort();
+    assert.deepStrictEqual(
+      skillDestinations,
+      [
+        path.join(homeDir, '.gemini', 'config', 'skills', 'tdd-workflow'),
+      ].sort(),
+      'Each skill lands exactly once, under config/skills'
     );
     assert.ok(
       !under(path.join(homeDir, '.gemini', 'skills')),
       'skills/egc was the retired Gemini CLI layout: nothing is planned under ~/.gemini/skills'
     );
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'rules'
-        && operation.destinationPath === path.join(homeDir, '.gemini', 'rules', 'egc')
-      )),
-      'rules keep the managed rules/egc namespace until they move to config/rules, where Antigravity reads them'
-    );
+    const { plannedFileContent } = require('../../scripts/lib/install/copy-transforms');
+    const configRules = path.join(homeDir, '.gemini', 'config', 'rules');
+    const ruleOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('rules/'));
+    assert.ok(ruleOperations.length > 100, 'every catalog rule is planned');
+    assert.ok(ruleOperations.every(operation => path.dirname(operation.destinationPath) === configRules), 'each rule is one flat file under config/rules');
+    assert.strictEqual(new Set(ruleOperations.map(operation => operation.destinationPath)).size, ruleOperations.length, 'no two languages share a file name');
+    assert.ok(!under(path.join(homeDir, '.gemini', 'rules')), 'the rules/egc tree is not written any more');
+    assert.ok(!destinations.includes(path.join(configRules, 'README.md')), 'the rules README is not a rule');
+    const planned = (source, destination) => {
+      const operation = ruleOperations.find(candidate => normalizedRelativePath(candidate.sourceRelativePath) === source);
+      assert.ok(operation, `${source} is planned`);
+      assert.strictEqual(operation.destinationPath, path.join(configRules, destination));
+      return plannedFileContent(path.join(repoRoot, source), operation.transform).toString('utf8');
+    };
+    assert.ok(planned('rules/golang/coding-style.md', 'golang-coding-style.md').startsWith('---\ntrigger: glob\n'), 'a rule with paths is a glob rule');
+    assert.ok(planned('rules/common/coding-style.md', 'common-coding-style.md').startsWith('---\ntrigger: always_on\n'), 'a common rule is always on');
+    assert.ok(planned('rules/zh/coding-style.md', 'zh-coding-style.md').startsWith('---\ntrigger: manual\n'), 'the Chinese translation of the common rules is manual, so the same rule never loads twice');
+  }));
+
+  tally(test('a bundled skill wins over a command of the same name, at home and in the project (#1706)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const projectRoot = '/workspace/app';
+    const selections = [
+      [{ id: 'commands-core', paths: ['commands'] }, { id: 'security', paths: ['skills/security/security-scan'] }],
+      [{ id: 'commands-core', paths: ['commands'] }, { id: 'security', paths: ['skills/security/security-scan/SKILL.md'] }],
+    ];
+    const cases = selections.flatMap(modules => [
+      ['egc', path.join(homeDir, '.gemini', 'config', 'skills'), modules],
+      ['antigravity', path.join(projectRoot, '.agents', 'skills'), modules],
+    ]);
+    for (const [target, skillsRoot, modules] of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, homeDir, projectRoot, modules });
+      const shadowed = plan.operations.filter(operation => (
+        operation.destinationPath === path.join(skillsRoot, 'security-scan')
+        || operation.destinationPath.startsWith(path.join(skillsRoot, 'security-scan') + path.sep)
+      ));
+      assert.deepStrictEqual(shadowed.map(operation => normalizedRelativePath(operation.sourceRelativePath)), [modules[1].paths[0]], `${target}: the skill answers /security-scan, the command is not written over it (${modules[1].paths[0]})`);
+      assert.ok(plan.operations.some(operation => operation.destinationPath === path.join(skillsRoot, 'plan', 'SKILL.md')), `${target}: the other commands are planned`);
+    }
+  }));
+
+  tally(test('two selected command paths that would install as one skill are refused (#1706)', () => {
+    const fs = require('fs');
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-command-collision-'));
+    try {
+      fs.mkdirSync(path.join(repoRoot, 'commands', 'foo'), { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'foo', 'bar.md'), '---\ndescription: a\n---\n');
+      fs.writeFileSync(path.join(repoRoot, 'commands', 'foo-bar.md'), '---\ndescription: b\n---\n');
+      for (const target of ['egc', 'antigravity']) {
+        assert.throws(() => planInstallTargetScaffold({
+          target,
+          repoRoot,
+          homeDir: '/Users/example',
+          projectRoot: '/workspace/app',
+          modules: [
+            { id: 'one', paths: ['commands/foo/bar.md'] },
+            { id: 'two', paths: ['commands/foo-bar.md'] },
+          ],
+        }), /would both install as/, `${target}: one slash skill never replaces another`);
+      }
+    } finally {
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
   }));
 
   tally(test('the egc target plans nothing that only the retired Gemini CLI read', () => {
@@ -172,9 +260,30 @@ function runTests() {
 
     const destinations = plan.operations.map(operation => operation.destinationPath);
     const under = prefix => destinations.some(destination => destination === prefix || destination.startsWith(prefix + path.sep));
-    for (const kept of ['AGENTS.md', 'agents', 'commands', path.join('scripts', 'hooks'), path.join('scripts', 'lib'), path.join('scripts', 'setup-package-manager.js')]) {
-      assert.ok(destinations.includes(path.join(root, kept)), `${kept} is still written: Antigravity reads AGENTS.md, its hooks run from scripts/, and agents and commands keep their spot until they move to config/`);
+    for (const kept of ['AGENTS.md', path.join('scripts', 'hooks'), path.join('scripts', 'lib'), path.join('scripts', 'setup-package-manager.js')]) {
+      assert.ok(destinations.includes(path.join(root, kept)), `${kept} is still written: Antigravity reads AGENTS.md and its hooks run from scripts/`);
     }
+    const commandOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('commands/'));
+    assert.deepStrictEqual(
+      commandOperations.map(operation => operation.destinationPath).sort(),
+      require('fs').readdirSync(path.join(repoRoot, 'commands')).filter(name => name.endsWith('.md'))
+        .map(name => path.join(root, 'config', 'skills', name.slice(0, -3), 'SKILL.md')).sort(),
+      'each command is a skill under config/skills, invoked as /<name> (#1706)'
+    );
+    assert.ok(commandOperations.every(operation => operation.transform === 'antigravity-command-skill'));
+    assert.ok(!under(path.join(root, 'commands')), 'nothing is planned under ~/.gemini/commands any more (#1706)');
+    const agentOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('agents/'));
+    assert.deepStrictEqual(
+      agentOperations.map(operation => normalizedRelativePath(operation.sourceRelativePath)).sort(),
+      require('fs').readdirSync(path.join(repoRoot, 'agents')).filter(name => name.endsWith('.md')).map(name => `agents/${name}`).sort(),
+      'every catalog agent is planned exactly once'
+    );
+    assert.ok(agentOperations.every(operation => (
+      path.dirname(operation.destinationPath) === path.join(root, 'config', 'agents')
+      && operation.transform === 'antigravity-agent-frontmatter'
+    )), 'each agent is one file under config/agents, in the subagent format (#1669)');
+    assert.ok(destinations.includes(path.join(root, 'config', 'agents', 'architect.md')));
+    assert.ok(!under(path.join(root, 'agents')), 'nothing is planned under ~/.gemini/agents any more (#1669)');
     for (const residue of ['.agents', 'hooks', 'mcp-configs']) {
       assert.ok(!under(path.join(root, residue)), `${residue} was the retired Gemini CLI layout: nothing is planned there`);
     }
@@ -608,7 +717,7 @@ function runTests() {
     );
   }));
 
-  tally(test('plans antigravity remaps for workflows, skills, and flat rules', () => {
+  tally(test('plans antigravity remaps for workflows, subagents, and flat rules (#1669)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -632,20 +741,26 @@ function runTests() {
       ],
     });
 
-    assert.ok(
-      plan.operations.some(operation => (
-        operation.sourceRelativePath === 'commands'
-        && operation.destinationPath === path.join(projectRoot, '.agents', 'workflows')
-      )),
-      'Should remap commands into workflows'
+    const commandOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('commands/'));
+    assert.deepStrictEqual(
+      commandOperations.map(operation => operation.destinationPath).sort(),
+      require('fs').readdirSync(path.join(repoRoot, 'commands')).filter(name => name.endsWith('.md'))
+        .map(name => path.join(projectRoot, '.agents', 'skills', name.slice(0, -3), 'SKILL.md')).sort(),
+      'each command is a workspace skill, since Antigravity stops running workflows (#1706)'
     );
-    assert.ok(
-      plan.operations.some(operation => (
-        operation.sourceRelativePath === 'agents'
-        && operation.destinationPath === path.join(projectRoot, '.agents', 'skills')
-      )),
-      'Should remap agents into skills'
+    assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(projectRoot, '.agents', 'workflows'))), 'nothing is planned under .agents/workflows');
+    const agentOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('agents/'));
+    assert.deepStrictEqual(
+      agentOperations.map(operation => normalizedRelativePath(operation.sourceRelativePath)).sort(),
+      require('fs').readdirSync(path.join(repoRoot, 'agents')).filter(name => name.endsWith('.md')).map(name => `agents/${name}`).sort(),
+      'every catalog agent is planned exactly once'
     );
+    assert.ok(agentOperations.every(operation => (
+      path.dirname(operation.destinationPath) === path.join(projectRoot, '.agents', 'agents')
+      && operation.transform === 'antigravity-agent-frontmatter'
+    )), 'each agent is one file under .agents/agents, where Antigravity reads workspace subagents');
+    assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(projectRoot, '.agents', 'skills') + path.sep)
+      && normalizedRelativePath(operation.sourceRelativePath).startsWith('agents')), 'no agent lands under .agents/skills any more');
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'rules/common/coding-style.md'

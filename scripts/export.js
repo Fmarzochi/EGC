@@ -152,8 +152,8 @@ function resolveDocument(opts) {
   }
   const projectPath = path.resolve(opts.project || process.cwd());
   const stateDir = branchState.getStateDir();
-  const branch = branchState.detectBranch(projectPath);
-  const resolved = branchState.resolveStateRead(stateDir, projectPath, branch);
+  const { branch, detachedCommit } = branchState.resolveHeadState(projectPath);
+  const resolved = branchState.resolveStateRead(stateDir, projectPath, branch, detachedCommit);
   return {
     file: resolved.filePath,
     root: statePlaintext.stateRoot(stateDir),

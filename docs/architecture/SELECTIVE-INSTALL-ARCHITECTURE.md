@@ -640,7 +640,8 @@ Suggested operation shape:
   "kind": "copy",
   "moduleId": "rules-core",
   "source": "rules/common/coding-style.md",
-  "destination": "/Users/example/.gemini/rules/egc/common/coding-style.md",
+  "destination": "/Users/example/.gemini/config/rules/common-coding-style.md",
+  "transform": "antigravity-rule-frontmatter",
   "ownership": "managed",
   "overwritePolicy": "replace"
 }
@@ -711,7 +712,8 @@ Suggested payload:
     {
       "kind": "copy",
       "moduleId": "rules-core",
-      "destination": "/Users/example/.gemini/rules/egc/common/coding-style.md",
+      "destination": "/Users/example/.gemini/config/rules/common-coding-style.md",
+      "transform": "antigravity-rule-frontmatter",
       "digest": "sha256:..."
     }
   ]

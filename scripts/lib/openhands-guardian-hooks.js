@@ -1,8 +1,10 @@
 'use strict';
 
-// Manages the Guardian entry inside .openhands/hooks.json (project-only --
-// confirmed against OpenHands/docs' own hooks.mdx, which describes hooks
-// as "configured per-repository", no global/home path documented).
+// Manages the Guardian entry inside the project's .openhands/hooks.json
+// (OpenHands/docs' own hooks.mdx describes hooks as "configured
+// per-repository"). OpenHands also reads a global ~/.openhands/hooks.json
+// when the project has none; EGC does not write that one yet (see
+// docs/spec/integration-tiers.md).
 //
 // OpenHands' hooks.json shape is genuinely different from every other host
 // wired today: NO top-level "hooks" wrapper key -- event names

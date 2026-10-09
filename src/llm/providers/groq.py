@@ -72,7 +72,7 @@ class GroqProvider(OpenAIProvider):
 
     def get_default_model(self) -> str:
         resolved = ModelResolver.resolve(None, provider="groq")
-        if resolved and ModelResolver._provider_for(resolved) == "groq":
+        if resolved and ModelResolver._provider_for(resolved, expected="groq") == "groq":
             return resolved
         return _DEFAULT_MODEL
 

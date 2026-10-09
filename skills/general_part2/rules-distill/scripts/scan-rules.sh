@@ -4,11 +4,16 @@
 # Output: JSON to stdout
 #
 # Environment:
-#   RULES_DISTILL_DIR  Override ~/.gemini/rules (for testing only)
+#   RULES_DISTILL_DIR  Override the rules folder of the EGC directory in use
+#                      (for testing only)
 
 set -euo pipefail
 
-RULES_DIR="${RULES_DISTILL_DIR:-${1:-$HOME/.gemini/rules}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=egc-paths.sh
+source "$SCRIPT_DIR/egc-paths.sh"
+
+RULES_DIR="${RULES_DISTILL_DIR:-${1:-$(egc_dir "$SCRIPT_DIR")/rules}}"
 
 if [[ ! -d "$RULES_DIR" ]]; then
   jq -n --arg path "$RULES_DIR" '{"error":"rules directory not found","path":$path}' >&2
@@ -29,8 +34,8 @@ trap _rules_cleanup EXIT
 
 for i in "${!files[@]}"; do
   file="${files[$i]}"
-  rel_path="${file#"$HOME"/}"
-  rel_path="~/$rel_path"
+  rel_path="$file"
+  [[ "$file" == "${HOME%/}/"* ]] && rel_path="~${file#"${HOME%/}"}"
 
   # Extract H2 headings (## Title) into a JSON array via jq
   headings_json=$({ grep -E '^## ' "$file" 2>/dev/null || true; } | sed 's/^## //' | jq -R . | jq -s '.')

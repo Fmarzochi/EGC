@@ -9,8 +9,10 @@ const {
 // still works but .agents/skills/ is the documented, recommended path as of
 // 2026). This adapter exists purely for discoverability (`--target openhands`
 // instead of requiring `--target codex`), same shape as goose-home.js. No
-// GateGuard hook wiring: OpenHands has no documented hook API equivalent to
-// ~/.codex/hooks.json.
+// hook wiring here: the Guardian goes into the project's .openhands/hooks.json
+// through openhands-project.js. OpenHands also reads a global
+// ~/.openhands/hooks.json when the project has none, which EGC does not write
+// yet (see docs/spec/integration-tiers.md).
 module.exports = createInstallTargetAdapter({
   id: 'openhands-home',
   target: 'openhands',

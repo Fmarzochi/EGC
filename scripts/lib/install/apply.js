@@ -114,6 +114,7 @@ function applyMcpCopyFileOperation(operation, disabledServers) {
     ? text
     : formatJson(filterMcpConfig(sourceConfig, disabledServers).config);
   writeTextKeepingMode(operation.destinationPath, landed, operation.sourcePath);
+  return landed;
 }
 
 // apply.js's own location is always the real installed package: unlike
@@ -281,7 +282,7 @@ function retirableEntries(plan) {
     const filePath = path.resolve(retirement.destinationPath);
     const root = roots.find(candidate => filePath.startsWith(candidate + path.sep));
     if (!root) continue;
-    if (!isRetirableFile(filePath, root, retirement.sourcePath, plan, retirement.transform)) continue;
+    if (!isRetirableFile(filePath, root, retirement.sourcePath, plan, retirement.transform, retirement.contentSha256)) continue;
     result.push({ retirement: { ...retirement, destinationPath: filePath }, root });
   }
   return result;
@@ -366,7 +367,7 @@ function sha256(buffer) {
 // file the plan copies today. A file the person replaced since is theirs, and
 // a file whose source is gone and matches nothing the plan writes cannot be
 // told apart from one, so both stay.
-function isRetirableFile(filePath, root, sourcePath, plan = {}, transform = undefined) {
+function isRetirableFile(filePath, root, sourcePath, plan = {}, transform = undefined, recordedSha256 = undefined) {
   let stat;
   try {
     stat = fs.lstatSync(filePath);
@@ -383,6 +384,9 @@ function isRetirableFile(filePath, root, sourcePath, plan = {}, transform = unde
     content = fs.readFileSync(filePath);
   } catch {
     return false;
+  }
+  if (typeof recordedSha256 === 'string' && recordedSha256.length > 0) {
+    return sha256(content) === recordedSha256;
   }
   try {
     const source = fs.statSync(sourcePath);
@@ -475,6 +479,93 @@ function findLegacyLinks(plan, { strict = false } = {}) {
 // to the target recorded by the scan, otherwise the path changed under the
 // install and is refused, never removed. unlink never follows a link, so
 // only the link itself goes.
+const FORMER_LEGACY_LINK_DIRECTORIES = [['antigravity-cli', 'skills']];
+
+function hasLinkedComponent(fromRoot, targetPath) {
+  const relative = path.relative(fromRoot, targetPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return true;
+  let current = fromRoot;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    let stat;
+    try {
+      stat = fs.lstatSync(current, { throwIfNoEntry: false });
+    } catch {
+      return true;
+    }
+    if (!stat) return false;
+    if (stat.isSymbolicLink()) return true;
+  }
+  return false;
+}
+
+function pointsIntoLegacyRoot(linkPath, root) {
+  let target;
+  try {
+    target = path.resolve(path.dirname(linkPath), fs.readlinkSync(linkPath));
+  } catch {
+    return null;
+  }
+  const candidates = [path.join(root, 'skills', 'egc'), ...legacyLinkRoots(root)];
+  const matched = candidates.find(candidate => target === candidate || target.startsWith(candidate + path.sep));
+  if (!matched) return null;
+  return hasLinkedComponent(path.dirname(path.dirname(matched)), target) ? null : target;
+}
+
+function isScannableDirectory(directory, root) {
+  if (hasLinkedComponent(root, directory)) return false;
+  try {
+    return fs.lstatSync(directory).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function findStrandedLegacyLinks(plan) {
+  const root = plan.targetRoot ? path.resolve(plan.targetRoot) : null;
+  if (!root) return [];
+  const planned = new Set((Array.isArray(plan.operations) ? plan.operations : []).map(operation => path.resolve(operation.destinationPath)));
+  const stranded = [];
+  for (const segments of FORMER_LEGACY_LINK_DIRECTORIES) {
+    const directory = path.join(root, ...segments);
+    if (!isScannableDirectory(directory, root)) continue;
+    let entries;
+    try {
+      entries = fs.readdirSync(directory);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const linkPath = path.join(directory, entry);
+      if (planned.has(linkPath) || !isSymbolicLink(linkPath)) continue;
+      const pointedAt = pointsIntoLegacyRoot(linkPath, root);
+      if (pointedAt) stranded.push({ linkPath, pointedAt });
+    }
+  }
+  return stranded;
+}
+
+function removeStrandedLegacyLinks(links, targetRoot) {
+  if (!targetRoot || links.length === 0) return [];
+  const root = path.resolve(targetRoot);
+  const removed = [];
+  for (const link of links) {
+    if (!isScannableDirectory(path.dirname(link.linkPath), root)) continue;
+    if (!isSymbolicLink(link.linkPath) || pointsIntoLegacyRoot(link.linkPath, root) !== link.pointedAt) continue;
+    fs.unlinkSync(link.linkPath);
+    removed.push(link);
+    removeEmptyParents(path.dirname(link.linkPath), root);
+  }
+  return removed;
+}
+
+function recordWrittenContentHashes(plan, written) {
+  for (const operation of plan.statePreview?.operations || []) {
+    const hash = written.get(path.resolve(String(operation.destinationPath || '')));
+    if (hash && operation.kind === 'copy-file') operation.contentSha256 = hash;
+  }
+}
+
 function removeLegacyLinks(links, targetRoot) {
   const root = targetRoot ? path.resolve(targetRoot) : null;
   const deepestFirst = [...links].sort((a, b) => segments(b.linkPath) - segments(a.linkPath));
@@ -926,6 +1017,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   const migratedLegacyLinks = findLegacyLinks(plan, { strict: true });
   removeLegacyLinks(migratedLegacyLinks, plan.targetRoot);
   refuseLinkedDestination(plan.installStatePath, plan.targetRoot);
+  const writtenHashes = new Map();
   for (const operation of plan.operations) {
 
     refuseLinkedDestination(operation.destinationPath, managedRootFor(plan, operation.destinationPath));
@@ -943,15 +1035,16 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
       applyMergeMarkdownIndexOperation(operation);
     } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
-      applyMcpCopyFileOperation(operation, disabledServers);
+      const landed = applyMcpCopyFileOperation(operation, disabledServers);
+      writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
     } else if (operation.kind === 'copy-file' && operation.transform) {
-      writeTextKeepingMode(
-        operation.destinationPath,
-        plannedFileContent(operation.sourcePath, operation.transform).toString('utf8'),
-        operation.sourcePath
-      );
+      const landed = plannedFileContent(operation.sourcePath, operation.transform).toString('utf8');
+      writeTextKeepingMode(operation.destinationPath, landed, operation.sourcePath);
+      writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
     } else {
+      const source = operation.kind === 'copy-file' ? fs.readFileSync(operation.sourcePath) : null;
       copyFileKeepingMode(operation.sourcePath, operation.destinationPath);
+      if (source) writtenHashes.set(path.resolve(operation.destinationPath), sha256(source));
     }
   }
 
@@ -962,7 +1055,9 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 
   const retiredFiles = retirePlannedFiles(plan);
   const retiredHooks = retirePlannedHooks(plan);
+  const retiredLegacyLinks = removeStrandedLegacyLinks(findStrandedLegacyLinks(plan), plan.targetRoot);
 
+  recordWrittenContentHashes(plan, writtenHashes);
   writeInstallState(plan.installStatePath, plan.statePreview);
   removeLegacyInstallStates(plan);
 
@@ -986,7 +1081,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     },
   });
 
-  const result = { ...plan, applied: true, migratedLegacyLinks, retiredFiles, retiredHooks, shapeTransitions: shapeResult.transitions };
+  const result = { ...plan, applied: true, migratedLegacyLinks, retiredLegacyLinks, retiredFiles, retiredHooks, shapeTransitions: shapeResult.transitions };
   Object.defineProperty(result, 'syncPromise', {
     value: syncPromise,
     enumerable: false,
@@ -1005,6 +1100,7 @@ module.exports = {
   checkedDestinations,
   deepMergeJson,
   findLegacyLinks,
+  findStrandedLegacyLinks,
   refuseLinkedDestination,
   removeLegacyLinks,
   writeGuardianCliMarker,

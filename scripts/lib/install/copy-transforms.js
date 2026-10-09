@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const path = require('node:path');
 
 // A copy transform rewrites the bytes of one planned file on the way to its
 // destination. The plan names it (operation.transform); the executor writes
@@ -9,6 +10,10 @@ const fs = require('node:fs');
 
 const CLAUDE_AGENT_FRONTMATTER_TRANSFORM = 'claude-agent-frontmatter';
 const OPENCODE_AGENT_FRONTMATTER_TRANSFORM = 'opencode-agent-frontmatter';
+const ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM = 'antigravity-rule-frontmatter';
+const ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM = 'antigravity-manual-rule-frontmatter';
+const ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM = 'antigravity-agent-frontmatter';
+const ANTIGRAVITY_COMMAND_SKILL_TRANSFORM = 'antigravity-command-skill';
 
 // Model names Claude Code resolves itself. Anything else in an agent's
 // frontmatter (the catalog's Gemini ids) would be sent to the API as-is and
@@ -44,11 +49,34 @@ function parseFlowSequence(value) {
   if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
     return null;
   }
-  return trimmed
-    .slice(1, -1)
-    .split(',')
+  return splitFlowItems(trimmed.slice(1, -1))
     .map(item => stripQuotes(item.trim()))
     .filter(Boolean);
+}
+
+function splitFlowItems(inner) {
+  const items = [];
+  let current = '';
+  let quote = null;
+  let depth = 0;
+  for (const char of inner) {
+    if (quote) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth = Math.max(0, depth - 1);
+    } else if (char === ',' && depth === 0) {
+      items.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  items.push(current);
+  return items;
 }
 
 function stripQuotes(value) {
@@ -202,30 +230,298 @@ function toOpenCodeAgentFrontmatter(text) {
   return ['---', ...frontmatter, '---', ...parts.body].join('\n');
 }
 
+function readRuleGlobs(frontmatter) {
+  const index = frontmatter.findIndex(line => splitFrontmatterLine(line)?.key === 'paths');
+  if (index < 0) {
+    return [];
+  }
+  const flow = parseFlowSequence(splitFrontmatterLine(frontmatter[index]).value);
+  return (flow || collectBlockListItems(frontmatter, index + 1).items).flatMap(expandGlobBraces);
+}
+
+function expandGlobBraces(glob) {
+  const close = glob.indexOf('}');
+  const open = close < 0 ? -1 : glob.lastIndexOf('{', close);
+  if (open < 0) {
+    return [glob];
+  }
+  const head = glob.slice(0, open);
+  const tail = glob.slice(close + 1);
+  return glob.slice(open + 1, close).split(',').flatMap(option => expandGlobBraces(`${head}${option.trim()}${tail}`));
+}
+
+function ruleTrigger(manual, globs) {
+  if (manual) {
+    return 'manual';
+  }
+  return globs.length > 0 ? 'glob' : 'always_on';
+}
+
+function flattenRuleLinks(line, directory) {
+  if (directory === null) {
+    return line;
+  }
+  return line.replaceAll(/\]\(([^()\s:#]+\.md)\)/g, (match, link) => {
+    const target = path.posix.normalize(path.posix.join(directory, link));
+    if (link.startsWith('/') || target.startsWith('../')) {
+      return match;
+    }
+    return `](${target.replaceAll('/', '-')})`;
+  });
+}
+
+function toAntigravityRule(text, { manual = false, directory = null } = {}) {
+  const source = stripByteOrderMark(text);
+  const parts = splitFrontmatter(source) || { frontmatter: [], body: source.split(/\r?\n/) };
+  const globs = manual ? [] : readRuleGlobs(parts.frontmatter);
+  const heading = parts.body.find(line => line.startsWith('# '));
+  const frontmatter = [`trigger: ${ruleTrigger(manual, globs)}`];
+  if (heading) {
+    frontmatter.push(`description: ${JSON.stringify(heading.slice(2).trim())}`);
+  }
+  if (globs.length > 0) {
+    frontmatter.push(`globs: ${JSON.stringify(globs.join(', '))}`);
+  }
+  return ['---', ...frontmatter, '---', ...parts.body.map(line => flattenRuleLinks(line, directory))].join('\n');
+}
+
+const ANTIGRAVITY_TOOL_NAMES = new Map([
+  ['Read', 'view_file'],
+  ['Grep', 'grep_search'],
+  ['Bash', 'run_command'],
+  ['Write', 'write_to_file'],
+  ['Edit', 'replace_file_content'],
+  ['MultiEdit', 'multi_replace_file_content'],
+]);
+const ANTIGRAVITY_AGENT_DROPPED_KEYS = new Set(['stack', 'color']);
+const ANTIGRAVITY_MODELS = new Set(['inherit', 'flash', 'pro']);
+
+function toAntigravityModel(value) {
+  const model = stripQuotes(value.trim()).toLowerCase();
+  if (ANTIGRAVITY_MODELS.has(model)) {
+    return model;
+  }
+  if (/(^|-)flash($|-)/.test(model)) {
+    return 'flash';
+  }
+  return /(^|-)pro($|-)/.test(model) ? 'pro' : null;
+}
+
+function toAntigravityToolsBlock(items) {
+  const tools = [...new Set(items.map(item => ANTIGRAVITY_TOOL_NAMES.get(stripQuotes(item.trim()))).filter(Boolean))];
+  return tools.length > 0 ? ['tools:', ...tools.map(tool => `  - ${tool}`)] : [];
+}
+
+function readMultilineFlowSequence(value, lines, index) {
+  let joined = value;
+  let next = index;
+  while (!joined.endsWith(']') && next < lines.length && /^[\s\]]/.test(lines[next])) {
+    joined = `${joined} ${lines[next].trim()}`;
+    next += 1;
+  }
+  const flow = parseFlowSequence(joined);
+  return flow ? { items: flow, next } : null;
+}
+
+function readFrontmatterList(value, lines, index) {
+  if (value.startsWith('[') && !value.endsWith(']')) {
+    const multiline = readMultilineFlowSequence(value, lines, index);
+    if (multiline) {
+      return multiline;
+    }
+  }
+  const flow = parseFlowSequence(value);
+  if (flow) {
+    return { items: flow, next: index };
+  }
+  if (value === '') {
+    return collectBlockListItems(lines, index);
+  }
+  return { items: value.split(','), next: index };
+}
+
+function stripYamlComment(value) {
+  let quote = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '#' && (index === 0 || /\s/.test(value[index - 1]))) {
+      return value.slice(0, index).trimEnd();
+    }
+  }
+  return value;
+}
+
+function rewriteAntigravityAgentFrontmatter(lines) {
+  const output = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    const match = splitFrontmatterLine(line);
+    index += 1;
+    if (!match) {
+      output.push(line);
+      continue;
+    }
+    const { key, value } = match;
+    if (ANTIGRAVITY_AGENT_DROPPED_KEYS.has(key)) {
+      index = value === '' ? collectBlockListItems(lines, index).next : index;
+      continue;
+    }
+    if (key === 'model') {
+      const model = toAntigravityModel(stripYamlComment(value));
+      if (model) output.push(`model: ${model}`);
+      continue;
+    }
+    if (key === 'tools') {
+      const list = readFrontmatterList(stripYamlComment(value), lines, index);
+      output.push(...toAntigravityToolsBlock(list.items));
+      index = list.next;
+      continue;
+    }
+    output.push(line);
+  }
+  return output;
+}
+
+function toAntigravityAgentFrontmatter(text) {
+  const parts = splitFrontmatter(stripByteOrderMark(text));
+  if (!parts) {
+    return text;
+  }
+  return ['---', ...rewriteAntigravityAgentFrontmatter(parts.frontmatter), '---', ...parts.body].join('\n');
+}
+
+function foldBlockLines(lines) {
+  const paragraphs = [];
+  let current = [];
+  for (const line of lines) {
+    if (line === '') {
+      if (current.length > 0) paragraphs.push(current.join(' '));
+      current = [];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length > 0) paragraphs.push(current.join(' '));
+  return paragraphs.join('\n');
+}
+
+function readBlockScalar(indicator, lines, start) {
+  const body = [];
+  for (let index = start; index < lines.length && (lines[index].trim() === '' || /^\s/.test(lines[index])); index += 1) {
+    body.push(lines[index]);
+  }
+  const indents = body.filter(line => line.trim() !== '').map(line => line.length - line.trimStart().length);
+  const indent = indents.length > 0 ? Math.min(...indents) : 0;
+  const dedented = body.map(line => (line.trim() === '' ? '' : line.slice(indent).trimEnd()));
+  return indicator.startsWith('>') ? foldBlockLines(dedented) : dedented.join('\n').replace(/^\n+|\n+$/g, '');
+}
+
+function yamlScalar(value) {
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).replaceAll("''", "'");
+  }
+  return value;
+}
+
+function commandDescription(parts) {
+  const index = parts.frontmatter.findIndex(line => splitFrontmatterLine(line)?.key === 'description');
+  if (index >= 0) {
+    const value = stripYamlComment(splitFrontmatterLine(parts.frontmatter[index]).value);
+    return /^[|>][+-]?$/.test(value) ? readBlockScalar(value, parts.frontmatter, index + 1) : yamlScalar(value);
+  }
+  const firstLine = parts.body.find(line => line.trim() !== '');
+  return firstLine ? firstLine.replace(/^#+\s*/, '').trim() : null;
+}
+
+function toAntigravityCommandSkill(text, { name = null } = {}) {
+  const source = stripByteOrderMark(text);
+  const parts = splitFrontmatter(source) || { frontmatter: [], body: source.split(/\r?\n/) };
+  const description = commandDescription(parts);
+  const frontmatter = [];
+  if (name) {
+    frontmatter.push(`name: ${name}`);
+  }
+  if (description) {
+    frontmatter.push(`description: ${JSON.stringify(description)}`);
+  }
+  return ['---', ...frontmatter, '---', ...parts.body].join('\n');
+}
+
+function commandName(sourcePath) {
+  if (!sourcePath) {
+    return null;
+  }
+  const segments = path.resolve(sourcePath).split(path.sep);
+  const commandsIndex = segments.lastIndexOf('commands');
+  const relative = commandsIndex < 0 ? segments.slice(-1) : segments.slice(commandsIndex + 1);
+  return relative.join('-').replace(/\.md$/, '');
+}
+
+function ruleDirectory(sourcePath) {
+  if (!sourcePath) {
+    return null;
+  }
+  const segments = path.resolve(sourcePath).split(path.sep);
+  const rulesIndex = segments.lastIndexOf('rules');
+  return rulesIndex < 0 ? null : segments.slice(rulesIndex + 1, -1).join('/');
+}
+
 const TRANSFORMS = Object.freeze({
   [CLAUDE_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toClaudeAgentFrontmatter(content.toString('utf8')), 'utf8'),
   [OPENCODE_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toOpenCodeAgentFrontmatter(content.toString('utf8')), 'utf8'),
+  [ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
+    toAntigravityRule(content.toString('utf8'), { directory: ruleDirectory(sourcePath) }),
+    'utf8'
+  ),
+  [ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM]: content => Buffer.from(toAntigravityAgentFrontmatter(content.toString('utf8')), 'utf8'),
+  [ANTIGRAVITY_COMMAND_SKILL_TRANSFORM]: (content, sourcePath) => Buffer.from(
+    toAntigravityCommandSkill(content.toString('utf8'), { name: commandName(sourcePath) }),
+    'utf8'
+  ),
+  [ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM]: (content, sourcePath) => Buffer.from(
+    toAntigravityRule(content.toString('utf8'), { manual: true, directory: ruleDirectory(sourcePath) }),
+    'utf8'
+  ),
 });
 
-function transformContent(content, transform) {
+function transformContent(content, transform, sourcePath = null) {
   const apply = TRANSFORMS[transform];
   if (typeof apply !== 'function') {
     throw new TypeError(`Unknown copy transform: ${transform}`);
   }
-  return apply(content);
+  return apply(content, sourcePath);
 }
 
 // The bytes a planned copy leaves at its destination: the source as-is, or
 // the source through the operation's transform.
 function plannedFileContent(sourcePath, transform) {
   const content = fs.readFileSync(sourcePath);
-  return transform ? transformContent(content, transform) : content;
+  return transform ? transformContent(content, transform, sourcePath) : content;
 }
 
 module.exports = {
+  ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM,
+  ANTIGRAVITY_COMMAND_SKILL_TRANSFORM,
+  ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
+  ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
   OPENCODE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
+  toAntigravityAgentFrontmatter,
+  toAntigravityCommandSkill,
+  toAntigravityRule,
   toClaudeAgentFrontmatter,
   toOpenCodeAgentFrontmatter,
   transformContent,

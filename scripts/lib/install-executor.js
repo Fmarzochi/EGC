@@ -12,6 +12,9 @@ const {
   resolveInstallPlan,
 } = require('./install-manifests');
 const { getInstallTargetAdapter } = require('./install-targets/registry');
+const { AGY_RULES_SUBDIR, isPersonCopy, planAntigravityRuleFiles, readRecordedDestinations } = require('./antigravity-rules');
+const { planAntigravityAgentFiles } = require('./antigravity-agents');
+const { planAntigravityCommandFiles } = require('./antigravity-commands');
 const { isGeneratedRuntimeSourcePath, isHostPlacedSourcePath, isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-source-filters');
 const { HOOK_OPERATION_KIND } = require('./claude-settings-hooks');
 const { MERGE_YAML_READ_LIST_KIND } = require('./aider-config-merge');
@@ -19,7 +22,6 @@ const { MERGE_MARKDOWN_INDEX_KIND } = require('./warp-agents-merge');
 const { assertSafeMcpConfig, isMcpConfigPath } = require('./mcp-config');
 
 const LANGUAGE_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
-const GEMINI_EGC_NAMESPACE = 'egc';
 
 function getSourceRoot() {
   return path.join(__dirname, '../..');
@@ -283,7 +285,7 @@ function isDirectoryNonEmpty(dirPath) {
 function planEGCLegacyInstall(context) {
   const adapter = getInstallTargetAdapter('egc');
   const targetRoot = adapter.resolveRoot({ homeDir: context.homeDir });
-  const rulesDir = context.geminiRulesDir || path.join(targetRoot, 'rules', GEMINI_EGC_NAMESPACE);
+  const rulesDir = context.geminiRulesDir || path.join(targetRoot, AGY_RULES_SUBDIR);
   const installStatePath = adapter.getInstallStatePath({ homeDir: context.homeDir });
   const operations = [];
   const warnings = [];
@@ -294,12 +296,26 @@ function planEGCLegacyInstall(context) {
     );
   }
 
-  addRecursiveCopyOperations(operations, {
-    moduleId: 'legacy-egc-rules',
-    sourceRoot: context.sourceRoot,
-    sourceRelativeDir: path.join('rules', 'common'),
-    destinationDir: path.join(rulesDir, 'common'),
-  });
+  const recordedDestinations = readRecordedDestinations(installStatePath);
+  const addRules = sourceRelativeDir => {
+    for (const rule of planAntigravityRuleFiles(context.sourceRoot, sourceRelativeDir)) {
+      const sourcePath = path.join(context.sourceRoot, rule.sourceRelativePath);
+      const destinationPath = path.join(rulesDir, rule.fileName);
+      if (isPersonCopy(destinationPath, sourcePath, rule.transform, recordedDestinations)) {
+        continue;
+      }
+      operations.push(buildCopyFileOperation({
+        moduleId: 'legacy-egc-rules',
+        sourcePath,
+        sourceRelativePath: rule.sourceRelativePath,
+        destinationPath,
+        strategy: 'flatten-copy',
+        transform: rule.transform,
+      }));
+    }
+  };
+
+  addRules('rules/common');
 
   for (const language of context.languages) {
     if (!LANGUAGE_NAME_PATTERN.test(language)) {
@@ -315,12 +331,7 @@ function planEGCLegacyInstall(context) {
       continue;
     }
 
-    addRecursiveCopyOperations(operations, {
-      moduleId: 'legacy-egc-rules',
-      sourceRoot: context.sourceRoot,
-      sourceRelativeDir: path.join('rules', language),
-      destinationDir: path.join(rulesDir, language),
-    });
+    addRules(`rules/${language}`);
   }
 
   return {
@@ -470,18 +481,26 @@ function planAntigravityLegacyInstall(context) {
     });
   }
 
-  addRecursiveCopyOperations(operations, {
-    moduleId: 'legacy-antigravity-install',
-    sourceRoot: context.sourceRoot,
-    sourceRelativeDir: 'commands',
-    destinationDir: path.join(targetRoot, 'workflows'),
-  });
-  addRecursiveCopyOperations(operations, {
-    moduleId: 'legacy-antigravity-install',
-    sourceRoot: context.sourceRoot,
-    sourceRelativeDir: 'agents',
-    destinationDir: path.join(targetRoot, 'skills'),
-  });
+  const recordedDestinations = readRecordedDestinations(installStatePath);
+  const libraryFiles = [
+    ...planAntigravityCommandFiles(context.sourceRoot, 'commands').map(file => ({ ...file, directory: 'skills' })),
+    ...planAntigravityAgentFiles(context.sourceRoot, 'agents').map(file => ({ ...file, directory: 'agents' })),
+  ];
+  for (const file of libraryFiles) {
+    const sourcePath = path.join(context.sourceRoot, file.sourceRelativePath);
+    const destinationPath = path.join(targetRoot, file.directory, file.fileName);
+    if (isPersonCopy(destinationPath, sourcePath, file.transform, recordedDestinations)) {
+      continue;
+    }
+    operations.push(buildCopyFileOperation({
+      moduleId: 'legacy-antigravity-install',
+      sourcePath,
+      sourceRelativePath: file.sourceRelativePath,
+      destinationPath,
+      strategy: 'flatten-copy',
+      transform: file.transform,
+    }));
+  }
   addRecursiveCopyOperations(operations, {
     moduleId: 'legacy-antigravity-install',
     sourceRoot: context.sourceRoot,

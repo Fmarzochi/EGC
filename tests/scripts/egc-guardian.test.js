@@ -243,7 +243,10 @@ async function runTests() {
 
   console.log('\n=== validate_write: ALLOWED (functional tool dirs) ===');
 
-  run(`write ~/.claude/settings.json`,          () => assertWriteAllowed(`${home}/.claude/settings.json`));
+  // settings.json holds the hooks Claude Code runs on the next session, so
+  // it is written by the person and the installer, never by the agent (the
+  // hook surfaces test covers every tool); the rest of ~/.claude stays open.
+  run(`write ~/.claude/settings.json`,          () => assertWriteDenied(`${home}/.claude/settings.json`));
   run(`write ~/.claude/CLAUDE.md`,               () => assertWriteAllowed(`${home}/.claude/CLAUDE.md`));
   run(`write ~/.claude/skills/foo/SKILL.md`,     () => assertWriteAllowed(`${home}/.claude/skills/foo/SKILL.md`));
   run(`write ~/.claude/projects/x/memory/MEMORY.md`, () => assertWriteAllowed(`${home}/.claude/projects/x/memory/MEMORY.md`));
