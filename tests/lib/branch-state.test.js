@@ -108,6 +108,23 @@ function runTests() {
     assert.strictEqual(detectBranch(repo), 'feature/auth');
   }));
 
+  if (process.platform !== 'win32') {
+    tally(test('detectBranch refuses a .git that is a symlink, even to another trusted repo (TOCTOU)', () => {
+      // trustedGitPath resolves through realpathSync, so a .git symlink
+      // pointing at a second, legitimate repo under the same trusted root
+      // would pass that check: canonicalPath(repoA/.git) resolves to
+      // repoB/.git, which is itself under a trusted root with a .git
+      // segment. readHeadLine must still refuse it before ever opening a
+      // file, since the link's target can be swapped again after the check
+      // (the TOCTOU window a resolve-then-read sequence leaves open).
+      const legitimate = makeGitRepo('feature/legit');
+      const container = makeTmpDir('egc-branch-state-link-');
+      const linkedGitDir = path.join(container, '.git');
+      fs.symlinkSync(path.join(legitimate, '.git'), linkedGitDir, 'dir');
+      assert.strictEqual(detectBranch(container), null, 'a symlinked .git is refused outright, never followed to a legitimate target');
+    }));
+  }
+
   tally(test('trustedGitPath returns the canonical path only under a trusted root with a .git segment', () => {
     const realTmp = fs.realpathSync.native(os.tmpdir());
     const under = path.join(realTmp, 'egc-trusted', '.git', 'HEAD');
@@ -195,20 +212,22 @@ function runTests() {
   tally(test('resolveHeadState reads .git/HEAD exactly once (one snapshot, not two)', () => {
     const repo = makeGitRepo(null);
     git(repo, 'checkout -q --detach');
-    const originalRead = fs.readFileSync;
+    const originalOpen = fs.openSync;
     let headReads = 0;
-    fs.readFileSync = function patched(target, ...rest) {
-      // trustedGitPath canonicalizes through realpathSync.native, so on a
-      // host where the temp root itself is a symlink (macOS: /tmp ->
-      // /private/tmp) the path actually read differs from the lexical one
-      // built from `repo`. Matching by basename is immune to that.
+    fs.openSync = function patched(target, ...rest) {
+      // readHeadLine opens the raw HEAD path with O_NOFOLLOW instead of
+      // handing a resolved string to readFileSync; trustedGitPath
+      // canonicalizes through realpathSync.native, so on a host where the
+      // temp root itself is a symlink (macOS: /tmp -> /private/tmp) the path
+      // actually opened differs from the lexical one built from `repo`.
+      // Matching by basename is immune to that.
       if (typeof target === 'string' && path.basename(target) === 'HEAD') headReads += 1;
-      return originalRead.call(fs, target, ...rest);
+      return originalOpen.call(fs, target, ...rest);
     };
     try {
       resolveHeadState(repo);
     } finally {
-      fs.readFileSync = originalRead;
+      fs.openSync = originalOpen;
     }
     assert.strictEqual(headReads, 1, 'detectBranch and detectDetachedCommit must not each read HEAD on their own');
   }));

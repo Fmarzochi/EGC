@@ -108,26 +108,54 @@ function findGitDir(startPath) {
   }
 }
 
+const NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+const NONBLOCK_FLAG = typeof fs.constants.O_NONBLOCK === 'number' ? fs.constants.O_NONBLOCK : 0;
+
+// Opens the exact path handed in, refusing a symlinked final component
+// (O_NOFOLLOW) instead of resolving it first and reading the target: a
+// resolve-then-read sequence leaves a TOCTOU window where the link can be
+// swapped between the two steps to redirect the read outside the trusted
+// roots trustedGitPath already approved. O_NONBLOCK keeps a FIFO planted at
+// the path from blocking this call forever.
+function readFileNoFollow(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NOFOLLOW_FLAG | NONBLOCK_FLAG);
+    if (!fs.fstatSync(fd).isFile()) return null;
+    return fs.readFileSync(fd, 'utf8');
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
 // Reads the raw, trimmed content of .git/HEAD, resolving worktree and
 // submodule pointer files and refusing anything outside the trusted roots.
 // Shared by detectBranch and detectDetachedCommit so both agree on exactly
 // what HEAD says.
+//
+// trustedGitPath is used only as a yes/no check here; every read below opens
+// the original, unresolved path with O_NOFOLLOW, which refuses a symlinked
+// final component outright, including one pointing at another trusted .git.
 function readHeadLine(projectPath) {
   try {
-    const rawGitDir = findGitDir(projectPath);
-    if (!rawGitDir) return null;
-    let gitDir = trustedGitPath(rawGitDir);
-    if (!gitDir) return null;
+    let gitDir = findGitDir(projectPath);
+    if (!gitDir || !trustedGitPath(gitDir)) return null;
+    if (fs.lstatSync(gitDir).isSymbolicLink()) return null;
     if (fs.statSync(gitDir).isFile()) {
       // Worktrees and submodules store a pointer file instead of a directory
-      const pointer = fs.readFileSync(gitDir, 'utf8').trim();
+      const rawPointer = readFileNoFollow(gitDir);
+      if (rawPointer === null) return null;
+      const pointer = rawPointer.trim();
       if (!pointer.startsWith('gitdir:')) return null;
-      gitDir = trustedGitPath(path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim()));
-      if (!gitDir) return null;
+      gitDir = path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim());
+      if (!trustedGitPath(gitDir)) return null;
     }
-    const headPath = trustedGitPath(path.resolve(gitDir, 'HEAD'));
-    if (!headPath) return null;
-    return fs.readFileSync(headPath, 'utf8').trim();
+    const headPath = path.resolve(gitDir, 'HEAD');
+    if (!trustedGitPath(headPath)) return null;
+    const head = readFileNoFollow(headPath);
+    return head === null ? null : head.trim();
   } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info available
     return null;
   }
