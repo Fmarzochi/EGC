@@ -57,9 +57,9 @@ rules/
 
 ### 选项 2：手动安装
 
-> **Antigravity：** 它只读取 `~/.gemini/config/rules/` 中带有 `trigger` frontmatter 的扁平 `.md` 文件，
-> 直接复制无法生成这种格式。Antigravity 请使用选项 1：安装程序会将每条规则以
-> `<language>-<rule>.md` 的形式连同其 trigger 写入该目录。下面的复制方式适用于按目录树读取规则的工具。
+**Antigravity：** 它只读取 `~/.gemini/config/rules/` 中带有 `trigger` frontmatter 的扁平 `.md` 文件，
+直接复制无法生成这种格式。Antigravity 请使用选项 1：安装程序会将每条规则以
+`<language>-<rule>.md` 的形式连同其 trigger 写入该目录。下面的复制方式适用于按目录树读取规则的工具。
 
 > **重要提示：** 复制整个目录: 不要使用 `/*` 展开。
 > 通用和语言特定目录包含同名文件。

@@ -44,10 +44,10 @@ rules/
 
 ### Option 2: Manual Installation
 
-> **Antigravity:** it reads only flat `.md` files with a `trigger` frontmatter in
-> `~/.gemini/config/rules/`, which a plain copy does not produce. Use Option 1 for
-> Antigravity: the installer writes each rule there as `<language>-<rule>.md` with
-> its trigger. The copy below is for a tool that reads a rules directory as a tree.
+**Antigravity:** it reads only flat `.md` files with a `trigger` frontmatter in
+`~/.gemini/config/rules/`, which a plain copy does not produce. Use Option 1 for
+Antigravity: the installer writes each rule there as `<language>-<rule>.md` with
+its trigger. The copy below is for a tool that reads a rules directory as a tree.
 
 > **Important:** Copy entire directories: do NOT flatten with `/*`.
 > Common and language-specific directories contain files with the same names.
