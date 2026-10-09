@@ -25,7 +25,13 @@ const {
 } = require('../claude-settings-hooks');
 const { createAntigravityGuardianOperations } = require('../antigravity-guardian-operations');
 const { resolveGlobalHooksJsonPath } = require('../antigravity-guardian-hooks');
-const { AGY_RULES_SUBDIR, isPersonRule, isRuleSource, planAntigravityRuleFiles } = require('../antigravity-rules');
+const {
+  AGY_RULES_SUBDIR,
+  isRuleSource,
+  planAntigravityCopyOperations,
+  planAntigravityRuleFiles,
+} = require('../antigravity-rules');
+const { AGY_AGENTS_SUBDIR, isAgentSource, planAntigravityAgentFiles } = require('../antigravity-agents');
 
 const AGY_SKILLS_SUBDIR = 'config/skills';
 
@@ -36,29 +42,27 @@ const AGY_SKILLS_SUBDIR = 'config/skills';
 // tree here. What an earlier install wrote for them is retired on the next
 // apply, file by file and only when byte-identical to what EGC copied
 // (helpers.js, planGenericRetirements); a file the person edited stays.
-// agents/ and commands/ keep their current spot until each family moves to
-// the directory Antigravity reads (config/agents); the same retirement
-// collects the old copies then, as it does for the rules/egc tree.
+// commands/ keeps its current spot until it moves to what Antigravity reads;
+// the same retirement collects the old copies then, as it does for the
+// rules/egc tree and the agents/ copies.
 const GEMINI_CLI_ONLY_SOURCE_PREFIXES = new Set(['.agents', 'hooks', 'mcp-configs', '.gemini-plugin']);
 
 function isGeminiCliOnlySource(sourceRelativePath) {
   return GEMINI_CLI_ONLY_SOURCE_PREFIXES.has(normalizeRelativePath(sourceRelativePath).split('/')[0]);
 }
 
-function planAntigravityRuleOperations(adapter, moduleId, sourceRelativePath, input, recordedDestinations) {
+function planAntigravityLibraryOperations(adapter, moduleId, sourceRelativePath, input, recordedDestinations) {
   const repoRoot = input.repoRoot || '';
-  const rulesDir = path.join(adapter.resolveRoot(input), AGY_RULES_SUBDIR);
-  return planAntigravityRuleFiles(repoRoot, sourceRelativePath)
-    .map(rule => ({
-      ...createRemappedOperation(adapter, moduleId, rule.sourceRelativePath, path.join(rulesDir, rule.fileName), { strategy: 'flatten-copy' }),
-      transform: rule.transform,
-    }))
-    .filter(operation => !isPersonRule(
-      operation.destinationPath,
-      path.join(repoRoot, operation.sourceRelativePath),
-      operation.transform,
-      recordedDestinations
-    ));
+  const targetRoot = adapter.resolveRoot(input);
+  const isRule = isRuleSource(sourceRelativePath);
+  return planAntigravityCopyOperations({
+    adapter,
+    moduleId,
+    files: isRule ? planAntigravityRuleFiles(repoRoot, sourceRelativePath) : planAntigravityAgentFiles(repoRoot, sourceRelativePath),
+    destinationDir: path.join(targetRoot, isRule ? AGY_RULES_SUBDIR : AGY_AGENTS_SUBDIR),
+    repoRoot,
+    recordedDestinations,
+  });
 }
 
 // Antigravity shares this home root (~/.gemini) for skill discovery (see
@@ -248,7 +252,7 @@ module.exports = createInstallTargetAdapter({
     return [buildValidationIssue(
       'warning',
       'install-state-unreadable',
-      `The install state at ${adapter.getInstallStatePath(input)} cannot be read: skills already under ${path.join(adapter.resolveRoot(input), AGY_SKILLS_SUBDIR)} and rules already under ${path.join(adapter.resolveRoot(input), AGY_RULES_SUBDIR)} that differ from EGC's are treated as yours and left as they are until it can be read again.`
+      `The install state at ${adapter.getInstallStatePath(input)} cannot be read: skills already under ${path.join(adapter.resolveRoot(input), AGY_SKILLS_SUBDIR)}, and rules and agents already under ${path.join(adapter.resolveRoot(input), AGY_RULES_SUBDIR)} and ${path.join(adapter.resolveRoot(input), AGY_AGENTS_SUBDIR)} that differ from EGC's, are treated as yours and left as they are until it can be read again.`
     )];
   },
   planOperations(input, adapter) {
@@ -261,8 +265,8 @@ module.exports = createInstallTargetAdapter({
       return paths
         .filter(p => !isForeignPlatformPath(p, adapter.target) && !isGeminiCliOnlySource(p))
         .flatMap(sourceRelativePath => {
-          if (isRuleSource(sourceRelativePath)) {
-            return planAntigravityRuleOperations(adapter, module.id, sourceRelativePath, planningInput, recordedDestinations);
+          if (isRuleSource(sourceRelativePath) || isAgentSource(sourceRelativePath)) {
+            return planAntigravityLibraryOperations(adapter, module.id, sourceRelativePath, planningInput, recordedDestinations);
           }
           const managedDestinationPaths = getAGYManagedDestinationPaths(
             adapter,

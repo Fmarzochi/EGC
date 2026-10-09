@@ -2,7 +2,7 @@
 
 ## Available Agents
 
-Located in `~/.gemini/agents/`:
+Located in `~/.gemini/config/agents/`:
 
 | Agent | Purpose | When to Use |
 |-------|---------|-------------|

@@ -9,32 +9,32 @@ const {
   plannedFileContent,
 } = require('./install/copy-transforms');
 const { isIgnoredSourceDirectory, isIgnoredSourceFile } = require('./install-source-filters');
-const { readInstallStateOrNull } = require('./install-targets/helpers');
+const { createRemappedOperation, readInstallStateOrNull } = require('./install-targets/helpers');
 
 const AGY_RULES_SUBDIR = 'config/rules';
 const MANUAL_RULE_LANGUAGES = new Set(['zh']);
 
-function normalizeRulePath(sourceRelativePath) {
+function normalizeSourcePath(sourceRelativePath) {
   return String(sourceRelativePath).replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/+$/, '');
 }
 
 function isRuleSource(sourceRelativePath) {
-  const normalized = normalizeRulePath(sourceRelativePath);
+  const normalized = normalizeSourcePath(sourceRelativePath);
   return normalized === 'rules' || normalized.startsWith('rules/');
 }
 
 function ruleFileName(sourceRelativeFile) {
-  const relative = normalizeRulePath(sourceRelativeFile).slice('rules/'.length);
+  const relative = normalizeSourcePath(sourceRelativeFile).slice('rules/'.length);
   return path.posix.basename(relative).toLowerCase() === 'readme.md' ? null : relative.replaceAll('/', '-');
 }
 
 function ruleTransform(sourceRelativeFile) {
-  return MANUAL_RULE_LANGUAGES.has(normalizeRulePath(sourceRelativeFile).split('/')[1])
+  return MANUAL_RULE_LANGUAGES.has(normalizeSourcePath(sourceRelativeFile).split('/')[1])
     ? ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM
     : ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM;
 }
 
-function listRuleSourceFiles(repoRoot, sourceRelativePath) {
+function listSourceFiles(repoRoot, sourceRelativePath) {
   const stat = fs.statSync(path.join(repoRoot, sourceRelativePath), { throwIfNoEntry: false });
   if (stat?.isFile()) {
     return [sourceRelativePath];
@@ -47,23 +47,35 @@ function listRuleSourceFiles(repoRoot, sourceRelativePath) {
     .flatMap(entry => {
       const child = `${sourceRelativePath}/${entry.name}`;
       if (entry.isDirectory()) {
-        return isIgnoredSourceDirectory(entry.name) ? [] : listRuleSourceFiles(repoRoot, child);
+        return isIgnoredSourceDirectory(entry.name) ? [] : listSourceFiles(repoRoot, child);
       }
       return entry.isFile() && !isIgnoredSourceFile(entry.name) ? [child] : [];
     });
+}
+
+function assertUniqueFileNames(files) {
+  const owners = new Map();
+  for (const file of files) {
+    const owner = owners.get(file.fileName);
+    if (owner) {
+      throw new Error(`${owner} and ${file.sourceRelativePath} would both install as ${file.fileName}`);
+    }
+    owners.set(file.fileName, file.sourceRelativePath);
+  }
+  return files;
 }
 
 function planAntigravityRuleFiles(repoRoot, sourceRelativePath) {
   if (!repoRoot) {
     return [];
   }
-  return listRuleSourceFiles(repoRoot, normalizeRulePath(sourceRelativePath))
+  return assertUniqueFileNames(listSourceFiles(repoRoot, normalizeSourcePath(sourceRelativePath))
     .map(sourceRelativeFile => ({
       sourceRelativePath: sourceRelativeFile,
       fileName: ruleFileName(sourceRelativeFile),
       transform: ruleTransform(sourceRelativeFile),
     }))
-    .filter(rule => rule.fileName);
+    .filter(rule => rule.fileName));
 }
 
 function readRecordedDestinations(statePath) {
@@ -72,7 +84,7 @@ function readRecordedDestinations(statePath) {
   return operations.map(operation => path.resolve(String(operation.destinationPath || '')));
 }
 
-function isPersonRule(destinationPath, sourcePath, transform, recordedDestinations) {
+function isPersonCopy(destinationPath, sourcePath, transform, recordedDestinations) {
   const stat = fs.lstatSync(destinationPath, { throwIfNoEntry: false });
   if (!stat || stat.isSymbolicLink()) {
     return false;
@@ -88,10 +100,28 @@ function isPersonRule(destinationPath, sourcePath, transform, recordedDestinatio
   }
 }
 
+function planAntigravityCopyOperations({ adapter, moduleId, files, destinationDir, repoRoot, recordedDestinations }) {
+  return files
+    .map(file => ({
+      ...createRemappedOperation(adapter, moduleId, file.sourceRelativePath, path.join(destinationDir, file.fileName), { strategy: 'flatten-copy' }),
+      transform: file.transform,
+    }))
+    .filter(operation => !isPersonCopy(
+      operation.destinationPath,
+      path.join(repoRoot, operation.sourceRelativePath),
+      operation.transform,
+      recordedDestinations
+    ));
+}
+
 module.exports = {
   AGY_RULES_SUBDIR,
-  isPersonRule,
+  assertUniqueFileNames,
+  isPersonCopy,
   isRuleSource,
+  listSourceFiles,
+  normalizeSourcePath,
+  planAntigravityCopyOperations,
   planAntigravityRuleFiles,
   readRecordedDestinations,
 };

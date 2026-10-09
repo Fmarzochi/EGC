@@ -468,7 +468,8 @@ function runTests() {
       assert.ok(operationFor(plan, path.join('.agents', 'rules', 'common-coding-style.md')));
       assert.ok(operationFor(plan, path.join('.agents', 'rules', 'typescript-testing.md')));
       assert.ok(operationFor(plan, path.join('.agents', 'workflows', 'plan.md')));
-      assert.ok(operationFor(plan, path.join('.agents', 'skills', 'architect.md')));
+      assert.strictEqual(operationFor(plan, path.join('.agents', 'agents', 'architect.md'))?.transform, 'antigravity-agent-frontmatter');
+      assert.ok(!operationFor(plan, path.join('.agents', 'skills', 'architect.md')));
       assert.ok(operationFor(plan, path.join('.agents', 'skills', 'demo', 'SKILL.md')));
       assert.strictEqual(plan.statePreview.target.id, 'antigravity-project');
     } finally {
