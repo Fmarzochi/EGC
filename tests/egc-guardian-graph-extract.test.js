@@ -198,5 +198,59 @@ run('every declarator of one variable statement is a symbol', () => {
   assert.ok(!sym(typed, 'number'), 'a comma inside a type argument is not a declarator');
 });
 
+run('calls inside a template literal interpolation are references, nested templates included, and lines stay right', () => {
+  const src = 'function f(x) {\n  return `a ${g(x)} b ${`nested ${h(x)}`} c ${ { k: 1 }.k }`;\n}\nexport function after() {}\n';
+  const r = extractFile(src);
+  const f = sym(r, 'f');
+  assert.ok(f.refs.includes('g') && f.refs.includes('h'), `refs: ${f.refs.join(', ')}`);
+  assert.strictEqual(f.startLine, 1);
+  assert.strictEqual(f.endLine, 3, 'the interpolations did not shift the end of f');
+  assert.strictEqual(sym(r, 'after').startLine, 4);
+  const multiline = extractFile('function m() {\n  return `one\n  ${call()}\n  two`;\n}\nexport const z = 1;\n');
+  assert.ok(sym(multiline, 'm').refs.includes('call'));
+  assert.strictEqual(sym(multiline, 'z').startLine, 6, 'lines inside the template are counted');
+  assert.strictEqual(extractFile('const s = `a ${x} b`; export function ok() {}\n').symbols.at(-1).name, 'ok');
+});
+
+run('a regex after a block is a regex, and a slash after an object literal is a division', () => {
+  const afterBlock = extractFile('if (ok) {\n  go();\n}\n/export function ghost() {}/.test(text);\nexport function after() {}\n');
+  assert.deepStrictEqual(afterBlock.symbols.map(s => s.name), ['after']);
+  const afterElse = extractFile('if (a) {\n  b();\n} else {\n  c();\n}\n/export const ghost = 1/.exec(t);\nexport const real = 1;\n');
+  assert.deepStrictEqual(afterElse.symbols.map(s => s.name), ['real']);
+  const division = extractFile('const half = { n: 4 }.n / 2; export function later() { return half / 2; }\n');
+  assert.ok(sym(division, 'later'), 'a division after an object literal must not start a regex');
+  const arrow = extractFile('const f = () => {};\nconst g = 8 / 2; export const z = 1;\n');
+  assert.ok(sym(arrow, 'z'));
+});
+
+run('CommonJS aliases: exports.name = local and { publicName: local } answer to the public name', () => {
+  const prop = extractFile('function foo() { return 1; }\nexports.bar = foo;\nmodule.exports.baz = foo;\n');
+  assert.ok(!sym(prop, 'bar') && !sym(prop, 'baz'), 'an alias is not a symbol of its own');
+  assert.ok(sym(prop, 'foo').exported);
+  const aliases = prop.imports.filter(im => im.specifier === '').flatMap(im => im.bindings);
+  assert.deepStrictEqual(aliases, [{ local: 'bar', imported: 'foo' }, { local: 'baz', imported: 'foo' }]);
+  const notAlias = extractFile('exports.count = 5;\nexports.handler = function () { return 1; };\nexports.nothing = null;\n');
+  assert.ok(sym(notAlias, 'count') && sym(notAlias, 'handler') && sym(notAlias, 'nothing'), 'a value that is not a name stays a symbol');
+  assert.ok(!notAlias.imports.some(im => im.specifier === ''));
+  const obj = extractFile('function baz() {}\nfunction qux() {}\nmodule.exports = { bar: baz, qux };\n');
+  assert.ok(sym(obj, 'baz').exported && sym(obj, 'qux').exported);
+  assert.deepStrictEqual(obj.imports.filter(im => im.specifier === '').flatMap(im => im.bindings), [{ local: 'bar', imported: 'baz' }]);
+});
+
+run('destructuring declarations bind symbols: objects, arrays, renames, defaults, rest and nesting', () => {
+  const obj = extractFile('export const { alpha, beta: renamed, gamma = 3, ...others } = source;\n');
+  assert.deepStrictEqual(obj.symbols.map(s => s.name), ['alpha', 'renamed', 'gamma', 'others']);
+  assert.ok(obj.symbols.every(s => s.exported));
+  const arr = extractFile('const [first, , third = 3, ...tail] = list;\n');
+  assert.deepStrictEqual(arr.symbols.map(s => s.name), ['first', 'third', 'tail']);
+  const nested = extractFile('const { a: { b, c: [d] }, e } = deep;\n');
+  assert.deepStrictEqual(nested.symbols.map(s => s.name), ['b', 'd', 'e']);
+  const mixed = extractFile('const { one } = x, plain = 2;\n');
+  assert.deepStrictEqual(mixed.symbols.map(s => s.name), ['one', 'plain']);
+  const required = extractFile("const { join, resolve: res } = require('node:path');\n");
+  assert.deepStrictEqual(required.symbols, [], 'a destructured require is an import, not symbols');
+  assert.strictEqual(required.imports.length, 1);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

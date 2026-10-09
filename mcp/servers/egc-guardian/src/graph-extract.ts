@@ -12,7 +12,8 @@ export interface ImportBinding { local: string; imported: string }
 export interface ExtractedImport { specifier: string; bindings: ImportBinding[]; reexport: boolean }
 export interface ExtractResult { symbols: ExtractedSymbol[]; imports: ExtractedImport[] }
 
-// ctl marks a ) that closes the head of if, for, while or with: a regex literal may follow it.
+// ctl marks a ) that closes the head of if, for, while or with, and a } that closes a block
+// (not an object literal): a regex literal may follow either.
 interface Tok { t: 'id' | 'str' | 'lit' | 'p'; v: string; line: number; ctl?: boolean }
 
 const MAX_SYMBOLS = 2000;
@@ -20,6 +21,8 @@ const MAX_REFS = 200;
 
 const REGEX_AFTER_KEYWORD = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
 const CONTROL_HEAD = new Set(['if', 'for', 'while', 'with']);
+// A { after one of these opens a block, not an object literal.
+const BLOCK_KEYWORDS = new Set(['else', 'do', 'try', 'finally']);
 const DECL_START = new Set(['export', 'import', 'const', 'let', 'var', 'function', 'class', 'interface', 'type', 'enum', 'abstract', 'declare', 'async', 'module', 'exports', 'namespace']);
 const DECL_MODIFIERS = new Set(['declare', 'abstract', 'async']);
 const CONTINUATION = new Set(['=', '+', '-', '*', '/', '%', '&', '|', '^', '?', ':', ',', '.', '<', '>', '!', '~', '(', '[', '{']);
@@ -40,9 +43,9 @@ function regexAllowed(prev: Tok | undefined): boolean {
   if (!prev) return true;
   if (prev.t === 'id') return REGEX_AFTER_KEYWORD.has(prev.v);
   if (prev.t === 'str' || prev.t === 'lit') return false;
-  if (prev.v === ')') return prev.ctl === true;
+  if (prev.v === ')' || prev.v === '}') return prev.ctl === true;
   // A / right after < is a JSX closing tag, not a regex.
-  return prev.v !== ']' && prev.v !== '}' && prev.v !== '<';
+  return prev.v !== ']' && prev.v !== '<';
 }
 
 export function tokenize(src: string): Tok[] {
@@ -67,8 +70,9 @@ export function tokenize(src: string): Tok[] {
     if (src[i] === q) i++;
     return v;
   }
-  function skipTemplate(): void {
-    i++;
+  // Reads template text up to the closing backtick or the next ${. True when it
+  // stopped at a ${, whose code follows as ordinary tokens.
+  function scanTemplateText(): boolean {
     while (i < n && src[i] !== '`') {
       if (src[i] === '\\') {
         if (src[i + 1] === '\n') line++;
@@ -78,24 +82,12 @@ export function tokenize(src: string): Tok[] {
       if (src[i] === '\n') line++;
       if (src[i] === '$' && src[i + 1] === '{') {
         i += 2;
-        skipInterpolation();
-        continue;
+        return true;
       }
       i++;
     }
     i++;
-  }
-  function skipInterpolation(): void {
-    let depth = 1;
-    while (i < n && depth > 0) {
-      const d = src[i];
-      if (d === '`') { skipTemplate(); continue; }
-      if (d === '"' || d === "'") { skipString(d); continue; }
-      if (d === '\n') line++;
-      if (d === '{') depth++;
-      else if (d === '}') depth--;
-      i++;
-    }
+    return false;
   }
 
   function skipBlockComment(): void {
@@ -139,6 +131,28 @@ export function tokenize(src: string): Tok[] {
   }
 
   const parens: boolean[] = [];
+  const blocks: boolean[] = [];
+  // The brace depth at each ${ still open: the } that brings the depth back is its end.
+  const interpolations: number[] = [];
+  let braces = 0;
+
+  function openBrace(): void {
+    const prev = toks[toks.length - 1];
+    const block = prev === undefined
+      || (prev.t === 'p' && (prev.v === ')' || prev.v === ';' || prev.v === '{' || prev.v === '}'))
+      || (prev.t === 'id' && BLOCK_KEYWORDS.has(prev.v));
+    blocks.push(block);
+    braces++;
+  }
+  // The } that ends a ${ is not a token: the template text goes on from it.
+  function closesInterpolation(): boolean {
+    if (interpolations.length === 0 || interpolations[interpolations.length - 1] !== braces) return false;
+    interpolations.pop();
+    i++;
+    if (scanTemplateText()) interpolations.push(braces);
+    else toks.push({ t: 'lit', v: '', line });
+    return true;
+  }
   function pushPunct(c: string): void {
     const tk: Tok = { t: 'p', v: c, line };
     if (c === '(') {
@@ -146,6 +160,12 @@ export function tokenize(src: string): Tok[] {
       parens.push(prev?.t === 'id' && CONTROL_HEAD.has(prev.v));
     } else if (c === ')') {
       tk.ctl = parens.pop() === true;
+    } else if (c === '{') {
+      openBrace();
+    } else if (c === '}') {
+      if (closesInterpolation()) return;
+      braces = Math.max(0, braces - 1);
+      tk.ctl = blocks.pop() === true;
     }
     toks.push(tk);
     i++;
@@ -158,8 +178,9 @@ export function tokenize(src: string): Tok[] {
     if (c === '"' || c === "'") {
       toks.push({ t: 'str', v: skipString(c), line: at });
     } else if (c === '`') {
-      skipTemplate();
+      i++;
       toks.push({ t: 'lit', v: '', line: at });
+      if (scanTemplateText()) interpolations.push(braces);
     } else if (c === '/' && regexAllowed(toks[toks.length - 1])) {
       skipRegex();
       toks.push({ t: 'lit', v: '', line: at });
@@ -342,33 +363,57 @@ export function extractFile(source: string): ExtractResult {
     return Math.max(k, i + 1);
   };
 
-  const parseCommonJs = (i: number, p: number): number => {
-    if (isP(toks[p], '=')) {
-      const rhs = p + 1;
-      if (isP(toks[rhs], '{')) {
-        const end = close(rhs);
-        for (let k = rhs + 1; k < end; ) {
-          const tk = toks[k];
-          if (isId(tk)) {
-            exportedNames.add(tk.v);
-            if (isP(toks[k + 1], ':') && isId(toks[k + 2])) exportedNames.add(toks[k + 2].v);
-          }
-          k = isOpen(tk) ? close(k) + 1 : k + 1;
-        }
-      } else if (isId(toks[rhs], 'function') || isId(toks[rhs], 'class') || (isId(toks[rhs], 'async') && isId(toks[rhs + 1], 'function'))) {
-        // module.exports = function () {} / class Foo {}: the implementation is the module's export.
-        return parseDeclaration(i, isId(toks[rhs], 'async') ? rhs + 1 : rhs, true, true);
-      } else if (isId(toks[rhs]) && (isP(toks[rhs + 1], ';') || toks[rhs + 1] === undefined || toks[rhs + 1].line > toks[rhs].line)) {
-        exportedNames.add(toks[rhs].v);
+  // module.exports = { publicName: local, shorthand }: the locals are exported, and answer to the public names too.
+  const exportObjectNames = (open: number): void => {
+    const end = close(open);
+    for (let k = open + 1; k < end; ) {
+      const tk = toks[k];
+      if (isId(tk) && isP(toks[k + 1], ':') && isId(toks[k + 2])) {
+        exportedNames.add(toks[k + 2].v);
+        if (tk.v !== toks[k + 2].v) addExportAlias(tk.v, toks[k + 2].v);
+        k += 3;
+        continue;
       }
-      return statementEnd(i) + 1;
+      if (isId(tk)) exportedNames.add(tk.v);
+      k = isOpen(tk) ? close(k) + 1 : k + 1;
     }
-    if (isP(toks[p], '.') && isId(toks[p + 1]) && isP(toks[p + 2], '=')) {
-      const end = statementEnd(i);
-      exportedNames.add(toks[p + 1].v);
-      addSymbol(toks[p + 1].v, 'variable', true, i, end);
-      return end + 1;
+  };
+
+  const isFunctionOrClassStart = (k: number): boolean =>
+    isId(toks[k], 'function') || isId(toks[k], 'class') || (isId(toks[k], 'async') && isId(toks[k + 1], 'function'));
+
+  // module.exports = ...
+  const parseModuleExports = (i: number, rhs: number): number => {
+    if (isP(toks[rhs], '{')) {
+      exportObjectNames(rhs);
+    } else if (isFunctionOrClassStart(rhs)) {
+      // module.exports = function () {} / class Foo {}: the implementation is the module's export.
+      return parseDeclaration(i, isId(toks[rhs], 'async') ? rhs + 1 : rhs, true, true);
+    } else if (isId(toks[rhs]) && (isP(toks[rhs + 1], ';') || toks[rhs + 1] === undefined || toks[rhs + 1].line > toks[rhs].line)) {
+      exportedNames.add(toks[rhs].v);
     }
+    return statementEnd(i) + 1;
+  };
+
+  // exports.name = ... and module.exports.name = ..., with p at the dot before the name.
+  const parseExportsProperty = (i: number, p: number): number => {
+    const end = statementEnd(i);
+    const name = toks[p + 1].v;
+    const value = toks[p + 3];
+    if (isId(value) && !NON_REF.has(value.v) && end <= p + 4) {
+      // exports.name = localName;: an alias of the local symbol, not a symbol of its own.
+      exportedNames.add(value.v);
+      addExportAlias(name, value.v);
+    } else {
+      exportedNames.add(name);
+      addSymbol(name, 'variable', true, i, end);
+    }
+    return end + 1;
+  };
+
+  const parseCommonJs = (i: number, p: number): number => {
+    if (isP(toks[p], '=')) return parseModuleExports(i, p + 1);
+    if (isP(toks[p], '.') && isId(toks[p + 1]) && isP(toks[p + 2], '=')) return parseExportsProperty(i, p);
     return i + 1;
   };
 
@@ -461,17 +506,45 @@ export function extractFile(source: string): ExtractResult {
     else addSymbol(name.v, isFunctionInit(at + 1) ? 'function' : 'variable', exported, from, stop);
   };
 
+  // The names a destructuring pattern binds, as token indexes: { a, b: c, d = 1, ...rest } and [x, , y = 2, ...z], nested too.
+  const patternNames = (open: number): number[] => {
+    const names: number[] = [];
+    const end = close(open);
+    const isObject = isP(toks[open], '{');
+    let k = open + 1;
+    while (k < end) {
+      let stop = k;
+      while (stop < end && !isP(toks[stop], ',')) stop = isOpen(toks[stop]) ? close(stop) + 1 : stop + 1;
+      let at = k;
+      while (isP(toks[at], '.')) at++;
+      if (isObject && isId(toks[at]) && isP(toks[at + 1], ':')) at += 2;
+      if (at < stop && isId(toks[at])) names.push(at);
+      else if (at < stop && (isP(toks[at], '{') || isP(toks[at], '['))) names.push(...patternNames(at));
+      k = stop + 1;
+    }
+    return names;
+  };
+
+  const addPatternDeclarator = (open: number, afterPattern: number, stop: number, exported: boolean, from: number): void => {
+    const spec = isP(toks[open], '{') ? requireSpecifier(afterPattern) : null;
+    if (spec !== null) {
+      imports.push({ specifier: spec, bindings: readBraceBindings(open, ':'), reexport: false });
+      return;
+    }
+    for (const at of patternNames(open)) addSymbol(toks[at].v, 'variable', exported, from, stop);
+  };
+
   const parseVariableDecl = (i: number, j: number, exported: boolean): number => {
     const end = statementEnd(j);
     const nameTok = toks[j + 1];
-    if (isId(nameTok)) {
-      const starts = extraDeclarators(j + 2, end);
-      addDeclarator(nameTok, j + 1, starts.length > 0 ? starts[0] - 2 : end, exported, i);
-      starts.forEach((at, n) => addDeclarator(toks[at], at, starts[n + 1] !== undefined ? starts[n + 1] - 2 : end, exported, at));
-    } else if (isP(nameTok, '{')) {
-      const spec = requireSpecifier(close(j + 1) + 1);
-      if (spec !== null) imports.push({ specifier: spec, bindings: readBraceBindings(j + 1, ':'), reexport: false });
-    }
+    const isPattern = isP(nameTok, '{') || isP(nameTok, '[');
+    // Where the first declarator's initializer starts: after its name, or after its pattern.
+    const afterFirst = isPattern ? close(j + 1) + 1 : j + 2;
+    const starts = extraDeclarators(afterFirst, end);
+    const stopOfFirst = starts.length > 0 ? starts[0] - 2 : end;
+    if (isId(nameTok)) addDeclarator(nameTok, j + 1, stopOfFirst, exported, i);
+    else if (isPattern) addPatternDeclarator(j + 1, afterFirst, stopOfFirst, exported, i);
+    starts.forEach((at, n) => addDeclarator(toks[at], at, starts[n + 1] !== undefined ? starts[n + 1] - 2 : end, exported, at));
     return end + 1;
   };
 
