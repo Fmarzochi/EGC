@@ -4,11 +4,9 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
+  createFlatSkillPlanOperations,
   createInstallTargetAdapter,
   createRemappedOperation,
-  isForeignPlatformPath,
-  planFlatSkillOperation,
-  resolveModulesPlan,
 } = require('./helpers');
 const {
   createCrusherScriptCopyOperations,
@@ -107,25 +105,13 @@ const baseAdapter = createInstallTargetAdapter({
    * @returns {Array<object>}
    */
   planOperations(input, adapter) {
-    const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
-    const sharedAgentsRoot = path.join(planningInput.homeDir || os.homedir(), '.agents');
-
-    const moduleOperations = modules.flatMap(module => {
-      const paths = (Array.isArray(module.paths) ? module.paths : [])
-        .filter(p => !isForeignPlatformPath(p, adapter.target));
-      return paths.map(sourceRelativePath => planFlatSkillOperation(
-        adapter,
-        module.id,
-        sourceRelativePath,
-        planningInput,
-        targetRoot,
-        path.join(sharedAgentsRoot, 'skills')
-      ));
+    const moduleOperations = createFlatSkillPlanOperations(input, adapter, {
+      skillsDir: planningInput => path.join(planningInput.homeDir || os.homedir(), '.agents', 'skills'),
     });
 
     return [
       ...moduleOperations,
-      ...createCrushOperations(adapter, targetRoot),
+      ...createCrushOperations(adapter, adapter.resolveRoot(input)),
     ];
   },
 });
