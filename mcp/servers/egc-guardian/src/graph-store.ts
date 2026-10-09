@@ -6,9 +6,9 @@ import type { Database } from 'sqlite';
 import type { ExtractResult, ImportBinding } from './graph-extract.js';
 import { openCompatDatabase } from './sqlite-compat.js';
 
-export const GRAPH_SCHEMA_VERSION = 1;
+export const GRAPH_SCHEMA_VERSION = 2;
 
-export interface FileRow { path: string; mtimeMs: number; size: number; hash: string }
+export interface FileRow { path: string; mtimeMs: number; ctimeMs: number; size: number; hash: string }
 export interface SymbolRow { id: number; file: string; name: string; kind: string; exported: boolean; startLine: number; endLine: number; refs: string[] }
 export interface ImportRow { file: string; specifier: string; bindings: ImportBinding[]; reexport: boolean }
 export interface EdgeRow { src: string; dst: string; kind: 'import' | 'ref' }
@@ -41,9 +41,10 @@ async function initSchema(db: Database): Promise<void> {
   const row = await db.get<{ value: string }>("SELECT value FROM meta WHERE key = 'version'");
   if (row && row.value !== String(GRAPH_SCHEMA_VERSION)) {
     for (const t of TABLES) await db.exec(`DROP TABLE IF EXISTS ${t}`);
+    await db.run("DELETE FROM meta WHERE key = 'edges_dirty'");
   }
   await db.exec(`
-    CREATE TABLE IF NOT EXISTS files(path TEXT PRIMARY KEY, mtime_ms REAL NOT NULL, size INTEGER NOT NULL, hash TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS files(path TEXT PRIMARY KEY, mtime_ms REAL NOT NULL, ctime_ms REAL NOT NULL DEFAULT 0, size INTEGER NOT NULL, hash TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS symbols(id INTEGER PRIMARY KEY AUTOINCREMENT, file TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL,
       exported INTEGER NOT NULL, start_line INTEGER NOT NULL, end_line INTEGER NOT NULL, refs TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS symbols_file ON symbols(file);
@@ -77,14 +78,14 @@ export async function openGraphStore(dbPath: string): Promise<GraphStore> {
 
   return {
     async getFiles() {
-      const rows = await db.all<{ path: string; mtime_ms: number; size: number; hash: string }[]>('SELECT path, mtime_ms, size, hash FROM files');
-      return new Map(rows.map(r => [r.path, { path: r.path, mtimeMs: r.mtime_ms, size: r.size, hash: r.hash }]));
+      const rows = await db.all<{ path: string; mtime_ms: number; ctime_ms: number; size: number; hash: string }[]>('SELECT path, mtime_ms, ctime_ms, size, hash FROM files');
+      return new Map(rows.map(r => [r.path, { path: r.path, mtimeMs: r.mtime_ms, ctimeMs: r.ctime_ms, size: r.size, hash: r.hash }]));
     },
     async replaceFile(file, extracted) {
       await inTransaction(db, async () => {
         await db.run('DELETE FROM symbols WHERE file = ?', file.path);
         await db.run('DELETE FROM imports WHERE file = ?', file.path);
-        await db.run('INSERT OR REPLACE INTO files(path, mtime_ms, size, hash) VALUES (?, ?, ?, ?)', file.path, file.mtimeMs, file.size, file.hash);
+        await db.run('INSERT OR REPLACE INTO files(path, mtime_ms, ctime_ms, size, hash) VALUES (?, ?, ?, ?, ?)', file.path, file.mtimeMs, file.ctimeMs ?? 0, file.size, file.hash);
         for (const s of extracted.symbols) {
           await db.run(
             'INSERT INTO symbols(file, name, kind, exported, start_line, end_line, refs) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -97,7 +98,7 @@ export async function openGraphStore(dbPath: string): Promise<GraphStore> {
       });
     },
     async touchFile(file) {
-      await db.run('UPDATE files SET mtime_ms = ?, size = ? WHERE path = ?', file.mtimeMs, file.size, file.path);
+      await db.run('UPDATE files SET mtime_ms = ?, ctime_ms = ?, size = ? WHERE path = ?', file.mtimeMs, file.ctimeMs ?? 0, file.size, file.path);
     },
     async removeFiles(paths) {
       await inTransaction(db, async () => {
@@ -124,8 +125,8 @@ export async function openGraphStore(dbPath: string): Promise<GraphStore> {
       await db.run("INSERT OR REPLACE INTO meta(key, value) VALUES ('edges_dirty', '1')");
     },
     async load() {
-      const files = (await db.all<{ path: string; mtime_ms: number; size: number; hash: string }[]>('SELECT path, mtime_ms, size, hash FROM files ORDER BY path'))
-        .map(r => ({ path: r.path, mtimeMs: r.mtime_ms, size: r.size, hash: r.hash }));
+      const files = (await db.all<{ path: string; mtime_ms: number; ctime_ms: number; size: number; hash: string }[]>('SELECT path, mtime_ms, ctime_ms, size, hash FROM files ORDER BY path'))
+        .map(r => ({ path: r.path, mtimeMs: r.mtime_ms, ctimeMs: r.ctime_ms, size: r.size, hash: r.hash }));
       const symbols = (await db.all<{ id: number; file: string; name: string; kind: string; exported: number; start_line: number; end_line: number; refs: string }[]>(
         'SELECT id, file, name, kind, exported, start_line, end_line, refs FROM symbols ORDER BY file, start_line, id'))
         .map(r => ({ id: r.id, file: r.file, name: r.name, kind: r.kind, exported: r.exported === 1, startLine: r.start_line, endLine: r.end_line, refs: JSON.parse(r.refs) as string[] }));
@@ -140,10 +141,21 @@ export async function openGraphStore(dbPath: string): Promise<GraphStore> {
   };
 }
 
+// A database that is damaged (not a database, malformed) is rebuilt from the
+// project. One that is merely busy, locked, unwritable or on a full disk is
+// not damaged: deleting it would throw away a good graph for a passing fault.
+const CORRUPTION = /SQLITE_CORRUPT|SQLITE_NOTADB|malformed|not a database|disk image is malformed|file is encrypted/i;
+
+export function isCorruption(err: unknown): boolean {
+  const e = err as { code?: unknown; message?: unknown } | null;
+  return CORRUPTION.test(`${String(e?.code ?? '')} ${String(e?.message ?? err)}`);
+}
+
 export async function openGraphStoreWithRecovery(dbPath: string): Promise<GraphStore> {
   try {
     return await openGraphStore(dbPath);
-  } catch {
+  } catch (err) {
+    if (!isCorruption(err)) throw err;
     for (const suffix of ['', '-wal', '-shm', '-journal']) fs.rmSync(dbPath + suffix, { force: true });
     return openGraphStore(dbPath);
   }

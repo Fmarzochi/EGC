@@ -26,23 +26,35 @@ function compileRule(raw: string): IgnoreFn {
   if (dirOnly) pat = pat.slice(0, -1);
   const rooted = pat.startsWith('/') || pat.includes('/');
   if (pat.startsWith('/')) pat = pat.slice(1);
+  // `**/` is any number of directories, none included; a bare `**` is anything.
   const body = pat
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '\0')
+    .replace(/\*\*\//g, '\u0001')
+    .replace(/\*\*/g, '\u0002')
     .replace(/\*/g, '[^/]*')
     .replace(/\?/g, '[^/]')
-    .replaceAll('\0', '.*');
+    .replaceAll('\u0001', '(?:.*/)?')
+    .replaceAll('\u0002', '.*');
   const re = new RegExp(`${rooted ? '^' : '(?:^|/)'}${body}${dirOnly ? '/' : '(?:/|$)'}`);
   return (rel, isDir) => re.test(dirOnly && isDir ? rel + '/' : rel);
 }
 
+// Rules apply in order and the last one that matches decides, so `*.js` followed
+// by `!keep.js` ignores every script but keep.js, as git does. (Git cannot
+// re-include a file whose directory is ignored; the walk never enters one.)
 export function makeIgnore(gitignoreText: string): IgnoreFn {
   const rules = gitignoreText
     .split(/\r?\n/)
     .map(l => l.trim())
-    .filter(l => l && !l.startsWith('#') && !l.startsWith('!'))
-    .map(compileRule);
-  return (rel, isDir) => rules.some(rule => rule(rel, isDir));
+    .filter(l => l && !l.startsWith('#'))
+    .map(l => ({ negate: l.startsWith('!'), pattern: l.startsWith('!') ? l.slice(1) : l }))
+    .filter(r => r.pattern !== '')
+    .map(r => ({ negate: r.negate, match: compileRule(r.pattern) }));
+  return (rel, isDir) => {
+    let ignored = false;
+    for (const rule of rules) if (rule.match(rel, isDir)) ignored = !rule.negate;
+    return ignored;
+  };
 }
 
 export function resolveSpecifier(fromFile: string, specifier: string, fileSet: Set<string>): string | null {
@@ -218,7 +230,7 @@ type IndexOutcome = 'skipped' | 'kept' | 'refreshed';
 async function indexFile(
   root: string,
   rel: string,
-  prev: { mtimeMs: number; size: number; hash: string } | undefined,
+  prev: { mtimeMs: number; ctimeMs: number; size: number; hash: string } | undefined,
   store: GraphStore,
   opts: BuildOptions,
   maxFileBytes: number,
@@ -233,11 +245,12 @@ async function indexFile(
     return 'skipped';
   }
   if (!st.isFile() || st.size > maxFileBytes) return 'skipped';
-  if (prev && prev.mtimeMs === st.mtimeMs && prev.size === st.size) return 'kept';
+  // Same size and modification time are not enough: a replacement can keep both. The change time cannot be set back.
+  if (prev && prev.mtimeMs === st.mtimeMs && prev.size === st.size && prev.ctimeMs === st.ctimeMs) return 'kept';
 
   const text = await readFileWithin(root, rel, maxFileBytes);
   if (text === null) return 'skipped';
-  const row = { path: rel, mtimeMs: st.mtimeMs, size: st.size, hash: crypto.createHash('sha256').update(text).digest('hex') };
+  const row = { path: rel, mtimeMs: st.mtimeMs, ctimeMs: st.ctimeMs, size: st.size, hash: crypto.createHash('sha256').update(text).digest('hex') };
   if (prev && prev.hash === row.hash) {
     await store.touchFile(row);
     return 'kept';

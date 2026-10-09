@@ -15,7 +15,7 @@ if (!fs.existsSync(path.join(buildDir, 'graph-store.js'))) {
   console.log('[SKIP] build not found. Run npm run build in mcp/servers/egc-guardian first.');
   process.exit(0);
 }
-const { graphDbPath, openGraphStore, openGraphStoreWithRecovery, GRAPH_SCHEMA_VERSION } = require(path.join(buildDir, 'graph-store.js'));
+const { graphDbPath, openGraphStore, openGraphStoreWithRecovery, isCorruption, GRAPH_SCHEMA_VERSION } = require(path.join(buildDir, 'graph-store.js'));
 
 let passed = 0;
 let failed = 0;
@@ -52,7 +52,7 @@ const extracted = {
     const store = await openGraphStore(path.join(tmp, 'rt', 'g.db'));
     await store.replaceFile({ path: 'a.js', mtimeMs: 1, size: 10, hash: 'h1' }, extracted);
     const data = await store.load();
-    assert.deepStrictEqual(data.files, [{ path: 'a.js', mtimeMs: 1, size: 10, hash: 'h1' }]);
+    assert.deepStrictEqual(data.files, [{ path: 'a.js', mtimeMs: 1, ctimeMs: 0, size: 10, hash: 'h1' }]);
     assert.strictEqual(data.symbols.length, 1);
     assert.deepStrictEqual(
       { ...data.symbols[0], id: 0 },
@@ -91,6 +91,30 @@ const extracted = {
     const again = await openGraphStore(p);
     assert.strictEqual((await again.getFiles()).size, 0);
     await again.close();
+  });
+
+  await run('only a damaged database is recovered; any other failure is rethrown and deletes nothing', async () => {
+    assert.strictEqual(isCorruption(new Error('SQLITE_NOTADB: file is not a database')), true);
+    assert.strictEqual(isCorruption(new Error('database disk image is malformed')), true);
+    assert.strictEqual(isCorruption(Object.assign(new Error('x'), { code: 'SQLITE_CORRUPT' })), true);
+    for (const message of ['SQLITE_BUSY: database is locked', 'EACCES: permission denied', 'SQLITE_FULL: database or disk is full', 'EBUSY: resource busy']) {
+      assert.strictEqual(isCorruption(new Error(message)), false, message);
+    }
+    // A path that cannot be opened as a database file is not a damaged one.
+    const dir = path.join(tmp, 'a-directory.db');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, 'keep.txt'), 'still here');
+    await assert.rejects(openGraphStoreWithRecovery(dir));
+    assert.ok(fs.existsSync(path.join(dir, 'keep.txt')), 'nothing was deleted');
+  });
+
+  await run('the change time is stored with the file and survives a touch', async () => {
+    const store = await openGraphStore(path.join(tmp, 'ctime', 'g.db'));
+    await store.replaceFile({ path: 'a.js', mtimeMs: 1, ctimeMs: 5, size: 10, hash: 'h1' }, { symbols: [], imports: [] });
+    assert.strictEqual((await store.getFiles()).get('a.js').ctimeMs, 5);
+    await store.touchFile({ path: 'a.js', mtimeMs: 2, ctimeMs: 9, size: 10, hash: 'h1' });
+    assert.strictEqual((await store.getFiles()).get('a.js').ctimeMs, 9);
+    await store.close();
   });
 
   await run('a corrupt database file is replaced by openGraphStoreWithRecovery', async () => {

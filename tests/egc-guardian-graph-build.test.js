@@ -231,6 +231,41 @@ const bump = file => {
     await store.close();
   });
 
+  await run('makeIgnore: ** also matches at the root, and a later ! rule re-includes a file', () => {
+    const globs = makeIgnore('**/*.gen.js\ndocs/**\nsrc/**/skip.js\n');
+    assert.ok(globs('a.gen.js', false), '**/ matches no directory at all');
+    assert.ok(globs('deep/er/a.gen.js', false));
+    assert.ok(globs('docs/a/b.md', false), 'a trailing /** matches everything below');
+    assert.ok(globs('src/skip.js', false), '/**/ matches zero directories');
+    assert.ok(globs('src/x/y/skip.js', false));
+    assert.ok(!globs('src/keep.js', false));
+    const negated = makeIgnore('*.js\n!keep.js\n');
+    assert.ok(negated('a.js', false));
+    assert.ok(!negated('keep.js', false), 'the exception stays in');
+    assert.ok(!negated('lib/keep.js', false), 'the exception is not anchored');
+    const reIgnored = makeIgnore('*.js\n!keep.js\nkeep.js\n');
+    assert.ok(reIgnored('keep.js', false), 'the last matching rule decides');
+    assert.ok(!makeIgnore('!\n#c\n').call(null, 'x', false), 'an empty negation and a comment ignore nothing');
+  });
+
+  await run('a replacement with the same size and the same modification time is still re-indexed', async () => {
+    const root = project({ 'a.js': 'export const aa = 1;\n' });
+    const file = path.join(root, 'a.js');
+    const pinned = Math.floor(Date.now() / 1000) - 100;
+    fs.utimesSync(file, pinned, pinned);
+    const store = await open();
+    await buildGraph(root, store);
+    const before = fs.statSync(file);
+    await new Promise(resolve => setTimeout(resolve, 30));
+    fs.writeFileSync(file, 'export const bb = 1;\n');
+    fs.utimesSync(file, pinned, pinned);
+    assert.strictEqual(fs.statSync(file).size, before.size);
+    assert.strictEqual(fs.statSync(file).mtimeMs, before.mtimeMs, 'the test keeps the modification time');
+    assert.strictEqual((await buildGraph(root, store)).refreshed, 1, 'the content changed, so the file is read again');
+    assert.deepStrictEqual((await store.load()).symbols.map(s => s.name), ['bb']);
+    await store.close();
+  });
+
   await run('deleting a file removes its rows and edges', async () => {
     const root = project({
       'a.js': "import { b } from './b.js';\nexport function a() { return b(); }\n",
