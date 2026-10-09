@@ -525,12 +525,23 @@ export function extractFile(source: string): ExtractResult {
     return names;
   };
 
+  // `= require(...)`, `= await import(...)`: what is bound comes from another module, whatever the argument is.
+  const loadsAModule = (eq: number): boolean => {
+    if (!isP(toks[eq], '=')) return false;
+    let k = eq + 1;
+    if (isId(toks[k], 'await')) k++;
+    return (isId(toks[k], 'require') || isId(toks[k], 'import')) && isP(toks[k + 1], '(');
+  };
+
   const addPatternDeclarator = (open: number, afterPattern: number, stop: number, exported: boolean, from: number): void => {
     const spec = isP(toks[open], '{') ? requireSpecifier(afterPattern) : null;
     if (spec !== null) {
       imports.push({ specifier: spec, bindings: readBraceBindings(open, ':'), reexport: false });
       return;
     }
+    // Names taken from a module whose path is not a plain string are imports too, not symbols of this file:
+    // counting them would credit every file that imports `validateCommand` with defining it.
+    if (loadsAModule(afterPattern)) return;
     for (const at of patternNames(open)) addSymbol(toks[at].v, 'variable', exported, from, stop);
   };
 
