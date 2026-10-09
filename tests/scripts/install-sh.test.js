@@ -23,7 +23,7 @@ function writeExecutable(filePath, content) {
   fs.writeFileSync(filePath, content, { mode: 0o755 });
 }
 
-function runIsolatedInstaller(rootDir, npmRoot, linkLog, homeDir) {
+function runIsolatedInstaller(rootDir, npmRoot, linkLog, homeDir, options = {}) {
   const scriptPath = path.join(rootDir, 'scripts', 'install.sh');
   const binDir = path.join(homeDir, 'bin');
 
@@ -49,8 +49,11 @@ if [ "$1" = "link" ]; then printf 'link\\n' >> "$FAKE_NPM_LINK_LOG"; exit 0; fi
 exit 0
 `);
   writeExecutable(path.join(binDir, 'npx'), '#!/bin/sh\nexit 0\n');
+  for (const [name, content] of Object.entries(options.extraBins || {})) {
+    writeExecutable(path.join(binDir, name), content);
+  }
 
-  const result = spawnSync('bash', [scriptPath, '--no-prompt-library'], {
+  const result = spawnSync('bash', [scriptPath, ...(options.args || ['--no-prompt-library'])], {
     cwd: homeDir,
     env: {
       ...process.env,
@@ -59,6 +62,7 @@ exit 0
       PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
       FAKE_NPM_ROOT: npmRoot,
       FAKE_NPM_LINK_LOG: linkLog,
+      ...(options.extraEnv || {}),
     },
     encoding: 'utf8',
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -414,6 +418,77 @@ function runTests() {
     );
     assert.ok(script.includes('! -e "$ROOT_DIR/.git"'), 'a checkout (.git file or directory) must take precedence over an npm-looking path');
     assert.ok(/npm link --silent/.test(script), 'source trees must still be able to link the egc command');
+  })) passed++; else failed++;
+
+  if (test('a bare invocation (no install-relevant args) refuses to run as root', () => {
+    const sandbox = createTempDir('egc-install-sh-root-bare-');
+    try {
+      const binDir = path.join(sandbox, 'bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      writeExecutable(path.join(binDir, 'id'), '#!/bin/sh\n[ "$1" = "-u" ] && echo 0 || echo root\n');
+      const result = spawnSync('bash', [SCRIPT], {
+        env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}` },
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: CLI_TIMEOUT_MS,
+      });
+      assert.strictEqual(result.status, 1);
+      assert.ok(result.stderr.includes('refusing to install as root'), result.stderr);
+      // The refusal must land before install_deps (npm ci) ever runs: no
+      // "installing root dependencies" line should reach stdout.
+      assert.ok(!result.stdout.includes('installing root dependencies'), result.stdout);
+    } finally {
+      cleanup(sandbox);
+    }
+  })) passed++; else failed++;
+
+  if (test('--dry-run as root is not refused even with no other install-relevant args', () => {
+    const sandbox = createTempDir('egc-install-sh-root-dryrun-');
+    try {
+      const binDir = path.join(sandbox, 'bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      writeExecutable(path.join(binDir, 'id'), '#!/bin/sh\n[ "$1" = "-u" ] && echo 0 || echo root\n');
+      writeExecutable(path.join(binDir, 'node'), '#!/bin/sh\n[ "$1" = "--version" ] && echo v20.18.0 || true\nexit 0\n');
+      writeExecutable(path.join(binDir, 'npm'), '#!/bin/sh\n[ "$1" = "--version" ] && echo 10.8.2 || true\nexit 0\n');
+      writeExecutable(path.join(binDir, 'npx'), '#!/bin/sh\nexit 0\n');
+      const result = spawnSync('bash', [SCRIPT, '--dry-run'], {
+        env: { ...process.env, PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`, CI: '1' },
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: CLI_TIMEOUT_MS,
+      });
+      assert.ok(!result.stderr.includes('refusing to install as root'), result.stderr);
+    } finally {
+      cleanup(sandbox);
+    }
+  })) passed++; else failed++;
+
+  if (test('EGC_ALLOW_ROOT=1 opts a bare root invocation back in past the refusal', () => {
+    // Not --dry-run: this really walks the isolated installer past the
+    // root guard, so it must run the same way runIsolatedInstaller's other
+    // callers do (a copied script, a sandboxed ROOT_DIR, stubbed-out
+    // node/npm/npx) rather than against this repository's real checkout,
+    // and the exit code must be asserted rather than only the absence of
+    // the refusal message (cubic review, confidence 9: this test used to
+    // run npm ci/npm link for real against the live repo and never checked
+    // whether the install it triggered actually succeeded).
+    const sandbox = createTempDir('egc-install-sh-root-allow-');
+    try {
+      const rootDir = path.join(sandbox, 'root');
+      const homeDir = path.join(sandbox, 'home');
+      fs.mkdirSync(rootDir, { recursive: true });
+      fs.mkdirSync(homeDir, { recursive: true });
+      const npmRoot = path.join(sandbox, 'npm-root');
+      const linkLog = path.join(sandbox, 'link.log');
+      const result = runIsolatedInstaller(rootDir, npmRoot, linkLog, homeDir, {
+        extraBins: { id: '#!/bin/sh\n[ "$1" = "-u" ] && echo 0 || echo root\n' },
+        extraEnv: { EGC_ALLOW_ROOT: '1' },
+      });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.ok(!result.stderr.includes('refusing to install as root'), result.stderr);
+    } finally {
+      cleanup(sandbox);
+    }
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
