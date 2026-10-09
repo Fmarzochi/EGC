@@ -5,6 +5,7 @@ import { scanForInjection } from './prompt-injection-scanner.js';
 import { llmRoute, keywordRoute } from './llm-router.js';
 import { detectIntent, digestTranscript, mineTranscript } from './intuition.js';
 import { autoLearn } from './learn-writer.js';
+import { writeAuditEntry } from './audit-log.js';
 
 // Thin CLI over the guardian engine so harness hooks can enforce the same
 // rules the MCP tools expose, without requiring the MCP server to be running.
@@ -178,11 +179,39 @@ function readStdin(): string {
   }
 }
 
+// The MCP server's own auditLog() writes to this same log for every denied
+// or flagged tool call, but that only covers the interactive MCP session.
+// The harness hooks below enforce the same rules through this CLI when no
+// MCP server is running, and until now nothing they did ever reached
+// ~/.egc/audit.log (C49): a command or write refused here left no trace
+// beyond the hook's own stderr, which the harness does not persist.
+function deniedVerdicts(mode: string, result: unknown): Array<{ reason?: unknown; trust_level?: unknown }> {
+  if ((mode === 'command' || mode === 'write') && result !== null && typeof result === 'object') {
+    const verdict = result as { allowed?: unknown; reason?: unknown; trust_level?: unknown };
+    return verdict.allowed === false ? [verdict] : [];
+  }
+  if (mode === 'command-batch' && Array.isArray(result)) {
+    return result.filter((verdict): verdict is { allowed?: unknown; reason?: unknown; trust_level?: unknown } => (
+      verdict !== null && typeof verdict === 'object' && (verdict as { allowed?: unknown }).allowed === false
+    ));
+  }
+  return [];
+}
+
+function auditIfDenied(mode: string, payload: string, result: unknown): void {
+  const action = mode === 'write' ? 'FILE_WRITE' : 'COMMAND_EXECUTION';
+  const payloadKey = mode === 'write' ? 'filepath' : 'command';
+  for (const verdict of deniedVerdicts(mode, result)) {
+    writeAuditEntry(action, 'DENIED', { [payloadKey]: payload, reason: verdict.reason, trust_level: verdict.trust_level });
+  }
+}
+
 async function main() {
   const mode = process.argv[2] ?? '';
   const payload = readStdin();
   const handler = MODES[mode];
   const result = handler ? await handler(payload) : { error: `unknown mode: ${mode}` };
+  auditIfDenied(mode, payload, result);
   process.stdout.write(JSON.stringify(result));
 }
 

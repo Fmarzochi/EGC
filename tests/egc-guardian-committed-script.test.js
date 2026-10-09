@@ -259,7 +259,10 @@ run('an allowed command stays allowed and an ordinary advisory stays one', () =>
 run('the command-batch CLI judges an entry marked committed as one, and anything else as typed', () => {
   const { spawnSync } = require('node:child_process');
   const cli = path.join(buildDir, 'guardian-cli.js');
-  const batch = payload => JSON.parse(spawnSync(process.execPath, [cli, 'command-batch'], { input: JSON.stringify(payload), encoding: 'utf8', timeout: 20000 }).stdout);
+  // Denied verdicts make the CLI write an audit entry (C49): HOME is pinned
+  // to this test's own temp cwd so that write lands there, never in the
+  // real ~/.egc/audit.log.
+  const batch = payload => JSON.parse(spawnSync(process.execPath, [cli, 'command-batch'], { input: JSON.stringify(payload), encoding: 'utf8', timeout: 20000, env: { ...process.env, HOME: cwd } }).stdout);
   const commands = ['eval "set -- x"', 'eval "set -- x"', 'eval "set -- x"', 'eval "set -- x"'];
   const verdicts = batch({ commands, cwd, committed: [true, false, 'true', 1] });
   assert.strictEqual(verdicts.length, 4);

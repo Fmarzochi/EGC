@@ -8,6 +8,7 @@
 // here, before it reaches a session.
 const assert = require('assert');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -20,6 +21,10 @@ if (!fs.existsSync(path.join(buildDir, 'guardian-cli.js'))) {
 }
 
 process.env.EGC_GUARDIAN_CLI = path.join(buildDir, 'guardian-cli.js');
+// This file deliberately exercises refusals: the CLI writes an audit entry
+// for each one (C49), so HOME is pinned to a temp dir for this whole
+// process and never the real ~/.egc/audit.log.
+process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-repo-scripts-home-'));
 const writeHook = require('../../scripts/hooks/pre-write-guardian-validate');
 const bashHook = require('../../scripts/hooks/pre-bash-guardian-validate');
 const { validateCommand } = require(path.join(buildDir, 'validator.js'));
