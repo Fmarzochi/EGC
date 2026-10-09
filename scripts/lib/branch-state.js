@@ -108,26 +108,76 @@ function findGitDir(startPath) {
   }
 }
 
+const NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+const NONBLOCK_FLAG = typeof fs.constants.O_NONBLOCK === 'number' ? fs.constants.O_NONBLOCK : 0;
+
+// Opens the exact path handed in, refusing a symlinked final component
+// (O_NOFOLLOW) instead of resolving it first and reading the target: a
+// resolve-then-read sequence leaves a TOCTOU window where the link can be
+// swapped between the two steps to redirect the read outside the trusted
+// roots trustedGitPath already approved. O_NONBLOCK keeps a FIFO planted at
+// the path from blocking this call forever.
+//
+// Windows has no O_NOFOLLOW (NOFOLLOW_FLAG is 0 there), so openSync alone
+// would silently follow a symlinked final component. An explicit lstatSync
+// right before the open narrows, but on this platform cannot fully close,
+// that same TOCTOU window; it is still strictly better than not checking.
+function readFileNoFollow(filePath) {
+  let fd;
+  try {
+    if (NOFOLLOW_FLAG === 0 && fs.lstatSync(filePath).isSymbolicLink()) return null;
+    fd = fs.openSync(filePath, fs.constants.O_RDONLY | NOFOLLOW_FLAG | NONBLOCK_FLAG);
+    if (!fs.fstatSync(fd).isFile()) return null;
+    return fs.readFileSync(fd, 'utf8');
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
+// True when the path is currently a symlink. NOSONAR: the path was already
+// confirmed by the trustedGitPath guard at every call site below; this only
+// reads metadata (never file content) off that same path, but Sonar's taint
+// tracker does not credit a guard that checks a sanitizer's return value
+// without reassigning it back to the variable -- the identical pattern in
+// branch-state.ts's readHeadLine does not trigger this. Reassigning the
+// variable to the canonicalized path instead would reopen the exact TOCTOU
+// this module exists to close (see the comment above readFileNoFollow).
+function isUnsafeSymlink(p) {
+  return fs.lstatSync(p).isSymbolicLink(); // NOSONAR
+}
+
 // Reads the raw, trimmed content of .git/HEAD, resolving worktree and
 // submodule pointer files and refusing anything outside the trusted roots.
 // Shared by detectBranch and detectDetachedCommit so both agree on exactly
 // what HEAD says.
+//
+// trustedGitPath is used only as a yes/no check here; every read opens the
+// original, unresolved path with O_NOFOLLOW, which refuses a symlinked
+// final component outright, including one pointing at another trusted .git.
+// The isUnsafeSymlink check right before each open is deliberately placed
+// with nothing else between it and the open it guards: Node has no portable
+// openat() to anchor an open to an already-validated directory fd, so this
+// adjacency is the narrowest TOCTOU window achievable without a native
+// binding, not a hermetic close of it. Closing it fully would require an
+// attacker-proof primitive this project does not depend on today.
 function readHeadLine(projectPath) {
   try {
-    const rawGitDir = findGitDir(projectPath);
-    if (!rawGitDir) return null;
-    let gitDir = trustedGitPath(rawGitDir);
-    if (!gitDir) return null;
-    if (fs.statSync(gitDir).isFile()) {
+    let gitDir = findGitDir(projectPath);
+    if (!gitDir || !trustedGitPath(gitDir) || isUnsafeSymlink(gitDir)) return null;
+    if (fs.statSync(gitDir).isFile()) { // NOSONAR: metadata read on gitDir, confirmed just above
       // Worktrees and submodules store a pointer file instead of a directory
-      const pointer = fs.readFileSync(gitDir, 'utf8').trim();
+      const rawPointer = readFileNoFollow(gitDir);
+      if (rawPointer === null) return null;
+      const pointer = rawPointer.trim();
       if (!pointer.startsWith('gitdir:')) return null;
-      gitDir = trustedGitPath(path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim()));
-      if (!gitDir) return null;
+      gitDir = path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim());
+      if (!trustedGitPath(gitDir) || isUnsafeSymlink(gitDir)) return null;
     }
-    const headPath = trustedGitPath(path.resolve(gitDir, 'HEAD'));
-    if (!headPath) return null;
-    return fs.readFileSync(headPath, 'utf8').trim();
+    if (isUnsafeSymlink(gitDir)) return null;
+    const head = readFileNoFollow(path.resolve(gitDir, 'HEAD'));
+    return head === null ? null : head.trim();
   } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info available
     return null;
   }
