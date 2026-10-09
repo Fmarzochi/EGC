@@ -244,6 +244,10 @@ function _extractMcpLineResult(line) {
   // notification that happens to carry a 'content' array never shadows the
   // real tool result.
   if (parsed.id !== 1) return null;
+  if (parsed.result?.isError) {
+    const message = parsed.result.content?.find(content => content.type === 'text')?.text;
+    throw new Error(message || 'MCP tool call failed');
+  }
   if (parsed.result?.content) {
     for (const content of parsed.result.content) {
       if (content.type === 'text') {
@@ -295,8 +299,8 @@ function _parseMcpResponse(stdout) {
  *
  * Protocol: the MCP SDK's StdioServerTransport requires a proper initialize /
  * notifications/initialized handshake before it will process tool calls.  We
- * send all three messages as JSONL (newline-separated) in one spawnSync write,
- * then scan every output line for the tools/call response (id === 1).
+ * send all three messages as JSONL (newline-separated) in one async spawn
+ * write, then scan every output line for the tools/call response (id === 1).
  *
  * Test hook: set EGC_BUS_STUB to a JSON-encoded value to short-circuit the
  * spawn entirely.  EGC_BUS_STUB=__NOT_BUILT__ simulates the binary being
@@ -631,21 +635,17 @@ function _parseEventTimestamp(line, i) {
   return after.trim();
 }
 
-// Preamble / trailer lines that are never part of an event payload.
-function _isEventTrailerLine(trimmed) {
-  return trimmed === '(no payload)'
-    || trimmed.startsWith('Events for ')
-    || trimmed.startsWith('Treat payloads')
-    || trimmed.startsWith('(peek mode');
-}
-
-// All other non-empty lines while there is a current event are payload. This
-// includes indented payload lines (which the server always emits with 2-space
-// indent) and any continuation lines.
+// A payload line is identified by its position, not its text: the server
+// ALWAYS emits payload with exactly a 2-space indent (see the comment above
+// _parseEventHeader), while preamble ("Events for …", "Treat payloads…") and
+// trailer ("(no payload)", "(peek mode…)") lines are never indented. Strip
+// only that indent and keep the rest verbatim, including a line that is
+// blank after the indent or happens to read like metadata, classifying by
+// content instead of position is what silently dropped real payload lines.
 function _appendEventPayloadLine(event, line) {
-  const trimmed = line.trim();
-  if (!trimmed || _isEventTrailerLine(trimmed)) return;
-  event.payload = event.payload ? `${event.payload}\n${trimmed}` : trimmed;
+  if (!line.startsWith('  ')) return;
+  const content = line.slice(2);
+  event.payload = event.payload === null ? content : `${event.payload}\n${content}`;
 }
 
 /**
@@ -694,7 +694,10 @@ function _validateSendParams(p) {
       { statusCode: 400 }
     );
   }
-  if (p.toSession   !== undefined && typeof p.toSession   !== 'string') throw Object.assign(new Error('"toSession" must be a string'),   { statusCode: 400 });
+  if (p.toSession !== undefined) {
+    if (typeof p.toSession !== 'string') throw Object.assign(new Error('"toSession" must be a string'), { statusCode: 400 });
+    if (!p.toSession) throw Object.assign(new Error('"toSession" must not be empty; omit it to broadcast'), { statusCode: 400 });
+  }
   if (p.sessionId   !== undefined && typeof p.sessionId   !== 'string') throw Object.assign(new Error('"sessionId" must be a string'),   { statusCode: 400 });
   if (p.projectPath !== undefined && typeof p.projectPath !== 'string') throw Object.assign(new Error('"projectPath" must be a string'), { statusCode: 400 });
   if (p.payload     !== undefined && typeof p.payload     !== 'string') throw Object.assign(new Error('"payload" must be a string'),     { statusCode: 400 });
@@ -804,4 +807,8 @@ module.exports = {
   // createQueryApi intentionally NOT re-exported: it is a low-level store
   // internal reached via createStateStore(), not part of the operations
   // public surface. Dropped per cubic-dev-ai P3 finding.
+  // _extractMcpLineResult is exported test-only: EGC_BUS_STUB short-circuits
+  // _callBusTool above the raw MCP JSON-RPC line level, so the isError check
+  // (#1797) is otherwise unreachable from a test.
+  _extractMcpLineResult,
 };
