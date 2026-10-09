@@ -2,10 +2,8 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
+  createFlatSkillPlanOperations,
   createInstallTargetAdapter,
-  isForeignPlatformPath,
-  planFlatSkillOperation,
-  resolveModulesPlan,
 } = require('./helpers');
 
 function resolveSharedAgentsRoot(input) {
@@ -24,10 +22,8 @@ module.exports = createInstallTargetAdapter({
     return [adapter.resolveRoot(input), resolveSharedAgentsRoot(input)];
   },
   planOperations(input, adapter) {
-    const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
-    const skillsDir = path.join(resolveSharedAgentsRoot(planningInput), 'skills');
-    return modules.flatMap(module => (Array.isArray(module.paths) ? module.paths : [])
-      .filter(sourceRelativePath => !isForeignPlatformPath(sourceRelativePath, adapter.target))
-      .map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot, skillsDir)));
+    return createFlatSkillPlanOperations(input, adapter, {
+      skillsDir: planningInput => path.join(resolveSharedAgentsRoot(planningInput), 'skills'),
+    });
   },
 });
