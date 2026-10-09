@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { CLI_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts.js');
 
 const script = path.join(__dirname, '..', 'scripts', 'context.js');
 const buildPath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'file-rank.js');
@@ -54,6 +55,19 @@ run('egc context refuses a filesystem root and the home directory', () => {
     assert.match(r.stderr, reason);
     assert.strictEqual(r.stdout, '', 'nothing from the refused directory is printed');
   }
+});
+
+run('a second positional argument is refused, and a copy without a Guardian build exits 2 with a message', () => {
+  const extra = spawnSync(process.execPath, [script, 'first', 'second', '--no-git'], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
+  assert.strictEqual(extra.status, 1);
+  assert.ok(extra.stderr.includes('unexpected argument second'), extra.stderr);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-context-unbuilt-'));
+  fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+  fs.copyFileSync(script, path.join(dir, 'scripts', 'context.js'));
+  const unbuilt = spawnSync(process.execPath, [path.join(dir, 'scripts', 'context.js'), 'anything', '--project', root, '--no-git'], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
+  assert.strictEqual(unbuilt.status, 2, unbuilt.stderr);
+  assert.ok(unbuilt.stderr.includes('guardian build not found'), unbuilt.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 run('a flag without its value is named, with the usage line, and is not a TypeError', () => {

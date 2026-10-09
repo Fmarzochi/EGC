@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { CLI_TIMEOUT_MS, FULL_INSTALL_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts.js');
 
 const bench = path.join(__dirname, '..', 'scripts', 'bench');
 const { recallAtK, reciprocalRank, percentile, estimateTokens, mean } = require(path.join(bench, 'metrics.js'));
@@ -98,7 +99,7 @@ if (!fs.existsSync(buildPath)) {
   run('end-to-end run prints the table and writes JSON; a high --min-recall fails with exit 1', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bench-e2e-'));
     const out = path.join(tmp, 'out.json');
-    const r = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--runs', '1', '--out', out], { encoding: 'utf8', timeout: 600000 });
+    const r = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--runs', '1', '--out', out], { encoding: 'utf8', timeout: FULL_INSTALL_TIMEOUT_MS });
     assert.strictEqual(r.status, 0, r.stderr);
     assert.ok(r.stdout.includes('mean recall@5'));
     const json = JSON.parse(fs.readFileSync(out, 'utf8'));
@@ -106,12 +107,50 @@ if (!fs.existsSync(buildPath)) {
     assert.ok(json.summary.meanRecallAtTop >= 0 && json.summary.meanRecallAtTop <= 1);
     const impossible = path.join(tmp, 'impossible.json');
     fs.writeFileSync(impossible, JSON.stringify({ tasks: [{ id: 'none', query: 'chargeCard', expected: ['no/such/file.ts'] }] }));
-    const strict = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--tasks', impossible, '--runs', '1', '--min-recall', '0.5'], { encoding: 'utf8', timeout: 600000 });
+    const strict = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--tasks', impossible, '--runs', '1', '--min-recall', '0.5'], { encoding: 'utf8', timeout: FULL_INSTALL_TIMEOUT_MS });
     assert.strictEqual(strict.status, 1, 'recall 0 is below 0.5');
     assert.ok(strict.stderr.includes('below --min-recall'));
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 }
+
+run('a bad argument exits 1 with the usage line, and --help prints the usage and exits 0', () => {
+  const bad = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--bogus'], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
+  assert.strictEqual(bad.status, 1);
+  assert.ok(bad.stderr.includes('unknown argument --bogus'), bad.stderr);
+  assert.ok(bad.stderr.includes('usage: node scripts/bench/run.js'), bad.stderr);
+  const help = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--help'], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
+  assert.strictEqual(help.status, 0);
+  assert.ok(help.stdout.includes('usage: node scripts/bench/run.js'));
+  assert.strictEqual(help.stderr, '');
+});
+
+// A copy of the harness in a tree that has no Guardian build, to reach the paths a built checkout never takes.
+function unbuiltCopy() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bench-unbuilt-'));
+  fs.mkdirSync(path.join(dir, 'scripts', 'bench'), { recursive: true });
+  for (const f of ['run.js', 'metrics.js']) fs.copyFileSync(path.join(bench, f), path.join(dir, 'scripts', 'bench', f));
+  return dir;
+}
+
+run('without a Guardian build it says so and exits 2', () => {
+  const dir = unbuiltCopy();
+  const r = spawnSync(process.execPath, [path.join(dir, 'scripts', 'bench', 'run.js')], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
+  assert.strictEqual(r.status, 2, r.stderr);
+  assert.ok(r.stderr.includes('guardian build not found'), r.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+run('a failure after the arguments are read is one line on stderr and exit 1, not an unhandled rejection', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bench-reject-'));
+  const broken = path.join(dir, 'tasks.json');
+  fs.writeFileSync(broken, '{ not json');
+  const r = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--tasks', broken], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
+  assert.strictEqual(r.status, 1, r.stdout);
+  assert.ok(r.stderr.startsWith('egc bench:'), r.stderr);
+  assert.ok(!r.stderr.includes('    at '), 'no stack trace');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
 
 run('a flag without its value is named in the error', () => {
   assert.throws(() => parse(['--top']), /--top needs a value/);
