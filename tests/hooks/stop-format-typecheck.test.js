@@ -232,6 +232,67 @@ if (test('stop hook passes stdin through unchanged', () => {
   assert.strictEqual(result.toString(), input);
 })) passed++; else failed++;
 
+console.log('\npost-edit-accumulator: C12 hardening\n=====================================\n');
+
+if (process.platform !== 'win32') {
+  if (test('the accumulator file is created with no group/other access, not the process umask', () => {
+    cleanAccumFile();
+    accumulator.run(JSON.stringify({ tool_input: { file_path: '/tmp/x.ts' } }));
+    const mode = fs.statSync(getAccumFile()).mode & 0o777;
+    // openSync ANDs the requested 0600 against the process umask, but 0600
+    // already excludes group/other bits, so only a umask that also clears
+    // owner bits (e.g. 0777) narrows the file -- down to 0000, which is not
+    // "still-private" but owner-unreadable, and makes the Stop-side
+    // readFileNoFollow fail so the whole batch is silently dropped (cubic
+    // review, confidence 8). Group/other access must stay zero, and the
+    // owner must still be able to read what was just written.
+    assert.strictEqual(mode & 0o077, 0, `expected no group/other access, got ${mode.toString(8)}`);
+    assert.ok(mode & 0o400, `expected the owner to still be able to read the file, got ${mode.toString(8)}`);
+    cleanAccumFile();
+  })) passed++; else failed++;
+}
+
+if (test('a path containing a newline is dropped instead of injecting an extra entry', () => {
+  cleanAccumFile();
+  accumulator.run(JSON.stringify({ tool_input: { file_path: '/tmp/real.ts\n/tmp/injected.ts' } }));
+  assert.ok(!fs.existsSync(getAccumFile()), 'nothing is written for a path carrying a newline');
+  cleanAccumFile();
+})) passed++; else failed++;
+
+if (process.platform !== 'win32') {
+  if (test('appendPath refuses to follow a symlink planted at the accumulator path', () => {
+    cleanAccumFile();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-accum-target-'));
+    const target = path.join(outside, 'victim.ts');
+    fs.writeFileSync(target, '// untouched\n');
+    fs.symlinkSync(target, getAccumFile());
+    accumulator.run(JSON.stringify({ tool_input: { file_path: '/tmp/x.ts' } }));
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), '// untouched\n', 'the symlink target is never written through');
+    fs.unlinkSync(getAccumFile());
+    fs.rmSync(outside, { recursive: true, force: true });
+  })) passed++; else failed++;
+
+  if (test('the Stop hook refuses to read through a symlink planted at the accumulator path', () => {
+    cleanAccumFile();
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-accum-target-'));
+    const target = path.join(outside, 'secret.ts');
+    fs.writeFileSync(target, '/some/private/path.ts\n');
+    fs.symlinkSync(target, getAccumFile());
+    const { execFileSync } = require('child_process');
+    const stopScript = path.resolve(__dirname, '../../scripts/hooks/stop-format-typecheck.js');
+    execFileSync('node', [stopScript], {
+      input: '{}',
+      env: { ...process.env, EGC_SESSION_ID: TEST_SESSION_ID },
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 10000
+    });
+    assert.ok(fs.existsSync(getAccumFile()), 'the symlink itself is left alone, never unlinked as if it had been read');
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), '/some/private/path.ts\n', 'the link target is never touched');
+    fs.unlinkSync(getAccumFile());
+    fs.rmSync(outside, { recursive: true, force: true });
+  })) passed++; else failed++;
+}
+
 if (origSessionId === undefined) {
   delete process.env.EGC_SESSION_ID;
 } else {

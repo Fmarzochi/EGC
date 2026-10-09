@@ -23,6 +23,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const { findProjectRoot, detectFormatter, resolveFormatterBin } = require('../lib/resolve-formatter');
+const { readFileNoFollow } = require('../lib/no-follow-accumulator');
 
 const MAX_STDIN = 1024 * 1024;
 // Total ms budget reserved for all batches (leaves headroom below the 300s Stop timeout)
@@ -164,12 +165,13 @@ function groupByTsConfigDir(files) {
 function main() {
   const accumFile = getAccumFile();
 
-  let raw;
-  try {
-    raw = fs.readFileSync(accumFile, 'utf8');
-  } catch {
-    return;
-  }
+  // Refuses a symlinked final component and a non-regular object planted
+  // at the path (mirroring the write-side guard in
+  // post-edit-accumulator.js), returning null for a missing file exactly
+  // like every other failure, so a Stop call with nothing to process is
+  // indistinguishable from one that refused an unsafe accumulator.
+  const raw = readFileNoFollow(accumFile);
+  if (raw === null) return;
 
   try { fs.unlinkSync(accumFile); } catch {
     // Intentional: accumulator file may already be gone if another runner consumed it.
