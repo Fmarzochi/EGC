@@ -161,12 +161,28 @@ function groupByTsConfigDir(files) {
   return byTsConfigDir;
 }
 
+// Opens the exact accumulator path with O_NOFOLLOW (a no-op on Windows,
+// where the flag does not exist) so a symlink planted at that predictable
+// path in the shared temp dir is refused instead of read through, mirroring
+// the write-side guard in post-edit-accumulator.js.
+const NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+
+function readAccumulatorNoFollow(accumFile) {
+  let fd;
+  try {
+    fd = fs.openSync(accumFile, fs.constants.O_RDONLY | NOFOLLOW_FLAG);
+    return fs.readFileSync(fd, 'utf8');
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
 function main() {
   const accumFile = getAccumFile();
 
   let raw;
   try {
-    raw = fs.readFileSync(accumFile, 'utf8');
+    raw = readAccumulatorNoFollow(accumFile);
   } catch {
     return;
   }
