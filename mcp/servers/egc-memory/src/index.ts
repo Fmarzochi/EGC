@@ -5,7 +5,6 @@ import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } fr
 import { Database } from 'sqlite';
 import { openCompatDatabase, selectedEngine } from './sqlite-compat';
 import path from 'node:path';
-import os from 'node:os';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -13,6 +12,7 @@ import { z } from 'zod';
 import { createSearchIndex, rebuildSearchIndex, searchDecisions, createLessonsSearchIndex, rebuildLessonsSearchIndex, searchLessons } from './search.js';
 import { resolveHeadState, resolveStateRead, resolveStateWrite } from './branch-state';
 import { GLOBAL_APPENDIX_SECTIONS, buildGlobalAppendix, globalStateFilePath } from './global-state';
+import { resolveHome } from './home';
 import {
   announce as busAnnounce,
   claimPath as busClaimPath,
@@ -52,7 +52,7 @@ import { SQLiteArbitrationQueue } from './write-queue.js';
 
 function hideEgcRootOnWindows(): void {
   if (process.platform !== 'win32') return;
-  const egcRoot = path.join(os.homedir(), '.egc');
+  const egcRoot = path.join(resolveHome(), '.egc');
   const attribPath = path.join(process.env.SystemRoot || String.raw`C:\Windows`, 'System32', 'attrib.exe');
   spawnSync(attribPath, ['+h', egcRoot], { stdio: 'ignore', shell: false });
 }
@@ -69,7 +69,7 @@ class PersistentLogger {
   private readonly maxSizeBytes = 5 * 1024 * 1024; // 5MB
 
   constructor(serviceName: string) {
-    const logDir = path.join(os.homedir(), '.egc', 'logs');
+    const logDir = path.join(resolveHome(), '.egc', 'logs');
     ensurePrivateDir(logDir);
     hideEgcRootOnWindows();
     this.logPath = path.join(logDir, `${serviceName}.log`);
@@ -387,7 +387,7 @@ async function runMigrations(db: Database, dbDir: string) {
 // Single source of truth for the memory store location: getDb() opens the
 // database here and the mesh transport watches the same path for changes.
 function getMemoryDbDir(): string {
-  return path.join(os.homedir(), '.egc', 'memory');
+  return path.join(resolveHome(), '.egc', 'memory');
 }
 
 let dbInitPromise: Promise<Database> | null = null;
@@ -426,15 +426,16 @@ async function getDb(): Promise<Database> {
 
 const server = new Server({ name: "egc-memory-orchestrator", version: "3.0.0" }, { capabilities: { tools: {} } });
 // Functions, not module-level constants: both loadOrCreateKey() and
-// loadOrCreateEncKey() resolve their key path from os.homedir() internally.
+// loadOrCreateEncKey() resolve their key path from resolveHome() internally.
 // Caching the returned Buffer once at process boot (the previous shape:
-// `const _encKey = loadOrCreateEncKey()`) meant getStateDir() below — which
-// already recomputes os.homedir() on every call — could point at a state
-// file directory computed under a different $HOME than the one the cached
-// key was derived from, if this process ever observed $HOME change after
-// boot. Writes and reads would then silently use different keys against
-// the same file: GCM auth-tag verification fails on read, indistinguishable
-// from disk corruption. Recomputing per call costs one ~64-byte file read.
+// `const _encKey = loadOrCreateEncKey()`) meant getStateDir() below, which
+// already recomputes resolveHome() on every call, could point at a state
+// file directory computed under a different environment than the one the
+// cached key was derived from, if this process ever observed HOME or
+// USERPROFILE change after boot. Writes and reads would then silently use
+// different keys against the same file: GCM auth-tag verification fails on
+// read, indistinguishable from disk corruption. Recomputing per call costs
+// one ~64-byte file read.
 function getIntegrityKey(): Buffer {
   return loadOrCreateKey();
 }
@@ -443,7 +444,7 @@ function getEncKey(): Buffer {
 }
 
 function getStateDir(): string {
-  const dir = path.join(os.homedir(), '.egc', 'state');
+  const dir = path.join(resolveHome(), '.egc', 'state');
   ensurePrivateDir(dir);
   hideEgcRootOnWindows();
   return dir;
@@ -523,7 +524,7 @@ function isFilesystemRoot(target: string): boolean {
 // the accepted shapes.
 function projectPathRefusal(resolved: string): string | null {
   const target = canonicalPath(resolved);
-  const underHome = below(target, canonicalPath(os.homedir()));
+  const underHome = below(target, canonicalPath(resolveHome()));
   if (underHome !== null) {
     const first = underHome.split(path.sep)[0];
     return first.startsWith('.') ? `${first} is a hidden directory under the home directory, where tools keep settings and secrets` : null;
@@ -545,7 +546,7 @@ function resolveProjectPath(provided?: string): string {
   // fallback for environments where cwd() itself is unavailable.
   let cwd: string | undefined;
   try { cwd = process.cwd(); } catch { /* cwd unavailable, e.g. a deleted directory */ }
-  const raw = provided || process.env.EGC_PROJECT || cwd || process.env.PWD || os.homedir();
+  const raw = provided || process.env.EGC_PROJECT || cwd || process.env.PWD || resolveHome();
   if (provided?.split(/[/\\]/).includes('..')) {
     throw new Error(`project_path must not contain path traversal sequences: ${provided}`);
   }
