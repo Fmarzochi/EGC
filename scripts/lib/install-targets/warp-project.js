@@ -196,6 +196,7 @@ module.exports = createInstallTargetAdapter({
   installStatePathSegments: ['egc-install-state.json'],
   nativeRootRelativePath: '.warp',
   validateMore(input, adapter) {
+    if (!input.projectRoot && !input.repoRoot) return [];
     if (collectRecordedDestinations(adapter, input)) return [];
     return [buildValidationIssue(
       'warning',

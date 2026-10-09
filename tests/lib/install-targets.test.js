@@ -4030,8 +4030,12 @@ function runTests() {
       fs.writeFileSync(statePath, '{');
       const warnings = unreadable(adapter.validate(input));
       assert.strictEqual(warnings.length, 1, 'one warning for an unreadable state');
+      assert.strictEqual(warnings[0].severity, 'warning');
       assert.ok(warnings[0].message.includes(path.join(projectRoot, '.warp', 'skills')), warnings[0].message);
       assert.ok(repoRoot, 'the catalog root is not needed to read the state');
+      const withoutProject = adapter.validate({});
+      assert.ok(withoutProject.some(issue => issue.code === 'missing-project-root'), 'validate({}) reports the missing project root instead of throwing');
+      assert.deepStrictEqual(unreadable(withoutProject), [], 'and no state warning without a project');
     } finally {
       fs.rmSync(projectRoot, { recursive: true, force: true });
     }
