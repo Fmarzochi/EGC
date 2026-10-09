@@ -14,6 +14,7 @@ All notable changes to EGC are documented here.
 ### Security
 
 - **The MCP SDK moves to the 1.32 line in the root and in both servers** (#1754, #1753, #1762): `@modelcontextprotocol/sdk` 1.32.0 in the root and Guardian lockfiles and 1.32.1 in the memory server, whose manifest floor rises to `^1.32.0`. `mcp/servers/egc-memory` joins the weekly Dependabot schedule with the minor-and-patch group, so that server receives version updates like the other two manifests (closes #1662). The release workflow pins `anchore/sbom-action` v0.24.3 (#1755).
+- **The standalone Guardian CLI now writes its own denials to the audit log**: every harness hook enforcing Guardian rules without an MCP server running (the Bash and write hooks, and every tool-specific adapter that routes through the same CLI) now logs a denied command or write the same way the MCP server's interactive session already does, with the same redaction of secret-looking values.
 
 ### Fixed
 
