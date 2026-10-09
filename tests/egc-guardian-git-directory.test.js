@@ -264,10 +264,13 @@ record(test('the command-batch CLI judges an entry in every directory it can run
     }),
     encoding: 'utf8',
     timeout: 20000,
-    // Denied verdicts make the CLI write an audit entry (C49): HOME is
-    // pinned to this test's own temp root so that write lands there, never
-    // in the real ~/.egc/audit.log.
-    env: { ...process.env, HOME: root },
+    // Denied verdicts make the CLI write an audit entry (C49): HOME and
+    // USERPROFILE are both pinned to this test's own temp root so that
+    // write lands there, never in the real ~/.egc/audit.log -- os.homedir()
+    // ignores HOME on Windows and reads USERPROFILE instead, so pinning
+    // only HOME leaves the write (and this test's own ~-rooted commands)
+    // resolving against the real runner profile there.
+    env: { ...process.env, HOME: root, USERPROFILE: root },
   });
   const [bothWays, plainOnly, malformed, missing, empty] = JSON.parse(result.stdout);
   assert.strictEqual(bothWays.allowed, false, JSON.stringify(bothWays));
@@ -286,7 +289,7 @@ record(test('the command-batch CLI judges an entry in every directory it can run
     }),
     encoding: 'utf8',
     timeout: 20000,
-    env: { ...process.env, HOME: root },
+    env: { ...process.env, HOME: root, USERPROFILE: root },
   });
   const [intoGitDir, atTop] = JSON.parse(committed.stdout);
   const refused = verdict => !verdict.allowed && verdict.advisory !== true;

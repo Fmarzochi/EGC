@@ -22,9 +22,14 @@ if (!fs.existsSync(path.join(buildDir, 'guardian-cli.js'))) {
 
 process.env.EGC_GUARDIAN_CLI = path.join(buildDir, 'guardian-cli.js');
 // This file deliberately exercises refusals: the CLI writes an audit entry
-// for each one (C49), so HOME is pinned to a temp dir for this whole
-// process and never the real ~/.egc/audit.log.
-process.env.HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-repo-scripts-home-'));
+// for each one (C49), so HOME and USERPROFILE are both pinned to a temp
+// dir for this whole process and never the real ~/.egc/audit.log --
+// os.homedir() ignores HOME on Windows and reads USERPROFILE instead.
+{
+  const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-repo-scripts-home-'));
+  process.env.HOME = isolatedHome;
+  process.env.USERPROFILE = isolatedHome;
+}
 const writeHook = require('../../scripts/hooks/pre-write-guardian-validate');
 const bashHook = require('../../scripts/hooks/pre-bash-guardian-validate');
 const { validateCommand } = require(path.join(buildDir, 'validator.js'));
