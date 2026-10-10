@@ -284,11 +284,37 @@ if (gitAvailable) {
     assert.ok(ctx.changed.has('c.txt'), [...ctx.changed].join(', '));
   });
 
-  await run('an unborn or detached HEAD does not throw', async () => {
+  await run('an unborn HEAD does not throw', async () => {
+    const unborn = path.join(tmp, 'unborn');
+    fs.mkdirSync(unborn);
+    git(unborn, 'init', '-q');
+    await collectGitContext(unborn);
+  });
+
+  await run('a detached HEAD ahead of the default branch still reports what the branch changed', async () => {
     const detached = path.join(tmp, 'detached');
     fs.mkdirSync(detached);
     git(detached, 'init', '-q');
-    await collectGitContext(detached);
+    // Whatever init.defaultBranch says, the branch the signal compares against is called main.
+    git(detached, 'symbolic-ref', 'HEAD', 'refs/heads/main');
+    git(detached, 'config', 'user.email', 't@example.com');
+    git(detached, 'config', 'user.name', 'test');
+    fs.writeFileSync(path.join(detached, 'base.txt'), 'base\n');
+    git(detached, 'add', '.');
+    git(detached, 'commit', '-q', '-m', 'base');
+    git(detached, 'checkout', '-q', '-b', 'feature');
+    fs.writeFileSync(path.join(detached, 'feature.txt'), 'feature\n');
+    git(detached, 'add', '.');
+    git(detached, 'commit', '-q', '-m', 'feature');
+    git(detached, 'checkout', '-q', '--detach', 'HEAD');
+    // Control: HEAD really is a commit with no branch name, so this is not the attached case.
+    const attached = spawnSync('git', ['-C', detached, 'symbolic-ref', '-q', 'HEAD'], { encoding: 'utf8', windowsHide: true });
+    assert.notStrictEqual(attached.status, 0, 'HEAD is still on a branch');
+    const ctx = await collectGitContext(detached);
+    assert.ok(ctx, 'a detached HEAD in a repository gives a context');
+    assert.ok(ctx.branch.has('feature.txt'), `branch: ${[...ctx.branch].join(', ')}`);
+    assert.ok(!ctx.branch.has('base.txt'), 'what main already had is not a branch change');
+    assert.ok(ctx.recent.has('feature.txt'), 'the commit signals are produced too');
   });
 } else {
   console.log('  SKIP repository tests (git not on PATH)');
