@@ -78,11 +78,17 @@ function isErrorEvent(event: RuntimeEvent, p: Record<string, unknown>): boolean 
 }
 
 // A token is a path when it starts like one (absolute, home, relative or
-// drive letter) or carries separators between name parts, a trailing :line
-// or :line:column included; quotes and punctuation around it are ignored.
+// drive letter), carries two or more separators and a letter (a date or a
+// ratio such as 3/14/2024 is not a path), or carries one separator and an
+// extension, a trailing :line or :line:column included. A token with a URI
+// scheme is not a path, since its endpoint tells failures apart; a token
+// with one separator and no extension is left alone, since read/write or
+// and/or is prose as often as src/loader is a path. Quotes, brackets and
+// punctuation around the token are ignored.
 const PATH_START = /^(?:[A-Za-z]:)?[\\/]|^~[\\/]|^\.{1,2}[\\/]/;
-const LEADING_PUNCTUATION = new Set(['\'', '"', '(']);
-const TRAILING_PUNCTUATION = new Set([',', '.', ';', ':', ')', '\'', '"']);
+const URI_SCHEME = /^[a-z][a-z\d+.-]*:\/\//i;
+const LEADING_PUNCTUATION = new Set(['\'', '"', '(', '[', '{']);
+const TRAILING_PUNCTUATION = new Set([',', '.', ';', ':', ')', '\'', '"', ']', '}', '!', '?']);
 
 // The token without the quotes and punctuation around it, walked from both
 // ends so the cost stays linear in its length.
@@ -96,9 +102,11 @@ function bareToken(token: string): string {
 
 function isPathToken(token: string): boolean {
   const bare = bareToken(token);
+  if (URI_SCHEME.test(bare)) return false;
   if (PATH_START.test(bare)) return true;
   const separators = bare.split(/[\\/]/).length - 1;
-  return separators >= 2 || (separators === 1 && /\.\w+(?::\d+)*$/.test(bare));
+  if (separators >= 2) return /[A-Za-z]/.test(bare);
+  return separators === 1 && /\.\w+(?::\d+)*$/.test(bare);
 }
 
 // The same error from two files is one pattern: every path in the message

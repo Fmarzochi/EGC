@@ -128,6 +128,12 @@ async function runTests() {
     assert.ok(err, 'one pattern for the three messages');
     assert.strictEqual(err.key, 'error:Cannot find module <path> imported');
     assert.strictEqual(err.occurrences, 3);
+    const keyOf = message => detectPatternsFromEvents([1, 2, 3].map(i => makeEvent(`k${i}`, 'error', { message }, daysAgo(i))), 7, 3)
+      .find(p => p.type === 'recurring_error').key;
+    assert.strictEqual(keyOf('bad import in [src/foo.ts]!'), 'error:bad import in <path>', 'brackets and punctuation around a path are ignored');
+    assert.strictEqual(keyOf('GET https://api.example/a failed'), 'error:GET https://api.example/a failed', 'a URL keeps its endpoint');
+    assert.strictEqual(keyOf('deadline 3/14/2024 passed'), 'error:deadline 3/14/2024 passed', 'a date is not a path');
+    assert.strictEqual(keyOf('choose read/write mode'), 'error:choose read/write mode', 'one separator and no extension is prose');
   }));
 
   if (await test('an error key comes from the code, else the TS code or the first six words of the message, on error events only', async () => {
