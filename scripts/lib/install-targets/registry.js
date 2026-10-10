@@ -2,6 +2,8 @@ const path = require('node:path');
 
 const aiderProject = require('./aider-project');
 const antigravityProject = require('./antigravity-project');
+const auggieHome = require('./auggie-home');
+const auggieProject = require('./auggie-project');
 const claudeCodeHome = require('./claude-home');
 const egcHome = require('./gemini-home');
 const codebuddyProject = require('./codebuddy-project');
@@ -43,6 +45,8 @@ const ADAPTERS = Object.freeze([
   claudeCodeHome,
   cursorProject,
   antigravityProject,
+  auggieHome,
+  auggieProject,
   aiderProject,
   codexHome,
   gooseHome,

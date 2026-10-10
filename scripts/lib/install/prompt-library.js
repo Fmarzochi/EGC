@@ -17,6 +17,7 @@ const { commandExists: defaultCommandExists } = require('../utils');
 const HOME_TARGET_COMMANDS = Object.freeze({
   egc: ['gemini', 'agy'],
   claude: ['claude'],
+  auggie: ['auggie'],
   codex: ['codex'],
   opencode: ['opencode'],
   windsurf: ['windsurf'],
@@ -52,6 +53,7 @@ const PROJECT_TARGETS_AT_HOME = Object.freeze({
 const TARGET_LABELS = Object.freeze({
   egc: 'Gemini / AGY',
   claude: 'Claude Code',
+  auggie: 'Auggie (Augment Code)',
   codex: 'Codex CLI',
   opencode: 'OpenCode',
   windsurf: 'Devin Desktop',

@@ -301,6 +301,61 @@ function hookEntryKeyOf(operation) {
   return [path.resolve(operation.destinationPath), operation.hookEvent, path.resolve(operation.hookScriptPath)].join('\n');
 }
 
+function isEmptyJsonObjectFile(filePath) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return false;
+  }
+  return Boolean(parsed) && typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length === 0;
+}
+
+// The hooks files the given retirements would leave with nothing in them,
+// for the dry run to list and the apply to remove: each handler runs its
+// removal on a scratch copy of the file, so the answer is the one the apply
+// gives, whatever the hook format. A file that ends `{}` held only EGC's
+// own entries; nothing of the person's is in it.
+function predictEmptiedHooksFiles(retirements) {
+  const byFile = new Map();
+  for (const retirement of Array.isArray(retirements) ? retirements : []) {
+    const filePath = path.resolve(retirement.destinationPath);
+    byFile.set(filePath, [...(byFile.get(filePath) || []), retirement]);
+  }
+  const emptied = [];
+  for (const [filePath, entries] of byFile) {
+    if (!fs.existsSync(filePath)) continue;
+    const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-hooks-retire-'));
+    const scratch = path.join(scratchDir, path.basename(filePath));
+    try {
+      fs.copyFileSync(filePath, scratch);
+      for (const retirement of entries) {
+        resolveHookOperationHandlers(retirement.hookEvent).remove({ ...retirement, destinationPath: scratch });
+      }
+      if (isEmptyJsonObjectFile(scratch)) emptied.push(filePath);
+    } finally {
+      fs.rmSync(scratchDir, { recursive: true, force: true });
+    }
+  }
+  return emptied;
+}
+
+// The dry-run counterpart of the removal below: the files the retirable
+// entries would empty.
+function retirableEmptiedHooksFiles(plan) {
+  return predictEmptiedHooksFiles(retirableHooks(plan));
+}
+
+// Removes the hooks files the retirements emptied, checked again on disk:
+// a file a current operation wrote into since is no longer empty and stays.
+function removeEmptiedHooksFiles(predicted) {
+  return predicted.filter(filePath => {
+    if (!isEmptyJsonObjectFile(filePath)) return false;
+    fs.unlinkSync(filePath);
+    return true;
+  });
+}
+
 // Removes each hook entry that left the plan through the handler the
 // uninstall uses. It runs once the current entries are written, so an
 // install that stops half-way never leaves the person without either set.
@@ -1051,7 +1106,9 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   performShapeTransitions([...pendingTransitions.values()], plan);
 
   const retiredFiles = retirePlannedFiles(plan);
+  const emptiedHooksFiles = predictEmptiedHooksFiles(plan.hookRetirements);
   const retiredHooks = retirePlannedHooks(plan);
+  const removedHooksFiles = removeEmptiedHooksFiles(emptiedHooksFiles);
   const retiredLegacyLinks = removeStrandedLegacyLinks(findStrandedLegacyLinks(plan), plan.targetRoot);
 
   recordWrittenContentHashes(plan, writtenHashes);
@@ -1078,7 +1135,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     },
   });
 
-  const result = { ...plan, applied: true, migratedLegacyLinks, retiredLegacyLinks, retiredFiles, retiredHooks, shapeTransitions: shapeResult.transitions };
+  const result = { ...plan, applied: true, migratedLegacyLinks, retiredLegacyLinks, retiredFiles, retiredHooks, removedHooksFiles, shapeTransitions: shapeResult.transitions };
   Object.defineProperty(result, 'syncPromise', {
     value: syncPromise,
     enumerable: false,
@@ -1091,6 +1148,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 module.exports = {
   applyInstallPlan,
   managedRootFor,
+  retirableEmptiedHooksFiles,
   retirableFiles,
   retirableHooks,
   retirePlannedFiles,

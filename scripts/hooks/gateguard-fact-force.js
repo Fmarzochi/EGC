@@ -664,12 +664,23 @@ function normalizeForMatch(value) {
 // the retired Gemini CLI's (`.claude/settings.json`,
 // `.gemini/settings.local.json`, ...): an edit there is how the hook itself
 // is configured or disabled, so it is never gated. Antigravity's own hooks
-// files (`.gemini/config/hooks.json`, `.gemini/antigravity-cli/hooks.json`)
-// are not exempt yet; they join when the gate is wired in Antigravity's
-// format. Nothing else under those directories is exempt.
-function isClaudeSettingsPath(filePath) {
+// files (`.gemini/config/hooks.json`, `.agents/hooks.json`), where the gate
+// runs as the egc-gateguard named hook, are exempt the same way: the
+// Guardian denies the agent those surfaces outright, so a gate retry there
+// would only cost a turn. They are matched the way the filesystem does, so
+// on a case-sensitive one `.AGENTS/hooks.json`, a file the Guardian does
+// not protect, stays gated. Nothing else under those directories is exempt.
+const CASE_INSENSITIVE_FILESYSTEM = process.platform === 'win32' || process.platform === 'darwin';
+const ANTIGRAVITY_HOOKS_FILE_RE = /(^|\/)\.(?:gemini\/config|agents)\/hooks\.json$/;
+
+function isAntigravityHooksPath(filePath) {
+  const slashed = String(filePath || '').replaceAll('\\', '/');
+  return ANTIGRAVITY_HOOKS_FILE_RE.test(CASE_INSENSITIVE_FILESYSTEM ? slashed.toLowerCase() : slashed);
+}
+
+function isGateExemptPath(filePath) {
   const normalized = normalizeForMatch(filePath);
-  return /(^|\/)\.(?:claude|gemini)\/settings(?:\.[^/]+)?\.json$/.test(normalized);
+  return /(^|\/)\.(?:claude|gemini)\/settings(?:\.[^/]+)?\.json$/.test(normalized) || isAntigravityHooksPath(filePath);
 }
 
 const SAFE_GIT_SUBCOMMANDS = {
@@ -839,7 +850,7 @@ const { WRAPPER_SPECS, readWrapperOption } = require('../lib/wrapper-options');
  */
 function handleEditWrite(rawInput, toolName, toolInput) {
   const filePath = toolInput.file_path || '';
-  if (!filePath || isClaudeSettingsPath(filePath)) {
+  if (!filePath || isGateExemptPath(filePath)) {
     trace('governance:allowed:settings', { toolName, filePath });
     return rawInput;
   }
@@ -870,7 +881,7 @@ function handleMultiEdit(rawInput, toolName, toolInput) {
   const edits = toolInput.edits || [];
   for (const edit of edits) {
     const filePath = edit.file_path || '';
-    if (!filePath || isClaudeSettingsPath(filePath)) continue;
+    if (!filePath || isGateExemptPath(filePath)) continue;
     if (!isChecked(filePath)) {
       if (!markChecked(filePath) || !markChecked(pendingKey(filePath))) {
         trace('governance:allowed:state_error', { toolName, filePath });
@@ -928,7 +939,7 @@ function handleApplyPatch(rawInput, rawPatchInput) {
   }
 
   for (const filePath of filePaths) {
-    if (isClaudeSettingsPath(filePath) || isChecked(filePath)) {
+    if (isGateExemptPath(filePath) || isChecked(filePath)) {
       continue;
     }
     if (!markChecked(filePath) || !markChecked(pendingKey(filePath))) {
