@@ -160,17 +160,23 @@ tally(test('a link through a directory alias and .. is resolved in filesystem or
     const missingLink = path.join(home, 'missing.md');
     if (!linkOrSkip(['..', 'alias', '..', 'missing.md'].join(path.sep), missingLink)) return SKIPPED;
     writeProtocolFile(missingLink, 'created');
-    assert.strictEqual(fs.readFileSync(path.join(dir, 'real', 'missing.md'), 'utf8'), 'created', 'alias/.. means the parent of the alias target');
-    assert.ok(!fs.existsSync(path.join(dir, 'missing.md')), 'not the parent of the link itself');
     assert.ok(fs.lstatSync(missingLink).isSymbolicLink());
+    assert.strictEqual(fs.readFileSync(missingLink, 'utf8'), 'created', 'reading through the link, as the tool does, gives the new text');
+    if (process.platform !== 'win32') {
+      assert.strictEqual(fs.readFileSync(path.join(dir, 'real', 'missing.md'), 'utf8'), 'created', 'on POSIX alias/.. means the parent of the alias target');
+      assert.ok(!fs.existsSync(path.join(dir, 'missing.md')), 'not the parent of the link itself');
+    }
 
     const existing = path.join(dir, 'real', 'existing.md');
     fs.writeFileSync(existing, 'old');
     const existingLink = path.join(home, 'existing.md');
     if (!linkOrSkip(['..', 'alias', '..', 'existing.md'].join(path.sep), existingLink)) return SKIPPED;
     writeProtocolFile(existingLink, 'new');
-    assert.strictEqual(fs.readFileSync(existing, 'utf8'), 'new');
-    assert.ok(!fs.existsSync(path.join(dir, 'existing.md')));
+    assert.strictEqual(fs.readFileSync(existingLink, 'utf8'), 'new', 'reading through the link gives the new text');
+    if (process.platform !== 'win32') {
+      assert.strictEqual(fs.readFileSync(existing, 'utf8'), 'new');
+      assert.ok(!fs.existsSync(path.join(dir, 'existing.md')));
+    }
     return true;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
