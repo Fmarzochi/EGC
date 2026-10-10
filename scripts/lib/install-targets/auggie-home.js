@@ -10,14 +10,14 @@ const { planAuggieOperations } = require('../auggie-operations');
 // rules recursively under ~/.augment/rules/*.md, always treated as
 // always_apply there regardless of frontmatter (the `type` key only
 // changes behavior for workspace rules). No hook or plugin API with an
-// allow/deny decision is documented -- --startup-script runs once before
-// the session, not per tool call -- so the Guardian and the Token Crusher
+// allow/deny decision is documented (--startup-script runs once before
+// the session, not per tool call), so the Guardian and the Token Crusher
 // stay out of scope here, same as Kiro and Devin Desktop. Agents have no
 // native equivalent (its --persona flag selects a built-in persona id, not
 // a catalog of markdown files), so they fall through to the default
 // scaffold as a plain library folder under .augment/agents/, same as every
 // family a target cannot run natively. planAuggieOperations itself is shared
-// with auggie-project.js in ../auggie-operations.js -- only the root differs
+// with auggie-project.js in ../auggie-operations.js: only the root differs
 // between the two scopes.
 module.exports = createInstallTargetAdapter({
   id: 'auggie-home',

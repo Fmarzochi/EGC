@@ -15,7 +15,7 @@ const {
 // `description`, confirmed against docs.augmentcode.com/cli), so every file
 // under rules/ loads into every session. rules/zh mirrors rules/common in
 // Chinese and would load twice, and rules/README.md is navigation for a
-// human browsing the source tree, not guidance for the agent -- both are
+// human browsing the source tree, not guidance for the agent: both are
 // excluded the same way claude-home.js excludes them from its own rules.
 const EXCLUDED_RULE_NAMESPACES = new Set(['zh']);
 
