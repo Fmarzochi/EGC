@@ -6,11 +6,14 @@ const path = require('node:path');
 
 const MAX_LINK_HOPS = 40;
 
+const MISSING = new Set(['ENOENT', 'ENOTDIR']);
+
 function lstatOrNull(filepath) {
   try {
     return fs.lstatSync(filepath);
-  } catch {
-    return null;
+  } catch (error) {
+    if (MISSING.has(error.code)) return null;
+    throw error;
   }
 }
 
@@ -55,8 +58,9 @@ function keepOwner(descriptor, existing) {
 function statOrNull(filepath) {
   try {
     return fs.statSync(filepath);
-  } catch {
-    return null;
+  } catch (error) {
+    if (MISSING.has(error.code)) return null;
+    throw error;
   }
 }
 

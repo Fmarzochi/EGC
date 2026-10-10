@@ -1451,7 +1451,7 @@ async function runProtocolContentTests() {
   })) passed++; else failed++;
 
   if (await test('every protocol write of the bootstrap goes through writeProtocolFile, none through a direct writeFileSync (#1832)', () => {
-    assert.deepStrictEqual(SCRIPT_SOURCE.match(/fs\.writeFileSync\(/g) || [], []);
+    assert.deepStrictEqual(SCRIPT_SOURCE.match(/\bwriteFile(?:Sync)?\b|\bappendFile(?:Sync)?\b|\bcreateWriteStream\b|\bfs\.promises\b|\bfs\/promises\b/g) || [], []);
     assert.ok(SCRIPT_SOURCE.includes("require('./lib/protocol-file-write')"));
   })) passed++; else failed++;
 
