@@ -86,6 +86,20 @@ function runTests() {
     }
   }));
 
+  results.push(test('a relative target is resolved against the Antigravity workspace, not the hook process directory', () => {
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'antigravity-gateguard-workspace-'));
+    try {
+      fs.writeFileSync(path.join(workspace, 'present.js'), 'x');
+      const existing = buildGateGuardInput(event('write_to_file', { TargetFile: 'present.js', CodeContent: 'y' }, { workspacePaths: [workspace] }));
+      assert.deepStrictEqual(existing, { session_id: 'conv-1', tool_name: 'Edit', tool_input: { file_path: path.join(workspace, 'present.js') } });
+      const created = buildGateGuardInput(event('write_to_file', { TargetFile: path.join('src', 'new.js'), CodeContent: 'y' }, { workspacePaths: [workspace] }));
+      assert.deepStrictEqual(created, { session_id: 'conv-1', tool_name: 'Write', tool_input: { file_path: path.join(workspace, 'src', 'new.js') } });
+      assert.strictEqual(buildGateGuardInput(event('write_to_file', { TargetFile: 'loose.js' }, { workspacePaths: [] })).tool_input.file_path, 'loose.js', 'with no workspace the target is passed as given');
+    } finally {
+      fs.rmSync(workspace, { recursive: true, force: true });
+    }
+  }));
+
   results.push(test('tools the gate does not judge, calls without their argument, and events with no tool call map to nothing', () => {
     assert.strictEqual(buildGateGuardInput(event('view_file', { AbsolutePath: '/etc/hostname' })), null);
     assert.strictEqual(buildGateGuardInput(event('run_command', { Cwd: '/workspace/app' })), null);
@@ -108,7 +122,7 @@ function runTests() {
       const first = runAdapter(stateDir, event('run_command', { CommandLine: 'ls', Cwd: '/workspace/app' }));
       assert.strictEqual(first.code, 0);
       assert.strictEqual(first.output.decision, 'deny');
-      assert.match(first.output.reason, /Fact-Forcing Gate/);
+      assert.match(first.output.reason, /\[Fact-Forcing Gate\][\s\S]*present these facts:/, 'the reason carries the facts the gate asks for');
       const retry = runAdapter(stateDir, event('run_command', { CommandLine: 'ls', Cwd: '/workspace/app' }));
       assert.deepStrictEqual(retry.output, { decision: 'ask' });
     });
@@ -119,7 +133,8 @@ function runTests() {
       const target = path.join(stateDir, 'notes.md');
       const first = runAdapter(stateDir, event('write_to_file', { TargetFile: target, CodeContent: '# notes' }));
       assert.strictEqual(first.output.decision, 'deny');
-      assert.match(first.output.reason, /Fact-Forcing Gate/);
+      assert.match(first.output.reason, /\[Fact-Forcing Gate\][\s\S]*present these facts:/, 'the reason carries the facts the gate asks for');
+      assert.ok(first.output.reason.includes(target), 'the facts name the file');
       assert.deepStrictEqual(runAdapter(stateDir, event('write_to_file', { TargetFile: target, CodeContent: '# notes' })).output, { decision: 'ask' });
     });
   }));

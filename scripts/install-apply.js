@@ -156,6 +156,12 @@ function printHookRetirements(plan, dryRun) {
   for (const entry of entries) {
     console.log(`- ${dryRun ? '' : 'retired hook entry: '}${entry.hookEvent} in ${entry.destinationPath}`);
   }
+  // A hooks file those entries leave with nothing in it goes with them; the
+  // dry run lists the same files the apply removes.
+  const files = dryRun ? plan.emptiedHooksFiles : plan.removedHooksFiles;
+  for (const filePath of Array.isArray(files) ? files : []) {
+    console.log(`- ${dryRun ? 'hooks file left empty, to remove: ' : 'removed emptied hooks file: '}${filePath}`);
+  }
 }
 
 // The links from EGC's own June 2026 layout (one link per Antigravity CLI
@@ -468,14 +474,16 @@ function main() {
     enforceTargetDetection(plan, options);
 
     if (options.dryRun) {
-      const { collectShapeTransitions, findLegacyLinks, findStrandedLegacyLinks, retirableFiles, retirableHooks } = require('./lib/install/apply');
+      const { collectShapeTransitions, findLegacyLinks, findStrandedLegacyLinks, retirableEmptiedHooksFiles, retirableFiles, retirableHooks } = require('./lib/install/apply');
       plan.legacyLinks = findLegacyLinks(plan);
       plan.strandedLegacyLinks = findStrandedLegacyLinks(plan);
       // The same test the apply runs: a file the person replaced is not
       // listed, because it would not be removed.
       plan.retirements = retirableFiles(plan);
-      // Likewise a hook entry that is no longer in its file.
+      // Likewise a hook entry that is no longer in its file, and the hooks
+      // files those entries would leave empty.
       plan.hookRetirements = retirableHooks(plan);
+      plan.emptiedHooksFiles = retirableEmptiedHooksFiles(plan);
       // Same again for destinations whose source changed shape: the apply
       // resolves a transition only when every file passes identity, so the
       // dry run lists the resolvable transitions and every refusal.

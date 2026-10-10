@@ -94,12 +94,13 @@ run('each conversation keeps its own cursor', () => {
   assert.strictEqual(other.output.injectSteps.length, 1, 'the second conversation has not looked yet');
 });
 
-run('unreadable stdin is an empty object with exit 0, never a broken turn', () => {
+run('unreadable stdin is an empty object with exit 0, even when the store moved: it names no conversation', () => {
   const home = makeHome();
   touchWal(home, Date.UTC(2026, 9, 10, 1, 0, 0));
   const result = runAdapter(home, 'not json');
   assert.strictEqual(result.status, 0);
-  assert.ok(result.output && typeof result.output === 'object', 'a JSON object is printed');
+  assert.deepStrictEqual(result.output, {});
+  assert.strictEqual(runAdapter(home, event('conv-1')).output.injectSteps.length, 1, 'the move is still announced to the first conversation that reads it');
 });
 
 run('buildInjection shapes the notice as one ephemeral message step and nothing when quiet', () => {

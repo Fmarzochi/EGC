@@ -10,8 +10,9 @@
  * This adapter calls mesh-events-inject.js's run() with Antigravity's
  * conversationId as the session key and answers one ephemeral message when
  * the bus store moved since this conversation's last look, an empty object
- * otherwise. It always prints a JSON object and always exits 0: a wake
- * signal must never break the turn.
+ * otherwise. Stdin that cannot be read names no conversation, so it is an
+ * empty object too. It always prints a JSON object and always exits 0: a
+ * wake signal must never break the turn.
  */
 
 'use strict';
@@ -30,8 +31,9 @@ function buildInjection(event) {
 }
 
 function injectionFor(ok, value) {
+  if (!ok) return {};
   try {
-    return buildInjection(ok ? value : null);
+    return buildInjection(value);
   } catch (_) { // NOSONAR: a wake signal must never break the harness turn
     return {};
   }

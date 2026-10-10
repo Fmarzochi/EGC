@@ -29,6 +29,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const path = require('node:path');
 const { run } = require('./gateguard-fact-force');
 const { runJsonEnvelopeGuardianAdapter } = require('../lib/adapter-stdin-json');
 
@@ -42,6 +43,20 @@ function isPlainObject(value) {
 
 function nonEmptyString(value) {
   return typeof value === 'string' && value.length > 0 ? value : '';
+}
+
+function firstWorkspace(event) {
+  const paths = event.workspacePaths;
+  return Array.isArray(paths) && typeof paths[0] === 'string' ? paths[0] : '';
+}
+
+// A relative target is Antigravity's, relative to its workspace, not to
+// the directory this hook process runs in.
+function targetOf(event, args) {
+  const target = nonEmptyString(args.TargetFile);
+  if (!target || path.isAbsolute(target)) return target;
+  const workspace = firstWorkspace(event);
+  return workspace ? path.resolve(workspace, target) : target;
 }
 
 // The gate phrases a creation and an edit differently; the file on disk
@@ -60,7 +75,7 @@ function buildGateGuardInput(event) {
     return command ? { session_id: sessionId, tool_name: 'Bash', tool_input: { command } } : null;
   }
   if (!WRITE_TOOLS.has(name)) return null;
-  const target = nonEmptyString(args.TargetFile);
+  const target = targetOf(event, args);
   return target ? { session_id: sessionId, tool_name: fileToolName(target), tool_input: { file_path: target } } : null;
 }
 

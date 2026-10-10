@@ -1114,6 +1114,29 @@ function runTests() {
     assert.ok(gated, `a first write under .claude/ is still gated: ${memory.stdout.slice(0, 200)}`);
   }));
 
+  // --- Test 16c: Antigravity's hooks files, where the gate runs as a named hook, are exempt like the settings files; the rest of .agents/ is not ---
+  clearState();
+  tally(test('allows edits to .gemini/config/hooks.json and .agents/hooks.json without gating, and still gates the rest of .agents/', () => {
+    for (const filePath of ['/home/person/.gemini/config/hooks.json', '/workspace/app/.agents/hooks.json']) {
+      const result = runHook({
+        tool_name: 'Edit',
+        tool_input: { file_path: filePath, old_string: '{}', new_string: '{"egc-gateguard":{}}' }
+      });
+      const output = parseOutput(result.stdout);
+      assert.ok(output, `should produce valid JSON output for ${filePath}`);
+      assert.notStrictEqual(output.hookSpecificOutput?.permissionDecision, 'deny', `${filePath} must not be gated`);
+    }
+    clearState();
+    const skill = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: '/workspace/app/.agents/skills/probe/SKILL.md', content: '# probe' }
+    });
+    const skillOutput = parseOutput(skill.stdout);
+    assert.ok(skillOutput, 'should produce valid JSON output');
+    const gated = skillOutput.hookSpecificOutput?.permissionDecision === 'deny' || skillOutput.decision === 'block';
+    assert.ok(gated, `a first write elsewhere under .agents/ is still gated: ${skill.stdout.slice(0, 200)}`);
+  }));
+
   // --- Test 17: allows read-only git introspection without first-bash gating ---
   clearState();
   tally(test('allows read-only git status without first-bash gating', () => {

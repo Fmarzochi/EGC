@@ -279,8 +279,14 @@ function runTests() {
       fs.writeFileSync(legacyHooks, JSON.stringify({ hooks: legacyClaudeHooksBlock(hooksDir) }, null, 2));
       recordLegacyClaudeHooks(statePath, legacyHooks, hooksDir);
 
+      const preview = run([...args, '--dry-run'], { cwd: projectDir, homeDir, env });
+      assert.strictEqual(preview.code, 0, preview.stderr);
+      assert.ok(preview.stdout.includes(`hooks file left empty, to remove: ${legacyHooks}`), `the dry run announces the file removal, got: ${preview.stdout.slice(-600)}`);
+      assert.ok(fs.existsSync(legacyHooks), 'the dry run removes nothing');
+
       const upgraded = run(args, { cwd: projectDir, homeDir, env });
       assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assert.ok(upgraded.stdout.includes(`removed emptied hooks file: ${legacyHooks}`), `the apply reports the file removal, got: ${upgraded.stdout.slice(-600)}`);
       assert.ok(!fs.existsSync(legacyHooks), 'the file that held only EGC entries is gone');
       assert.deepStrictEqual(Object.keys(readJson(configHooks)).sort(), NAMED_ANTIGRAVITY_HOOKS, 'the named hooks stay');
       const recorded = readJson(statePath).operations;

@@ -665,12 +665,14 @@ function normalizeForMatch(value) {
 // `.gemini/settings.local.json`, ...): an edit there is how the hook itself
 // is configured or disabled, so it is never gated. Antigravity's own hooks
 // files (`.gemini/config/hooks.json`, `.agents/hooks.json`), where the gate
-// runs as the egc-gateguard named hook, are hook surfaces the Guardian
-// denies to the agent outright, so the gate has nothing to add there.
-// Nothing else under those directories is exempt.
+// runs as the egc-gateguard named hook, are exempt the same way: the
+// Guardian denies the agent those surfaces outright, so a gate retry there
+// would only cost a turn. Nothing else under those directories is exempt.
 function isClaudeSettingsPath(filePath) {
   const normalized = normalizeForMatch(filePath);
-  return /(^|\/)\.(?:claude|gemini)\/settings(?:\.[^/]+)?\.json$/.test(normalized);
+  return /(^|\/)\.(?:claude|gemini)\/settings(?:\.[^/]+)?\.json$/.test(normalized)
+    || /(^|\/)\.gemini\/config\/hooks\.json$/.test(normalized)
+    || /(^|\/)\.agents\/hooks\.json$/.test(normalized);
 }
 
 const SAFE_GIT_SUBCOMMANDS = {
