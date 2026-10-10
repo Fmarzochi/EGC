@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('assert');
+const TOML = require('@iarna/toml');
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -327,7 +328,7 @@ async function runClaudeCodeAndGeminiCliTests() {
 
 // Split out from runTests() to keep its cyclomatic complexity down: covers
 // the two non-markdown protocol formats (Cursor's JSON cursor.rules, Codex's
-// TOML persistent_instructions), each needing its own upgrade-from-legacy
+// TOML developer_instructions), each needing its own upgrade-from-legacy
 // and stay-idempotent-at-current-version case.
 async function runCursorAndCodexUpgradeTests() {
   let passed = 0;
@@ -420,41 +421,20 @@ async function runCursorAndCodexUpgradeTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('Codex config.toml: a pre-versioning legacy persistent_instructions (no marker) is upgraded to the current version with the Crusher text, staying a valid single-line TOML string', () => {
+  if (await test('Codex config.toml: a single-quoted developer_instructions is rewritten as a double-quoted string with its quotes and backslashes escaped (#1708)', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.codex'));
       const tomlPath = path.join(home, '.codex', 'config.toml');
-      fs.writeFileSync(tomlPath, 'persistent_instructions = "State lives at ~/.egc/state/<slug>.md. Legacy pre-Crusher text mentioning get_state and update_state."\n', 'utf8');
-
-      const output = run(home);
-      assert.ok(output.includes(`Codex: memory protocol upgraded v1 -> ${V}`), `should report a v1 upgrade to the current version, got: ${output}`);
-
-      const content = fs.readFileSync(tomlPath, 'utf8');
-      const match = content.match(/^persistent_instructions = "(.*)"$/m);
-      assert.ok(match, 'persistent_instructions must remain a single-line double-quoted TOML string');
-      assert.ok(!match[1].includes('"'), 'the TOML string value must not contain an unescaped double-quote');
-      assert.ok(match[1].includes(`[egc-protocol:${V}]`), 'upgraded value must carry the current version marker');
-      assert.ok(match[1].includes('Token Crusher Protocol'), 'upgraded value must include the Crusher section');
-      assert.ok(match[1].includes('Legacy pre-Crusher text'), 'pre-marker legacy text is left in place rather than guessed-and-removed');
-    } finally {
-      cleanup(home);
-    }
-  })) passed++; else failed++;
-
-  if (await test('Codex config.toml: escapes double quotes and backslashes when upgrading a single-quoted persistent_instructions (cubic review, PR #1095)', () => {
-    const home = mktempHome();
-    try {
-      fs.mkdirSync(path.join(home, '.codex'));
-      const tomlPath = path.join(home, '.codex', 'config.toml');
-      fs.writeFileSync(tomlPath, 'persistent_instructions = \'Legacy text mentioning get_state with a "quoted word" and a backslash \\ here.\'\n', 'utf8');
+      fs.writeFileSync(tomlPath, 'developer_instructions = \'My text with a "quoted word" and a backslash \\ here.\'\n', 'utf8');
 
       run(home);
 
       const content = fs.readFileSync(tomlPath, 'utf8');
-      assert.ok(/^persistent_instructions = "/m.test(content), 'must be rewritten as a double-quoted TOML string');
-      assert.ok(content.includes('\\"quoted word\\"'), 'the original double quotes must be escaped, not left bare inside the new double-quoted string');
-      assert.ok(content.includes('backslash \\\\ here'), 'the original backslash must be escaped (doubled), not left bare');
+      assert.ok(/^developer_instructions = "/m.test(content), 'must be rewritten as a double-quoted TOML string');
+      const parsed = TOML.parse(content);
+      assert.ok(parsed.developer_instructions.startsWith('My text with a "quoted word" and a backslash \\ here.'), 'the person\'s text round-trips exactly');
+      assert.ok(parsed.developer_instructions.includes(`[egc-protocol:${V}]`), 'the protocol is appended');
     } finally {
       cleanup(home);
     }
@@ -465,8 +445,230 @@ async function runCursorAndCodexUpgradeTests() {
     try {
       fs.mkdirSync(path.join(home, '.codex'));
       run(home);
+      const tomlPath = path.join(home, '.codex', 'config.toml');
+      const first = fs.readFileSync(tomlPath, 'utf8');
       const second = run(home);
       assert.ok(second.includes(`Codex: already configured (${V})`), `second run should report already configured, got: ${second}`);
+      assert.strictEqual(fs.readFileSync(tomlPath, 'utf8'), first, 'a rerun rewrites nothing');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  {
+    const [codexPassed, codexFailed] = await runCodexDeveloperInstructionsTests();
+    passed += codexPassed;
+    failed += codexFailed;
+  }
+
+  return [passed, failed];
+}
+
+async function runCodexDeveloperInstructionsTests() {
+  let passed = 0;
+  let failed = 0;
+  const codexToml = home => path.join(home, '.codex', 'config.toml');
+  const egcLegacy = version => `persistent_instructions = "State is owned by egc-memory (encrypted at rest, one file per project and branch); never read or write those files directly. If get_state is not among your tools, say the server is not registered and point at egc init. [egc-protocol:v${version}] Old protocol text. [/egc-protocol]"`;
+  const tableBlock = '[mcp_servers.demo]\ncommand = "npx"\nargs = ["-y", "demo"]\n';
+
+  if (await test('Codex TOML round trip: a fresh config.toml gets the protocol in top-level developer_instructions and no persistent_instructions (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      const output = run(home);
+      assert.ok(output.includes('Codex: memory protocol installed in developer_instructions'), `the install is reported, got: ${output}`);
+      const parsed = TOML.parse(fs.readFileSync(codexToml(home), 'utf8'));
+      assert.ok(parsed.developer_instructions.includes(`[egc-protocol:${V}]`), 'developer_instructions carries the current protocol');
+      assert.ok(parsed.developer_instructions.includes('Token Crusher Protocol'), 'with the full protocol text');
+      assert.ok(!('persistent_instructions' in parsed), 'the key Codex does not read is never written');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex TOML round trip: in a file with tables the key lands at the top level, before the first table, and every table stays as it was (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(codexToml(home), `model = "o3"\n\n${tableBlock}`, 'utf8');
+      run(home);
+      const parsed = TOML.parse(fs.readFileSync(codexToml(home), 'utf8'));
+      assert.strictEqual(parsed.model, 'o3');
+      assert.ok(parsed.developer_instructions.includes(`[egc-protocol:${V}]`), 'top-level developer_instructions carries the protocol');
+      assert.deepStrictEqual(parsed.mcp_servers.demo, { command: 'npx', args: ['-y', 'demo'] }, 'the table is unchanged and holds no instruction key');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex TOML round trip: a developer_instructions value of the person is kept word for word with the protocol appended, and a rerun changes nothing (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(codexToml(home), `developer_instructions = "Answer in Portuguese."\n\n${tableBlock}`, 'utf8');
+      run(home);
+      const content = fs.readFileSync(codexToml(home), 'utf8');
+      const parsed = TOML.parse(content);
+      assert.ok(parsed.developer_instructions.startsWith('Answer in Portuguese. [egc-protocol:'), 'the person\'s value comes first, untouched');
+      assert.strictEqual((parsed.developer_instructions.match(/\[egc-protocol:v\d+\]/g) || []).length, 1, 'one protocol segment');
+      run(home);
+      assert.strictEqual(fs.readFileSync(codexToml(home), 'utf8'), content, 'a rerun rewrites nothing');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex TOML round trip: the old EGC persistent_instructions is removed, wherever the old append left it, and the protocol moves to developer_instructions (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(codexToml(home), `model = "o3"\n\n${tableBlock}\n${egcLegacy(7)}\n`, 'utf8');
+      const output = run(home);
+      const parsed = TOML.parse(fs.readFileSync(codexToml(home), 'utf8'));
+      assert.ok(parsed.developer_instructions.includes(`[egc-protocol:${V}]`), 'the protocol is in developer_instructions');
+      assert.ok(!('persistent_instructions' in parsed) && !('persistent_instructions' in parsed.mcp_servers.demo), 'the old EGC line is gone, also from inside the table');
+      assert.deepStrictEqual(parsed.mcp_servers.demo, { command: 'npx', args: ['-y', 'demo'] });
+      assert.ok(output.includes('Codex: removed the EGC persistent_instructions line'), `the migration is reported, got: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex TOML round trip: an unversioned legacy EGC persistent_instructions is recognised and removed (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(codexToml(home), 'persistent_instructions = "At the start of every session call get_state({}) via egc-memory to restore context. At the end call update_state({...}) to save decisions. State lives at ~/.egc/state/<slug>.md."\n', 'utf8');
+      run(home);
+      const parsed = TOML.parse(fs.readFileSync(codexToml(home), 'utf8'));
+      assert.ok(!('persistent_instructions' in parsed));
+      assert.ok(parsed.developer_instructions.includes(`[egc-protocol:${V}]`));
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex TOML round trip: both keys present, a hand-edited developer_instructions and the old EGC persistent_instructions, keeps the person\'s value and drops only the EGC line (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(codexToml(home), `developer_instructions = "My own rules: run the tests first."\n${egcLegacy(5)}\n\n${tableBlock}`, 'utf8');
+      const output = run(home);
+      const parsed = TOML.parse(fs.readFileSync(codexToml(home), 'utf8'));
+      assert.ok(parsed.developer_instructions.startsWith('My own rules: run the tests first. [egc-protocol:'), 'the hand-edited value is never lost');
+      assert.ok(parsed.developer_instructions.includes(`[egc-protocol:${V}]`), 'and carries the current protocol');
+      assert.ok(!('persistent_instructions' in parsed), 'the EGC-only old line is removed');
+      assert.ok(output.includes('Codex: removed the EGC persistent_instructions line'), `got: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex TOML round trip: a persistent_instructions with text of the person, alone or next to an EGC segment, stays untouched and is reported (#1708)', () => {
+    for (const legacy of [
+      'persistent_instructions = "Prefer small commits."',
+      'persistent_instructions = "Prefer small commits. [egc-protocol:v6] Old protocol text. [/egc-protocol]"',
+    ]) {
+      const home = mktempHome();
+      try {
+        fs.mkdirSync(path.join(home, '.codex'));
+        fs.writeFileSync(codexToml(home), `${legacy}\n`, 'utf8');
+        const output = run(home);
+        const content = fs.readFileSync(codexToml(home), 'utf8');
+        assert.ok(content.includes(`${legacy}\n`), `the line stays byte for byte: ${legacy}`);
+        assert.ok(TOML.parse(content).developer_instructions.includes(`[egc-protocol:${V}]`), 'the protocol is installed in developer_instructions');
+        assert.ok(output.includes('holds text of your own and was left untouched'), `the kept line is reported, got: ${output}`);
+      } finally {
+        cleanup(home);
+      }
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex TOML round trip: a trailing comment on developer_instructions survives the rewrite (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(codexToml(home), 'developer_instructions = "mine" # keep\n', 'utf8');
+      run(home);
+      const content = fs.readFileSync(codexToml(home), 'utf8');
+      assert.ok(/^developer_instructions = "mine \[egc-protocol:v\d+\].*" # keep$/m.test(content), `the comment stays on the line, got: ${content.slice(0, 120)}`);
+      assert.ok(TOML.parse(content).developer_instructions.startsWith('mine [egc-protocol:'));
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex TOML round trip: a quoted "developer_instructions" key is updated in place, never duplicated (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(codexToml(home), '"developer_instructions" = "mine"\n', 'utf8');
+      run(home);
+      const content = fs.readFileSync(codexToml(home), 'utf8');
+      const parsed = TOML.parse(content);
+      assert.ok(parsed.developer_instructions.startsWith('mine [egc-protocol:'), 'the quoted key keeps the person\'s text with the protocol appended');
+      assert.strictEqual((content.match(/developer_instructions/g) || []).length, 1, 'one assignment');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex TOML round trip: a nested array and a quote run inside a single-line string are not mistaken for a table or a multiline string (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(codexToml(home), 'model = \'o3 """ ok\'\nitems = [\n  [1, 2],\n  [3, 4]\n]\n\n[ui]\ntheme = "dark"\n', 'utf8');
+      run(home);
+      const parsed = TOML.parse(fs.readFileSync(codexToml(home), 'utf8'));
+      assert.strictEqual(parsed.model, 'o3 """ ok');
+      assert.deepStrictEqual(parsed.items, [[1, 2], [3, 4]]);
+      assert.deepStrictEqual(parsed.ui, { theme: 'dark' }, 'the table holds no instruction key');
+      assert.ok(parsed.developer_instructions.includes(`[egc-protocol:${V}]`), 'the protocol is top-level');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex TOML round trip: a CRLF config.toml with tables gets the key at the top level and keeps its line endings (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(codexToml(home), 'model = "o3"\r\n\r\n[mcp_servers.egc-memory]\r\ncommand = "node"\r\n', 'utf8');
+      const output = run(home);
+      const content = fs.readFileSync(codexToml(home), 'utf8');
+      const parsed = TOML.parse(content);
+      assert.ok(parsed.developer_instructions.includes(`[egc-protocol:${V}]`), `the protocol is installed at the top level, got: ${output}`);
+      assert.deepStrictEqual(parsed.mcp_servers['egc-memory'], { command: 'node' });
+      assert.ok(content.endsWith('\r\n'), 'the trailing CRLF stays');
+      assert.ok(content.split('\r\n').every(line => !line.includes('\n') && !line.includes('\r')), 'every line break is exactly CRLF');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex: a config.toml that is not valid TOML is left untouched and reported (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      const original = 'model = "o3\n[broken\n';
+      fs.writeFileSync(codexToml(home), original, 'utf8');
+      const output = run(home);
+      assert.strictEqual(fs.readFileSync(codexToml(home), 'utf8'), original);
+      assert.ok(output.includes('Codex: config.toml is not valid TOML: skipping'), `got: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Codex: when the planned rewrite would not keep every other key and table as it was, the file is left untouched and reported (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      const original = 'items = [\n  [3]\n]\n';
+      fs.writeFileSync(codexToml(home), original, 'utf8');
+      const output = run(home);
+      assert.strictEqual(fs.readFileSync(codexToml(home), 'utf8'), original, 'a rewrite the TOML check rejects is never written');
+      assert.ok(output.includes('Codex: config.toml has a layout this installer cannot edit safely: skipping'), `got: ${output}`);
     } finally {
       cleanup(home);
     }
@@ -532,55 +734,33 @@ async function runCursorAndCodexEdgeCaseTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('Codex: a triple-quoted multiline persistent_instructions is skipped without modification', () => {
+  if (await test('Codex: a triple-quoted multiline developer_instructions is skipped without modification, and the old key with it (#1708)', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.codex'));
       const tomlPath = path.join(home, '.codex', 'config.toml');
-      const original = 'persistent_instructions = """\nLegacy multiline text mentioning get_state.\n"""\n';
+      const original = 'developer_instructions = """\nMy multiline text.\n"""\npersistent_instructions = "State lives at ~/.egc/state/<slug>.md."\n';
       fs.writeFileSync(tomlPath, original, 'utf8');
 
       const output = run(home);
-      assert.ok(/Codex: persistent_instructions multiline: skipping/.test(output), `should report the skip, got: ${output}`);
-      assert.strictEqual(fs.readFileSync(tomlPath, 'utf8'), original, 'multiline persistent_instructions must be left untouched');
+      assert.ok(/Codex: developer_instructions multiline: skipping/.test(output), `should report the skip, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(tomlPath, 'utf8'), original, 'the file is left untouched while the protocol cannot be installed');
     } finally {
       cleanup(home);
     }
   })) passed++; else failed++;
 
-  if (await test('Codex: an unrecognized (non-string) persistent_instructions value is skipped without modification', () => {
+  if (await test('Codex: an unrecognized (non-string) developer_instructions value is skipped without modification (#1708)', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.codex'));
       const tomlPath = path.join(home, '.codex', 'config.toml');
-      const original = 'persistent_instructions = 12345\n';
+      const original = 'developer_instructions = 12345\n';
       fs.writeFileSync(tomlPath, original, 'utf8');
 
       const output = run(home);
-      assert.ok(/Codex: persistent_instructions in unrecognized format: skipping/.test(output), `should report the skip, got: ${output}`);
-      assert.strictEqual(fs.readFileSync(tomlPath, 'utf8'), original, 'unrecognized persistent_instructions must be left untouched');
-    } finally {
-      cleanup(home);
-    }
-  })) passed++; else failed++;
-
-  if (await test('Codex: an existing config.toml with no persistent_instructions key at all gets one appended fresh', () => {
-    const home = mktempHome();
-    try {
-      fs.mkdirSync(path.join(home, '.codex'));
-      const tomlPath = path.join(home, '.codex', 'config.toml');
-      const original = '[some_other_section]\nfoo = "bar"\n';
-      fs.writeFileSync(tomlPath, original, 'utf8');
-
-      const output = run(home);
-      assert.ok(/Codex: memory protocol installed/.test(output), `should report a fresh install, got: ${output}`);
-
-      const content = fs.readFileSync(tomlPath, 'utf8');
-      assert.ok(content.includes('[some_other_section]'), 'pre-existing unrelated TOML content must be preserved');
-      assert.ok(content.includes('foo = "bar"'), 'pre-existing unrelated TOML content must be preserved');
-      const match = content.match(/^persistent_instructions = "(.*)"$/m);
-      assert.ok(match, 'persistent_instructions must be appended as a single-line double-quoted TOML string');
-      assert.ok(match[1].includes(`[egc-protocol:${V}]`), 'appended value must carry the current version marker');
+      assert.ok(/Codex: developer_instructions in unrecognized format: skipping/.test(output), `should report the skip, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(tomlPath, 'utf8'), original, 'unrecognized developer_instructions must be left untouched');
     } finally {
       cleanup(home);
     }
@@ -1402,11 +1582,11 @@ async function runRemainingHarnessTests() {
       run(home);
       const tomlPath = path.join(home, '.codex', 'config.toml');
       const content = fs.readFileSync(tomlPath, 'utf8');
-      const match = content.match(/^persistent_instructions = "(.*)"$/m);
-      assert.ok(match, 'persistent_instructions must be a single-line double-quoted TOML string');
+      const match = content.match(/^developer_instructions = "(.*)"$/m);
+      assert.ok(match, 'developer_instructions must be a single-line double-quoted TOML string');
       assert.ok(!match[1].includes('"'), 'the TOML string value must not contain an unescaped double-quote');
       for (const cmd of SESSION_BUS_COMMANDS) {
-        assert.ok(match[1].includes(cmd), `Codex persistent_instructions must reference ${cmd}`);
+        assert.ok(match[1].includes(cmd), `Codex developer_instructions must reference ${cmd}`);
       }
     } finally {
       cleanup(home);
