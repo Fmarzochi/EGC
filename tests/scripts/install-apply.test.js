@@ -2652,8 +2652,9 @@ function runTests() {
   }
 
   tally(test('the Cursor rule and the Gemini home AGENTS.md are generated, and a populated rule survives a reinstall (#1670)', () => {
-    const homeDir = createTempDir('install-apply-home-');
-    const projectDir = createTempDir('install-apply-project-');
+    // Real paths: macOS hands out /var/... for a /private/var/... tree, and the planner records the resolved form.
+    const homeDir = fs.realpathSync(createTempDir('install-apply-home-'));
+    const projectDir = fs.realpathSync(createTempDir('install-apply-project-'));
     const rulePath = path.join(projectDir, '.cursor', 'rules', 'egc-context.mdc');
 
     try {
