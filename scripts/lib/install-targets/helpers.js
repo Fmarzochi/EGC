@@ -675,7 +675,7 @@ function planGenericRetirements(input, adapter) {
   if (!siblingOwned) return [];
 
   const operations = Array.isArray(input.operations) ? input.operations : adapter.planOperations(input);
-  const activeModuleIds = collectActiveModuleIds(input, operations);
+  const activeModuleIds = collectActiveModuleIds(input, operations, adapter);
   const boundaries = {
     managedRoots: resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root)),
     seen: new Set(),
@@ -703,9 +703,11 @@ function planGenericRetirements(input, adapter) {
 // the ones the adapter plans on its own (hook scripts and their entries,
 // recorded under ids no manifest lists). Whatever such a module no longer
 // plans has left the plan; a module that is no longer installed at all is
-// left to the uninstall.
-function collectActiveModuleIds(input, operations) {
-  const active = new Set();
+// left to the uninstall, unless the adapter declares it retired: then what
+// it recorded leaves with it (the Token Crusher hook on Antigravity, which
+// never fired, is the first).
+function collectActiveModuleIds(input, operations, adapter) {
+  const active = new Set(Array.isArray(adapter?.retiredModuleIds) ? adapter.retiredModuleIds : []);
   for (const module of Array.isArray(input.modules) ? input.modules : []) {
     if (module && typeof module.id === 'string') active.add(module.id);
   }
@@ -763,7 +765,7 @@ function planHookRetirements(input, adapter) {
 
   const operations = Array.isArray(input.operations) ? input.operations : adapter.planOperations(input);
   const planned = new Set(operations.filter(operation => operation?.kind === HOOK_OPERATION_KIND).map(hookEntryIdentity));
-  const activeModuleIds = collectActiveModuleIds(input, operations);
+  const activeModuleIds = collectActiveModuleIds(input, operations, adapter);
   const managedRoots = resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root));
   const seen = new Set();
   const retirements = [];
@@ -804,6 +806,9 @@ function createInstallTargetAdapter(config) {
     target: config.target,
     kind: config.kind,
     nativeRootRelativePath: config.nativeRootRelativePath || null,
+    // Module ids this adapter stopped planning on purpose: what an earlier
+    // install recorded under them is retired on upgrade like the rest.
+    retiredModuleIds: Array.isArray(config.retiredModuleIds) ? [...config.retiredModuleIds] : [],
     supports(target) {
       return target === config.target || target === config.id;
     },

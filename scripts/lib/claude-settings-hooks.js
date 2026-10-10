@@ -62,6 +62,18 @@ const {
   removeAntigravityGuardianHookFromFile,
 } = require('./antigravity-guardian-hooks');
 const {
+  ANTIGRAVITY_GATEGUARD_HOOK_TAG,
+  applyAntigravityGateGuardHookToFile,
+  inspectAntigravityGateGuardHookFile,
+  removeAntigravityGateGuardHookFromFile,
+} = require('./antigravity-gateguard-hooks');
+const {
+  ANTIGRAVITY_MESH_HOOK_TAG,
+  applyAntigravityMeshHookToFile,
+  inspectAntigravityMeshHookFile,
+  removeAntigravityMeshHookFromFile,
+} = require('./antigravity-mesh-hooks');
+const {
   ROOCODE_DENYLIST_TAG,
   applyRoocodeDenylistToFile,
   inspectRoocodeDenylistFile,
@@ -1244,6 +1256,19 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     apply: operation => applyAntigravityGuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
     remove: operation => removeAntigravityGuardianHookFromFile(operation.destinationPath),
     inspect: operation => inspectAntigravityGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  // The same whole-name ownership for the two other named hooks EGC writes
+  // to Antigravity's hooks.json: the GateGuard gate (PreToolUse) and the
+  // session-mesh notice (PreInvocation).
+  [ANTIGRAVITY_GATEGUARD_HOOK_TAG]: {
+    apply: operation => applyAntigravityGateGuardHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeAntigravityGateGuardHookFromFile(operation.destinationPath),
+    inspect: operation => inspectAntigravityGateGuardHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  [ANTIGRAVITY_MESH_HOOK_TAG]: {
+    apply: operation => applyAntigravityMeshHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeAntigravityMeshHookFromFile(operation.destinationPath),
+    inspect: operation => inspectAntigravityMeshHookFile(operation.destinationPath, operation.hookScriptPath),
   },
   // Recorded by installs of the retired Roo Code adapter (roo-cline.deniedCommands
   // seeded into a workspace's .vscode/settings.json): nothing plans it any

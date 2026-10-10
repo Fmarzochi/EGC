@@ -8,27 +8,15 @@ const {
   normalizeRelativePath,
   planFlatSkillOperation,
 } = require('./helpers');
-const {
-  GATEGUARD_HOOK_MODULE_ID,
-  GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-  resolveGateGuardHookScriptDestination,
-  createCrusherScriptCopyOperations,
-  createMeshNoticeScriptCopyOperations,
-} = require('../claude-settings-hooks');
-const {
-  createProjectGateGuardHookMergeOperation,
-  createProjectCrusherHookMergeOperation,
-  createProjectBashGuardianHookMergeOperation,
-  createProjectMeshNoticeHookMergeOperation,
-} = require('../antigravity-settings-hooks');
+const { CRUSHER_HOOK_MODULE_ID } = require('../claude-settings-hooks');
 const { createAntigravityGuardianOperations } = require('../antigravity-guardian-operations');
+const { createAntigravityGateGuardOperations, createAntigravityMeshNoticeOperations } = require('../antigravity-hook-operations');
 const { resolveProjectHooksJsonPath } = require('../antigravity-guardian-hooks');
 const { planAntigravityCopyOperations, readRecordedDestinations } = require('../antigravity-rules');
 const { isAgentSource, planAntigravityAgentFiles } = require('../antigravity-agents');
 const { dropCommandsShadowedBySkills, isCommandSource, planAntigravityCommandFiles } = require('../antigravity-commands');
 
 const SUPPORTED_SOURCE_PREFIXES = ['rules', 'commands', 'agents', 'skills', '.agents', 'AGENTS.md'];
-const UTILS_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
 
 function supportsAntigravitySourcePath(sourceRelativePath) {
   const normalizedPath = normalizeRelativePath(sourceRelativePath);
@@ -37,75 +25,30 @@ function supportsAntigravitySourcePath(sourceRelativePath) {
   ));
 }
 
-function resolveUtilsScriptDestination(targetRoot) {
-  return path.join(targetRoot, 'scripts', 'lib', 'utils.js');
-}
-
-// gateguard-fact-force.js requires '../lib/utils' at load time, so both
-// files are scaffolded together under this adapter's own root (.agents/)
-// before the .agents/hooks.json merge points a command at either of them.
-// 'scripts/**' is outside SUPPORTED_SOURCE_PREFIXES above (Antigravity's
-// module content is rules/commands/agents/skills, not raw scripts), so this
-// is scaffolded directly rather than through the module path filter.
-function createGateGuardOperations(adapter, targetRoot, projectRoot) {
-  const scriptOperation = createRemappedOperation(
-    adapter,
-    GATEGUARD_HOOK_MODULE_ID,
-    GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
-    resolveGateGuardHookScriptDestination(targetRoot),
-    { strategy: 'preserve-relative-path' }
+// The hooks Antigravity runs are the named hooks in the project
+// .agents/hooks.json, in its own format: egc-guardian
+// (antigravity-guardian-operations.js), egc-gateguard and egc-mesh-notice
+// (antigravity-hook-operations.js). Each comes with the scripts it runs,
+// scaffolded under this adapter's own root (.agents/) before the hooks.json
+// entry points a command at them: 'scripts/**' is outside
+// SUPPORTED_SOURCE_PREFIXES above (Antigravity's module content is
+// rules/commands/agents/skills, not raw scripts), so they are scaffolded
+// directly rather than through the module path filter. The Claude-format
+// entries once written beside them (a `hooks` key with Bash and Edit
+// matchers, which name no Antigravity tool, and a UserPromptSubmit event
+// Antigravity does not have) never fired; an upgrade retires them, since
+// they left the plan. The Token Crusher keeps no hook here: an Antigravity
+// hook answers a decision, never a rewritten command, so the `egc run` shim
+// and the protocol are its path.
+function createAntigravityHookOperations(adapter, targetRoot, projectRoot) {
+  const remap = (moduleId, sourceRelativePath, destinationPath, options) => (
+    createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
   );
-  const utilsOperation = createRemappedOperation(
-    adapter,
-    GATEGUARD_HOOK_MODULE_ID,
-    UTILS_SOURCE_RELATIVE_PATH,
-    resolveUtilsScriptDestination(targetRoot),
-    { strategy: 'preserve-relative-path' }
-  );
-
+  const hooksJsonPath = resolveProjectHooksJsonPath(projectRoot);
   return [
-    scriptOperation,
-    utilsOperation,
-    createProjectGateGuardHookMergeOperation(targetRoot, projectRoot, 'Edit'),
-    createProjectGateGuardHookMergeOperation(targetRoot, projectRoot, 'Write'),
-    createProjectGateGuardHookMergeOperation(targetRoot, projectRoot, 'MultiEdit'),
-    createProjectGateGuardHookMergeOperation(targetRoot, projectRoot, 'Bash'),
-    // Token Crusher: same hooks.json shape, scaffold the hook + deps under the
-    // adapter root and register it on Bash at .agents/hooks.json.
-    ...createCrusherScriptCopyOperations(
-      (moduleId, sourceRelativePath, destinationPath, options) => (
-        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
-      ),
-      targetRoot
-    ),
-    createProjectCrusherHookMergeOperation(targetRoot, projectRoot, 'Bash'),
-    // EGC Guardian: GateGuard above only forces investigation before a risky
-    // action; it never checks a Bash command against the Guardian's actual
-    // allowlist/denylist. 2026-07-27 audit (EGC-460) found this target had
-    // GateGuard + Crusher wired but never the Guardian validator itself.
-    // The entry Antigravity runs is the egc-guardian named hook, in its own
-    // format, at the same .agents/hooks.json (antigravity-guardian-operations.js,
-    // which also copies the Guardian scripts); the Claude-format Bash entry
-    // beside it never matches an Antigravity tool and stays as it was.
-    ...createAntigravityGuardianOperations(
-      (moduleId, sourceRelativePath, destinationPath, options) => (
-        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
-      ),
-      targetRoot,
-      resolveProjectHooksJsonPath(projectRoot)
-    ),
-    createProjectBashGuardianHookMergeOperation(targetRoot, projectRoot, 'Bash'),
-    // Session-mesh wake-signal notice: Antigravity inherited the Gemini CLI
-    // hook loop, which reads the hookSpecificOutput.additionalContext field
-    // mesh-events-inject.js already emits, so the same standalone script is
-    // copied and registered on UserPromptSubmit with zero translation.
-    ...createMeshNoticeScriptCopyOperations(
-      (moduleId, sourceRelativePath, destinationPath, options) => (
-        createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
-      ),
-      targetRoot
-    ),
-    createProjectMeshNoticeHookMergeOperation(targetRoot, projectRoot),
+    ...createAntigravityGuardianOperations(remap, targetRoot, hooksJsonPath),
+    ...createAntigravityGateGuardOperations(remap, targetRoot, hooksJsonPath),
+    ...createAntigravityMeshNoticeOperations(remap, targetRoot, hooksJsonPath),
   ];
 }
 
@@ -115,6 +58,9 @@ module.exports = createInstallTargetAdapter({
   kind: 'project',
   rootSegments: ['.agents'],
   installStatePathSegments: ['egc-install-state.json'],
+  // The Token Crusher hook once written here never fired; an upgrade
+  // retires what that module recorded (see createAntigravityHookOperations).
+  retiredModuleIds: [CRUSHER_HOOK_MODULE_ID],
   supportsModule(module) {
     const paths = Array.isArray(module?.paths) ? module.paths : [];
     return paths.length > 0;
@@ -177,12 +123,12 @@ module.exports = createInstallTargetAdapter({
         });
     });
 
-    // Deterministic: every Antigravity install registers the GateGuard
-    // fact-forcing gate, even when no content modules are selected,
-    // mirroring Claude Code's always-on hook registration.
+    // Deterministic: every Antigravity install registers the three named
+    // hooks, even when no content modules are selected, mirroring Claude
+    // Code's always-on hook registration.
     return [
       ...dropCommandsShadowedBySkills(moduleOperations),
-      ...createGateGuardOperations(adapter, targetRoot, projectRoot),
+      ...createAntigravityHookOperations(adapter, targetRoot, projectRoot),
     ];
   },
 });
