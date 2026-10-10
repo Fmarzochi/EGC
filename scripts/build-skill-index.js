@@ -127,7 +127,18 @@ function triggersOf(content) {
   const rest = content.slice(match.index + match[0].length);
   const end = rest.search(/^#{1,3}\s/m);
   const body = (end === -1 ? rest : rest.slice(0, end)).replace(/[`*_>#-]/g, ' ').replace(/\s+/g, ' ').trim();
-  return body.length > MAX_TRIGGER_CHARS ? body.slice(0, MAX_TRIGGER_CHARS) : body;
+  return cutOnWordBoundary(body);
+}
+
+// The cut lands after a whole word: a slice through the middle of a path or
+// a word leaves the catalog ending on a fragment nothing can match.
+function cutOnWordBoundary(body) {
+  if (body.length <= MAX_TRIGGER_CHARS) return body;
+  const head = body.slice(0, MAX_TRIGGER_CHARS);
+  if (/\s/.test(body[MAX_TRIGGER_CHARS])) return head.trimEnd();
+  let end = head.length;
+  while (end > 0 && !/\s/.test(head[end - 1])) end -= 1;
+  return end === 0 ? head : head.slice(0, end).trimEnd();
 }
 
 for (const f of listSkillMd(path.join(root, 'skills'))) {

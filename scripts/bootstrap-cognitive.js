@@ -473,17 +473,60 @@ const CODEX_SKIP_MESSAGES = {
   }
 })();
 
-// ── Trae (~/.trae/MEMORY.md and ~/.trae-cn/MEMORY.md) ────────────────────────
+function retireLegacyTraeMemory(legacyFile, label) {
+  if (!fs.existsSync(legacyFile) || !fs.lstatSync(legacyFile).isFile()) return;
+  const raw = fs.readFileSync(legacyFile, 'utf8');
+  if (!MARKER_BLOCK_RE.test(raw) || raw.replace(MARKER_BLOCK_RE, '').trim() !== '') return;
+  fs.unlinkSync(legacyFile);
+  console.log(`  [cognitive] ${label}: retired the old protocol copy Trae does not read (${legacyFile.replace(HOME, '~')})`);
+}
+
+function injectTraeUserRule(filepath, label, content) {
+  if (!fs.existsSync(filepath)) {
+    injectStandaloneProtocol(filepath, label, content);
+    return true;
+  }
+  const raw = fs.readFileSync(filepath, 'utf8');
+  const blocks = [...raw.matchAll(new RegExp(MARKER_BLOCK_RE.source, 'g'))];
+  if (blocks.length === 0) {
+    console.log(`  [cognitive] ${label}: ${filepath.replace(HOME, '~')} is a rule of your own, left untouched; the memory protocol was not installed`);
+    return false;
+  }
+  const installedVersion = Math.min(...blocks.map(block => resolveInstalledVersion(block, 0)));
+  if (blocks.length === 1 && installedVersion >= PROTOCOL_VERSION) {
+    console.log(`  [cognitive] ${label}: already configured (v${installedVersion})`);
+    return true;
+  }
+  let replaced = false;
+  const updated = raw.replace(new RegExp(MARKER_BLOCK_RE.source, 'g'), () => {
+    if (replaced) return '';
+    replaced = true;
+    return content;
+  });
+  fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
+  fs.writeFileSync(filepath, updated, 'utf8');
+  console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION}, ${blocks.length} block(s) merged into one (${filepath.replace(HOME, '~')})`);
+  return true;
+}
+
+// ── Trae (~/.trae/user_rules/egc-memory.md and ~/.trae-cn/user_rules/egc-memory.md) ──
 (function bootstrapTrae() {
-  try {
-    for (const dir of ['.trae', '.trae-cn']) {
+  for (const dir of ['.trae', '.trae-cn']) {
+    const label = `Trae (${dir})`;
+    let installed = false;
+    try {
       const traeDir = path.join(HOME, dir);
       if (!fs.existsSync(traeDir)) continue;
-      const target = path.join(traeDir, 'MEMORY.md');
-      injectStandaloneProtocol(target, `Trae (${dir})`, markdownProtocolBody('EGC Session Memory'));
+      installed = injectTraeUserRule(path.join(traeDir, 'user_rules', 'egc-memory.md'), label, markdownProtocolBody('EGC Session Memory'));
+    } catch (e) {
+      console.log(`  [cognitive] ${label}: unexpected error: ${e.message}`);
     }
-  } catch (e) {
-    console.log(`  [cognitive] Trae: unexpected error: ${e.message}`);
+    if (!installed) continue;
+    try {
+      retireLegacyTraeMemory(path.join(HOME, dir, 'MEMORY.md'), label);
+    } catch (e) {
+      console.log(`  [cognitive] ${label}: unable to retire the old MEMORY.md: ${e.message}`);
+    }
   }
 })();
 
