@@ -639,7 +639,8 @@ async function runCodexDeveloperInstructionsTests() {
       const parsed = TOML.parse(content);
       assert.ok(parsed.developer_instructions.includes(`[egc-protocol:${V}]`), `the protocol is installed at the top level, got: ${output}`);
       assert.deepStrictEqual(parsed.mcp_servers['egc-memory'], { command: 'node' });
-      assert.ok(!/[^\r]\n/.test(content), 'every line still ends in CRLF');
+      assert.ok(content.endsWith('\r\n'), 'the trailing CRLF stays');
+      assert.ok(content.split('\r\n').every(line => !line.includes('\n') && !line.includes('\r')), 'every line break is exactly CRLF');
     } finally {
       cleanup(home);
     }
