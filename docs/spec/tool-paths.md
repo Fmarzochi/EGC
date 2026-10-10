@@ -10,9 +10,9 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | --- | --- | --- | --- |
 | default | linux | none | all |
 | win32 | win32 | none | windsurf-home |
-| XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME` set to a directory, shown as `$XDG_CONFIG_HOME` in the paths | crush-home |
-| CRUSH_GLOBAL_CONFIG | linux | `CRUSH_GLOBAL_CONFIG` set to a directory, shown as `$CRUSH_GLOBAL_CONFIG` in the paths | crush-home |
-| KIMI_CODE_HOME | linux | `KIMI_CODE_HOME` set to a directory, shown as `$KIMI_CODE_HOME` in the paths | kimi-home |
+| XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME` set to an absolute directory, shown as `$XDG_CONFIG_HOME` in the paths | crush-home |
+| CRUSH_GLOBAL_CONFIG | linux | `CRUSH_GLOBAL_CONFIG` set to an absolute directory, shown as `$CRUSH_GLOBAL_CONFIG` in the paths | crush-home |
+| KIMI_CODE_HOME | linux | `KIMI_CODE_HOME` set to an absolute directory, shown as `$KIMI_CODE_HOME` in the paths | kimi-home |
 | TRAE_ENV=cn | linux | `TRAE_ENV=cn` | trae-project |
 
 ## egc-home

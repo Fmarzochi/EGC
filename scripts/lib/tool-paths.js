@@ -154,7 +154,7 @@ function renderToolPathsMarkdown(table) {
   ];
   for (const variant of table.variants) {
     const env = Object.entries(variant.env || {})
-      .map(([name, value]) => (value.startsWith('$') ? `\`${name}\` set to a directory, shown as \`${value}\` in the paths` : `\`${name}=${value}\``))
+      .map(([name, value]) => (value.startsWith('$') ? `\`${name}\` set to an absolute directory, shown as \`${value}\` in the paths` : `\`${name}=${value}\``))
       .join(', ') || 'none';
     lines.push(`| ${variant.id} | ${variant.platform} | ${env} | ${variant.adapters ? variant.adapters.join(', ') : 'all'} |`);
   }

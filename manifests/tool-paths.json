@@ -20,7 +20,7 @@
     },
     {
       "id": "XDG_CONFIG_HOME",
-      "description": "XDG_CONFIG_HOME set, which moves the Crush config directory",
+      "description": "XDG_CONFIG_HOME set to an absolute directory, which moves the Crush config directory (a relative value is ignored and Crush stays in ~/.config/crush)",
       "platform": "linux",
       "env": {
         "XDG_CONFIG_HOME": "$XDG_CONFIG_HOME"
@@ -31,7 +31,7 @@
     },
     {
       "id": "CRUSH_GLOBAL_CONFIG",
-      "description": "CRUSH_GLOBAL_CONFIG set, which names the Crush config directory directly",
+      "description": "CRUSH_GLOBAL_CONFIG set, which names the Crush config directory directly (resolved to an absolute path)",
       "platform": "linux",
       "env": {
         "CRUSH_GLOBAL_CONFIG": "$CRUSH_GLOBAL_CONFIG"
