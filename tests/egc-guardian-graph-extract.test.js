@@ -318,5 +318,13 @@ run('a pattern nested very deep, or opened and never closed, does not throw', ()
   assert.deepStrictEqual(shallow.symbols.map(s => s.name), ['deep']);
 });
 
+run('a nested pattern that binds a hundred thousand names does not overflow the stack', () => {
+  // A 1 MiB file holds that many short names; handing them to push() as arguments overflows the call stack.
+  const names = Array.from({ length: 200000 }, (_, i) => `n${i}`).join(', ');
+  let r;
+  assert.doesNotThrow(() => { r = extractFile(`const [[${names}]] = source;\nexport function after() {}\n`); });
+  assert.ok(r.symbols.length > 0, 'the names are still bound');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

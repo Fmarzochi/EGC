@@ -571,7 +571,10 @@ export function extractFile(source: string): ExtractResult {
       const stop = elementEnd(k, end);
       const at = bindingStart(k, isObject, stop);
       if (at < stop && isId(toks[at])) names.push(at);
-      else if (at < stop && (isP(toks[at], '{') || isP(toks[at], '['))) names.push(...patternNames(at, depth + 1));
+      else if (at < stop && (isP(toks[at], '{') || isP(toks[at], '['))) {
+        // Not names.push(...nested): a file full of names would hand push() more arguments than the stack holds.
+        for (const nested of patternNames(at, depth + 1)) names.push(nested);
+      }
       k = stop + 1;
     }
     return names;
