@@ -52,7 +52,7 @@ function applyCursorGuardianHookToFile(hooksJsonPath, event, adapterScriptPath, 
   const seedPath = options?.seedPath;
   if (seedPath && !fs.existsSync(hooksJsonPath) && fs.existsSync(seedPath)) {
     try {
-      const seedConfig = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+      const seedConfig = retireEgcEntries(JSON.parse(fs.readFileSync(seedPath, 'utf8'))).config;
       const command = buildHookCommand(adapterScriptPath);
       const { config } = addFlatHookEntry(seedConfig, event, command, {
         isOwnBasename,

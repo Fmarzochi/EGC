@@ -248,6 +248,24 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('a seed that still carries the retired beforeFileEdit entry does not bring it into a fresh file', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-hooks-seed-retired-'));
+    const hooksJsonPath = path.join(tempDir, 'hooks.json');
+    const seedPath = path.join(tempDir, 'seed-hooks.json');
+    try {
+      fs.writeFileSync(seedPath, JSON.stringify({ version: 1, hooks: {
+        beforeFileEdit: [{ command: 'EGC_HOOK_EVENT=pre_tool node .cursor/hooks/dashboard-emit.js', event: 'beforeFileEdit' }],
+        stop: [{ command: 'node stop.js', event: 'stop' }],
+      } }));
+      applyCursorGuardianHookToFile(hooksJsonPath, BEFORE_SHELL_EXECUTION_EVENT, '/abs/adapter.js', { seedPath });
+      const written = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+      assert.strictEqual(written.hooks.beforeFileEdit, undefined, 'the retired entry is not seeded');
+      assert.deepStrictEqual(written.hooks.stop, [{ command: 'node stop.js', event: 'stop' }], 'the other seeded hooks stay');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (test('an upgrade removes the beforeFileEdit entry an older seed wrote and keeps the person\'s own entries', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-hooks-retire-'));
     const hooksJsonPath = path.join(tempDir, 'hooks.json');
