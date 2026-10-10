@@ -1450,6 +1450,37 @@ async function runProtocolContentTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('every protocol write of the bootstrap goes through writeProtocolFile, none through a direct writeFileSync (#1832)', () => {
+    assert.deepStrictEqual(SCRIPT_SOURCE.match(/fs\.writeFileSync\(/g) || [], []);
+    assert.ok(SCRIPT_SOURCE.includes("require('./lib/protocol-file-write')"));
+  })) passed++; else failed++;
+
+  if (await test('a ~/.claude/CLAUDE.md that is a symlink into a dotfiles directory keeps its link, and the dotfiles file gets the protocol (#1832)', () => {
+    const home = mktempHome();
+    try {
+      const dotfiles = path.join(home, 'dotfiles');
+      fs.mkdirSync(dotfiles, { recursive: true });
+      fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+      const real = path.join(dotfiles, 'CLAUDE.md');
+      const link = path.join(home, '.claude', 'CLAUDE.md');
+      fs.writeFileSync(real, '# My memory\n');
+      try {
+        fs.symlinkSync(real, link, 'file');
+      } catch {
+        console.log('  [SKIP] symlink not available on this runner');
+        return;
+      }
+      run(home);
+      assert.ok(fs.lstatSync(link).isSymbolicLink(), 'the link is still a link');
+      const content = fs.readFileSync(real, 'utf8');
+      assert.ok(content.startsWith('# My memory\n'), 'the person text stays first');
+      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'and the protocol was appended through the link');
+      assert.deepStrictEqual(fs.readdirSync(dotfiles).filter(name => name.endsWith('.tmp')), [], 'no temporary file is left');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('BLOCK advertises all 5 core protocol commands (Guardian Protocol + reduce_context)', () => {
     for (const cmd of ['orchestrate_task', 'validate_command', 'validate_write', 'reduce_context', 'auto_learn']) {
       assert.ok(SCRIPT_SOURCE.includes(cmd), `BLOCK must reference ${cmd}`);
