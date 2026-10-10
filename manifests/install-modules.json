@@ -985,12 +985,18 @@
         "amp",
         "copilot",
         "zed",
+        "kiro",
+        "trae",
         "junie",
         "goose",
         "openhands",
         "cline",
         "crush"
       ],
+      "unsupportedTargets": {
+        "warp": "Warp has no file format for an agent or a custom slash command: its agents load skills from .warp/skills and .agents/skills, invoked as /<name>, and agent profiles only set permissions (https://docs.warp.dev/agent-platform/warp-agents/skills, read on 2026-10-10). agents-core and commands-core do not reach Warp either; the engineering-audit skill reaches it through skills-extended.",
+        "aider": "Aider has a fixed set of in-chat commands and no subagents (https://aider.chat/docs/usage/commands.html, read on 2026-10-10); an extra file only reaches it as a read-only convention through --read (https://aider.chat/docs/usage/conventions.html), which would load the auditor into every chat. agents-core and commands-core do not reach Aider either; the engineering-audit skill reaches it through skills-extended."
+      },
       "dependencies": [
         "agents-core",
         "commands-core"

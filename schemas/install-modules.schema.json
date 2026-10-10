@@ -2,6 +2,36 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "EGC Install Modules",
   "type": "object",
+  "definitions": {
+    "targetId": {
+      "type": "string",
+      "enum": [
+        "egc",
+        "claude",
+        "cursor",
+        "antigravity",
+        "auggie",
+        "codex",
+        "opencode",
+        "codebuddy",
+        "windsurf",
+        "amp",
+        "copilot",
+        "zed",
+        "kiro",
+        "trae",
+        "goose",
+        "openhands",
+        "aider",
+        "cline",
+        "warp",
+        "junie",
+        "qwen",
+        "kimi",
+        "crush"
+      ]
+    }
+  },
   "properties": {
     "version": {
       "type": "integer",
@@ -47,32 +77,18 @@
             "type": "array",
             "minItems": 1,
             "items": {
+              "$ref": "#/definitions/targetId"
+            }
+          },
+          "unsupportedTargets": {
+            "type": "object",
+            "description": "Targets the module cannot reach, each with the reason from that tool's current docs: an https link and the date it was read, written as \"read on YYYY-MM-DD\".",
+            "propertyNames": {
+              "$ref": "#/definitions/targetId"
+            },
+            "additionalProperties": {
               "type": "string",
-              "enum": [
-                "egc",
-                "claude",
-                "cursor",
-                "antigravity",
-                "auggie",
-                "codex",
-                "opencode",
-                "codebuddy",
-                "windsurf",
-                "amp",
-                "copilot",
-                "zed",
-                "kiro",
-                "trae",
-                "goose",
-                "openhands",
-                "aider",
-                "cline",
-                "warp",
-                "junie",
-                "qwen",
-                "kimi",
-                "crush"
-              ]
+              "pattern": "^(?=[\\s\\S]*https://\\S)(?=[\\s\\S]*read on \\d{4}-\\d{2}-\\d{2})"
             }
           },
           "dependencies": {
