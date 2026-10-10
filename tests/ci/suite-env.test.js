@@ -2,7 +2,8 @@
 
 /**
  * The environment tests/run-all.js gives every test file: no variables of the
- * tool session the suite runs inside, and no git automatic maintenance.
+ * tool session the suite runs inside, no git automatic maintenance, and a
+ * validator budget sized for a loaded runner.
  * tests/hooks/hooks.test.js checks that run-all.js hands it to each file.
  *
  * Run with: node tests/ci/suite-env.test.js
@@ -15,6 +16,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { suiteEnv } = require('../fixtures/suite-env');
 const { removeDirWithRetries } = require('../fixtures/remove-dir');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 // Fixed git locations before a PATH lookup.
 const GIT_BIN = [
@@ -62,6 +64,11 @@ test('turns git automatic maintenance off', () => {
 test('keeps the git config parameters already in the environment', () => {
   const env = suiteEnv({ GIT_CONFIG_PARAMETERS: "'user.name'='Someone'" });
   assert.strictEqual(env.GIT_CONFIG_PARAMETERS, "'user.name'='Someone' 'maintenance.auto'='false'");
+});
+
+test('gives the Guardian hook the budget of a CLI probe, whatever the machine has set', () => {
+  assert.strictEqual(suiteEnv({}).EGC_GUARDIAN_TIMEOUT_MS, String(CLI_TIMEOUT_MS));
+  assert.strictEqual(suiteEnv({ EGC_GUARDIAN_TIMEOUT_MS: '300' }).EGC_GUARDIAN_TIMEOUT_MS, String(CLI_TIMEOUT_MS));
 });
 
 test('a commit under the suite environment starts no automatic maintenance', () => {
