@@ -85,21 +85,64 @@ runCase('non-bash input without a command is passed through', () => {
   assert.strictEqual(toPreToolUseOutput(original, final), final);
 });
 
+const CLAUDE_REWRITE_OUTPUT = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"egc run git log --oneline -50"}}}';
+
+runCase('outside CodeBuddy the rewrite output is byte for byte the updatedInput envelope (#1675)', () => {
+  const original = bashInput('git log --oneline -50');
+  const final = bashInput('egc run git log --oneline -50');
+  assert.strictEqual(toPreToolUseOutput(original, final, {}), CLAUDE_REWRITE_OUTPUT);
+  assert.strictEqual(toPreToolUseOutput(original, final, { CLAUDE_PROJECT_DIR: '/work/app' }), CLAUDE_REWRITE_OUTPUT);
+});
+
+runCase('under CodeBuddy a rewrite is returned as hookSpecificOutput.modifiedInput, never updatedInput (#1675)', () => {
+  const original = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git log', description: 'x' } });
+  const final = JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'egc run git log', description: 'x' } });
+  const out = JSON.parse(toPreToolUseOutput(original, final, { CODEBUDDY_PROJECT_DIR: '/work/app' }));
+  assert.deepStrictEqual(out, {
+    hookSpecificOutput: { hookEventName: 'PreToolUse', modifiedInput: { command: 'egc run git log', description: 'x' } },
+  });
+});
+
+runCase('under CodeBuddy a deny and an unchanged command still pass through verbatim (#1675)', () => {
+  const env = { CODEBUDDY_PROJECT_DIR: '/work/app' };
+  const deny = JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'no' } });
+  assert.strictEqual(toPreToolUseOutput(bashInput('git push'), deny, env), deny);
+  const raw = bashInput('ls -la');
+  assert.strictEqual(toPreToolUseOutput(raw, raw, env), raw);
+});
+
+const dispatcherEnv = extra => {
+  const env = {
+    ...process.env,
+    EGC_ASSUME_EGC_CLI: '1',
+    EGC_HOOK_PROFILE: 'standard',
+    EGC_DISABLED_HOOKS: 'pre:bash:gateguard-fact-force,pre:bash:guardian-validate,pre:bash:verification-gate,pre:bash:block-no-verify,pre:bash:commit-quality',
+    ...extra,
+  };
+  if (!('CODEBUDDY_PROJECT_DIR' in extra)) delete env.CODEBUDDY_PROJECT_DIR;
+  return env;
+};
+
 // Integration: spawn the dispatcher end to end with the gates disabled so the
 // crusher runs, and confirm a real git log comes back as an updatedInput rewrite.
 runCase('dispatcher end-to-end wraps a crushed command as updatedInput', () => {
   const r = spawnSync('node', [DISPATCHER, 'pre'], {
     input: bashInput('git log --oneline -50'),
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      EGC_ASSUME_EGC_CLI: '1',
-      EGC_HOOK_PROFILE: 'standard',
-      EGC_DISABLED_HOOKS: 'pre:bash:gateguard-fact-force,pre:bash:guardian-validate,pre:bash:verification-gate,pre:bash:block-no-verify,pre:bash:commit-quality',
-    },
+    env: dispatcherEnv({}),
+  });
+  assert.strictEqual(r.stdout.trim(), CLAUDE_REWRITE_OUTPUT);
+});
+
+runCase('dispatcher end-to-end under CodeBuddy wraps a crushed command as modifiedInput (#1675)', () => {
+  const r = spawnSync('node', [DISPATCHER, 'pre'], {
+    input: bashInput('git log --oneline -50'),
+    encoding: 'utf8',
+    env: dispatcherEnv({ CODEBUDDY_PROJECT_DIR: path.join(__dirname, '..', '..') }),
   });
   const out = JSON.parse(r.stdout);
-  assert.strictEqual(out.hookSpecificOutput.updatedInput.command, 'egc run git log --oneline -50');
+  assert.strictEqual(out.hookSpecificOutput.modifiedInput.command, 'egc run git log --oneline -50');
+  assert.ok(!('updatedInput' in out.hookSpecificOutput), 'CodeBuddy never receives updatedInput');
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

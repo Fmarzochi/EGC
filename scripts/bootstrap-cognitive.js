@@ -473,12 +473,17 @@ const CODEX_SKIP_MESSAGES = {
   }
 })();
 
-function retireLegacyTraeMemory(legacyFile, label) {
+function retireLegacyMemoryCopy(legacyFile, label, tool) {
   if (!fs.existsSync(legacyFile) || !fs.lstatSync(legacyFile).isFile()) return;
   const raw = fs.readFileSync(legacyFile, 'utf8');
-  if (!MARKER_BLOCK_RE.test(raw) || raw.replace(MARKER_BLOCK_RE, '').trim() !== '') return;
+  if (!MARKER_BLOCK_RE.test(raw)) return;
+  const shown = legacyFile.replace(HOME, '~');
+  if (raw.replace(MARKER_BLOCKS_RE, '').trim() !== '') {
+    console.log(`  [cognitive] ${label}: kept ${shown}, which holds content of your own next to the old EGC protocol block ${tool} does not read; remove the block by hand if you no longer need it`);
+    return;
+  }
   fs.unlinkSync(legacyFile);
-  console.log(`  [cognitive] ${label}: retired the old protocol copy Trae does not read (${legacyFile.replace(HOME, '~')})`);
+  console.log(`  [cognitive] ${label}: retired the old protocol copy ${tool} does not read (${shown})`);
 }
 
 function injectTraeUserRule(filepath, label, content) {
@@ -523,22 +528,27 @@ function injectTraeUserRule(filepath, label, content) {
     }
     if (!installed) continue;
     try {
-      retireLegacyTraeMemory(path.join(HOME, dir, 'MEMORY.md'), label);
+      retireLegacyMemoryCopy(path.join(HOME, dir, 'MEMORY.md'), label, 'Trae');
     } catch (e) {
       console.log(`  [cognitive] ${label}: unable to retire the old MEMORY.md: ${e.message}`);
     }
   }
 })();
 
-// ── CodeBuddy (~/.codebuddy/MEMORY.md) ───────────────────────────────────────
+// ── CodeBuddy (~/.codebuddy/CODEBUDDY.md) ────────────────────────────────────
 (function bootstrapCodeBuddy() {
+  const codebuddyDir = path.join(HOME, '.codebuddy');
   try {
-    const codebuddyDir = path.join(HOME, '.codebuddy');
     if (!fs.existsSync(codebuddyDir)) return;
-    const target = path.join(codebuddyDir, 'MEMORY.md');
-    injectStandaloneProtocol(target, 'CodeBuddy', markdownProtocolBody('Session Memory'));
+    injectProtocol(path.join(codebuddyDir, 'CODEBUDDY.md'), 'CodeBuddy');
   } catch (e) {
     console.log(`  [cognitive] CodeBuddy: unexpected error: ${e.message}`);
+    return;
+  }
+  try {
+    retireLegacyMemoryCopy(path.join(codebuddyDir, 'MEMORY.md'), 'CodeBuddy', 'CodeBuddy');
+  } catch (e) {
+    console.log(`  [cognitive] CodeBuddy: unable to retire the old MEMORY.md: ${e.message}`);
   }
 })();
 
