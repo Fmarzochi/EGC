@@ -918,13 +918,11 @@ async function runOpenCodeTests() {
   return [passed, failed];
 }
 
-// Same complexity-budget reasoning as above: the 4 standalone markdown
-// targets (Trae, CodeBuddy) each need the same pair
-// of upgrade-from-legacy / stay-idempotent-at-current-version cases.
+// Same complexity-budget reasoning as above: the standalone markdown
+// target (CodeBuddy) needs the pair of upgrade-from-legacy /
+// stay-idempotent-at-current-version cases; Trae has its own below.
 async function runStandaloneTargetUpgradeTests() {
   const STANDALONE_TARGETS = [
-    { home: '.trae', target: ['.trae', 'MEMORY.md'], label: 'Trae (.trae)' },
-    { home: '.trae-cn', target: ['.trae-cn', 'MEMORY.md'], label: 'Trae (.trae-cn)' },
     { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
   ];
 
@@ -967,13 +965,170 @@ async function runStandaloneTargetUpgradeTests() {
   return [passed, failed];
 }
 
+async function runTraeUserRulesTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('Trae: a fresh install writes the protocol to ~/.trae/user_rules, where Trae reads global rules, and nothing to ~/.trae/MEMORY.md (#1676)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.trae'));
+      run(home);
+      const content = fs.readFileSync(path.join(home, '.trae', 'user_rules', 'egc-memory.md'), 'utf8');
+      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'the user rule carries the current protocol');
+      assert.ok(!fs.existsSync(path.join(home, '.trae', 'MEMORY.md')), 'nothing is written to the old MEMORY.md');
+      assert.ok(!fs.existsSync(path.join(home, '.trae-cn')), 'the CN directory is not created when absent');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Trae: an upgrade moves the protocol from MEMORY.md to user_rules and retires only the copies that hold nothing but the EGC block (#1676)', () => {
+    const home = mktempHome();
+    try {
+      for (const dir of ['.trae', '.trae-cn']) fs.mkdirSync(path.join(home, dir));
+      const oldBlock = '<!-- egc-memory-protocol:v1 -->\n# EGC Session Memory\n\nCall get_state.\n<!-- /egc-memory-protocol -->\n';
+      const egcOnly = path.join(home, '.trae', 'MEMORY.md');
+      const withNotes = path.join(home, '.trae-cn', 'MEMORY.md');
+      fs.writeFileSync(egcOnly, oldBlock, 'utf8');
+      fs.writeFileSync(withNotes, `${oldBlock}\n# My notes\n`, 'utf8');
+
+      const output = run(home);
+      for (const dir of ['.trae', '.trae-cn']) {
+        const rule = fs.readFileSync(path.join(home, dir, 'user_rules', 'egc-memory.md'), 'utf8');
+        assert.ok(rule.includes(`<!-- egc-memory-protocol:${V} -->`), `${dir}/user_rules carries the current protocol`);
+      }
+      assert.ok(!fs.existsSync(egcOnly), 'the MEMORY.md EGC wrote is retired');
+      assert.ok(output.includes('Trae (.trae): retired the old protocol copy'), `the retirement is reported, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(withNotes, 'utf8'), `${oldBlock}\n# My notes\n`, 'a MEMORY.md with the person\'s own content stays untouched');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Trae: a MEMORY.md without the EGC marker is never removed (#1676)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.trae'));
+      const own = path.join(home, '.trae', 'MEMORY.md');
+      fs.writeFileSync(own, '# My memory\n', 'utf8');
+      run(home);
+      assert.strictEqual(fs.readFileSync(own, 'utf8'), '# My memory\n');
+      assert.ok(fs.existsSync(path.join(home, '.trae', 'user_rules', 'egc-memory.md')));
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Trae: a non-regular MEMORY.md is left in place and the CN home is still installed (#1676)', () => {
+    const home = mktempHome();
+    try {
+      for (const dir of ['.trae', '.trae-cn']) fs.mkdirSync(path.join(home, dir));
+      const legacyDir = path.join(home, '.trae', 'MEMORY.md');
+      fs.mkdirSync(legacyDir);
+      fs.writeFileSync(path.join(legacyDir, 'keep.md'), 'x', 'utf8');
+      run(home);
+      assert.ok(fs.lstatSync(legacyDir).isDirectory(), 'a directory at MEMORY.md stays');
+      assert.strictEqual(fs.readFileSync(path.join(legacyDir, 'keep.md'), 'utf8'), 'x');
+      for (const dir of ['.trae', '.trae-cn']) {
+        assert.ok(fs.existsSync(path.join(home, dir, 'user_rules', 'egc-memory.md')), `${dir}/user_rules is installed`);
+      }
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Trae: a failure in the ~/.trae home keeps its old MEMORY.md and does not stop the ~/.trae-cn home from being installed (#1676)', () => {
+    const home = mktempHome();
+    try {
+      for (const dir of ['.trae', '.trae-cn']) fs.mkdirSync(path.join(home, dir));
+      fs.mkdirSync(path.join(home, '.trae', 'user_rules', 'egc-memory.md'), { recursive: true });
+      const legacy = path.join(home, '.trae', 'MEMORY.md');
+      const oldBlock = '<!-- egc-memory-protocol:v1 -->\nold\n<!-- /egc-memory-protocol -->\n';
+      fs.writeFileSync(legacy, oldBlock, 'utf8');
+      const output = run(home);
+      assert.ok(output.includes('Trae (.trae): unexpected error:'), `the .trae failure is reported, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(legacy, 'utf8'), oldBlock, 'the old MEMORY.md stays while no protocol is in place');
+      assert.ok(!output.includes('Trae (.trae): retired'), `no retirement is reported, got: ${output}`);
+      const rule = fs.readFileSync(path.join(home, '.trae-cn', 'user_rules', 'egc-memory.md'), 'utf8');
+      assert.ok(rule.includes(`<!-- egc-memory-protocol:${V} -->`), 'the CN home is still installed');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Trae: duplicate EGC blocks in user_rules are merged into one current block, keeping the text around them (#1676)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.trae'));
+      run(home);
+      const rule = path.join(home, '.trae', 'user_rules', 'egc-memory.md');
+      const current = fs.readFileSync(rule, 'utf8');
+      fs.writeFileSync(rule, `# Before\n\n${current}\n# Middle\n\n<!-- egc-memory-protocol:v1 -->\nold\n<!-- /egc-memory-protocol -->\n`, 'utf8');
+      run(home);
+      const content = fs.readFileSync(rule, 'utf8');
+      assert.strictEqual((content.match(/<!-- egc-memory-protocol(:v\d+)? -->/g) || []).length, 1, 'one opening marker remains');
+      assert.strictEqual(content.split('<!-- /egc-memory-protocol -->').length - 1, 1, 'one closing marker remains');
+      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'and it is the current one');
+      assert.ok(content.startsWith('# Before\n\n') && content.includes('# Middle'), 'the person\'s text stays');
+      assert.ok(!content.includes('\nold\n'), 'the stale duplicate is gone');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Trae: an egc-memory.md rule of the person\'s own, without the EGC marker, is left untouched (#1676)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.trae'));
+      const rule = path.join(home, '.trae', 'user_rules', 'egc-memory.md');
+      fs.mkdirSync(path.dirname(rule), { recursive: true });
+      fs.writeFileSync(rule, '# My rule\n', 'utf8');
+      const legacy = path.join(home, '.trae', 'MEMORY.md');
+      const oldBlock = '<!-- egc-memory-protocol:v1 -->\nold\n<!-- /egc-memory-protocol -->\n';
+      fs.writeFileSync(legacy, oldBlock, 'utf8');
+      const output = run(home);
+      assert.strictEqual(fs.readFileSync(rule, 'utf8'), '# My rule\n');
+      assert.strictEqual(fs.readFileSync(legacy, 'utf8'), oldBlock, 'the old MEMORY.md stays when the protocol was not installed');
+      assert.ok(!output.includes('Trae (.trae): retired'), `no retirement is reported, got: ${output}`);
+      assert.ok(output.includes(`Trae (.trae): ${path.join('~', '.trae', 'user_rules', 'egc-memory.md')} is a rule of your own, left untouched`), `the conflict is reported, got: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Trae: an older EGC block in user_rules is upgraded in place, keeping the text around it, and a rerun changes nothing (#1676)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.trae'));
+      const rule = path.join(home, '.trae', 'user_rules', 'egc-memory.md');
+      fs.mkdirSync(path.dirname(rule), { recursive: true });
+      fs.writeFileSync(rule, '# Before\n\n<!-- egc-memory-protocol:v1 -->\nold\n<!-- /egc-memory-protocol -->\n\n# After\n', 'utf8');
+      const output = run(home);
+      const content = fs.readFileSync(rule, 'utf8');
+      assert.ok(output.includes('Trae (.trae): memory protocol upgraded v1'), `the upgrade is reported, got: ${output}`);
+      assert.ok(content.startsWith('# Before\n\n'), 'the text before the block stays');
+      assert.ok(content.endsWith('\n# After\n'), 'the text after the block stays');
+      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`) && content.includes('EGC Token Crusher Protocol'), 'the block is the current protocol');
+      assert.ok(!content.includes('\nold\n'), 'the old block is gone');
+      const second = run(home);
+      assert.ok(second.includes(`Trae (.trae): already configured (${V})`), `a rerun is idempotent, got: ${second}`);
+      assert.strictEqual(fs.readFileSync(rule, 'utf8'), content);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 // Trae, CodeBuddy, Continue.dev) was never exercised by any existing test,
 // since none of them ever hand injectStandaloneProtocol() a structurally
 // broken path. Split out for the same complexity-budget reason as the
 // helpers above.
 async function runStandaloneCatchBlockTests() {
   const BROKEN_PATH_TARGETS = [
-    { home: '.trae', target: ['.trae', 'MEMORY.md'], label: 'Trae' },
+    { home: '.trae', target: ['.trae', 'user_rules', 'egc-memory.md'], label: 'Trae (.trae)' },
     { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
   ];
 
@@ -1123,7 +1278,7 @@ async function runProtocolContentTests() {
 
       const filesToCheck = [
         path.join(home, '.codex', 'config.toml'),
-        path.join(home, '.trae', 'MEMORY.md'),
+        path.join(home, '.trae', 'user_rules', 'egc-memory.md'),
         path.join(home, '.codebuddy', 'MEMORY.md'),
       ];
       for (const filePath of filesToCheck) {
@@ -1300,6 +1455,12 @@ async function runRemainingHarnessTests() {
     const [standalonePassed, standaloneFailed] = await runStandaloneTargetUpgradeTests();
     passed += standalonePassed;
     failed += standaloneFailed;
+  }
+
+  {
+    const [traePassed, traeFailed] = await runTraeUserRulesTests();
+    passed += traePassed;
+    failed += traeFailed;
   }
 
   {
