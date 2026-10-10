@@ -728,7 +728,7 @@ async function runCursorAndCodexEdgeCaseTests() {
       fs.writeFileSync(settingsFile, JSON.stringify({ 'cursor.rules': '[egc-memory-protocol:v8] Old. [/egc-memory-protocol]' }));
 
       const output = run(home);
-      assert.ok(output.includes('Cursor: retired the old protocol copy Cursor does not read (~/.cursor/rules)'), `should report the file, got: ${output}`);
+      assert.ok(output.includes(`Cursor: retired the old protocol copy Cursor does not read (${path.join('~', '.cursor', 'rules')})`), `should report the file, got: ${output}`);
       assert.ok(!fs.existsSync(legacyFile), 'the old file is gone');
       assert.ok(!('cursor.rules' in JSON.parse(fs.readFileSync(settingsFile, 'utf8'))), 'the old setting is gone');
 
@@ -756,7 +756,7 @@ async function runCursorAndCodexEdgeCaseTests() {
       const original = `My own rule.\n\n<!-- egc-memory-protocol:v8 -->\nCall get_state.\n<!-- /egc-memory-protocol -->\n`;
       fs.writeFileSync(legacyFile, original);
       const output = run(home);
-      assert.ok(output.includes('Cursor: kept ~/.cursor/rules'), `should report the kept file, got: ${output}`);
+      assert.ok(output.includes(`Cursor: kept ${path.join('~', '.cursor', 'rules')}`), `should report the kept file, got: ${output}`);
       assert.strictEqual(fs.readFileSync(legacyFile, 'utf8'), original);
     } finally {
       cleanup(home);
