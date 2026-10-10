@@ -409,7 +409,7 @@ async function indexFile(
 }
 
 // What one file's outcome adds to the build: kept and refreshed files are in the
-// graph, skipped and failed ones are not, and the last two are counted apart.
+// graph, skipped and failed ones are not, and refreshed and failed are counted apart.
 function tally(outcome: IndexOutcome, rel: string, wanted: Set<string>, counts: { refreshed: number; failed: number }): void {
   if (outcome === 'kept' || outcome === 'refreshed') wanted.add(rel);
   if (outcome === 'refreshed') counts.refreshed++;
