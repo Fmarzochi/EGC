@@ -17,12 +17,32 @@ function lstatOrNull(filepath) {
   }
 }
 
+function realpathOrNull(filepath) {
+  try {
+    return fs.realpathSync.native(filepath);
+  } catch (error) {
+    if (MISSING.has(error.code)) return null;
+    throw error;
+  }
+}
+
+function followLink(linkPath) {
+  const destination = fs.readlinkSync(linkPath);
+  const joined = path.isAbsolute(destination) ? destination : `${path.dirname(linkPath)}${path.sep}${destination}`;
+  const real = realpathOrNull(joined);
+  if (real) return { path: real, resolved: true };
+  const parent = realpathOrNull(path.dirname(joined));
+  return { path: parent ? path.join(parent, path.basename(joined)) : path.resolve(joined), resolved: false };
+}
+
 function resolveWriteTarget(filepath) {
   let current = path.resolve(filepath);
   for (let hop = 0; hop <= MAX_LINK_HOPS; hop++) {
     const stat = lstatOrNull(current);
     if (!stat || !stat.isSymbolicLink()) return current;
-    current = path.resolve(path.dirname(current), fs.readlinkSync(current));
+    const next = followLink(current);
+    if (next.resolved) return next.path;
+    current = next.path;
   }
   throw Object.assign(new Error(`too many levels of symbolic links: ${filepath}`), { code: 'ELOOP' });
 }

@@ -143,6 +143,40 @@ tally(test('a chain of links whose last target is missing creates that target an
   }
 }));
 
+tally(test('a link through a directory alias and .. is resolved in filesystem order, for an existing and a missing target', () => {
+  const dir = tempDir();
+  try {
+    const sub = path.join(dir, 'real', 'sub');
+    const alias = path.join(dir, 'alias');
+    const home = path.join(dir, 'home');
+    fs.mkdirSync(sub, { recursive: true });
+    fs.mkdirSync(home);
+    try {
+      fs.symlinkSync(sub, alias, 'dir');
+    } catch (error) {
+      if (!SYMLINK_UNSUPPORTED.has(error.code)) throw error;
+      return SKIPPED;
+    }
+    const missingLink = path.join(home, 'missing.md');
+    if (!linkOrSkip(['..', 'alias', '..', 'missing.md'].join(path.sep), missingLink)) return SKIPPED;
+    writeProtocolFile(missingLink, 'created');
+    assert.strictEqual(fs.readFileSync(path.join(dir, 'real', 'missing.md'), 'utf8'), 'created', 'alias/.. means the parent of the alias target');
+    assert.ok(!fs.existsSync(path.join(dir, 'missing.md')), 'not the parent of the link itself');
+    assert.ok(fs.lstatSync(missingLink).isSymbolicLink());
+
+    const existing = path.join(dir, 'real', 'existing.md');
+    fs.writeFileSync(existing, 'old');
+    const existingLink = path.join(home, 'existing.md');
+    if (!linkOrSkip(['..', 'alias', '..', 'existing.md'].join(path.sep), existingLink)) return SKIPPED;
+    writeProtocolFile(existingLink, 'new');
+    assert.strictEqual(fs.readFileSync(existing, 'utf8'), 'new');
+    assert.ok(!fs.existsSync(path.join(dir, 'existing.md')));
+    return true;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}));
+
 tally(test('a new file keeps the permissions of the creation mask', () => {
   if (process.platform === 'win32') return;
   const dir = tempDir();
