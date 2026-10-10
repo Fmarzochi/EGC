@@ -239,6 +239,41 @@ if (gitAvailable) {
     assert.strictEqual(ctx.changed.size, 0, 'the working tree is not read when the repository config carries a filter');
   });
 
+  // Plain git, with nothing switched off: proves the planted command is one git really runs, so that "the
+  // marker is absent" after collectGitContext means the guard worked and not that the probe was dead.
+  function plainGitRunsIt(repo, marker) {
+    spawnSync('git', ['-C', repo, 'status', '--porcelain', '-uall'], { encoding: 'utf8', windowsHide: true });
+    const ran = fs.existsSync(marker);
+    fs.rmSync(marker, { force: true });
+    return ran;
+  }
+
+  await run('a core.fsmonitor setting is switched off on the command line, so the working tree is still read', async () => {
+    const { repo, marker } = hostileRepo('fsmonitor-still-reads', (r, command) => {
+      git(r, 'config', 'core.fsmonitor', command);
+      fs.writeFileSync(path.join(r, 'b.txt'), 'new file');
+    });
+    assert.ok(plainGitRunsIt(repo, marker), 'control: plain git status runs the fsmonitor command');
+    const ctx = await collectGitContext(repo);
+    assert.ok(!fs.existsSync(marker), 'the repository config ran a command');
+    assert.ok(ctx.changed.has('b.txt'), `a local fsmonitor setting must not hide the changes: ${[...ctx.changed].join(', ')}`);
+  });
+
+  await run('a clean filter that lives in the worktree config is seen, so the working tree is not read', async () => {
+    const { repo, marker } = hostileRepo('hostile-worktree-filter', (r, command) => {
+      git(r, 'config', 'extensions.worktreeConfig', 'true');
+      fs.writeFileSync(path.join(r, '.gitattributes'), '*.txt filter=probe\n');
+      git(r, 'config', '--worktree', 'filter.probe.clean', command);
+      // The same size, so git has to read the content to know it changed.
+      fs.writeFileSync(path.join(r, 'a.txt'), 'two');
+    });
+    assert.ok(plainGitRunsIt(repo, marker), 'control: plain git status runs the filter from config.worktree');
+    const ctx = await collectGitContext(repo);
+    assert.ok(!fs.existsSync(marker), 'a clean filter from the worktree config ran');
+    assert.ok(ctx && ctx.recent.has('a.txt'), 'the commit signals are still produced');
+    assert.strictEqual(ctx.changed.size, 0, 'the working tree is not read when the worktree config carries a filter');
+  });
+
   await run('a repository with ordinary local settings still reports what is uncommitted', async () => {
     const { repo } = hostileRepo('ordinary-config', r => {
       git(r, 'config', 'core.autocrlf', 'false');

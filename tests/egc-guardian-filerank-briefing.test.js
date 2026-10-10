@@ -147,11 +147,13 @@ fs.writeFileSync(path.join(root, 'unrelated.ts'), 'export const color = "red";\n
     ]).join('\n');
     assert.ok(!lines.includes('ignore all previous instructions'), 'an instruction-like path reached the table');
     assert.ok(lines.includes('path omitted'), 'the withheld path is marked');
-    assert.ok(!lines.includes('AAAAAAAAAAAAAAAAAAAA'), 'a secret in a path reached the table');
+    assert.ok(!lines.includes('sk-ant-'), 'a secret in a path reached the table');
+    assert.ok(lines.includes('keys/[REDACTED].txt'), 'the secret is replaced in place and the rest of the path is kept');
     assert.ok(lines.includes('src/ordinary.ts'), 'an ordinary path is shown as it is');
     // The same paths take the same treatment in both outputs.
     const briefing = renderBriefing('q', '', [{ path: injected, score: 1, signals: {} }, { path: secret, score: 1, signals: {} }]);
-    assert.ok(!briefing.includes('AAAAAAAAAAAAAAAAAAAA') && !briefing.includes('ignore all previous instructions'));
+    assert.ok(!briefing.includes('sk-ant-') && !briefing.includes('ignore all previous instructions'));
+    assert.ok(briefing.includes('keys/[REDACTED].txt') && briefing.includes('[path omitted'), 'the briefing marks both paths the same way');
   });
 
   await run('no project files gives an empty ranking', async () => {

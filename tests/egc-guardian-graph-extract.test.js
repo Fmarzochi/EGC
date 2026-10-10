@@ -275,5 +275,37 @@ run('names taken from require() or import() are imports, whatever the path looks
   assert.deepStrictEqual(computedValue.symbols.map(s => s.name), ['alpha', 'beta', 'gamma', 'delta']);
 });
 
+run('a regex that opens an interpolation is a regex, in the first one and in a later one', () => {
+  // Read as a division, a regex holding a brace, a class with a slash or a comment opener makes the rest of the file vanish.
+  const tail = '\nexport function real() { return 1; }\nexport const z = 2;\n';
+  const shapes = ['/{/', '/[/]/', '/\\/*/', '/}/', '/`/'];
+  for (const re of shapes) {
+    for (const head of ['const s = `a ${', 'const s = `a ${x} b ${']) {
+      const r = extractFile(`${head}${re}.test(y)}\`;${tail}`);
+      assert.deepStrictEqual(r.symbols.map(s => s.name), ['s', 'real', 'z'], `${head}${re}: ${r.symbols.map(s => s.name).join(', ')}`);
+    }
+  }
+  // A division after a value inside an interpolation stays a division.
+  const division = extractFile('const s = `a ${total / 2} b ${count / 4}`;\nexport function real() {}\n');
+  assert.ok(sym(division, 'real'));
+});
+
+run('an object export aliases a name only when the value is that name alone', () => {
+  const src = 'const handlers = {};\nfunction fn() {}\nfunction make() {}\nmodule.exports = { run: handlers.run, ok: fn, call: make(), n: 5 };\n';
+  const r = extractFile(src);
+  const aliases = r.imports.filter(im => im.specifier === '').flatMap(im => im.bindings);
+  assert.deepStrictEqual(aliases, [{ local: 'ok', imported: 'fn' }], `aliases: ${JSON.stringify(aliases)}`);
+  assert.ok(sym(r, 'fn').exported, 'the alone name is exported');
+  assert.ok(!sym(r, 'handlers').exported, 'a member access does not export its object');
+  assert.ok(!sym(r, 'make').exported, 'a call does not export the function it calls');
+});
+
+run('a computed key in a destructuring pattern selects, and the value is what binds', () => {
+  const obj = extractFile('const { [key]: value, other, [a.b]: { inner } } = source;\n');
+  assert.deepStrictEqual(obj.symbols.map(s => s.name), ['value', 'other', 'inner']);
+  const arr = extractFile('const [first, [second]] = list;\n');
+  assert.deepStrictEqual(arr.symbols.map(s => s.name), ['first', 'second']);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
