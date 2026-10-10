@@ -629,6 +629,22 @@ async function runCodexDeveloperInstructionsTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('Codex TOML round trip: a CRLF config.toml with tables gets the key at the top level and keeps its line endings (#1708)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codex'));
+      fs.writeFileSync(codexToml(home), 'model = "o3"\r\n\r\n[mcp_servers.egc-memory]\r\ncommand = "node"\r\n', 'utf8');
+      const output = run(home);
+      const content = fs.readFileSync(codexToml(home), 'utf8');
+      const parsed = TOML.parse(content);
+      assert.ok(parsed.developer_instructions.includes(`[egc-protocol:${V}]`), `the protocol is installed at the top level, got: ${output}`);
+      assert.deepStrictEqual(parsed.mcp_servers['egc-memory'], { command: 'node' });
+      assert.ok(!/[^\r]\n/.test(content), 'every line still ends in CRLF');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('Codex: a config.toml that is not valid TOML is left untouched and reported (#1708)', () => {
     const home = mktempHome();
     try {

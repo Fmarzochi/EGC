@@ -374,13 +374,13 @@ function findCodexKey(lines, key, end) {
 }
 
 function parseCodexString(line) {
-  const assignment = line.match(/^\s*[^=]+=\s*/)[0];
+  const assignment = line.match(/^[ \t]*[^=\s][^=]*=[ \t]*/)[0];
   const value = line.slice(assignment.length);
   if (value.startsWith('"""') || value.startsWith("'''")) return { kind: 'multiline' };
-  const basic = value.match(/^"((?:[^"\\]|\\.)*)"(\s*#.*)?\s*$/);
+  const basic = value.match(/^"((?:[^"\\]|\\.)*)"([ \t]*(?:#.*)?)$/);
   if (basic) return { kind: 'string', assignment, text: basic[1], comment: basic[2] || '' };
-  const literal = value.match(/^'([^']*)'(\s*#.*)?\s*$/);
-  if (literal) return { kind: 'string', assignment, text: literal[1].replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`), comment: literal[2] || '' };
+  const literal = value.match(/^'([^']*)'([ \t]*(?:#.*)?)$/);
+  if (literal) return { kind: 'string', assignment, text: literal[1].replaceAll('\\', String.raw`\\`).replaceAll('"', String.raw`\"`), comment: literal[2] || '' };
   return { kind: 'unrecognized' };
 }
 
@@ -389,7 +389,7 @@ function insertCodexKey(lines, end) {
   const line = CODEX_PROTOCOL_FULL.trimEnd();
   if (end < out.length) {
     out.splice(end, 0, line, '');
-  } else if (out[out.length - 1] === '') {
+  } else if (out.at(-1) === '') {
     out.splice(out.length - 1, 0, line);
   } else {
     out.push(line, '');
@@ -441,7 +441,7 @@ function codexUserText(value) {
 }
 
 function codexRewriteIsFaithful(before, newContent, legacy) {
-  if (!TOML) return true;
+  if (!TOML) return false;
   let after;
   try {
     after = TOML.parse(newContent);
@@ -458,7 +458,7 @@ function codexRewriteIsFaithful(before, newContent, legacy) {
 }
 
 function parseCodexToml(content) {
-  if (!TOML) return {};
+  if (!TOML) return undefined;
   try {
     return TOML.parse(content);
   } catch {
@@ -471,12 +471,14 @@ function parseCodexToml(content) {
 // happened to a persistent_instructions line.
 function upgradeCodexTomlContent(originalContent) {
   const before = parseCodexToml(originalContent);
+  if (before === undefined) return { status: 'skip-no-parser' };
   if (!before) return { status: 'skip-invalid' };
-  const developer = planCodexDeveloperInstructions(originalContent.split('\n'));
+  const eol = originalContent.includes('\r\n') ? '\r\n' : '\n';
+  const developer = planCodexDeveloperInstructions(originalContent.split(eol));
   if (developer.status.startsWith('skip-')) return { status: developer.status };
   const { legacy, lines } = planCodexLegacyKey(developer.lines);
   const changed = developer.status === 'update' || legacy === 'retired';
-  const newContent = lines.join('\n');
+  const newContent = lines.join(eol);
   if (changed && !codexRewriteIsFaithful(before, newContent, legacy)) return { status: 'skip-layout' };
   return {
     status: changed ? 'update' : 'up-to-date',
@@ -491,6 +493,7 @@ const CODEX_SKIP_MESSAGES = {
   'skip-multiline': 'developer_instructions multiline: skipping',
   'skip-unrecognized': 'developer_instructions in unrecognized format: skipping',
   'skip-invalid': 'config.toml is not valid TOML: skipping',
+  'skip-no-parser': 'the TOML parser (@iarna/toml) is not available to check the edit of config.toml: skipping',
   'skip-layout': 'config.toml has a layout this installer cannot edit safely: skipping; add the protocol to developer_instructions by hand',
 };
 
