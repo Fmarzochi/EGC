@@ -167,16 +167,34 @@ tally(test('a link through a directory alias and .. is resolved in filesystem or
       assert.ok(!fs.existsSync(path.join(dir, 'missing.md')), 'not the parent of the link itself');
     }
 
-    const existing = path.join(dir, 'real', 'existing.md');
+    const existing = process.platform === 'win32' ? path.join(dir, 'existing.md') : path.join(dir, 'real', 'existing.md');
+    const elsewhere = process.platform === 'win32' ? path.join(dir, 'real', 'existing.md') : path.join(dir, 'existing.md');
     fs.writeFileSync(existing, 'old');
     const existingLink = path.join(home, 'existing.md');
     if (!linkOrSkip(['..', 'alias', '..', 'existing.md'].join(path.sep), existingLink)) return SKIPPED;
     writeProtocolFile(existingLink, 'new');
     assert.strictEqual(fs.readFileSync(existingLink, 'utf8'), 'new', 'reading through the link gives the new text');
-    if (process.platform !== 'win32') {
-      assert.strictEqual(fs.readFileSync(existing, 'utf8'), 'new');
-      assert.ok(!fs.existsSync(path.join(dir, 'existing.md')));
-    }
+    assert.strictEqual(fs.readFileSync(existing, 'utf8'), 'new', 'the existing target is replaced');
+    assert.ok(!fs.existsSync(elsewhere));
+    assert.ok(fs.lstatSync(existingLink).isSymbolicLink());
+    return true;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}));
+
+tally(test('a dangling link through a missing directory is refused, not normalized past it', () => {
+  if (process.platform === 'win32') return;
+  const dir = tempDir();
+  try {
+    const sibling = path.join(dir, 'actual.md');
+    fs.writeFileSync(sibling, 'keep');
+    const link = path.join(dir, 'link.md');
+    if (!linkOrSkip(['missing', '..', 'actual.md'].join(path.sep), link)) return SKIPPED;
+    assert.throws(() => writeProtocolFile(link, 'new'), error => error.code === 'ENOENT' && error.message.includes(link));
+    assert.strictEqual(fs.readFileSync(sibling, 'utf8'), 'keep', 'the sibling is untouched');
+    assert.ok(!fs.existsSync(path.join(dir, 'missing')), 'no directory is created');
+    assert.ok(fs.lstatSync(link).isSymbolicLink());
     return true;
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

@@ -32,7 +32,10 @@ function followLink(linkPath) {
   const real = realpathOrNull(joined);
   if (real) return { path: real, resolved: true };
   const parent = realpathOrNull(path.dirname(joined));
-  return { path: parent ? path.join(parent, path.basename(joined)) : path.resolve(joined), resolved: false };
+  if (!parent) {
+    throw Object.assign(new Error(`symbolic link ${linkPath} points to ${destination}, whose directory does not exist`), { code: 'ENOENT' });
+  }
+  return { path: path.join(parent, path.basename(joined)), resolved: false };
 }
 
 function resolveWriteTarget(filepath) {
