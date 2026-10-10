@@ -115,5 +115,57 @@ tally(test('a write that fails midway leaves the original text and its backup in
   }
 }));
 
+tally(test('a chain of links whose last target is missing creates that target and leaves every link in place', () => {
+  const dir = tempDir();
+  try {
+    const final = path.join(dir, 'dotfiles', 'CLAUDE.md');
+    const middle = path.join(dir, 'middle', 'CLAUDE.md');
+    const link = path.join(dir, 'home', 'CLAUDE.md');
+    for (const p of [final, middle, link]) fs.mkdirSync(path.dirname(p), { recursive: true });
+    try {
+      fs.symlinkSync(final, middle, 'file');
+      fs.symlinkSync(middle, link, 'file');
+    } catch {
+      console.log('  [SKIP] symlink not available on this runner');
+      return;
+    }
+    writeProtocolFile(link, 'new');
+    assert.ok(fs.lstatSync(link).isSymbolicLink() && fs.lstatSync(middle).isSymbolicLink(), 'both links stay links');
+    assert.strictEqual(fs.readFileSync(final, 'utf8'), 'new', 'the missing final target is created');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}));
+
+tally(test('a new file keeps the permissions of the creation mask', () => {
+  if (process.platform === 'win32') return;
+  const dir = tempDir();
+  const previous = process.umask(0o077);
+  try {
+    const file = path.join(dir, 'GEMINI.md');
+    writeProtocolFile(file, 'created');
+    assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600, 'umask 077 gives 0600, not 0644');
+  } finally {
+    process.umask(previous);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}));
+
+tally(test('an existing file the process may not write is refused, not replaced', () => {
+  if (process.platform === 'win32' || (typeof process.getuid === 'function' && process.getuid() === 0)) return;
+  const dir = tempDir();
+  try {
+    const file = path.join(dir, 'CLAUDE.md');
+    fs.writeFileSync(file, 'read only');
+    fs.chmodSync(file, 0o444);
+    assert.throws(() => writeProtocolFile(file, 'new'), error => error.code === 'EACCES');
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), 'read only');
+    assert.deepStrictEqual(leftovers(dir), []);
+  } finally {
+    fs.chmodSync(path.join(dir, 'CLAUDE.md'), 0o644);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}));
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

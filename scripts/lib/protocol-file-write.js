@@ -4,19 +4,24 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const MAX_LINK_HOPS = 40;
+
+function lstatOrNull(filepath) {
+  try {
+    return fs.lstatSync(filepath);
+  } catch {
+    return null;
+  }
+}
+
 function resolveWriteTarget(filepath) {
-  let stat;
-  try {
-    stat = fs.lstatSync(filepath);
-  } catch {
-    return filepath;
+  let current = path.resolve(filepath);
+  for (let hop = 0; hop <= MAX_LINK_HOPS; hop++) {
+    const stat = lstatOrNull(current);
+    if (!stat || !stat.isSymbolicLink()) return current;
+    current = path.resolve(path.dirname(current), fs.readlinkSync(current));
   }
-  if (!stat.isSymbolicLink()) return filepath;
-  try {
-    return fs.realpathSync(filepath);
-  } catch {
-    return path.resolve(path.dirname(filepath), fs.readlinkSync(filepath));
-  }
+  throw Object.assign(new Error(`too many levels of symbolic links: ${filepath}`), { code: 'ELOOP' });
 }
 
 function closeQuietly(descriptor) {
@@ -60,13 +65,13 @@ function writeProtocolFile(filepath, content) {
   const directory = path.dirname(target);
   fs.mkdirSync(directory, { recursive: true });
   const existing = statOrNull(target);
-  const mode = existing ? existing.mode & 0o777 : 0o644;
+  if (existing) fs.accessSync(target, fs.constants.W_OK);
   const temporary = path.join(directory, `.${path.basename(target)}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
-  const descriptor = fs.openSync(temporary, 'wx', mode);
+  const descriptor = fs.openSync(temporary, 'wx', existing ? existing.mode & 0o777 : 0o666);
   let open = true;
   try {
     fs.writeFileSync(descriptor, content, 'utf8');
-    fs.fchmodSync(descriptor, mode);
+    if (existing) fs.fchmodSync(descriptor, existing.mode & 0o777);
     keepOwner(descriptor, existing);
     fs.closeSync(descriptor);
     open = false;
