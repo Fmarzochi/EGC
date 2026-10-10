@@ -5,6 +5,7 @@ const { isGeneratedRuntimeSourcePath, isHostPlacedSourcePath, isIgnoredSourceDir
 const { HOOK_OPERATION_KIND } = require('../claude-settings-hooks');
 const { MERGE_YAML_READ_LIST_KIND } = require('../aider-config-merge');
 const { MERGE_MARKDOWN_INDEX_KIND } = require('../warp-agents-merge');
+const { GENERATE_CONTEXT_FILE_KIND, createGeneratedContextOperation, isGeneratedContextSource } = require('../generated-context-files');
 const { assertSafeMcpConfig, isMcpConfigPath } = require('../mcp-config');
 
 // Builders for the install plan's operations, and the pass that turns the
@@ -201,8 +202,20 @@ function materializeScaffoldOperation(sourceRoot, operation) {
     return [{ ...operation, scaffoldOnly: false }];
   }
 
-  if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
+  if (operation.kind === MERGE_MARKDOWN_INDEX_KIND || operation.kind === GENERATE_CONTEXT_FILE_KIND) {
     return [{ ...operation, scaffoldOnly: false }];
+  }
+
+  // A scaffold that names a propagation-filled context file (the root
+  // AGENTS.md an adapter lays out) becomes the generated form whether or
+  // not the source is on disk: a registry install has no such file, a clone
+  // has it populated, and both must plan the same destination.
+  if (isGeneratedContextSource(operation.sourceRelativePath)) {
+    return [createGeneratedContextOperation({
+      moduleId: operation.moduleId,
+      sourceRelativePath: operation.sourceRelativePath,
+      destinationPath: operation.destinationPath,
+    })];
   }
 
   if (operation.kind === 'merge-json') {
@@ -282,8 +295,18 @@ function dedupeCopyFileDestinations(operations, nativeRootRelativePath) {
 
   const winnerIndexByDestination = new Map();
   const result = [];
+  // A generated catalog never shadows a file another module copies to the
+  // same place: on the codex target the native .agents/AGENTS.md lands at
+  // ~/.agents/AGENTS.md, where the root AGENTS.md would also be generated,
+  // and the copied file is what a registry install always had there.
+  const copiedDestinations = new Set(operations
+    .filter(operation => operation.kind === 'copy-file')
+    .map(operation => operation.destinationPath));
 
   for (const operation of operations) {
+    if (operation.kind === GENERATE_CONTEXT_FILE_KIND && copiedDestinations.has(operation.destinationPath)) {
+      continue;
+    }
     if (operation.kind !== 'copy-file') {
       result.push(operation);
       continue;

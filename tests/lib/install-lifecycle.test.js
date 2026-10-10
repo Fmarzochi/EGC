@@ -33,6 +33,10 @@ const {
   MERGE_MARKDOWN_INDEX_KIND,
   mergeSkillIndexEntry,
 } = require('../../scripts/lib/warp-agents-merge');
+const {
+  createGeneratedContextOperation,
+  generatedContextTemplate,
+} = require('../../scripts/lib/generated-context-files');
 const { shellQuote } = require('../../scripts/lib/doctor-summary');
 const {
   ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -2715,6 +2719,66 @@ function runTests() {
       assert.strictEqual(issue.severity, 'warning');
       assert.ok(issue.message.includes(`--profile ${shellQuote('full')}`), issue.message);
     } finally {
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('a generated context file is healthy once it carries its project-memory section, repaired when it lost it and removed on uninstall (#1670)', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+    const targetRoot = path.join(projectRoot, '.cursor');
+    const installStatePath = path.join(targetRoot, 'egc-install-state.json');
+    const rulePath = path.join(targetRoot, 'rules', 'egc-context.mdc');
+    const template = generatedContextTemplate('.cursor/rules/egc-context.mdc');
+    const lifecycle = { repoRoot: REPO_ROOT, homeDir, projectRoot, targets: ['cursor'] };
+
+    try {
+      fs.mkdirSync(path.dirname(rulePath), { recursive: true });
+      fs.writeFileSync(rulePath, template);
+      writeState(installStatePath, {
+        adapter: { id: 'cursor-project', target: 'cursor', kind: 'project' },
+        targetRoot,
+        installStatePath,
+        request: { profile: null, modules: [], includeComponents: [], excludeComponents: [], legacyLanguages: [], legacyMode: true },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [createGeneratedContextOperation({
+          moduleId: 'platform-configs',
+          sourceRelativePath: '.cursor/rules/egc-context.mdc',
+          destinationPath: rulePath,
+        })],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+
+      let report = buildDoctorReport({ homeDir, projectRoot, targets: ['cursor'] });
+      assert.strictEqual(report.results[0].status, 'ok', 'the freshly generated rule reports ok');
+
+      // Propagation fills the block: still healthy, and repair leaves it alone.
+      const populated = template.replace('<!-- egc:start -->\n', '<!-- egc:start -->\n## EGC Project Memory\n- decided: keep the cache\n');
+      fs.writeFileSync(rulePath, populated);
+      report = buildDoctorReport({ homeDir, projectRoot, targets: ['cursor'] });
+      assert.strictEqual(report.results[0].status, 'ok', 'a populated rule is the healthy state, never a drift');
+      repairInstalledStates(lifecycle);
+      assert.strictEqual(fs.readFileSync(rulePath, 'utf8'), populated, 'repair never rewrites a populated rule');
+
+      // The person emptied the file: drift, and repair regenerates the canonical text.
+      fs.writeFileSync(rulePath, '# a rule of my own\n');
+      report = buildDoctorReport({ homeDir, projectRoot, targets: ['cursor'] });
+      assert.strictEqual(report.results[0].status, 'warning', 'a rule without the section is flagged');
+      assert.ok(report.results[0].issues.some(issue => issue.code === 'drifted-managed-files'), 'as drift');
+      repairInstalledStates(lifecycle);
+      assert.strictEqual(fs.readFileSync(rulePath, 'utf8'), template, 'repair regenerates the canonical text');
+
+      // Gone: flagged, and repair brings it back.
+      fs.rmSync(rulePath);
+      report = buildDoctorReport({ homeDir, projectRoot, targets: ['cursor'] });
+      assert.strictEqual(report.results[0].status, 'error', 'a missing rule is flagged');
+      repairInstalledStates(lifecycle);
+      assert.strictEqual(fs.readFileSync(rulePath, 'utf8'), template, 'repair recreates a missing rule');
+
+      uninstallInstalledStates(lifecycle);
+      assert.ok(!fs.existsSync(rulePath), 'uninstall removes the generated rule');
+    } finally {
+      cleanup(homeDir);
       cleanup(projectRoot);
     }
   }));

@@ -178,6 +178,31 @@ run('a clean packaged tree keeps stdout empty so npm pack --json can parse its o
   }
 });
 
+run('packaged-tree honours a plain-path negation inside a shipped directory', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.cursor/', '!.cursor/rules/egc-context.mdc'] }, null, 2));
+  fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.cursor', 'rules', 'egc-context.mdc'), POPULATED);
+  fs.writeFileSync(path.join(dir, '.cursor', 'rules', 'other.md'), '# a rule that ships\n');
+  git('add', '.');
+  git('commit', '-q', '-m', 'seed', '--no-verify');
+  const res = runScript(dir, '--packaged-tree');
+  assert.strictEqual(res.status, 0, `expected exit 0, got ${res.status}: ${res.stderr}`);
+  assert.ok(res.stderr.includes('state-leak check: clean'), res.stderr);
+});
+
+run('packaged-tree still scans what only a glob negation would exclude', () => {
+  const { dir, git } = makeRepo();
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 't', version: '0.0.0', files: ['.cursor/', '!**/egc-context.mdc'] }, null, 2));
+  fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.cursor', 'rules', 'egc-context.mdc'), POPULATED);
+  git('add', '.');
+  git('commit', '-q', '-m', 'seed', '--no-verify');
+  const res = runScript(dir, '--packaged-tree');
+  assert.strictEqual(res.status, 1, `expected exit 1, got ${res.status}: ${res.stderr}`);
+  assert.ok(res.stderr.includes('.cursor/rules/egc-context.mdc'), res.stderr);
+});
+
 run('packaged-tree skips with a notice outside a git checkout', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-leak-nogit-'));
   try {

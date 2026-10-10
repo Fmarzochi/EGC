@@ -26,6 +26,7 @@ const {
   MERGE_MARKDOWN_INDEX_KIND,
   nextSkillIndexContent,
 } = require('../warp-agents-merge');
+const { GENERATE_CONTEXT_FILE_KIND, nextGeneratedContextContent } = require('../generated-context-files');
 
 function readJsonObject(filePath, label) {
   let parsed;
@@ -98,6 +99,18 @@ function applyMergeMarkdownIndexOperation(operation) {
     : null;
   const nextContent = nextSkillIndexContent(existingContent, operation);
   if (nextContent === null || nextContent === existingContent) return;
+  writeManagedText(operation.destinationPath, nextContent);
+}
+
+// Written only when the destination does not yet carry the project-memory
+// section: an installed file, populated by propagation or not, is left as
+// it is (generated-context-files.js).
+function applyGeneratedContextOperation(operation) {
+  const existingContent = fs.existsSync(operation.destinationPath)
+    ? fs.readFileSync(operation.destinationPath, 'utf8')
+    : null;
+  const nextContent = nextGeneratedContextContent(existingContent, operation);
+  if (nextContent === null) return;
   writeManagedText(operation.destinationPath, nextContent);
 }
 
@@ -1025,6 +1038,34 @@ function performDirToFile(transition) {
   }
 }
 
+// One planned operation, by kind: the merge and hook kinds edit a file in
+// place, a generated context file is written only when it lacks its
+// section, and a copied file lands with its hash recorded for the state.
+function applyPlannedOperation(operation, disabledServers, writtenHashes) {
+  if (operation.kind === HOOK_OPERATION_KIND) {
+    applyManagedHookOperation(operation);
+  } else if (operation.kind === 'merge-json') {
+    applyMergeJsonOperation(operation, disabledServers);
+  } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
+    applyMergeYamlReadListOperation(operation);
+  } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
+    applyMergeMarkdownIndexOperation(operation);
+  } else if (operation.kind === GENERATE_CONTEXT_FILE_KIND) {
+    applyGeneratedContextOperation(operation);
+  } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
+    const landed = applyMcpCopyFileOperation(operation, disabledServers);
+    writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
+  } else if (operation.kind === 'copy-file' && operation.transform) {
+    const landed = plannedFileContent(operation.sourcePath, operation.transform).toString('utf8');
+    writeTextKeepingMode(operation.destinationPath, landed, operation.sourcePath);
+    writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
+  } else {
+    const source = operation.kind === 'copy-file' ? fs.readFileSync(operation.sourcePath) : null;
+    copyFileKeepingMode(operation.sourcePath, operation.destinationPath);
+    if (source) writtenHashes.set(path.resolve(operation.destinationPath), sha256(source));
+  }
+}
+
 function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
 
@@ -1078,26 +1119,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
 
 
-    if (operation.kind === HOOK_OPERATION_KIND) {
-      applyManagedHookOperation(operation);
-    } else if (operation.kind === 'merge-json') {
-      applyMergeJsonOperation(operation, disabledServers);
-    } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
-      applyMergeYamlReadListOperation(operation);
-    } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
-      applyMergeMarkdownIndexOperation(operation);
-    } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
-      const landed = applyMcpCopyFileOperation(operation, disabledServers);
-      writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
-    } else if (operation.kind === 'copy-file' && operation.transform) {
-      const landed = plannedFileContent(operation.sourcePath, operation.transform).toString('utf8');
-      writeTextKeepingMode(operation.destinationPath, landed, operation.sourcePath);
-      writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
-    } else {
-      const source = operation.kind === 'copy-file' ? fs.readFileSync(operation.sourcePath) : null;
-      copyFileKeepingMode(operation.sourcePath, operation.destinationPath);
-      if (source) writtenHashes.set(path.resolve(operation.destinationPath), sha256(source));
-    }
+    applyPlannedOperation(operation, disabledServers, writtenHashes);
   }
 
   // A listed transition always has its consuming operation; a transition
