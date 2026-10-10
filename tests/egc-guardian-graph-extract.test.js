@@ -307,5 +307,16 @@ run('a computed key in a destructuring pattern selects, and the value is what bi
   assert.deepStrictEqual(arr.symbols.map(s => s.name), ['first', 'second']);
 });
 
+run('a pattern nested very deep, or opened and never closed, does not throw', () => {
+  const depth = 30000;
+  const matched = extractFile(`const ${'['.repeat(depth)}a${']'.repeat(depth)} = x;\nexport function after() {}\n`);
+  assert.ok(sym(matched, 'after'), 'the code after a deep pattern is still read');
+  assert.doesNotThrow(() => extractFile(`const ${'{'.repeat(depth)}a\nexport function after() {}\n`));
+  assert.doesNotThrow(() => extractFile(`const ${'['.repeat(depth)}a\nexport function after() {}\n`));
+  // Ordinary nesting is untouched.
+  const shallow = extractFile(`const ${'['.repeat(10)}deep${']'.repeat(10)} = x;\n`);
+  assert.deepStrictEqual(shallow.symbols.map(s => s.name), ['deep']);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

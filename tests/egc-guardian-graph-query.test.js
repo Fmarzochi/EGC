@@ -55,6 +55,19 @@ const GRAPH = {
     assert.deepStrictEqual(splitWords('Fix the validateCommand bug in my_helper_fn'), ['fix', 'validate', 'command', 'bug', 'helper']);
   });
 
+  await run('splitWords keeps its acronym boundaries and is linear on a long run of capitals', () => {
+    assert.deepStrictEqual(splitWords('parseHTTPServer ABCDef XMLHttpRequest'), ['parse', 'http', 'server', 'abc', 'def', 'xml', 'http', 'request']);
+    // The repository controls the identifier: a quadratic split here blocks the whole server.
+    // 100,000 capitals took about eleven seconds with the backtracking form; a linear one takes milliseconds.
+    const run = 'A'.repeat(100000);
+    const started = Date.now();
+    assert.deepStrictEqual(splitWords(run), [run.toLowerCase()]);
+    // The last capital before a lowercase letter starts the next word: AAA...A + Ax, and Ax is under three letters.
+    assert.deepStrictEqual(splitWords(`${run}x`), ['a'.repeat(99999)]);
+    const ms = Date.now() - started;
+    assert.ok(ms < 2000, `splitWords took ${ms} ms on a long run of capitals`);
+  });
+
   await run('a named symbol ranks first and explains itself', async () => {
     const r = await queryGraph('fix validateCommand to reject empty input', GRAPH, { readFile });
     assert.strictEqual(r.files[0].path, 'validator.js');
