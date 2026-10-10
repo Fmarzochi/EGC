@@ -66,7 +66,7 @@ function writeProtocolFile(filepath, content) {
   fs.mkdirSync(directory, { recursive: true });
   const existing = statOrNull(target);
   if (existing) fs.accessSync(target, fs.constants.W_OK);
-  const temporary = path.join(directory, `.${path.basename(target)}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`);
+  const temporary = path.join(directory, `.egc-${process.pid}-${crypto.randomBytes(6).toString('hex')}.tmp`);
   const descriptor = fs.openSync(temporary, 'wx', existing ? existing.mode & 0o777 : 0o666);
   let open = true;
   try {

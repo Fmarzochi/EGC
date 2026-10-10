@@ -1466,7 +1466,8 @@ async function runProtocolContentTests() {
       fs.writeFileSync(real, '# My memory\n');
       try {
         fs.symlinkSync(real, link, 'file');
-      } catch {
+      } catch (error) {
+        if (!['EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP'].includes(error.code)) throw error;
         console.log('  [SKIP] symlink not available on this runner');
         return;
       }

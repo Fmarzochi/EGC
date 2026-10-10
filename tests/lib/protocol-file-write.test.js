@@ -11,9 +11,25 @@ const path = require('path');
 
 const { writeProtocolFile } = require('../../scripts/lib/protocol-file-write');
 
+const SKIPPED = Symbol('skipped');
+const SYMLINK_UNSUPPORTED = new Set(['EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP']);
+
+function linkOrSkip(target, link) {
+  try {
+    fs.symlinkSync(target, link, 'file');
+    return true;
+  } catch (error) {
+    if (!SYMLINK_UNSUPPORTED.has(error.code)) throw error;
+    return false;
+  }
+}
+
 function test(name, fn) {
   try {
-    fn();
+    if (fn() === SKIPPED) {
+      console.log(`  SKIP ${name} (symlinks are not available on this runner)`);
+      return SKIPPED;
+    }
     console.log(`  PASS ${name}`);
     return true;
   } catch (error) {
@@ -33,7 +49,8 @@ function leftovers(dir) {
 
 let passed = 0;
 let failed = 0;
-const tally = ok => { if (ok) passed++; else failed++; };
+let skipped = 0;
+const tally = ok => { if (ok === SKIPPED) skipped++; else if (ok) passed++; else failed++; };
 
 console.log('\n=== protocol-file-write (#1832) ===\n');
 
@@ -73,12 +90,7 @@ tally(test('a symlink to a file in another directory survives, and the file it p
     const real = path.join(dotfiles, 'CLAUDE.md');
     const link = path.join(home, 'CLAUDE.md');
     fs.writeFileSync(real, 'old');
-    try {
-      fs.symlinkSync(real, link, 'file');
-    } catch {
-      console.log('  [SKIP] symlink not available on this runner');
-      return;
-    }
+    if (!linkOrSkip(real, link)) return SKIPPED;
     writeProtocolFile(link, 'new');
     assert.ok(fs.lstatSync(link).isSymbolicLink(), 'the link is still a link');
     assert.strictEqual(fs.realpathSync(link), fs.realpathSync(real), 'and points where it did');
@@ -122,13 +134,7 @@ tally(test('a chain of links whose last target is missing creates that target an
     const middle = path.join(dir, 'middle', 'CLAUDE.md');
     const link = path.join(dir, 'home', 'CLAUDE.md');
     for (const p of [final, middle, link]) fs.mkdirSync(path.dirname(p), { recursive: true });
-    try {
-      fs.symlinkSync(final, middle, 'file');
-      fs.symlinkSync(middle, link, 'file');
-    } catch {
-      console.log('  [SKIP] symlink not available on this runner');
-      return;
-    }
+    if (!linkOrSkip(final, middle) || !linkOrSkip(middle, link)) return SKIPPED;
     writeProtocolFile(link, 'new');
     assert.ok(fs.lstatSync(link).isSymbolicLink() && fs.lstatSync(middle).isSymbolicLink(), 'both links stay links');
     assert.strictEqual(fs.readFileSync(final, 'utf8'), 'new', 'the missing final target is created');
@@ -167,5 +173,5 @@ tally(test('an existing file the process may not write is refused, not replaced'
   }
 }));
 
-console.log(`\n${passed} passed, ${failed} failed\n`);
+console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped\n`);
 process.exit(failed > 0 ? 1 : 0);
