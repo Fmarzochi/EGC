@@ -93,11 +93,52 @@ function test(name, fn) {
   }
 }
 
+// A function the script defines and never calls is dead weight that drifts
+// on its own: Register-McpJson stayed behind after its callers moved to
+// scripts/lib/mcp-register.js (#1658). The definition line is excluded from
+// the count, so a name has to appear somewhere else in the script to count
+// as called.
+function assertEveryFunctionIsCalled(scriptSource) {
+  const lines = scriptSource.split('\n');
+  const defined = lines
+    .map(line => line.match(/^\s*function\s+([A-Za-z][A-Za-z0-9-]*)\s*\{/))
+    .filter(Boolean)
+    .map(match => match[1]);
+  assert.ok(defined.length > 0, 'could not read any function definition out of install.ps1');
+  const isCallLine = (line, name) => !/^\s*function\s/.test(line) && new RegExp(`(^|[^A-Za-z0-9-])${name}([^A-Za-z0-9-]|$)`).test(line);
+  const unused = defined.filter(name => !lines.some(line => isCallLine(line, name)));
+  assert.deepStrictEqual(unused, [], `install.ps1 defines functions nothing calls: ${unused.join(', ')}`);
+}
+
+// install.ps1 used to carry its own merge into the person's MCP config, with
+// a ConvertFrom-Json catch that warned and returned; that function went with
+// #1658, so the script must not parse anyone's JSON config any more, and the
+// guard it used to police lives in the Node writer every entry point shares
+// (parseJsonObject in scripts/lib/mcp-register.js, covered by
+// tests/lib/mcp-register.test.js).
+function assertInvalidJsonIsLeftUntouched(scriptSource) {
+  assert.ok(
+    !scriptSource.includes('ConvertFrom-Json'),
+    'install.ps1 must not parse an existing JSON config of its own; the shared CLI does that'
+  );
+  const writerSource = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'lib', 'mcp-register.js'), 'utf8');
+  assert.ok(
+    writerSource.includes('is not valid JSON - left untouched'),
+    'the shared writer must refuse an unparsable existing config and leave it untouched'
+  );
+}
+
+let passed = 0;
+let failed = 0;
+
+function tally(ok) {
+  if (ok) passed++;
+  else failed++;
+}
+
 function runTests() {
   console.log('\n=== Testing install.ps1 ===\n');
 
-  let passed = 0;
-  let failed = 0;
   const powerShellCommand = resolvePowerShellCommand();
 
   if (test('publishes egc-install through the Node installer runtime for cross-platform npm usage', () => {
@@ -121,6 +162,13 @@ function runTests() {
     assert.ok(ps1Floor, 'could not read the Node floor out of install.ps1');
     assert.strictEqual(ps1Floor[1], bashFloor[1], 'install.ps1 Node floor must match install.sh');
   })) passed++; else failed++;
+
+  // A function the script defines and never calls is dead weight that
+  // drifts on its own: Register-McpJson stayed behind after its callers
+  // moved to scripts/lib/mcp-register.js (#1658). The definition line is
+  // excluded from the count, so a name has to appear somewhere else in the
+  // script to count as called.
+  tally(test('every function install.ps1 defines is called somewhere in the script (#1658)', () => assertEveryFunctionIsCalled(scriptSource)));
 
   if (test('prompt-library counts match install.sh and the README catalog numbers', () => {
     const countsOf = (source, label) => {
@@ -205,16 +253,7 @@ function runTests() {
     assert.ok(bashSource.includes('skipping the .mcp.egc.json convenience copy'));
   })) passed++; else failed++;
 
-  if (test('skips (never overwrites) an existing MCP config that fails to parse as JSON', () => {
-    // A pre-existing config with invalid JSON must be left untouched: the
-    // default $obj = @{ mcpServers = @{} } falling through to the merge/
-    // write path below would overwrite the user's real config with just
-    // the two new servers, discarding everything else in the file.
-    assert.ok(
-      /catch\s*\{[^}]*is not valid JSON[^}]*return[^}]*\}/s.test(scriptSource),
-      'the ConvertFrom-Json catch block must warn and return, not fall through to a merge/overwrite'
-    );
-  })) passed++; else failed++;
+  if (test('an existing MCP config that fails to parse as JSON is left untouched by the one writer that merges into it', () => assertInvalidJsonIsLeftUntouched(scriptSource))) passed++; else failed++;
 
   if (test('delegates MCP registration to the shared CLI instead of keeping its own copy of the list', () => {
     // Both installers and `egc init` now read one list, so Continue.dev and
