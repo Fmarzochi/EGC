@@ -2768,6 +2768,15 @@ function runTests() {
       repairInstalledStates(lifecycle);
       assert.strictEqual(fs.readFileSync(rulePath, 'utf8'), template, 'repair regenerates the canonical text');
 
+      // A directory in its place: reported as drift, never a crash.
+      fs.rmSync(rulePath);
+      fs.mkdirSync(rulePath);
+      report = buildDoctorReport({ homeDir, projectRoot, targets: ['cursor'] });
+      assert.strictEqual(report.results[0].status, 'warning', 'a directory where the rule should be is flagged');
+      assert.ok(report.results[0].issues.some(issue => issue.code === 'drifted-managed-files'), 'as drift');
+      fs.rmSync(rulePath, { recursive: true });
+      fs.writeFileSync(rulePath, template);
+
       // Gone: flagged, and repair brings it back.
       fs.rmSync(rulePath);
       report = buildDoctorReport({ homeDir, projectRoot, targets: ['cursor'] });

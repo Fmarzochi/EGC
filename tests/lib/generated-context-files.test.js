@@ -80,6 +80,11 @@ test('a destination without the project-memory section receives the template, on
   const populated = template.replace(`${EGC_START}\n`, `${EGC_START}\n## EGC Project Memory\n- decided: keep the cache\n`);
   assert.strictEqual(nextGeneratedContextContent(populated, operation), null, 'a populated file is never touched');
   assert.strictEqual(nextGeneratedContextContent(template, operation), null, 'the freshly generated file is never rewritten');
+  const cutBeforeBlock = template.slice(0, template.indexOf(EGC_START));
+  assert.ok(cutBeforeBlock.includes(PROJECT_MEMORY_HEADING), 'the Cursor rule carries the heading above its instructions too');
+  assert.strictEqual(nextGeneratedContextContent(cutBeforeBlock, operation), template, 'a file cut off before the propagation block is rewritten');
+  assert.strictEqual(nextGeneratedContextContent(`${EGC_START}\n${EGC_END}\n`, operation), template, 'a block without the heading is rewritten');
+  assert.strictEqual(hasProjectMemorySection(`${PROJECT_MEMORY_HEADING}\n`), false, 'the heading counts only inside the block');
   assert.strictEqual(hasProjectMemorySection(populated), true);
   assert.strictEqual(hasProjectMemorySection(undefined), false);
 });

@@ -751,8 +751,12 @@ function inspectWarpAgentsIndexOperation(operation, destinationPath) {
 // install, and a byte comparison would report drift forever and let a
 // repair wipe the projected memory.
 function inspectGeneratedContextOperation(operation, destinationPath) {
-  if (hasProjectMemorySection(readFileUtf8(destinationPath))) {
-    return inspectResult('ok', operation, destinationPath);
+  try {
+    if (hasProjectMemorySection(readFileUtf8(destinationPath))) {
+      return inspectResult('ok', operation, destinationPath);
+    }
+  } catch (_error) { // NOSONAR: a directory or an unreadable file in its place is drift, not a crash
+    return inspectResult('drifted', operation, destinationPath);
   }
   return inspectResult('drifted', operation, destinationPath);
 }

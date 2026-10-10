@@ -11,6 +11,8 @@
 // project-memory section, populated or not.
 const GENERATE_CONTEXT_FILE_KIND = 'generate-context-file';
 const PROJECT_MEMORY_HEADING = '## EGC Project Memory';
+const EGC_START = '<!-- egc:start -->';
+const EGC_END = '<!-- egc:end -->';
 
 const AGENTS_CATALOG_TEMPLATE = [
   "# EGC: Agent Catalog",
@@ -152,8 +154,16 @@ function generatedContextTemplate(sourceRelativePath) {
   return template;
 }
 
+// The heading counts only inside the propagation block: the Cursor rule
+// carries it above its instructions too, so a file cut off before the
+// block must read as drifted, not healthy.
 function hasProjectMemorySection(content) {
-  return typeof content === 'string' && content.includes(PROJECT_MEMORY_HEADING);
+  if (typeof content !== 'string') return false;
+  const start = content.indexOf(EGC_START);
+  if (start === -1) return false;
+  const end = content.indexOf(EGC_END, start);
+  if (end === -1) return false;
+  return content.slice(start, end).includes(PROJECT_MEMORY_HEADING);
 }
 
 // The text the destination should hold now, or null when the file already

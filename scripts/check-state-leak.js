@@ -209,20 +209,28 @@ function loadPackagedPrefixes(entries = loadPackagedFilesField()) {
     .map(stripTrailingSlashes);
 }
 
-// A plain-path negation in "files" ("!.cursor/rules/egc-context.mdc") keeps
-// that one file out of the package even though its directory ships, so the
-// guard leaves it alone too: it is exactly how a propagation file inside a
-// shipped tree stays unpublished. A negation with glob characters is not
-// resolved here; whatever it would exclude is still scanned, which only
-// errs on the side of refusing a publish.
+// A plain-path negation in "files" ("!.cursor/rules/egc-context.mdc", or
+// "!some/dir/" with everything below it) keeps that path out of the package
+// even though its directory ships, so the guard leaves it alone too: it is
+// exactly how a propagation file inside a shipped tree stays unpublished.
+// A negation with glob characters is not resolved here; whatever it would
+// exclude is still scanned, which only errs on the side of refusing a
+// publish.
 function loadPackagedExclusions(entries = loadPackagedFilesField()) {
   return new Set(entries
     .filter(entry => entry.startsWith('!') && !/[*?[\]{}]/.test(entry))
     .map(entry => stripTrailingSlashes(entry.slice(1))));
 }
 
+function isExcludedPath(filePath, exclusions) {
+  for (const exclusion of exclusions) {
+    if (filePath === exclusion || filePath.startsWith(`${exclusion}/`)) return true;
+  }
+  return false;
+}
+
 function isPackagedPath(filePath, prefixes, exclusions = new Set()) {
-  if (exclusions.has(filePath)) return false;
+  if (isExcludedPath(filePath, exclusions)) return false;
   return prefixes.some(prefix => filePath === prefix || filePath.startsWith(`${prefix}/`));
 }
 
