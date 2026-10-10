@@ -93,11 +93,123 @@ function test(name, fn) {
   }
 }
 
+// Drops whole-line comments and <# ... #> blocks, so a name that survives
+// is code, not prose about code.
+function stripPowerShellComments(source) {
+  return source
+    .replace(/<#[\s\S]*?#>/g, '')
+    .split('\n')
+    .filter(line => !/^\s*#/.test(line))
+    .join('\n');
+}
+
+// Splits a script into its top-level code and one body per function, at any
+// depth: a function ends at the first brace written at the indent of its own
+// definition, which is how install.ps1 closes every block. Register-McpJson
+// sat four spaces deep inside a top-level block, so a column-0 reading would
+// have missed it.
+function splitPowerShellFunctions(source) {
+  const bodies = new Map();
+  const topLevel = [];
+  const open = [];
+  for (const line of stripPowerShellComments(source).split('\n')) {
+    const definition = line.match(/^(\s*)function\s+([A-Za-z][A-Za-z0-9-]*)\s*\{/);
+    const innermost = open.at(-1);
+    if (definition) {
+      open.push({ name: definition[2], indent: definition[1] });
+      bodies.set(definition[2], []);
+    } else if (innermost && line.trimEnd() === `${innermost.indent}}`) {
+      open.pop();
+    } else {
+      (innermost ? bodies.get(innermost.name) : topLevel).push(line);
+    }
+  }
+  return { topLevel: topLevel.join('\n'), bodies };
+}
+
+// Walks the call graph from the script's top-level code: a function is live
+// when that code names it, directly or through another live function. A
+// mention inside a comment, or inside a function nothing reaches, keeps
+// nothing alive. Register-McpJson and the Resolve-PhysicalDirectory chain
+// stayed in install.ps1 that way after their callers moved to
+// scripts/lib/mcp-register.js (#1658).
+function findUnreachableFunctions(source) {
+  const { topLevel, bodies } = splitPowerShellFunctions(source);
+  const mentions = (code, name) => new RegExp(`(^|[^A-Za-z0-9-])${name}([^A-Za-z0-9-]|$)`, 'm').test(code);
+  const live = new Set([...bodies.keys()].filter(name => mentions(topLevel, name)));
+  const queue = [...live];
+  while (queue.length > 0) {
+    const code = bodies.get(queue.shift()).join('\n');
+    for (const name of bodies.keys()) {
+      if (!live.has(name) && mentions(code, name)) {
+        live.add(name);
+        queue.push(name);
+      }
+    }
+  }
+  return [...bodies.keys()].filter(name => !live.has(name));
+}
+
+// One helper the top-level code runs, one helper only an unreachable
+// function names, one function named only in comments, and one defined
+// inside a block that nothing calls: the guard has to report the last
+// three and nothing else.
+const UNREACHABLE_SAMPLE = [
+  'function Used-Helper {',
+  '  Write-Host "used"',
+  '}',
+  'function Orphan-Helper {',
+  '  Write-Host "only Orphan-Caller names me"',
+  '}',
+  'function Orphan-Caller {',
+  '  Orphan-Helper',
+  '}',
+  '<# Orphan-Caller is named in this block comment #>',
+  '# and Orphan-Caller again in this line comment',
+  'if ($true) {',
+  '  function Nested-Orphan {',
+  '    Write-Host "defined inside a live block, never called"',
+  '  }',
+  '  Used-Helper',
+  '}',
+].join('\n');
+
+function assertEveryFunctionIsReachable(scriptSource) {
+  const { bodies } = splitPowerShellFunctions(scriptSource);
+  assert.ok(bodies.size > 0, 'could not read any function definition out of install.ps1');
+  const unreachable = findUnreachableFunctions(scriptSource);
+  assert.deepStrictEqual(unreachable, [], `install.ps1 defines functions its live code never reaches: ${unreachable.join(', ')}`);
+}
+
+// install.ps1 used to carry its own merge into the person's MCP config, with
+// a ConvertFrom-Json catch that warned and returned; that function went with
+// #1658, so the script must not parse anyone's JSON config any more, and the
+// guard it used to police lives in the Node writer every entry point shares
+// (parseJsonObject in scripts/lib/mcp-register.js, covered by
+// tests/lib/mcp-register.test.js).
+function assertInvalidJsonIsLeftUntouched(scriptSource) {
+  assert.ok(
+    !scriptSource.includes('ConvertFrom-Json'),
+    'install.ps1 must not parse an existing JSON config of its own; the shared CLI does that'
+  );
+  const writerSource = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'lib', 'mcp-register.js'), 'utf8');
+  assert.ok(
+    writerSource.includes('is not valid JSON - left untouched'),
+    'the shared writer must refuse an unparsable existing config and leave it untouched'
+  );
+}
+
+let passed = 0;
+let failed = 0;
+
+function tally(ok) {
+  if (ok) passed++;
+  else failed++;
+}
+
 function runTests() {
   console.log('\n=== Testing install.ps1 ===\n');
 
-  let passed = 0;
-  let failed = 0;
   const powerShellCommand = resolvePowerShellCommand();
 
   if (test('publishes egc-install through the Node installer runtime for cross-platform npm usage', () => {
@@ -121,6 +233,17 @@ function runTests() {
     assert.ok(ps1Floor, 'could not read the Node floor out of install.ps1');
     assert.strictEqual(ps1Floor[1], bashFloor[1], 'install.ps1 Node floor must match install.sh');
   })) passed++; else failed++;
+
+  // A function the script defines and never calls is dead weight that
+  // drifts on its own: Register-McpJson stayed behind after its callers
+  // moved to scripts/lib/mcp-register.js (#1658). The definition line is
+  // excluded from the count, so a name has to appear somewhere else in the
+  // script to count as called.
+  tally(test('the dead-function guard ignores comments and functions only unreachable code names', () => {
+    assert.deepStrictEqual(findUnreachableFunctions(UNREACHABLE_SAMPLE), ['Orphan-Helper', 'Orphan-Caller', 'Nested-Orphan']);
+  }));
+
+  tally(test('every function install.ps1 defines is reachable from the script\'s live code (#1658)', () => assertEveryFunctionIsReachable(scriptSource)));
 
   if (test('prompt-library counts match install.sh and the README catalog numbers', () => {
     const countsOf = (source, label) => {
@@ -205,16 +328,7 @@ function runTests() {
     assert.ok(bashSource.includes('skipping the .mcp.egc.json convenience copy'));
   })) passed++; else failed++;
 
-  if (test('skips (never overwrites) an existing MCP config that fails to parse as JSON', () => {
-    // A pre-existing config with invalid JSON must be left untouched: the
-    // default $obj = @{ mcpServers = @{} } falling through to the merge/
-    // write path below would overwrite the user's real config with just
-    // the two new servers, discarding everything else in the file.
-    assert.ok(
-      /catch\s*\{[^}]*is not valid JSON[^}]*return[^}]*\}/s.test(scriptSource),
-      'the ConvertFrom-Json catch block must warn and return, not fall through to a merge/overwrite'
-    );
-  })) passed++; else failed++;
+  if (test('an existing MCP config that fails to parse as JSON is left untouched by the one writer that merges into it', () => assertInvalidJsonIsLeftUntouched(scriptSource))) passed++; else failed++;
 
   if (test('delegates MCP registration to the shared CLI instead of keeping its own copy of the list', () => {
     // Both installers and `egc init` now read one list, so Continue.dev and
