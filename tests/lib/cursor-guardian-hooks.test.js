@@ -15,6 +15,7 @@ const path = require('path');
 
 const {
   BEFORE_SHELL_EXECUTION_EVENT,
+  RETIRED_EGC_ENTRIES,
   addCursorHookEntry,
   applyCursorGuardianHookToFile,
   inspectCursorGuardianHookFile,
@@ -217,6 +218,76 @@ function runTests() {
       assert.strictEqual(inspectCursorGuardianHookFile(hooksJsonPath, BEFORE_SHELL_EXECUTION_EVENT, '/abs/adapter.js'), 'drifted');
       applyCursorGuardianHookToFile(hooksJsonPath, BEFORE_SHELL_EXECUTION_EVENT, '/abs/adapter.js');
       assert.strictEqual(inspectCursorGuardianHookFile(hooksJsonPath, BEFORE_SHELL_EXECUTION_EVENT, '/abs/adapter.js'), 'ok');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  const DOCUMENTED_CURSOR_HOOK_EVENTS = new Set([
+    'sessionStart', 'sessionEnd', 'preToolUse', 'postToolUse', 'postToolUseFailure', 'subagentStart', 'subagentStop',
+    'beforeShellExecution', 'afterShellExecution', 'beforeMCPExecution', 'afterMCPExecution', 'beforeReadFile',
+    'afterFileEdit', 'beforeSubmitPrompt', 'preCompact', 'stop', 'afterAgentResponse', 'afterAgentThought',
+    'beforeTabFileRead', 'afterTabFileEdit', 'workspaceOpen',
+  ]);
+
+  if (test('the repository .cursor/hooks.json the adapter seeds from registers only events Cursor documents (https://cursor.com/docs/agent/hooks, read 2026-10-10)', () => {
+    const seed = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '.cursor', 'hooks.json'), 'utf8'));
+    const undocumented = Object.keys(seed.hooks).filter(event => !DOCUMENTED_CURSOR_HOOK_EVENTS.has(event));
+    assert.deepStrictEqual(undocumented, [], 'every event key is documented');
+    for (const [event, entries] of Object.entries(seed.hooks)) {
+      for (const entry of entries) {
+        assert.strictEqual(entry.event, event, `the entry under ${event} names its own event`);
+      }
+    }
+    const row = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'manifests', 'tool-paths.json'), 'utf8')).rows
+      .find(candidate => candidate.adapter === 'cursor-project' && candidate.path === '<project>/.cursor/hooks.json');
+    const listed = row.note.split(':')[1].split('.')[0].split(',').map(name => name.trim());
+    assert.deepStrictEqual([...listed].sort(), Object.keys(seed.hooks).sort(), 'the spec row lists exactly the seeded events');
+    for (const { event } of RETIRED_EGC_ENTRIES) {
+      assert.ok(!DOCUMENTED_CURSOR_HOOK_EVENTS.has(event), `${event} is retired because it is not documented`);
+    }
+  })) passed++; else failed++;
+
+  if (test('a seed that still carries the retired beforeFileEdit entry does not bring it into a fresh file', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-hooks-seed-retired-'));
+    const hooksJsonPath = path.join(tempDir, 'hooks.json');
+    const seedPath = path.join(tempDir, 'seed-hooks.json');
+    try {
+      fs.writeFileSync(seedPath, JSON.stringify({ version: 1, hooks: {
+        beforeFileEdit: [{ command: 'EGC_HOOK_EVENT=pre_tool node .cursor/hooks/dashboard-emit.js', event: 'beforeFileEdit' }],
+        stop: [{ command: 'node stop.js', event: 'stop' }],
+      } }));
+      applyCursorGuardianHookToFile(hooksJsonPath, BEFORE_SHELL_EXECUTION_EVENT, '/abs/adapter.js', { seedPath });
+      const written = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+      assert.strictEqual(written.hooks.beforeFileEdit, undefined, 'the retired entry is not seeded');
+      assert.deepStrictEqual(written.hooks.stop, [{ command: 'node stop.js', event: 'stop' }], 'the other seeded hooks stay');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('an upgrade removes the beforeFileEdit entry an older seed wrote and keeps the person\'s own entries', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cursor-hooks-retire-'));
+    const hooksJsonPath = path.join(tempDir, 'hooks.json');
+    const shared = path.join(tempDir, 'shared-hooks.json');
+    const egcEntry = { command: 'EGC_HOOK_EVENT=pre_tool node .cursor/hooks/dashboard-emit.js', event: 'beforeFileEdit', description: 'Emit pre-edit event to EGC Dashboard' };
+    const ownEntry = { command: 'node my-own-check.js', event: 'beforeFileEdit' };
+    try {
+      fs.writeFileSync(hooksJsonPath, JSON.stringify({ version: 1, hooks: { beforeFileEdit: [egcEntry], stop: [{ command: 'node stop.js' }] } }));
+      fs.writeFileSync(shared, JSON.stringify({ version: 1, hooks: { beforeFileEdit: [egcEntry, ownEntry] } }));
+
+      assert.deepStrictEqual(applyCursorGuardianHookToFile(hooksJsonPath, BEFORE_SHELL_EXECUTION_EVENT, '/abs/adapter.js'), { changed: true });
+      const upgraded = JSON.parse(fs.readFileSync(hooksJsonPath, 'utf8'));
+      assert.strictEqual(upgraded.hooks.beforeFileEdit, undefined, 'the event key goes once its only entry was EGC\'s');
+      assert.deepStrictEqual(upgraded.hooks.stop, [{ command: 'node stop.js' }]);
+      assert.ok(upgraded.hooks[BEFORE_SHELL_EXECUTION_EVENT].some(entry => entry.command.includes('/abs/adapter.js')));
+
+      applyCursorGuardianHookToFile(shared, BEFORE_SHELL_EXECUTION_EVENT, '/abs/adapter.js');
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(shared, 'utf8')).hooks.beforeFileEdit, [ownEntry], 'the person\'s entry stays');
+
+      const before = fs.readFileSync(hooksJsonPath, 'utf8');
+      assert.deepStrictEqual(applyCursorGuardianHookToFile(hooksJsonPath, BEFORE_SHELL_EXECUTION_EVENT, '/abs/adapter.js'), { changed: false });
+      assert.strictEqual(fs.readFileSync(hooksJsonPath, 'utf8'), before, 'a second run changes nothing');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }

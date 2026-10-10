@@ -203,7 +203,8 @@
       "surface": "hooks",
       "path": "<project>/.cursor/hooks.json",
       "status": "documented",
-      "source": "https://cursor.com/docs/agent/hooks"
+      "source": "https://cursor.com/docs/agent/hooks",
+      "note": "Seeded from the repository's .cursor/hooks.json with documented events only (read on 2026-10-10): sessionStart, sessionEnd, preToolUse, beforeShellExecution, afterShellExecution, afterFileEdit, beforeMCPExecution, afterMCPExecution, beforeReadFile, beforeSubmitPrompt, subagentStart, subagentStop, beforeTabFileRead, afterTabFileEdit, preCompact, stop. beforeFileEdit is not documented: on upgrade only the entry EGC wrote under it is removed, and entries of the person's own stay."
     },
     {
       "adapter": "cursor-project",

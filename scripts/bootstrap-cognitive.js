@@ -24,15 +24,11 @@ const PROTOCOL_VERSION = 9;
 const MARKER = `<!-- egc-memory-protocol:v${PROTOCOL_VERSION} -->`;
 const MARKER_BLOCK_RE = /<!-- egc-memory-protocol(?::v(\d+))? -->[\s\S]*?<!-- \/egc-memory-protocol -->\n?/;
 
-// Cursor's cursor.rules setting is a single flat string (no markdown), so it
-// gets its own bracket-tag marker/block pair instead of the HTML-comment one
-// above, versioned the same way for the same reason: an already-configured
-// install should not stay frozen when a new protocol section ships. Only
-// matches a block that has both the versioned opening tag and the closing
-// tag (v2+); the pre-versioning format (v1) never wrote a closing tag, so an
-// unbounded end-of-string fallback here would risk deleting any Cursor rules
-// the user appended after an old, unclosed block. bootstrapCursor() falls
-// back to appending rather than replacing when this does not match.
+// Older installs wrote the protocol into Cursor's cursor.rules setting as a
+// bracket-tag block. Only a block with both the versioned opening tag and the
+// closing tag (v2+) is matched; the pre-versioning format (v1) never wrote a
+// closing tag, so an unbounded end-of-string match would delete any Cursor
+// rules the user appended after an old, unclosed block.
 const CURSOR_BLOCK_RE = /\[egc-memory-protocol:v(\d+)\][\s\S]*?\[\/egc-memory-protocol\]/;
 
 // Shared by every version-marker check below: a versioned match wins on its
@@ -263,83 +259,45 @@ try {
   console.log(`  [cognitive] Antigravity (Gemini home): unexpected error: ${e.message}`);
 }
 
-function cursorRulesBlock() {
-  return `[egc-memory-protocol:v${PROTOCOL_VERSION}] At the start of every session call get_state({}) via egc-memory to restore project context. At the end call update_state({...}) to save decisions. State is owned by egc-memory (encrypted at rest, one file per project and branch); never read or write those files directly. If get_state is not among your tools, say the server is not registered and point at egc init. [egc-auto-intuition] Act on user intent not keywords: session ending->update_state, session start->get_state, save this decision->update_state (decisions field), log to the decision history->store_decision, save lesson->lesson_save, what failed or what did we decide->get_state first then search_history/query_history for the store_decision history, review PR->review-pr agents when the prompt library is installed (orchestrate_task lists what is not installed), context heavy->reduce_context, how much did I save->egc gain, missed savings->egc discover, another session left something->session_events/session_peers, hand off work->session_send, join session->session_announce, lock a path->claim_path, unlock a path->release_path, read shared memory->working_memory_get, save shared memory->working_memory_set, list shared memory->working_memory_list. Judge by full context not literal words. [egc-guardian] Before every non-trivial task call orchestrate_task. Before every shell command call validate_command. Before every new file write/edit call validate_write with cwd set to the absolute working directory. After every work block call auto_learn. [egc-token-crusher] The automatic hook rewrite is silently ignored for assistant-issued Bash calls, a confirmed Claude Code limitation not planned to be fixed, so prefix any command likely to produce large output yourself with egc run <command> instead of running it directly (e.g. egc run git log --stat, egc run npm install). Use egc run --raw <command> only when you genuinely need the uncompressed output. [/egc-memory-protocol]`;
-}
-
-// Computes the new cursor.rules value and the version it is upgraded from,
-// pulled out of bootstrapCursor() to keep that function's own branching
-// shallow. Nothing at all, or an old unclosed v1 tag with no reliable end
-// marker, appends rather than guessing where a legacy block ends, so nothing
-// the user wrote is ever deleted.
-// Every closed protocol block in the rules: an older install could leave a
-// second one, kept for good if only the first were checked.
 const CURSOR_BLOCKS_RE = new RegExp(CURSOR_BLOCK_RE.source, `${CURSOR_BLOCK_RE.flags.replace('g', '')}g`);
 
-function computeCursorRulesUpdate(existing) {
-  const blocks = [...existing.matchAll(CURSOR_BLOCKS_RE)];
-  const blockMatch = blocks[0] ?? null;
-  const hasLegacyTag = !blockMatch && existing.includes('[egc-memory-protocol]');
-  const installedVersion = resolveInstalledVersion(blockMatch, hasLegacyTag ? 1 : 0);
-  const stale = Math.max(0, blocks.length - 1);
-
-  if (stale === 0 && installedVersion >= PROTOCOL_VERSION) {
-    return { upToDate: true, installedVersion };
+function retireCursorSettingsRules(settingsFile) {
+  const shown = settingsFile.replace(HOME, '~');
+  const rawContent = fs.readFileSync(settingsFile, 'utf8');
+  let obj;
+  try {
+    obj = JSON.parse(rawContent);
+  } catch (_) { // NOSONAR: invalid JSON is reported via the user-facing skip message below
+    console.log(`  [cognitive] Cursor: ${shown} is not valid JSON (JSONC?): skipping`);
+    return;
   }
-
-  const separator = existing.trim() ? '\n\n' : '';
-  let first = true;
-  const newRules = blockMatch
-    ? existing.replace(CURSOR_BLOCKS_RE, () => {
-      if (!first) return '';
-      first = false;
-      return cursorRulesBlock();
-    })
-    : existing + separator + cursorRulesBlock();
-
-  return { upToDate: false, installedVersion, newRules, stale };
+  const rules = obj && typeof obj === 'object' ? obj['cursor.rules'] : undefined;
+  if (typeof rules !== 'string') return;
+  if (rules.replace(CURSOR_BLOCKS_RE, '').includes('[egc-memory-protocol]')) {
+    console.log(`  [cognitive] Cursor: kept the old unclosed EGC block in cursor.rules in ${shown}, since its end cannot be told from rules of your own; remove it by hand`);
+  }
+  if (!CURSOR_BLOCK_RE.test(rules)) return;
+  const kept = rules.replace(CURSOR_BLOCKS_RE, '').replace(/\n{3,}/g, '\n\n').trim();
+  if (kept) obj['cursor.rules'] = kept;
+  else delete obj['cursor.rules'];
+  writeProtocolFile(settingsFile + '.egc.bak', rawContent);
+  writeProtocolFile(settingsFile, JSON.stringify(obj, null, 2) + '\n');
+  console.log(`  [cognitive] Cursor: retired the old protocol block from cursor.rules in ${shown}, a setting Cursor does not read; Cursor gets the protocol from the project rule .cursor/rules/egc-context.mdc`);
 }
 
-// ── Cursor (global User Rules via settings.json) ──────────────────────────────
+// ── Cursor (user rules live in the Cursor account, not in a file) ─────────────
 (function bootstrapCursor() {
   try {
-    const settingsPaths = [
+    const cursorDir = path.join(HOME, '.cursor');
+    const settingsFile = [
       path.join(HOME, '.config', 'Cursor', 'User', 'settings.json'),
       path.join(HOME, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json'),
       process.env.APPDATA ? path.join(process.env.APPDATA, 'Cursor', 'User', 'settings.json') : null,
-    ].filter(Boolean);
+    ].filter(Boolean).find(p => fs.existsSync(p));
+    if (!settingsFile && !fs.existsSync(cursorDir)) return;
 
-    const settingsFile = settingsPaths.find(p => fs.existsSync(p));
-    if (!settingsFile && !fs.existsSync(path.join(HOME, '.cursor'))) return;
-
-    if (!settingsFile) {
-      injectProtocol(path.join(HOME, '.cursor', 'rules'), 'Cursor');
-      return;
-    }
-
-    const rawContent = fs.readFileSync(settingsFile, 'utf8');
-    let obj;
-    try {
-      obj = JSON.parse(rawContent);
-    } catch (_) { // NOSONAR: invalid JSON is reported via the user-facing skip message below
-      console.log('  [cognitive] Cursor: settings.json is not valid JSON (JSONC?): skipping');
-      return;
-    }
-
-    const update = computeCursorRulesUpdate(obj['cursor.rules'] || '');
-    if (update.upToDate) {
-      console.log(`  [cognitive] Cursor: already configured (v${update.installedVersion})`);
-      return;
-    }
-
-    obj['cursor.rules'] = update.newRules;
-    writeProtocolFile(settingsFile + '.egc.bak', rawContent);
-    writeProtocolFile(settingsFile, JSON.stringify(obj, null, 2) + '\n');
-    const upgraded = update.stale > 0
-      ? `${keptOnce(update.stale)} (v${update.installedVersion} -> v${PROTOCOL_VERSION})`
-      : `upgraded v${update.installedVersion} -> v${PROTOCOL_VERSION}`;
-    const action = update.installedVersion > 0 ? upgraded : 'installed';
-    console.log(`  [cognitive] Cursor: memory protocol ${action} (${settingsFile.replace(HOME, '~')})`);
+    retireLegacyMemoryCopy(path.join(cursorDir, 'rules'), 'Cursor', 'Cursor');
+    if (settingsFile) retireCursorSettingsRules(settingsFile);
   } catch (e) {
     console.log(`  [cognitive] Cursor: unexpected error: ${e.message}`);
   }

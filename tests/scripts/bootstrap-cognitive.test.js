@@ -203,9 +203,6 @@ async function runClaudeCodeAndGeminiCliTests() {
     try {
       fs.mkdirSync(path.join(home, '.claude'));
       fs.mkdirSync(path.join(home, '.codex'));
-      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
-      fs.mkdirSync(cursorSettingsDir, { recursive: true });
-      fs.writeFileSync(path.join(cursorSettingsDir, 'settings.json'), JSON.stringify({ 'editor.fontSize': 14 }), 'utf8');
       run(home);
 
       const block = fs.readFileSync(path.join(home, '.claude', 'CLAUDE.md'), 'utf8');
@@ -220,26 +217,17 @@ async function runClaudeCodeAndGeminiCliTests() {
       assert.ok(toml.includes('say the server is not registered and point at egc init'), 'and the same fallback');
       assert.ok(!toml.includes('State lives at'), 'the Codex line must no longer point at a state file path');
       assert.ok(toml.includes('review PR->review-pr agents when the prompt library is installed'), 'the Codex line must carry the same condition');
-
-      const cursorRules = JSON.parse(fs.readFileSync(path.join(cursorSettingsDir, 'settings.json'), 'utf8'))['cursor.rules'];
-      assert.ok(cursorRules.includes('never read or write those files directly'), 'the Cursor rules must carry the same rule');
-      assert.ok(cursorRules.includes('say the server is not registered and point at egc init'), 'and the same fallback');
-      assert.ok(!cursorRules.includes('State lives at'), 'the Cursor rules must no longer point at a state file path');
-      assert.ok(cursorRules.includes('review PR->review-pr agents when the prompt library is installed'), 'the Cursor rules must carry the same condition');
     } finally {
       cleanup(home);
     }
   })) passed++; else failed++;
 
-  if (await test('protocol routes a decision to update_state and recalls it from get_state first, in the block, standalone, Codex and Cursor forms (#1524)', () => {
+  if (await test('protocol routes a decision to update_state and recalls it from get_state first, in the block, standalone and Codex forms (#1524)', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.claude'));
       fs.mkdirSync(path.join(home, '.codex'));
       fs.mkdirSync(path.join(home, '.opencode'));
-      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
-      fs.mkdirSync(cursorSettingsDir, { recursive: true });
-      fs.writeFileSync(path.join(cursorSettingsDir, 'settings.json'), '{}', 'utf8');
       run(home);
 
       const markdownForms = [
@@ -253,7 +241,6 @@ async function runClaudeCodeAndGeminiCliTests() {
 
       const compactForms = [
         ['Codex line', fs.readFileSync(path.join(home, '.codex', 'config.toml'), 'utf8')],
-        ['Cursor rules', JSON.parse(fs.readFileSync(path.join(cursorSettingsDir, 'settings.json'), 'utf8'))['cursor.rules']],
       ];
       for (const [label, text] of compactForms) {
         assert.ok(text.includes('save this decision->update_state'), `the ${label} must route a decision to update_state`);
@@ -334,88 +321,97 @@ async function runCursorAndCodexUpgradeTests() {
   let passed = 0;
   let failed = 0;
 
-  if (await test('Cursor settings.json: a pre-versioning legacy cursor.rules (no marker, no closing tag) is upgraded by appending the current version with the Crusher tag, never deleting the old text', () => {
+  if (await test('Cursor settings.json: an old closed protocol block in cursor.rules is removed with the key, unrelated settings kept and a backup written (#1677)', () => {
     const home = mktempHome();
     try {
       const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
       fs.mkdirSync(cursorSettingsDir, { recursive: true });
       const settingsFile = path.join(cursorSettingsDir, 'settings.json');
-      fs.writeFileSync(settingsFile, JSON.stringify({
-        'editor.fontSize': 14,
-        'cursor.rules': '[egc-memory-protocol] Legacy pre-Crusher rules mentioning get_state and update_state.',
-      }), 'utf8');
+      const original = JSON.stringify({ 'editor.fontSize': 14, 'cursor.rules': '[egc-memory-protocol:v8] Old protocol mentioning get_state. [/egc-memory-protocol]' });
+      fs.writeFileSync(settingsFile, original, 'utf8');
 
       const output = run(home);
-      assert.ok(output.includes(`Cursor: memory protocol upgraded v1 -> ${V}`), `should report a v1 upgrade to the current version, got: ${output}`);
-
+      assert.ok(output.includes('Cursor: retired the old protocol block from cursor.rules'), `should report the retirement, got: ${output}`);
       const parsed = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-      assert.strictEqual(parsed['editor.fontSize'], 14, 'unrelated settings must be preserved');
-      assert.ok(parsed['cursor.rules'].includes('Legacy pre-Crusher rules'), 'the old unclosed legacy block is never deleted, since there is no reliable end marker to cut it at');
-      assert.ok(parsed['cursor.rules'].includes('[egc-token-crusher]'), 'upgraded cursor.rules must include the Crusher tag');
-      assert.ok(parsed['cursor.rules'].includes(`[egc-memory-protocol:${V}]`), 'marker must be stamped with the current version');
+      assert.deepStrictEqual(parsed, { 'editor.fontSize': 14 }, 'the key goes once only the EGC block was in it');
+      assert.strictEqual(fs.readFileSync(settingsFile + '.egc.bak', 'utf8'), original, 'the backup holds the file as it was');
     } finally {
       cleanup(home);
     }
   })) passed++; else failed++;
 
-  if (await test('Cursor settings.json: a current closed block with a stale closed one after it keeps a single current block, the user rules untouched', () => {
+  if (await test('Cursor settings.json: rules of the user around a current and a stale block survive, every EGC block goes (#1677)', () => {
     const home = mktempHome();
     try {
       const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
       fs.mkdirSync(cursorSettingsDir, { recursive: true });
       const settingsFile = path.join(cursorSettingsDir, 'settings.json');
-      fs.writeFileSync(settingsFile, JSON.stringify({ 'cursor.rules': 'Always use tabs.' }), 'utf8');
+      const rules = `Always use tabs.\n\n[egc-memory-protocol:${V}] Current block. [/egc-memory-protocol]\n\nNever commit secrets.\n\n[egc-memory-protocol:v2] Old closed block. [/egc-memory-protocol]`;
+      fs.writeFileSync(settingsFile, JSON.stringify({ 'cursor.rules': rules }), 'utf8');
+
       run(home);
-      const current = JSON.parse(fs.readFileSync(settingsFile, 'utf8'))['cursor.rules'];
-      const stale = '[egc-memory-protocol:v2] Old closed block. [/egc-memory-protocol]';
-      fs.writeFileSync(settingsFile, JSON.stringify({ 'cursor.rules': `${current}\n\nNever commit secrets.\n\n${stale}` }), 'utf8');
-
-      const output = run(home);
-      assert.ok(output.includes(`Cursor: memory protocol kept once, 1 stale block removed (${V} -> ${V})`), `should report the cleanup, got: ${output}`);
-      const rules = JSON.parse(fs.readFileSync(settingsFile, 'utf8'))['cursor.rules'];
-      assert.strictEqual((rules.match(/\[egc-memory-protocol:v\d+\]/g) || []).length, 1, 'exactly one protocol block');
-      assert.ok(rules.includes(`[egc-memory-protocol:${V}]`) && !rules.includes('Old closed block'), 'the current block stays, the stale one goes');
-      assert.ok(rules.indexOf(`[egc-memory-protocol:${V}]`) < rules.indexOf('Never commit secrets.'), 'the current block keeps the place of the first');
-      assert.ok(rules.includes('Always use tabs.') && rules.includes('Never commit secrets.'), 'the user rules survive');
-      assert.ok(run(home).includes(`Cursor: already configured (${V})`), 'a rerun finds it configured');
+      const kept = JSON.parse(fs.readFileSync(settingsFile, 'utf8'))['cursor.rules'];
+      assert.strictEqual(kept, 'Always use tabs.\n\nNever commit secrets.');
+      const before = fs.readFileSync(settingsFile, 'utf8');
+      assert.ok(!run(home).includes('Cursor:'), 'a rerun has nothing to say about Cursor');
+      assert.strictEqual(fs.readFileSync(settingsFile, 'utf8'), before, 'and changes nothing');
     } finally {
       cleanup(home);
     }
   })) passed++; else failed++;
 
-  if (await test('Cursor settings.json: rules the user appended after an old unclosed legacy block survive the upgrade (cubic review, PR #1095)', () => {
+  if (await test('Cursor settings.json: an old unclosed legacy block is left in place and reported, since its end cannot be told from the user rules (#1677)', () => {
     const home = mktempHome();
     try {
       const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
       fs.mkdirSync(cursorSettingsDir, { recursive: true });
       const settingsFile = path.join(cursorSettingsDir, 'settings.json');
-      fs.writeFileSync(settingsFile, JSON.stringify({
+      const original = JSON.stringify({
         'cursor.rules': '[egc-memory-protocol] Legacy pre-Crusher rules mentioning get_state and update_state.\n\nAlways use tabs, never spaces, in this project.',
-      }), 'utf8');
+      });
+      fs.writeFileSync(settingsFile, original, 'utf8');
 
-      run(home);
-
-      const parsed = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-      assert.ok(
-        parsed['cursor.rules'].includes('Always use tabs, never spaces, in this project.'),
-        'a rule the user appended after the old unclosed EGC block must survive the upgrade, not be silently deleted'
-      );
+      const output = run(home);
+      assert.ok(output.includes('Cursor: kept the old unclosed EGC block in cursor.rules'), `should report the kept block, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(settingsFile, 'utf8'), original, 'the file is untouched byte for byte');
+      assert.ok(!fs.existsSync(settingsFile + '.egc.bak'), 'no backup when nothing is written');
     } finally {
       cleanup(home);
     }
   })) passed++; else failed++;
 
-  if (await test('Cursor settings.json: a current-version install is left untouched on rerun (idempotent)', () => {
+  if (await test('Cursor settings.json: a file without cursor.rules is never written, and nothing is added to it (#1677)', () => {
     const home = mktempHome();
     try {
       const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
       fs.mkdirSync(cursorSettingsDir, { recursive: true });
       const settingsFile = path.join(cursorSettingsDir, 'settings.json');
-      fs.writeFileSync(settingsFile, JSON.stringify({ 'editor.fontSize': 14 }), 'utf8');
+      const original = JSON.stringify({ 'editor.fontSize': 14 });
+      fs.writeFileSync(settingsFile, original, 'utf8');
 
       run(home);
-      const second = run(home);
-      assert.ok(second.includes(`Cursor: already configured (${V})`), `second run should report already configured, got: ${second}`);
+      run(home);
+      assert.strictEqual(fs.readFileSync(settingsFile, 'utf8'), original, 'the file is untouched byte for byte');
+      assert.ok(!fs.existsSync(settingsFile + '.egc.bak'));
+      assert.ok(!fs.existsSync(path.join(home, '.cursor', 'rules')), 'and no ~/.cursor/rules is created');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Cursor settings.json: rules of the user with no EGC block keep their blank lines and the file is not written (#1677)', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      const original = JSON.stringify({ 'cursor.rules': 'Always use tabs.\n\n\nNever commit secrets.\n' });
+      fs.writeFileSync(settingsFile, original, 'utf8');
+
+      const output = run(home);
+      assert.ok(!output.includes('Cursor:'), `nothing to report, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(settingsFile, 'utf8'), original, 'the file is untouched byte for byte');
+      assert.ok(!fs.existsSync(settingsFile + '.egc.bak'));
     } finally {
       cleanup(home);
     }
@@ -687,15 +683,81 @@ async function runCursorAndCodexEdgeCaseTests() {
   let passed = 0;
   let failed = 0;
 
-  if (await test('Cursor: falls back to injectProtocol on ~/.cursor/rules when no settings.json exists anywhere', () => {
+  if (await test('Cursor: with only ~/.cursor present, nothing is created at ~/.cursor/rules (#1677)', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.cursor'));
       const output = run(home);
-      assert.ok(/Cursor: memory protocol installed/.test(output), `should report install, got: ${output}`);
-      const target = path.join(home, '.cursor', 'rules');
-      const content = fs.readFileSync(target, 'utf8');
-      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'protocol block must be written to ~/.cursor/rules');
+      assert.ok(!output.includes('Cursor:'), `nothing to report, got: ${output}`);
+      assert.deepStrictEqual(fs.readdirSync(path.join(home, '.cursor')), [], '~/.cursor stays empty');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Cursor: an existing ~/.cursor/rules directory is untouched byte for byte (#1677)', () => {
+    const home = mktempHome();
+    try {
+      const rulesDir = path.join(home, '.cursor', 'rules');
+      fs.mkdirSync(path.join(rulesDir, 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(rulesDir, 'mine.mdc'), '---\nalwaysApply: true\n---\nUse tabs.\n');
+      fs.writeFileSync(path.join(rulesDir, 'nested', 'egc-like.md'), `<!-- egc-memory-protocol:${V} -->\nCopied by hand.\n<!-- /egc-memory-protocol -->\n`);
+      const snapshot = dir => fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).map(entry => {
+        const full = path.join(dir, entry.name);
+        return entry.isDirectory() ? [entry.name, snapshot(full)] : [entry.name, fs.readFileSync(full, 'utf8'), fs.statSync(full).mtimeMs];
+      });
+      const before = snapshot(rulesDir);
+      run(home);
+      assert.ok(fs.statSync(rulesDir).isDirectory());
+      assert.deepStrictEqual(snapshot(rulesDir), before, 'same entries, same bytes, same times');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Cursor: an install then an upgrade removes the ~/.cursor/rules file and the cursor.rules block EGC wrote, and the installed project rule carries the protocol (#1677)', () => {
+    const home = mktempHome();
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bootstrap-cursor-project-'));
+    try {
+      const legacyFile = path.join(home, '.cursor', 'rules');
+      fs.mkdirSync(path.dirname(legacyFile), { recursive: true });
+      fs.writeFileSync(legacyFile, `<!-- egc-memory-protocol:v8 -->\n## EGC Session Memory\nCall get_state.\n<!-- /egc-memory-protocol -->\n`);
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      fs.writeFileSync(settingsFile, JSON.stringify({ 'cursor.rules': '[egc-memory-protocol:v8] Old. [/egc-memory-protocol]' }));
+
+      const output = run(home);
+      assert.ok(output.includes(`Cursor: retired the old protocol copy Cursor does not read (${path.join('~', '.cursor', 'rules')})`), `should report the file, got: ${output}`);
+      assert.ok(!fs.existsSync(legacyFile), 'the old file is gone');
+      assert.ok(!('cursor.rules' in JSON.parse(fs.readFileSync(settingsFile, 'utf8'))), 'the old setting is gone');
+
+      execFileSync('node', [path.join(REPO_ROOT, 'scripts', 'install-apply.js'), '--target', 'cursor', '--modules', 'platform-configs'], {
+        cwd: project,
+        env: { ...process.env, HOME: home, USERPROFILE: home },
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const projectRule = fs.readFileSync(path.join(project, '.cursor', 'rules', 'egc-context.mdc'), 'utf8');
+      assert.ok(/^---\n[\s\S]*?alwaysApply: true\n[\s\S]*?---\n/.test(projectRule), 'the installed project rule applies to every request');
+      assert.ok(projectRule.includes('`get_state`') && projectRule.includes('`update_state`'), 'and carries the session protocol');
+      assert.ok(!fs.existsSync(legacyFile) && !fs.existsSync(path.join(home, '.cursor', 'rules')), 'the install puts nothing back at ~/.cursor/rules');
+    } finally {
+      cleanup(home);
+      cleanup(project);
+    }
+  })) passed++; else failed++;
+
+  if (await test('Cursor: a ~/.cursor/rules file with text of the user next to the EGC block is kept and reported (#1677)', () => {
+    const home = mktempHome();
+    try {
+      const legacyFile = path.join(home, '.cursor', 'rules');
+      fs.mkdirSync(path.dirname(legacyFile), { recursive: true });
+      const original = `My own rule.\n\n<!-- egc-memory-protocol:v8 -->\nCall get_state.\n<!-- /egc-memory-protocol -->\n`;
+      fs.writeFileSync(legacyFile, original);
+      const output = run(home);
+      assert.ok(output.includes(`Cursor: kept ${path.join('~', '.cursor', 'rules')}`), `should report the kept file, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(legacyFile, 'utf8'), original);
     } finally {
       cleanup(home);
     }
@@ -1530,15 +1592,12 @@ async function runProtocolContentTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('installs all 9 session bus commands for Cursor, Codex, Trae, and CodeBuddy', () => {
+  if (await test('installs all 9 session bus commands for Codex, Trae, and CodeBuddy', () => {
     const home = mktempHome();
     try {
       fs.mkdirSync(path.join(home, '.codex'));;
       fs.mkdirSync(path.join(home, '.trae'));
       fs.mkdirSync(path.join(home, '.codebuddy'));
-      // No .cursor/.config/Cursor -> exercises the injectProtocol(BLOCK) fallback,
-      // already covered by the BLOCK-wide assertion above; here we cover the
-      // 5 harnesses that used to ship an abbreviated, hand-duplicated copy.
       run(home);
 
       const filesToCheck = [
@@ -1585,27 +1644,6 @@ async function runProtocolContentTests() {
 async function runRemainingHarnessTests() {
   let passed = 0;
   let failed = 0;
-
-  if (await test('installs all 9 session bus commands for Cursor via settings.json', () => {
-    const home = mktempHome();
-    try {
-      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
-      fs.mkdirSync(cursorSettingsDir, { recursive: true });
-      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
-      fs.writeFileSync(settingsFile, JSON.stringify({ 'editor.fontSize': 14 }), 'utf8');
-
-      run(home);
-
-      const written = fs.readFileSync(settingsFile, 'utf8');
-      const parsed = JSON.parse(written); // throws if bootstrap wrote invalid JSON
-      assert.strictEqual(parsed['editor.fontSize'], 14, 'unrelated settings must be preserved');
-      for (const cmd of SESSION_BUS_COMMANDS) {
-        assert.ok(parsed['cursor.rules'].includes(cmd), `cursor.rules must reference ${cmd}`);
-      }
-    } finally {
-      cleanup(home);
-    }
-  })) passed++; else failed++;
 
   if (await test('Codex config.toml stays a single-line valid TOML string after install', () => {
     const home = mktempHome();

@@ -48,7 +48,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | agents | `<project>/.cursor/agents/` | default | documented | <https://cursor.com/docs/context/subagents> |  |
 | commands | `<project>/.cursor/commands/` | default | unverified | <https://cursor.com/docs/context/skills> | Cursor's current docs no longer describe custom commands in .cursor/commands; the skills page talks about moving commands to skills (read on 2026-10-10). |
 | runtime | `<project>/.cursor/hooks/` | default | egc |  | EGC runtime: hook scripts the hook configuration of the tool points at. |
-| hooks | `<project>/.cursor/hooks.json` | default | documented | <https://cursor.com/docs/agent/hooks> |  |
+| hooks | `<project>/.cursor/hooks.json` | default | documented | <https://cursor.com/docs/agent/hooks> | Seeded from the repository's .cursor/hooks.json with documented events only (read on 2026-10-10): sessionStart, sessionEnd, preToolUse, beforeShellExecution, afterShellExecution, afterFileEdit, beforeMCPExecution, afterMCPExecution, beforeReadFile, beforeSubmitPrompt, subagentStart, subagentStop, beforeTabFileRead, afterTabFileEdit, preCompact, stop. beforeFileEdit is not documented: on upgrade only the entry EGC wrote under it is removed, and entries of the person's own stay. |
 | library | `<project>/.cursor/mcp-configs/` | default | egc |  | EGC library: platform configuration sources copied for reference; the tool does not load this path. |
 | mcp | `<project>/.cursor/mcp.json` | default | documented | <https://cursor.com/docs/context/mcp> |  |
 | rules | `<project>/.cursor/rules/` | default | documented | <https://cursor.com/docs/context/rules> |  |
