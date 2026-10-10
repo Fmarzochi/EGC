@@ -1,6 +1,6 @@
 # Support Levels
 
-EGC supports 21 AI coding tools, and every one of them gets the same install path, the same MCP registration and the same memory protocol; the [integration tiers](../spec/integration-tiers.md) are the map of how each one integrates. What differs is what the maintainers guarantee when a vendor changes something. This document says so, per tool, so nobody has to guess.
+EGC supports 22 AI coding tools, and every one of them gets the same install path, the same MCP registration and the same memory protocol; the [integration tiers](../spec/integration-tiers.md) are the map of how each one integrates. What differs is what the maintainers guarantee when a vendor changes something. This document says so, per tool, so nobody has to guess.
 
 ## The two levels
 

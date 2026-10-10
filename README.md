@@ -16,7 +16,7 @@
 
 ---
 
-EGC is a local-first runtime for AI coding tools. Install it once and Cursor, Claude Code, Codex, Copilot, Aider and the rest of the 22 AI coding tools it supports share one encrypted memory of your projects, one safety layer in front of every command, one filter that keeps noisy output away from the model, and one live bus that lets your open sessions see each other. Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
+EGC is a local-first runtime for AI coding tools. Install it once and Cursor, Claude Code, Codex, Copilot, Aider and the rest of the 22 AI coding tools it supports share one encrypted memory of your projects, one filter that keeps noisy output away from the model, and one live bus that lets your open sessions see each other. Most of them also get a safety layer in front of every command; a few, like Auggie, expose no hook surface for it yet, and [the integration tiers](docs/spec/integration-tiers.md) say exactly which. Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
 
 Nothing leaves your machine. Memory lives in `~/.egc`, encrypted with AES-256-GCM, kept per project and branch, and never committed to git.
 
