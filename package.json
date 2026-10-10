@@ -85,6 +85,7 @@
     "docs/RULES.md",
     ".github/SECURITY.md",
     "!.cursor/rules/egc-context.mdc",
+    "!.trae/rules/egc-context.md",
     "!**/__pycache__",
     "!**/*.pyc",
     "!**/*.pyo",
