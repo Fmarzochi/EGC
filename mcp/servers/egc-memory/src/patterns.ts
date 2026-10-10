@@ -77,11 +77,42 @@ function isErrorEvent(event: RuntimeEvent, p: Record<string, unknown>): boolean 
     && (typeof errorCodeOf(p) === 'string' || typeof errorMessageOf(p) === 'string');
 }
 
-// A TypeScript error code in the message, or its first six words.
+// A token is a path when it starts like one (absolute, home, relative or
+// drive letter) or carries separators between name parts, a trailing :line
+// or :line:column included; quotes and punctuation around it are ignored.
+const PATH_START = /^(?:[A-Za-z]:)?[\\/]|^~[\\/]|^\.{1,2}[\\/]/;
+const LEADING_PUNCTUATION = new Set(['\'', '"', '(']);
+const TRAILING_PUNCTUATION = new Set([',', '.', ';', ':', ')', '\'', '"']);
+
+// The token without the quotes and punctuation around it, walked from both
+// ends so the cost stays linear in its length.
+function bareToken(token: string): string {
+  let start = 0;
+  let end = token.length;
+  while (start < end && LEADING_PUNCTUATION.has(token[start])) start += 1;
+  while (end > start && TRAILING_PUNCTUATION.has(token[end - 1])) end -= 1;
+  return token.slice(start, end);
+}
+
+function isPathToken(token: string): boolean {
+  const bare = bareToken(token);
+  if (PATH_START.test(bare)) return true;
+  const separators = bare.split(/[\\/]/).length - 1;
+  return separators >= 2 || (separators === 1 && /\.\w+(?::\d+)*$/.test(bare));
+}
+
+// The same error from two files is one pattern: every path in the message
+// becomes <path> before the key is taken.
+function normalizePaths(message: string): string {
+  return message.replace(/\S+/g, token => (isPathToken(token) ? '<path>' : token));
+}
+
+// A TypeScript error code in the message, or its first six words, paths
+// normalized.
 function messageKey(message: string): string | null {
   const tsMatch = /TS\d+/.exec(message);
   if (tsMatch) return tsMatch[0];
-  return message.trim().split(/\s+/).slice(0, 6).join(' ') || null;
+  return normalizePaths(message).trim().split(/\s+/).slice(0, 6).join(' ') || null;
 }
 
 function extractErrorKey(event: RuntimeEvent): string | null {

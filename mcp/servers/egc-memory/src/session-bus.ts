@@ -70,7 +70,8 @@ export async function sweepDead(db: BusDb, nowMs: number = Date.now()): Promise<
   await db.run('DELETE FROM bus_locks WHERE session_id IN (SELECT id FROM bus_sessions WHERE heartbeat_at < ?)', cutoff);
   await db.run('DELETE FROM bus_sessions WHERE heartbeat_at < ?', cutoff);
   await db.run(
-    "DELETE FROM bus_locks WHERE (julianday('now') - julianday(acquired_at)) * 86400 > ttl_seconds"
+    'DELETE FROM bus_locks WHERE (julianday(?) - julianday(acquired_at)) * 86400 > ttl_seconds',
+    new Date(nowMs).toISOString()
   );
   const eventCutoff = new Date(nowMs - EVENT_TTL_SECONDS * 1000).toISOString();
   await db.run('DELETE FROM bus_events WHERE created_at < ?', eventCutoff);
