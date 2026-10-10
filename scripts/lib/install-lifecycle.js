@@ -40,6 +40,11 @@ const {
   nextSkillIndexContent,
   removeSkillIndexEntry,
 } = require('./warp-agents-merge');
+const {
+  GENERATE_CONTEXT_FILE_KIND,
+  hasProjectMemorySection,
+  nextGeneratedContextContent,
+} = require('./generated-context-files');
 
 const DEFAULT_REPO_ROOT = path.join(__dirname, '../..');
 
@@ -498,6 +503,18 @@ function repairMergeMarkdownIndex(operation) {
   replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
 }
 
+// Rewritten only when the file is gone or lost its project-memory section;
+// a populated file is the healthy state, never a drift to undo.
+function repairGeneratedContextFile(operation) {
+  const existingContent = fs.existsSync(operation.destinationPath)
+    ? fs.readFileSync(operation.destinationPath, 'utf8')
+    : null;
+  const nextContent = nextGeneratedContextContent(existingContent, operation);
+  if (nextContent === null) return;
+  ensureParentDir(operation.destinationPath);
+  replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
+}
+
 function executeRepairOperation(repoRoot, operation) {
   if (operation.kind === 'copy-file') {
     repairCopyFile(repoRoot, operation);
@@ -511,6 +528,8 @@ function executeRepairOperation(repoRoot, operation) {
     repairMergeYamlReadList(operation);
   } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
     repairMergeMarkdownIndex(operation);
+  } else if (operation.kind === GENERATE_CONTEXT_FILE_KIND) {
+    repairGeneratedContextFile(operation);
   } else {
     throw new Error(`Unsupported repair operation kind: ${operation.kind}`);
   }
@@ -629,6 +648,13 @@ function uninstallManagedHookOperation(operation) {
   return { removedPaths: [], cleanupTargets: [] };
 }
 
+// The generated file is a projection: the memory it may carry lives in the
+// egc-memory state and comes back with the next propagation, so uninstall
+// removes it like any managed copy.
+function uninstallGeneratedContextFile(operation) {
+  return uninstallCopyFile(operation);
+}
+
 const UNINSTALL_HANDLERS = {
   'copy-file': uninstallCopyFile,
   'merge-json': uninstallMergeJson,
@@ -636,6 +662,7 @@ const UNINSTALL_HANDLERS = {
   [HOOK_OPERATION_KIND]: uninstallManagedHookOperation,
   [MERGE_YAML_READ_LIST_KIND]: uninstallAiderConfigReadList,
   [MERGE_MARKDOWN_INDEX_KIND]: uninstallWarpAgentsIndexEntry,
+  [GENERATE_CONTEXT_FILE_KIND]: uninstallGeneratedContextFile,
 };
 
 function executeUninstallOperation(operation) {
@@ -720,6 +747,20 @@ function inspectWarpAgentsIndexOperation(operation, destinationPath) {
   return inspectResult('ok', operation, destinationPath);
 }
 
+// Judged by structure, never by bytes: propagation fills the file after the
+// install, and a byte comparison would report drift forever and let a
+// repair wipe the projected memory.
+function inspectGeneratedContextOperation(operation, destinationPath) {
+  try {
+    if (hasProjectMemorySection(readFileUtf8(destinationPath))) {
+      return inspectResult('ok', operation, destinationPath);
+    }
+  } catch (_error) { // NOSONAR: a directory or an unreadable file in its place is drift, not a crash
+    return inspectResult('drifted', operation, destinationPath);
+  }
+  return inspectResult('drifted', operation, destinationPath);
+}
+
 function inspectManagedOperation(repoRoot, operation) {
   const destinationPath = operation.destinationPath;
   if (!destinationPath) {
@@ -758,6 +799,10 @@ function inspectManagedOperation(repoRoot, operation) {
 
   if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
     return inspectWarpAgentsIndexOperation(operation, destinationPath);
+  }
+
+  if (operation.kind === GENERATE_CONTEXT_FILE_KIND) {
+    return inspectGeneratedContextOperation(operation, destinationPath);
   }
 
   return inspectResult('unverified', operation, destinationPath);

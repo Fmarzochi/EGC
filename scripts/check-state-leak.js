@@ -198,19 +198,46 @@ function stripTrailingSlashes(entry) {
   return entry.slice(0, end);
 }
 
-function loadPackagedPrefixes() {
+function loadPackagedFilesField() {
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-  return (Array.isArray(pkg.files) ? pkg.files : [])
-    .filter(entry => typeof entry === 'string' && !entry.startsWith('!'))
+  return (Array.isArray(pkg.files) ? pkg.files : []).filter(entry => typeof entry === 'string');
+}
+
+function loadPackagedPrefixes(entries = loadPackagedFilesField()) {
+  return entries
+    .filter(entry => !entry.startsWith('!'))
     .map(stripTrailingSlashes);
 }
 
-function isPackagedPath(filePath, prefixes) {
+// A plain-path negation in "files" ("!.cursor/rules/egc-context.mdc", or
+// "!some/dir/" with everything below it) keeps that path out of the package
+// even though its directory ships, so the guard leaves it alone too: it is
+// exactly how a propagation file inside a shipped tree stays unpublished.
+// A negation with glob characters is not resolved here; whatever it would
+// exclude is still scanned, which only errs on the side of refusing a
+// publish.
+function loadPackagedExclusions(entries = loadPackagedFilesField()) {
+  return new Set(entries
+    .filter(entry => entry.startsWith('!') && !/[*?[\]{}]/.test(entry))
+    .map(entry => stripTrailingSlashes(entry.slice(1))));
+}
+
+function isExcludedPath(filePath, exclusions) {
+  for (const exclusion of exclusions) {
+    if (filePath === exclusion || filePath.startsWith(`${exclusion}/`)) return true;
+  }
+  return false;
+}
+
+function isPackagedPath(filePath, prefixes, exclusions = new Set()) {
+  if (isExcludedPath(filePath, exclusions)) return false;
   return prefixes.some(prefix => filePath === prefix || filePath.startsWith(`${prefix}/`));
 }
 
 function checkPackagedTree() {
-  const prefixes = loadPackagedPrefixes();
+  const entries = loadPackagedFilesField();
+  const prefixes = loadPackagedPrefixes(entries);
+  const exclusions = loadPackagedExclusions(entries);
   let listing;
   try {
     // Tracked AND untracked-but-not-ignored files: npm pack reads the
@@ -236,7 +263,7 @@ function checkPackagedTree() {
     return [];
   }
   const packagedFiles = listing.split('\0').filter(Boolean)
-    .filter(file => isPackagedPath(file, prefixes))
+    .filter(file => isPackagedPath(file, prefixes, exclusions))
     .filter(isGuardedPath);
   return scanDiskFiles(packagedFiles);
 }

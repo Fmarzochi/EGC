@@ -2651,6 +2651,45 @@ function runTests() {
     }));
   }
 
+  tally(test('the Cursor rule and the Gemini home AGENTS.md are generated, and a populated rule survives a reinstall (#1670)', () => {
+    // Real paths: macOS hands out /var/... for a /private/var/... tree, and the planner records the resolved form.
+    const homeDir = fs.realpathSync(createTempDir('install-apply-home-'));
+    const projectDir = fs.realpathSync(createTempDir('install-apply-project-'));
+    const rulePath = path.join(projectDir, '.cursor', 'rules', 'egc-context.mdc');
+
+    try {
+      const dryRun = run(['--target', 'cursor', '--modules', 'platform-configs', '--dry-run', '--json'], { cwd: projectDir, homeDir });
+      assert.strictEqual(dryRun.code, 0, dryRun.stderr);
+      const planned = JSON.parse(dryRun.stdout).plan.operations;
+      assert.ok(planned.some(operation => operation.kind === 'generate-context-file' && operation.destinationPath === rulePath), 'the dry run plans the generated rule');
+      assert.ok(!planned.some(operation => operation.kind === 'copy-file' && /egc-context/.test(operation.sourceRelativePath)), 'no copy of a propagation-filled file is planned');
+
+      let result = run(['--target', 'cursor', '--modules', 'platform-configs'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const generated = fs.readFileSync(rulePath, 'utf8');
+      assert.ok(generated.startsWith('---\ndescription: EGC project memory (auto-updated)\nalwaysApply: true\n---\n'), 'the rule carries its frontmatter');
+      assert.ok(generated.includes('## EGC Natural Language Interface'), 'the rule carries the intent map');
+      assert.ok(generated.includes('<!-- egc:start -->'), 'with the propagation block ready to be filled');
+      const state = readJson(path.join(projectDir, '.cursor', 'egc-install-state.json'));
+      assert.ok(state.operations.some(operation => operation.kind === 'generate-context-file' && operation.destinationPath === rulePath), 'the install-state records the generated operation');
+
+      const populated = generated.replace('<!-- egc:start -->\n', '<!-- egc:start -->\n## EGC Project Memory\n- decided: keep the cache\n');
+      fs.writeFileSync(rulePath, populated);
+      result = run(['--target', 'cursor', '--modules', 'platform-configs'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.strictEqual(fs.readFileSync(rulePath, 'utf8'), populated, 'a reinstall leaves the populated rule alone');
+
+      result = run(['--profile', 'core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const catalog = fs.readFileSync(path.join(homeDir, '.gemini', 'AGENTS.md'), 'utf8');
+      assert.ok(catalog.startsWith('# EGC: Agent Catalog\n'), 'the Gemini home AGENTS.md is the generated catalog');
+      assert.ok(catalog.includes('<!-- egc:start -->'), 'with its propagation block');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
