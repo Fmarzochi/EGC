@@ -85,6 +85,27 @@ function runTests() {
     }
   }));
 
+  tally(test('a write that fails midway leaves the previous document intact and no temporary file', () => {
+    const root = makeRoot();
+    const hookFile = resolveGuardianHookFilePath(root);
+    const realWriteFileSync = fs.writeFileSync;
+    try {
+      applyKiroV3GuardianHookToFile(hookFile, '/abs/old-adapter.js');
+      const before = fs.readFileSync(hookFile, 'utf8');
+      fs.writeFileSync = (target, data, ...rest) => {
+        realWriteFileSync(target, String(data).slice(0, 3), ...rest);
+        throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+      };
+      assert.throws(() => applyKiroV3GuardianHookToFile(hookFile, '/abs/new-adapter.js'), error => error.code === 'ENOSPC');
+      fs.writeFileSync = realWriteFileSync;
+      assert.strictEqual(fs.readFileSync(hookFile, 'utf8'), before, 'Kiro still reads the whole previous document');
+      assert.deepStrictEqual(fs.readdirSync(path.dirname(hookFile)), [GUARDIAN_HOOK_FILE_NAME], 'no temporary sibling is left');
+    } finally {
+      fs.writeFileSync = realWriteFileSync;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('the registered command blocks a destructive execute_bash call with exit code 2, the code Kiro CLI 3.0 rejects a PreToolUse event on, and lets a safe one through', () => {
     const document = buildGuardianHookDocument(ADAPTER);
     const blocked = runRegisteredCommand(document, { hook_event_name: 'PreToolUse', tool_name: 'execute_bash', tool_input: { command: 'rm -rf /' } });

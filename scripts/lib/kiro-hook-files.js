@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
-const path = require('node:path');
+const { writeProtocolFile } = require('./protocol-file-write');
 
 function serializeHookDocument(document) {
   return `${JSON.stringify(document, null, 2)}\n`;
@@ -14,8 +14,7 @@ function writeOwnedHookFile(hookFilePath, document) {
       return { changed: false };
     }
   } catch { /* missing or unreadable: write below */ }
-  fs.mkdirSync(path.dirname(hookFilePath), { recursive: true });
-  fs.writeFileSync(hookFilePath, desired);
+  writeProtocolFile(hookFilePath, desired);
   return { changed: true };
 }
 
