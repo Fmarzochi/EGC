@@ -1001,10 +1001,13 @@ async function runCodeBuddyMemoryTests() {
   if (await test('CodeBuddy: when CODEBUDDY.md cannot be written, the EGC MEMORY.md stays and no retirement is reported (#1675)', () => {
     const home = mktempHome();
     try {
-      fs.mkdirSync(codebuddyFile(home), { recursive: true });
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      fs.writeFileSync(codebuddyFile(home), '# My preferences\n', 'utf8');
+      fs.mkdirSync(`${codebuddyFile(home)}.egc.bak`);
       fs.writeFileSync(legacyFile(home), oldBlock, 'utf8');
       const output = run(home);
       assert.ok(output.includes('CodeBuddy: unexpected error:'), `the failure is reported, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(codebuddyFile(home), 'utf8'), '# My preferences\n', 'the failed write left CODEBUDDY.md as it was');
       assert.strictEqual(fs.readFileSync(legacyFile(home), 'utf8'), oldBlock, 'the old copy stays while no protocol is in place');
       assert.ok(!output.includes('CodeBuddy: retired'), `no retirement is reported, got: ${output}`);
     } finally {
