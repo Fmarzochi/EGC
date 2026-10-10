@@ -27,7 +27,7 @@ function linkOrSkip(target, link) {
 function test(name, fn) {
   try {
     if (fn() === SKIPPED) {
-      console.log(`  SKIP ${name} (symlinks are not available on this runner)`);
+      console.log(`  SKIP ${name}`);
       return SKIPPED;
     }
     console.log(`  PASS ${name}`);
@@ -184,7 +184,7 @@ tally(test('a link through a directory alias and .. is resolved in filesystem or
 }));
 
 tally(test('a dangling link through a missing directory is refused, not normalized past it', () => {
-  if (process.platform === 'win32') return;
+  if (process.platform === 'win32') return SKIPPED;
   const dir = tempDir();
   try {
     const sibling = path.join(dir, 'actual.md');
@@ -202,7 +202,7 @@ tally(test('a dangling link through a missing directory is refused, not normaliz
 }));
 
 tally(test('a new file keeps the permissions of the creation mask', () => {
-  if (process.platform === 'win32') return;
+  if (process.platform === 'win32') return SKIPPED;
   const dir = tempDir();
   const previous = process.umask(0o077);
   try {
@@ -216,7 +216,7 @@ tally(test('a new file keeps the permissions of the creation mask', () => {
 }));
 
 tally(test('an existing file the process may not write is refused, not replaced', () => {
-  if (process.platform === 'win32' || (typeof process.getuid === 'function' && process.getuid() === 0)) return;
+  if (process.platform === 'win32' || (typeof process.getuid === 'function' && process.getuid() === 0)) return SKIPPED;
   const dir = tempDir();
   try {
     const file = path.join(dir, 'CLAUDE.md');
