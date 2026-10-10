@@ -18,6 +18,7 @@ const {
 } = require('../../scripts/lib/kiro-v3-guardian-hooks');
 
 const ADAPTER = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'kiro-guardian-adapter.js');
+const FAKE_GUARDIAN_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 
 function test(name, fn) {
   try {
@@ -40,7 +41,7 @@ function runRegisteredCommand(document, payload) {
     shell: true,
     input: JSON.stringify(payload),
     encoding: 'utf8',
-    env: { ...process.env, EGC_DISABLED_HOOKS: '' },
+    env: { ...process.env, EGC_DISABLED_HOOKS: '', EGC_GUARDIAN_CLI: FAKE_GUARDIAN_CLI },
   });
 }
 
@@ -76,6 +77,11 @@ function runTests() {
       edited.hooks[0].enabled = false;
       fs.writeFileSync(hookFile, JSON.stringify(edited));
       assert.strictEqual(inspectKiroV3GuardianHookFile(hookFile, '/abs/adapter.js'), 'drifted', 'a disabled Guardian is drift');
+
+      const reordered = buildGuardianHookDocument('/abs/adapter.js');
+      fs.writeFileSync(hookFile, JSON.stringify({ hooks: reordered.hooks.map(hook => Object.fromEntries(Object.entries(hook).reverse())), version: reordered.version }));
+      assert.strictEqual(inspectKiroV3GuardianHookFile(hookFile, '/abs/adapter.js'), 'ok', 'reordered keys and other whitespace are the same document');
+      assert.deepStrictEqual(applyKiroV3GuardianHookToFile(hookFile, '/abs/adapter.js'), { changed: false }, 'apply is a no-op exactly when inspect says ok');
 
       assert.deepStrictEqual(removeKiroV3GuardianHookFromFile(hookFile), { changed: true });
       assert.ok(!fs.existsSync(hookFile));

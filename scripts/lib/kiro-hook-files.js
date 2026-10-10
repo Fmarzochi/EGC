@@ -1,20 +1,31 @@
 'use strict';
 
 const fs = require('node:fs');
+const { isDeepStrictEqual } = require('node:util');
 const { writeProtocolFile } = require('./protocol-file-write');
 
 function serializeHookDocument(document) {
   return `${JSON.stringify(document, null, 2)}\n`;
 }
 
-function writeOwnedHookFile(hookFilePath, document) {
-  const desired = serializeHookDocument(document);
+function readHookDocument(hookFilePath) {
   try {
-    if (fs.readFileSync(hookFilePath, 'utf8') === desired) {
-      return { changed: false };
-    }
-  } catch { /* missing or unreadable: write below */ }
-  writeProtocolFile(hookFilePath, desired);
+    return { found: true, value: JSON.parse(fs.readFileSync(hookFilePath, 'utf8')) };
+  } catch {
+    return { found: false };
+  }
+}
+
+function matchesDocument(hookFilePath, document) {
+  const onDisk = readHookDocument(hookFilePath);
+  return onDisk.found && isDeepStrictEqual(onDisk.value, document);
+}
+
+function writeOwnedHookFile(hookFilePath, document) {
+  if (matchesDocument(hookFilePath, document)) {
+    return { changed: false };
+  }
+  writeProtocolFile(hookFilePath, serializeHookDocument(document));
   return { changed: true };
 }
 
@@ -31,12 +42,7 @@ function removeOwnedHookFile(hookFilePath) {
 }
 
 function inspectOwnedHookFile(hookFilePath, document) {
-  try {
-    const onDisk = JSON.parse(fs.readFileSync(hookFilePath, 'utf8'));
-    return JSON.stringify(onDisk) === JSON.stringify(document) ? 'ok' : 'drifted';
-  } catch {
-    return 'drifted';
-  }
+  return matchesDocument(hookFilePath, document) ? 'ok' : 'drifted';
 }
 
 module.exports = {
