@@ -273,11 +273,11 @@ function retireCursorSettingsRules(settingsFile) {
   }
   const rules = obj && typeof obj === 'object' ? obj['cursor.rules'] : undefined;
   if (typeof rules !== 'string') return;
-  const kept = rules.replace(CURSOR_BLOCKS_RE, '').replace(/\n{3,}/g, '\n\n').trim();
-  if (kept.includes('[egc-memory-protocol]')) {
+  if (rules.replace(CURSOR_BLOCKS_RE, '').includes('[egc-memory-protocol]')) {
     console.log(`  [cognitive] Cursor: kept the old unclosed EGC block in cursor.rules in ${shown}, since its end cannot be told from rules of your own; remove it by hand`);
   }
-  if (kept === rules.trim()) return;
+  if (!CURSOR_BLOCK_RE.test(rules)) return;
+  const kept = rules.replace(CURSOR_BLOCKS_RE, '').replace(/\n{3,}/g, '\n\n').trim();
   if (kept) obj['cursor.rules'] = kept;
   else delete obj['cursor.rules'];
   writeProtocolFile(settingsFile + '.egc.bak', rawContent);

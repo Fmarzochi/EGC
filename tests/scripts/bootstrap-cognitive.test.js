@@ -399,6 +399,24 @@ async function runCursorAndCodexUpgradeTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('Cursor settings.json: rules of the user with no EGC block keep their blank lines and the file is not written (#1677)', () => {
+    const home = mktempHome();
+    try {
+      const cursorSettingsDir = path.join(home, '.config', 'Cursor', 'User');
+      fs.mkdirSync(cursorSettingsDir, { recursive: true });
+      const settingsFile = path.join(cursorSettingsDir, 'settings.json');
+      const original = JSON.stringify({ 'cursor.rules': 'Always use tabs.\n\n\nNever commit secrets.\n' });
+      fs.writeFileSync(settingsFile, original, 'utf8');
+
+      const output = run(home);
+      assert.ok(!output.includes('Cursor:'), `nothing to report, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(settingsFile, 'utf8'), original, 'the file is untouched byte for byte');
+      assert.ok(!fs.existsSync(settingsFile + '.egc.bak'));
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('Codex config.toml: a single-quoted developer_instructions is rewritten as a double-quoted string with its quotes and backslashes escaped (#1708)', () => {
     const home = mktempHome();
     try {
@@ -697,8 +715,9 @@ async function runCursorAndCodexEdgeCaseTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('Cursor: an install then an upgrade removes the ~/.cursor/rules file and the cursor.rules block EGC wrote, and the project rule carries the protocol (#1677)', () => {
+  if (await test('Cursor: an install then an upgrade removes the ~/.cursor/rules file and the cursor.rules block EGC wrote, and the installed project rule carries the protocol (#1677)', () => {
     const home = mktempHome();
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bootstrap-cursor-project-'));
     try {
       const legacyFile = path.join(home, '.cursor', 'rules');
       fs.mkdirSync(path.dirname(legacyFile), { recursive: true });
@@ -713,12 +732,19 @@ async function runCursorAndCodexEdgeCaseTests() {
       assert.ok(!fs.existsSync(legacyFile), 'the old file is gone');
       assert.ok(!('cursor.rules' in JSON.parse(fs.readFileSync(settingsFile, 'utf8'))), 'the old setting is gone');
 
-      const { generatedContextTemplate } = require('../../scripts/lib/generated-context-files');
-      const projectRule = generatedContextTemplate('.cursor/rules/egc-context.mdc');
-      assert.ok(/^---\n[\s\S]*alwaysApply: true[\s\S]*?\n---\n/.test(projectRule), 'the project rule applies to every request');
+      execFileSync('node', [path.join(REPO_ROOT, 'scripts', 'install-apply.js'), '--target', 'cursor', '--modules', 'platform-configs'], {
+        cwd: project,
+        env: { ...process.env, HOME: home, USERPROFILE: home },
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const projectRule = fs.readFileSync(path.join(project, '.cursor', 'rules', 'egc-context.mdc'), 'utf8');
+      assert.ok(/^---\n[\s\S]*?alwaysApply: true\n[\s\S]*?---\n/.test(projectRule), 'the installed project rule applies to every request');
       assert.ok(projectRule.includes('`get_state`') && projectRule.includes('`update_state`'), 'and carries the session protocol');
+      assert.ok(!fs.existsSync(legacyFile) && !fs.existsSync(path.join(home, '.cursor', 'rules')), 'the install puts nothing back at ~/.cursor/rules');
     } finally {
       cleanup(home);
+      cleanup(project);
     }
   })) passed++; else failed++;
 
