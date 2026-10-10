@@ -117,7 +117,7 @@ function main() {
         ".cursor/hooks.json",
         ".cursor/hooks/adapter.js",
         ".cursor/rules/common-security.md",
-        ".trae/rules/egc-context.md",
+        ".trae/README.md",
         "scripts/hooks/scrubber-cli.js",
         "scripts/lib/scrubber/engine.js",
         "skills/security/content-scrubber/SKILL.md",
@@ -131,9 +131,13 @@ function main() {
         )
       }
 
+      // The propagation targets never ship: on a maintainer's machine they
+      // live populated, and no install plan copies them (the Cursor rule is
+      // generated at install time; nothing installs the Trae one).
       for (const excludedPath of [
         "AGENTS.md",
         ".cursor/rules/egc-context.mdc",
+        ".trae/rules/egc-context.md",
         "skills/general_part2/skill-comply/.gitignore",
       ]) {
         assert.ok(
