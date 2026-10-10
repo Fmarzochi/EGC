@@ -65,7 +65,7 @@ export const CATALOG: ReadonlyArray<{ kind: 'agent' | 'skill' | 'rule'; name: st
     "name": "continuous-learning",
     "description": "Automatically extract reusable patterns from AI coding sessions and save them as learned skills for future use.",
     "source": "skills/ai/continuous-learning/SKILL.md",
-    "triggers": "Setting up automatic pattern extraction from AI coding sessions Configuring the Stop hook for session evaluation Reviewing or curating learned skills in ~/.gemini/skills/learned/ Adjusting extraction "
+    "triggers": "Setting up automatic pattern extraction from AI coding sessions Configuring the Stop hook for session evaluation Reviewing or curating learned skills in skills/learned/ of the EGC directory in use ( ~"
   },
   {
     "kind": "skill",
