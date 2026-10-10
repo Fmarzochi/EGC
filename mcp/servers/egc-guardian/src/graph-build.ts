@@ -333,7 +333,11 @@ export async function readFileWithin(root: string, rel: string, maxBytes: number
   try {
     const before = await fs.promises.lstat(abs);
     if (!before.isFile()) return null;
-    if (path.relative(root, await fs.promises.realpath(abs)) !== inside) return null;
+    // Both sides go through the same call. fs.realpathSync (the JS one) leaves a
+    // Windows 8.3 short name such as RUNNER~1 as it is, fs.promises.realpath
+    // expands it, so a root from the first never matches a path from the second.
+    const [realRoot, realAbs] = await Promise.all([fs.promises.realpath(root), fs.promises.realpath(abs)]);
+    if (path.relative(realRoot, realAbs) !== inside) return null;
     handle = await fs.promises.open(abs, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
     const st = await handle.stat();
     if (!st.isFile() || st.size > maxBytes) return null;
@@ -397,7 +401,8 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
   const maxMs = opts.maxMs ?? 20000;
   const maxFileBytes = opts.maxFileBytes ?? 1024 * 1024;
   const deadline = started + maxMs;
-  const root = fs.realpathSync(projectRoot);
+  // .native: the JS realpathSync keeps a Windows 8.3 short name (RUNNER~1) in the path.
+  const root = fs.realpathSync.native(projectRoot);
 
   // Read like any project file: a .gitignore that is a link or a named pipe is not followed.
   const gitignore = await readFileWithin(root, '.gitignore', MAX_GITIGNORE_BYTES);
