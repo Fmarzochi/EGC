@@ -50,11 +50,16 @@ function daysAgo(n) {
   return new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
 }
 
+let passed = 0;
+let failed = 0;
+
+function tally(ok) {
+  if (ok) passed += 1;
+  else failed += 1;
+}
+
 async function runTests() {
   console.log('\n=== Testing pattern-detection ===\n');
-
-  let passed = 0;
-  let failed = 0;
 
   if (await test('detects repeated_command when a command appears above min_occurrences', async () => {
     const events = [
@@ -112,6 +117,18 @@ async function runTests() {
     assert.ok(err, 'should detect TS2322 from message text');
     assert.strictEqual(err.occurrences, 3);
   })) passed += 1; else failed += 1;
+
+  tally(await test('an error key replaces file paths, so the same error from three files is one pattern (#1681)', async () => {
+    const events = [
+      makeEvent('e1', 'error', { message: 'Cannot find module /home/ana/app/src/one.js imported' }, daysAgo(5)),
+      makeEvent('e2', 'error', { message: 'Cannot find module C:\\Users\\bo\\app\\src\\two.js imported' }, daysAgo(4)),
+      makeEvent('e3', 'error', { message: 'Cannot find module ./src/three.js:12:5 imported' }, daysAgo(2)),
+    ];
+    const err = detectPatternsFromEvents(events, 7, 3).find(p => p.type === 'recurring_error');
+    assert.ok(err, 'one pattern for the three messages');
+    assert.strictEqual(err.key, 'error:Cannot find module <path> imported');
+    assert.strictEqual(err.occurrences, 3);
+  }));
 
   if (await test('an error key comes from the code, else the TS code or the first six words of the message, on error events only', async () => {
     const keyOf = (eventType, payload) => {
