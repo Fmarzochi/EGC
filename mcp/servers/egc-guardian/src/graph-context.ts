@@ -108,7 +108,7 @@ export async function buildRelevantContext(
       return unavailable('the code graph is being built by another process; try again shortly');
     }
     const { build, data } = loaded;
-    audit('GRAPH_BUILD', { status: build.status, files: build.files, refreshed: build.refreshed, removed: build.removed, build_ms: build.buildMs });
+    audit('GRAPH_BUILD', { status: build.status, files: build.files, refreshed: build.refreshed, removed: build.removed, failed: build.failed, build_ms: build.buildMs });
 
     const result = await queryGraph(prompt, data, {
       budgetTokens,
