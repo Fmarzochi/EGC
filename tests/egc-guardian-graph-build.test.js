@@ -124,7 +124,11 @@ const bump = file => {
     const res = await buildGraph(short, store);
     assert.strictEqual(res.files, 2, `nothing indexed through ${short}`);
     assert.strictEqual(await readFileWithin(short, 'b.js', 1024), 'export function b() { return 1; }\n');
-    assert.strictEqual(await readFileWithin(short, '../escape.js', 1024), null, 'a short root is still a root');
+    // A file that exists beside the root: null must mean "outside the root", not "no such file".
+    const outside = path.join(path.dirname(root), 'outside-short-root.js');
+    fs.writeFileSync(outside, 'export const secret = 1;\n');
+    assert.strictEqual(fs.readFileSync(outside, 'utf8'), 'export const secret = 1;\n', 'the file outside the root is really there');
+    assert.strictEqual(await readFileWithin(short, '../outside-short-root.js', 1024), null, 'a short root is still a root');
     await store.close();
   });
 
