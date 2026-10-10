@@ -18,14 +18,14 @@
       "name": "agent-introspection-debugging",
       "description": "Structured self-debugging workflow for AI agent failures using capture, diagnosis, contained recovery, and introspection reports.",
       "source": "skills/ai/agent-introspection-debugging/SKILL.md",
-      "triggers": "Maximum tool call / loop limit failures Repeated retries with no forward progress Context growth or prompt drift that starts degrading output quality File system or environment state mismatch between "
+      "triggers": "Maximum tool call / loop limit failures Repeated retries with no forward progress Context growth or prompt drift that starts degrading output quality File system or environment state mismatch between"
     },
     {
       "kind": "skill",
       "name": "agent-sort",
       "description": "Build an evidence-backed EGC install plan for a specific repo by sorting skills, commands, rules, hooks, and extras into DAILY vs LIBRARY buckets using parallel repo-aware review passes. Use when EGC should be trimmed to what a project actually needs instead of loading the full bundle.",
       "source": "skills/ai/agent-sort/SKILL.md",
-      "triggers": "A project only needs a subset of EGC and full installs are too noisy The repo stack is clear, but nobody wants to hand curate skills one by one A team wants a repeatable install decision backed by gre"
+      "triggers": "A project only needs a subset of EGC and full installs are too noisy The repo stack is clear, but nobody wants to hand curate skills one by one A team wants a repeatable install decision backed by"
     },
     {
       "kind": "skill",
@@ -44,63 +44,63 @@
       "name": "autonomous-agent-harness",
       "description": "Transform Claude Code into a fully autonomous agent system with persistent memory, scheduled operations, computer use, and task queuing. Replaces standalone agent frameworks (Hermes, AutoGPT) by leveraging Claude Code's native crons, dispatch, MCP tools, and memory. Use when the user wants continuous autonomous operation, scheduled tasks, or a self-directing agent loop.",
       "source": "skills/ai/autonomous-agent-harness/SKILL.md",
-      "triggers": "User wants an agent that runs continuously or on a schedule Setting up automated workflows that trigger periodically Building a personal AI assistant that remembers context across sessions User says \""
+      "triggers": "User wants an agent that runs continuously or on a schedule Setting up automated workflows that trigger periodically Building a personal AI assistant that remembers context across sessions User says"
     },
     {
       "kind": "skill",
       "name": "autonomous-lesson-learning",
       "description": "Autonomous loop that learns while it runs: recalls stored lessons before each iteration, saves new lessons on failures and wins, and reinforces known lessons instead of repeating mistakes. Orchestrates continuous-agent-loop patterns with the egc-memory lesson tools.",
       "source": "skills/ai/autonomous-lesson-learning/SKILL.md",
-      "triggers": "Running a long multi iteration task autonomously (fix all lint errors, raise coverage, burn down an issue list) where repeating a known mistake is expensive Resuming a class of work that has failed be"
+      "triggers": "Running a long multi iteration task autonomously (fix all lint errors, raise coverage, burn down an issue list) where repeating a known mistake is expensive Resuming a class of work that has failed"
     },
     {
       "kind": "skill",
       "name": "autonomous-loops",
       "description": "Patterns and architectures for autonomous AI coding loops: from simple sequential pipelines to RFC-driven multi-agent DAG systems.",
       "source": "skills/ai/autonomous-loops/SKILL.md",
-      "triggers": "Setting up autonomous development workflows that run without human intervention Choosing the right loop architecture for your problem (simple vs complex) Building CI/CD style continuous development pi"
+      "triggers": "Setting up autonomous development workflows that run without human intervention Choosing the right loop architecture for your problem (simple vs complex) Building CI/CD style continuous development"
     },
     {
       "kind": "skill",
       "name": "continuous-learning",
       "description": "Automatically extract reusable patterns from AI coding sessions and save them as learned skills for future use.",
       "source": "skills/ai/continuous-learning/SKILL.md",
-      "triggers": "Setting up automatic pattern extraction from AI coding sessions Configuring the Stop hook for session evaluation Reviewing or curating learned skills in skills/learned/ of the EGC directory in use ( ~"
+      "triggers": "Setting up automatic pattern extraction from AI coding sessions Configuring the Stop hook for session evaluation Reviewing or curating learned skills stored in ~/.claude/skills/learned/ inside Claude"
     },
     {
       "kind": "skill",
       "name": "continuous-learning-v2",
       "description": "Instinct-based learning system that observes sessions via hooks, creates atomic instincts with confidence scoring, and evolves them into skills/commands/agents. v2.1 adds project-scoped instincts to prevent cross-project contamination.",
       "source": "skills/ai/continuous-learning-v2/SKILL.md",
-      "triggers": "Setting up automatic learning from AI coding sessions Configuring instinct based behavior extraction via hooks Tuning confidence thresholds for learned behaviors Reviewing, exporting, or importing ins"
+      "triggers": "Setting up automatic learning from AI coding sessions Configuring instinct based behavior extraction via hooks Tuning confidence thresholds for learned behaviors Reviewing, exporting, or importing"
     },
     {
       "kind": "skill",
       "name": "cost-aware-llm-pipeline",
       "description": "Cost optimization patterns for LLM API usage: model routing by task complexity, budget tracking, retry logic, and prompt caching.",
       "source": "skills/ai/cost-aware-llm-pipeline/SKILL.md",
-      "triggers": "Building applications that call LLM APIs (Gemini, GPT, etc.) Processing batches of items with varying complexity Need to stay within a budget for API spend Optimizing cost without sacrificing quality "
+      "triggers": "Building applications that call LLM APIs (Gemini, GPT, etc.) Processing batches of items with varying complexity Need to stay within a budget for API spend Optimizing cost without sacrificing quality"
     },
     {
       "kind": "skill",
       "name": "deep-research",
       "description": "Multi-source deep research using firecrawl and exa MCPs. Searches the web, synthesizes findings, and delivers cited reports with source attribution. Use when the user wants thorough research on any topic with evidence and citations.",
       "source": "skills/ai/deep-research/SKILL.md",
-      "triggers": "User asks to research any topic in depth Competitive analysis, technology evaluation, or market sizing Due diligence on companies, investors, or technologies Any question requiring synthesis from mult"
+      "triggers": "User asks to research any topic in depth Competitive analysis, technology evaluation, or market sizing Due diligence on companies, investors, or technologies Any question requiring synthesis from"
     },
     {
       "kind": "skill",
       "name": "exa-search",
       "description": "Neural search via Exa MCP for web, code, and company research. Use when the user needs web search, code examples, company intel, people lookup, or AI-powered deep research with Exa's neural search engine.",
       "source": "skills/ai/exa-search/SKILL.md",
-      "triggers": "User needs current web information or news Searching for code examples, API docs, or technical references Researching companies, competitors, or market players Finding professional profiles or people "
+      "triggers": "User needs current web information or news Searching for code examples, API docs, or technical references Researching companies, competitors, or market players Finding professional profiles or people"
     },
     {
       "kind": "skill",
       "name": "fal-ai-media",
       "description": "Unified media generation via fal.ai MCP: image, video, and audio. Covers text-to-image (Nano Banana), text/image-to-video (Seedance, Kling, Veo 3), text-to-speech (CSM-1B), and video-to-audio (ThinkSound). Use when the user wants to generate images, videos, or audio with AI.",
       "source": "skills/ai/fal-ai-media/SKILL.md",
-      "triggers": "User wants to generate images from text prompts Creating videos from text or images Generating speech, music, or sound effects Any media generation task User says \"generate image\", \"create video\", \"te"
+      "triggers": "User wants to generate images from text prompts Creating videos from text or images Generating speech, music, or sound effects Any media generation task User says \"generate image\", \"create video\","
     },
     {
       "kind": "skill",
@@ -114,28 +114,28 @@
       "name": "regex-vs-llm-structured-text",
       "description": "Decision framework for choosing between regex and LLM when parsing structured text: start with regex, add LLM only for low-confidence edge cases.",
       "source": "skills/ai/regex-vs-llm-structured-text/SKILL.md",
-      "triggers": "Parsing structured text with repeating patterns (questions, forms, tables) Deciding between regex and LLM for text extraction Building hybrid pipelines that combine both approaches Optimizing cost/acc"
+      "triggers": "Parsing structured text with repeating patterns (questions, forms, tables) Deciding between regex and LLM for text extraction Building hybrid pipelines that combine both approaches Optimizing"
     },
     {
       "kind": "skill",
       "name": "token-budget-advisor",
       "description": "Offers the user an informed choice about how much response depth to consume before answering. Use this skill when the user explicitly wants to control response length, depth, or token budget. TRIGGER when: \"token budget\", \"token count\", \"token usage\", \"token limit\", \"response length\", \"answer depth\", \"short version\", \"brief answer\", \"detailed answer\", \"exhaustive answer\", \"respuesta corta vs larga\", \"cuántos tokens\", \"ahorrar tokens\", \"responde al 50%\", \"dame la versión corta\", \"quiero controlar cuánto usas\", or clear variants where the user is explicitly asking to control answer size or depth. DO NOT TRIGGER when: user has already specified a level in the current session (maintain it), the request is clearly a one-word answer, or \"token\" refers to auth/session/payment tokens rather than response size.",
       "source": "skills/ai/token-budget-advisor/SKILL.md",
-      "triggers": "User wants to control how long or detailed a response is User mentions tokens, budget, depth, or response length User says \"short version\", \"tldr\", \"brief\", \"al 25%\", \"exhaustive\", etc. Any time the u"
+      "triggers": "User wants to control how long or detailed a response is User mentions tokens, budget, depth, or response length User says \"short version\", \"tldr\", \"brief\", \"al 25%\", \"exhaustive\", etc. Any time the"
     },
     {
       "kind": "skill",
       "name": "agent-architecture-audit",
       "description": "Full-stack diagnostic for agent and LLM applications. Audits the 12-layer agent stack for wrapper regression, memory pollution, tool discipline failures, hidden repair loops, and rendering corruption. Produces severity-ranked findings with code-first fixes. Essential for developers building agent applications, autonomous loops, or any LLM-powered feature.",
       "source": "skills/architecture/agent-architecture-audit/SKILL.md",
-      "triggers": "MANDATORY for: Releasing any agent or LLM powered application to production Shipping features with tool calling, memory, or multi step workflows Agent behavior degrades after adding wrapper layers Use"
+      "triggers": "MANDATORY for: Releasing any agent or LLM powered application to production Shipping features with tool calling, memory, or multi step workflows Agent behavior degrades after adding wrapper layers"
     },
     {
       "kind": "skill",
       "name": "agentic-os",
       "description": "Build persistent multi-agent operating systems on your AI coding tool. Covers kernel architecture, specialist agents, slash commands, file-based memory, scheduled automation, and state management without external databases.",
       "source": "skills/architecture/agentic-os/SKILL.md",
-      "triggers": "Building a multi agent workflow inside your AI coding tool Setting up persistent automation that survives session restarts Creating a \"personal OS\" or \"agentic OS\" for recurring tasks User says \"agent"
+      "triggers": "Building a multi agent workflow inside your AI coding tool Setting up persistent automation that survives session restarts Creating a \"personal OS\" or \"agentic OS\" for recurring tasks User says"
     },
     {
       "kind": "skill",
@@ -149,14 +149,14 @@
       "name": "architecture-decision-records",
       "description": "Capture architectural decisions made during AI coding sessions as structured ADRs. Auto-detects decision moments, records context, alternatives considered, and rationale. Maintains an ADR log so future developers understand why the codebase is shaped the way it is.",
       "source": "skills/architecture/architecture-decision-records/SKILL.md",
-      "triggers": "User explicitly says \"let's record this decision\" or \"ADR this\" User chooses between significant alternatives (framework, library, pattern, database, API design) User says \"we decided to...\" or \"the r"
+      "triggers": "User explicitly says \"let's record this decision\" or \"ADR this\" User chooses between significant alternatives (framework, library, pattern, database, API design) User says \"we decided to...\" or \"the"
     },
     {
       "kind": "skill",
       "name": "blueprint",
       "description": "Turn a one-line objective into a step-by-step construction plan for multi-session, multi-agent engineering projects. Each step has a self-contained context brief so a fresh agent can execute it cold. Includes adversarial review gate, dependency graph, parallel step detection, anti-pattern catalog, and plan mutation protocol. TRIGGER when: user requests a plan, blueprint, or roadmap for a complex multi-PR task, or describes work that needs multiple sessions. DO NOT TRIGGER when: task is completable in a single PR or fewer than 3 tool calls, or user says \"just do it\".",
       "source": "skills/architecture/blueprint/SKILL.md",
-      "triggers": "Breaking a large feature into multiple PRs with clear dependency order Planning a refactor or migration that spans multiple sessions Coordinating parallel workstreams across sub agents Any task where "
+      "triggers": "Breaking a large feature into multiple PRs with clear dependency order Planning a refactor or migration that spans multiple sessions Coordinating parallel workstreams across sub agents Any task where"
     },
     {
       "kind": "skill",
@@ -170,14 +170,14 @@
       "name": "foundation-models-on-device",
       "description": "Apple FoundationModels framework for on-device LLM: text generation, guided generation with @Generable, tool calling, and snapshot streaming in iOS 26+.",
       "source": "skills/architecture/foundation-models-on-device/SKILL.md",
-      "triggers": "Building AI powered features using Apple Intelligence on device Generating or summarizing text without cloud dependency Extracting structured data from natural language input Implementing custom tool "
+      "triggers": "Building AI powered features using Apple Intelligence on device Generating or summarizing text without cloud dependency Extracting structured data from natural language input Implementing custom tool"
     },
     {
       "kind": "skill",
       "name": "jpa-patterns",
       "description": "JPA/Hibernate patterns for entity design, relationships, query optimization, transactions, auditing, indexing, pagination, and pooling in Spring Boot.",
       "source": "skills/architecture/jpa-patterns/SKILL.md",
-      "triggers": "Designing JPA entities and table mappings Defining relationships (@OneToMany, @ManyToOne, @ManyToMany) Optimizing queries (N+1 prevention, fetch strategies, projections) Configuring transactions, audi"
+      "triggers": "Designing JPA entities and table mappings Defining relationships (@OneToMany, @ManyToOne, @ManyToMany) Optimizing queries (N+1 prevention, fetch strategies, projections) Configuring transactions,"
     },
     {
       "kind": "skill",
@@ -198,35 +198,35 @@
       "name": "carrier-relationship-management",
       "description": "Codified expertise for managing carrier portfolios, negotiating freight rates, tracking carrier performance, allocating freight, and maintaining strategic carrier relationships. Informed by transportation managers with 15+ years experience. Includes scorecarding frameworks, RFP processes, market intelligence, and compliance vetting. Use when managing carriers, negotiating rates, evaluating carrier performance, or building freight strategies.",
       "source": "skills/automation/carrier-relationship-management/SKILL.md",
-      "triggers": "Onboarding a new carrier and vetting safety, insurance, and authority Running an annual or lane specific RFP for rate benchmarking Building or updating carrier scorecards and performance reviews Reall"
+      "triggers": "Onboarding a new carrier and vetting safety, insurance, and authority Running an annual or lane specific RFP for rate benchmarking Building or updating carrier scorecards and performance reviews"
     },
     {
       "kind": "skill",
       "name": "customer-billing-ops",
       "description": "Operate customer billing workflows such as subscriptions, refunds, churn triage, billing-portal recovery, and plan analysis using connected billing tools like Stripe. Use when the user needs to help a customer, inspect subscription state, or manage revenue-impacting billing operations.",
       "source": "skills/automation/customer-billing-ops/SKILL.md",
-      "triggers": "Customer says billing is broken, they want a refund, or they cannot cancel Investigating duplicate subscriptions, accidental charges, failed renewals, or churn risk Reviewing plan mix, active subscrip"
+      "triggers": "Customer says billing is broken, they want a refund, or they cannot cancel Investigating duplicate subscriptions, accidental charges, failed renewals, or churn risk Reviewing plan mix, active"
     },
     {
       "kind": "skill",
       "name": "energy-procurement",
       "description": "Codified expertise for electricity and gas procurement, tariff optimization, demand charge management, renewable PPA evaluation, and multi-facility energy cost management. Informed by energy procurement managers with 15+ years experience at large commercial and industrial consumers. Includes market structure analysis, hedging strategies, load profiling, and sustainability reporting frameworks. Use when procuring energy, optimizing tariffs, managing demand charges, evaluating PPAs, or developing energy strategies.",
       "source": "skills/automation/energy-procurement/SKILL.md",
-      "triggers": "Running an RFP for electricity or natural gas supply across multiple facilities Analyzing tariff structures and rate schedule optimization opportunities Evaluating demand charge mitigation strategies "
+      "triggers": "Running an RFP for electricity or natural gas supply across multiple facilities Analyzing tariff structures and rate schedule optimization opportunities Evaluating demand charge mitigation strategies"
     },
     {
       "kind": "skill",
       "name": "finance-billing-ops",
       "description": "Evidence-first revenue, pricing, refunds, team-billing, and billing-model truth workflow for EGC. Use when the user wants a sales snapshot, pricing comparison, duplicate-charge diagnosis, or code-backed billing reality instead of generic payments advice.",
       "source": "skills/automation/finance-billing-ops/SKILL.md",
-      "triggers": "user asks for Stripe sales, refunds, MRR, or recent customer activity user asks whether team billing, per seat billing, or quota stacking is real in code user wants competitor pricing comparisons or p"
+      "triggers": "user asks for Stripe sales, refunds, MRR, or recent customer activity user asks whether team billing, per seat billing, or quota stacking is real in code user wants competitor pricing comparisons or"
     },
     {
       "kind": "skill",
       "name": "inventory-demand-planning",
       "description": "Codified expertise for demand forecasting, safety stock optimization, replenishment planning, and promotional lift estimation at multi-location retailers. Informed by demand planners with 15+ years experience managing hundreds of SKUs. Includes forecasting method selection, ABC/XYZ analysis, seasonal transition management, and vendor negotiation frameworks. Use when forecasting demand, setting safety stock, planning replenishment, managing promotions, or optimizing inventory levels.",
       "source": "skills/automation/inventory-demand-planning/SKILL.md",
-      "triggers": "Generating or reviewing demand forecasts for existing or new SKUs Setting safety stock levels based on demand variability and service level targets Planning replenishment for seasonal transitions, pro"
+      "triggers": "Generating or reviewing demand forecasts for existing or new SKUs Setting safety stock levels based on demand variability and service level targets Planning replenishment for seasonal transitions,"
     },
     {
       "kind": "skill",
@@ -247,21 +247,21 @@
       "name": "nutrient-document-processing",
       "description": "Process, convert, OCR, extract, redact, sign, and fill documents using the Nutrient DWS API. Works with PDFs, DOCX, XLSX, PPTX, HTML, and images.",
       "source": "skills/automation/nutrient-document-processing/SKILL.md",
-      "triggers": "Converting documents between formats (PDF, DOCX, XLSX, PPTX, HTML, images) Extracting text, tables, or key value pairs from PDFs OCR on scanned documents or images Redacting PII before sharing documen"
+      "triggers": "Converting documents between formats (PDF, DOCX, XLSX, PPTX, HTML, images) Extracting text, tables, or key value pairs from PDFs OCR on scanned documents or images Redacting PII before sharing"
     },
     {
       "kind": "skill",
       "name": "production-scheduling",
       "description": "Codified expertise for production scheduling, job sequencing, line balancing, changeover optimization, and bottleneck resolution in discrete and batch manufacturing. Informed by production schedulers with 15+ years experience. Includes TOC/drum-buffer-rope, SMED, OEE analysis, disruption response frameworks, and ERP/MES interaction patterns. Use when scheduling production, resolving bottlenecks, optimizing changeovers, responding to disruptions, or balancing manufacturing lines.",
       "source": "skills/automation/production-scheduling/SKILL.md",
-      "triggers": "Production orders compete for constrained work centers Disruptions (breakdown, shortage, absenteeism) require rapid re sequencing Changeover and campaign trade offs need explicit economic decisions Ne"
+      "triggers": "Production orders compete for constrained work centers Disruptions (breakdown, shortage, absenteeism) require rapid re sequencing Changeover and campaign trade offs need explicit economic decisions"
     },
     {
       "kind": "skill",
       "name": "quality-nonconformance",
       "description": "Codified expertise for quality control, non-conformance investigation, root cause analysis, corrective action, and supplier quality management in regulated manufacturing. Informed by quality engineers with 15+ years experience across FDA, IATF 16949, and AS9100 environments. Includes NCR lifecycle management, CAPA systems, SPC interpretation, and audit methodology. Use when investigating non-conformances, performing root cause analysis, managing CAPAs, interpreting SPC data, or handling supplier quality issues.",
       "source": "skills/automation/quality-nonconformance/SKILL.md",
-      "triggers": "Investigating a non conformance (NCR) from incoming inspection, in process, or final test Performing root cause analysis using 5 Why, Ishikawa, or fault tree methods Determining disposition for non co"
+      "triggers": "Investigating a non conformance (NCR) from incoming inspection, in process, or final test Performing root cause analysis using 5 Why, Ishikawa, or fault tree methods Determining disposition for non"
     },
     {
       "kind": "skill",
@@ -275,28 +275,28 @@
       "name": "api-design",
       "description": "REST API design patterns including resource naming, status codes, pagination, filtering, error responses, versioning, and rate limiting for production APIs.",
       "source": "skills/backend/api-design/SKILL.md",
-      "triggers": "Designing new API endpoints Reviewing existing API contracts Adding pagination, filtering, or sorting Implementing error handling for APIs Planning API versioning strategy Building public or partner f"
+      "triggers": "Designing new API endpoints Reviewing existing API contracts Adding pagination, filtering, or sorting Implementing error handling for APIs Planning API versioning strategy Building public or partner"
     },
     {
       "kind": "skill",
       "name": "backend-patterns",
       "description": "Backend architecture patterns, API design, database optimization, and server-side best practices for Node.js, Express, and Next.js API routes.",
       "source": "skills/backend/backend-patterns/SKILL.md",
-      "triggers": "Designing REST or GraphQL API endpoints Implementing repository, service, or controller layers Optimizing database queries (N+1, indexing, connection pooling) Adding caching (Redis, in memory, HTTP ca"
+      "triggers": "Designing REST or GraphQL API endpoints Implementing repository, service, or controller layers Optimizing database queries (N+1, indexing, connection pooling) Adding caching (Redis, in memory, HTTP"
     },
     {
       "kind": "skill",
       "name": "clickhouse-io",
       "description": "ClickHouse database patterns, query optimization, analytics, and data engineering best practices for high-performance analytical workloads.",
       "source": "skills/backend/clickhouse-io/SKILL.md",
-      "triggers": "Designing ClickHouse table schemas (MergeTree engine selection) Writing analytical queries (aggregations, window functions, joins) Optimizing query performance (partition pruning, projections, materia"
+      "triggers": "Designing ClickHouse table schemas (MergeTree engine selection) Writing analytical queries (aggregations, window functions, joins) Optimizing query performance (partition pruning, projections,"
     },
     {
       "kind": "skill",
       "name": "database-migrations",
       "description": "Database migration best practices for schema changes, data migrations, rollbacks, and zero-downtime deployments across PostgreSQL, MySQL, and common ORMs (Prisma, Drizzle, Kysely, Django, TypeORM, golang-migrate).",
       "source": "skills/backend/database-migrations/SKILL.md",
-      "triggers": "Creating or altering database tables Adding/removing columns or indexes Running data migrations (backfill, transform) Planning zero downtime schema changes Setting up migration tooling for a new proje"
+      "triggers": "Creating or altering database tables Adding/removing columns or indexes Running data migrations (backfill, transform) Planning zero downtime schema changes Setting up migration tooling for a new"
     },
     {
       "kind": "skill",
@@ -317,7 +317,7 @@
       "name": "django-security",
       "description": "Django security best practices, authentication, authorization, CSRF protection, SQL injection prevention, XSS prevention, and secure deployment configurations.",
       "source": "skills/backend/django-security/SKILL.md",
-      "triggers": "Setting up Django authentication and authorization Implementing user permissions and roles Configuring production security settings Reviewing Django application for security issues Deploying Django ap"
+      "triggers": "Setting up Django authentication and authorization Implementing user permissions and roles Configuring production security settings Reviewing Django application for security issues Deploying Django"
     },
     {
       "kind": "skill",
@@ -331,14 +331,14 @@
       "name": "evm-token-decimals",
       "description": "Prevent silent decimal mismatch bugs across EVM chains. Covers runtime decimal lookup, chain-aware caching, bridged-token precision drift, and safe normalization for bots, dashboards, and DeFi tools.",
       "source": "skills/backend/evm-token-decimals/SKILL.md",
-      "triggers": "Reading ERC 20 balances in Python, TypeScript, or Solidity Calculating fiat values from on chain balances Comparing token amounts across multiple EVM chains Handling bridged assets Building portfolio "
+      "triggers": "Reading ERC 20 balances in Python, TypeScript, or Solidity Calculating fiat values from on chain balances Comparing token amounts across multiple EVM chains Handling bridged assets Building portfolio"
     },
     {
       "kind": "skill",
       "name": "fastapi-patterns",
       "description": "FastAPI patterns for async APIs, dependency injection, Pydantic request and response models, OpenAPI docs, tests, security, and production readiness.",
       "source": "skills/backend/fastapi-patterns/SKILL.md",
-      "triggers": "Building or reviewing a FastAPI app. Splitting routers, schemas, dependencies, and database access. Writing async endpoints that call a database or external service. Adding authentication, authorizati"
+      "triggers": "Building or reviewing a FastAPI app. Splitting routers, schemas, dependencies, and database access. Writing async endpoints that call a database or external service. Adding authentication,"
     },
     {
       "kind": "skill",
@@ -352,7 +352,7 @@
       "name": "java-coding-standards",
       "description": "Java coding standards for Spring Boot services: naming, immutability, Optional usage, streams, exceptions, generics, and project layout.",
       "source": "skills/backend/java-coding-standards/SKILL.md",
-      "triggers": "Writing or reviewing Java code in Spring Boot projects Enforcing naming, immutability, or exception handling conventions Working with records, sealed classes, or pattern matching (Java 17+) Reviewing "
+      "triggers": "Writing or reviewing Java code in Spring Boot projects Enforcing naming, immutability, or exception handling conventions Working with records, sealed classes, or pattern matching (Java 17+) Reviewing"
     },
     {
       "kind": "skill",
@@ -373,14 +373,14 @@
       "name": "mysql-patterns",
       "description": "MySQL and MariaDB schema, query, indexing, transaction, replication, and connection-pool patterns for production backends.",
       "source": "skills/backend/mysql-patterns/SKILL.md",
-      "triggers": "Designing MySQL or MariaDB tables, indexes, and constraints Reviewing migrations before they run on large production tables Debugging slow queries, lock waits, deadlocks, or connection exhaustion Addi"
+      "triggers": "Designing MySQL or MariaDB tables, indexes, and constraints Reviewing migrations before they run on large production tables Debugging slow queries, lock waits, deadlocks, or connection exhaustion"
     },
     {
       "kind": "skill",
       "name": "nestjs-patterns",
       "description": "NestJS architecture patterns for modules, controllers, providers, DTO validation, guards, interceptors, config, and production-grade TypeScript backends.",
       "source": "skills/backend/nestjs-patterns/SKILL.md",
-      "triggers": "Building NestJS APIs or services Structuring modules, controllers, and providers Adding DTO validation, guards, interceptors, or exception filters Configuring environment aware settings and database i"
+      "triggers": "Building NestJS APIs or services Structuring modules, controllers, and providers Adding DTO validation, guards, interceptors, or exception filters Configuring environment aware settings and database"
     },
     {
       "kind": "skill",
@@ -415,35 +415,35 @@
       "name": "quarkus-patterns",
       "description": "Quarkus 3.x LTS architecture patterns with Camel for messaging, RESTful API design, CDI services, data access with Panache, and async processing. Use for Java Quarkus backend work with event-driven architectures.",
       "source": "skills/backend/quarkus-patterns/SKILL.md",
-      "triggers": "Building REST APIs with JAX RS or RESTEasy Reactive Structuring resource → service → repository layers Implementing event driven patterns with Apache Camel and RabbitMQ Configuring Hibernate Panache, "
+      "triggers": "Building REST APIs with JAX RS or RESTEasy Reactive Structuring resource → service → repository layers Implementing event driven patterns with Apache Camel and RabbitMQ Configuring Hibernate Panache,"
     },
     {
       "kind": "skill",
       "name": "quarkus-security",
       "description": "Quarkus Security best practices for authentication, authorization, JWT/OIDC, RBAC, input validation, CSRF, secrets management, and dependency security.",
       "source": "skills/backend/quarkus-security/SKILL.md",
-      "triggers": "Adding authentication (JWT, OIDC, Basic Auth) Implementing authorization with @RolesAllowed or SecurityIdentity Validating user input (Bean Validation, custom validators) Configuring CORS or security "
+      "triggers": "Adding authentication (JWT, OIDC, Basic Auth) Implementing authorization with @RolesAllowed or SecurityIdentity Validating user input (Bean Validation, custom validators) Configuring CORS or security"
     },
     {
       "kind": "skill",
       "name": "quarkus-tdd",
       "description": "Test-driven development for Quarkus 3.x LTS using JUnit 5, Mockito, REST Assured, Camel testing, and JaCoCo. Use when adding features, fixing bugs, or refactoring event-driven services.",
       "source": "skills/backend/quarkus-tdd/SKILL.md",
-      "triggers": "New features or REST endpoints Bug fixes or refactors Adding data access logic, security rules, or reactive streams Testing Apache Camel routes and event handlers Testing event driven services with Ra"
+      "triggers": "New features or REST endpoints Bug fixes or refactors Adding data access logic, security rules, or reactive streams Testing Apache Camel routes and event handlers Testing event driven services with"
     },
     {
       "kind": "skill",
       "name": "quarkus-verification",
       "description": "Verification loop for Quarkus projects: build, static analysis, tests with coverage, security scans, native compilation, and diff review before release or PR.",
       "source": "skills/backend/quarkus-verification/SKILL.md",
-      "triggers": "Before opening a pull request for a Quarkus service After major refactoring or dependency upgrades Pre deployment verification for staging or production Running full build → lint → test → security sca"
+      "triggers": "Before opening a pull request for a Quarkus service After major refactoring or dependency upgrades Pre deployment verification for staging or production Running full build → lint → test → security"
     },
     {
       "kind": "skill",
       "name": "redis-patterns",
       "description": "Redis data structure patterns, caching strategies, distributed locks, rate limiting, pub/sub, and connection management for production applications.",
       "source": "skills/backend/redis-patterns/SKILL.md",
-      "triggers": "Adding caching to an application Implementing rate limiting or throttling Building distributed locks or coordination Setting up session or token storage Using Pub/Sub or Redis Streams for messaging Co"
+      "triggers": "Adding caching to an application Implementing rate limiting or throttling Building distributed locks or coordination Setting up session or token storage Using Pub/Sub or Redis Streams for messaging"
     },
     {
       "kind": "skill",
@@ -457,35 +457,35 @@
       "name": "springboot-patterns",
       "description": "Spring Boot architecture patterns, REST API design, layered services, data access, caching, async processing, and logging. Use for Java Spring Boot backend work.",
       "source": "skills/backend/springboot-patterns/SKILL.md",
-      "triggers": "Building REST APIs with Spring MVC or WebFlux Structuring controller → service → repository layers Configuring Spring Data JPA, caching, or async processing Adding validation, exception handling, or p"
+      "triggers": "Building REST APIs with Spring MVC or WebFlux Structuring controller → service → repository layers Configuring Spring Data JPA, caching, or async processing Adding validation, exception handling, or"
     },
     {
       "kind": "skill",
       "name": "springboot-security",
       "description": "Spring Security best practices for authn/authz, validation, CSRF, secrets, headers, rate limiting, and dependency security in Java Spring Boot services.",
       "source": "skills/backend/springboot-security/SKILL.md",
-      "triggers": "Adding authentication (JWT, OAuth2, session based) Implementing authorization (@PreAuthorize, role based access) Validating user input (Bean Validation, custom validators) Configuring CORS, CSRF, or s"
+      "triggers": "Adding authentication (JWT, OAuth2, session based) Implementing authorization (@PreAuthorize, role based access) Validating user input (Bean Validation, custom validators) Configuring CORS, CSRF, or"
     },
     {
       "kind": "skill",
       "name": "tinystruct-patterns",
       "description": "Use when developing application modules or microservices with the tinystruct Java framework. Covers routing, context management, JSON handling with Builder, and CLI/HTTP dual-mode patterns.",
       "source": "skills/backend/tinystruct-patterns/SKILL.md",
-      "triggers": "Creating new Application modules by extending AbstractApplication . Defining routes and command line actions using @Action . Handling per request state via Context . Performing JSON serialization usin"
+      "triggers": "Creating new Application modules by extending AbstractApplication . Defining routes and command line actions using @Action . Handling per request state via Context . Performing JSON serialization"
     },
     {
       "kind": "skill",
       "name": "automation-audit-ops",
       "description": "Evidence-first automation inventory and overlap audit workflow for EGC. Use when the user wants to know which jobs, hooks, connectors, MCP servers, or wrappers are live, broken, redundant, or missing before fixing anything.",
       "source": "skills/devops/automation-audit-ops/SKILL.md",
-      "triggers": "user asks \"what automations do I have\", \"what is live\", \"what is broken\", or \"what overlaps\" the task spans cron jobs, GitHub Actions, local hooks, MCP servers, connectors, wrappers, or app integratio"
+      "triggers": "user asks \"what automations do I have\", \"what is live\", \"what is broken\", or \"what overlaps\" the task spans cron jobs, GitHub Actions, local hooks, MCP servers, connectors, wrappers, or app"
     },
     {
       "kind": "skill",
       "name": "bun-runtime",
       "description": "Bun as runtime, package manager, bundler, and test runner. When to choose Bun vs Node, migration notes, and Vercel support.",
       "source": "skills/devops/bun-runtime/SKILL.md",
-      "triggers": "Prefer Bun for: new JS/TS projects, scripts where install/run speed matters, Vercel deployments with Bun runtime, and when you want a single toolchain (run + install + test + build). Prefer Node for: "
+      "triggers": "Prefer Bun for: new JS/TS projects, scripts where install/run speed matters, Vercel deployments with Bun runtime, and when you want a single toolchain (run + install + test + build). Prefer Node for:"
     },
     {
       "kind": "skill",
@@ -512,7 +512,7 @@
       "name": "deployment-patterns",
       "description": "Deployment workflows, CI/CD pipeline patterns, Docker containerization, health checks, rollback strategies, and production readiness checklists for web applications.",
       "source": "skills/devops/deployment-patterns/SKILL.md",
-      "triggers": "Setting up CI/CD pipelines Dockerizing an application Planning deployment strategy (blue green, canary, rolling) Implementing health checks and readiness probes Preparing for a production release Conf"
+      "triggers": "Setting up CI/CD pipelines Dockerizing an application Planning deployment strategy (blue green, canary, rolling) Implementing health checks and readiness probes Preparing for a production release"
     },
     {
       "kind": "skill",
@@ -526,7 +526,7 @@
       "name": "error-handling",
       "description": "Patterns for robust error handling across TypeScript, Python, and Go. Covers typed errors, error boundaries, retries, circuit breakers, and user-facing error messages.",
       "source": "skills/devops/error-handling/SKILL.md",
-      "triggers": "Designing error types or exception hierarchies for a new module or service Adding retry logic or circuit breakers for unreliable external dependencies Reviewing API endpoints for missing error handlin"
+      "triggers": "Designing error types or exception hierarchies for a new module or service Adding retry logic or circuit breakers for unreliable external dependencies Reviewing API endpoints for missing error"
     },
     {
       "kind": "skill",
@@ -540,7 +540,7 @@
       "name": "github-ops",
       "description": "GitHub repository operations, automation, and management. Issue triage, PR management, CI/CD operations, release management, and security monitoring using the gh CLI. Use when the user wants to manage GitHub issues, PRs, CI status, releases, contributors, stale items, or any GitHub operational task beyond simple git commands.",
       "source": "skills/devops/github-ops/SKILL.md",
-      "triggers": "Triaging issues (classifying, labeling, responding, deduplicating) Managing PRs (review status, CI checks, stale PRs, merge readiness) Debugging CI/CD failures Preparing releases and changelogs Monito"
+      "triggers": "Triaging issues (classifying, labeling, responding, deduplicating) Managing PRs (review status, CI checks, stale PRs, merge readiness) Debugging CI/CD failures Preparing releases and changelogs"
     },
     {
       "kind": "skill",
@@ -554,35 +554,35 @@
       "name": "plan-orchestrate",
       "description": "Read a plan document, decompose it into steps, design a per-step agent chain from the EGC catalogue, and emit ready-to-paste /orchestrate custom prompts. Generative only: never invokes /orchestrate itself. Use when the user has a multi-step plan and wants to drive it through orchestrate without composing chains by hand.",
       "source": "skills/devops/plan-orchestrate/SKILL.md",
-      "triggers": "User has a multi step plan document (PRD, RFC, implementation plan) and wants to drive it through /orchestrate . User says \"orchestrate this plan\", \"give me orchestrate prompts for each step\", \"compos"
+      "triggers": "User has a multi step plan document (PRD, RFC, implementation plan) and wants to drive it through /orchestrate . User says \"orchestrate this plan\", \"give me orchestrate prompts for each step\","
     },
     {
       "kind": "skill",
       "name": "production-audit",
       "description": "Local-evidence production readiness audit for shipped apps, pre-launch reviews, post-merge checks, and \"what breaks in prod?\" questions without sending repo data to an external audit service.",
       "source": "skills/devops/production-audit/SKILL.md",
-      "triggers": "The user asks \"is this production ready\", \"what would break in prod\", \"what did we miss\", \"audit this repo\", or \"ready to ship?\" A feature was merged and needs a pre deploy or post merge risk pass. A "
+      "triggers": "The user asks \"is this production ready\", \"what would break in prod\", \"what did we miss\", \"audit this repo\", or \"ready to ship?\" A feature was merged and needs a pre deploy or post merge risk pass. A"
     },
     {
       "kind": "skill",
       "name": "search-first",
       "description": "Research-before-coding workflow. Search for existing tools, libraries, and patterns before writing custom code. Invokes the researcher agent.",
       "source": "skills/devops/search-first/SKILL.md",
-      "triggers": "Use this skill when: Starting a new feature that likely has existing solutions Adding a dependency or integration The user asks \"add X functionality\" and you're about to write code Before creating a n"
+      "triggers": "Use this skill when: Starting a new feature that likely has existing solutions Adding a dependency or integration The user asks \"add X functionality\" and you're about to write code Before creating a"
     },
     {
       "kind": "skill",
       "name": "skill-scout",
       "description": "Search existing local, marketplace, GitHub, and web skill sources before creating a new skill. Use when the user wants to create, build, fork, or find a skill for a workflow.",
       "source": "skills/devops/skill-scout/SKILL.md",
-      "triggers": "The user says \"create a skill\", \"build a skill\", \"make a skill\", or \"new skill\". The user asks \"is there a skill for X?\" or \"does a skill exist that does Y?\" The user describes a workflow and you are "
+      "triggers": "The user says \"create a skill\", \"build a skill\", \"make a skill\", or \"new skill\". The user asks \"is there a skill for X?\" or \"does a skill exist that does Y?\" The user describes a workflow and you are"
     },
     {
       "kind": "skill",
       "name": "terminal-ops",
       "description": "Evidence-first repo execution workflow for EGC. Use when the user wants a command run, a repo checked, a CI failure debugged, or a narrow fix pushed with exact proof of what was executed and verified.",
       "source": "skills/devops/terminal-ops/SKILL.md",
-      "triggers": "user says \"fix\", \"debug\", \"run this\", \"check the repo\", or \"push it\" the task depends on command output, git state, test results, or a verified local fix the answer must distinguish changed locally, v"
+      "triggers": "user says \"fix\", \"debug\", \"run this\", \"check the repo\", or \"push it\" the task depends on command output, git state, test results, or a verified local fix the answer must distinguish changed locally,"
     },
     {
       "kind": "skill",
@@ -596,7 +596,7 @@
       "name": "brand-voice",
       "description": "Build a source-derived writing style profile from real posts, essays, launch notes, docs, or site copy, then reuse that profile across content, outreach, and social workflows. Use when the user wants voice consistency without generic AI writing tropes.",
       "source": "skills/docs/brand-voice/SKILL.md",
-      "triggers": "the user wants content or outreach in a specific voice writing for X, LinkedIn, email, launch posts, threads, or product updates adapting a known author's tone across channels the existing content lan"
+      "triggers": "the user wants content or outreach in a specific voice writing for X, LinkedIn, email, launch posts, threads, or product updates adapting a known author's tone across channels the existing content"
     },
     {
       "kind": "skill",
@@ -610,14 +610,14 @@
       "name": "documentation-lookup",
       "description": "Use up-to-date library and framework docs via Context7 MCP instead of training data. Activates for setup questions, API references, code examples, or when the user names a framework (e.g. React, Next.js, Prisma).",
       "source": "skills/docs/documentation-lookup/SKILL.md",
-      "triggers": "Activate when the user: Asks setup or configuration questions (e.g. \"How do I configure Next.js middleware?\") Requests code that depends on a library (\"Write a Prisma query for...\") Needs API or refer"
+      "triggers": "Activate when the user: Asks setup or configuration questions (e.g. \"How do I configure Next.js middleware?\") Requests code that depends on a library (\"Write a Prisma query for...\") Needs API or"
     },
     {
       "kind": "skill",
       "name": "investor-materials",
       "description": "Create and update pitch decks, one-pagers, investor memos, accelerator applications, financial models, and fundraising materials. Use when the user needs investor-facing documents, projections, use-of-funds tables, milestone plans, or materials that must stay internally consistent across multiple fundraising assets.",
       "source": "skills/docs/investor-materials/SKILL.md",
-      "triggers": "creating or revising a pitch deck writing an investor memo or one pager building a financial model, milestone plan, or use of funds table answering accelerator or incubator application questions align"
+      "triggers": "creating or revising a pitch deck writing an investor memo or one pager building a financial model, milestone plan, or use of funds table answering accelerator or incubator application questions"
     },
     {
       "kind": "skill",
@@ -631,112 +631,112 @@
       "name": "market-research",
       "description": "Conduct market research, competitive analysis, investor due diligence, and industry intelligence with source attribution and decision-oriented summaries. Use when the user wants market sizing, competitor comparisons, fund research, technology scans, or research that informs business decisions.",
       "source": "skills/docs/market-research/SKILL.md",
-      "triggers": "researching a market, category, company, investor, or technology trend building TAM/SAM/SOM estimates comparing competitors or adjacent products preparing investor dossiers before outreach pressure te"
+      "triggers": "researching a market, category, company, investor, or technology trend building TAM/SAM/SOM estimates comparing competitors or adjacent products preparing investor dossiers before outreach pressure"
     },
     {
       "kind": "skill",
       "name": "mle-workflow",
       "description": "Production machine-learning engineering workflow for data contracts, reproducible training, model evaluation, deployment, monitoring, and rollback. Use when building, reviewing, or hardening ML systems beyond one-off notebooks.",
       "source": "skills/docs/mle-workflow/SKILL.md",
-      "triggers": "Planning or reviewing a production ML feature, model refresh, ranking system, recommender, classifier, embedding workflow, or forecasting pipeline Converting notebook code into a reusable training, ev"
+      "triggers": "Planning or reviewing a production ML feature, model refresh, ranking system, recommender, classifier, embedding workflow, or forecasting pipeline Converting notebook code into a reusable training,"
     },
     {
       "kind": "skill",
       "name": "pubmed-database",
       "description": "Direct PubMed and NCBI E-utilities search workflows for biomedical literature, MeSH queries, PMID lookup, citation retrieval, and API-backed literature monitoring.",
       "source": "skills/docs/scientific-db-pubmed-database/SKILL.md",
-      "triggers": "Searching MEDLINE or life sciences literature. Building PubMed queries with MeSH terms, field tags, dates, or article types. Looking up PMIDs, abstracts, publication metadata, or related citations. Ru"
+      "triggers": "Searching MEDLINE or life sciences literature. Building PubMed queries with MeSH terms, field tags, dates, or article types. Looking up PMIDs, abstracts, publication metadata, or related citations."
     },
     {
       "kind": "skill",
       "name": "uspto-database",
       "description": "USPTO patent and trademark data workflow for official record lookup, PatentSearch queries, TSDR checks, assignment data, and reproducible IP research logs.",
       "source": "skills/docs/scientific-db-uspto-database/SKILL.md",
-      "triggers": "Searching granted patents or pre grant publications. Checking patent application status, file wrapper data, assignments, or public prosecution history. Looking up trademark status, documents, or assig"
+      "triggers": "Searching granted patents or pre grant publications. Checking patent application status, file wrapper data, assignments, or public prosecution history. Looking up trademark status, documents, or"
     },
     {
       "kind": "skill",
       "name": "gget",
       "description": "gget CLI and Python workflow for quick genomic database queries, sequence lookup, BLAST-style searches, enrichment checks, and reproducible bioinformatics evidence logs.",
       "source": "skills/docs/scientific-pkg-gget/SKILL.md",
-      "triggers": "Finding Ensembl IDs, gene metadata, transcript details, or sequences. Running quick BLAST or BLAT lookups without building a full local pipeline. Fetching reference genome links and annotations from E"
+      "triggers": "Finding Ensembl IDs, gene metadata, transcript details, or sequences. Running quick BLAST or BLAT lookups without building a full local pipeline. Fetching reference genome links and annotations from"
     },
     {
       "kind": "skill",
       "name": "literature-review",
       "description": "Systematic literature-review workflow for academic, biomedical, technical, and scientific topics, including search planning, source screening, synthesis, citation checks, and evidence logging.",
       "source": "skills/docs/scientific-thinking-literature-review/SKILL.md",
-      "triggers": "Building a systematic, scoping, or narrative literature review. Synthesizing the state of the art for a research question. Finding gaps, contradictions, or future work directions. Preparing citation b"
+      "triggers": "Building a systematic, scoping, or narrative literature review. Synthesizing the state of the art for a research question. Finding gaps, contradictions, or future work directions. Preparing citation"
     },
     {
       "kind": "skill",
       "name": "scholar-evaluation",
       "description": "Structured scholarly-work evaluation for papers, proposals, literature reviews, methods sections, evidence quality, citation support, and research-writing feedback.",
       "source": "skills/docs/scientific-thinking-scholar-evaluation/SKILL.md",
-      "triggers": "Reviewing a research paper, proposal, thesis chapter, or literature review. Checking whether claims are supported by cited evidence. Evaluating methodology, study design, analysis, or limitations. Com"
+      "triggers": "Reviewing a research paper, proposal, thesis chapter, or literature review. Checking whether claims are supported by cited evidence. Evaluating methodology, study design, analysis, or limitations."
     },
     {
       "kind": "skill",
       "name": "seo",
       "description": "Audit, plan, and implement SEO improvements across technical SEO, on-page optimization, structured data, Core Web Vitals, and content strategy. Use when the user wants better search visibility, SEO remediation, schema markup, sitemap/robots work, or keyword mapping.",
       "source": "skills/docs/seo/SKILL.md",
-      "triggers": "Use this skill when: auditing crawlability, indexability, canonicals, or redirects improving title tags, meta descriptions, and heading structure adding or validating structured data improving Core We"
+      "triggers": "Use this skill when: auditing crawlability, indexability, canonicals, or redirects improving title tags, meta descriptions, and heading structure adding or validating structured data improving Core"
     },
     {
       "kind": "skill",
       "name": "accessibility",
       "description": "Design, implement, and audit inclusive digital products using WCAG 2.2 Level AA",
       "source": "skills/frontend/accessibility/SKILL.md",
-      "triggers": "Defining UI component specifications for Web, iOS, or Android. Auditing existing code for accessibility barriers or compliance gaps. Implementing new WCAG 2.2 standards like Target Size (Minimum) and "
+      "triggers": "Defining UI component specifications for Web, iOS, or Android. Auditing existing code for accessibility barriers or compliance gaps. Implementing new WCAG 2.2 standards like Target Size (Minimum) and"
     },
     {
       "kind": "skill",
       "name": "angular-developer",
       "description": "Generates Angular code and provides architectural guidance. Trigger when creating projects, components, or services, or for best practices on reactivity (signals, linkedSignal, resource), forms, dependency injection, routing, SSR, accessibility (ARIA), animations, styling (component styles, Tailwind CSS), testing, or CLI tooling.",
       "source": "skills/frontend/angular-developer/SKILL.md",
-      "triggers": "Working in any Angular project or codebase Creating or scaffolding a new Angular project, application, or library Generating components, services, directives, pipes, guards, or resolvers Implementing "
+      "triggers": "Working in any Angular project or codebase Creating or scaffolding a new Angular project, application, or library Generating components, services, directives, pipes, guards, or resolvers Implementing"
     },
     {
       "kind": "skill",
       "name": "frontend-design-direction",
       "description": "Set an EGC-specific frontend design direction for production UI work. Use when building or improving websites, dashboards, applications, components, landing pages, visual tools, or any web UI that needs stronger product-specific design judgment.",
       "source": "skills/frontend/frontend-design-direction/SKILL.md",
-      "triggers": "The user asks to build a web page, app, dashboard, artifact, component, or UI. The user asks to make an interface more polished, distinctive, beautiful, or less generic. The implementation needs visua"
+      "triggers": "The user asks to build a web page, app, dashboard, artifact, component, or UI. The user asks to make an interface more polished, distinctive, beautiful, or less generic. The implementation needs"
     },
     {
       "kind": "skill",
       "name": "frontend-patterns",
       "description": "Frontend development patterns for React, Next.js, state management, performance optimization, and UI best practices.",
       "source": "skills/frontend/frontend-patterns/SKILL.md",
-      "triggers": "Building React components (composition, props, rendering) Managing state (useState, useReducer, Zustand, Context) Implementing data fetching (SWR, React Query, server components) Optimizing performanc"
+      "triggers": "Building React components (composition, props, rendering) Managing state (useState, useReducer, Zustand, Context) Implementing data fetching (SWR, React Query, server components) Optimizing"
     },
     {
       "kind": "skill",
       "name": "frontend-slides",
       "description": "Create stunning, animation-rich HTML presentations from scratch or by converting PowerPoint files. Use when the user wants to build a presentation, convert a PPT/PPTX to web, or create slides for a talk/pitch. Helps non-designers discover their aesthetic through visual exploration rather than abstract choices.",
       "source": "skills/frontend/frontend-slides/SKILL.md",
-      "triggers": "Creating a talk deck, pitch deck, workshop deck, or internal presentation Converting .ppt or .pptx slides into an HTML presentation Improving an existing HTML presentation's layout, motion, or typogra"
+      "triggers": "Creating a talk deck, pitch deck, workshop deck, or internal presentation Converting .ppt or .pptx slides into an HTML presentation Improving an existing HTML presentation's layout, motion, or"
     },
     {
       "kind": "skill",
       "name": "ios-icon-gen",
       "description": "Generate iOS app icons as PNG imagesets for Xcode asset catalogs from SF Symbols (5000+ Apple-native) or Iconify API (275k+ open source icons from 200+ collections). Use when generating icons, creating icon assets, adding icons to asset catalog, or searching for icons for iOS projects.",
       "source": "skills/frontend/ios-icon-gen/SKILL.md",
-      "triggers": "Generating icon assets for an iOS/macOS Xcode project Searching for icons across open source collections Creating PNG imagesets (1x, 2x, 3x) for asset catalogs Replacing placeholder icons with product"
+      "triggers": "Generating icon assets for an iOS/macOS Xcode project Searching for icons across open source collections Creating PNG imagesets (1x, 2x, 3x) for asset catalogs Replacing placeholder icons with"
     },
     {
       "kind": "skill",
       "name": "make-interfaces-feel-better",
       "description": "Apply concrete design-engineering details that make interfaces feel polished. Use when reviewing or improving UI spacing, typography, borders, shadows, motion, hit areas, icons, text wrapping, and interaction states.",
       "source": "skills/frontend/make-interfaces-feel-better/SKILL.md",
-      "triggers": "The user says the UI feels off, flat, generic, cramped, jumpy, or unfinished. You are building controls, cards, lists, dashboards, navigation, forms, or toolbars. A component needs hover, active, focu"
+      "triggers": "The user says the UI feels off, flat, generic, cramped, jumpy, or unfinished. You are building controls, cards, lists, dashboards, navigation, forms, or toolbars. A component needs hover, active,"
     },
     {
       "kind": "skill",
       "name": "manim-video",
       "description": "Build reusable Manim explainers for technical concepts, graphs, system diagrams, and product walkthroughs, then hand off to the wider EGC video stack if needed. Use when the user wants a clean animated explainer rather than a generic talking-head script.",
       "source": "skills/frontend/manim-video/SKILL.md",
-      "triggers": "the user wants a technical explainer animation the concept is a graph, workflow, architecture, metric progression, or system diagram the user wants a short product or launch explainer for X or a landi"
+      "triggers": "the user wants a technical explainer animation the concept is a graph, workflow, architecture, metric progression, or system diagram the user wants a short product or launch explainer for X or a"
     },
     {
       "kind": "skill",
@@ -750,14 +750,14 @@
       "name": "motion-foundations",
       "description": "Motion tokens, spring presets, performance rules, device adaptation, accessibility enforcement, and SSR safety for React / Next.js using motion/react. Foundation layer: all other motion skills depend on this.",
       "source": "skills/frontend/motion-foundations/SKILL.md",
-      "triggers": "Starting any animated component from scratch Setting up tokens, spring presets, or easing values Implementing prefers reduced motion support Debugging hydration mismatches from animation initial state"
+      "triggers": "Starting any animated component from scratch Setting up tokens, spring presets, or easing values Implementing prefers reduced motion support Debugging hydration mismatches from animation initial"
     },
     {
       "kind": "skill",
       "name": "motion-patterns",
       "description": "Production-ready animation patterns for React / Next.js: button, modal, toast, stagger, page transitions, exit animations, scroll, and layout: built on motion-foundations tokens and springs.",
       "source": "skills/frontend/motion-patterns/SKILL.md",
-      "triggers": "Animating a button, card, modal, or toast notification Building list entrances with stagger Setting up page transitions in Next.js App Router Adding entrance or exit animations to conditional content "
+      "triggers": "Animating a button, card, modal, or toast notification Building list entrances with stagger Setting up page transitions in Next.js App Router Adding entrance or exit animations to conditional content"
     },
     {
       "kind": "skill",
@@ -778,21 +778,21 @@
       "name": "ui-demo",
       "description": "Record polished UI demo videos using Playwright. Use when the user asks to create a demo, walkthrough, screen recording, or tutorial video of a web application. Produces WebM videos with visible cursor, natural pacing, and professional feel.",
       "source": "skills/frontend/ui-demo/SKILL.md",
-      "triggers": "User asks for a \"demo video\", \"screen recording\", \"walkthrough\", or \"tutorial\" User wants to showcase a feature or workflow visually User needs a video for documentation, onboarding, or stakeholder pr"
+      "triggers": "User asks for a \"demo video\", \"screen recording\", \"walkthrough\", or \"tutorial\" User wants to showcase a feature or workflow visually User needs a video for documentation, onboarding, or stakeholder"
     },
     {
       "kind": "skill",
       "name": "ui-to-vue",
       "description": "Use when the user has UI screenshots or design exports that need batch conversion into Vue 3 components, especially with Vant, Element Plus, or Ant Design Vue.",
       "source": "skills/frontend/ui-to-vue/SKILL.md",
-      "triggers": "The user provides a directory of design screenshots or design export images. The target application is Vue 3. The user wants a first pass of page components, shared components, and router wiring. The "
+      "triggers": "The user provides a directory of design screenshots or design export images. The target application is Vue 3. The user wants a first pass of page components, shared components, and router wiring. The"
     },
     {
       "kind": "skill",
       "name": "video-editing",
       "description": "AI-assisted video editing workflows for cutting, structuring, and augmenting real footage. Covers the full pipeline from raw capture through FFmpeg, Remotion, ElevenLabs, fal.ai, and final polish in Descript or CapCut. Use when the user wants to edit video, cut footage, create vlogs, or build video content.",
       "source": "skills/frontend/video-editing/SKILL.md",
-      "triggers": "User wants to edit, cut, or structure video footage Turning long recordings into short form content Building vlogs, tutorials, or demo videos from raw capture Adding overlays, subtitles, music, or voi"
+      "triggers": "User wants to edit, cut, or structure video footage Turning long recordings into short form content Building vlogs, tutorials, or demo videos from raw capture Adding overlays, subtitles, music, or"
     },
     {
       "kind": "skill",
@@ -805,14 +805,14 @@
       "name": "vite-patterns",
       "description": "Vite build tool patterns including config, plugins, HMR, env variables, proxy setup, SSR, library mode, dependency pre-bundling, and build optimization. Activate when working with vite.config.ts, Vite plugins, or Vite-based projects.",
       "source": "skills/frontend/vite-patterns/SKILL.md",
-      "triggers": "Configuring vite.config.ts or vite.config.js Setting up environment variables or .env files Configuring dev server proxy for API backends Optimizing build output (chunks, minification, assets) Publish"
+      "triggers": "Configuring vite.config.ts or vite.config.js Setting up environment variables or .env files Configuring dev server proxy for API backends Optimizing build output (chunks, minification, assets)"
     },
     {
       "kind": "skill",
       "name": "agent-payment-x402",
       "description": "Add x402 payment execution to AI agents: per-task budgets, spending controls, and non-custodial wallets via MCP tools. Use when agents need to pay for APIs, services, or other agents.",
       "source": "skills/general/agent-payment-x402/SKILL.md",
-      "triggers": "Use when: your agent needs to pay for an API call, purchase a service, settle with another agent, enforce per task spending limits, or manage a non custodial wallet. Pairs naturally with cost aware ll"
+      "triggers": "Use when: your agent needs to pay for an API call, purchase a service, settle with another agent, enforce per task spending limits, or manage a non custodial wallet. Pairs naturally with cost aware"
     },
     {
       "kind": "skill",
@@ -846,7 +846,7 @@
       "name": "click-path-audit",
       "description": "Trace every user-facing button/touchpoint through its full state change sequence to find bugs where functions individually work but cancel each other out, produce wrong final state, or leave the UI in an inconsistent state. Use when: systematic debugging found no bugs but users report broken buttons, or after any major refactor touching shared state stores.",
       "source": "skills/general/click-path-audit/SKILL.md",
-      "triggers": "After systematic debugging finds \"no bugs\" but users report broken UI After modifying any Zustand store action (check all callers) After any refactor that touches shared state Before release, on criti"
+      "triggers": "After systematic debugging finds \"no bugs\" but users report broken UI After modifying any Zustand store action (check all callers) After any refactor that touches shared state Before release, on"
     },
     {
       "kind": "skill",
@@ -860,21 +860,21 @@
       "name": "codebase-onboarding",
       "description": "Analyze an unfamiliar codebase and generate a structured onboarding guide with architecture map, key entry points, conventions, and a starter GEMINI.md. Use when joining a new project or setting up your AI coding tool for the first time in a repo.",
       "source": "skills/general/codebase-onboarding/SKILL.md",
-      "triggers": "First time opening a project with your AI coding tool Joining a new team or repository User asks \"help me understand this codebase\" User asks to generate a GEMINI.md for a project User says \"onboard m"
+      "triggers": "First time opening a project with your AI coding tool Joining a new team or repository User asks \"help me understand this codebase\" User asks to generate a GEMINI.md for a project User says \"onboard"
     },
     {
       "kind": "skill",
       "name": "coding-standards",
       "description": "Baseline cross-project coding conventions for naming, readability, immutability, and code-quality review. Use detailed frontend or backend skills for framework-specific patterns.",
       "source": "skills/general/coding-standards/SKILL.md",
-      "triggers": "Starting a new project or module Reviewing code for quality and maintainability Refactoring existing code to follow conventions Enforcing naming, formatting, or structural consistency Setting up linti"
+      "triggers": "Starting a new project or module Reviewing code for quality and maintainability Refactoring existing code to follow conventions Enforcing naming, formatting, or structural consistency Setting up"
     },
     {
       "kind": "skill",
       "name": "configure-egc",
       "description": "Interactive installer for EGC - Extended Global Context: guides users through selecting and installing skills and rules to user-level or project-level directories, verifies paths, and optionally optimizes installed files.",
       "source": "skills/general/configure-egc/SKILL.md",
-      "triggers": "User says \"configure egc\", \"install egc\", \"setup everything egc code\", or similar User wants to selectively install skills or rules from this project User wants to verify or fix an existing EGC instal"
+      "triggers": "User says \"configure egc\", \"install egc\", \"setup everything egc code\", or similar User wants to selectively install skills or rules from this project User wants to verify or fix an existing EGC"
     },
     {
       "kind": "skill",
@@ -888,7 +888,7 @@
       "name": "council",
       "description": "Convene a four-voice council for ambiguous decisions, tradeoffs, and go/no-go calls. Use when multiple valid paths exist and you need structured disagreement before choosing.",
       "source": "skills/general/council/SKILL.md",
-      "triggers": "Use council when: a decision has multiple credible paths and no obvious winner you need explicit tradeoff surfacing the user asks for second opinions, dissent, or multiple perspectives conversational "
+      "triggers": "Use council when: a decision has multiple credible paths and no obvious winner you need explicit tradeoff surfacing the user asks for second opinions, dissent, or multiple perspectives conversational"
     },
     {
       "kind": "skill",
@@ -902,7 +902,7 @@
       "name": "crosspost",
       "description": "Multi-platform content distribution across X, LinkedIn, Threads, and Bluesky. Adapts content per platform using content-engine patterns. Never posts identical content cross-platform. Use when the user wants to distribute content across social platforms.",
       "source": "skills/general/crosspost/SKILL.md",
-      "triggers": "the user wants to publish the same underlying idea across multiple platforms a launch, update, release, or essay needs platform specific versions the user says \"crosspost\", \"post this everywhere\", or "
+      "triggers": "the user wants to publish the same underlying idea across multiple platforms a launch, update, release, or essay needs platform specific versions the user says \"crosspost\", \"post this everywhere\", or"
     },
     {
       "kind": "skill",
@@ -916,35 +916,35 @@
       "name": "data-scraper-agent",
       "description": "Build a fully automated AI-powered data collection agent for any public source: job boards, prices, news, GitHub, sports, anything. Scrapes on a schedule, enriches data with a free LLM (Gemini Flash), stores results in Notion/Sheets/Supabase, and learns from user feedback. Runs 100% free on GitHub Actions. Use when the user wants to monitor, collect, or track any public data automatically.",
       "source": "skills/general/data-scraper-agent/SKILL.md",
-      "triggers": "User wants to scrape or monitor any public website or API User says \"build a bot that checks...\", \"monitor X for me\", \"collect data from...\" User wants to track jobs, prices, news, repos, sports score"
+      "triggers": "User wants to scrape or monitor any public website or API User says \"build a bot that checks...\", \"monitor X for me\", \"collect data from...\" User wants to track jobs, prices, news, repos, sports"
     },
     {
       "kind": "skill",
       "name": "design-system",
       "description": "Use this skill to generate or audit design systems, check visual consistency, and review PRs that touch styling.",
       "source": "skills/general/design-system/SKILL.md",
-      "triggers": "Starting a new project that needs a design system Auditing an existing codebase for visual consistency Before a redesign: understand what you have When the UI looks \"off\" but you can't pinpoint why Re"
+      "triggers": "Starting a new project that needs a design system Auditing an existing codebase for visual consistency Before a redesign: understand what you have When the UI looks \"off\" but you can't pinpoint why"
     },
     {
       "kind": "skill",
       "name": "egc-devfleet",
       "description": "Orchestrate multi-agent coding tasks via Gemini DevFleet: plan projects, dispatch parallel agents in isolated worktrees, monitor progress, and read structured reports.",
       "source": "skills/general/egc-devfleet/SKILL.md",
-      "triggers": "Use this skill when you need to dispatch multiple Claude Code agents to work on coding tasks in parallel. Each agent runs in an isolated git worktree with full tooling. Requires a running Gemini DevFl"
+      "triggers": "Use this skill when you need to dispatch multiple Claude Code agents to work on coding tasks in parallel. Each agent runs in an isolated git worktree with full tooling. Requires a running Gemini"
     },
     {
       "kind": "skill",
       "name": "egc-tools-cost-audit",
       "description": "Evidence-first EGC Tools burn and billing audit workflow. Use when investigating runaway PR creation, quota bypass, premium-model leakage, duplicate jobs, or GitHub App cost spikes in the EGC Tools repo.",
       "source": "skills/general/egc-tools-cost-audit/SKILL.md",
-      "triggers": "user says EGC Tools burn rate, PR recursion, over created PRs, usage limit bypass, or premium model leakage the task is in the sibling EGC Tools repo and depends on webhook handlers, queue workers, us"
+      "triggers": "user says EGC Tools burn rate, PR recursion, over created PRs, usage limit bypass, or premium model leakage the task is in the sibling EGC Tools repo and depends on webhook handlers, queue workers,"
     },
     {
       "kind": "skill",
       "name": "engineering-audit",
       "description": "Engineering health assessment patterns, scoring thresholds, refactoring techniques, and observability guidelines for the engineering-auditor agent and commands.",
       "source": "skills/general/engineering-audit/SKILL.md",
-      "triggers": "Before a release or major refactor When onboarding a new project and assessing technical debt When CI quality gates start failing repeatedly When a team member asks \"how healthy is this codebase?\" Per"
+      "triggers": "Before a release or major refactor When onboarding a new project and assessing technical debt When CI quality gates start failing repeatedly When a team member asks \"how healthy is this codebase?\""
     },
     {
       "kind": "skill",
@@ -963,14 +963,14 @@
       "name": "gan-style-harness",
       "description": "GAN-inspired Generator-Evaluator agent harness for building high-quality applications autonomously. ",
       "source": "skills/general/gan-style-harness/SKILL.md",
-      "triggers": "Building complete applications from a one line prompt Frontend design tasks requiring high visual quality Full stack projects that need working features, not just code Any task where \"AI slop\" aesthet"
+      "triggers": "Building complete applications from a one line prompt Frontend design tasks requiring high visual quality Full stack projects that need working features, not just code Any task where \"AI slop\""
     },
     {
       "kind": "skill",
       "name": "gateguard",
       "description": "Fact-forcing gate that blocks Edit/Write/Bash (including MultiEdit) and demands concrete investigation (importers, data schemas, user instruction) before allowing the action. Measurably improves output quality by +2.25 points vs ungated agents.",
       "source": "skills/general/gateguard/SKILL.md",
-      "triggers": "Working on any codebase where file edits affect multiple modules Projects with data files that have specific schemas or date formats Teams where AI generated code must match existing patterns Any work"
+      "triggers": "Working on any codebase where file edits affect multiple modules Projects with data files that have specific schemas or date formats Teams where AI generated code must match existing patterns Any"
     },
     {
       "kind": "skill",
@@ -984,7 +984,7 @@
       "name": "healthcare-cdss-patterns",
       "description": "Clinical Decision Support System (CDSS) development patterns. Drug interaction checking, dose validation, clinical scoring (NEWS2, qSOFA), alert severity classification, and integration into EMR workflows.",
       "source": "skills/general/healthcare-cdss-patterns/SKILL.md",
-      "triggers": "Implementing drug interaction checking Building dose validation engines Implementing clinical scoring systems (NEWS2, qSOFA, APACHE, GCS) Designing alert systems for abnormal clinical values Building "
+      "triggers": "Implementing drug interaction checking Building dose validation engines Implementing clinical scoring systems (NEWS2, qSOFA, APACHE, GCS) Designing alert systems for abnormal clinical values Building"
     },
     {
       "kind": "skill",
@@ -997,28 +997,28 @@
       "name": "healthcare-emr-patterns",
       "description": "EMR/EHR development patterns for healthcare applications. Clinical safety, encounter workflows, prescription generation, clinical decision support integration, and accessibility-first UI for medical data entry.",
       "source": "skills/general_part2/healthcare-emr-patterns/SKILL.md",
-      "triggers": "Building patient encounter workflows (complaint, exam, diagnosis, prescription) Implementing clinical note taking (structured + free text + voice to text) Designing prescription/medication modules wit"
+      "triggers": "Building patient encounter workflows (complaint, exam, diagnosis, prescription) Implementing clinical note taking (structured + free text + voice to text) Designing prescription/medication modules"
     },
     {
       "kind": "skill",
       "name": "healthcare-eval-harness",
       "description": "Patient safety evaluation harness for healthcare application deployments. Automated test suites for CDSS accuracy, PHI exposure, clinical workflow integrity, and integration compliance. Blocks deployments on safety failures.",
       "source": "skills/general_part2/healthcare-eval-harness/SKILL.md",
-      "triggers": "Before any deployment of EMR/EHR applications After modifying CDSS logic (drug interactions, dose validation, scoring) After changing database schemas that touch patient data After modifying authentic"
+      "triggers": "Before any deployment of EMR/EHR applications After modifying CDSS logic (drug interactions, dose validation, scoring) After changing database schemas that touch patient data After modifying"
     },
     {
       "kind": "skill",
       "name": "hermes-imports",
       "description": "Convert local Hermes operator workflows into sanitized EGC skills and release-pack artifacts. Use when preparing a Hermes workflow for public EGC reuse without leaking private workspace state, credentials, or local-only paths.",
       "source": "skills/general_part2/hermes-imports/SKILL.md",
-      "triggers": "A Hermes workflow has repeated enough times to become reusable. A local operator prompt should become a public EGC skill. A launch, content, research, or engineering workflow needs sanitized handoff d"
+      "triggers": "A Hermes workflow has repeated enough times to become reusable. A local operator prompt should become a public EGC skill. A launch, content, research, or engineering workflow needs sanitized handoff"
     },
     {
       "kind": "skill",
       "name": "hexagonal-architecture",
       "description": "Design, implement, and refactor Ports & Adapters systems with clear domain boundaries, dependency inversion, and testable use-case orchestration across TypeScript, Java, Kotlin, and Go services.",
       "source": "skills/general_part2/hexagonal-architecture/SKILL.md",
-      "triggers": "Building new features where long term maintainability and testability matter. Refactoring layered or framework heavy code where domain logic is mixed with I/O concerns. Supporting multiple interfaces "
+      "triggers": "Building new features where long term maintainability and testability matter. Refactoring layered or framework heavy code where domain logic is mixed with I/O concerns. Supporting multiple interfaces"
     },
     {
       "kind": "skill",
@@ -1045,14 +1045,14 @@
       "name": "nextjs-turbopack",
       "description": "Next.js 16+ and Turbopack: incremental bundling, FS caching, dev speed, and when to use Turbopack vs webpack.",
       "source": "skills/general_part2/nextjs-turbopack/SKILL.md",
-      "triggers": "Turbopack (default dev) : Use for day to day development. Faster cold start and HMR, especially in large apps. Webpack (legacy dev) : Use only if you hit a Turbopack bug or rely on a webpack only plug"
+      "triggers": "Turbopack (default dev) : Use for day to day development. Faster cold start and HMR, especially in large apps. Webpack (legacy dev) : Use only if you hit a Turbopack bug or rely on a webpack only"
     },
     {
       "kind": "skill",
       "name": "nuxt4-patterns",
       "description": "Nuxt 4 app patterns for hydration safety, performance, route rules, lazy loading, and SSR-safe data fetching with useFetch and useAsyncData.",
       "source": "skills/general_part2/nuxt4-patterns/SKILL.md",
-      "triggers": "Hydration mismatches between server HTML and client state Route level rendering decisions such as prerender, SWR, ISR, or client only sections Performance work around lazy loading, lazy hydration, or "
+      "triggers": "Hydration mismatches between server HTML and client state Route level rendering decisions such as prerender, SWR, ISR, or client only sections Performance work around lazy loading, lazy hydration, or"
     },
     {
       "kind": "skill",
@@ -1066,35 +1066,35 @@
       "name": "opensource-pipeline",
       "description": "Open-source pipeline: fork, sanitize, and package private projects for safe public release. Chains 3 agents (forker, sanitizer, packager). Triggers: '/opensource', 'open source this', 'make this public', 'prepare for open source'.",
       "source": "skills/general_part2/opensource-pipeline/SKILL.md",
-      "triggers": "User says \"open source this project\" or \"make this public\" User wants to prepare a private repo for public release User needs to strip secrets before pushing to GitHub User invokes /opensource fork , "
+      "triggers": "User says \"open source this project\" or \"make this public\" User wants to prepare a private repo for public release User needs to strip secrets before pushing to GitHub User invokes /opensource fork ,"
     },
     {
       "kind": "skill",
       "name": "perl-security",
       "description": "Comprehensive Perl security covering taint mode, input validation, safe process execution, DBI parameterized queries, web security (XSS/SQLi/CSRF), and perlcritic security policies.",
       "source": "skills/general_part2/perl-security/SKILL.md",
-      "triggers": "Handling user input in Perl applications Building Perl web applications (CGI, Mojolicious, Dancer2, Catalyst) Reviewing Perl code for security vulnerabilities Performing file operations with user supp"
+      "triggers": "Handling user input in Perl applications Building Perl web applications (CGI, Mojolicious, Dancer2, Catalyst) Reviewing Perl code for security vulnerabilities Performing file operations with user"
     },
     {
       "kind": "skill",
       "name": "plankton-code-quality",
       "description": "Write-time code quality enforcement using Plankton: auto-formatting, linting, and Gemini-powered fixes on every file edit via hooks.",
       "source": "skills/general_part2/plankton-code-quality/SKILL.md",
-      "triggers": "You want automatic formatting and linting on every file edit (not just at commit time) You need defense against agents modifying linter configs to pass instead of fixing code You want tiered model rou"
+      "triggers": "You want automatic formatting and linting on every file edit (not just at commit time) You need defense against agents modifying linter configs to pass instead of fixing code You want tiered model"
     },
     {
       "kind": "skill",
       "name": "product-capability",
       "description": "Translate PRD intent, roadmap asks, or product discussions into an implementation-ready capability plan that exposes constraints, invariants, interfaces, and unresolved decisions before multi-service work starts. Use when the user needs an EGC-native PRD-to-SRS lane instead of vague planning prose.",
       "source": "skills/general_part2/product-capability/SKILL.md",
-      "triggers": "A PRD, roadmap item, discussion, or founder note exists, but the implementation constraints are still implicit A feature crosses multiple services, repos, or teams and needs a capability contract befo"
+      "triggers": "A PRD, roadmap item, discussion, or founder note exists, but the implementation constraints are still implicit A feature crosses multiple services, repos, or teams and needs a capability contract"
     },
     {
       "kind": "skill",
       "name": "product-lens",
       "description": "Use this skill to validate the \"why\" before building, run product diagnostics, and pressure-test product direction before the request becomes an implementation contract.",
       "source": "skills/general_part2/product-lens/SKILL.md",
-      "triggers": "Before starting any feature: validate the \"why\" Weekly product review: are we building the right thing? When stuck choosing between features Before a launch: sanity check the user journey When convert"
+      "triggers": "Before starting any feature: validate the \"why\" Weekly product review: are we building the right thing? When stuck choosing between features Before a launch: sanity check the user journey When"
     },
     {
       "kind": "skill",
@@ -1114,7 +1114,7 @@
       "name": "repo-scan",
       "description": "Cross-stack source code asset audit: classifies every file, detects embedded third-party libraries, and delivers actionable four-level verdicts per module with interactive HTML reports.",
       "source": "skills/general_part2/repo-scan/SKILL.md",
-      "triggers": "Taking over a large legacy codebase and need a structural overview Before major refactoring: identify what's core, what's duplicate, what's dead Auditing third party dependencies embedded directly in "
+      "triggers": "Taking over a large legacy codebase and need a structural overview Before major refactoring: identify what's core, what's duplicate, what's dead Auditing third party dependencies embedded directly in"
     },
     {
       "kind": "skill",
@@ -1128,7 +1128,7 @@
       "name": "safety-guard",
       "description": "Use this skill to prevent destructive operations when working on production systems or running agents autonomously.",
       "source": "skills/general_part2/safety-guard/SKILL.md",
-      "triggers": "When working on production systems When agents are running autonomously (full auto mode) When you want to restrict edits to a specific directory During sensitive operations (migrations, deploys, data "
+      "triggers": "When working on production systems When agents are running autonomously (full auto mode) When you want to restrict edits to a specific directory During sensitive operations (migrations, deploys, data"
     },
     {
       "kind": "skill",
@@ -1156,7 +1156,7 @@
       "name": "workspace-surface-audit",
       "description": "Audit the active repo, MCP servers, plugins, connectors, env surfaces, and harness setup, then recommend the highest-value EGC-native skills, hooks, agents, and operator workflows. Use when the user wants help setting up your AI coding tool or understanding what capabilities are actually available in their environment.",
       "source": "skills/general_part2/workspace-surface-audit/SKILL.md",
-      "triggers": "User says \"set up my AI coding tool\", \"recommend automations\", \"what plugins or MCPs should I use?\", or \"what am I missing?\" Auditing a machine or repo before installing more skills, hooks, or connect"
+      "triggers": "User says \"set up my AI coding tool\", \"recommend automations\", \"what plugins or MCPs should I use?\", or \"what am I missing?\" Auditing a machine or repo before installing more skills, hooks, or"
     },
     {
       "kind": "skill",
@@ -1170,49 +1170,49 @@
       "name": "connections-optimizer",
       "description": "Reorganize the user's X and LinkedIn network with review-first pruning, add/follow recommendations, and channel-specific warm outreach drafted in the user's real voice. Use when the user wants to clean up following lists, grow toward current priorities, or rebalance a social graph around higher-signal relationships.",
       "source": "skills/integrations/connections-optimizer/SKILL.md",
-      "triggers": "the user wants to prune their X following the user wants to rebalance who they follow or stay connected to the user says \"clean up my network\", \"who should I unfollow\", \"who should I follow\", \"who sho"
+      "triggers": "the user wants to prune their X following the user wants to rebalance who they follow or stay connected to the user says \"clean up my network\", \"who should I unfollow\", \"who should I follow\", \"who"
     },
     {
       "kind": "skill",
       "name": "email-ops",
       "description": "Evidence-first mailbox triage, drafting, send verification, and sent-mail-safe follow-up workflow for EGC. Use when the user wants to organize email, draft or send through the real mail surface, or prove what landed in Sent.",
       "source": "skills/integrations/email-ops/SKILL.md",
-      "triggers": "user asks to triage inbox or archive low signal mail user wants a draft, reply, or new outbound email user wants to know whether a mail was already sent the user wants proof of which account, thread, "
+      "triggers": "user asks to triage inbox or archive low signal mail user wants a draft, reply, or new outbound email user wants to know whether a mail was already sent the user wants proof of which account, thread,"
     },
     {
       "kind": "skill",
       "name": "jira-integration",
       "description": "Use this skill when retrieving Jira tickets, analyzing requirements, updating ticket status, adding comments, or transitioning issues. Provides Jira API patterns via MCP or direct REST calls.",
       "source": "skills/integrations/jira-integration/SKILL.md",
-      "triggers": "Fetching a Jira ticket to understand requirements Extracting testable acceptance criteria from a ticket Adding progress comments to a Jira issue Transitioning a ticket status (To Do → In Progress → Do"
+      "triggers": "Fetching a Jira ticket to understand requirements Extracting testable acceptance criteria from a ticket Adding progress comments to a Jira issue Transitioning a ticket status (To Do → In Progress →"
     },
     {
       "kind": "skill",
       "name": "messages-ops",
       "description": "Evidence-first live messaging workflow for EGC. Use when the user wants to read texts or DMs, recover a recent one-time code, inspect a thread before replying, or prove which message source was actually checked.",
       "source": "skills/integrations/messages-ops/SKILL.md",
-      "triggers": "user says \"read my messages\", \"check texts\", \"look in DMs\", or \"find the code\" the task depends on a live thread or a recent code delivered to a local messaging surface the user wants proof of which s"
+      "triggers": "user says \"read my messages\", \"check texts\", \"look in DMs\", or \"find the code\" the task depends on a live thread or a recent code delivered to a local messaging surface the user wants proof of which"
     },
     {
       "kind": "skill",
       "name": "social-graph-ranker",
       "description": "Weighted social-graph ranking for warm intro discovery, bridge scoring, and network gap analysis across X and LinkedIn. Use when the user wants the reusable graph-ranking engine itself, not the broader outreach or network-maintenance workflow layered on top of it.",
       "source": "skills/integrations/social-graph-ranker/SKILL.md",
-      "triggers": "Choose this skill when the user primarily wants the ranking engine: \"who in my network is best positioned to introduce me?\" \"rank my mutuals by who can get me to these people\" \"map my graph against th"
+      "triggers": "Choose this skill when the user primarily wants the ranking engine: \"who in my network is best positioned to introduce me?\" \"rank my mutuals by who can get me to these people\" \"map my graph against"
     },
     {
       "kind": "skill",
       "name": "unified-notifications-ops",
       "description": "Operate notifications as one EGC-native workflow across GitHub, Linear, desktop alerts, hooks, and connected communication surfaces. Use when the real problem is alert routing, deduplication, escalation, or inbox collapse.",
       "source": "skills/integrations/unified-notifications-ops/SKILL.md",
-      "triggers": "the user wants a unified notification lane across GitHub, Linear, local hooks, desktop alerts, chat, or email CI failures, review requests, issue updates, and operator events are arriving in disconnec"
+      "triggers": "the user wants a unified notification lane across GitHub, Linear, local hooks, desktop alerts, chat, or email CI failures, review requests, issue updates, and operator events are arriving in"
     },
     {
       "kind": "skill",
       "name": "x-api",
       "description": "X/Twitter API integration for posting tweets, threads, reading timelines, search, and analytics. Covers OAuth auth patterns, rate limits, and platform-native content posting. Use when the user wants to interact with X programmatically.",
       "source": "skills/integrations/x-api/SKILL.md",
-      "triggers": "User wants to post tweets or threads programmatically Reading timeline, mentions, or user data from X Searching X for content, trends, or conversations Building X integrations or bots Analytics and en"
+      "triggers": "User wants to post tweets or threads programmatically Reading timeline, mentions, or user data from X Searching X for content, trends, or conversations Building X integrations or bots Analytics and"
     },
     {
       "kind": "skill",
@@ -1226,21 +1226,21 @@
       "name": "kotlin-coroutines-flows",
       "description": "Kotlin Coroutines and Flow patterns for Android and KMP: structured concurrency, Flow operators, StateFlow, error handling, and testing.",
       "source": "skills/language/kotlin-coroutines-flows/SKILL.md",
-      "triggers": "Writing async code with Kotlin coroutines Using Flow, StateFlow, or SharedFlow for reactive data Handling concurrent operations (parallel loading, debounce, retry) Testing coroutines and Flows Managin"
+      "triggers": "Writing async code with Kotlin coroutines Using Flow, StateFlow, or SharedFlow for reactive data Handling concurrent operations (parallel loading, debounce, retry) Testing coroutines and Flows"
     },
     {
       "kind": "skill",
       "name": "kotlin-exposed-patterns",
       "description": "JetBrains Exposed ORM patterns including DSL queries, DAO pattern, transactions, HikariCP connection pooling, Flyway migrations, and repository pattern.",
       "source": "skills/language/kotlin-exposed-patterns/SKILL.md",
-      "triggers": "Setting up database access with Exposed Writing SQL queries using Exposed DSL or DAO Configuring connection pooling with HikariCP Creating database migrations with Flyway Implementing the repository p"
+      "triggers": "Setting up database access with Exposed Writing SQL queries using Exposed DSL or DAO Configuring connection pooling with HikariCP Creating database migrations with Flyway Implementing the repository"
     },
     {
       "kind": "skill",
       "name": "kotlin-ktor-patterns",
       "description": "Ktor server patterns including routing DSL, plugins, authentication, Koin DI, kotlinx.serialization, WebSockets, and testApplication testing.",
       "source": "skills/language/kotlin-ktor-patterns/SKILL.md",
-      "triggers": "Building Ktor HTTP servers Configuring Ktor plugins (Auth, CORS, ContentNegotiation, StatusPages) Implementing REST APIs with Ktor Setting up dependency injection with Koin Writing Ktor integration te"
+      "triggers": "Building Ktor HTTP servers Configuring Ktor plugins (Auth, CORS, ContentNegotiation, StatusPages) Implementing REST APIs with Ktor Setting up dependency injection with Koin Writing Ktor integration"
     },
     {
       "kind": "skill",
@@ -1254,28 +1254,28 @@
       "name": "swift-actor-persistence",
       "description": "Thread-safe data persistence in Swift using actors: in-memory cache with file-backed storage, eliminating data races by design.",
       "source": "skills/language/swift-actor-persistence/SKILL.md",
-      "triggers": "Building a data persistence layer in Swift 5.5+ Need thread safe access to shared mutable state Want to eliminate manual synchronization (locks, DispatchQueues) Building offline first apps with local "
+      "triggers": "Building a data persistence layer in Swift 5.5+ Need thread safe access to shared mutable state Want to eliminate manual synchronization (locks, DispatchQueues) Building offline first apps with local"
     },
     {
       "kind": "skill",
       "name": "swift-concurrency-6-2",
       "description": "Swift 6.2 Approachable Concurrency: single-threaded by default, @concurrent for explicit background offloading, isolated conformances for main actor types.",
       "source": "skills/language/swift-concurrency-6-2/SKILL.md",
-      "triggers": "Migrating Swift 5.x or 6.0/6.1 projects to Swift 6.2 Resolving data race safety compiler errors Designing MainActor based app architecture Offloading CPU intensive work to background threads Implement"
+      "triggers": "Migrating Swift 5.x or 6.0/6.1 projects to Swift 6.2 Resolving data race safety compiler errors Designing MainActor based app architecture Offloading CPU intensive work to background threads"
     },
     {
       "kind": "skill",
       "name": "swift-protocol-di-testing",
       "description": "Protocol-based dependency injection for testable Swift code: mock file system, network, and external APIs using focused protocols and Swift Testing.",
       "source": "skills/language/swift-protocol-di-testing/SKILL.md",
-      "triggers": "Writing Swift code that accesses file system, network, or external APIs Need to test error handling paths without triggering real failures Building modules that work across environments (app, test, Sw"
+      "triggers": "Writing Swift code that accesses file system, network, or external APIs Need to test error handling paths without triggering real failures Building modules that work across environments (app, test,"
     },
     {
       "kind": "skill",
       "name": "cisco-ios-patterns",
       "description": "Cisco IOS and IOS-XE review patterns for show commands, config hierarchy, wildcard masks, ACL placement, interface hygiene, and safe change-window verification.",
       "source": "skills/security/cisco-ios-patterns/SKILL.md",
-      "triggers": "Reviewing IOS or IOS XE configuration before a planned change. Choosing read only show commands for troubleshooting. Checking ACL wildcard masks and interface direction. Explaining global, interface, "
+      "triggers": "Reviewing IOS or IOS XE configuration before a planned change. Choosing read only show commands for troubleshooting. Checking ACL wildcard masks and interface direction. Explaining global, interface,"
     },
     {
       "kind": "skill",
@@ -1288,14 +1288,14 @@
       "name": "customs-trade-compliance",
       "description": "Codified expertise for customs documentation, tariff classification, duty optimization, restricted party screening, and regulatory compliance across multiple jurisdictions. Informed by trade compliance specialists with 15+ years experience. Includes HS classification logic, Incoterms application, FTA utilization, and penalty mitigation. Use when handling customs clearance, tariff classification, trade compliance, import/export documentation, or duty optimization.",
       "source": "skills/security/customs-trade-compliance/SKILL.md",
-      "triggers": "Classifying goods under HS/HTS tariff codes for import or export Preparing customs documentation (commercial invoices, certificates of origin, ISF filings) Screening parties against denied/restricted "
+      "triggers": "Classifying goods under HS/HTS tariff codes for import or export Preparing customs documentation (commercial invoices, certificates of origin, ISF filings) Screening parties against denied/restricted"
     },
     {
       "kind": "skill",
       "name": "defi-amm-security",
       "description": "Security checklist for Solidity AMM contracts, liquidity pools, and swap flows. Covers reentrancy, CEI ordering, donation or inflation attacks, oracle manipulation, slippage, admin controls, and integer math.",
       "source": "skills/security/defi-amm-security/SKILL.md",
-      "triggers": "Writing or auditing a Solidity AMM or liquidity pool contract Implementing swap, deposit, withdraw, mint, or burn flows that hold token balances Reviewing any contract that uses token.balanceOf(addres"
+      "triggers": "Writing or auditing a Solidity AMM or liquidity pool contract Implementing swap, deposit, withdraw, mint, or burn flows that hold token balances Reviewing any contract that uses"
     },
     {
       "kind": "skill",
@@ -1309,98 +1309,98 @@
       "name": "hipaa-compliance",
       "description": "HIPAA-specific entrypoint for healthcare privacy and security work. Use when a task is explicitly framed around HIPAA, PHI handling, covered entities, BAAs, breach posture, or US healthcare compliance requirements.",
       "source": "skills/security/hipaa-compliance/SKILL.md",
-      "triggers": "The request explicitly mentions HIPAA, PHI, covered entities, business associates, or BAAs Building or reviewing US healthcare software that stores, processes, exports, or transmits PHI Assessing whet"
+      "triggers": "The request explicitly mentions HIPAA, PHI, covered entities, business associates, or BAAs Building or reviewing US healthcare software that stores, processes, exports, or transmits PHI Assessing"
     },
     {
       "kind": "skill",
       "name": "homelab-network-readiness",
       "description": "Readiness checklist for homelab VLAN segmentation, local DNS filtering, and WireGuard-style remote access before changing router, firewall, DHCP, or VPN configuration.",
       "source": "skills/security/homelab-network-readiness/SKILL.md",
-      "triggers": "Preparing to split a flat network into trusted, IoT, guest, server, or management VLANs. Moving DHCP clients to Pi hole, AdGuard Home, Unbound, or another local DNS resolver. Adding WireGuard, Tailsca"
+      "triggers": "Preparing to split a flat network into trusted, IoT, guest, server, or management VLANs. Moving DHCP clients to Pi hole, AdGuard Home, Unbound, or another local DNS resolver. Adding WireGuard,"
     },
     {
       "kind": "skill",
       "name": "homelab-network-setup",
       "description": "Practical home and homelab network planning for gateways, switches, access points, IP ranges, DHCP reservations, DNS, cabling, and common beginner mistakes.",
       "source": "skills/security/homelab-network-setup/SKILL.md",
-      "triggers": "Planning a new home network or redesigning an ISP router only setup. Choosing gateway, switch, and access point roles. Designing IP ranges, DHCP scopes, static reservations, and DNS. Preparing for fut"
+      "triggers": "Planning a new home network or redesigning an ISP router only setup. Choosing gateway, switch, and access point roles. Designing IP ranges, DHCP scopes, static reservations, and DNS. Preparing for"
     },
     {
       "kind": "skill",
       "name": "homelab-pihole-dns",
       "description": "Pi-hole installation, blocklist management, DNS-over-HTTPS setup, DHCP integration, local DNS records, and troubleshooting broken DNS resolution on a home network.",
       "source": "skills/security/homelab-pihole-dns/SKILL.md",
-      "triggers": "Installing Pi hole on a Raspberry Pi or Linux host Configuring Pi hole as the DNS server for a home network Adding or managing blocklists Setting up DNS over HTTPS (DoH) upstream resolvers Creating lo"
+      "triggers": "Installing Pi hole on a Raspberry Pi or Linux host Configuring Pi hole as the DNS server for a home network Adding or managing blocklists Setting up DNS over HTTPS (DoH) upstream resolvers Creating"
     },
     {
       "kind": "skill",
       "name": "homelab-vlan-segmentation",
       "description": "Segmenting home networks into VLANs for IoT, guest, trusted, and server traffic using UniFi, pfSense/OPNsense, and MikroTik: including switch trunk config, firewall rules, and wireless SSID mapping.",
       "source": "skills/security/homelab-vlan-segmentation/SKILL.md",
-      "triggers": "Setting up VLANs on a home network for the first time Isolating IoT devices (smart bulbs, cameras, TVs) from trusted devices Creating a guest Wi Fi network that cannot reach home devices Explaining ho"
+      "triggers": "Setting up VLANs on a home network for the first time Isolating IoT devices (smart bulbs, cameras, TVs) from trusted devices Creating a guest Wi Fi network that cannot reach home devices Explaining"
     },
     {
       "kind": "skill",
       "name": "homelab-wireguard-vpn",
       "description": "WireGuard VPN server setup, peer configuration, key generation, split tunneling vs full tunnel routing, and remote access to a home network from mobile and laptop clients.",
       "source": "skills/security/homelab-wireguard-vpn/SKILL.md",
-      "triggers": "Setting up WireGuard server on a Raspberry Pi, Linux host, pfSense, or router Generating WireGuard keypairs and writing peer config files Configuring remote access from a phone or laptop to a home net"
+      "triggers": "Setting up WireGuard server on a Raspberry Pi, Linux host, pfSense, or router Generating WireGuard keypairs and writing peer config files Configuring remote access from a phone or laptop to a home"
     },
     {
       "kind": "skill",
       "name": "llm-trading-agent-security",
       "description": "Security patterns for autonomous trading agents with wallet or transaction authority. Covers prompt injection, spend limits, pre-send simulation, circuit breakers, MEV protection, and key handling.",
       "source": "skills/security/llm-trading-agent-security/SKILL.md",
-      "triggers": "Building an AI agent that signs and sends transactions Auditing a trading bot or on chain execution assistant Designing wallet key management for an agent Giving an LLM access to order placement, swap"
+      "triggers": "Building an AI agent that signs and sends transactions Auditing a trading bot or on chain execution assistant Designing wallet key management for an agent Giving an LLM access to order placement,"
     },
     {
       "kind": "skill",
       "name": "netmiko-ssh-automation",
       "description": "Safe Python Netmiko patterns for read-only collection, bounded batch SSH, TextFSM parsing, guarded config changes, timeouts, and network automation error handling.",
       "source": "skills/security/netmiko-ssh-automation/SKILL.md",
-      "triggers": "Collecting show command output across routers, switches, or firewalls. Building a small audit script for interface, routing, or config evidence. Adding timeouts and exception handling to network SSH s"
+      "triggers": "Collecting show command output across routers, switches, or firewalls. Building a small audit script for interface, routing, or config evidence. Adding timeouts and exception handling to network SSH"
     },
     {
       "kind": "skill",
       "name": "network-bgp-diagnostics",
       "description": "Diagnostics-only BGP troubleshooting patterns for neighbor state, route exchange, prefix policy, AS path inspection, and safe evidence collection.",
       "source": "skills/security/network-bgp-diagnostics/SKILL.md",
-      "triggers": "BGP neighbors are stuck in Idle, Connect, Active, OpenSent, or OpenConfirm. A session is Established but expected prefixes are missing. A route map, prefix list, max prefix limit, or AS path policy ma"
+      "triggers": "BGP neighbors are stuck in Idle, Connect, Active, OpenSent, or OpenConfirm. A session is Established but expected prefixes are missing. A route map, prefix list, max prefix limit, or AS path policy"
     },
     {
       "kind": "skill",
       "name": "network-config-validation",
       "description": "Pre-deployment checks for router and switch configuration, including dangerous commands, duplicate addresses, subnet overlaps, stale references, management-plane risk, and IOS-style security hygiene.",
       "source": "skills/security/network-config-validation/SKILL.md",
-      "triggers": "Reviewing Cisco IOS or IOS XE style snippets before deployment. Auditing generated config from scripts or templates. Looking for dangerous commands, duplicate IP addresses, or subnet overlaps. Checkin"
+      "triggers": "Reviewing Cisco IOS or IOS XE style snippets before deployment. Auditing generated config from scripts or templates. Looking for dangerous commands, duplicate IP addresses, or subnet overlaps."
     },
     {
       "kind": "skill",
       "name": "network-interface-health",
       "description": "Diagnose interface errors, drops, CRCs, duplex mismatches, flapping, speed negotiation issues, and counter trends on routers, switches, and Linux hosts.",
       "source": "skills/security/network-interface-health/SKILL.md",
-      "triggers": "A host or VLAN has packet loss, latency spikes, or intermittent reachability. A switch or router interface shows CRCs, runts, giants, drops, resets, or flaps. You need to compare both ends of a link b"
+      "triggers": "A host or VLAN has packet loss, latency spikes, or intermittent reachability. A switch or router interface shows CRCs, runts, giants, drops, resets, or flaps. You need to compare both ends of a link"
     },
     {
       "kind": "skill",
       "name": "security-bounty-hunter",
       "description": "Hunt for exploitable, bounty-worthy security issues in repositories. Focuses on remotely reachable vulnerabilities that qualify for real reports instead of noisy local-only findings.",
       "source": "skills/security/security-bounty-hunter/SKILL.md",
-      "triggers": "Scanning a repository for exploitable vulnerabilities Preparing a Huntr, HackerOne, or similar bounty submission Triage where the question is \"does this actually pay?\" rather than \"is this theoretical"
+      "triggers": "Scanning a repository for exploitable vulnerabilities Preparing a Huntr, HackerOne, or similar bounty submission Triage where the question is \"does this actually pay?\" rather than \"is this"
     },
     {
       "kind": "skill",
       "name": "security-review",
       "description": "Use this skill when adding authentication, handling user input, working with secrets, creating API endpoints, or implementing payment/sensitive features. Provides comprehensive security checklist and patterns.",
       "source": "skills/security/security-review/SKILL.md",
-      "triggers": "Implementing authentication or authorization Handling user input or file uploads Creating new API endpoints Working with secrets or credentials Implementing payment features Storing or transmitting se"
+      "triggers": "Implementing authentication or authorization Handling user input or file uploads Creating new API endpoints Working with secrets or credentials Implementing payment features Storing or transmitting"
     },
     {
       "kind": "skill",
       "name": "security-scan",
       "description": "Scan your Claude Code configuration (.claude/ directory) for security vulnerabilities, misconfigurations, and injection risks using AgentShield. Checks CLAUDE.md, settings.json, MCP servers, hooks, and agent definitions.",
       "source": "skills/security/security-scan/SKILL.md",
-      "triggers": "Setting up a new project with your AI coding tool After modifying .claude/settings.json , CLAUDE.md , or MCP configs Before committing configuration changes When onboarding to a new repository with ex"
+      "triggers": "Setting up a new project with your AI coding tool After modifying .claude/settings.json , CLAUDE.md , or MCP configs Before committing configuration changes When onboarding to a new repository with"
     },
     {
       "kind": "skill",
@@ -1413,14 +1413,14 @@
       "name": "ai-regression-testing",
       "description": "Regression testing strategies for AI-assisted development. Sandbox-mode API testing without database dependencies, automated bug-check workflows, and patterns to catch AI blind spots where the same model writes and reviews code.",
       "source": "skills/testing/ai-regression-testing/SKILL.md",
-      "triggers": "AI agent (Claude Code, Cursor, Codex) has modified API routes or backend logic A bug was found and fixed: need to prevent re introduction Project has a sandbox/mock mode that can be leveraged for DB f"
+      "triggers": "AI agent (Claude Code, Cursor, Codex) has modified API routes or backend logic A bug was found and fixed: need to prevent re introduction Project has a sandbox/mock mode that can be leveraged for DB"
     },
     {
       "kind": "skill",
       "name": "cpp-testing",
       "description": "Use only when writing/updating/fixing C++ tests, configuring GoogleTest/CTest, diagnosing failing or flaky tests, or adding coverage/sanitizers.",
       "source": "skills/testing/cpp-testing/SKILL.md",
-      "triggers": "Writing new C++ tests or fixing existing tests Designing unit/integration test coverage for C++ components Adding test coverage, CI gating, or regression protection Configuring CMake/CTest workflows f"
+      "triggers": "Writing new C++ tests or fixing existing tests Designing unit/integration test coverage for C++ components Adding test coverage, CI gating, or regression protection Configuring CMake/CTest workflows"
     },
     {
       "kind": "skill",
@@ -1454,7 +1454,7 @@
       "name": "eval-harness",
       "description": "Formal evaluation framework for AI coding sessions implementing eval-driven development (EDD) principles",
       "source": "skills/testing/eval-harness/SKILL.md",
-      "triggers": "Setting up eval driven development (EDD) for AI assisted workflows Defining pass/fail criteria for AI coding task completion Measuring agent reliability with pass@k metrics Creating regression test su"
+      "triggers": "Setting up eval driven development (EDD) for AI assisted workflows Defining pass/fail criteria for AI coding task completion Measuring agent reliability with pass@k metrics Creating regression test"
     },
     {
       "kind": "skill",
@@ -1468,7 +1468,7 @@
       "name": "golang-testing",
       "description": "Go testing patterns including table-driven tests, subtests, benchmarks, fuzzing, and test coverage. Follows TDD methodology with idiomatic Go practices.",
       "source": "skills/testing/golang-testing/SKILL.md",
-      "triggers": "Writing new Go functions or methods Adding test coverage to existing code Creating benchmarks for performance critical code Implementing fuzz tests for input validation Following TDD workflow in Go pr"
+      "triggers": "Writing new Go functions or methods Adding test coverage to existing code Creating benchmarks for performance critical code Implementing fuzz tests for input validation Following TDD workflow in Go"
     },
     {
       "kind": "skill",
@@ -1489,7 +1489,7 @@
       "name": "laravel-verification",
       "description": "Verification loop for Laravel projects: env checks, linting, static analysis, tests with coverage, security scans, and deployment readiness.",
       "source": "skills/testing/laravel-verification/SKILL.md",
-      "triggers": "Before opening a pull request for a Laravel project After major refactors or dependency upgrades Pre deployment verification for staging or production Running full lint test security deploy readiness "
+      "triggers": "Before opening a pull request for a Laravel project After major refactors or dependency upgrades Pre deployment verification for staging or production Running full lint test security deploy readiness"
     },
     {
       "kind": "skill",
@@ -1510,7 +1510,7 @@
       "name": "rust-testing",
       "description": "Rust testing patterns including unit tests, integration tests, async testing, property-based testing, mocking, and coverage. Follows TDD methodology.",
       "source": "skills/testing/rust-testing/SKILL.md",
-      "triggers": "Writing new Rust functions, methods, or traits Adding test coverage to existing code Creating benchmarks for performance critical code Implementing property based tests for input validation Following "
+      "triggers": "Writing new Rust functions, methods, or traits Adding test coverage to existing code Creating benchmarks for performance critical code Implementing property based tests for input validation Following"
     },
     {
       "kind": "skill",
@@ -1545,7 +1545,7 @@
       "name": "windows-desktop-e2e",
       "description": "E2E testing for Windows native desktop apps (WPF, WinForms, Win32/MFC, Qt) using pywinauto and Windows UI Automation.",
       "source": "skills/testing/windows-desktop-e2e/SKILL.md",
-      "triggers": "Writing or running E2E tests for a Windows native desktop application Setting up a desktop GUI test suite from scratch Diagnosing flaky or failing desktop automation tests Adding testability (Automati"
+      "triggers": "Writing or running E2E tests for a Windows native desktop application Setting up a desktop GUI test suite from scratch Diagnosing flaky or failing desktop automation tests Adding testability"
     },
     {
       "kind": "skill",
@@ -1565,35 +1565,35 @@
       "name": "iterative-retrieval",
       "description": "Pattern for progressively refining context retrieval to solve the subagent context problem",
       "source": "skills/workflows/iterative-retrieval/SKILL.md",
-      "triggers": "Spawning subagents that need codebase context they cannot predict upfront Building multi agent workflows where context is progressively refined Encountering \"context too large\" or \"missing context\" fa"
+      "triggers": "Spawning subagents that need codebase context they cannot predict upfront Building multi agent workflows where context is progressively refined Encountering \"context too large\" or \"missing context\""
     },
     {
       "kind": "skill",
       "name": "knowledge-ops",
       "description": "Knowledge base management, ingestion, sync, and retrieval across multiple storage layers (local files, MCP memory, vector stores, Git repos). Use when the user wants to save, organize, sync, deduplicate, or search across their knowledge systems.",
       "source": "skills/workflows/knowledge-ops/SKILL.md",
-      "triggers": "User wants to save information to their knowledge base Ingesting documents, conversations, or data into structured storage Syncing knowledge across systems (local files, MCP memory, Supabase, Git repo"
+      "triggers": "User wants to save information to their knowledge base Ingesting documents, conversations, or data into structured storage Syncing knowledge across systems (local files, MCP memory, Supabase, Git"
     },
     {
       "kind": "skill",
       "name": "project-flow-ops",
       "description": "Operate execution flow across GitHub and Linear by triaging issues and pull requests, linking active work, and keeping GitHub public-facing while Linear remains the internal execution layer. Use when the user wants backlog control, PR triage, or GitHub-to-Linear coordination.",
       "source": "skills/workflows/project-flow-ops/SKILL.md",
-      "triggers": "Triage open PR or issue backlogs Decide what belongs in Linear vs what should remain GitHub only Link active GitHub work to internal execution lanes Classify PRs into merge, port/rebuild, close, or pa"
+      "triggers": "Triage open PR or issue backlogs Decide what belongs in Linear vs what should remain GitHub only Link active GitHub work to internal execution lanes Classify PRs into merge, port/rebuild, close, or"
     },
     {
       "kind": "skill",
       "name": "research-ops",
       "description": "Evidence-first current-state research workflow for EGC. Use when the user wants fresh facts, comparisons, enrichment, or a recommendation built from current public evidence and any supplied local context.",
       "source": "skills/workflows/research-ops/SKILL.md",
-      "triggers": "user says \"research\", \"look up\", \"compare\", \"who should I talk to\", or \"what's the latest\" the answer depends on current public information the user already supplied evidence and wants it factored int"
+      "triggers": "user says \"research\", \"look up\", \"compare\", \"who should I talk to\", or \"what's the latest\" the answer depends on current public information the user already supplied evidence and wants it factored"
     },
     {
       "kind": "skill",
       "name": "skill-router",
       "description": "Describes how skills and agents from the EGC library are surfaced to a target harness, and how to inspect or install the catalog. Use when the user asks which skills/agents EGC ships, or wants to discover or install a curated profile.",
       "source": "skills/workflows/skill-router/SKILL.md",
-      "triggers": "When you need to discover which skills and agents EGC ships. When you want to install a curated profile or specific modules into a target harness (Cursor, Codex, Gemini, compatible harness, etc.). Whe"
+      "triggers": "When you need to discover which skills and agents EGC ships. When you want to install a curated profile or specific modules into a target harness (Cursor, Codex, Gemini, compatible harness, etc.)."
     },
     {
       "kind": "skill",
@@ -1606,7 +1606,7 @@
       "name": "strategic-compact",
       "description": "Suggests manual context compaction at logical intervals to preserve context through task phases rather than arbitrary auto-compaction.",
       "source": "skills/workflows/strategic-compact/SKILL.md",
-      "triggers": "Running long sessions that approach context limits (200K+ tokens) Working on multi phase tasks (research → plan → implement → test) Switching between unrelated tasks within the same session After comp"
+      "triggers": "Running long sessions that approach context limits (200K+ tokens) Working on multi phase tasks (research → plan → implement → test) Switching between unrelated tasks within the same session After"
     },
     {
       "kind": "agent",
