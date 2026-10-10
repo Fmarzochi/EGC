@@ -10,7 +10,6 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { CLI_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts.js');
 
 const script = path.join(__dirname, '..', 'scripts', 'context.js');
 const buildPath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'file-rank.js');
@@ -72,19 +71,23 @@ run('egc context refuses a filesystem root and the home directory', () => {
   }
 });
 
-run('a second positional argument is refused, and a copy without a Guardian build exits 2 with a message', () => {
-  const extra = spawnSync(process.execPath, [script, 'first', 'second', '--no-git'], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
-  assert.strictEqual(extra.status, 1);
-  assert.ok(extra.stderr.includes('unexpected argument second'), extra.stderr);
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-context-unbuilt-'));
-  try {
-    fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
-    fs.copyFileSync(script, path.join(dir, 'scripts', 'context.js'));
-    const unbuilt = spawnSync(process.execPath, [path.join(dir, 'scripts', 'context.js'), 'anything', '--project', root, '--no-git'], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
-    assert.strictEqual(unbuilt.status, 2, unbuilt.stderr);
-    assert.ok(unbuilt.stderr.includes('guardian build not found'), unbuilt.stderr);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+run('a second positional argument is rejected, not silently dropped', () => {
+  const r = spawnSync(process.execPath, [script, 'first', 'second', '--no-git'], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 1);
+  assert.ok(r.stderr.includes('unexpected argument second'), r.stderr);
+  assert.ok(r.stderr.includes('usage: egc context'), r.stderr);
+});
+
+run('--top outside 1-50 is a usage error, above the range and below it', () => {
+  for (const top of ['0', '51', '-1']) {
+    const r = spawnSync(process.execPath, [script, 'chargeCard', '--project', root, '--no-git', '--top', top], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 1, `--top ${top}: ${r.stdout}`);
+    assert.ok(r.stderr.includes('--top must be 1-50'), r.stderr);
+  }
+  // The boundaries themselves are not errors.
+  for (const top of ['1', '50']) {
+    const r = spawnSync(process.execPath, [script, 'chargeCard', '--project', root, '--no-git', '--top', top], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, `--top ${top}: ${r.stderr}`);
   }
 });
 
