@@ -71,6 +71,26 @@ run('egc context refuses a filesystem root and the home directory', () => {
   }
 });
 
+run('a second positional argument is rejected, not silently dropped', () => {
+  const r = spawnSync(process.execPath, [script, 'first', 'second', '--no-git'], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 1);
+  assert.ok(r.stderr.includes('unexpected argument second'), r.stderr);
+  assert.ok(r.stderr.includes('usage: egc context'), r.stderr);
+});
+
+run('--top outside 1-50 is a usage error, above the range and below it', () => {
+  for (const top of ['0', '51', '-1']) {
+    const r = spawnSync(process.execPath, [script, 'chargeCard', '--project', root, '--no-git', '--top', top], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 1, `--top ${top}: ${r.stdout}`);
+    assert.ok(r.stderr.includes('--top must be 1-50'), r.stderr);
+  }
+  // The boundaries themselves are not errors.
+  for (const top of ['1', '50']) {
+    const r = spawnSync(process.execPath, [script, 'chargeCard', '--project', root, '--no-git', '--top', top], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, `--top ${top}: ${r.stderr}`);
+  }
+});
+
 run('a flag without its value is named, with the usage line, and is not a TypeError', () => {
   for (const flag of ['--project', '--top', '--history']) {
     const r = spawnSync(process.execPath, [script, 'chargeCard', flag], { encoding: 'utf8' });
