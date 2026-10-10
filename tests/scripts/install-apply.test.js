@@ -255,8 +255,11 @@ function runTests() {
   const NAMED_ANTIGRAVITY_HOOKS = ['egc-gateguard', 'egc-guardian', 'egc-mesh-notice'];
 
   tally(test('an upgrade retires the Claude-format hooks under antigravity-cli, removes the emptied file and keeps the named hooks in config/hooks.json (#1707)', () => {
-    const homeDir = createTempDir('install-apply-home-');
-    const projectDir = createTempDir('install-apply-project-');
+    // Real paths: the retirement compares the recorded entries against the
+    // managed roots the installer resolves, and macOS keeps the temporary
+    // directory behind a symbolic link.
+    const homeDir = fs.realpathSync(createTempDir('install-apply-home-'));
+    const projectDir = fs.realpathSync(createTempDir('install-apply-project-'));
 
     try {
       const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
@@ -298,8 +301,8 @@ function runTests() {
   }));
 
   tally(test('an upgrade retires the Claude-format hooks beside the named hooks in .agents/hooks.json and keeps the person\'s own hook (#1707)', () => {
-    const homeDir = createTempDir('install-apply-home-');
-    const projectDir = createTempDir('install-apply-project-');
+    const homeDir = fs.realpathSync(createTempDir('install-apply-home-'));
+    const projectDir = fs.realpathSync(createTempDir('install-apply-project-'));
 
     try {
       const args = ['--target', 'antigravity', '--profile', 'core'];

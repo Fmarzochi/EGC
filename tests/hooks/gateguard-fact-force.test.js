@@ -1135,6 +1135,19 @@ function runTests() {
     assert.ok(skillOutput, 'should produce valid JSON output');
     const gated = skillOutput.hookSpecificOutput?.permissionDecision === 'deny' || skillOutput.decision === 'block';
     assert.ok(gated, `a first write elsewhere under .agents/ is still gated: ${skill.stdout.slice(0, 200)}`);
+    if (process.platform === 'linux') {
+      // On a case-sensitive filesystem a differently cased spelling is
+      // another file, one the Guardian does not protect, so the gate keeps it.
+      clearState();
+      const spelled = runHook({
+        tool_name: 'Write',
+        tool_input: { file_path: '/workspace/app/.AGENTS/hooks.json', content: '{}' }
+      });
+      const spelledOutput = parseOutput(spelled.stdout);
+      assert.ok(spelledOutput, 'should produce valid JSON output');
+      const spelledGated = spelledOutput.hookSpecificOutput?.permissionDecision === 'deny' || spelledOutput.decision === 'block';
+      assert.ok(spelledGated, `.AGENTS/hooks.json is not the exempt file on a case-sensitive filesystem: ${spelled.stdout.slice(0, 200)}`);
+    }
   }));
 
   // --- Test 17: allows read-only git introspection without first-bash gating ---
