@@ -2598,14 +2598,14 @@ function runTests() {
     );
   }));
 
-  tally(test('crusher hook is registered on Bash and scaffolded for Copilot and Antigravity', () => {
+  // Antigravity has no Token Crusher hook: its hooks answer a decision, never
+  // a rewritten command (tests/lib/antigravity-mesh-hooks.test.js).
+  tally(test('crusher hook is registered on Bash and scaffolded for Copilot', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
-    const projectRoot = '/workspace/app';
 
     const cases = [
       { target: 'copilot', input: { homeDir }, hooksFilePath: path.join(homeDir, '.copilot', 'hooks', 'hooks.json'), root: path.join(homeDir, '.github') },
-      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
     ];
 
     for (const { target, input, hooksFilePath, root } of cases) {
@@ -2638,19 +2638,16 @@ function runTests() {
     }
   }));
 
-  // Session-mesh wake-signal notice: Antigravity inherited the Gemini CLI
-  // hook loop, which reads the hookSpecificOutput.additionalContext field
-  // mesh-events-inject.js emits, so the same standalone script is registered
-  // on UserPromptSubmit at both the project hooks file (antigravity target)
-  // and the global one (egc target owns ~/.gemini).
-  tally(test('mesh notice hook is registered on UserPromptSubmit and scaffolded for Antigravity, Codex, and Trae', () => {
+  // Session-mesh wake-signal notice on the hosts with a UserPromptSubmit
+  // hook in the Claude format. Antigravity has no such event: its notice is
+  // the egc-mesh-notice named hook on PreInvocation
+  // (tests/lib/antigravity-mesh-hooks.test.js).
+  tally(test('mesh notice hook is registered on UserPromptSubmit and scaffolded for Codex and Trae', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
 
     const cases = [
-      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
-      { target: 'egc', input: { homeDir }, hooksFilePath: path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json'), root: path.join(homeDir, '.gemini') },
       { target: 'codex', input: { homeDir }, hooksFilePath: path.join(homeDir, '.codex', 'hooks.json'), root: path.join(homeDir, '.codex') },
       // Trae feeds plain-text stdout to the model, so its registered command
       // is the host adapter, not the shared JSON-emitting script directly.
@@ -2757,14 +2754,14 @@ function runTests() {
   // had GateGuard + Crusher wired (tests above) but never the Guardian
   // command validator itself -- neither one actually checks a Bash command
   // against the Guardian's allowlist/denylist.
-  tally(test('Guardian hook is registered on Bash and scaffolded for Copilot and Antigravity', () => {
+  // Antigravity's Guardian is the egc-guardian named hook in its own format
+  // (tests/lib/antigravity-guardian-hooks.test.js), not a Claude-format entry.
+  tally(test('Guardian hook is registered on Bash and scaffolded for Copilot', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
-    const projectRoot = '/workspace/app';
 
     const cases = [
       { target: 'copilot', input: { homeDir }, hooksFilePath: path.join(homeDir, '.copilot', 'hooks', 'hooks.json'), root: path.join(homeDir, '.github') },
-      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
     ];
 
     for (const { target, input, hooksFilePath, root } of cases) {
@@ -3048,171 +3045,51 @@ function runTests() {
     }
   }));
 
-  tally(test('antigravity-project adapter registers the GateGuard fact-force hook at .agents/hooks.json', () => {
+  // The three hooks Antigravity runs are named hooks in its own format, at
+  // .agents/hooks.json (antigravity target) and ~/.gemini/config/hooks.json
+  // (egc target); the Claude-format entries once planned beside them, and
+  // the whole ~/.gemini/antigravity-cli/hooks.json, never fired. Their
+  // modules, dispatch and copies are covered in
+  // tests/lib/antigravity-guardian-hooks.test.js,
+  // tests/lib/antigravity-gateguard-hooks.test.js and
+  // tests/lib/antigravity-mesh-hooks.test.js; this checks the two plans as
+  // a whole.
+  tally(test('the Antigravity targets plan exactly the three named hooks in the file Antigravity reads, with no Claude-format entry anywhere', () => {
     const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
+    const cases = [
+      { target: 'egc', input: { homeDir }, hooksFilePath: path.join(homeDir, '.gemini', 'config', 'hooks.json'), root: path.join(homeDir, '.gemini') },
+      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
+    ];
 
-    const plan = planInstallTargetScaffold({
-      target: 'antigravity',
-      repoRoot,
-      projectRoot,
-      modules: [],
-    });
-    const hooksFilePath = path.join(projectRoot, '.agents', 'hooks.json');
-    const gateGuardScriptPath = path.join(
-      projectRoot, '.agents', 'scripts', 'hooks', 'gateguard-fact-force.js'
-    );
-
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
-        && operation.destinationPath === gateGuardScriptPath
-      )),
-      'Should scaffold the GateGuard script under .agents/ even with no modules selected'
-    );
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
-        && operation.destinationPath === path.join(projectRoot, '.agents', 'scripts', 'lib', 'utils.js')
-      )),
-      'Should scaffold the GateGuard utils.js dependency alongside the hook script'
-    );
-
-    const gateGuardOperations = plan.operations.filter(operation => (
-      operation.kind === 'merge-claude-settings-hooks'
-      && operation.hookEvent === 'PreToolUse'
-      && operation.destinationPath === hooksFilePath
-      && operation.hookScriptPath === gateGuardScriptPath
-    ));
-    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
-    assert.deepStrictEqual(
-      matchers,
-      ['Bash', 'Edit', 'MultiEdit', 'Write'],
-      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity project scope'
-    );
-  }));
-
-  tally(test('egc-home adapter registers the GateGuard fact-force hook for Antigravity global scope too', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const homeDir = '/Users/example';
-
-    const plan = planInstallTargetScaffold({
-      target: 'egc',
-      repoRoot,
-      homeDir,
-      modules: [],
-    });
-    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
-    const gateGuardScriptPath = path.join(
-      homeDir, '.gemini', 'scripts', 'hooks', 'gateguard-fact-force.js'
-    );
-
-    const gateGuardOperations = plan.operations.filter(operation => (
-      operation.kind === 'merge-claude-settings-hooks'
-      && operation.hookEvent === 'PreToolUse'
-      && operation.destinationPath === hooksFilePath
-      && operation.hookScriptPath === gateGuardScriptPath
-    ));
-    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
-    assert.deepStrictEqual(
-      matchers,
-      ['Bash', 'Edit', 'MultiEdit', 'Write'],
-      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity global hooks.json, ' +
-      'separate from Gemini CLI\'s own ~/.gemini/hooks/hooks.json'
-    );
-
-    // cubic-dev-ai review (PR #1052, 2026-07-27): this test already used
-    // modules: [] (no hooks-runtime module selected), so if the script copy
-    // were still implicit/optional the hooks.json entry above would point
-    // at a file that was never actually scaffolded. Asserting the copy
-    // operation exists here, in the same modules: [] scenario, proves the
-    // registration is now self-sufficient regardless of module selection.
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
-        && operation.destinationPath === gateGuardScriptPath
-      )),
-      'gateguard-fact-force.js must be copied unconditionally, not only via the hooks-runtime module'
-    );
-  }));
-
-  // EGC Guardian: cubic-dev-ai review (PR #1052, 2026-07-27) found
-  // createGlobalBashGuardianHookMergeOperation existed in
-  // antigravity-settings-hooks.js but was never called from gemini-home.js,
-  // so global Antigravity installs never got the Guardian despite GateGuard
-  // (test above) being wired. A follow-up review then found the same
-  // registered-but-never-copied gap once it WAS wired.
-  tally(test('egc-home adapter registers the EGC Guardian on Bash for Antigravity global scope too', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const homeDir = '/Users/example';
-
-    const plan = planInstallTargetScaffold({
-      target: 'egc',
-      repoRoot,
-      homeDir,
-      modules: [],
-    });
-    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
-    const guardianScriptPath = path.join(
-      homeDir, '.gemini', 'scripts', 'hooks', 'pre-bash-guardian-validate.js'
-    );
-
-    const guardianOperations = plan.operations.filter(operation => (
-      operation.kind === 'merge-claude-settings-hooks'
-      && operation.hookEvent === 'PreToolUse'
-      && operation.destinationPath === hooksFilePath
-      && operation.hookScriptPath === guardianScriptPath
-    ));
-    assert.strictEqual(guardianOperations.length, 1, 'Guardian registered once for the Antigravity global hooks.json');
-    assert.strictEqual(guardianOperations[0].hookMatcher, 'Bash', 'Guardian only needs the Bash matcher');
-
-    for (const src of ['scripts/hooks/pre-bash-guardian-validate.js', 'scripts/lib/guardian-bin.js', 'scripts/lib/shell-split.js']) {
-      assert.ok(
-        plan.operations.some(operation => (
-          normalizedRelativePath(operation.sourceRelativePath) === src
-          && operation.destinationPath === path.join(homeDir, '.gemini', ...src.split('/'))
-        )),
-        `${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
+    for (const { target, input, hooksFilePath, root } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+      const hookOperations = plan.operations.filter(operation => operation.kind === 'merge-claude-settings-hooks');
+      assert.deepStrictEqual(
+        hookOperations.map(operation => operation.hookEvent).sort(),
+        ['antigravity:egc-gateguard', 'antigravity:egc-guardian', 'antigravity:egc-mesh-notice'],
+        `${target}: the three named hooks and nothing else`
       );
-    }
-  }));
-
-  // Token Crusher: 2026-07-21 audit left Antigravity's PROJECT-level
-  // registration (.agents/hooks.json, antigravity-project.js) wired but its
-  // GLOBAL registration (this egc-home target, ~/.gemini/antigravity-cli/
-  // hooks.json) unverified/unwired -- same pattern as the GateGuard/Guardian
-  // global gaps above. Closed 2026-07-28.
-  tally(test('egc-home adapter registers the Token Crusher on Bash for Antigravity global scope too', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const homeDir = '/Users/example';
-
-    const plan = planInstallTargetScaffold({
-      target: 'egc',
-      repoRoot,
-      homeDir,
-      modules: [],
-    });
-    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
-    const crusherScriptPath = path.join(
-      homeDir, '.gemini', 'scripts', 'hooks', 'crusher-hook.js'
-    );
-
-    const crusherOperations = plan.operations.filter(operation => (
-      operation.kind === 'merge-claude-settings-hooks'
-      && operation.hookEvent === 'PreToolUse'
-      && operation.destinationPath === hooksFilePath
-      && operation.hookScriptPath === crusherScriptPath
-    ));
-    assert.strictEqual(crusherOperations.length, 1, 'Crusher registered once for the Antigravity global hooks.json');
-    assert.strictEqual(crusherOperations[0].hookMatcher, 'Bash', 'Crusher only needs the Bash matcher');
-
-    for (const src of ['scripts/hooks/crusher-hook.js', 'scripts/hooks/pre-bash-crusher-rewrite.js', 'scripts/hooks/pretooluse-output.js', 'scripts/lib/crusher/engine.js']) {
+      for (const operation of hookOperations) {
+        assert.strictEqual(operation.destinationPath, hooksFilePath, `${target}: ${operation.hookEvent} goes to the file Antigravity reads`);
+        assert.ok(
+          plan.operations.some(copy => copy.kind !== 'merge-claude-settings-hooks' && copy.destinationPath === operation.hookScriptPath),
+          `${target}: the adapter ${path.basename(operation.hookScriptPath)} is copied with no modules selected`
+        );
+      }
+      for (const src of ['scripts/hooks/gateguard-fact-force.js', 'scripts/lib/utils.js', 'scripts/hooks/pre-bash-guardian-validate.js', 'scripts/lib/guardian-bin.js', 'scripts/lib/shell-split.js', 'scripts/lib/wrapper-options.js', 'scripts/hooks/mesh-events-inject.js']) {
+        assert.ok(
+          plan.operations.some(operation => (
+            normalizedRelativePath(operation.sourceRelativePath) === src
+            && operation.destinationPath === path.join(root, ...src.split('/'))
+          )),
+          `${target}: ${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
+        );
+      }
       assert.ok(
-        plan.operations.some(operation => (
-          normalizedRelativePath(operation.sourceRelativePath) === src
-          && operation.destinationPath === path.join(homeDir, '.gemini', ...src.split('/'))
-        )),
-        `${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
+        !plan.operations.some(operation => operation.destinationPath.includes(path.join('antigravity-cli', 'hooks.json'))),
+        `${target}: nothing is planned for antigravity-cli/hooks.json`
       );
     }
   }));
@@ -3272,12 +3149,13 @@ function runTests() {
 
     // The hooks.json registrations themselves are unrelated to the copy
     // dedup and must still be present.
-    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
-    assert.ok(
-      plan.operations.some(operation => (
+    const hooksFilePath = path.join(homeDir, '.gemini', 'config', 'hooks.json');
+    assert.strictEqual(
+      plan.operations.filter(operation => (
         operation.kind === 'merge-claude-settings-hooks' && operation.destinationPath === hooksFilePath
-      )),
-      'hooks.json registrations must survive the copy dedup'
+      )).length,
+      3,
+      'the three named hook registrations must survive the copy dedup'
     );
   }));
 

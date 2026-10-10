@@ -320,7 +320,25 @@ function retirePlannedHooks(plan) {
       applyManagedHookOperation(operation);
     }
   }
+  for (const filePath of new Set(retired.map(retirement => path.resolve(retirement.destinationPath)))) {
+    removeEmptiedHooksFile(filePath);
+  }
   return retired;
+}
+
+// A hooks file the retirements left with nothing in it is removed: the
+// entries were EGC's, in a file EGC created for them, and a file holding
+// only `{}` is nothing the person wrote. A file with any other key stays.
+function removeEmptiedHooksFile(filePath) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return false;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length > 0) return false;
+  fs.unlinkSync(filePath);
+  return true;
 }
 
 function isSymbolicLink(filePath) {

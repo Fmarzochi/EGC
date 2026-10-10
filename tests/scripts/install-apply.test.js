@@ -216,6 +216,110 @@ function runTests() {
     }
   }));
 
+  // The layout an install before #1707 left behind: Claude-format entries
+  // Antigravity never ran, recorded in the install state as managed hook
+  // operations pointing at the scripts under the target's own root.
+  const LEGACY_CLAUDE_HOOK_ENTRIES = [
+    { event: 'PreToolUse', script: 'gateguard-fact-force.js', matcher: 'Bash', moduleId: 'claude-gateguard-fact-force-hook' },
+    { event: 'PreToolUse', script: 'crusher-hook.js', matcher: 'Bash', moduleId: 'egc-crusher-hook' },
+    { event: 'PreToolUse', script: 'pre-bash-guardian-validate.js', matcher: 'Bash', moduleId: 'egc-bash-guardian-hook' },
+    { event: 'UserPromptSubmit', script: 'mesh-events-inject.js', moduleId: 'egc-mesh-notice-hook' },
+  ];
+
+  function legacyClaudeHooksBlock(hooksDir) {
+    const hooks = {};
+    for (const entry of LEGACY_CLAUDE_HOOK_ENTRIES) {
+      const group = { ...(entry.matcher ? { matcher: entry.matcher } : {}), hooks: [{ type: 'command', command: `"${process.execPath}" "${path.join(hooksDir, entry.script)}"` }] };
+      hooks[entry.event] = [...(hooks[entry.event] || []), group];
+    }
+    return hooks;
+  }
+
+  function recordLegacyClaudeHooks(statePath, hooksFile, hooksDir) {
+    const state = readJson(statePath);
+    state.operations.push(...LEGACY_CLAUDE_HOOK_ENTRIES.map(entry => ({
+      kind: 'merge-claude-settings-hooks',
+      moduleId: entry.moduleId,
+      sourceRelativePath: `scripts/hooks/${entry.script}`,
+      destinationPath: hooksFile,
+      strategy: 'merge-claude-settings-hooks',
+      ownership: 'managed',
+      scaffoldOnly: false,
+      hookEvent: entry.event,
+      hookScriptPath: path.join(hooksDir, entry.script),
+      ...(entry.matcher ? { hookMatcher: entry.matcher } : {}),
+    })));
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  }
+
+  const NAMED_ANTIGRAVITY_HOOKS = ['egc-gateguard', 'egc-guardian', 'egc-mesh-notice'];
+
+  tally(test('an upgrade retires the Claude-format hooks under antigravity-cli, removes the emptied file and keeps the named hooks in config/hooks.json (#1707)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const configHooks = path.join(geminiRoot, 'config', 'hooks.json');
+      const legacyHooks = path.join(geminiRoot, 'antigravity-cli', 'hooks.json');
+      const hooksDir = path.join(geminiRoot, 'scripts', 'hooks');
+      const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
+      assert.deepStrictEqual(Object.keys(readJson(configHooks)).sort(), NAMED_ANTIGRAVITY_HOOKS, 'a fresh install writes the three named hooks');
+      assert.ok(!fs.existsSync(legacyHooks), 'and nothing under antigravity-cli');
+      for (const script of ['antigravity-gateguard-adapter.js', 'antigravity-mesh-notice-adapter.js', 'gateguard-fact-force.js', 'mesh-events-inject.js']) {
+        assert.ok(fs.existsSync(path.join(hooksDir, script)), `${script} is installed`);
+      }
+
+      fs.mkdirSync(path.dirname(legacyHooks), { recursive: true });
+      fs.writeFileSync(legacyHooks, JSON.stringify({ hooks: legacyClaudeHooksBlock(hooksDir) }, null, 2));
+      recordLegacyClaudeHooks(statePath, legacyHooks, hooksDir);
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assert.ok(!fs.existsSync(legacyHooks), 'the file that held only EGC entries is gone');
+      assert.deepStrictEqual(Object.keys(readJson(configHooks)).sort(), NAMED_ANTIGRAVITY_HOOKS, 'the named hooks stay');
+      const recorded = readJson(statePath).operations;
+      assert.ok(!recorded.some(operation => operation.destinationPath === legacyHooks), 'the state no longer records the retired entries');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('an upgrade retires the Claude-format hooks beside the named hooks in .agents/hooks.json and keeps the person\'s own hook (#1707)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'antigravity', '--profile', 'core'];
+      const first = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const hooksFile = path.join(projectDir, '.agents', 'hooks.json');
+      const hooksDir = path.join(projectDir, '.agents', 'scripts', 'hooks');
+      const statePath = path.join(projectDir, '.agents', 'egc-install-state.json');
+      assert.deepStrictEqual(Object.keys(readJson(hooksFile)).sort(), NAMED_ANTIGRAVITY_HOOKS, 'a fresh install writes the three named hooks');
+
+      const own = { PostToolUse: [{ matcher: 'run_command', hooks: [{ command: './lint.sh' }] }] };
+      fs.writeFileSync(hooksFile, JSON.stringify({ 'user-lint': own, ...readJson(hooksFile), hooks: legacyClaudeHooksBlock(hooksDir) }, null, 2));
+      recordLegacyClaudeHooks(statePath, hooksFile, hooksDir);
+
+      const upgraded = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      const after = readJson(hooksFile);
+      assert.deepStrictEqual(Object.keys(after).sort(), [...NAMED_ANTIGRAVITY_HOOKS, 'user-lint'], 'the Claude-format block is gone, the named hooks and the person\'s hook stay');
+      assert.deepStrictEqual(after['user-lint'], own, 'the person\'s hook is untouched');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
   tally(test('an upgrade moves the managed skills from antigravity-cli/skills to config/skills and keeps the person\'s files (#1705)', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
@@ -2119,8 +2223,8 @@ function runTests() {
       const geminiRoot = path.join(homeDir, '.gemini');
       // Antigravity's hooks land in its own files; the hooks/hooks.json and
       // settings.json of the retired Gemini CLI are neither copied nor created.
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'hooks.json')), 'the Antigravity guardian hook is registered in config/hooks.json');
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'hooks.json')), 'the Antigravity CLI hooks are registered in antigravity-cli/hooks.json');
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'hooks.json')), 'the Antigravity named hooks are registered in config/hooks.json');
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'hooks.json')), 'nothing is written to antigravity-cli/hooks.json, which Antigravity never read');
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'hooks', 'hooks.json')), 'the Gemini CLI hooks file is not copied any more');
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'settings.json')), 'settings.json should not be created just to install managed hooks');
     } finally {
