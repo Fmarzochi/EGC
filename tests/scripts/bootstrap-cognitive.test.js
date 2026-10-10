@@ -1391,6 +1391,54 @@ async function runStandaloneCatchBlockTests() {
 // created by any test above, the early existsSync guard always took the
 // false branch, so the hook-copy loop, the installed/already-configured
 // messages, and the catch block never ran.
+// Mistral Vibe reads ~/.vibe/AGENTS.md (or $VIBE_HOME/AGENTS.md) as the
+// user-level instructions for every project; the bootstrap fills it the same
+// way as Zed's, only when the data root exists (#1497).
+async function runVibeTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('writes Mistral Vibe AGENTS.md when ~/.vibe exists', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.vibe'), { recursive: true });
+      const output = run(home, { VIBE_HOME: '' });
+      assert.ok(/Mistral Vibe: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const content = fs.readFileSync(path.join(home, '.vibe', 'AGENTS.md'), 'utf8');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Mistral Vibe when ~/.vibe does not exist', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home, { VIBE_HOME: '' });
+      assert.ok(!/\[cognitive\] Mistral Vibe:/.test(output), 'should not mention Vibe at all');
+      assert.ok(!fs.existsSync(path.join(home, '.vibe')), 'nothing is created');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the Mistral Vibe AGENTS.md under VIBE_HOME when it is set', () => {
+    const home = mktempHome();
+    try {
+      const moved = path.join(home, 'vibe-data');
+      fs.mkdirSync(moved, { recursive: true });
+      const output = run(home, { VIBE_HOME: moved });
+      assert.ok(/Mistral Vibe: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(moved, 'AGENTS.md')), 'the file lands under VIBE_HOME');
+      assert.ok(!fs.existsSync(path.join(home, '.vibe')), 'and not under ~/.vibe');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 async function runKiroTests() {
   let passed = 0;
   let failed = 0;
@@ -1738,6 +1786,12 @@ async function runRemainingHarnessTests() {
     const [kiroPassed, kiroFailed] = await runKiroTests();
     passed += kiroPassed;
     failed += kiroFailed;
+  }
+
+  {
+    const [vibePassed, vibeFailed] = await runVibeTests();
+    passed += vibePassed;
+    failed += vibeFailed;
   }
 
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {

@@ -13,6 +13,7 @@ try {
 }
 const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, assertLandsInside, resolveCrushConfigDir } = require('./lib/mcp-register');
 const { commandExists } = require('./lib/utils');
+const { resolveVibeHome } = require('./lib/install-targets/vibe-home');
 const { writeProtocolFile } = require('./lib/protocol-file-write');
 
 // Bump when BLOCK's content changes in a way that already-configured installs
@@ -717,6 +718,17 @@ function injectTraeUserRule(filepath, label, content) {
     injectProtocol(path.join(zedDir, 'AGENTS.md'), 'Zed');
   } catch (e) {
     console.log(`  [cognitive] Zed: unexpected error: ${e.message}`);
+  }
+})();
+
+// ── Mistral Vibe (<VIBE_HOME or ~/.vibe>/AGENTS.md) ─────────────────────
+(function bootstrapVibe() {
+  try {
+    const vibeDir = resolveVibeHome({ homeDir: HOME });
+    if (!fs.existsSync(vibeDir)) return;
+    injectProtocol(path.join(vibeDir, 'AGENTS.md'), 'Mistral Vibe');
+  } catch (e) {
+    console.log(`  [cognitive] Mistral Vibe: unexpected error: ${e.message}`);
   }
 })();
 

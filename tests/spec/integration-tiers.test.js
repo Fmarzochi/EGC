@@ -44,9 +44,10 @@ const EXPECTED_HARNESSES = [
   'Zed',
   'Kimi Code CLI',
   'Crush (Charmbracelet)',
+  'Mistral Vibe',
 ];
 
-const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'auggie', 'codex', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'kiro', 'trae', 'junie', 'goose', 'openhands', 'aider', 'cline', 'warp', 'kimi', 'crush'];
+const EXPECTED_TIER1_TARGETS = ['egc', 'claude', 'cursor', 'antigravity', 'auggie', 'codex', 'qwen', 'opencode', 'codebuddy', 'windsurf', 'amp', 'copilot', 'zed', 'kiro', 'trae', 'junie', 'goose', 'openhands', 'aider', 'cline', 'warp', 'kimi', 'crush', 'vibe'];
 
 function loadDoc() {
   assert.ok(fs.existsSync(DOC_PATH), `integration-tiers.md must exist at ${DOC_PATH}`);

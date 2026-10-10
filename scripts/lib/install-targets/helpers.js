@@ -191,6 +191,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   zed:          { name: 'Zed',               url: 'https://zed.dev' },
   kimi:         { name: 'Kimi Code CLI',     url: 'https://github.com/MoonshotAI/kimi-code' },
   crush:        { name: 'Crush',             url: 'https://github.com/charmbracelet/crush' },
+  vibe:         { name: 'Mistral Vibe',      url: 'https://github.com/mistralai/mistral-vibe' },
 });
 
 // An adapter that picks its root by policy (config.resolveRoot) is detected

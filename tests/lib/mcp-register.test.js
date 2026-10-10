@@ -153,8 +153,51 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe',
     ]);
+  })));
+
+  (tally(test('Mistral Vibe: the path is config.toml under the data root, the root alone opens the gate, VIBE_HOME moves both, and the format is toml with transport = "stdio" (#1497)', () => {
+    const tmpHome = makeTempDir();
+    const previous = process.env.VIBE_HOME;
+    try {
+      delete process.env.VIBE_HOME;
+      const vibeDir = path.join(tmpHome, '.vibe');
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Mistral Vibe');
+      assert.ok(absent, 'Mistral Vibe must be a registration target');
+      assert.strictEqual(absent.path, path.join(vibeDir, 'config.toml'));
+      assert.strictEqual(absent.format, 'toml');
+      assert.deepStrictEqual(absent.tomlServerKeys, { transport: 'stdio' });
+      fs.mkdirSync(vibeDir, { recursive: true });
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Mistral Vibe').gate(), true, 'the data root alone opens the gate');
+      const moved = path.join(tmpHome, 'elsewhere', 'vibe');
+      process.env.VIBE_HOME = moved;
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Mistral Vibe');
+      assert.strictEqual(target.path, path.join(moved, 'config.toml'));
+      assert.strictEqual(target.allowedRoot, moved, 'a root outside the home is allowed because VIBE_HOME put it there');
+    } finally {
+      if (previous === undefined) delete process.env.VIBE_HOME;
+      else process.env.VIBE_HOME = previous;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('registerToml writes the keys a target asks for right after the name, and nothing extra for Codex', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const bins = { guardianBin: '/bins/guardian.js', memoryBin: '/bins/memory.js' };
+      const vibe = path.join(tmpHome, 'vibe.toml');
+      assert.strictEqual(registerToml(vibe, bins, { tomlServerKeys: { transport: 'stdio' } }), true);
+      const written = fs.readFileSync(vibe, 'utf8');
+      assert.ok(written.includes('[[mcp_servers]]\nname = "egc-guardian"\ntransport = "stdio"\ncommand = "node"\n'), written);
+      assert.ok(written.includes('[[mcp_servers]]\nname = "egc-memory"\ntransport = "stdio"\ncommand = "node"\n'), written);
+      assert.strictEqual(registerToml(vibe, bins, { tomlServerKeys: { transport: 'stdio' } }), false, 'both servers already there');
+      const codex = path.join(tmpHome, 'codex.toml');
+      registerToml(codex, bins);
+      assert.ok(!fs.readFileSync(codex, 'utf8').includes('transport'), 'Codex keeps the shape it always had');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
   })));
 
   (tally(test('Auggie: the gate opens on the ~/.augment directory, and the path is settings.json under it', () => {

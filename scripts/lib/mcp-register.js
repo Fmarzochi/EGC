@@ -28,6 +28,7 @@ const { commandExists } = require('./utils');
 const { isInsideReal, realizePath } = require('./path-safety');
 const { replaceFileWith } = require('./install/preserving-write');
 const { resolveCrushConfigDir, resolveCrushConfigPath } = require('./install-targets/crush-home');
+const { resolveVibeHome } = require('./install-targets/vibe-home');
 
 let TOML = null;
 try {
@@ -497,6 +498,19 @@ function buildMcpRegistrationTargets(homeDir) {
       allowedRoot: process.env.CRUSH_GLOBAL_CONFIG ? path.dirname(resolveCrushConfigPath(homeDir)) : undefined,
       format: 'crush-mcp',
     },
+    {
+      // Mistral Vibe keeps its MCP servers as [[mcp_servers]] tables in
+      // config.toml under VIBE_HOME or ~/.vibe (README of mistral-vibe,
+      // 2026-10-10), each naming its transport; a stdio server names its
+      // command and args. The gate opens on the data root (created on first
+      // launch) or the `vibe` binary on PATH.
+      name: 'Mistral Vibe',
+      path: path.join(resolveVibeHome(homeDir), 'config.toml'),
+      gate: () => fs.existsSync(resolveVibeHome(homeDir)) || commandExists('vibe'),
+      allowedRoot: resolveVibeHome(homeDir),
+      format: 'toml',
+      tomlServerKeys: { transport: 'stdio' },
+    },
   ];
 }
 
@@ -620,6 +634,12 @@ function keepsEverythingElse(original, updated) {
   }
 }
 
+// The keys a tool's [[mcp_servers]] table needs beyond name, command and
+// args (Mistral Vibe: transport = "stdio"), one line each, after the name.
+function tomlServerLines(keys) {
+  return Object.entries(keys || {}).map(([key, value]) => `${key} = "${tomlEscape(value)}"\n`).join('');
+}
+
 /**
  * Same idea as registerJson but for TOML configs (Codex CLI, Mistral Vibe).
  * Returns true if the file was appended to, false if both entries were
@@ -643,8 +663,9 @@ function keepsEverythingElse(original, updated) {
  * lose any other content is refused and the file is left as it was. An
  * install may leave a tool unregistered, but it must never damage a config.
  */
-function registerToml(targetPath, bins) {
+function registerToml(targetPath, bins, target = {}) {
   const { guardianBin, memoryBin } = bins;
+  const extraLines = tomlServerLines(target.tomlServerKeys);
   const original = readFileIfExists(targetPath) ?? '';
   let content = original;
 
@@ -676,11 +697,11 @@ function registerToml(targetPath, bins) {
 
   let appended = false;
   if (!tomlHasActiveServer(content, 'egc-guardian')) {
-    content += `\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["${tomlEscape(guardianBin)}"]\n`;
+    content += `\n[[mcp_servers]]\nname = "egc-guardian"\n${extraLines}command = "node"\nargs = ["${tomlEscape(guardianBin)}"]\n`;
     appended = true;
   }
   if (!tomlHasActiveServer(content, 'egc-memory')) {
-    content += `\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["${tomlEscape(memoryBin)}"]\n`;
+    content += `\n[[mcp_servers]]\nname = "egc-memory"\n${extraLines}command = "node"\nargs = ["${tomlEscape(memoryBin)}"]\n`;
     appended = true;
   }
   if (!appended) return false;
@@ -966,7 +987,7 @@ function registerTarget(target, bins, roots, onRegister, onWarn, onUnchanged) {
   try {
     // The Claude Code CLI writes its own file; every other handler writes here.
     if (target.format !== 'claude-cli') assertLandsInside(target.path, target.allowedRoot ? [...roots, target.allowedRoot] : roots);
-    const registered = handler(target.path, bins);
+    const registered = handler(target.path, bins, target);
     if (registered) {
       if (onRegister) onRegister(target);
     } else if (onUnchanged) {

@@ -85,6 +85,10 @@ const {
   inspectCrushHookFile,
   removeCrushHookFromFile,
 } = require('./crush-settings-hooks');
+const {
+  VIBE_HOOK_OPERATION_HANDLERS,
+  VIBE_PRE_TOOL_EVENT,
+} = require('./vibe-hooks-toml');
 
 const SESSION_START_EVENT = 'SessionStart';
 const STOP_EVENT = 'Stop';
@@ -1284,6 +1288,9 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeCrushHookFromFile(operation.destinationPath, operation.hookScriptPath),
     inspect: operation => inspectCrushHookFile(operation.destinationPath, operation.hookScriptPath, operation.hookMatcher),
   },
+  // Mistral Vibe: [[hooks]] tables in hooks.toml, by hook name
+  // (scripts/lib/vibe-hooks-toml.js).
+  [VIBE_PRE_TOOL_EVENT]: VIBE_HOOK_OPERATION_HANDLERS,
 };
 
 const SESSION_START_HOOK_OPERATION_HANDLERS = {
@@ -1319,6 +1326,7 @@ module.exports = {
   CRUSHER_HOOK_MODULE_ID,
   CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   CRUSH_PRE_TOOL_USE_EVENT,
+  VIBE_PRE_TOOL_EVENT,
   PRE_COMPACT_EVENT,
   POST_COMPACT_EVENT,
   EGC_MEMORY_SAVE_HOOK_MODULE_ID,

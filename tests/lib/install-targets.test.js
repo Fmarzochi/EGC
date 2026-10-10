@@ -4990,6 +4990,100 @@ function runTests() {
     assert.ok(targets.includes('crush'), 'Should include crush target');
   }));
 
+  tally(test('vibe-home: ids, root, state path, flat skills, library folders and the two hooks.toml entries under ~/.vibe (#1497)', () => {
+    const { VIBE_CRUSHER_MATCHER, VIBE_GUARDIAN_MATCHER } = require('../../scripts/lib/vibe-hooks-toml');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const previous = process.env.VIBE_HOME;
+    delete process.env.VIBE_HOME;
+    try {
+      const adapter = getInstallTargetAdapter('vibe');
+      assert.strictEqual(adapter.id, 'vibe-home');
+      assert.strictEqual(adapter.target, 'vibe');
+      assert.strictEqual(adapter.kind, 'home');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, '.vibe'));
+      assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(homeDir, '.vibe', 'egc', 'install-state.json'));
+      const plan = planInstallTargetScaffold({
+        target: 'vibe',
+        repoRoot,
+        homeDir,
+        modules: [
+          { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+          { id: 'rules-core', paths: ['rules/common/memory.md'] },
+        ],
+      });
+      const destinations = plan.operations.map(op => op.destinationPath);
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'skills', 'continuous-learning', 'SKILL.md')), 'a skill lands flat under skills/');
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'rules', 'common', 'memory.md')), 'a rule lands as a library folder');
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'scripts', 'hooks', 'vibe-guardian-adapter.js')), 'the Guardian adapter ships');
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'scripts', 'hooks', 'vibe-crusher-adapter.js')), 'the Crusher adapter ships');
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'scripts', 'hooks', 'pre-bash-crusher-rewrite.js')), 'the rewrite decision ships next to the Crusher adapter');
+      const hooks = plan.operations.filter(op => op.hookEvent === 'vibe:pre_tool');
+      assert.deepStrictEqual(hooks.map(op => [op.moduleId, op.hookMatcher]), [
+        ['egc-bash-guardian-hook', VIBE_GUARDIAN_MATCHER],
+        ['egc-crusher-hook', VIBE_CRUSHER_MATCHER],
+      ]);
+      assert.ok(VIBE_GUARDIAN_MATCHER.startsWith('re:^(bash|') && VIBE_GUARDIAN_MATCHER.includes('|edit)'), 'the Guardian matches the shell tools and edit');
+      assert.ok(VIBE_CRUSHER_MATCHER.startsWith('re:^(bash|') && !VIBE_CRUSHER_MATCHER.includes('edit'), 'the Crusher matches the shell tools only');
+      assert.ok(hooks.every(op => op.destinationPath === path.join(homeDir, '.vibe', 'hooks.toml')), 'both entries go to hooks.toml');
+      assert.deepStrictEqual(plan.managedRoots, [path.resolve(homeDir, '.vibe')], 'vibe-home manages only its own root');
+    } finally {
+      if (previous === undefined) delete process.env.VIBE_HOME;
+      else process.env.VIBE_HOME = previous;
+    }
+  }));
+
+  tally(test('vibe adapters route resolveRoot, every destination and every managed root through VIBE_HOME, with a tilde expanded', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const previous = process.env.VIBE_HOME;
+    const customHome = path.resolve('/custom/egc-vibe-home');
+    try {
+      process.env.VIBE_HOME = customHome;
+      const adapter = getInstallTargetAdapter('vibe');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), customHome, 'resolveRoot honours VIBE_HOME');
+      const plan = planInstallTargetScaffold({ target: 'vibe', repoRoot, homeDir, modules: [{ id: 'rules-core', paths: ['rules/common/memory.md'] }] });
+      assert.strictEqual(plan.targetRoot, customHome);
+      assert.ok(plan.installStatePath.startsWith(customHome), 'the install state sits under VIBE_HOME');
+      for (const operation of plan.operations) {
+        assert.ok(String(operation.destinationPath).startsWith(customHome), 'every destination must sit under VIBE_HOME, found ' + operation.destinationPath);
+      }
+      for (const root of plan.managedRoots) {
+        assert.ok(root.startsWith(customHome), 'every managed root must sit under VIBE_HOME, found ' + root);
+      }
+      process.env.VIBE_HOME = '~/vibe-data';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, 'vibe-data'), 'a leading tilde is the home directory');
+    } finally {
+      if (previous === undefined) delete process.env.VIBE_HOME;
+      else process.env.VIBE_HOME = previous;
+    }
+  }));
+
+  tally(test('vibe-project installs the same shape under the project .vibe, and both vibe adapters are registered', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/work/project';
+    const adapter = getInstallTargetAdapter('vibe-project');
+    assert.strictEqual(adapter.target, 'vibe');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.vibe'));
+    assert.strictEqual(adapter.getInstallStatePath({ projectRoot }), path.join(projectRoot, '.vibe', 'egc-install-state.json'));
+    const plan = planInstallTargetScaffold({ target: 'vibe-project', repoRoot, projectRoot, modules: [{ id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] }] });
+    const destinations = plan.operations.map(op => op.destinationPath);
+    assert.ok(destinations.includes(path.join(projectRoot, '.vibe', 'skills', 'continuous-learning', 'SKILL.md')), 'a skill lands flat under the project skills/');
+    assert.ok(plan.operations.some(op => op.hookEvent === 'vibe:pre_tool' && op.destinationPath === path.join(projectRoot, '.vibe', 'hooks.toml')), 'the hooks go to the project hooks.toml');
+    const { listInstallTargetAdapters } = require('../../scripts/lib/install-targets/registry');
+    const ids = listInstallTargetAdapters().map(a => a.id);
+    assert.ok(ids.includes('vibe-home') && ids.includes('vibe-project'), 'both vibe adapters are registered');
+  }));
+
+  tally(test('vibe-home warns when ~/.vibe is absent, naming the tool and its repository', () => {
+    const adapter = getInstallTargetAdapter('vibe');
+    const homeDir = path.join(os.tmpdir(), 'egc-vibe-home-that-does-not-exist');
+    const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+    assert.ok(warning, 'a home without ~/.vibe gets the ide-not-detected warning');
+    assert.match(warning.message, /^Mistral Vibe does not appear to be installed/);
+    assert.ok(warning.message.includes('https://github.com/mistralai/mistral-vibe'), 'the warning names the repository');
+  }));
   tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

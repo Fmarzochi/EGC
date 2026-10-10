@@ -14,6 +14,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | CRUSH_GLOBAL_CONFIG | linux | `CRUSH_GLOBAL_CONFIG` set to an absolute directory, shown as `$CRUSH_GLOBAL_CONFIG` in the paths | crush-home |
 | KIMI_CODE_HOME | linux | `KIMI_CODE_HOME` set to an absolute directory, shown as `$KIMI_CODE_HOME` in the paths | kimi-home |
 | TRAE_ENV=cn | linux | `TRAE_ENV=cn` | trae-project |
+| VIBE_HOME | linux | `VIBE_HOME` set to an absolute directory, shown as `$VIBE_HOME` in the paths | vibe-home |
 
 ## egc-home
 
@@ -389,3 +390,34 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | state | `~/.config/crush/egc/crush-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 | state | `$XDG_CONFIG_HOME/crush/egc/crush-install-state.json` | XDG_CONFIG_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 | state | `$CRUSH_GLOBAL_CONFIG/egc/crush-install-state.json` | CRUSH_GLOBAL_CONFIG | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## vibe-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| library | `~/.vibe/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.vibe/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `~/.vibe/hooks.toml` | default | documented | <https://github.com/mistralai/mistral-vibe> |  |
+| library | `~/.vibe/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| runtime | `~/.vibe/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `~/.vibe/skills/` | default | documented | <https://github.com/mistralai/mistral-vibe> |  |
+| state | `~/.vibe/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| library | `$VIBE_HOME/agents/` | VIBE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `$VIBE_HOME/commands/` | VIBE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `$VIBE_HOME/hooks.toml` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
+| library | `$VIBE_HOME/rules/` | VIBE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| runtime | `$VIBE_HOME/scripts/` | VIBE_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `$VIBE_HOME/skills/` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
+| state | `$VIBE_HOME/egc/install-state.json` | VIBE_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## vibe-project
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| library | `<project>/.vibe/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `<project>/.vibe/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `<project>/.vibe/hooks.toml` | default | documented | <https://github.com/mistralai/mistral-vibe> |  |
+| library | `<project>/.vibe/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| runtime | `<project>/.vibe/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `<project>/.vibe/skills/` | default | documented | <https://github.com/mistralai/mistral-vibe> |  |
+| state | `<project>/.vibe/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
