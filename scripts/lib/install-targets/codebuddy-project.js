@@ -96,8 +96,8 @@ function createHookOperations(adapter, targetRoot, modules) {
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Write'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'MultiEdit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, 'Bash'),
-    // Token Crusher: CodeBuddy reads the same hooks.json schema as Claude Code,
-    // so an updatedInput rewrite applies. Scaffold the standalone crusher hook
+    // Token Crusher: CodeBuddy reads the same hooks.json schema as Claude Code
+    // and applies a rewrite returned as modifiedInput. Scaffold the standalone crusher hook
     // and its dependency tree explicitly (no content module carries them) and
     // register it on Bash only, where there is shell output to compress.
     ...createCrusherScriptCopyOperations(

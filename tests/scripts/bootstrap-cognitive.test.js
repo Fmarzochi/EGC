@@ -43,7 +43,7 @@ function run(homeDir, extraEnv = {}) {
 // .opencode/.codebuddy source files are intentionally absent, so __dirname
 // resolution inside the copy sees them as missing without ever touching
 // this real repo's actual .opencode/instructions/EGC_MEMORY.md or
-// .codebuddy/MEMORY.md -- exercises the markdownProtocolBody() fallback
+// .codebuddy/CODEBUDDY.md -- exercises the markdownProtocolBody() fallback
 // branch (only reachable if those repo files ever went missing, e.g. from
 // an npm package that excluded them).
 function mktempFakeRepo() {
@@ -271,7 +271,7 @@ async function runClaudeCodeAndGeminiCliTests() {
       'rules/common/memory.md',
       '.cursor/rules/common-auto-intuition.md',
       '.opencode/instructions/EGC_MEMORY.md',
-      '.codebuddy/MEMORY.md',
+      '.codebuddy/CODEBUDDY.md',
       '.trae/MEMORY.md',
       '.trae/rules/egc-context.md',
     ];
@@ -918,49 +918,102 @@ async function runOpenCodeTests() {
   return [passed, failed];
 }
 
-// Same complexity-budget reasoning as above: the standalone markdown
-// target (CodeBuddy) needs the pair of upgrade-from-legacy /
-// stay-idempotent-at-current-version cases; Trae has its own below.
-async function runStandaloneTargetUpgradeTests() {
-  const STANDALONE_TARGETS = [
-    { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
-  ];
-
+async function runCodeBuddyMemoryTests() {
   let passed = 0;
   let failed = 0;
+  const codebuddyFile = home => path.join(home, '.codebuddy', 'CODEBUDDY.md');
+  const legacyFile = home => path.join(home, '.codebuddy', 'MEMORY.md');
+  const oldBlock = '<!-- egc-memory-protocol:v2 -->\n# Session Memory\n\nCall get_state.\n<!-- /egc-memory-protocol -->\n';
 
-  for (const spec of STANDALONE_TARGETS) {
-    if (await test(`${spec.label}: a pre-versioning legacy install (no marker at all) is upgraded to the current version with the Crusher section, not left frozen`, () => {
-      const home = mktempHome();
-      try {
-        fs.mkdirSync(path.join(home, spec.home), { recursive: true });
-        const target = path.join(home, ...spec.target);
-        fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.writeFileSync(target, '# EGC Session Memory\n\nLegacy pre-marker content, written before versioning existed. Mentions get_state and update_state so the old plain existsSync check would have skipped it forever.\n', 'utf8');
+  if (await test('CodeBuddy: a fresh install writes the protocol to ~/.codebuddy/CODEBUDDY.md, the user memory CodeBuddy reads, and nothing to MEMORY.md (#1675)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      run(home);
+      const content = fs.readFileSync(codebuddyFile(home), 'utf8');
+      assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'CODEBUDDY.md carries the current protocol');
+      assert.ok(content.includes('EGC Token Crusher Protocol'), 'with the full protocol body');
+      assert.ok(!fs.existsSync(legacyFile(home)), 'nothing is written to MEMORY.md');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
 
-        const output = run(home);
-        assert.ok(output.includes(`${spec.label}: memory protocol upgraded`), `should report an upgrade for ${spec.label}, got: ${output}`);
+  if (await test('CodeBuddy: a CODEBUDDY.md of the person keeps its content, gets the block appended once, and a rerun changes nothing (#1675)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      fs.writeFileSync(codebuddyFile(home), '# My preferences\n\nUse tabs.\n', 'utf8');
+      run(home);
+      const content = fs.readFileSync(codebuddyFile(home), 'utf8');
+      assert.ok(content.startsWith('# My preferences\n\nUse tabs.\n'), 'the person\'s memory stays first and intact');
+      assert.strictEqual((content.match(/<!-- egc-memory-protocol:v\d+ -->/g) || []).length, 1, 'one EGC block');
+      const second = run(home);
+      assert.ok(second.includes(`CodeBuddy: already configured (${V})`), `a rerun is idempotent, got: ${second}`);
+      assert.strictEqual(fs.readFileSync(codebuddyFile(home), 'utf8'), content);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
 
-        const content = fs.readFileSync(target, 'utf8');
-        assert.ok(content.includes('EGC Token Crusher Protocol'), 'upgraded content must include the Crusher section');
-        assert.ok(content.includes(`<!-- egc-memory-protocol:${V} -->`), 'upgraded content must carry the current version marker');
-      } finally {
-        cleanup(home);
-      }
-    })) passed++; else failed++;
+  if (await test('CodeBuddy: an upgrade moves the protocol from MEMORY.md to CODEBUDDY.md and retires the MEMORY.md that held only the EGC block (#1675)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      fs.writeFileSync(legacyFile(home), oldBlock, 'utf8');
+      const output = run(home);
+      assert.ok(fs.readFileSync(codebuddyFile(home), 'utf8').includes(`<!-- egc-memory-protocol:${V} -->`), 'CODEBUDDY.md carries the current protocol');
+      assert.ok(!fs.existsSync(legacyFile(home)), 'the MEMORY.md EGC wrote is retired');
+      assert.ok(output.includes('CodeBuddy: retired the old protocol copy CodeBuddy does not read'), `the retirement is reported, got: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
 
-    if (await test(`${spec.label}: a current-version install is left untouched on rerun (idempotent)`, () => {
-      const home = mktempHome();
-      try {
-        fs.mkdirSync(path.join(home, spec.home), { recursive: true });
-        run(home);
-        const second = run(home);
-        assert.ok(second.includes(`${spec.label}: already configured (${V})`), `second run should report ${spec.label} as already configured, got: ${second}`);
-      } finally {
-        cleanup(home);
-      }
-    })) passed++; else failed++;
-  }
+  if (await test('CodeBuddy: a MEMORY.md with content of the person next to the EGC block stays untouched and is reported (#1675)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      const mixed = `${oldBlock}\n# My notes\n`;
+      fs.writeFileSync(legacyFile(home), mixed, 'utf8');
+      const output = run(home);
+      assert.strictEqual(fs.readFileSync(legacyFile(home), 'utf8'), mixed, 'the file is never edited');
+      assert.ok(output.includes('CodeBuddy: kept'), `the kept file is reported, got: ${output}`);
+      assert.ok(fs.existsSync(codebuddyFile(home)), 'the protocol is still installed in CODEBUDDY.md');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('CodeBuddy: a MEMORY.md without the EGC marker is neither removed nor reported (#1675)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      fs.writeFileSync(legacyFile(home), '# My memory\n', 'utf8');
+      const output = run(home);
+      assert.strictEqual(fs.readFileSync(legacyFile(home), 'utf8'), '# My memory\n');
+      assert.ok(!output.includes('CodeBuddy: kept') && !output.includes('CodeBuddy: retired'), `nothing is reported about it, got: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('CodeBuddy: when CODEBUDDY.md cannot be written, the EGC MEMORY.md stays and no retirement is reported (#1675)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.codebuddy'));
+      fs.writeFileSync(codebuddyFile(home), '# My preferences\n', 'utf8');
+      fs.mkdirSync(`${codebuddyFile(home)}.egc.bak`);
+      fs.writeFileSync(legacyFile(home), oldBlock, 'utf8');
+      const output = run(home);
+      assert.ok(output.includes('CodeBuddy: unexpected error:'), `the failure is reported, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(codebuddyFile(home), 'utf8'), '# My preferences\n', 'the failed write left CODEBUDDY.md as it was');
+      assert.strictEqual(fs.readFileSync(legacyFile(home), 'utf8'), oldBlock, 'the old copy stays while no protocol is in place');
+      assert.ok(!output.includes('CodeBuddy: retired'), `no retirement is reported, got: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
 
   return [passed, failed];
 }
@@ -1129,7 +1182,7 @@ async function runTraeUserRulesTests() {
 async function runStandaloneCatchBlockTests() {
   const BROKEN_PATH_TARGETS = [
     { home: '.trae', target: ['.trae', 'user_rules', 'egc-memory.md'], label: 'Trae (.trae)' },
-    { home: '.codebuddy', target: ['.codebuddy', 'MEMORY.md'], label: 'CodeBuddy' },
+    { home: '.codebuddy', target: ['.codebuddy', 'CODEBUDDY.md'], label: 'CodeBuddy' },
   ];
 
   let passed = 0;
@@ -1229,7 +1282,7 @@ async function runProtocolContentTests() {
     assert.deepStrictEqual(withoutCwd, [], 'every form the script installs names cwd in the sentence that calls validate_write');
     for (const file of ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', 'rules/common/memory.md', '.trae/MEMORY.md', '.trae/rules/egc-context.md',
       '.opencode/instructions/INSTRUCTIONS.md', '.opencode/instructions/EGC_MEMORY.md', '.kiro/steering/development-workflow.md',
-      '.cursor/rules/common-development-workflow.md', '.codebuddy/MEMORY.md', '.agents/AGENTS.md']) {
+      '.cursor/rules/common-development-workflow.md', '.codebuddy/CODEBUDDY.md', '.agents/AGENTS.md']) {
       const text = fs.readFileSync(path.join(__dirname, '..', '..', ...file.split('/')), 'utf8');
       const calls = text.match(/validate_write\(\{[^}]*\}\)/g) || [];
       assert.ok(calls.length > 0, `${file} shows the validate_write call`);
@@ -1279,7 +1332,7 @@ async function runProtocolContentTests() {
       const filesToCheck = [
         path.join(home, '.codex', 'config.toml'),
         path.join(home, '.trae', 'user_rules', 'egc-memory.md'),
-        path.join(home, '.codebuddy', 'MEMORY.md'),
+        path.join(home, '.codebuddy', 'CODEBUDDY.md'),
       ];
       for (const filePath of filesToCheck) {
         const content = fs.readFileSync(filePath, 'utf8');
@@ -1292,17 +1345,17 @@ async function runProtocolContentTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('markdownProtocolBody fallback (CodeBuddy) has full session bus and Guardian if the repo source .md ever goes missing', () => {
+  if (await test('markdownProtocolBody fallback (Trae) has full session bus and Guardian if the repo source .md ever goes missing', () => {
     let fakeScript;
     let home;
     try {
       fakeScript = mktempFakeRepo();
       home = mktempHome();
-      fs.mkdirSync(path.join(home, '.codebuddy'));
+      fs.mkdirSync(path.join(home, '.trae'));
       runScript(fakeScript, home);
 
-      const codebuddyContent = fs.readFileSync(path.join(home, '.codebuddy', 'MEMORY.md'), 'utf8');
-      for (const content of [codebuddyContent]) {
+      const traeContent = fs.readFileSync(path.join(home, '.trae', 'user_rules', 'egc-memory.md'), 'utf8');
+      for (const content of [traeContent]) {
         for (const cmd of SESSION_BUS_COMMANDS) {
           assert.ok(content.includes(cmd), `fallback content must reference ${cmd}`);
         }
@@ -1452,7 +1505,7 @@ async function runRemainingHarnessTests() {
   })) passed++; else failed++;
 
   {
-    const [standalonePassed, standaloneFailed] = await runStandaloneTargetUpgradeTests();
+    const [standalonePassed, standaloneFailed] = await runCodeBuddyMemoryTests();
     passed += standalonePassed;
     failed += standaloneFailed;
   }

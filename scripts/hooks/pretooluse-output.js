@@ -6,10 +6,12 @@
 // leaves the command changed inside a bare `{tool_name, tool_input}` object.
 // Hosts (Claude Code, Codex, CodeBuddy) ignore that shape and run the original
 // command; a rewrite only takes effect when returned as
-// `hookSpecificOutput.updatedInput`. This wraps a genuine rewrite in that
-// envelope while forwarding deny/ask/context outputs and unchanged commands
-// untouched. Fail-open: any parse failure emits the chain output verbatim.
-function toPreToolUseOutput(originalRaw, finalRaw) {
+// `hookSpecificOutput.updatedInput`, or `hookSpecificOutput.modifiedInput`
+// under CodeBuddy, recognized by the CODEBUDDY_PROJECT_DIR it sets for hooks.
+// This wraps a genuine rewrite in that envelope while forwarding
+// deny/ask/context outputs and unchanged commands untouched. Fail-open: any
+// parse failure emits the chain output verbatim.
+function toPreToolUseOutput(originalRaw, finalRaw, env = process.env) {
   let original;
   let final;
   try {
@@ -32,10 +34,11 @@ function toPreToolUseOutput(originalRaw, finalRaw) {
   if (typeof finalCommand === 'string'
     && typeof originalCommand === 'string'
     && finalCommand !== originalCommand) {
+    const inputField = env.CODEBUDDY_PROJECT_DIR ? 'modifiedInput' : 'updatedInput';
     return JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
-        updatedInput: final.tool_input,
+        [inputField]: final.tool_input,
       },
     });
   }
