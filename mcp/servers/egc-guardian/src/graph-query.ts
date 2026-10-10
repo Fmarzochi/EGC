@@ -16,10 +16,14 @@ const STOP = new Set([
   'use', 'using', 'add', 'make', 'get', 'set', 'new', 'all', 'any', 'not', 'but', 'has', 'have', 'should', 'would', 'could', 'please', 'need', 'want', 'file', 'code'
 ]);
 
+// The text can come from a project file, so no step may backtrack: the acronym
+// boundary is a lookahead (ABCDef -> ABC Def), which costs the same on a long
+// run of capitals as on a short one. `([A-Z]+)([A-Z][a-z])` re-scanned the run
+// from every position and took seconds on a hundred thousand capitals.
 export function splitWords(text: string): string[] {
   return text
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/([A-Z])(?=[A-Z][a-z])/g, '$1 ')
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter(w => w.length >= 3 && !STOP.has(w));
