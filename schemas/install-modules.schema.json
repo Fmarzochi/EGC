@@ -75,6 +75,41 @@
               ]
             }
           },
+          "unsupportedTargets": {
+            "type": "object",
+            "description": "Targets the module cannot reach, each with the reason from that tool's current docs (link and the date it was read).",
+            "propertyNames": {
+              "enum": [
+                "egc",
+                "claude",
+                "cursor",
+                "antigravity",
+                "auggie",
+                "codex",
+                "opencode",
+                "codebuddy",
+                "windsurf",
+                "amp",
+                "copilot",
+                "zed",
+                "kiro",
+                "trae",
+                "goose",
+                "openhands",
+                "aider",
+                "cline",
+                "warp",
+                "junie",
+                "qwen",
+                "kimi",
+                "crush"
+              ]
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "dependencies": {
             "type": "array",
             "items": {

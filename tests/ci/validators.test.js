@@ -2590,6 +2590,39 @@ function runTests() {
     cleanupTestDir(testDir);
   }));
 
+  tally(test('unsupportedTargets: a reason per target passes, a target listed both ways fails, an unknown target fails the schema (#1679)', () => {
+    const run = unsupportedTargets => {
+      const testDir = createTestDir();
+      writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
+        version: 1,
+        modules: [{ id: 'rules-core', kind: 'rules', description: 'Rules', paths: ['rules'], targets: ['egc', 'warp'], unsupportedTargets, dependencies: [], defaultInstall: true, cost: 'light', stability: 'stable' }]
+      });
+      writeJson(path.join(testDir, 'manifests', 'install-profiles.json'), { version: 1, profiles: Object.fromEntries(['minimal', 'core', 'developer', 'security', 'research', 'full'].map(name => [name, { description: name, modules: ['rules-core'] }])) });
+      writeJson(path.join(testDir, 'manifests', 'install-components.json'), { version: 1, components: [] });
+      fs.mkdirSync(path.join(testDir, 'rules'), { recursive: true });
+      const result = runValidatorWithDirs('validate-install-manifests', {
+        REPO_ROOT: testDir,
+        MODULES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-modules.json'),
+        PROFILES_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-profiles.json'),
+        COMPONENTS_MANIFEST_PATH: path.join(testDir, 'manifests', 'install-components.json'),
+        MODULES_SCHEMA_PATH: modulesSchemaPath,
+        PROFILES_SCHEMA_PATH: profilesSchemaPath,
+        COMPONENTS_SCHEMA_PATH: componentsSchemaPath,
+      });
+      cleanupTestDir(testDir);
+      return result;
+    };
+    const ok = run({ aider: 'Aider has no subagents (https://aider.chat/docs/usage/commands.html, read on 2026-10-10).' });
+    assert.strictEqual(ok.code, 0, `a reason for a target outside targets passes: ${ok.stderr}`);
+    const both = run({ warp: 'listed as a target too' });
+    assert.strictEqual(both.code, 1, 'a target listed both ways fails');
+    assert.ok(both.stderr.includes('lists warp both as a target and as unsupported'), both.stderr);
+    const unknown = run({ 'not-a-tool': 'x' });
+    assert.strictEqual(unknown.code, 1, 'an unknown target key fails the schema');
+    const empty = run({ aider: '' });
+    assert.strictEqual(empty.code, 1, 'an empty reason fails the schema');
+  }));
+
   tally(test('rejects manifest paths that are absolute or climb out of the repository', () => {
     for (const unsafe of ['../outside', 'rules/../../etc', '/etc/passwd']) {
       const testDir = createTestDir();

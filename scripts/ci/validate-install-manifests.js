@@ -117,6 +117,17 @@ function validateModuleDependencies(module, modules) {
   return hasErrors;
 }
 
+function validateUnsupportedTargets(module) {
+  let hasErrors = false;
+  for (const target of Object.keys(module.unsupportedTargets || {})) {
+    if (module.targets.includes(target)) {
+      console.error(`ERROR: Module ${module.id} lists ${target} both as a target and as unsupported`);
+      hasErrors = true;
+    }
+  }
+  return hasErrors;
+}
+
 function validateModules(modules) {
   let hasErrors = false;
   const moduleIds = new Set();
@@ -131,6 +142,7 @@ function validateModules(modules) {
 
     if (validateModuleDependencies(module, modules)) hasErrors = true;
     if (validateModulePaths(module, claimedPaths)) hasErrors = true;
+    if (validateUnsupportedTargets(module)) hasErrors = true;
   }
 
   return { hasErrors, moduleIds };
