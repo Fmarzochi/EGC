@@ -174,6 +174,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   claude:       { name: 'Claude Code',        url: 'https://claude.ai/download' },
   cursor:       { name: 'Cursor',             url: 'https://cursor.sh' },
   antigravity:  { name: 'Antigravity CLI',    url: 'https://github.com/google-gemini/gemini-cli' },
+  auggie:       { name: 'Auggie',             url: 'https://docs.augmentcode.com/cli/overview' },
   codex:        { name: 'Codex CLI',          url: 'https://github.com/openai/codex' },
   opencode:     { name: 'OpenCode',           url: 'https://opencode.ai' },
   codebuddy:    { name: 'CodeBuddy',          url: 'https://copilot.tencent.com' },

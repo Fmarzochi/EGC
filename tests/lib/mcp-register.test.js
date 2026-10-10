@@ -153,8 +153,23 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Kimi Code CLI', 'Crush',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush',
     ]);
+  })));
+
+  (tally(test('Auggie: the gate opens on the ~/.augment directory, and the path is settings.json under it', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const augmentDir = path.join(tmpHome, '.augment');
+      fs.mkdirSync(augmentDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Auggie');
+      assert.ok(target, 'Auggie must be a registration target');
+      assert.strictEqual(target.path, path.join(augmentDir, 'settings.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the config directory alone opens the gate');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
   })));
 
   (tally(test('Kimi Code CLI: the gate opens on the ~/.kimi-code directory, and the path is mcp.json under it', () => {

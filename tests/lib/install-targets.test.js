@@ -5111,6 +5111,110 @@ function runTests() {
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('crush'), 'Should include crush target');
   }));
+
+  tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'auggie',
+      repoRoot,
+      homeDir,
+      modules: [
+        { id: 'skills-core', paths: ['skills/workflow/tdd-workflow'] },
+        { id: 'commands-core', paths: ['commands'] },
+        { id: 'rules-core', paths: ['rules'] },
+      ],
+    });
+
+    const skillsDir = path.join(homeDir, '.augment', 'skills');
+    const commandsDir = path.join(homeDir, '.augment', 'commands');
+    const rulesDir = path.join(homeDir, '.augment', 'rules');
+
+    const commandOps = plan.operations.filter(op => op.destinationPath && op.destinationPath.startsWith(commandsDir + path.sep));
+    const ruleOps = plan.operations.filter(op => op.destinationPath && op.destinationPath.startsWith(rulesDir + path.sep));
+
+    assert.ok(
+      plan.operations.some(op => op.destinationPath === path.join(skillsDir, 'tdd-workflow')),
+      'the skill lands flat under ~/.augment/skills, stripped of its category'
+    );
+    assert.ok(commandOps.length > 0, 'commands land under ~/.augment/commands');
+    assert.ok(
+      commandOps.every(op => path.dirname(op.destinationPath) === commandsDir),
+      'each command sits directly under ~/.augment/commands, not a subdirectory'
+    );
+    assert.ok(ruleOps.length > 0, 'rules land under ~/.augment/rules');
+    assert.ok(
+      ruleOps.every(op => path.dirname(op.destinationPath) === rulesDir),
+      'each rule sits directly under ~/.augment/rules, proving the flatten, not just the prefix'
+    );
+    assert.deepStrictEqual(plan.managedRoots, [path.resolve(homeDir, '.augment')], 'auggie-home manages only its own root, no hooks or shared root');
+  }));
+
+  tally(test('auggie-project installs the same three families under the project .augment', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'auggie-project',
+      repoRoot,
+      projectRoot,
+      modules: [
+        { id: 'skills-core', paths: ['skills/workflow/tdd-workflow'] },
+        { id: 'commands-core', paths: ['commands'] },
+        { id: 'rules-core', paths: ['rules'] },
+      ],
+    });
+
+    const skillsDir = path.join(projectRoot, '.augment', 'skills');
+    const commandsDir = path.join(projectRoot, '.augment', 'commands');
+    const rulesDir = path.join(projectRoot, '.augment', 'rules');
+    const commandOps = plan.operations.filter(op => op.destinationPath && op.destinationPath.startsWith(commandsDir + path.sep));
+    const ruleOps = plan.operations.filter(op => op.destinationPath && op.destinationPath.startsWith(rulesDir + path.sep));
+
+    assert.ok(
+      plan.operations.some(op => op.destinationPath === path.join(skillsDir, 'tdd-workflow')),
+      'the skill lands flat under the project .augment/skills'
+    );
+    assert.ok(commandOps.length > 0, 'commands land under the project .augment/commands');
+    assert.ok(
+      commandOps.every(op => path.dirname(op.destinationPath) === commandsDir),
+      'each command sits directly under the project .augment/commands, not a subdirectory'
+    );
+    assert.ok(ruleOps.length > 0, 'rules land under the project .augment/rules');
+    assert.ok(
+      ruleOps.every(op => path.dirname(op.destinationPath) === rulesDir),
+      'each rule sits directly under the project .augment/rules, proving the flatten, not just the prefix'
+    );
+  }));
+
+  tally(test('auggie adapters are included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const ids = adapters.map(a => a.id);
+    assert.ok(ids.includes('auggie-home'), 'Should include auggie-home');
+    assert.ok(ids.includes('auggie-project'), 'Should include auggie-project');
+  }));
+
+  tally(test('auggie-home excludes rules/README.md and the rules/zh mirror, since Auggie treats every rule as always-on (#1825)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'auggie',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+
+    const rulesDir = path.join(homeDir, '.augment', 'rules');
+    const ruleNames = plan.operations
+      .filter(op => op.destinationPath && op.destinationPath.startsWith(rulesDir + path.sep))
+      .map(op => path.basename(op.destinationPath).toLowerCase());
+
+    assert.ok(ruleNames.length > 0, 'at least one rule is still installed');
+    assert.ok(!ruleNames.some(name => name.includes('readme')), `no README.md should reach ~/.augment/rules, got ${JSON.stringify(ruleNames)}`);
+    assert.ok(!ruleNames.some(name => name.startsWith('zh-')), `the Chinese mirror should not reach ~/.augment/rules, got ${JSON.stringify(ruleNames)}`);
+  }));
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

@@ -51,6 +51,12 @@ const EXCEPTIONS = {
     commands: () => 0,
     rules: () => 1, // only rules/common/memory.md, merged into the read list
   },
+  auggie: {
+    // Same reasoning as Claude Code above: Auggie's workspace rules carry no
+    // paths-based scoping, so every file under rules/ loads into every
+    // session, and rules/zh would double that cost in Chinese.
+    rules: catalog => catalog.rules.files.filter(file => !normalize(file).startsWith('rules/zh/')).length,
+  },
   warp: {
     agents: () => 0, // Warp reads AGENTS.md; skills go through its index
     commands: () => 0,

@@ -466,6 +466,18 @@ function buildMcpRegistrationTargets(homeDir) {
       format: 'zed-context-servers',
     },
     {
+      // Auggie persists MCP servers in ~/.augment/settings.json, a general
+      // settings file (also holds enableToolSearch and other keys), under
+      // the standard mcpServers object `auggie mcp add` itself writes to
+      // (docs.augmentcode.com/cli/integrations, 2026-10-09). The generic
+      // 'json' format merges into mcpServers and leaves every other key
+      // untouched, so it is safe on a file that is not MCP-only.
+      name: 'Auggie',
+      path: path.join(homeDir, '.augment', 'settings.json'),
+      gate: () => fs.existsSync(path.join(homeDir, '.augment')) || commandExists('auggie'),
+      format: 'json',
+    },
+    {
       // Kimi Code CLI (MoonshotAI/kimi-code) reads MCP servers from
       // ~/.kimi-code/mcp.json (or $KIMI_CODE_HOME/mcp.json) in the standard
       // {mcpServers: {name: {command, args}}} JSON shape. The gate opens on the

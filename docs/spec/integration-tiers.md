@@ -2,7 +2,7 @@
 
 > The honest map of how each supported AI coding tool integrates with EGC.
 
-EGC supports 21 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
+EGC supports 22 AI coding tools through 3 distinct integration mechanisms. This document is the source of truth for what is and is not integrated, and at what depth.
 
 What the maintainers guarantee per tool is a separate axis: see [support levels](../governance/support-levels.md).
 
@@ -43,6 +43,7 @@ What the maintainers guarantee per tool is a separate axis: see [support levels]
 | 19 | **Qwen Code** | 1 | `qwen` | `.qwen/skills/<name>/SKILL.md` (project only, no home target) | Skills installed flat with the source category stripped; Qwen Code discovers project skills natively from `.qwen/skills/`; agents, commands and rules as library folders under `.qwen/`; Guardian and Token Crusher `PreToolUse` hooks merged into `.qwen/settings.json` with the `run_shell_command` matcher, the Claude Code hook format Qwen Code reads ([Qwen Code hooks](https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/)) |
 | 20 | **Kimi Code CLI** | 1 | `kimi` | `~/.kimi-code/skills/<name>/SKILL.md` (home only; `KIMI_CODE_HOME` moves the data root) | Skills installed flat (source category stripped); agents, commands and rules as library folders under `~/.kimi-code/`; MCP servers registered in `~/.kimi-code/mcp.json` (or `$KIMI_CODE_HOME/mcp.json`) in the standard `{mcpServers: {}}` JSON shape; the hook surface (a `[[hooks]]` array in `config.toml`) is deferred pending machine verification of the TOML merge and the Bash matcher, the same way Warp defers its hooks |
 | 21 | **Crush (Charmbracelet)** | 1 | `crush` | `~/.config/crush/` (home only; `$XDG_CONFIG_HOME/crush` or `$CRUSH_GLOBAL_CONFIG` respected) | Skills installed flat to shared `~/.agents/skills/<name>/SKILL.md`; agents, commands and rules as library folders under `~/.config/crush/`; Guardian PreToolUse hook (`^(bash|edit|write|multiedit)$`) and Token Crusher (`^bash$`) wired into `crush.json` via flat hook schema; MCP servers registered under `mcp` key in `crush.json`; cognitive bootstrap into `~/.config/crush/CRUSH.md`. Subagents are currently read-only |
+| 22 | **Auggie (Augment Code)** | 1 | `auggie` | `~/.augment/skills/<name>/SKILL.md` (home) and `.augment/skills/<name>/SKILL.md` (project, id `auggie-project`) | Skills, commands and rules installed natively: skills flat under `.augment/skills/`, commands flat under `.augment/commands/<name>.md`, rules flattened (Cursor-style namespaced filenames) under `.augment/rules/*.md`, recursively searched and always treated as `always_apply` there regardless of frontmatter ([Auggie CLI docs](https://docs.augmentcode.com/cli/overview), accessed 2026-10-09); agents have no native equivalent and ship as a plain library folder under `.augment/agents/`. No hook or plugin API with an allow/deny decision is documented, so the Guardian and the Token Crusher are out of scope for this target, same as Kiro and Devin Desktop. MCP servers registered in `~/.augment/settings.json` under the standard `mcpServers` key, the same file `auggie mcp add` itself writes to |
 
 ## Prompt library per target
 
@@ -73,7 +74,7 @@ Tier 3 (protocol-only) is the entry point for any tool that supports MCP. Claude
 
 ## What "supported" guarantees
 
-For all 21 harnesses, EGC guarantees:
+For all 22 harnesses, EGC guarantees:
 
 - The install path is documented above
 - MCP server registration (if the tool supports MCP)

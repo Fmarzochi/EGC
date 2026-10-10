@@ -1,6 +1,6 @@
 # Support Levels
 
-EGC supports 21 AI coding tools, and every one of them gets the same install path, the same MCP registration and the same memory protocol; the [integration tiers](../spec/integration-tiers.md) are the map of how each one integrates. What differs is what the maintainers guarantee when a vendor changes something. This document says so, per tool, so nobody has to guess.
+EGC supports 22 AI coding tools, and every one of them gets the same install path, the same MCP registration and the same memory protocol; the [integration tiers](../spec/integration-tiers.md) are the map of how each one integrates. What differs is what the maintainers guarantee when a vendor changes something. This document says so, per tool, so nobody has to guess.
 
 ## The two levels
 
@@ -27,7 +27,7 @@ Criteria, in this order: whether the maintainer or a steward uses the tool every
 
 ### Community-supported
 
-Amp, VS Code Copilot, Devin Desktop, Zed, Kiro, Trae, CodeBuddy, JetBrains Junie, Goose, OpenHands, Aider, Cline, Warp, Qwen Code, Kimi Code CLI and Crush (Charmbracelet; its skills share the `~/.agents` root with Codex, Goose and OpenHands, and its subagents are currently read-only).
+Amp, VS Code Copilot, Devin Desktop, Zed, Kiro, Trae, CodeBuddy, JetBrains Junie, Goose, OpenHands, Aider, Cline, Warp, Qwen Code, Kimi Code CLI, Crush (Charmbracelet; its skills share the `~/.agents` root with Codex, Goose and OpenHands, and its subagents are currently read-only) and Auggie (Augment Code; no hook or plugin API with an allow/deny decision is documented, so the Guardian and the Token Crusher are out of scope).
 
 Each one installs and is tested in CI on Linux, macOS and Windows like the core tools. Where the vendor exposes no hook surface, Guardian and Token Crusher coverage is documented as absent in the integration tiers, not promised.
 

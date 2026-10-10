@@ -57,7 +57,7 @@ This section is deliberately public. Honest gap-tracking beats aspirational omis
 
 ## Compatibility commitments
 
-- All 22 `SUPPORTED_INSTALL_TARGETS` identifiers (`egc`, `claude`, `cursor`, `antigravity`, `codex`, `qwen`, `opencode`, `codebuddy`, `windsurf`, `amp`, `copilot`, `zed`, `kiro`, `trae`, `junie`, `goose`, `openhands`, `aider`, `cline`, `warp`, `kimi`, `crush`) are stable. They will not be renamed within `0.x`. The ids `gemini`, `continue` and `roocode` were retired on 2026-08-16 (#1279) and `amazonq` on 2026-09-30; `egc install`, `egc doctor`, `egc repair` and `egc auto-update` still recognize them and explain the retirement, while the catalog queries reject them as unknown targets
+- All 23 `SUPPORTED_INSTALL_TARGETS` identifiers (`egc`, `claude`, `cursor`, `antigravity`, `auggie`, `codex`, `qwen`, `opencode`, `codebuddy`, `windsurf`, `amp`, `copilot`, `zed`, `kiro`, `trae`, `junie`, `goose`, `openhands`, `aider`, `cline`, `warp`, `kimi`, `crush`) are stable. They will not be renamed within `0.x`. The ids `gemini`, `continue` and `roocode` were retired on 2026-08-16 (#1279) and `amazonq` on 2026-09-30; `egc install`, `egc doctor`, `egc repair` and `egc auto-update` still recognize them and explain the retirement, while the catalog queries reject them as unknown targets
 - The Tier 2 install entry points (`.kiro/install.sh`, `.trae/install.sh`, `.codebuddy/install.sh` and its Node twin) were retired after 1.1.22; `egc install --target <tool> --profile full` is the entry point for every tool
 - The Tier 3 protocol injection target paths (`~/.claude/CLAUDE.md` for Claude Code) are stable within `0.x`
 - JSON Schema field names are stable within `MINOR` versions. Removals require a `MAJOR` bump
