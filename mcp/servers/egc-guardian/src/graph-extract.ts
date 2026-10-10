@@ -18,6 +18,10 @@ interface Tok { t: 'id' | 'str' | 'lit' | 'p'; v: string; line: number; ctl?: bo
 
 const MAX_SYMBOLS = 2000;
 const MAX_REFS = 200;
+// Real code nests a destructuring pattern a few levels. A file of bare brackets
+// nests it tens of thousands deep, which would overflow the stack of the
+// recursion that reads it.
+const MAX_PATTERN_DEPTH = 32;
 
 const REGEX_AFTER_KEYWORD = new Set(['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'throw', 'case', 'do', 'else', 'yield', 'await']);
 const CONTROL_HEAD = new Set(['if', 'for', 'while', 'with']);
@@ -557,8 +561,9 @@ export function extractFile(source: string): ExtractResult {
   };
 
   // The names a destructuring pattern binds, as token indexes: { a, b: c, d = 1, ...rest } and [x, , y = 2, ...z], nested too.
-  const patternNames = (open: number): number[] => {
+  const patternNames = (open: number, depth = 0): number[] => {
     const names: number[] = [];
+    if (depth > MAX_PATTERN_DEPTH) return names;
     const end = close(open);
     const isObject = isP(toks[open], '{');
     let k = open + 1;
@@ -566,7 +571,7 @@ export function extractFile(source: string): ExtractResult {
       const stop = elementEnd(k, end);
       const at = bindingStart(k, isObject, stop);
       if (at < stop && isId(toks[at])) names.push(at);
-      else if (at < stop && (isP(toks[at], '{') || isP(toks[at], '['))) names.push(...patternNames(at));
+      else if (at < stop && (isP(toks[at], '{') || isP(toks[at], '['))) names.push(...patternNames(at, depth + 1));
       k = stop + 1;
     }
     return names;

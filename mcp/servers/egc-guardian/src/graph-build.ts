@@ -390,8 +390,17 @@ async function indexFile(
     await store.touchFile(row);
     return 'kept';
   }
+  // A file the extractor cannot read is skipped like an unreadable one. Left to
+  // throw, it would stop the whole build, and the same file would stop every
+  // later build, so the project would never get its context.
+  let extracted: ReturnType<typeof extractFile>;
+  try {
+    extracted = extractFile(text);
+  } catch {
+    return 'skipped';
+  }
   await markEdgesDirty();
-  await store.replaceFile(row, extractFile(text));
+  await store.replaceFile(row, extracted);
   return 'refreshed';
 }
 

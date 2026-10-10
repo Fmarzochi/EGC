@@ -459,6 +459,22 @@ const bump = file => {
     await store.close();
   });
 
+  await run('a file nested deep enough to overflow the stack does not stop the build or the files beside it', async () => {
+    const depth = 30000;
+    const root = project({
+      'ok.js': 'export function okTarget() { return 1; }\n',
+      'deep.js': `const ${'['.repeat(depth)}a${']'.repeat(depth)} = x;\nexport function tail() { return 1; }\n`
+    });
+    const store = await open();
+    const res = await buildGraph(root, store);
+    assert.strictEqual(res.status, 'ok');
+    const data = await store.load();
+    assert.ok(data.symbols.some(s => s.name === 'okTarget'), 'the file beside the deep one is indexed');
+    // And the next build does not fail at the same file.
+    assert.strictEqual((await buildGraph(root, store)).status, 'ok');
+    await store.close();
+  });
+
   await run('deleting a file removes its rows and edges', async () => {
     const root = project({
       'a.js': "import { b } from './b.js';\nexport function a() { return b(); }\n",
