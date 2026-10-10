@@ -5,6 +5,12 @@ const fs   = require('node:fs');
 const path = require('node:path');
 const os   = require('node:os');
 const crypto = require('node:crypto');
+let TOML = null;
+try {
+  TOML = require('@iarna/toml');
+} catch {
+  TOML = null;
+}
 const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, assertLandsInside, resolveCrushConfigDir } = require('./lib/mcp-register');
 const { commandExists } = require('./lib/utils');
 
@@ -338,6 +344,12 @@ function computeCursorRulesUpdate(existing) {
   }
 })();
 
+const CODEX_TABLE_HEADER_RE = /^[ \t]*\[\[?[ \t]*[A-Za-z0-9_."'-][A-Za-z0-9_."' \t-]*\]\]?[ \t]*(?:#.*)?$/;
+
+function codexKeyRe(key) {
+  return new RegExp(`^\\s*(?:${key}|"${key}"|'${key}')\\s*=`);
+}
+
 function codexTopLevelEnd(lines) {
   let open = null;
   for (let i = 0; i < lines.length; i++) {
@@ -346,28 +358,29 @@ function codexTopLevelEnd(lines) {
       if (line.includes(open)) open = null;
       continue;
     }
-    const triple = line.match(/"""|'''/);
-    if (triple && line.split(triple[0]).length === 2) {
-      open = triple[0];
+    const opener = line.match(/^\s*[^#=\s][^=]*=\s*("""|''')/);
+    if (opener && line.split(opener[1]).length === 2) {
+      open = opener[1];
       continue;
     }
-    if (/^\s*\[/.test(line)) return i;
+    if (CODEX_TABLE_HEADER_RE.test(line)) return i;
   }
   return lines.length;
 }
 
 function findCodexKey(lines, key, end) {
-  const keyRe = new RegExp(`^\\s*${key}\\s*=`);
+  const keyRe = codexKeyRe(key);
   return lines.slice(0, end).findIndex(line => keyRe.test(line));
 }
 
 function parseCodexString(line) {
-  const value = line.slice(line.indexOf('=') + 1).trim();
+  const assignment = line.match(/^\s*[^=]+=\s*/)[0];
+  const value = line.slice(assignment.length);
   if (value.startsWith('"""') || value.startsWith("'''")) return { kind: 'multiline' };
-  const basic = value.match(/^"((?:[^"\\]|\\.)*)"\s*(?:#.*)?$/);
-  if (basic) return { kind: 'string', text: basic[1] };
-  const literal = value.match(/^'([^']*)'\s*(?:#.*)?$/);
-  if (literal) return { kind: 'string', text: literal[1].replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`) };
+  const basic = value.match(/^"((?:[^"\\]|\\.)*)"(\s*#.*)?\s*$/);
+  if (basic) return { kind: 'string', assignment, text: basic[1], comment: basic[2] || '' };
+  const literal = value.match(/^'([^']*)'(\s*#.*)?\s*$/);
+  if (literal) return { kind: 'string', assignment, text: literal[1].replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`), comment: literal[2] || '' };
   return { kind: 'unrecognized' };
 }
 
@@ -392,7 +405,7 @@ function planCodexDeveloperInstructions(lines) {
   if (parsed.kind !== 'string') return { status: `skip-${parsed.kind}` };
   const markers = parsed.text.match(CODEX_PROTOCOL_MARKERS_RE) || [];
   const installedVersion = resolveInstalledVersion(parsed.text.match(CODEX_PROTOCOL_MARKER_RE), null);
-  const wasBasic = /^\s*developer_instructions\s*=\s*"/.test(lines[index]);
+  const wasBasic = lines[index][parsed.assignment.length] === '"';
   if (markers.length === 1 && installedVersion >= PROTOCOL_VERSION && wasBasic) return { status: 'up-to-date', installedVersion, lines };
   let replaced = false;
   const updated = markers.length > 0
@@ -403,7 +416,7 @@ function planCodexDeveloperInstructions(lines) {
     })
     : `${parsed.text}${CODEX_PROTOCOL_SUFFIX}`;
   const out = [...lines];
-  out[index] = `developer_instructions = "${updated}"`;
+  out[index] = `${parsed.assignment}"${updated}"${parsed.comment}`;
   return { status: 'update', installedVersion, lines: out };
 }
 
@@ -416,26 +429,69 @@ function planCodexLegacyKey(lines) {
   return { legacy: 'retired', lines: lines.filter((_, i) => i !== index) };
 }
 
+function withoutCodexKeys(value, dropLegacy, top) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value instanceof Date) return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !(top && key === 'developer_instructions') && !(dropLegacy && key === 'persistent_instructions'))
+    .map(([key, child]) => [key, withoutCodexKeys(child, dropLegacy, false)]));
+}
+
+function codexUserText(value) {
+  return typeof value === 'string' ? value.replace(CODEX_PROTOCOL_MARKERS_RE, '').trim() : '';
+}
+
+function codexRewriteIsFaithful(before, newContent, legacy) {
+  if (!TOML) return true;
+  let after;
+  try {
+    after = TOML.parse(newContent);
+  } catch {
+    return false;
+  }
+  if (typeof after.developer_instructions !== 'string' || !after.developer_instructions.includes(`[egc-protocol:v${PROTOCOL_VERSION}]`)) return false;
+  const userTextKept = typeof before.developer_instructions === 'string'
+    ? codexUserText(after.developer_instructions) === codexUserText(before.developer_instructions)
+    : codexUserText(after.developer_instructions) === CODEX_PROTOCOL_PREFIX;
+  if (!userTextKept) return false;
+  const dropLegacy = legacy === 'retired';
+  return JSON.stringify(withoutCodexKeys(before, dropLegacy, true)) === JSON.stringify(withoutCodexKeys(after, dropLegacy, true));
+}
+
+function parseCodexToml(content) {
+  if (!TOML) return {};
+  try {
+    return TOML.parse(content);
+  } catch {
+    return null;
+  }
+}
+
 // Returns { status, installedVersion, legacy, newContent }; status is
-// 'up-to-date', 'skip-multiline', 'skip-unrecognized', or 'update', and
-// legacy reports what happened to a persistent_instructions line.
+// 'up-to-date', 'update', or a 'skip-' reason, and legacy reports what
+// happened to a persistent_instructions line.
 function upgradeCodexTomlContent(originalContent) {
+  const before = parseCodexToml(originalContent);
+  if (!before) return { status: 'skip-invalid' };
   const developer = planCodexDeveloperInstructions(originalContent.split('\n'));
   if (developer.status.startsWith('skip-')) return { status: developer.status };
   const { legacy, lines } = planCodexLegacyKey(developer.lines);
   const changed = developer.status === 'update' || legacy === 'retired';
+  const newContent = lines.join('\n');
+  if (changed && !codexRewriteIsFaithful(before, newContent, legacy)) return { status: 'skip-layout' };
   return {
     status: changed ? 'update' : 'up-to-date',
     installedVersion: developer.installedVersion,
     developerChanged: developer.status === 'update',
     legacy,
-    newContent: lines.join('\n'),
+    newContent,
   };
 }
 
 const CODEX_SKIP_MESSAGES = {
   'skip-multiline': 'developer_instructions multiline: skipping',
   'skip-unrecognized': 'developer_instructions in unrecognized format: skipping',
+  'skip-invalid': 'config.toml is not valid TOML: skipping',
+  'skip-layout': 'config.toml has a layout this installer cannot edit safely: skipping; add the protocol to developer_instructions by hand',
 };
 
 function reportCodexResult(result, tomlPath) {
