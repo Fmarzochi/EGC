@@ -54,8 +54,9 @@ const open = async () => {
   openStores.add(store);
   const close = store.close.bind(store);
   store.close = async () => {
-    openStores.delete(store);
+    // Forgotten only once the close has really happened: one that throws leaves the file open.
     await close();
+    openStores.delete(store);
   };
   return store;
 };
