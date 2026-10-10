@@ -6,8 +6,8 @@ const path = require('node:path');
 
 const { listInstallTargetAdapters, planInstallTargetScaffold } = require('./install-targets/registry');
 
-const TABLE_RELATIVE_PATH = path.join('manifests', 'tool-paths.json');
-const DOC_RELATIVE_PATH = path.join('docs', 'spec', 'tool-paths.md');
+const TABLE_RELATIVE_PATH = 'manifests/tool-paths.json';
+const DOC_RELATIVE_PATH = 'docs/spec/tool-paths.md';
 const OVERRIDE_VARIABLES = ['XDG_CONFIG_HOME', 'CRUSH_GLOBAL_CONFIG', 'KIMI_CODE_HOME', 'TRAE_ENV'];
 
 function loadToolPaths(repoRoot) {

@@ -92,7 +92,7 @@ tally(test('the longest matching row wins, and a variant row only applies in its
 }));
 
 tally(test(`${DOC_RELATIVE_PATH} is generated from the table`, () => {
-  const current = fs.readFileSync(path.join(REPO_ROOT, DOC_RELATIVE_PATH), 'utf8');
+  const current = fs.readFileSync(path.join(REPO_ROOT, DOC_RELATIVE_PATH), 'utf8').replaceAll('\r\n', '\n');
   assert.strictEqual(current, renderToolPathsMarkdown(table), 'run node scripts/ci/generate-tool-paths-doc.js');
 }));
 
