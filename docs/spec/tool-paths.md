@@ -206,7 +206,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | --- | --- | --- | --- | --- | --- |
 | agents | `~/.kiro/agents/` | default | documented | <https://kiro.dev/docs/custom-agents/creating/> |  |
 | library | `~/.kiro/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| hooks | `~/.kiro/hooks/` | default | documented | <https://kiro.dev/docs/hooks/> |  |
+| hooks | `~/.kiro/hooks/` | default | documented | <https://kiro.dev/docs/hooks/> | Kiro CLI 3.0 reads standalone hook documents here (https://kiro.dev/docs/cli/v3/hooks-migration/, read on 2026-10-10): egc-guardian.json runs the Guardian on PreToolUse with the shell matcher, and a PreToolUse command that exits 2 blocks the call; the 2.x agent-config entry in agents/default.json stays. |
 | library | `~/.kiro/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `~/.kiro/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | mcp | `~/.kiro/settings/` | default | documented | <https://kiro.dev/docs/mcp/configuration/> |  |
@@ -220,7 +220,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | --- | --- | --- | --- | --- | --- |
 | agents | `<project>/.kiro/agents/` | default | documented | <https://kiro.dev/docs/custom-agents/creating/> |  |
 | library | `<project>/.kiro/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| hooks | `<project>/.kiro/hooks/` | default | documented | <https://kiro.dev/docs/hooks/> |  |
+| hooks | `<project>/.kiro/hooks/` | default | documented | <https://kiro.dev/docs/hooks/> | Kiro CLI 3.0 reads standalone hook documents here (https://kiro.dev/docs/cli/v3/hooks-migration/, read on 2026-10-10): egc-guardian.json runs the Guardian on PreToolUse with the shell matcher, and a PreToolUse command that exits 2 blocks the call; the 2.x agent-config entry in agents/default.json stays. |
 | library | `<project>/.kiro/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.kiro/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | mcp | `<project>/.kiro/settings/` | default | documented | <https://kiro.dev/docs/mcp/configuration/> |  |

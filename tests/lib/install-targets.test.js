@@ -3274,6 +3274,13 @@ function runTests() {
       assert.ok(mergeOperation, `[${target}] Should plan the preToolUse agent-config merge`);
       assert.strictEqual(mergeOperation.destinationPath, path.join(targetRoot, 'agents', 'default.json'));
       assert.strictEqual(mergeOperation.hookScriptPath, adapterScriptDestination);
+
+      const v3Operation = plan.operations.find(
+        operation => operation.kind === 'merge-claude-settings-hooks' && operation.hookEvent === 'kiro-v3-guardian-hook-file'
+      );
+      assert.ok(v3Operation, `[${target}] Should plan the Kiro CLI 3.0 standalone hook document next to the 2.x entry`);
+      assert.strictEqual(v3Operation.destinationPath, path.join(targetRoot, 'hooks', 'egc-guardian.json'));
+      assert.strictEqual(v3Operation.hookScriptPath, adapterScriptDestination, 'both layouts run the same adapter');
     }
   }));
 

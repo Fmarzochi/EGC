@@ -860,7 +860,8 @@
       "surface": "hooks",
       "path": "~/.kiro/hooks/",
       "status": "documented",
-      "source": "https://kiro.dev/docs/hooks/"
+      "source": "https://kiro.dev/docs/hooks/",
+      "note": "Kiro CLI 3.0 reads standalone hook documents here (https://kiro.dev/docs/cli/v3/hooks-migration/, read on 2026-10-10): egc-guardian.json runs the Guardian on PreToolUse with the shell matcher, and a PreToolUse command that exits 2 blocks the call; the 2.x agent-config entry in agents/default.json stays."
     },
     {
       "adapter": "kiro-home",
@@ -923,7 +924,8 @@
       "surface": "hooks",
       "path": "<project>/.kiro/hooks/",
       "status": "documented",
-      "source": "https://kiro.dev/docs/hooks/"
+      "source": "https://kiro.dev/docs/hooks/",
+      "note": "Kiro CLI 3.0 reads standalone hook documents here (https://kiro.dev/docs/cli/v3/hooks-migration/, read on 2026-10-10): egc-guardian.json runs the Guardian on PreToolUse with the shell matcher, and a PreToolUse command that exits 2 blocks the call; the 2.x agent-config entry in agents/default.json stays."
     },
     {
       "adapter": "kiro-project",
