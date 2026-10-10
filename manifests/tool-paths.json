@@ -1,0 +1,1491 @@
+{
+  "version": 1,
+  "description": "Every path an install target plans, with the tool surface it serves and the source that says the tool reads it. tests/ci/tool-paths-contract.test.js plans every adapter in every variant and fails when a planned path is outside this table or a row matches nothing; docs/spec/tool-paths.md is generated from it.",
+  "checkedOn": "2026-10-10",
+  "variants": [
+    {
+      "id": "default",
+      "description": "Linux or macOS, no override variable set",
+      "platform": "linux",
+      "env": {}
+    },
+    {
+      "id": "win32",
+      "description": "Windows, where Devin keeps its user config under %APPDATA%",
+      "platform": "win32",
+      "env": {},
+      "adapters": [
+        "windsurf-home"
+      ]
+    },
+    {
+      "id": "XDG_CONFIG_HOME",
+      "description": "XDG_CONFIG_HOME set, which moves the Crush config directory",
+      "platform": "linux",
+      "env": {
+        "XDG_CONFIG_HOME": "$XDG_CONFIG_HOME"
+      },
+      "adapters": [
+        "crush-home"
+      ]
+    },
+    {
+      "id": "CRUSH_GLOBAL_CONFIG",
+      "description": "CRUSH_GLOBAL_CONFIG set, which names the Crush config directory directly",
+      "platform": "linux",
+      "env": {
+        "CRUSH_GLOBAL_CONFIG": "$CRUSH_GLOBAL_CONFIG"
+      },
+      "adapters": [
+        "crush-home"
+      ]
+    },
+    {
+      "id": "KIMI_CODE_HOME",
+      "description": "KIMI_CODE_HOME set, which moves the Kimi Code data root",
+      "platform": "linux",
+      "env": {
+        "KIMI_CODE_HOME": "$KIMI_CODE_HOME"
+      },
+      "adapters": [
+        "kimi-home"
+      ]
+    },
+    {
+      "id": "TRAE_ENV=cn",
+      "description": "TRAE_ENV=cn, the Chinese edition of Trae",
+      "platform": "linux",
+      "env": {
+        "TRAE_ENV": "cn"
+      },
+      "adapters": [
+        "trae-project"
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "adapter": "egc-home",
+      "surface": "context",
+      "path": "~/.gemini/AGENTS.md",
+      "status": "documented",
+      "source": "https://antigravity.google/docs/rules"
+    },
+    {
+      "adapter": "egc-home",
+      "surface": "agents",
+      "path": "~/.gemini/config/agents/",
+      "status": "documented",
+      "source": "https://antigravity.google/docs/subagents"
+    },
+    {
+      "adapter": "egc-home",
+      "surface": "hooks",
+      "path": "~/.gemini/config/hooks.json",
+      "status": "documented",
+      "source": "https://antigravity.google/docs/hooks"
+    },
+    {
+      "adapter": "egc-home",
+      "surface": "rules",
+      "path": "~/.gemini/config/rules/",
+      "status": "documented",
+      "source": "https://antigravity.google/docs/rules"
+    },
+    {
+      "adapter": "egc-home",
+      "surface": "skills",
+      "path": "~/.gemini/config/skills/",
+      "status": "documented",
+      "source": "https://antigravity.google/docs/skills"
+    },
+    {
+      "adapter": "egc-home",
+      "surface": "runtime",
+      "path": "~/.gemini/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "claude-home",
+      "surface": "agents",
+      "path": "~/.claude/agents/",
+      "status": "documented",
+      "source": "https://docs.anthropic.com/en/docs/claude-code/sub-agents"
+    },
+    {
+      "adapter": "claude-home",
+      "surface": "commands",
+      "path": "~/.claude/commands/",
+      "status": "documented",
+      "source": "https://docs.anthropic.com/en/docs/claude-code/slash-commands"
+    },
+    {
+      "adapter": "claude-home",
+      "surface": "runtime",
+      "path": "~/.claude/egc/",
+      "status": "egc",
+      "note": "EGC runtime: install state and support files EGC reads."
+    },
+    {
+      "adapter": "claude-home",
+      "surface": "runtime",
+      "path": "~/.claude/hooks/",
+      "status": "egc",
+      "note": "EGC runtime: hook scripts the hook configuration of the tool points at."
+    },
+    {
+      "adapter": "claude-home",
+      "surface": "rules",
+      "path": "~/.claude/rules/",
+      "status": "documented",
+      "source": "https://docs.anthropic.com/en/docs/claude-code/memory"
+    },
+    {
+      "adapter": "claude-home",
+      "surface": "runtime",
+      "path": "~/.claude/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "claude-home",
+      "surface": "settings",
+      "path": "~/.claude/settings.json",
+      "status": "documented",
+      "source": "https://docs.anthropic.com/en/docs/claude-code/settings"
+    },
+    {
+      "adapter": "claude-home",
+      "surface": "skills",
+      "path": "~/.claude/skills/",
+      "status": "documented",
+      "source": "https://docs.anthropic.com/en/docs/claude-code/skills"
+    },
+    {
+      "adapter": "cursor-project",
+      "surface": "library",
+      "path": "<project>/.cursor/.agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "cursor-project",
+      "surface": "agents",
+      "path": "<project>/.cursor/agents/",
+      "status": "documented",
+      "source": "https://cursor.com/docs/context/subagents"
+    },
+    {
+      "adapter": "cursor-project",
+      "surface": "commands",
+      "path": "<project>/.cursor/commands/",
+      "status": "unverified",
+      "source": "https://cursor.com/docs/context/skills",
+      "note": "Cursor's current docs no longer describe custom commands in .cursor/commands; the skills page talks about moving commands to skills (read on 2026-10-10)."
+    },
+    {
+      "adapter": "cursor-project",
+      "surface": "runtime",
+      "path": "<project>/.cursor/hooks/",
+      "status": "egc",
+      "note": "EGC runtime: hook scripts the hook configuration of the tool points at."
+    },
+    {
+      "adapter": "cursor-project",
+      "surface": "hooks",
+      "path": "<project>/.cursor/hooks.json",
+      "status": "documented",
+      "source": "https://cursor.com/docs/agent/hooks"
+    },
+    {
+      "adapter": "cursor-project",
+      "surface": "library",
+      "path": "<project>/.cursor/mcp-configs/",
+      "status": "egc",
+      "note": "EGC library: platform configuration sources copied for reference; the tool does not load this path."
+    },
+    {
+      "adapter": "cursor-project",
+      "surface": "mcp",
+      "path": "<project>/.cursor/mcp.json",
+      "status": "documented",
+      "source": "https://cursor.com/docs/context/mcp"
+    },
+    {
+      "adapter": "cursor-project",
+      "surface": "rules",
+      "path": "<project>/.cursor/rules/",
+      "status": "documented",
+      "source": "https://cursor.com/docs/context/rules"
+    },
+    {
+      "adapter": "cursor-project",
+      "surface": "runtime",
+      "path": "<project>/.cursor/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "cursor-project",
+      "surface": "skills",
+      "path": "<project>/.cursor/skills/",
+      "status": "documented",
+      "source": "https://cursor.com/docs/context/skills"
+    },
+    {
+      "adapter": "antigravity-project",
+      "surface": "library",
+      "path": "<project>/.agents/.agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "antigravity-project",
+      "surface": "context",
+      "path": "<project>/.agents/AGENTS.md",
+      "status": "documented",
+      "source": "https://antigravity.google/docs/rules"
+    },
+    {
+      "adapter": "antigravity-project",
+      "surface": "agents",
+      "path": "<project>/.agents/agents/",
+      "status": "documented",
+      "source": "https://antigravity.google/docs/subagents"
+    },
+    {
+      "adapter": "antigravity-project",
+      "surface": "hooks",
+      "path": "<project>/.agents/hooks.json",
+      "status": "documented",
+      "source": "https://antigravity.google/docs/hooks"
+    },
+    {
+      "adapter": "antigravity-project",
+      "surface": "rules",
+      "path": "<project>/.agents/rules/",
+      "status": "documented",
+      "source": "https://antigravity.google/docs/rules"
+    },
+    {
+      "adapter": "antigravity-project",
+      "surface": "runtime",
+      "path": "<project>/.agents/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "antigravity-project",
+      "surface": "skills",
+      "path": "<project>/.agents/skills/",
+      "status": "documented",
+      "source": "https://antigravity.google/docs/skills"
+    },
+    {
+      "adapter": "auggie-home",
+      "surface": "agents",
+      "path": "~/.augment/agents/",
+      "status": "documented",
+      "source": "https://docs.augmentcode.com/cli/subagents"
+    },
+    {
+      "adapter": "auggie-home",
+      "surface": "commands",
+      "path": "~/.augment/commands/",
+      "status": "documented",
+      "source": "https://docs.augmentcode.com/cli/custom-commands"
+    },
+    {
+      "adapter": "auggie-home",
+      "surface": "rules",
+      "path": "~/.augment/rules/",
+      "status": "documented",
+      "source": "https://docs.augmentcode.com/cli/rules"
+    },
+    {
+      "adapter": "auggie-home",
+      "surface": "skills",
+      "path": "~/.augment/skills/",
+      "status": "documented",
+      "source": "https://docs.augmentcode.com/cli/skills"
+    },
+    {
+      "adapter": "auggie-project",
+      "surface": "agents",
+      "path": "<project>/.augment/agents/",
+      "status": "documented",
+      "source": "https://docs.augmentcode.com/cli/subagents"
+    },
+    {
+      "adapter": "auggie-project",
+      "surface": "commands",
+      "path": "<project>/.augment/commands/",
+      "status": "documented",
+      "source": "https://docs.augmentcode.com/cli/custom-commands"
+    },
+    {
+      "adapter": "auggie-project",
+      "surface": "rules",
+      "path": "<project>/.augment/rules/",
+      "status": "documented",
+      "source": "https://docs.augmentcode.com/cli/rules"
+    },
+    {
+      "adapter": "auggie-project",
+      "surface": "skills",
+      "path": "<project>/.augment/skills/",
+      "status": "documented",
+      "source": "https://docs.augmentcode.com/cli/skills"
+    },
+    {
+      "adapter": "aider-project",
+      "surface": "config",
+      "path": "<project>/.aider.conf.yml",
+      "status": "documented",
+      "source": "https://aider.chat/docs/config/aider_conf.html"
+    },
+    {
+      "adapter": "aider-project",
+      "surface": "rules",
+      "path": "<project>/.aider/rules/",
+      "status": "documented",
+      "source": "https://aider.chat/docs/config/aider_conf.html",
+      "note": "Loaded through the read list EGC writes in .aider.conf.yml."
+    },
+    {
+      "adapter": "aider-project",
+      "surface": "skills",
+      "path": "<project>/.aider/skills/",
+      "status": "documented",
+      "source": "https://aider.chat/docs/config/aider_conf.html",
+      "note": "Loaded through the read list EGC writes in .aider.conf.yml."
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "library",
+      "path": "~/.agents",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "library",
+      "path": "~/.agents/.codex/",
+      "status": "egc",
+      "note": "EGC library: platform configuration sources copied for reference; the tool does not load this path."
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "context",
+      "path": "~/.agents/AGENTS.md",
+      "status": "unverified",
+      "source": "https://learn.chatgpt.com/docs/agent-configuration/agents-md",
+      "note": "Codex reads AGENTS.md from CODEX_HOME (~/.codex) and from the project, not from ~/.agents (read on 2026-10-10)."
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "library",
+      "path": "~/.agents/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "library",
+      "path": "~/.agents/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "library",
+      "path": "~/.agents/mcp-configs/",
+      "status": "egc",
+      "note": "EGC library: platform configuration sources copied for reference; the tool does not load this path."
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "library",
+      "path": "~/.agents/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "runtime",
+      "path": "~/.agents/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "skills",
+      "path": "~/.agents/skills/",
+      "status": "documented",
+      "source": "https://learn.chatgpt.com/codex/skills"
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "hooks",
+      "path": "~/.codex/hooks.json",
+      "status": "documented",
+      "source": "https://learn.chatgpt.com/docs/hooks"
+    },
+    {
+      "adapter": "codex-home",
+      "surface": "runtime",
+      "path": "~/.codex/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "goose-home",
+      "surface": "library",
+      "path": "~/.agents/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "goose-home",
+      "surface": "library",
+      "path": "~/.agents/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "goose-home",
+      "surface": "hooks",
+      "path": "~/.agents/plugins/egc-guardian/hooks/hooks.json",
+      "status": "documented",
+      "source": "https://goose-docs.ai/docs/guides/context-engineering/hooks"
+    },
+    {
+      "adapter": "goose-home",
+      "surface": "runtime",
+      "path": "~/.agents/plugins/egc-guardian/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "goose-home",
+      "surface": "library",
+      "path": "~/.agents/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "goose-home",
+      "surface": "skills",
+      "path": "~/.agents/skills/",
+      "status": "documented",
+      "source": "https://goose-docs.ai/docs/guides/context-engineering/using-skills"
+    },
+    {
+      "adapter": "openhands-home",
+      "surface": "library",
+      "path": "~/.agents/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "openhands-home",
+      "surface": "library",
+      "path": "~/.agents/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "openhands-home",
+      "surface": "library",
+      "path": "~/.agents/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "openhands-home",
+      "surface": "skills",
+      "path": "~/.agents/skills/",
+      "status": "documented",
+      "source": "https://docs.openhands.dev/overview/skills"
+    },
+    {
+      "adapter": "openhands-project",
+      "surface": "hooks",
+      "path": "<project>/.openhands/hooks.json",
+      "status": "documented",
+      "source": "https://docs.openhands.dev/openhands/usage/customization/hooks"
+    },
+    {
+      "adapter": "openhands-project",
+      "surface": "runtime",
+      "path": "<project>/.openhands/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "qwen-project",
+      "surface": "agents",
+      "path": "<project>/.qwen/agents/",
+      "status": "documented",
+      "source": "https://qwenlm.github.io/qwen-code-docs/en/users/features/sub-agents/"
+    },
+    {
+      "adapter": "qwen-project",
+      "surface": "commands",
+      "path": "<project>/.qwen/commands/",
+      "status": "documented",
+      "source": "https://qwenlm.github.io/qwen-code-docs/en/users/features/commands/"
+    },
+    {
+      "adapter": "qwen-project",
+      "surface": "library",
+      "path": "<project>/.qwen/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "qwen-project",
+      "surface": "runtime",
+      "path": "<project>/.qwen/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "qwen-project",
+      "surface": "hooks",
+      "path": "<project>/.qwen/settings.json",
+      "status": "documented",
+      "source": "https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/"
+    },
+    {
+      "adapter": "qwen-project",
+      "surface": "skills",
+      "path": "<project>/.qwen/skills/",
+      "status": "documented",
+      "source": "https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/"
+    },
+    {
+      "adapter": "opencode-home",
+      "surface": "agents",
+      "path": "~/.config/opencode/agents/",
+      "status": "documented",
+      "source": "https://opencode.ai/docs/agents/"
+    },
+    {
+      "adapter": "opencode-home",
+      "surface": "commands",
+      "path": "~/.config/opencode/commands/",
+      "status": "documented",
+      "source": "https://opencode.ai/docs/commands/"
+    },
+    {
+      "adapter": "opencode-home",
+      "surface": "runtime",
+      "path": "~/.config/opencode/hooks/",
+      "status": "egc",
+      "note": "EGC runtime: hook scripts the hook configuration of the tool points at."
+    },
+    {
+      "adapter": "opencode-home",
+      "surface": "library",
+      "path": "~/.config/opencode/instructions/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "opencode-home",
+      "surface": "library",
+      "path": "~/.config/opencode/mcp-configs/",
+      "status": "egc",
+      "note": "EGC library: platform configuration sources copied for reference; the tool does not load this path."
+    },
+    {
+      "adapter": "opencode-home",
+      "surface": "plugins",
+      "path": "~/.config/opencode/plugins/",
+      "status": "documented",
+      "source": "https://opencode.ai/docs/plugins/"
+    },
+    {
+      "adapter": "opencode-home",
+      "surface": "library",
+      "path": "~/.config/opencode/prompts/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "opencode-home",
+      "surface": "library",
+      "path": "~/.config/opencode/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "opencode-home",
+      "surface": "runtime",
+      "path": "~/.config/opencode/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "opencode-home",
+      "surface": "skills",
+      "path": "~/.config/opencode/skills/",
+      "status": "documented",
+      "source": "https://opencode.ai/docs/skills/"
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "library",
+      "path": "<project>/.codebuddy/.agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "context",
+      "path": "<project>/.codebuddy/AGENTS.md",
+      "status": "unverified",
+      "source": "https://www.codebuddy.ai/docs/cli/memory",
+      "note": "CodeBuddy's memory docs list CODEBUDDY.md and .codebuddy/rules, not .codebuddy/AGENTS.md (read on 2026-10-10)."
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "agents",
+      "path": "<project>/.codebuddy/agents/",
+      "status": "documented",
+      "source": "https://www.codebuddy.ai/docs/cli/sub-agents"
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "commands",
+      "path": "<project>/.codebuddy/commands/",
+      "status": "documented",
+      "source": "https://www.codebuddy.ai/docs/cli/slash-commands"
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "runtime",
+      "path": "<project>/.codebuddy/hooks/",
+      "status": "egc",
+      "note": "EGC runtime: hook scripts the hook configuration of the tool points at."
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "library",
+      "path": "<project>/.codebuddy/mcp-configs/",
+      "status": "egc",
+      "note": "EGC library: platform configuration sources copied for reference; the tool does not load this path."
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "rules",
+      "path": "<project>/.codebuddy/rules/",
+      "status": "documented",
+      "source": "https://www.codebuddy.ai/docs/cli/memory"
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "runtime",
+      "path": "<project>/.codebuddy/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "settings",
+      "path": "<project>/.codebuddy/settings.json",
+      "status": "documented",
+      "source": "https://www.codebuddy.ai/docs/cli/settings"
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "skills",
+      "path": "<project>/.codebuddy/skills/",
+      "status": "documented",
+      "source": "https://www.codebuddy.ai/docs/cli/skills"
+    },
+    {
+      "adapter": "cline-project",
+      "surface": "rules",
+      "path": "<project>/.clinerules/",
+      "status": "documented",
+      "source": "https://docs.cline.bot/customization/cline-rules"
+    },
+    {
+      "adapter": "cline-project",
+      "surface": "library",
+      "path": "<project>/.clinerules/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "cline-project",
+      "surface": "library",
+      "path": "<project>/.clinerules/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "cline-project",
+      "surface": "hooks",
+      "path": "<project>/.clinerules/hooks/",
+      "status": "unverified",
+      "source": "https://docs.cline.bot/customization/hooks",
+      "note": "Cline's current docs move hooks to SDK plugins and no longer name .clinerules/hooks (read on 2026-10-10)."
+    },
+    {
+      "adapter": "cline-project",
+      "surface": "runtime",
+      "path": "<project>/.clinerules/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "cline-project",
+      "surface": "skills",
+      "path": "<project>/.clinerules/skills/",
+      "status": "documented",
+      "source": "https://docs.cline.bot/customization/skills"
+    },
+    {
+      "adapter": "kiro-home",
+      "surface": "agents",
+      "path": "~/.kiro/agents/",
+      "status": "documented",
+      "source": "https://kiro.dev/docs/custom-agents/creating/"
+    },
+    {
+      "adapter": "kiro-home",
+      "surface": "library",
+      "path": "~/.kiro/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "kiro-home",
+      "surface": "hooks",
+      "path": "~/.kiro/hooks/",
+      "status": "documented",
+      "source": "https://kiro.dev/docs/hooks/"
+    },
+    {
+      "adapter": "kiro-home",
+      "surface": "library",
+      "path": "~/.kiro/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "kiro-home",
+      "surface": "runtime",
+      "path": "~/.kiro/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "kiro-home",
+      "surface": "mcp",
+      "path": "~/.kiro/settings/",
+      "status": "documented",
+      "source": "https://kiro.dev/docs/mcp/configuration/"
+    },
+    {
+      "adapter": "kiro-home",
+      "surface": "skills",
+      "path": "~/.kiro/skills/",
+      "status": "documented",
+      "source": "https://kiro.dev/docs/skills/"
+    },
+    {
+      "adapter": "kiro-home",
+      "surface": "steering",
+      "path": "~/.kiro/steering/",
+      "status": "documented",
+      "source": "https://kiro.dev/docs/steering/"
+    },
+    {
+      "adapter": "kiro-project",
+      "surface": "agents",
+      "path": "<project>/.kiro/agents/",
+      "status": "documented",
+      "source": "https://kiro.dev/docs/custom-agents/creating/"
+    },
+    {
+      "adapter": "kiro-project",
+      "surface": "library",
+      "path": "<project>/.kiro/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "kiro-project",
+      "surface": "hooks",
+      "path": "<project>/.kiro/hooks/",
+      "status": "documented",
+      "source": "https://kiro.dev/docs/hooks/"
+    },
+    {
+      "adapter": "kiro-project",
+      "surface": "library",
+      "path": "<project>/.kiro/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "kiro-project",
+      "surface": "runtime",
+      "path": "<project>/.kiro/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "kiro-project",
+      "surface": "mcp",
+      "path": "<project>/.kiro/settings/",
+      "status": "documented",
+      "source": "https://kiro.dev/docs/mcp/configuration/"
+    },
+    {
+      "adapter": "kiro-project",
+      "surface": "skills",
+      "path": "<project>/.kiro/skills/",
+      "status": "documented",
+      "source": "https://kiro.dev/docs/skills/"
+    },
+    {
+      "adapter": "kiro-project",
+      "surface": "steering",
+      "path": "<project>/.kiro/steering/",
+      "status": "documented",
+      "source": "https://kiro.dev/docs/steering/"
+    },
+    {
+      "adapter": "windsurf-home",
+      "surface": "library",
+      "path": "~/.codeium/windsurf/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "windsurf-home",
+      "surface": "library",
+      "path": "~/.codeium/windsurf/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "windsurf-home",
+      "surface": "library",
+      "path": "~/.codeium/windsurf/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "windsurf-home",
+      "surface": "runtime",
+      "path": "~/.codeium/windsurf/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "windsurf-home",
+      "surface": "skills",
+      "path": "~/.codeium/windsurf/skills/",
+      "status": "documented",
+      "source": "https://docs.devin.ai/desktop/cascade/skills"
+    },
+    {
+      "adapter": "windsurf-home",
+      "surface": "hooks",
+      "path": "~/.config/devin/config.json",
+      "status": "documented",
+      "source": "https://docs.devin.ai/cli/extensibility/hooks"
+    },
+    {
+      "adapter": "windsurf-home",
+      "surface": "hooks",
+      "path": "~/AppData/Roaming/devin/config.json",
+      "status": "documented",
+      "source": "https://docs.devin.ai/cli/extensibility/hooks",
+      "variant": "win32"
+    },
+    {
+      "adapter": "windsurf-project",
+      "surface": "library",
+      "path": "<project>/.devin/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "windsurf-project",
+      "surface": "library",
+      "path": "<project>/.devin/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "windsurf-project",
+      "surface": "hooks",
+      "path": "<project>/.devin/config.local.json",
+      "status": "documented",
+      "source": "https://docs.devin.ai/cli/extensibility/hooks"
+    },
+    {
+      "adapter": "windsurf-project",
+      "surface": "library",
+      "path": "<project>/.devin/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "windsurf-project",
+      "surface": "runtime",
+      "path": "<project>/.devin/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "windsurf-project",
+      "surface": "skills",
+      "path": "<project>/.devin/skills/",
+      "status": "documented",
+      "source": "https://docs.devin.ai/desktop/cascade/skills"
+    },
+    {
+      "adapter": "amp-home",
+      "surface": "skills",
+      "path": "~/.agents/skills/",
+      "status": "documented",
+      "source": "https://ampcode.com/docs/customize/skills"
+    },
+    {
+      "adapter": "amp-home",
+      "surface": "library",
+      "path": "~/.amp/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "amp-home",
+      "surface": "library",
+      "path": "~/.amp/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "amp-home",
+      "surface": "library",
+      "path": "~/.amp/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "amp-home",
+      "surface": "plugins",
+      "path": "~/.config/amp/plugins/",
+      "status": "documented",
+      "source": "https://ampcode.com/docs/customize/plugins"
+    },
+    {
+      "adapter": "amp-home",
+      "surface": "runtime",
+      "path": "~/.config/amp/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "amp-project",
+      "surface": "skills",
+      "path": "<project>/.agents/skills/",
+      "status": "documented",
+      "source": "https://ampcode.com/docs/customize/skills"
+    },
+    {
+      "adapter": "amp-project",
+      "surface": "library",
+      "path": "<project>/.amp/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "amp-project",
+      "surface": "library",
+      "path": "<project>/.amp/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "amp-project",
+      "surface": "plugins",
+      "path": "<project>/.amp/plugins/",
+      "status": "documented",
+      "source": "https://ampcode.com/docs/customize/plugins"
+    },
+    {
+      "adapter": "amp-project",
+      "surface": "library",
+      "path": "<project>/.amp/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "amp-project",
+      "surface": "runtime",
+      "path": "<project>/.amp/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "copilot-home",
+      "surface": "hooks",
+      "path": "~/.copilot/hooks/",
+      "status": "documented",
+      "source": "https://code.visualstudio.com/docs/copilot/customization/hooks"
+    },
+    {
+      "adapter": "copilot-home",
+      "surface": "skills",
+      "path": "~/.copilot/skills/",
+      "status": "documented",
+      "source": "https://code.visualstudio.com/docs/copilot/customization/agent-skills"
+    },
+    {
+      "adapter": "copilot-home",
+      "surface": "library",
+      "path": "~/.github/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "copilot-home",
+      "surface": "library",
+      "path": "~/.github/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "copilot-home",
+      "surface": "library",
+      "path": "~/.github/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "copilot-home",
+      "surface": "runtime",
+      "path": "~/.github/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "skills",
+      "path": "~/.agents/skills/",
+      "status": "documented",
+      "source": "https://zed.dev/docs/ai/skills"
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "library",
+      "path": "~/.config/zed/.agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "context",
+      "path": "~/.config/zed/AGENTS.md",
+      "status": "documented",
+      "source": "https://zed.dev/docs/ai/instructions"
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "library",
+      "path": "~/.config/zed/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "library",
+      "path": "~/.config/zed/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "library",
+      "path": "~/.config/zed/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "library",
+      "path": "<project>/.trae/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "library",
+      "path": "<project>/.trae/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "hooks",
+      "path": "<project>/.trae/hooks.json",
+      "status": "documented",
+      "source": "https://docs.trae.ai/ide/hook-configuration-reference"
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "library",
+      "path": "<project>/.trae/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "runtime",
+      "path": "<project>/.trae/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "skills",
+      "path": "<project>/.trae/skills/",
+      "status": "documented",
+      "source": "https://docs.trae.ai/ide/skills"
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "library",
+      "path": "<project>/.trae-cn/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "TRAE_ENV=cn"
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "library",
+      "path": "<project>/.trae-cn/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "TRAE_ENV=cn"
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "hooks",
+      "path": "<project>/.trae-cn/hooks.json",
+      "status": "unverified",
+      "source": "https://docs.trae.ai/ide/hook-configuration-reference",
+      "note": "The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10).",
+      "variant": "TRAE_ENV=cn"
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "library",
+      "path": "<project>/.trae-cn/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "TRAE_ENV=cn"
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "runtime",
+      "path": "<project>/.trae-cn/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run.",
+      "variant": "TRAE_ENV=cn"
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "skills",
+      "path": "<project>/.trae-cn/skills/",
+      "status": "unverified",
+      "source": "https://docs.trae.ai/ide/skills",
+      "note": "The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10).",
+      "variant": "TRAE_ENV=cn"
+    },
+    {
+      "adapter": "junie-home",
+      "surface": "library",
+      "path": "~/.junie/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "junie-home",
+      "surface": "library",
+      "path": "~/.junie/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "junie-home",
+      "surface": "hooks",
+      "path": "~/.junie/config.json",
+      "status": "documented",
+      "source": "https://junie.jetbrains.com/docs/junie-cli-hooks.html"
+    },
+    {
+      "adapter": "junie-home",
+      "surface": "library",
+      "path": "~/.junie/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "junie-home",
+      "surface": "runtime",
+      "path": "~/.junie/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "junie-home",
+      "surface": "skills",
+      "path": "~/.junie/skills/",
+      "status": "documented",
+      "source": "https://junie.jetbrains.com/docs/agent-skills.html"
+    },
+    {
+      "adapter": "junie-project",
+      "surface": "library",
+      "path": "<project>/.junie/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "junie-project",
+      "surface": "library",
+      "path": "<project>/.junie/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "junie-project",
+      "surface": "library",
+      "path": "<project>/.junie/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "junie-project",
+      "surface": "skills",
+      "path": "<project>/.junie/skills/",
+      "status": "documented",
+      "source": "https://junie.jetbrains.com/docs/agent-skills.html"
+    },
+    {
+      "adapter": "warp-project",
+      "surface": "rules",
+      "path": "<project>/.warp/rules/",
+      "status": "unverified",
+      "source": "https://docs.warp.dev/agent-platform/warp-agents/rules",
+      "note": "Warp reads AGENTS.md (and WARP.md) as rules; its docs do not name a .warp/rules directory (read on 2026-10-10)."
+    },
+    {
+      "adapter": "warp-project",
+      "surface": "skills",
+      "path": "<project>/.warp/skills/",
+      "status": "documented",
+      "source": "https://docs.warp.dev/agent-platform/warp-agents/skills"
+    },
+    {
+      "adapter": "warp-project",
+      "surface": "rules",
+      "path": "<project>/AGENTS.md",
+      "status": "documented",
+      "source": "https://docs.warp.dev/agent-platform/warp-agents/rules"
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "library",
+      "path": "~/.kimi-code/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "library",
+      "path": "~/.kimi-code/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "library",
+      "path": "~/.kimi-code/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "skills",
+      "path": "~/.kimi-code/skills/",
+      "status": "documented",
+      "source": "https://github.com/MoonshotAI/kimi-code"
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "library",
+      "path": "$KIMI_CODE_HOME/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "KIMI_CODE_HOME"
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "library",
+      "path": "$KIMI_CODE_HOME/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "KIMI_CODE_HOME"
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "library",
+      "path": "$KIMI_CODE_HOME/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "KIMI_CODE_HOME"
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "skills",
+      "path": "$KIMI_CODE_HOME/skills/",
+      "status": "documented",
+      "source": "https://github.com/MoonshotAI/kimi-code",
+      "variant": "KIMI_CODE_HOME"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "skills",
+      "path": "~/.agents/skills/",
+      "status": "documented",
+      "source": "https://github.com/charmbracelet/crush"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "library",
+      "path": "~/.config/crush/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "library",
+      "path": "~/.config/crush/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "config",
+      "path": "~/.config/crush/crush.json",
+      "status": "documented",
+      "source": "https://github.com/charmbracelet/crush"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "library",
+      "path": "~/.config/crush/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "runtime",
+      "path": "~/.config/crush/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "library",
+      "path": "$XDG_CONFIG_HOME/crush/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "library",
+      "path": "$XDG_CONFIG_HOME/crush/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "config",
+      "path": "$XDG_CONFIG_HOME/crush/crush.json",
+      "status": "documented",
+      "source": "https://github.com/charmbracelet/crush",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "library",
+      "path": "$XDG_CONFIG_HOME/crush/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "runtime",
+      "path": "$XDG_CONFIG_HOME/crush/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run.",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "library",
+      "path": "$CRUSH_GLOBAL_CONFIG/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "CRUSH_GLOBAL_CONFIG"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "library",
+      "path": "$CRUSH_GLOBAL_CONFIG/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "CRUSH_GLOBAL_CONFIG"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "config",
+      "path": "$CRUSH_GLOBAL_CONFIG/crush.json",
+      "status": "documented",
+      "source": "https://github.com/charmbracelet/crush",
+      "variant": "CRUSH_GLOBAL_CONFIG"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "library",
+      "path": "$CRUSH_GLOBAL_CONFIG/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "CRUSH_GLOBAL_CONFIG"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "runtime",
+      "path": "$CRUSH_GLOBAL_CONFIG/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run.",
+      "variant": "CRUSH_GLOBAL_CONFIG"
+    }
+  ]
+}

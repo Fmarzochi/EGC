@@ -77,6 +77,7 @@ const SESSION = {
 const CASES = {
   'hooks.schema.json': () => assertValid('hooks.schema.json', repoJson('hooks/hooks.json'), 'hooks/hooks.json'),
   'install-modules.schema.json': () => assertValid('install-modules.schema.json', repoJson('manifests/install-modules.json'), 'manifests/install-modules.json'),
+  'tool-paths.schema.json': () => assertValid('tool-paths.schema.json', repoJson('manifests/tool-paths.json'), 'manifests/tool-paths.json'),
   'install-profiles.schema.json': () => assertValid('install-profiles.schema.json', repoJson('manifests/install-profiles.json'), 'manifests/install-profiles.json'),
   'install-components.schema.json': () => assertValid('install-components.schema.json', repoJson('manifests/install-components.json'), 'manifests/install-components.json'),
   'plugin.schema.json': () => assertValid('plugin.schema.json', repoJson('.gemini-plugin/plugin.json'), '.gemini-plugin/plugin.json'),
