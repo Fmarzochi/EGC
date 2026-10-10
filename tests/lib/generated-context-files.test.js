@@ -47,7 +47,8 @@ console.log('\n=== Testing generated context files ===\n');
 test('the templates are the tracked AGENTS.md and Cursor rule, byte for byte outside the propagation block', () => {
   for (const source of ['AGENTS.md', '.cursor/rules/egc-context.mdc']) {
     const template = generatedContextTemplate(source);
-    const tracked = fs.readFileSync(path.join(REPO_ROOT, ...source.split('/')), 'utf8');
+    // A Windows checkout with core.autocrlf lands the tracked file with CRLF.
+    const tracked = fs.readFileSync(path.join(REPO_ROOT, ...source.split('/')), 'utf8').replaceAll('\r\n', '\n');
     assert.strictEqual(withCanonicalBlock(tracked, template), template, `${source} matches its template`);
     assert.ok(template.endsWith('\n'), `${source} template ends with a newline`);
     assert.ok(template.includes(PROJECT_MEMORY_HEADING), `${source} template carries the project-memory heading`);
