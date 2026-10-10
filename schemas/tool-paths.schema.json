@@ -21,7 +21,7 @@
     },
     "checkedOn": {
       "type": "string",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+      "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
     },
     "variants": {
       "type": "array",
@@ -38,7 +38,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_=-]+$"
           },
           "description": {
             "type": "string",
@@ -104,7 +105,7 @@
           },
           "source": {
             "type": "string",
-            "pattern": "^https://\\S+$"
+            "pattern": "^https://[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+(/[^\\s]*)?$"
           },
           "note": {
             "type": "string",

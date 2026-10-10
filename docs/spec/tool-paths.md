@@ -10,9 +10,9 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | --- | --- | --- | --- |
 | default | linux | none | all |
 | win32 | win32 | none | windsurf-home |
-| XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME=$XDG_CONFIG_HOME` | crush-home |
-| CRUSH_GLOBAL_CONFIG | linux | `CRUSH_GLOBAL_CONFIG=$CRUSH_GLOBAL_CONFIG` | crush-home |
-| KIMI_CODE_HOME | linux | `KIMI_CODE_HOME=$KIMI_CODE_HOME` | kimi-home |
+| XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME` set to a directory, shown as `$XDG_CONFIG_HOME` in the paths | crush-home |
+| CRUSH_GLOBAL_CONFIG | linux | `CRUSH_GLOBAL_CONFIG` set to a directory, shown as `$CRUSH_GLOBAL_CONFIG` in the paths | crush-home |
+| KIMI_CODE_HOME | linux | `KIMI_CODE_HOME` set to a directory, shown as `$KIMI_CODE_HOME` in the paths | kimi-home |
 | TRAE_ENV=cn | linux | `TRAE_ENV=cn` | trae-project |
 
 ## egc-home
@@ -25,6 +25,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | rules | `~/.gemini/config/rules/` | default | documented | <https://antigravity.google/docs/rules> |  |
 | skills | `~/.gemini/config/skills/` | default | documented | <https://antigravity.google/docs/skills> |  |
 | runtime | `~/.gemini/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| state | `~/.gemini/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## claude-home
 
@@ -53,6 +54,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | rules | `<project>/.cursor/rules/` | default | documented | <https://cursor.com/docs/context/rules> |  |
 | runtime | `<project>/.cursor/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `<project>/.cursor/skills/` | default | documented | <https://cursor.com/docs/context/skills> |  |
+| state | `<project>/.cursor/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## antigravity-project
 
@@ -65,6 +67,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | rules | `<project>/.agents/rules/` | default | documented | <https://antigravity.google/docs/rules> |  |
 | runtime | `<project>/.agents/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `<project>/.agents/skills/` | default | documented | <https://antigravity.google/docs/skills> |  |
+| state | `<project>/.agents/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## auggie-home
 
@@ -74,6 +77,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | commands | `~/.augment/commands/` | default | documented | <https://docs.augmentcode.com/cli/custom-commands> |  |
 | rules | `~/.augment/rules/` | default | documented | <https://docs.augmentcode.com/cli/rules> |  |
 | skills | `~/.augment/skills/` | default | documented | <https://docs.augmentcode.com/cli/skills> |  |
+| state | `~/.augment/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## auggie-project
 
@@ -83,6 +87,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | commands | `<project>/.augment/commands/` | default | documented | <https://docs.augmentcode.com/cli/custom-commands> |  |
 | rules | `<project>/.augment/rules/` | default | documented | <https://docs.augmentcode.com/cli/rules> |  |
 | skills | `<project>/.augment/skills/` | default | documented | <https://docs.augmentcode.com/cli/skills> |  |
+| state | `<project>/.augment/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## aider-project
 
@@ -91,6 +96,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | config | `<project>/.aider.conf.yml` | default | documented | <https://aider.chat/docs/config/aider_conf.html> |  |
 | rules | `<project>/.aider/rules/` | default | documented | <https://aider.chat/docs/config/aider_conf.html> | Loaded through the read list EGC writes in .aider.conf.yml. |
 | skills | `<project>/.aider/skills/` | default | documented | <https://aider.chat/docs/config/aider_conf.html> | Loaded through the read list EGC writes in .aider.conf.yml. |
+| state | `<project>/.aider/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## codex-home
 
@@ -107,6 +113,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | skills | `~/.agents/skills/` | default | documented | <https://learn.chatgpt.com/codex/skills> |  |
 | hooks | `~/.codex/hooks.json` | default | documented | <https://learn.chatgpt.com/docs/hooks> |  |
 | runtime | `~/.codex/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| state | `~/.agents/egc/codex-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## goose-home
 
@@ -118,6 +125,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | runtime | `~/.agents/plugins/egc-guardian/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | library | `~/.agents/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | skills | `~/.agents/skills/` | default | documented | <https://goose-docs.ai/docs/guides/context-engineering/using-skills> |  |
+| state | `~/.agents/egc/goose-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## openhands-home
 
@@ -127,6 +135,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `~/.agents/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `~/.agents/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | skills | `~/.agents/skills/` | default | documented | <https://docs.openhands.dev/overview/skills> |  |
+| state | `~/.agents/egc/openhands-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## openhands-project
 
@@ -134,6 +143,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | --- | --- | --- | --- | --- | --- |
 | hooks | `<project>/.openhands/hooks.json` | default | documented | <https://docs.openhands.dev/openhands/usage/customization/hooks> |  |
 | runtime | `<project>/.openhands/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| state | `<project>/.openhands/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## qwen-project
 
@@ -145,6 +155,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | runtime | `<project>/.qwen/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | hooks | `<project>/.qwen/settings.json` | default | documented | <https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/> |  |
 | skills | `<project>/.qwen/skills/` | default | documented | <https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/> |  |
+| state | `<project>/.qwen/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## opencode-home
 
@@ -160,6 +171,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `~/.config/opencode/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `~/.config/opencode/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `~/.config/opencode/skills/` | default | documented | <https://opencode.ai/docs/skills/> |  |
+| state | `~/.config/opencode/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## codebuddy-project
 
@@ -175,6 +187,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | runtime | `<project>/.codebuddy/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | settings | `<project>/.codebuddy/settings.json` | default | documented | <https://www.codebuddy.ai/docs/cli/settings> |  |
 | skills | `<project>/.codebuddy/skills/` | default | documented | <https://www.codebuddy.ai/docs/cli/skills> |  |
+| state | `<project>/.codebuddy/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## cline-project
 
@@ -199,6 +212,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | mcp | `~/.kiro/settings/` | default | documented | <https://kiro.dev/docs/mcp/configuration/> |  |
 | skills | `~/.kiro/skills/` | default | documented | <https://kiro.dev/docs/skills/> |  |
 | steering | `~/.kiro/steering/` | default | documented | <https://kiro.dev/docs/steering/> |  |
+| state | `~/.kiro/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## kiro-project
 
@@ -212,6 +226,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | mcp | `<project>/.kiro/settings/` | default | documented | <https://kiro.dev/docs/mcp/configuration/> |  |
 | skills | `<project>/.kiro/skills/` | default | documented | <https://kiro.dev/docs/skills/> |  |
 | steering | `<project>/.kiro/steering/` | default | documented | <https://kiro.dev/docs/steering/> |  |
+| state | `<project>/.kiro/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## windsurf-home
 
@@ -224,6 +239,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | skills | `~/.codeium/windsurf/skills/` | default | documented | <https://docs.devin.ai/desktop/cascade/skills> |  |
 | hooks | `~/.config/devin/config.json` | default | documented | <https://docs.devin.ai/cli/extensibility/hooks> |  |
 | hooks | `~/AppData/Roaming/devin/config.json` | win32 | documented | <https://docs.devin.ai/cli/extensibility/hooks> |  |
+| state | `~/.codeium/windsurf/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## windsurf-project
 
@@ -235,6 +251,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `<project>/.devin/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.devin/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `<project>/.devin/skills/` | default | documented | <https://docs.devin.ai/desktop/cascade/skills> |  |
+| state | `<project>/.devin/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## amp-home
 
@@ -246,6 +263,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `~/.amp/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | plugins | `~/.config/amp/plugins/` | default | documented | <https://ampcode.com/docs/customize/plugins> |  |
 | runtime | `~/.config/amp/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| state | `~/.amp/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## amp-project
 
@@ -257,6 +275,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | plugins | `<project>/.amp/plugins/` | default | documented | <https://ampcode.com/docs/customize/plugins> |  |
 | library | `<project>/.amp/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.amp/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| state | `<project>/.amp/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## copilot-home
 
@@ -268,6 +287,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `~/.github/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `~/.github/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `~/.github/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| state | `~/.github/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## zed-home
 
@@ -279,6 +299,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `~/.config/zed/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `~/.config/zed/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `~/.config/zed/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| state | `~/.config/zed/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## trae-project
 
@@ -296,6 +317,8 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `<project>/.trae-cn/rules/` | TRAE_ENV=cn | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.trae-cn/scripts/` | TRAE_ENV=cn | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `<project>/.trae-cn/skills/` | TRAE_ENV=cn | unverified | <https://docs.trae.ai/ide/skills> | The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10). |
+| state | `<project>/.trae/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| state | `<project>/.trae-cn/egc-install-state.json` | TRAE_ENV=cn | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## junie-home
 
@@ -307,6 +330,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `~/.junie/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `~/.junie/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `~/.junie/skills/` | default | documented | <https://junie.jetbrains.com/docs/agent-skills.html> |  |
+| state | `~/.junie/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## junie-project
 
@@ -316,6 +340,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `<project>/.junie/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `<project>/.junie/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | skills | `<project>/.junie/skills/` | default | documented | <https://junie.jetbrains.com/docs/agent-skills.html> |  |
+| state | `<project>/.junie/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## warp-project
 
@@ -324,6 +349,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | rules | `<project>/.warp/rules/` | default | unverified | <https://docs.warp.dev/agent-platform/warp-agents/rules> | Warp reads AGENTS.md (and WARP.md) as rules; its docs do not name a .warp/rules directory (read on 2026-10-10). |
 | skills | `<project>/.warp/skills/` | default | documented | <https://docs.warp.dev/agent-platform/warp-agents/skills> |  |
 | rules | `<project>/AGENTS.md` | default | documented | <https://docs.warp.dev/agent-platform/warp-agents/rules> |  |
+| state | `<project>/.warp/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## kimi-home
 
@@ -337,6 +363,8 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `$KIMI_CODE_HOME/commands/` | KIMI_CODE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `$KIMI_CODE_HOME/rules/` | KIMI_CODE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | skills | `$KIMI_CODE_HOME/skills/` | KIMI_CODE_HOME | documented | <https://github.com/MoonshotAI/kimi-code> |  |
+| state | `~/.kimi-code/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| state | `$KIMI_CODE_HOME/egc/install-state.json` | KIMI_CODE_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## crush-home
 
@@ -358,3 +386,6 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | config | `$CRUSH_GLOBAL_CONFIG/crush.json` | CRUSH_GLOBAL_CONFIG | documented | <https://github.com/charmbracelet/crush> |  |
 | library | `$CRUSH_GLOBAL_CONFIG/rules/` | CRUSH_GLOBAL_CONFIG | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `$CRUSH_GLOBAL_CONFIG/scripts/` | CRUSH_GLOBAL_CONFIG | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| state | `~/.config/crush/egc/crush-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| state | `$XDG_CONFIG_HOME/crush/egc/crush-install-state.json` | XDG_CONFIG_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| state | `$CRUSH_GLOBAL_CONFIG/egc/crush-install-state.json` | CRUSH_GLOBAL_CONFIG | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |

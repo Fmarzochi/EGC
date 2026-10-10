@@ -69,7 +69,11 @@ function withPlatformAndEnv(platform, env, fn) {
 function planAdapterDestinations({ repoRoot, adapter, modules, homeDir, projectRoot }) {
   const targetModules = modules.filter(module => module.targets.includes(adapter.target));
   const plan = planInstallTargetScaffold({ target: adapter.id, repoRoot, projectRoot, homeDir, modules: targetModules });
-  return plan.operations.map(operation => operation.destinationPath);
+  return [
+    ...plan.operations.map(operation => operation.destinationPath),
+    plan.installStatePath,
+    ...(plan.legacyInstallStatePaths || []),
+  ].filter(Boolean);
 }
 
 function variantEnv(variant, scratch) {
@@ -149,7 +153,9 @@ function renderToolPathsMarkdown(table) {
     '| --- | --- | --- | --- |',
   ];
   for (const variant of table.variants) {
-    const env = Object.entries(variant.env || {}).map(([name, value]) => `\`${name}=${value}\``).join(', ') || 'none';
+    const env = Object.entries(variant.env || {})
+      .map(([name, value]) => (value.startsWith('$') ? `\`${name}\` set to a directory, shown as \`${value}\` in the paths` : `\`${name}=${value}\``))
+      .join(', ') || 'none';
     lines.push(`| ${variant.id} | ${variant.platform} | ${env} | ${variant.adapters ? variant.adapters.join(', ') : 'all'} |`);
   }
   const adapters = [...new Set(table.rows.map(row => row.adapter))];

@@ -44,6 +44,19 @@ tally(test('manifests/tool-paths.json matches its schema', () => {
   const schema = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'schemas', 'tool-paths.schema.json'), 'utf8'));
   const validate = new Ajv({ allErrors: true }).compile(schema);
   assert.ok(validate(table), JSON.stringify(validate.errors, null, 2));
+  const firstDocumented = table.rows.findIndex(row => row.status === 'documented');
+  const badSource = { ...table, rows: table.rows.map((row, index) => (index === firstDocumented ? { ...row, source: 'https://?' } : row)) };
+  assert.ok(!validate(badSource), 'a source that is not an https URL fails');
+  assert.ok(!validate({ ...table, checkedOn: '2026-99-99' }), 'an impossible checkedOn fails');
+}));
+
+tally(test('checkedOn is a real calendar date, and the variant ids are unique with default first', () => {
+  const checked = new Date(`${table.checkedOn}T00:00:00Z`);
+  assert.ok(!Number.isNaN(checked.getTime()) && checked.toISOString().slice(0, 10) === table.checkedOn, `checkedOn ${table.checkedOn} is not a calendar date`);
+  const ids = table.variants.map(variant => variant.id);
+  assert.strictEqual(ids[0], 'default', 'the default variant comes first');
+  assert.ok(!table.variants[0].adapters, 'the default variant plans every adapter');
+  assert.deepStrictEqual(ids.filter((id, index) => ids.indexOf(id) !== index), [], 'duplicate variant ids');
 }));
 
 tally(test('every registered adapter has rows, and every row and variant names a registered adapter and a declared variant', () => {

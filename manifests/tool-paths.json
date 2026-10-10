@@ -107,6 +107,13 @@
       "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
     },
     {
+      "adapter": "egc-home",
+      "surface": "state",
+      "path": "~/.gemini/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "claude-home",
       "surface": "agents",
       "path": "~/.claude/agents/",
@@ -234,6 +241,13 @@
       "source": "https://cursor.com/docs/context/skills"
     },
     {
+      "adapter": "cursor-project",
+      "surface": "state",
+      "path": "<project>/.cursor/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "antigravity-project",
       "surface": "library",
       "path": "<project>/.agents/.agents/",
@@ -283,6 +297,13 @@
       "source": "https://antigravity.google/docs/skills"
     },
     {
+      "adapter": "antigravity-project",
+      "surface": "state",
+      "path": "<project>/.agents/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "auggie-home",
       "surface": "agents",
       "path": "~/.augment/agents/",
@@ -309,6 +330,13 @@
       "path": "~/.augment/skills/",
       "status": "documented",
       "source": "https://docs.augmentcode.com/cli/skills"
+    },
+    {
+      "adapter": "auggie-home",
+      "surface": "state",
+      "path": "~/.augment/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
     },
     {
       "adapter": "auggie-project",
@@ -339,6 +367,13 @@
       "source": "https://docs.augmentcode.com/cli/skills"
     },
     {
+      "adapter": "auggie-project",
+      "surface": "state",
+      "path": "<project>/.augment/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "aider-project",
       "surface": "config",
       "path": "<project>/.aider.conf.yml",
@@ -360,6 +395,13 @@
       "status": "documented",
       "source": "https://aider.chat/docs/config/aider_conf.html",
       "note": "Loaded through the read list EGC writes in .aider.conf.yml."
+    },
+    {
+      "adapter": "aider-project",
+      "surface": "state",
+      "path": "<project>/.aider/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
     },
     {
       "adapter": "codex-home",
@@ -440,6 +482,13 @@
       "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
     },
     {
+      "adapter": "codex-home",
+      "surface": "state",
+      "path": "~/.agents/egc/codex-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "goose-home",
       "surface": "library",
       "path": "~/.agents/agents/",
@@ -482,6 +531,13 @@
       "source": "https://goose-docs.ai/docs/guides/context-engineering/using-skills"
     },
     {
+      "adapter": "goose-home",
+      "surface": "state",
+      "path": "~/.agents/egc/goose-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "openhands-home",
       "surface": "library",
       "path": "~/.agents/agents/",
@@ -510,6 +566,13 @@
       "source": "https://docs.openhands.dev/overview/skills"
     },
     {
+      "adapter": "openhands-home",
+      "surface": "state",
+      "path": "~/.agents/egc/openhands-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "openhands-project",
       "surface": "hooks",
       "path": "<project>/.openhands/hooks.json",
@@ -522,6 +585,13 @@
       "path": "<project>/.openhands/scripts/",
       "status": "egc",
       "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "openhands-project",
+      "surface": "state",
+      "path": "<project>/.openhands/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
     },
     {
       "adapter": "qwen-project",
@@ -564,6 +634,13 @@
       "path": "<project>/.qwen/skills/",
       "status": "documented",
       "source": "https://qwenlm.github.io/qwen-code-docs/en/users/features/skills/"
+    },
+    {
+      "adapter": "qwen-project",
+      "surface": "state",
+      "path": "<project>/.qwen/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
     },
     {
       "adapter": "opencode-home",
@@ -636,6 +713,13 @@
       "source": "https://opencode.ai/docs/skills/"
     },
     {
+      "adapter": "opencode-home",
+      "surface": "state",
+      "path": "~/.config/opencode/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "codebuddy-project",
       "surface": "library",
       "path": "<project>/.codebuddy/.agents/",
@@ -705,6 +789,13 @@
       "path": "<project>/.codebuddy/skills/",
       "status": "documented",
       "source": "https://www.codebuddy.ai/docs/cli/skills"
+    },
+    {
+      "adapter": "codebuddy-project",
+      "surface": "state",
+      "path": "<project>/.codebuddy/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
     },
     {
       "adapter": "cline-project",
@@ -806,6 +897,13 @@
       "source": "https://kiro.dev/docs/steering/"
     },
     {
+      "adapter": "kiro-home",
+      "surface": "state",
+      "path": "~/.kiro/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "kiro-project",
       "surface": "agents",
       "path": "<project>/.kiro/agents/",
@@ -862,6 +960,13 @@
       "source": "https://kiro.dev/docs/steering/"
     },
     {
+      "adapter": "kiro-project",
+      "surface": "state",
+      "path": "<project>/.kiro/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "windsurf-home",
       "surface": "library",
       "path": "~/.codeium/windsurf/agents/",
@@ -912,6 +1017,13 @@
       "variant": "win32"
     },
     {
+      "adapter": "windsurf-home",
+      "surface": "state",
+      "path": "~/.codeium/windsurf/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "windsurf-project",
       "surface": "library",
       "path": "<project>/.devin/agents/",
@@ -952,6 +1064,13 @@
       "path": "<project>/.devin/skills/",
       "status": "documented",
       "source": "https://docs.devin.ai/desktop/cascade/skills"
+    },
+    {
+      "adapter": "windsurf-project",
+      "surface": "state",
+      "path": "<project>/.devin/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
     },
     {
       "adapter": "amp-home",
@@ -996,6 +1115,13 @@
       "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
     },
     {
+      "adapter": "amp-home",
+      "surface": "state",
+      "path": "~/.amp/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "amp-project",
       "surface": "skills",
       "path": "<project>/.agents/skills/",
@@ -1036,6 +1162,13 @@
       "path": "<project>/.amp/scripts/",
       "status": "egc",
       "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "amp-project",
+      "surface": "state",
+      "path": "<project>/.amp/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
     },
     {
       "adapter": "copilot-home",
@@ -1080,6 +1213,13 @@
       "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
     },
     {
+      "adapter": "copilot-home",
+      "surface": "state",
+      "path": "~/.github/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "zed-home",
       "surface": "skills",
       "path": "~/.agents/skills/",
@@ -1120,6 +1260,13 @@
       "path": "~/.config/zed/rules/",
       "status": "egc",
       "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "state",
+      "path": "~/.config/zed/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
     },
     {
       "adapter": "trae-project",
@@ -1214,6 +1361,21 @@
       "variant": "TRAE_ENV=cn"
     },
     {
+      "adapter": "trae-project",
+      "surface": "state",
+      "path": "<project>/.trae/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
+      "adapter": "trae-project",
+      "surface": "state",
+      "path": "<project>/.trae-cn/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages.",
+      "variant": "TRAE_ENV=cn"
+    },
+    {
       "adapter": "junie-home",
       "surface": "library",
       "path": "~/.junie/agents/",
@@ -1256,6 +1418,13 @@
       "source": "https://junie.jetbrains.com/docs/agent-skills.html"
     },
     {
+      "adapter": "junie-home",
+      "surface": "state",
+      "path": "~/.junie/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "junie-project",
       "surface": "library",
       "path": "<project>/.junie/agents/",
@@ -1284,6 +1453,13 @@
       "source": "https://junie.jetbrains.com/docs/agent-skills.html"
     },
     {
+      "adapter": "junie-project",
+      "surface": "state",
+      "path": "<project>/.junie/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "warp-project",
       "surface": "rules",
       "path": "<project>/.warp/rules/",
@@ -1304,6 +1480,13 @@
       "path": "<project>/AGENTS.md",
       "status": "documented",
       "source": "https://docs.warp.dev/agent-platform/warp-agents/rules"
+    },
+    {
+      "adapter": "warp-project",
+      "surface": "state",
+      "path": "<project>/.warp/egc-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
     },
     {
       "adapter": "kimi-home",
@@ -1363,6 +1546,21 @@
       "path": "$KIMI_CODE_HOME/skills/",
       "status": "documented",
       "source": "https://github.com/MoonshotAI/kimi-code",
+      "variant": "KIMI_CODE_HOME"
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "state",
+      "path": "~/.kimi-code/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "state",
+      "path": "$KIMI_CODE_HOME/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages.",
       "variant": "KIMI_CODE_HOME"
     },
     {
@@ -1485,6 +1683,29 @@
       "path": "$CRUSH_GLOBAL_CONFIG/scripts/",
       "status": "egc",
       "note": "EGC runtime: the scripts the tool's hook or plugin entries run.",
+      "variant": "CRUSH_GLOBAL_CONFIG"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "state",
+      "path": "~/.config/crush/egc/crush-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "state",
+      "path": "$XDG_CONFIG_HOME/crush/egc/crush-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages.",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "crush-home",
+      "surface": "state",
+      "path": "$CRUSH_GLOBAL_CONFIG/egc/crush-install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages.",
       "variant": "CRUSH_GLOBAL_CONFIG"
     }
   ]
