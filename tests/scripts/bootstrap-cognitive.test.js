@@ -1038,13 +1038,18 @@ async function runTraeUserRulesTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('Trae: a failure in the ~/.trae home does not stop the ~/.trae-cn home from being installed (#1676)', () => {
+  if (await test('Trae: a failure in the ~/.trae home keeps its old MEMORY.md and does not stop the ~/.trae-cn home from being installed (#1676)', () => {
     const home = mktempHome();
     try {
       for (const dir of ['.trae', '.trae-cn']) fs.mkdirSync(path.join(home, dir));
       fs.mkdirSync(path.join(home, '.trae', 'user_rules', 'egc-memory.md'), { recursive: true });
+      const legacy = path.join(home, '.trae', 'MEMORY.md');
+      const oldBlock = '<!-- egc-memory-protocol:v1 -->\nold\n<!-- /egc-memory-protocol -->\n';
+      fs.writeFileSync(legacy, oldBlock, 'utf8');
       const output = run(home);
       assert.ok(output.includes('Trae (.trae): unexpected error:'), `the .trae failure is reported, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(legacy, 'utf8'), oldBlock, 'the old MEMORY.md stays while no protocol is in place');
+      assert.ok(!output.includes('Trae (.trae): retired'), `no retirement is reported, got: ${output}`);
       const rule = fs.readFileSync(path.join(home, '.trae-cn', 'user_rules', 'egc-memory.md'), 'utf8');
       assert.ok(rule.includes(`<!-- egc-memory-protocol:${V} -->`), 'the CN home is still installed');
     } finally {
@@ -1079,8 +1084,13 @@ async function runTraeUserRulesTests() {
       const rule = path.join(home, '.trae', 'user_rules', 'egc-memory.md');
       fs.mkdirSync(path.dirname(rule), { recursive: true });
       fs.writeFileSync(rule, '# My rule\n', 'utf8');
+      const legacy = path.join(home, '.trae', 'MEMORY.md');
+      const oldBlock = '<!-- egc-memory-protocol:v1 -->\nold\n<!-- /egc-memory-protocol -->\n';
+      fs.writeFileSync(legacy, oldBlock, 'utf8');
       const output = run(home);
       assert.strictEqual(fs.readFileSync(rule, 'utf8'), '# My rule\n');
+      assert.strictEqual(fs.readFileSync(legacy, 'utf8'), oldBlock, 'the old MEMORY.md stays when the protocol was not installed');
+      assert.ok(!output.includes('Trae (.trae): retired'), `no retirement is reported, got: ${output}`);
       assert.ok(output.includes(`Trae (.trae): ${path.join('~', '.trae', 'user_rules', 'egc-memory.md')} is a rule of your own, left untouched`), `the conflict is reported, got: ${output}`);
     } finally {
       cleanup(home);

@@ -484,18 +484,18 @@ function retireLegacyTraeMemory(legacyFile, label) {
 function injectTraeUserRule(filepath, label, content) {
   if (!fs.existsSync(filepath)) {
     injectStandaloneProtocol(filepath, label, content);
-    return;
+    return true;
   }
   const raw = fs.readFileSync(filepath, 'utf8');
   const blocks = [...raw.matchAll(new RegExp(MARKER_BLOCK_RE.source, 'g'))];
   if (blocks.length === 0) {
     console.log(`  [cognitive] ${label}: ${filepath.replace(HOME, '~')} is a rule of your own, left untouched; the memory protocol was not installed`);
-    return;
+    return false;
   }
   const installedVersion = Math.min(...blocks.map(block => resolveInstalledVersion(block, 0)));
   if (blocks.length === 1 && installedVersion >= PROTOCOL_VERSION) {
     console.log(`  [cognitive] ${label}: already configured (v${installedVersion})`);
-    return;
+    return true;
   }
   let replaced = false;
   const updated = raw.replace(new RegExp(MARKER_BLOCK_RE.source, 'g'), () => {
@@ -506,19 +506,22 @@ function injectTraeUserRule(filepath, label, content) {
   fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
   fs.writeFileSync(filepath, updated, 'utf8');
   console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION}, ${blocks.length} block(s) merged into one (${filepath.replace(HOME, '~')})`);
+  return true;
 }
 
 // ── Trae (~/.trae/user_rules/egc-memory.md and ~/.trae-cn/user_rules/egc-memory.md) ──
 (function bootstrapTrae() {
   for (const dir of ['.trae', '.trae-cn']) {
     const label = `Trae (${dir})`;
+    let installed = false;
     try {
       const traeDir = path.join(HOME, dir);
       if (!fs.existsSync(traeDir)) continue;
-      injectTraeUserRule(path.join(traeDir, 'user_rules', 'egc-memory.md'), label, markdownProtocolBody('EGC Session Memory'));
+      installed = injectTraeUserRule(path.join(traeDir, 'user_rules', 'egc-memory.md'), label, markdownProtocolBody('EGC Session Memory'));
     } catch (e) {
       console.log(`  [cognitive] ${label}: unexpected error: ${e.message}`);
     }
+    if (!installed) continue;
     try {
       retireLegacyTraeMemory(path.join(HOME, dir, 'MEMORY.md'), label);
     } catch (e) {
