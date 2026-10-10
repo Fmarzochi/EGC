@@ -10,6 +10,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { execSync } = require('node:child_process');
 
 const buildDir = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build');
 if (!fs.existsSync(path.join(buildDir, 'graph-build.js'))) {
@@ -45,6 +46,18 @@ function project(files) {
   return root;
 }
 const open = () => openGraphStore(path.join(tmp, `db${n++}`, 'g.db'));
+// The 8.3 short form of a Windows path (RUNNER~1), as os.tmpdir() returns it on
+// the GitHub runners, or null where there is none to be had.
+function shortPathOf(p) {
+  if (process.platform !== 'win32') return null;
+  try {
+    const cmd = process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe';
+    const short = execSync(`"${cmd}" /d /c for %I in ("${p}") do @echo %~sI`, { encoding: 'utf8' }).trim();
+    return short && short.toLowerCase() !== p.toLowerCase() ? short : null;
+  } catch {
+    return null;
+  }
+}
 const bump = file => {
   const t = new Date(Date.now() + 5000 * ++n);
   fs.utimesSync(file, t, t);
@@ -97,6 +110,21 @@ const bump = file => {
     const a = data.symbols.find(s => s.name === 'a');
     const b = data.symbols.find(s => s.name === 'b');
     assert.ok(data.edges.some(e => e.kind === 'ref' && e.src === `s:${a.id}` && e.dst === `s:${b.id}`), JSON.stringify(data.edges));
+    await store.close();
+  });
+
+  await run('a root given by its Windows 8.3 short name is indexed and read like the long one', async () => {
+    const root = project({ 'a.js': "import { b } from './b.js';\nexport function a() { return b(); }\n", 'b.js': 'export function b() { return 1; }\n' });
+    const short = shortPathOf(root);
+    if (short === null) {
+      console.log('  SKIP no 8.3 short name for the temp directory on this platform or volume');
+      return;
+    }
+    const store = await open();
+    const res = await buildGraph(short, store);
+    assert.strictEqual(res.files, 2, `nothing indexed through ${short}`);
+    assert.strictEqual(await readFileWithin(short, 'b.js', 1024), 'export function b() { return 1; }\n');
+    assert.strictEqual(await readFileWithin(short, '../escape.js', 1024), null, 'a short root is still a root');
     await store.close();
   });
 
