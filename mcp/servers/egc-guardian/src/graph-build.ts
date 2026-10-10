@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { extractFile } from './graph-extract.js';
+import { extractFile, type ExtractResult } from './graph-extract.js';
 import type { EdgeRow, GraphData, GraphStore, SymbolRow } from './graph-store.js';
 
 export interface BuildOptions {
@@ -9,8 +9,12 @@ export interface BuildOptions {
   maxMs?: number;
   maxFileBytes?: number;
   isProtectedPath?: (absPath: string) => boolean;
+  // Reads the symbols of one file; extractFile unless a caller needs another.
+  extract?: (text: string) => ExtractResult;
 }
-export interface BuildResult { status: 'ok' | 'partial'; files: number; refreshed: number; removed: number; buildMs: number }
+// failed counts the files the extractor threw on. They are left out of the
+// graph, so a build with any is partial, not ok.
+export interface BuildResult { status: 'ok' | 'partial'; files: number; refreshed: number; removed: number; failed: number; buildMs: number }
 
 const SOURCE_EXT = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 export const TEXT_EXT = /\.(?:[cm]?[jt]sx?|md|json|ya?ml|sh|txt|toml)$/i;
@@ -358,10 +362,10 @@ export async function readFileWithin(root: string, rel: string, maxBytes: number
   }
 }
 
-type IndexOutcome = 'skipped' | 'kept' | 'refreshed';
+type IndexOutcome = 'skipped' | 'kept' | 'refreshed' | 'failed';
 
 // One file of the walk: skipped (protected, unreadable, too large), kept as it
-// was, or re-extracted into the store.
+// was, re-extracted into the store, or failed (the extractor threw on it).
 async function indexFile(
   root: string,
   rel: string,
@@ -390,18 +394,26 @@ async function indexFile(
     await store.touchFile(row);
     return 'kept';
   }
-  // A file the extractor cannot read is skipped like an unreadable one. Left to
-  // throw, it would stop the whole build, and the same file would stop every
-  // later build, so the project would never get its context.
-  let extracted: ReturnType<typeof extractFile>;
+  // A file the extractor cannot read is left out and counted. Left to throw, it
+  // would stop the whole build, and the same file would stop every later build,
+  // so the project would never get its context.
+  let extracted: ExtractResult;
   try {
-    extracted = extractFile(text);
+    extracted = (opts.extract ?? extractFile)(text);
   } catch {
-    return 'skipped';
+    return 'failed';
   }
   await markEdgesDirty();
   await store.replaceFile(row, extracted);
   return 'refreshed';
+}
+
+// What one file's outcome adds to the build: kept and refreshed files are in the
+// graph, skipped and failed ones are not, and the last two are counted apart.
+function tally(outcome: IndexOutcome, rel: string, wanted: Set<string>, counts: { refreshed: number; failed: number }): void {
+  if (outcome === 'kept' || outcome === 'refreshed') wanted.add(rel);
+  if (outcome === 'refreshed') counts.refreshed++;
+  if (outcome === 'failed') counts.failed++;
 }
 
 export async function buildGraph(projectRoot: string, store: GraphStore, opts: BuildOptions = {}): Promise<BuildResult> {
@@ -420,7 +432,7 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
   const walked = await walkFiles(root, ignore, name => SOURCE_EXT.test(name), maxFiles, deadline);
   const known = await store.getFiles();
   const wanted = new Set<string>();
-  let refreshed = 0;
+  const counts = { refreshed: 0, failed: 0 };
   let truncated = walked.truncated;
   // File rows commit one by one and the edges last. The flag is set before the
   // first write and cleared by the same commit that replaces the edges, so a
@@ -440,8 +452,7 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
       break;
     }
     const outcome = await indexFile(root, rel, known.get(rel), store, opts, maxFileBytes, markEdgesDirty);
-    if (outcome !== 'skipped') wanted.add(rel);
-    if (outcome === 'refreshed') refreshed++;
+    tally(outcome, rel, wanted, counts);
   }
 
   const walkedSet = new Set(walked.files);
@@ -457,10 +468,11 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
   }
 
   return {
-    status: truncated ? 'partial' : 'ok',
+    status: truncated || counts.failed > 0 ? 'partial' : 'ok',
     files: wanted.size,
-    refreshed,
+    refreshed: counts.refreshed,
     removed: removable.length,
+    failed: counts.failed,
     buildMs: Date.now() - started
   };
 }

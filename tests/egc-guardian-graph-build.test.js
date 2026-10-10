@@ -470,8 +470,41 @@ const bump = file => {
     assert.strictEqual(res.status, 'ok');
     const data = await store.load();
     assert.ok(data.symbols.some(s => s.name === 'okTarget'), 'the file beside the deep one is indexed');
-    // And the next build does not fail at the same file.
-    assert.strictEqual((await buildGraph(root, store)).status, 'ok');
+    // The depth limit lets the extractor finish the deep file; skipping it (the catch) would leave it out.
+    assert.ok(data.files.some(f => f.path === 'deep.js'), 'the deep file itself is indexed');
+    assert.ok(data.symbols.some(s => s.name === 'tail'), 'what follows the deep pattern is read');
+    // Changed, so the next build reads it again instead of keeping the stored rows.
+    const deep = path.join(root, 'deep.js');
+    fs.appendFileSync(deep, 'export const later = 1;\n');
+    bump(deep);
+    const again = await buildGraph(root, store);
+    assert.strictEqual(again.status, 'ok');
+    assert.strictEqual(again.refreshed, 1, 'the changed deep file was read again');
+    assert.ok((await store.load()).symbols.some(s => s.name === 'later'));
+    await store.close();
+  });
+
+  await run('a file the extractor cannot read is counted and makes the build partial, and the files beside it are indexed', async () => {
+    const { extractFile } = require(path.join(buildDir, 'graph-extract.js'));
+    const root = project({ 'ok.js': 'export function fine() {}\n', 'bad.js': 'export function BOOM() {}\n' });
+    const extract = text => {
+      if (text.includes('BOOM')) throw new RangeError('the extractor gave up on this file');
+      return extractFile(text);
+    };
+    const store = await open();
+    const res = await buildGraph(root, store, { extract });
+    assert.strictEqual(res.status, 'partial', 'a file was left out, so the graph is not whole');
+    assert.strictEqual(res.failed, 1);
+    assert.strictEqual(res.files, 1);
+    assert.deepStrictEqual((await store.load()).files.map(f => f.path), ['ok.js']);
+    // Readable again: indexed, and the build is whole.
+    const bad = path.join(root, 'bad.js');
+    fs.writeFileSync(bad, 'export function repaired() {}\n');
+    bump(bad);
+    const next = await buildGraph(root, store, { extract });
+    assert.strictEqual(next.status, 'ok');
+    assert.strictEqual(next.failed, 0);
+    assert.strictEqual(next.files, 2);
     await store.close();
   });
 
