@@ -29,7 +29,9 @@ function test(name, fn) {
 
 function auditorModule() {
   const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'manifests', 'install-modules.json'), 'utf8'));
-  return manifest.modules.find(module => module.id === MODULE_ID);
+  const module = manifest.modules.find(candidate => candidate.id === MODULE_ID);
+  assert.ok(module, `the ${MODULE_ID} module is in manifests/install-modules.json`);
+  return module;
 }
 
 function planFor(target) {
@@ -87,7 +89,7 @@ for (const target of ['warp', 'aider']) {
 
 tally(test('every install target either receives the module or has a recorded reason', () => {
   const schema = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'schemas', 'install-modules.schema.json'), 'utf8'));
-  const allTargets = schema.properties.modules.items.properties.targets.items.enum;
+  const allTargets = schema.definitions.targetId.enum;
   const module = auditorModule();
   const missing = allTargets.filter(target => !module.targets.includes(target) && !(target in module.unsupportedTargets));
   assert.deepStrictEqual(missing, []);

@@ -2590,7 +2590,7 @@ function runTests() {
     cleanupTestDir(testDir);
   }));
 
-  tally(test('unsupportedTargets: a reason per target passes, a target listed both ways fails, an unknown target fails the schema (#1679)', () => {
+  tally(test('unsupportedTargets: a reason with a docs link and a read date passes; a target listed both ways, an unknown target, and a reason without the link or the date fail (#1679)', () => {
     const run = unsupportedTargets => {
       const testDir = createTestDir();
       writeJson(path.join(testDir, 'manifests', 'install-modules.json'), {
@@ -2614,13 +2614,18 @@ function runTests() {
     };
     const ok = run({ aider: 'Aider has no subagents (https://aider.chat/docs/usage/commands.html, read on 2026-10-10).' });
     assert.strictEqual(ok.code, 0, `a reason for a target outside targets passes: ${ok.stderr}`);
-    const both = run({ warp: 'listed as a target too' });
+    const both = run({ warp: 'Listed as a target too (https://docs.warp.dev, read on 2026-10-10).' });
     assert.strictEqual(both.code, 1, 'a target listed both ways fails');
     assert.ok(both.stderr.includes('lists warp both as a target and as unsupported'), both.stderr);
-    const unknown = run({ 'not-a-tool': 'x' });
+    const reason = 'No subagents (https://aider.chat/docs/usage/commands.html, read on 2026-10-10).';
+    const unknown = run({ 'not-a-tool': reason });
     assert.strictEqual(unknown.code, 1, 'an unknown target key fails the schema');
-    const empty = run({ aider: '' });
-    assert.strictEqual(empty.code, 1, 'an empty reason fails the schema');
+    assert.ok(unknown.stderr.includes('unsupportedTargets') && unknown.stderr.includes('property name must be valid'), unknown.stderr);
+    for (const bad of ['', '   ', 'Not supported.', 'Not supported (https://aider.chat/docs).', 'Not supported, read on 2026-10-10.']) {
+      const result = run({ aider: bad });
+      assert.strictEqual(result.code, 1, `a reason without both the link and the read date fails: ${JSON.stringify(bad)}`);
+      assert.ok(result.stderr.includes('/unsupportedTargets/aider must match pattern'), result.stderr);
+    }
   }));
 
   tally(test('rejects manifest paths that are absolute or climb out of the repository', () => {
