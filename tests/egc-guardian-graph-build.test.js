@@ -45,7 +45,20 @@ function project(files) {
   }
   return root;
 }
-const open = () => openGraphStore(path.join(tmp, `db${n++}`, 'g.db'));
+// Every store a test opens is tracked until it is closed. Windows refuses to
+// delete a database file that is still open, so a store left open fails only
+// the final cleanup there; the check at the end of the run fails it everywhere.
+const openStores = new Set();
+const open = async () => {
+  const store = await openGraphStore(path.join(tmp, `db${n++}`, 'g.db'));
+  openStores.add(store);
+  const close = store.close.bind(store);
+  store.close = async () => {
+    openStores.delete(store);
+    await close();
+  };
+  return store;
+};
 // The 8.3 short form of a Windows path (RUNNER~1), as os.tmpdir() returns it on
 // the GitHub runners, or null where there is none to be had.
 function shortPathOf(p) {
@@ -433,7 +446,12 @@ const bump = file => {
       canLink = false;
     }
     if (canLink) {
-      assert.strictEqual((await buildGraph(linked, await open())).files, 1, 'a linked .gitignore is not followed');
+      const linkedStore = await open();
+      try {
+        assert.strictEqual((await buildGraph(linked, linkedStore)).files, 1, 'a linked .gitignore is not followed');
+      } finally {
+        await linkedStore.close();
+      }
     } else {
       console.log('    - file symlinks not available here (EPERM); the directory case only');
     }
@@ -509,6 +527,11 @@ const bump = file => {
     assert.deepStrictEqual(again, { ran: true, value: 'again' }, 'the lock is released');
   });
 
+  if (openStores.size > 0) {
+    console.log(`  FAIL ${openStores.size} graph store(s) opened by the tests were never closed`);
+    failed++;
+    for (const store of [...openStores]) await store.close().catch(() => undefined);
+  }
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
