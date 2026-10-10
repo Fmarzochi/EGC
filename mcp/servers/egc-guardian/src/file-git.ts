@@ -61,15 +61,26 @@ function runGit(projectPath: string, args: string[]): Promise<string | null> {
 // looks at files: a filter (git status runs `clean` whenever it has to compare
 // a file's content), a hooks directory, a diff or merge driver, or an include
 // that could bring any of them in. The user's own and the system config are
-// trusted; this one belongs to the project being ranked.
-const RISKY_LOCAL_CONFIG = /^(filter\..+\.(clean|smudge|process|required)|core\.(fsmonitor|hookspath)|include\.path|includeif\..+\.path|diff\..+\.(command|textconv)|merge\..+\.driver)$/i;
+// trusted; this one belongs to the project being ranked. core.fsmonitor is not
+// here: SAFE_GIT_ARGS switches it off on the command line, which wins over any
+// repository setting, so a repository that has one (the built-in daemon, say)
+// can still be read.
+const RISKY_LOCAL_CONFIG = /^(filter\..+\.(clean|smudge|process|required)|core\.hookspath|include\.path|includeif\..+\.path|diff\..+\.(command|textconv)|merge\..+\.driver)$/i;
+
+// The two files a repository's own settings live in: the shared one, and the
+// one of this worktree, which git reads too when extensions.worktreeConfig is
+// on (without it, --worktree is the same as --local).
+const OWN_CONFIG_SCOPES = ['--local', '--worktree'];
 
 // `git config --list` only prints; it runs nothing. When it cannot be read the
 // answer is no, so the working tree is not looked at.
 async function localConfigIsPlain(projectPath: string): Promise<boolean> {
-  const out = await runGit(projectPath, ['config', '--local', '--list', '-z']);
-  if (out === null) return false;
-  return !out.split('\0').some(entry => RISKY_LOCAL_CONFIG.test(entry.split('\n')[0]));
+  for (const scope of OWN_CONFIG_SCOPES) {
+    const out = await runGit(projectPath, ['config', scope, '--list', '-z']); // NOSONAR: both files are read, and the first risky or unreadable one ends it
+    if (out === null) return false;
+    if (out.split('\0').some(entry => RISKY_LOCAL_CONFIG.test(entry.split('\n')[0]))) return false;
+  }
+  return true;
 }
 
 const norm = (p: string): string => p.replaceAll('\\', '/').trim().replace(/^\.\/+/, '');
