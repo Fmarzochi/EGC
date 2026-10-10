@@ -13,6 +13,7 @@ try {
 }
 const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, assertLandsInside, resolveCrushConfigDir } = require('./lib/mcp-register');
 const { commandExists } = require('./lib/utils');
+const { writeProtocolFile } = require('./lib/protocol-file-write');
 
 // Bump when BLOCK's content changes in a way that already-configured installs
 // should receive (e.g. a new protocol section). injectProtocol() upgrades any
@@ -192,8 +193,8 @@ function reconcileBlocks(filepath, label, raw, blocks) {
     console.log(`  [cognitive] ${label}: already configured (v${installedVersion})`);
     return;
   }
-  fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
-  fs.writeFileSync(filepath, withSingleBlock(raw), 'utf8');
+  writeProtocolFile(filepath + '.egc.bak', raw);
+  writeProtocolFile(filepath, withSingleBlock(raw));
   console.log(`  [cognitive] ${label}: memory protocol ${upgradeNote(installedVersion, blocks.length - 1)} (${filepath.replace(HOME, '~')})`);
 }
 
@@ -205,12 +206,12 @@ function injectProtocol(filepath, label) {
       reconcileBlocks(filepath, label, raw, blocks);
       return;
     }
-    fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
-    fs.writeFileSync(filepath, raw + BLOCK, 'utf8');
+    writeProtocolFile(filepath + '.egc.bak', raw);
+    writeProtocolFile(filepath, raw + BLOCK);
   } else {
     const dir = path.dirname(filepath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(filepath, BLOCK, 'utf8');
+    writeProtocolFile(filepath, BLOCK);
   }
   console.log(`  [cognitive] ${label}: memory protocol installed (${filepath.replace(HOME, '~')})`);
 }
@@ -228,15 +229,15 @@ function injectStandaloneProtocol(filepath, label, content) {
       console.log(`  [cognitive] ${label}: already configured (v${installedVersion || 'legacy'})`);
       return;
     }
-    fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
-    fs.writeFileSync(filepath, content, 'utf8');
+    writeProtocolFile(filepath + '.egc.bak', raw);
+    writeProtocolFile(filepath, content);
     console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion || 'legacy'} -> v${PROTOCOL_VERSION} (${filepath.replace(HOME, '~')})`);
     return;
   }
 
   const dir = path.dirname(filepath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filepath, content, 'utf8');
+  writeProtocolFile(filepath, content);
   console.log(`  [cognitive] ${label}: memory protocol installed (${filepath.replace(HOME, '~')})`);
 }
 
@@ -332,8 +333,8 @@ function computeCursorRulesUpdate(existing) {
     }
 
     obj['cursor.rules'] = update.newRules;
-    fs.writeFileSync(settingsFile + '.egc.bak', rawContent, 'utf8');
-    fs.writeFileSync(settingsFile, JSON.stringify(obj, null, 2) + '\n', 'utf8');
+    writeProtocolFile(settingsFile + '.egc.bak', rawContent);
+    writeProtocolFile(settingsFile, JSON.stringify(obj, null, 2) + '\n');
     const upgraded = update.stale > 0
       ? `${keptOnce(update.stale)} (v${update.installedVersion} -> v${PROTOCOL_VERSION})`
       : `upgraded v${update.installedVersion} -> v${PROTOCOL_VERSION}`;
@@ -520,7 +521,7 @@ function reportCodexResult(result, tomlPath) {
     const tomlPath = path.join(codexDir, 'config.toml');
 
     if (!fs.existsSync(tomlPath)) {
-      fs.writeFileSync(tomlPath, CODEX_PROTOCOL_FULL);
+      writeProtocolFile(tomlPath, CODEX_PROTOCOL_FULL);
       console.log(`  [cognitive] Codex: memory protocol installed in developer_instructions (${tomlPath.replace(HOME, '~')})`);
       return;
     }
@@ -533,8 +534,8 @@ function reportCodexResult(result, tomlPath) {
       return;
     }
     if (result.status === 'update') {
-      fs.writeFileSync(tomlPath + '.egc.bak', originalContent, 'utf8');
-      fs.writeFileSync(tomlPath, result.newContent, 'utf8');
+      writeProtocolFile(tomlPath + '.egc.bak', originalContent);
+      writeProtocolFile(tomlPath, result.newContent);
     }
     reportCodexResult(result, tomlPath);
   } catch (e) {
@@ -620,8 +621,8 @@ function injectTraeUserRule(filepath, label, content) {
     replaced = true;
     return content;
   });
-  fs.writeFileSync(filepath + '.egc.bak', raw, 'utf8');
-  fs.writeFileSync(filepath, updated, 'utf8');
+  writeProtocolFile(filepath + '.egc.bak', raw);
+  writeProtocolFile(filepath, updated);
   console.log(`  [cognitive] ${label}: memory protocol upgraded v${installedVersion} -> v${PROTOCOL_VERSION}, ${blocks.length} block(s) merged into one (${filepath.replace(HOME, '~')})`);
   return true;
 }
