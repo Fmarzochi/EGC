@@ -39,10 +39,14 @@ const isOpen = (tk?: Tok): boolean => !!tk && tk.t === 'p' && (tk.v === '{' || t
 const isId = (tk: Tok | undefined, v?: string): boolean => !!tk && tk.t === 'id' && (v === undefined || tk.v === v);
 const isP = (tk: Tok | undefined, v: string): boolean => !!tk && tk.t === 'p' && tk.v === v;
 
+const INTERPOLATION_START = '${';
+
 function regexAllowed(prev: Tok | undefined): boolean {
   if (!prev) return true;
   if (prev.t === 'id') return REGEX_AFTER_KEYWORD.has(prev.v);
-  if (prev.t === 'str' || prev.t === 'lit') return false;
+  if (prev.t === 'str') return false;
+  // The marker left where a ${ opened an expression: what follows it starts a statement-like position.
+  if (prev.t === 'lit') return prev.v === INTERPOLATION_START;
   if (prev.v === ')' || prev.v === '}') return prev.ctl === true;
   // A / right after < is a JSX closing tag, not a regex.
   return prev.v !== ']' && prev.v !== '<';
@@ -149,9 +153,14 @@ export function tokenize(src: string): Tok[] {
     if (interpolations.length === 0 || interpolations[interpolations.length - 1] !== braces) return false;
     interpolations.pop();
     i++;
-    if (scanTemplateText()) interpolations.push(braces);
+    if (scanTemplateText()) openInterpolation();
     else toks.push({ t: 'lit', v: '', line });
     return true;
+  }
+  // A ${ opens an expression: a / right after it starts a regex, which the marker token tells regexAllowed.
+  function openInterpolation(): void {
+    interpolations.push(braces);
+    toks.push({ t: 'lit', v: INTERPOLATION_START, line });
   }
   function pushPunct(c: string): void {
     const tk: Tok = { t: 'p', v: c, line };
@@ -180,7 +189,7 @@ export function tokenize(src: string): Tok[] {
     } else if (c === '`') {
       i++;
       toks.push({ t: 'lit', v: '', line: at });
-      if (scanTemplateText()) interpolations.push(braces);
+      if (scanTemplateText()) openInterpolation();
     } else if (c === '/' && regexAllowed(toks[toks.length - 1])) {
       skipRegex();
       toks.push({ t: 'lit', v: '', line: at });
@@ -376,19 +385,35 @@ export function extractFile(source: string): ExtractResult {
     return Math.max(k, i + 1);
   };
 
+  // Where the element that starts at from ends: the next comma at this nesting level, or end.
+  const elementEnd = (from: number, end: number): number => {
+    let at = from;
+    while (at < end && !isP(toks[at], ',')) at = isOpen(toks[at]) ? close(at) + 1 : at + 1;
+    return at;
+  };
+
+  // { publicName: value }: an alias of a local only when the value is that one name. handlers.run, make() and 5
+  // name nothing this file exports.
+  const exportProperty = (key: Tok, valueStart: number, valueEnd: number): void => {
+    const value = toks[valueStart];
+    if (valueEnd !== valueStart + 1 || !isId(value)) return;
+    exportedNames.add(value.v);
+    if (key.v !== value.v) addExportAlias(key.v, value.v);
+  };
+
   // module.exports = { publicName: local, shorthand }: the locals are exported, and answer to the public names too.
   const exportObjectNames = (open: number): void => {
     const end = close(open);
     for (let k = open + 1; k < end; ) {
       const tk = toks[k];
-      if (isId(tk) && isP(toks[k + 1], ':') && isId(toks[k + 2])) {
-        exportedNames.add(toks[k + 2].v);
-        if (tk.v !== toks[k + 2].v) addExportAlias(tk.v, toks[k + 2].v);
-        k += 3;
-        continue;
+      if (isId(tk) && isP(toks[k + 1], ':')) {
+        const valueEnd = elementEnd(k + 2, end);
+        exportProperty(tk, k + 2, valueEnd);
+        k = valueEnd + 1;
+      } else {
+        if (isId(tk)) exportedNames.add(tk.v);
+        k = isOpen(tk) ? close(k) + 1 : k + 1;
       }
-      if (isId(tk)) exportedNames.add(tk.v);
-      k = isOpen(tk) ? close(k) + 1 : k + 1;
     }
   };
 
@@ -519,6 +544,18 @@ export function extractFile(source: string): ExtractResult {
     else if (!loadsAModule(at + 1)) addSymbol(name.v, isFunctionInit(at + 1) ? 'function' : 'variable', exported, from, stop);
   };
 
+  // Where what one pattern element binds starts: past a rest dot, and in an object past the key and its colon.
+  // A computed key is a selector, not a binding, so it is skipped whole.
+  const bindingStart = (from: number, isObject: boolean, stop: number): number => {
+    let at = from;
+    while (isP(toks[at], '.')) at++;
+    if (isObject && isP(toks[at], '[')) {
+      const afterKey = close(at) + 1;
+      return isP(toks[afterKey], ':') ? afterKey + 1 : stop;
+    }
+    return isObject && isId(toks[at]) && isP(toks[at + 1], ':') ? at + 2 : at;
+  };
+
   // The names a destructuring pattern binds, as token indexes: { a, b: c, d = 1, ...rest } and [x, , y = 2, ...z], nested too.
   const patternNames = (open: number): number[] => {
     const names: number[] = [];
@@ -526,11 +563,8 @@ export function extractFile(source: string): ExtractResult {
     const isObject = isP(toks[open], '{');
     let k = open + 1;
     while (k < end) {
-      let stop = k;
-      while (stop < end && !isP(toks[stop], ',')) stop = isOpen(toks[stop]) ? close(stop) + 1 : stop + 1;
-      let at = k;
-      while (isP(toks[at], '.')) at++;
-      if (isObject && isId(toks[at]) && isP(toks[at + 1], ':')) at += 2;
+      const stop = elementEnd(k, end);
+      const at = bindingStart(k, isObject, stop);
       if (at < stop && isId(toks[at])) names.push(at);
       else if (at < stop && (isP(toks[at], '{') || isP(toks[at], '['))) names.push(...patternNames(at));
       k = stop + 1;
