@@ -33,9 +33,24 @@ function run(name, fn) {
   }
 }
 
+// Before the skip guard on purpose: the guard fires on the very condition this case is about, and the case
+// does not need the real build. The script finds the build next to itself, so a copy in a bare tree has none.
+run('a missing guardian build exits 2 with one line saying how to build it', () => {
+  const bare = path.join(tmp, 'bare');
+  fs.mkdirSync(path.join(bare, 'scripts'), { recursive: true });
+  const copy = path.join(bare, 'scripts', 'context.js');
+  fs.copyFileSync(script, copy);
+  const r = spawnSync(process.execPath, [copy, 'chargeCard', '--project', root, '--no-git'], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 2, r.stderr);
+  assert.strictEqual(r.stdout, '');
+  assert.match(r.stderr, /^egc context: guardian build not found; run npm run build in mcp\/servers\/egc-guardian\n$/);
+});
+
 if (!fs.existsSync(buildPath)) {
   console.log('[SKIP] build not found. Run npm run build in mcp/servers/egc-guardian first.');
-  process.exit(0);
+  fs.rmSync(tmp, { recursive: true, force: true });
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
 }
 
 run('prints the three-block briefing on stdout', () => {
@@ -111,18 +126,6 @@ run('--history - reads the history from stdin', () => {
   const r = spawnSync(process.execPath, [script, 'refunds', '--project', root, '--no-git', '--history', '-'], { input: 'piped history', encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
   assert.ok(r.stdout.includes('piped history'));
-});
-
-run('a missing guardian build exits 2 with one line saying how to build it', () => {
-  // The script finds the build next to itself, so a copy in a bare tree has none.
-  const bare = path.join(tmp, 'bare');
-  fs.mkdirSync(path.join(bare, 'scripts'), { recursive: true });
-  const copy = path.join(bare, 'scripts', 'context.js');
-  fs.copyFileSync(script, copy);
-  const r = spawnSync(process.execPath, [copy, 'chargeCard', '--project', root, '--no-git'], { encoding: 'utf8' });
-  assert.strictEqual(r.status, 2, r.stderr);
-  assert.strictEqual(r.stdout, '');
-  assert.match(r.stderr, /^egc context: guardian build not found; run npm run build in mcp\/servers\/egc-guardian\n$/);
 });
 
 run('no query is a usage error with exit 1', () => {
