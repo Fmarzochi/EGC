@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { CLI_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts.js');
 
 const buildDir = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build');
 if (!fs.existsSync(path.join(buildDir, 'index.js'))) {
@@ -54,11 +55,20 @@ function session() {
     }
   });
   const rpc = (id, method, params) => new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`timeout on ${method}`)), 30000);
+    const timer = setTimeout(() => reject(new Error(`timeout on ${method}`)), CLI_TIMEOUT_MS);
     pending.set(id, msg => { clearTimeout(timer); resolve(msg); });
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
-  return { child, rpc };
+  // Resolves once the server is gone. On Windows a process that is still dying holds
+  // the database under the temp tree open, and the tree cannot be removed under it.
+  const stop = () => {
+    if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+    return new Promise(resolve => {
+      child.once('exit', resolve);
+      child.kill();
+    });
+  };
+  return { child, rpc, stop };
 }
 
 async function open(s) {
@@ -77,7 +87,7 @@ async function open(s) {
       assert.deepStrictEqual(tool.inputSchema.required, ['query']);
       assert.ok(tool.inputSchema.properties.explain && tool.inputSchema.properties.project_path);
     } finally {
-      s.child.kill();
+      await s.stop();
     }
   });
 
@@ -91,7 +101,7 @@ async function open(s) {
       assert.ok(body.briefing.includes('[USER REQUEST]'));
       assert.ok(Array.isArray(body.explain) && body.explain[0].startsWith('explain:'));
     } finally {
-      s.child.kill();
+      await s.stop();
     }
   });
 
@@ -102,11 +112,16 @@ async function open(s) {
       const res = await s.rpc(4, 'tools/call', { name: 'rank_files', arguments: { project_path: root } });
       assert.ok(res.error || res.result.isError, 'rejected');
     } finally {
-      s.child.kill();
+      await s.stop();
     }
   });
 
-  fs.rmSync(tmp, { recursive: true, force: true });
+  try {
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch (err) {
+    console.log(`  FAIL removing ${tmp}: ${err.message}`);
+    failed++;
+  }
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();

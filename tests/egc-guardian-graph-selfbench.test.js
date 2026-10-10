@@ -32,14 +32,18 @@ const CASES = [
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-graph-selfbench-'));
   const env = { ...process.env, EGC_DIR: tmp };
   let failed = 0;
-  for (const [prompt, expected] of CASES) {
-    const r = await buildRelevantContext(prompt, path.join(repoRoot, 'mcp', 'servers'), 3000, { env });
-    const top = (r.files || []).slice(0, 5).map(f => path.basename(f.path));
-    const ok = r.status !== 'unavailable' && top.includes(expected);
-    console.log(`  ${ok ? 'PASS' : 'FAIL'} "${prompt}" -> ${expected} in [${top.join(', ')}]`);
-    if (!ok) failed++;
+  try {
+    for (const [prompt, expected] of CASES) {
+      const r = await buildRelevantContext(prompt, path.join(repoRoot, 'mcp', 'servers'), 3000, { env });
+      const top = (r.files || []).slice(0, 5).map(f => path.basename(f.path));
+      const ok = r.status !== 'unavailable' && top.includes(expected);
+      console.log(`  ${ok ? 'PASS' : 'FAIL'} "${prompt}" -> ${expected} in [${top.join(', ')}]`);
+      if (!ok) failed++;
+    }
+  } finally {
+    // Removed whether a case threw or not: the graph database lives under it.
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
-  fs.rmSync(tmp, { recursive: true, force: true });
   console.log(`\n${CASES.length - failed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();

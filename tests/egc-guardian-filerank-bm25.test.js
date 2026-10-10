@@ -72,5 +72,28 @@ run('the weighting is deterministic: same input, same scores', () => {
   assert.strictEqual(a.score(0, a.expand(['billing'])), b.score(0, b.expand(['billing'])));
 });
 
+run('the vocabulary is ordered by code unit, so the host locale cannot reorder the expansion of a query term', () => {
+  const docs = [doc('a.ts', { summary: ['aaaaaa'] }), doc('b.ts', { summary: ['aaaaab'] }), doc('c.ts', { summary: ['aaaaaba'] })];
+  const expected = Bm25Index.build(docs).expand(['aaaaa']).map(([t]) => t);
+  assert.deepStrictEqual(expected, ['aaaaaa', 'aaaaab', 'aaaaaba']);
+  if (Intl.Collator.supportedLocalesOf(['da']).length === 0) {
+    console.log('    - no Danish collation data here; the order was checked in the default locale only');
+    return;
+  }
+  // localeCompare reads the host's default locale, which a test cannot change, so the
+  // same sort is run under a Danish collation, where "aa" sorts as one letter after z.
+  const danish = new Intl.Collator('da');
+  const original = String.prototype.localeCompare;
+  String.prototype.localeCompare = function (other) {
+    return danish.compare(String(this), other);
+  };
+  try {
+    const under = Bm25Index.build(docs).expand(['aaaaa']).map(([t]) => t);
+    assert.deepStrictEqual(under, expected, 'the expansion order followed the locale');
+  } finally {
+    String.prototype.localeCompare = original;
+  }
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

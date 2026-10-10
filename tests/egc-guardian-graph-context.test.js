@@ -10,6 +10,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { CLI_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts.js');
 
 const buildDir = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build');
 if (!fs.existsSync(path.join(buildDir, 'graph-context.js'))) {
@@ -32,6 +33,16 @@ async function run(name, fn) {
     console.log(`    ${err.stack || err.message}`);
     failed++;
   }
+}
+
+// Resolves once the child is gone. On Windows a process that is still dying holds
+// the database under the temp tree open, and the tree cannot be removed under it.
+function stop(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise(resolve => {
+    child.once('exit', resolve);
+    child.kill();
+  });
 }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-graph-context-'));
@@ -308,7 +319,7 @@ fs.writeFileSync(path.join(root, 'secrets.js'), 'export const apiKey = "sk-ant-a
       }
     });
     const rpc = (id, method, params) => new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`timeout on ${method}`)), 20000);
+      const timer = setTimeout(() => reject(new Error(`timeout on ${method}`)), CLI_TIMEOUT_MS);
       pending.set(id, msg => { clearTimeout(timer); resolve(msg); });
       child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
     });
@@ -321,11 +332,16 @@ fs.writeFileSync(path.join(root, 'secrets.js'), 'export const apiKey = "sk-ant-a
       assert.strictEqual(body.relevant_context.status, 'ok', JSON.stringify(body.relevant_context));
       assert.strictEqual(body.relevant_context.files[0].path, 'helper.js');
     } finally {
-      child.kill();
+      await stop(child);
     }
   });
 
-  fs.rmSync(tmp, { recursive: true, force: true });
+  try {
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch (err) {
+    console.log(`  FAIL removing ${tmp}: ${err.message}`);
+    failed++;
+  }
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();

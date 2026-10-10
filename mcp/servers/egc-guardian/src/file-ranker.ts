@@ -67,6 +67,14 @@ export const BM25_K1 = 1.5;
 export const BM25_B = 0.75;
 export const HISTORY_TERM_WEIGHT = 0.4;
 
+// By code unit, never localeCompare: that follows the host's locale, and in
+// Danish "aa" sorts after "z", so the vocabulary, and with it the order the
+// expanded terms are summed in, would differ from one machine to the next.
+const byCodeUnit = (a: string, b: string): number => {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+};
+
 function commonPrefixLen(a: string, b: string): number {
   let n = 0;
   while (n < a.length && n < b.length && a[n] === b[n]) n++;
@@ -100,7 +108,7 @@ export class Bm25Index {
     const avgdl = n ? docLen.reduce((a, b) => a + b, 0) / n : 0;
     const idf = new Map<string, number>();
     for (const [t, c] of df) idf.set(t, Math.log(1 + (n - c + 0.5) / (c + 0.5)));
-    return new Bm25Index(docTf, docLen, avgdl, idf, [...df.keys()].sort((a, b) => a.localeCompare(b)));
+    return new Bm25Index(docTf, docLen, avgdl, idf, [...df.keys()].sort(byCodeUnit));
   }
 
   expand(terms: string[]): Array<[string, number]> {
@@ -286,7 +294,7 @@ propagator('import_graph', 1.2, (ranked, ctx, weight) => {
 });
 
 const byRank = (a: ScoredDoc, b: ScoredDoc): number =>
-  b.total - a.total || (a.doc.path < b.doc.path ? -1 : a.doc.path > b.doc.path ? 1 : 0);
+  b.total - a.total || byCodeUnit(a.doc.path, b.doc.path);
 
 export function scoreDocuments(
   docs: FileDoc[],
