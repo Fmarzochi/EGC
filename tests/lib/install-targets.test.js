@@ -5467,6 +5467,121 @@ function runTests() {
       else process.env.VIBE_HOME = previous;
     }
   }));
+
+  tally(test('grok-home: ids, root, state path, flat skills, library folders, AGENTS.md and the Guardian hook file under ~/.grok (#1495)', () => {
+    const { GUARDIAN_MATCHER, OPERATION_DISPATCH_TAG } = require('../../scripts/lib/grok-hooks');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const previous = process.env.GROK_HOME;
+    delete process.env.GROK_HOME;
+    try {
+      const adapter = getInstallTargetAdapter('grok');
+      assert.strictEqual(adapter.id, 'grok-home');
+      assert.strictEqual(adapter.target, 'grok');
+      assert.strictEqual(adapter.kind, 'home');
+      const root = path.join(homeDir, '.grok');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root);
+      assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(root, 'egc', 'install-state.json'));
+      const plan = planInstallTargetScaffold({
+        target: 'grok',
+        repoRoot,
+        homeDir,
+        modules: [
+          { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+          { id: 'rules-core', paths: ['rules/common/memory.md'] },
+          { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+          { id: 'commands-core', paths: ['commands/plan.md'] },
+        ],
+      });
+      const destinations = plan.operations.map(op => op.destinationPath);
+      assert.ok(destinations.includes(path.join(root, 'skills', 'continuous-learning', 'SKILL.md')), 'a skill lands flat under skills/, where Grok discovers it');
+      assert.ok(destinations.includes(path.join(root, 'AGENTS.md')), 'the root AGENTS.md lands where Grok reads global rules');
+      for (const family of ['rules/common/memory.md', 'agents/code-reviewer.md', 'commands/plan.md']) {
+        assert.ok(destinations.includes(path.join(root, 'egc', 'library', ...family.split('/'))), `${family} lands under the EGC library folder`);
+      }
+      assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'rules') + path.sep) || destination.startsWith(path.join(root, 'agents') + path.sep)), 'nothing of EGC lands in Grok\'s own rules/ or agents/');
+      for (const script of ['grok-guardian-adapter.js', 'pre-bash-guardian-validate.js', 'pre-write-guardian-validate.js']) {
+        assert.ok(destinations.includes(path.join(root, 'scripts', 'hooks', script)), `${script} ships`);
+      }
+      const hooks = plan.operations.filter(op => op.hookEvent === OPERATION_DISPATCH_TAG);
+      assert.strictEqual(hooks.length, 1, 'one Guardian hook file');
+      assert.strictEqual(hooks[0].destinationPath, path.join(root, 'hooks', 'egc-guardian.json'));
+      assert.strictEqual(hooks[0].hookScriptPath, path.join(root, 'scripts', 'hooks', 'grok-guardian-adapter.js'));
+      assert.strictEqual(GUARDIAN_MATCHER, 'Bash|Edit|Write', 'the Guardian judges the shell and the file writes');
+      assert.deepStrictEqual(plan.managedRoots, [path.resolve(root)], 'grok-home manages only its own root');
+    } finally {
+      if (previous === undefined) delete process.env.GROK_HOME;
+      else process.env.GROK_HOME = previous;
+    }
+  }));
+
+  tally(test('grok-home routes resolveRoot, every destination and every managed root through GROK_HOME, with a tilde expanded (#1495)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const previous = process.env.GROK_HOME;
+    const customHome = path.resolve('/custom/egc-grok-home');
+    try {
+      process.env.GROK_HOME = customHome;
+      const adapter = getInstallTargetAdapter('grok');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), customHome);
+      const plan = planInstallTargetScaffold({ target: 'grok', repoRoot, homeDir, modules: [{ id: 'rules-core', paths: ['rules/common/memory.md'] }] });
+      assert.strictEqual(plan.targetRoot, customHome);
+      assert.ok(plan.installStatePath.startsWith(customHome));
+      for (const operation of plan.operations) {
+        assert.ok(String(operation.destinationPath).startsWith(customHome), 'every destination sits under GROK_HOME, found ' + operation.destinationPath);
+      }
+      for (const managedRoot of plan.managedRoots) {
+        assert.ok(managedRoot.startsWith(customHome), 'every managed root sits under GROK_HOME, found ' + managedRoot);
+      }
+      process.env.GROK_HOME = '~/grok-data';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, 'grok-data'));
+    } finally {
+      if (previous === undefined) delete process.env.GROK_HOME;
+      else process.env.GROK_HOME = previous;
+    }
+  }));
+
+  tally(test('grok-home warns when ~/.grok is absent, naming the tool and its docs (#1495)', () => {
+    const previous = process.env.GROK_HOME;
+    delete process.env.GROK_HOME;
+    try {
+      const adapter = getInstallTargetAdapter('grok');
+      const homeDir = path.join(os.tmpdir(), 'egc-grok-home-that-does-not-exist');
+      const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+      assert.ok(warning, 'a home without ~/.grok gets the ide-not-detected warning');
+      assert.match(warning.message, /^Grok Build does not appear to be installed/);
+      assert.match(warning.message, /https:\/\/docs\.x\.ai\/build\/overview/);
+    } finally {
+      if (previous === undefined) delete process.env.GROK_HOME;
+      else process.env.GROK_HOME = previous;
+    }
+  }));
+
+  tally(test('the Grok Guardian hook file is written whole in the Claude Code shape, reported drifted when edited, and removed on uninstall (#1495)', () => {
+    const fs = require('fs');
+    const { resolveHookOperationHandlers } = require('../../scripts/lib/claude-settings-hooks');
+    const { OPERATION_DISPATCH_TAG, buildGrokGuardianHookDocument } = require('../../scripts/lib/grok-hooks');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-grok-hook-'));
+    try {
+      const operation = { hookEvent: OPERATION_DISPATCH_TAG, destinationPath: path.join(dir, 'hooks', 'egc-guardian.json'), hookScriptPath: path.join(dir, 'scripts', 'hooks', 'grok-guardian-adapter.js') };
+      const handlers = resolveHookOperationHandlers(OPERATION_DISPATCH_TAG);
+      assert.deepStrictEqual(handlers.apply(operation), { changed: true });
+      const written = JSON.parse(fs.readFileSync(operation.destinationPath, 'utf8'));
+      assert.deepStrictEqual(written, buildGrokGuardianHookDocument(operation.hookScriptPath));
+      const [entry] = written.hooks.PreToolUse;
+      assert.strictEqual(entry.matcher, 'Bash|Edit|Write');
+      assert.strictEqual(entry.hooks[0].type, 'command');
+      assert.ok(entry.hooks[0].command.includes('grok-guardian-adapter.js'));
+      assert.deepStrictEqual(handlers.apply(operation), { changed: false }, 'a second apply is a no-op');
+      assert.strictEqual(handlers.inspect(operation), 'ok');
+      fs.writeFileSync(operation.destinationPath, '{"hooks":{}}');
+      assert.strictEqual(handlers.inspect(operation), 'drifted');
+      assert.deepStrictEqual(handlers.remove(operation), { changed: true });
+      assert.ok(!fs.existsSync(operation.destinationPath), 'uninstall removes the file EGC owns');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
   tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

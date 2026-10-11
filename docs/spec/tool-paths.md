@@ -15,6 +15,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | KIMI_CODE_HOME | linux | `KIMI_CODE_HOME` set to an absolute directory, shown as `$KIMI_CODE_HOME` in the paths | kimi-home |
 | TRAE_ENV=cn | linux | `TRAE_ENV=cn` | trae-project |
 | VIBE_HOME | linux | `VIBE_HOME` set to an absolute directory, shown as `$VIBE_HOME` in the paths | vibe-home |
+| GROK_HOME | linux | `GROK_HOME` set to an absolute directory, shown as `$GROK_HOME` in the paths | grok-home |
 
 ## egc-home
 
@@ -415,6 +416,27 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | context | `$VIBE_HOME/AGENTS.md` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | skills | `$VIBE_HOME/skills/` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | state | `$VIBE_HOME/egc/install-state.json` | VIBE_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## grok-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| library | `~/.grok/egc/library/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.grok/egc/library/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `~/.grok/hooks/egc-guardian.json` | default | documented | <https://docs.x.ai/build/features/hooks> | Personal hooks live in ~/.grok/hooks/*.json in the Claude Code shape; a PreToolUse hook on the Bash, Edit and Write tools denies with exit code 2 or {"decision": "deny"} (read on 2026-10-11). EGC owns this whole file. |
+| library | `~/.grok/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| runtime | `~/.grok/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| context | `~/.grok/AGENTS.md` | default | documented | <https://docs.x.ai/build/features/project-rules> | Grok reads global rules from ~/.grok/ before the project ones, AGENTS.md first (read on 2026-10-11). |
+| skills | `~/.grok/skills/` | default | documented | <https://docs.x.ai/build/features/skills-plugins-marketplaces> | Grok discovers skills in ~/.grok/skills/ and ./.grok/skills/ (read on 2026-10-11); GROK_HOME moves the data root (https://docs.x.ai/build/settings/reference). |
+| state | `~/.grok/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| library | `$GROK_HOME/egc/library/agents/` | GROK_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `$GROK_HOME/egc/library/commands/` | GROK_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `$GROK_HOME/hooks/egc-guardian.json` | GROK_HOME | documented | <https://docs.x.ai/build/features/hooks> | Personal hooks live in ~/.grok/hooks/*.json in the Claude Code shape; a PreToolUse hook on the Bash, Edit and Write tools denies with exit code 2 or {"decision": "deny"} (read on 2026-10-11). EGC owns this whole file. |
+| library | `$GROK_HOME/egc/library/rules/` | GROK_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| runtime | `$GROK_HOME/scripts/` | GROK_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| context | `$GROK_HOME/AGENTS.md` | GROK_HOME | documented | <https://docs.x.ai/build/features/project-rules> | Grok reads global rules from ~/.grok/ before the project ones, AGENTS.md first (read on 2026-10-11). |
+| skills | `$GROK_HOME/skills/` | GROK_HOME | documented | <https://docs.x.ai/build/features/skills-plugins-marketplaces> | Grok discovers skills in ~/.grok/skills/ and ./.grok/skills/ (read on 2026-10-11); GROK_HOME moves the data root (https://docs.x.ai/build/settings/reference). |
+| state | `$GROK_HOME/egc/install-state.json` | GROK_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## vibe-project
 

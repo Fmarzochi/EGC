@@ -73,6 +73,17 @@
       "adapters": [
         "vibe-home"
       ]
+    },
+    {
+      "id": "GROK_HOME",
+      "description": "GROK_HOME set, which moves the Grok Build data root",
+      "platform": "linux",
+      "env": {
+        "GROK_HOME": "$GROK_HOME"
+      },
+      "adapters": [
+        "grok-home"
+      ]
     }
   ],
   "rows": [
@@ -1876,6 +1887,132 @@
       "status": "egc",
       "note": "EGC runtime: the install state EGC writes to track the files it manages.",
       "variant": "VIBE_HOME"
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "library",
+      "path": "~/.grok/egc/library/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "library",
+      "path": "~/.grok/egc/library/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "hooks",
+      "path": "~/.grok/hooks/egc-guardian.json",
+      "status": "documented",
+      "source": "https://docs.x.ai/build/features/hooks",
+      "note": "Personal hooks live in ~/.grok/hooks/*.json in the Claude Code shape; a PreToolUse hook on the Bash, Edit and Write tools denies with exit code 2 or {\"decision\": \"deny\"} (read on 2026-10-11). EGC owns this whole file."
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "library",
+      "path": "~/.grok/egc/library/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "runtime",
+      "path": "~/.grok/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "context",
+      "path": "~/.grok/AGENTS.md",
+      "status": "documented",
+      "source": "https://docs.x.ai/build/features/project-rules",
+      "note": "Grok reads global rules from ~/.grok/ before the project ones, AGENTS.md first (read on 2026-10-11)."
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "skills",
+      "path": "~/.grok/skills/",
+      "status": "documented",
+      "source": "https://docs.x.ai/build/features/skills-plugins-marketplaces",
+      "note": "Grok discovers skills in ~/.grok/skills/ and ./.grok/skills/ (read on 2026-10-11); GROK_HOME moves the data root (https://docs.x.ai/build/settings/reference)."
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "state",
+      "path": "~/.grok/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "library",
+      "path": "$GROK_HOME/egc/library/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "GROK_HOME"
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "library",
+      "path": "$GROK_HOME/egc/library/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "GROK_HOME"
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "hooks",
+      "path": "$GROK_HOME/hooks/egc-guardian.json",
+      "status": "documented",
+      "source": "https://docs.x.ai/build/features/hooks",
+      "note": "Personal hooks live in ~/.grok/hooks/*.json in the Claude Code shape; a PreToolUse hook on the Bash, Edit and Write tools denies with exit code 2 or {\"decision\": \"deny\"} (read on 2026-10-11). EGC owns this whole file.",
+      "variant": "GROK_HOME"
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "library",
+      "path": "$GROK_HOME/egc/library/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "GROK_HOME"
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "runtime",
+      "path": "$GROK_HOME/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run.",
+      "variant": "GROK_HOME"
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "context",
+      "path": "$GROK_HOME/AGENTS.md",
+      "status": "documented",
+      "source": "https://docs.x.ai/build/features/project-rules",
+      "note": "Grok reads global rules from ~/.grok/ before the project ones, AGENTS.md first (read on 2026-10-11).",
+      "variant": "GROK_HOME"
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "skills",
+      "path": "$GROK_HOME/skills/",
+      "status": "documented",
+      "source": "https://docs.x.ai/build/features/skills-plugins-marketplaces",
+      "note": "Grok discovers skills in ~/.grok/skills/ and ./.grok/skills/ (read on 2026-10-11); GROK_HOME moves the data root (https://docs.x.ai/build/settings/reference).",
+      "variant": "GROK_HOME"
+    },
+    {
+      "adapter": "grok-home",
+      "surface": "state",
+      "path": "$GROK_HOME/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages.",
+      "variant": "GROK_HOME"
     },
     {
       "adapter": "vibe-project",

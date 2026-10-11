@@ -1501,6 +1501,51 @@ async function runVibeTests() {
   return [passed, failed];
 }
 
+async function runGrokTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('writes the Grok Build AGENTS.md when ~/.grok exists (#1495)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.grok'), { recursive: true });
+      const output = run(home, { GROK_HOME: '' });
+      assert.ok(/Grok Build: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const content = fs.readFileSync(path.join(home, '.grok', 'AGENTS.md'), 'utf8');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Grok Build when ~/.grok does not exist (#1495)', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home, { GROK_HOME: '' });
+      assert.ok(!/\[cognitive\] Grok Build:/.test(output), 'should not mention Grok at all');
+      assert.ok(!fs.existsSync(path.join(home, '.grok')), 'nothing is created');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the Grok Build AGENTS.md under GROK_HOME when it is set (#1495)', () => {
+    const home = mktempHome();
+    try {
+      const moved = path.join(home, 'grok-data');
+      fs.mkdirSync(moved, { recursive: true });
+      const output = run(home, { GROK_HOME: moved });
+      assert.ok(/Grok Build: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(moved, 'AGENTS.md')), 'the file lands under GROK_HOME');
+      assert.ok(!fs.existsSync(path.join(home, '.grok')), 'and not under ~/.grok');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 async function runKiroTests() {
   let passed = 0;
   let failed = 0;
@@ -1830,6 +1875,12 @@ async function runRemainingHarnessTests() {
     const [vibePassed, vibeFailed] = await runVibeTests();
     passed += vibePassed;
     failed += vibeFailed;
+  }
+
+  {
+    const [grokPassed, grokFailed] = await runGrokTests();
+    passed += grokPassed;
+    failed += grokFailed;
   }
 
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {
