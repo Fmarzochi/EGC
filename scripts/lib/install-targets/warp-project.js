@@ -74,29 +74,39 @@ function isSymbolicLink(target) {
 }
 
 function readMemoryRule(repoRoot) {
-  if (!repoRoot) return null;
+  const sourcePath = path.join(repoRoot || '', ...MEMORY_RULE_SOURCE.split('/'));
   try {
-    return fs.readFileSync(path.join(repoRoot, ...MEMORY_RULE_SOURCE.split('/')), 'utf8');
-  } catch {
-    return null;
+    return fs.readFileSync(sourcePath, 'utf8');
+  } catch (error) {
+    throw new Error(`Cannot read the memory rule for Warp at ${sourcePath}: ${error.message}`, { cause: error });
   }
 }
 
-function planMemoryRuleOperations(moduleId, repoRoot, agentsFilePath, indexedSkillNames) {
+function selectRulesFile(projectRoot) {
+  const warpFile = path.join(projectRoot, 'WARP.md');
+  const stat = fs.lstatSync(warpFile, { throwIfNoEntry: false });
+  return stat?.isFile() ? warpFile : path.join(projectRoot, 'AGENTS.md');
+}
+
+function planMemoryRuleOperations(moduleId, context) {
   const base = {
     kind: MERGE_MARKDOWN_INDEX_KIND,
     moduleId,
     sourceRelativePath: MEMORY_RULE_SOURCE,
-    destinationPath: agentsFilePath,
     strategy: MERGE_MARKDOWN_INDEX_KIND,
     ownership: 'managed',
     scaffoldOnly: false,
   };
-  const operations = indexedSkillNames.has(LEGACY_MEMORY_INDEX_NAME)
-    ? [{ ...base, skillName: LEGACY_MEMORY_INDEX_NAME, removeEntry: true }]
+  const operations = context.indexedSkillNames.has(LEGACY_MEMORY_INDEX_NAME)
+    ? [{ ...base, destinationPath: context.agentsFilePath, skillName: LEGACY_MEMORY_INDEX_NAME, removeEntry: true }]
     : [];
-  const ruleContent = readMemoryRule(repoRoot);
-  if (ruleContent !== null) operations.push({ ...base, memoryRule: true, ruleContent });
+  const movedFrom = new Set(context.previousOperations
+    .filter(operation => operation.memoryRule && !operation.removeEntry && operation.destinationPath !== context.rulesFilePath)
+    .map(operation => operation.destinationPath));
+  for (const destinationPath of movedFrom) {
+    operations.push({ ...base, destinationPath, memoryRule: true, removeEntry: true });
+  }
+  operations.push({ ...base, destinationPath: context.rulesFilePath, memoryRule: true, ruleContent: readMemoryRule(context.repoRoot) });
   return operations;
 }
 
@@ -119,9 +129,17 @@ function createWarpPlanOperations(input, adapter) {
   const agentsFilePath = path.join(projectRoot, 'AGENTS.md');
   const recordedDestinations = collectRecordedDestinations(adapter, planningInput);
   const previousState = readInstallStateOrNull(adapter.getInstallStatePath(planningInput));
-  const indexedSkillNames = new Set((Array.isArray(previousState?.operations) ? previousState.operations : [])
+  const previousOperations = Array.isArray(previousState?.operations) ? previousState.operations : [];
+  const indexedSkillNames = new Set(previousOperations
     .filter(operation => operation.kind === MERGE_MARKDOWN_INDEX_KIND && !operation.removeEntry && operation.skillName)
     .map(operation => operation.skillName));
+  const memoryRuleContext = {
+    repoRoot: input.repoRoot,
+    agentsFilePath,
+    rulesFilePath: selectRulesFile(projectRoot),
+    previousOperations,
+    indexedSkillNames,
+  };
 
   return modules.flatMap(module => {
     const paths = Array.isArray(module.paths) ? module.paths : [];
@@ -179,10 +197,11 @@ function createWarpPlanOperations(input, adapter) {
         }
 
         // rules-core's memory protocol (rules/common/memory.md) has to be
-        // loaded every session, and Warp loads only AGENTS.md (or WARP.md),
-        // so its text goes into a marked block of the project's AGENTS.md.
+        // loaded every session, and Warp loads only AGENTS.md (or WARP.md,
+        // which wins when both exist), so its text goes into a marked block
+        // of whichever of the two Warp reads.
         if (normalized === 'rules') {
-          return planMemoryRuleOperations(module.id, input.repoRoot, agentsFilePath, indexedSkillNames);
+          return planMemoryRuleOperations(module.id, memoryRuleContext);
         }
 
         return [];

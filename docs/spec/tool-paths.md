@@ -354,7 +354,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | Surface | Path | Variant | Status | Source | Note |
 | --- | --- | --- | --- | --- | --- |
 | skills | `<project>/.warp/skills/` | default | documented | <https://docs.warp.dev/agent-platform/warp-agents/skills> |  |
-| rules | `<project>/AGENTS.md` | default | documented | <https://docs.warp.dev/agent-platform/warp-agents/rules> | Warp loads AGENTS.md (or WARP.md, which wins when both exist) as project rules and names no other rules directory (read on 2026-10-11). EGC keeps the skills index and the memory rule in marked blocks of this file; the copy at .warp/rules/common/memory.md an earlier install wrote is retired only while it holds EGC's bytes. |
+| rules | `<project>/AGENTS.md` | default | documented | <https://docs.warp.dev/agent-platform/warp-agents/rules> | Warp loads AGENTS.md (or WARP.md, which wins when both exist) as project rules and names no other rules directory (read on 2026-10-11). EGC keeps the skills index and the memory rule in marked blocks of this file, and puts the memory rule in WARP.md instead when the project has one; the copy at .warp/rules/common/memory.md an earlier install wrote is retired only while it holds EGC's bytes. |
 | state | `<project>/.warp/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## kimi-home

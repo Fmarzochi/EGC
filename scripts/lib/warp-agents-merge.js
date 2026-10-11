@@ -35,15 +35,7 @@ function parseEntryLine(line) {
 }
 
 function findBlockRange(lines) {
-  const startIndex = lines.indexOf(BLOCK_START);
-  if (startIndex === -1) {
-    return null;
-  }
-  const endIndex = lines.indexOf(BLOCK_END, startIndex + 1);
-  if (endIndex === -1) {
-    return null;
-  }
-  return { startIndex, endIndex };
+  return findMarkedRange(lines, BLOCK_START, BLOCK_END);
 }
 
 function extractEntries(lines, range) {
@@ -118,11 +110,19 @@ function removeSkillIndexEntry(existingContent, name) {
   return [...before, ...blockLines, ...after].join('\n');
 }
 
+function isMarkerLine(line, marker) {
+  return line === marker || line === `${marker}\r`;
+}
+
 function findMarkedRange(lines, start, end) {
-  const startIndex = lines.indexOf(start);
+  const startIndex = lines.findIndex(line => isMarkerLine(line, start));
   if (startIndex === -1) return null;
-  const endIndex = lines.indexOf(end, startIndex + 1);
-  return endIndex === -1 ? null : { startIndex, endIndex };
+  const endOffset = lines.slice(startIndex + 1).findIndex(line => isMarkerLine(line, end));
+  return endOffset === -1 ? null : { startIndex, endIndex: startIndex + 1 + endOffset };
+}
+
+function isBlankLine(line) {
+  return line === '' || line === '\r';
 }
 
 function upsertMemoryRuleBlock(existingContent, ruleContent) {
@@ -154,8 +154,8 @@ function removeMemoryRuleBlock(existingContent) {
 
   const before = lines.slice(0, range.startIndex);
   const after = lines.slice(range.endIndex + 1);
-  while (before.length > 0 && before[before.length - 1] === '') before.pop();
-  while (after.length > 0 && after[0] === '') after.shift();
+  while (before.length > 0 && isBlankLine(before[before.length - 1])) before.pop();
+  while (after.length > 0 && isBlankLine(after[0])) after.shift();
   const joined = (after.length > 0 ? [...before, '', ...after] : before).join('\n').replace(/\n+$/, ''); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
   return joined.length > 0 ? `${joined}\n` : '';
 }
@@ -166,9 +166,14 @@ function removeIndexOperationContent(existingContent, operation) {
     : removeSkillIndexEntry(existingContent, operation.skillName);
 }
 
+function nextMemoryRuleContent(existingContent, operation) {
+  if (!operation.removeEntry) return upsertMemoryRuleBlock(existingContent, operation.ruleContent);
+  return existingContent === null ? null : removeMemoryRuleBlock(existingContent);
+}
+
 function nextSkillIndexContent(existingContent, operation) {
   if (operation.memoryRule) {
-    return upsertMemoryRuleBlock(existingContent, operation.ruleContent);
+    return nextMemoryRuleContent(existingContent, operation);
   }
   if (operation.removeEntry) {
     return existingContent === null ? null : removeSkillIndexEntry(existingContent, operation.skillName);
