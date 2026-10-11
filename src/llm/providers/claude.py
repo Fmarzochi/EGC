@@ -92,32 +92,43 @@ class ClaudeProvider(LLMProvider):
         return calls or None
 
     @staticmethod
-    def _build_request(messages: list[Message]) -> tuple[str | None, list[dict[str, Any]]]:
+    def _tool_result_block(msg: Message) -> dict[str, Any]:
+        if not msg.tool_call_id:
+            raise ValueError("a tool message needs tool_call_id to answer a tool_use block")
+        return {"type": "tool_result", "tool_use_id": msg.tool_call_id, "content": msg.content}
+
+    @staticmethod
+    def _with_tool_result(turns: list[dict[str, Any]], block: dict[str, Any]) -> list[dict[str, Any]]:
+        # Every result of one assistant turn travels in the same user turn.
+        previous = turns[-1] if turns else None
+        if previous and previous["role"] == "user" and isinstance(previous["content"], list):
+            return [*turns[:-1], {**previous, "content": [*previous["content"], block]}]
+        return [*turns, {"role": "user", "content": [block]}]
+
+    @staticmethod
+    def _assistant_turn(msg: Message) -> dict[str, Any]:
+        blocks: list[dict[str, Any]] = [{"type": "text", "text": msg.content}] if msg.content else []
+        blocks.extend(
+            {"type": "tool_use", "id": tc.id, "name": tc.name, "input": tc.arguments}
+            for tc in msg.tool_calls or []
+        )
+        return {"role": "assistant", "content": blocks}
+
+    @classmethod
+    def _build_request(cls, messages: list[Message]) -> tuple[str | None, list[dict[str, Any]]]:
         # The Messages API takes the system prompt as a top-level parameter and
         # has no tool role: an assistant turn carries its calls as tool_use
         # blocks and the results travel as tool_result blocks in the next user
-        # turn, every result of one assistant turn in the same user turn.
+        # turn.
         system_parts: list[str] = []
         turns: list[dict[str, Any]] = []
         for msg in messages:
             if msg.role == Role.SYSTEM:
                 system_parts.append(msg.content)
             elif msg.role == Role.TOOL:
-                if not msg.tool_call_id:
-                    raise ValueError("a tool message needs tool_call_id to answer a tool_use block")
-                block = {"type": "tool_result", "tool_use_id": msg.tool_call_id, "content": msg.content}
-                previous = turns[-1] if turns else None
-                if previous and previous["role"] == "user" and isinstance(previous["content"], list):
-                    turns[-1] = {**previous, "content": [*previous["content"], block]}
-                else:
-                    turns.append({"role": "user", "content": [block]})
+                turns = cls._with_tool_result(turns, cls._tool_result_block(msg))
             elif msg.role == Role.ASSISTANT and msg.tool_calls:
-                blocks: list[dict[str, Any]] = [{"type": "text", "text": msg.content}] if msg.content else []
-                blocks.extend(
-                    {"type": "tool_use", "id": tc.id, "name": tc.name, "input": tc.arguments}
-                    for tc in msg.tool_calls
-                )
-                turns.append({"role": "assistant", "content": blocks})
+                turns.append(cls._assistant_turn(msg))
             else:
                 turns.append({"role": msg.role.value, "content": msg.content})
         return ("\n\n".join(system_parts) or None, turns)
