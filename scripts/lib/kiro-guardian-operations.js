@@ -9,6 +9,7 @@
 // this identical operation shape, differing only in rootSegments/
 // installStatePathSegments.
 
+const { createKiroV3GuardianHookFileOperation } = require('./claude-settings-hooks');
 const { createFlatHookGuardianOperations } = require('./guardian-flat-hook-operations');
 const {
   GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -18,15 +19,18 @@ const {
 } = require('./kiro-guardian-hooks');
 
 function createKiroGuardianOperations(adapter, targetRoot, createRemappedOperation) {
-  return createFlatHookGuardianOperations({
-    adapter,
-    targetRoot,
-    createRemappedOperation,
-    guardianAdapterSourceRelativePath: GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
-    hookEvent: PRE_TOOL_USE_EVENT,
-    resolveAgentConfigPath,
-    resolveGuardianAdapterScriptDestination,
-  });
+  return [
+    ...createFlatHookGuardianOperations({
+      adapter,
+      targetRoot,
+      createRemappedOperation,
+      guardianAdapterSourceRelativePath: GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
+      hookEvent: PRE_TOOL_USE_EVENT,
+      resolveAgentConfigPath,
+      resolveGuardianAdapterScriptDestination,
+    }),
+    createKiroV3GuardianHookFileOperation(targetRoot, resolveGuardianAdapterScriptDestination(targetRoot)),
+  ];
 }
 
 module.exports = { createKiroGuardianOperations };
