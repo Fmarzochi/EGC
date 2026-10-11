@@ -744,8 +744,16 @@ function registerZedContextServers(targetPath, bins) {
   }
   let changed = false;
   for (const [key, value] of Object.entries(incoming.context_servers)) {
-    if (!settings.context_servers[key]) {
-      settings.context_servers[key] = value;
+    const existing = settings.context_servers[key];
+    const isLegacyShape = existing && typeof existing.command === 'object' && existing.command !== null;
+    if (!existing || isLegacyShape) {
+      settings.context_servers[key] = isLegacyShape
+        ? {
+            ...value,
+            ...(existing.command.env && Object.keys(existing.command.env).length > 0 ? { env: existing.command.env } : {}),
+            ...(existing.settings && Object.keys(existing.settings).length > 0 ? { settings: existing.settings } : {})
+          }
+        : value;
       changed = true;
     }
   }
