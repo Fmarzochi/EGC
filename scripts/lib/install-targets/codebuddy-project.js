@@ -133,7 +133,11 @@ function isPersonOwnedRule(destination, recordedDestinations) {
   if (!stat) return false;
   if (!stat.isFile()) return true;
   if (recordedDestinations?.includes(path.resolve(destination))) return false;
-  return fs.readFileSync(destination, 'utf8') !== generatedContextTemplate(CONTEXT_FILE_NAME);
+  try {
+    return fs.readFileSync(destination, 'utf8') !== generatedContextTemplate(CONTEXT_FILE_NAME);
+  } catch {
+    return true;
+  }
 }
 
 function planContextRuleOperation(adapter, moduleId, input, targetRoot) {

@@ -3354,6 +3354,15 @@ function runTests() {
       fs.writeFileSync(destination, 'My own CodeBuddy rule.\n');
       assert.deepStrictEqual(planNow(), [], 'a file of the person\'s own is left alone');
 
+      if (process.platform !== 'win32' && process.getuid?.() !== 0) {
+        fs.chmodSync(destination, 0o000);
+        try {
+          assert.deepStrictEqual(planNow(), [], 'a rule that cannot be read is left alone and the plan goes on');
+        } finally {
+          fs.chmodSync(destination, 0o644);
+        }
+      }
+
       const statePath = path.join(projectRoot, '.codebuddy', 'egc-install-state.json');
       const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
       writeInstallState(statePath, createInstallState({
