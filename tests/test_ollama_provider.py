@@ -1,6 +1,7 @@
 """Tests for OllamaProvider request payload handling."""
 
 import json
+import os
 import unittest
 from unittest.mock import patch
 
@@ -64,6 +65,26 @@ class TestOllamaProviderStreamGuard(unittest.TestCase):
                 provider.generate(stream_input)
         self.assertIn("streaming not supported", str(ctx.exception))
         urlopen.assert_not_called()
+
+
+
+class TestOllamaProviderCatalog(unittest.TestCase):
+    """#1700: the default and the model list come from the catalog checked on 2026-10-11."""
+
+    def test_default_model_comes_from_the_catalog_when_no_env_is_set(self) -> None:
+        with patch.dict("os.environ", {}, clear=False):
+            os.environ.pop("OLLAMA_MODEL", None)
+            os.environ.pop("LLM_MODEL", None)
+            provider = OllamaProvider(base_url="http://localhost:11434")
+        self.assertEqual(provider.get_default_model(), "qwen3")
+
+    def test_models_list_carries_the_current_and_the_legacy_default(self) -> None:
+        provider = OllamaProvider(base_url="http://localhost:11434", default_model="qwen3")
+        by_name = {m.name: m for m in provider.list_models()}
+        self.assertIn("qwen3", by_name)
+        self.assertIn("llama3.2", by_name)
+        self.assertTrue(by_name["qwen3"].supports_tools)
+        self.assertTrue(by_name["llama3.2"].supports_tools)
 
 
 if __name__ == "__main__":

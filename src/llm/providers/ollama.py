@@ -15,6 +15,7 @@ from llm.core.interface import (
 )
 from llm.core.interface import CLIENT_TIMEOUT
 from llm.core.redact import redact_secrets
+from llm.core.model_resolver import ModelResolver
 from llm.core.types import (
     LLMInput,
     LLMOutput,
@@ -79,31 +80,21 @@ class OllamaProvider(LLMProvider):
         self.base_url = base_url or os.environ.get(
             "OLLAMA_BASE_URL", "http://localhost:11434"
         )
-        self.default_model = default_model or os.environ.get("OLLAMA_MODEL", "llama3.2")
-        self._models = [
+        self.default_model = (
+            default_model
+            or os.environ.get("OLLAMA_MODEL")
+            or ModelResolver.default_model("ollama")
+        )
+        # The catalog lives in the central registry (library ids checked on
+        # 2026-10-11); the inline entry only covers a registry without ollama rows.
+        self._models = ModelResolver.model_infos("ollama") or [
             ModelInfo(
-                name="llama3.2",
+                name=self.default_model,
                 provider=ProviderType.OLLAMA,
-                supports_tools=False,
+                supports_tools=True,
                 supports_vision=False,
-                max_tokens=4096,
-                context_window=128000,
-            ),
-            ModelInfo(
-                name="mistral",
-                provider=ProviderType.OLLAMA,
-                supports_tools=False,
-                supports_vision=False,
-                max_tokens=4096,
-                context_window=8192,
-            ),
-            ModelInfo(
-                name="codellama",
-                provider=ProviderType.OLLAMA,
-                supports_tools=False,
-                supports_vision=False,
-                max_tokens=4096,
-                context_window=16384,
+                max_tokens=8192,
+                context_window=40960,
             ),
         ]
 

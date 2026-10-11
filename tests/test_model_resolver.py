@@ -45,7 +45,7 @@ class TestResolve:
             ("haiku", "gemini-2.5-flash-lite"),
             ("claude", "claude-sonnet-4-7"),
             ("openai", "gpt-4o"),
-            ("ollama", "llama3.2"),
+            ("ollama", "qwen3"),
             ("openrouter", "openrouter/auto"),
             ("mistral", "mistral-large-latest"),
             ("groq", "openai/gpt-oss-120b"),
@@ -97,7 +97,7 @@ class TestDefaultModel:
             ("gemini", "gemini-2.5-pro"),
             ("claude", "claude-sonnet-4-7"),
             ("openai", "gpt-4o"),
-            ("ollama", "llama3.2"),
+            ("ollama", "qwen3"),
             ("openrouter", "openrouter/auto"),
             ("mistral", "mistral-large-latest"),
             ("deepseek", "deepseek-chat"),
@@ -263,7 +263,7 @@ class TestMetadata:
         assert ModelResolver.pick_by_capability(ModelCapability.LOW_LATENCY, "claude") == "claude-haiku-4-7"
 
     def test_pick_by_capability_without_a_match_uses_the_provider_default(self):
-        assert ModelResolver.pick_by_capability(ModelCapability.MULTIMODAL, "ollama") == "llama3.2"
+        assert ModelResolver.pick_by_capability(ModelCapability.LONG_CONTEXT, "ollama") == "qwen3"
 
 
 @pytest.mark.unit
@@ -357,3 +357,29 @@ class TestDescribeStrategy:
         })
         assert ModelResolver.describe_strategy("gemini-code-only")["preferred_capability"] == "code"
         assert ModelResolver.describe_strategy("vendor/new-model")["preferred_capability"] == "general"
+
+
+class TestCatalogRefreshOctober2026:
+    """#1698, #1699, #1700: Groq, OpenRouter and Ollama ids checked against the vendors on 2026-10-11."""
+
+    def test_ollama_default_is_a_current_model_and_the_old_default_stays_registered(self):
+        assert ModelResolver.default_model("ollama") == "qwen3"
+        assert ModelResolver.resolve("llama3.2") == "llama3.2"
+        assert ModelResolver.supports("llama3.2", ModelCapability.TOOL_CALLING)
+
+    def test_ollama_tagged_id_passes_through_unchanged(self):
+        assert ModelResolver.resolve("qwen3:8b", "ollama") == "qwen3:8b"
+        assert ModelResolver.resolve("gpt-oss:120b", "ollama") == "gpt-oss:120b"
+
+    def test_groq_catalog_carries_the_four_production_models(self):
+        groq = set(ModelResolver.list_models("groq"))
+        assert {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"} <= groq
+        assert ModelResolver.get_fallback("openai/gpt-oss-120b") == "openai/gpt-oss-20b"
+
+    def test_retired_openrouter_qwen_id_resolves_to_its_replacement(self):
+        assert ModelResolver.resolve("qwen/qwen3-235b-a22b") == "qwen/qwen3.5-397b-a17b"
+        assert "qwen/qwen3-235b-a22b" not in ModelResolver.list_models("openrouter")
+
+    def test_openrouter_catalog_carries_the_current_flagships(self):
+        router = set(ModelResolver.list_models("openrouter"))
+        assert {"anthropic/claude-sonnet-5.5", "openai/gpt-6-astra", "google/gemini-3.8-flash", "qwen/qwen3.5-397b-a17b"} <= router
