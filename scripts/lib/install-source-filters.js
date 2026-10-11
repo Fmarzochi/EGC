@@ -20,6 +20,16 @@ const IGNORED_FILE_NAMES = new Set([
 
 const IGNORED_FILE_SUFFIXES = ['.pyc', '.pyo'];
 
+// The context files the egc-memory propagation fills with project memory
+// (.cursor/rules/egc-context.mdc and the egc-context.md of the other
+// tools): never a copy source, from a populated clone or from the package.
+// The installer generates them from scripts/lib/generated-context-files.js
+// instead, so no enumerator may hand one over as a file to copy.
+const PROPAGATION_TARGET_FILE_NAMES = new Set([
+  'egc-context.mdc',
+  'egc-context.md',
+]);
+
 // Install-state files a local install may have left inside a source tree:
 // runtime output, never copied as a source. Every adapter's state name fits
 // one of these (egc-install-state.json, egc/install-state.json and the
@@ -34,7 +44,7 @@ function isIgnoredSourceDirectory(directoryName) {
 }
 
 function isIgnoredSourceFile(fileName) {
-  if (IGNORED_FILE_NAMES.has(fileName)) {
+  if (IGNORED_FILE_NAMES.has(fileName) || PROPAGATION_TARGET_FILE_NAMES.has(fileName)) {
     return true;
   }
   return IGNORED_FILE_SUFFIXES.some(suffix => fileName.endsWith(suffix));

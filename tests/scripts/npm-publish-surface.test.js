@@ -37,13 +37,13 @@ const modules = JSON.parse(
   fs.readFileSync(path.join(repoRoot, "manifests", "install-modules.json"), "utf8")
 ).modules
 
-// Manifest sources that deliberately do NOT ship in the npm package today.
-// All three are local memory-propagation targets: packing them straight from
-// a working tree would risk publishing populated memory, so adding them to
-// "files" is a maintainer decision, not a mechanical fix. Registry installs
-// silently skip them (materializeScaffoldOperation drops missing sources).
-// Shrink this list, never grow it.
-const KNOWN_UNPACKAGED = new Set(["AGENTS.md", ".cursor", ".gemini"])
+// Manifest sources that deliberately do NOT ship in the npm package. The
+// root AGENTS.md is a memory-propagation target, populated on a
+// maintainer's machine, so it is never packed: the installer generates it
+// from scripts/lib/generated-context-files.js instead (#1670), and a
+// registry install plans it like a clone does. Shrink this list, never
+// grow it.
+const KNOWN_UNPACKAGED = new Set(["AGENTS.md"])
 
 function normalizePublishPath(value) {
   return String(value).replace(/\\/g, "/").replace(/\/$/, "")
@@ -114,7 +114,10 @@ function main() {
 
       for (const requiredPath of [
         ".codex/config.toml",
-        ".trae/rules/egc-context.md",
+        ".cursor/hooks.json",
+        ".cursor/hooks/adapter.js",
+        ".cursor/rules/common-security.md",
+        ".trae/README.md",
         "scripts/hooks/scrubber-cli.js",
         "scripts/lib/scrubber/engine.js",
         "skills/security/content-scrubber/SKILL.md",
@@ -128,9 +131,13 @@ function main() {
         )
       }
 
+      // The propagation targets never ship: on a maintainer's machine they
+      // live populated, and no install plan copies them (the Cursor rule is
+      // generated at install time; nothing installs the Trae one).
       for (const excludedPath of [
         "AGENTS.md",
         ".cursor/rules/egc-context.mdc",
+        ".trae/rules/egc-context.md",
         "skills/general_part2/skill-comply/.gitignore",
       ]) {
         assert.ok(

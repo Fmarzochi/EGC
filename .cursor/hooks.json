@@ -22,13 +22,6 @@
         "description": "GateGuard Fact-Forcing Gate: require investigation before Write/Shell tool calls"
       }
     ],
-    "beforeFileEdit": [
-      {
-        "command": "EGC_HOOK_EVENT=pre_tool node .cursor/hooks/dashboard-emit.js",
-        "event": "beforeFileEdit",
-        "description": "Emit pre-edit event to EGC Dashboard"
-      }
-    ],
     "beforeShellExecution": [
       {
         "command": "EGC_HOOK_EVENT=pre_tool node .cursor/hooks/dashboard-emit.js",

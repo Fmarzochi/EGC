@@ -17,6 +17,7 @@ const { commandExists: defaultCommandExists } = require('../utils');
 const HOME_TARGET_COMMANDS = Object.freeze({
   egc: ['gemini', 'agy'],
   claude: ['claude'],
+  auggie: ['auggie'],
   codex: ['codex'],
   opencode: ['opencode'],
   windsurf: ['windsurf'],
@@ -29,6 +30,7 @@ const HOME_TARGET_COMMANDS = Object.freeze({
   openhands: ['openhands'],
   kimi: ['kimi'],
   crush: ['crush'],
+  vibe: ['vibe'],
 });
 
 // Codex, Goose and OpenHands share the ~/.agents root, so that root says
@@ -52,6 +54,7 @@ const PROJECT_TARGETS_AT_HOME = Object.freeze({
 const TARGET_LABELS = Object.freeze({
   egc: 'Gemini / AGY',
   claude: 'Claude Code',
+  auggie: 'Auggie (Augment Code)',
   codex: 'Codex CLI',
   opencode: 'OpenCode',
   windsurf: 'Devin Desktop',
@@ -64,6 +67,7 @@ const TARGET_LABELS = Object.freeze({
   openhands: 'OpenHands',
   kimi: 'Kimi Code CLI',
   crush: 'Crush',
+  vibe: 'Mistral Vibe',
   trae: 'Trae',
   codebuddy: 'CodeBuddy',
 });

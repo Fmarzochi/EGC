@@ -31,6 +31,7 @@ const {
   removeCursorCrusherHookFromFile,
 } = require('./cursor-crusher-hooks');
 const {
+  GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH: KIRO_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH,
   PRE_TOOL_USE_EVENT: KIRO_PRE_TOOL_USE_EVENT,
   applyKiroGuardianHookToFile,
   inspectKiroGuardianHookFile,
@@ -43,6 +44,13 @@ const {
   removeKiroMeshHookFromFile,
   resolveMeshHookFilePath: resolveKiroMeshHookFilePath,
 } = require('./kiro-mesh-hooks');
+const {
+  OPERATION_DISPATCH_TAG: KIRO_V3_GUARDIAN_HOOK_FILE_TAG,
+  applyKiroV3GuardianHookToFile,
+  inspectKiroV3GuardianHookFile,
+  removeKiroV3GuardianHookFromFile,
+  resolveGuardianHookFilePath: resolveKiroV3GuardianHookFilePath,
+} = require('./kiro-v3-guardian-hooks');
 const {
   OPERATION_DISPATCH_TAG: AMAZONQ_OPERATION_DISPATCH_TAG,
   applyAmazonQGuardianHookToFile,
@@ -62,6 +70,18 @@ const {
   removeAntigravityGuardianHookFromFile,
 } = require('./antigravity-guardian-hooks');
 const {
+  ANTIGRAVITY_GATEGUARD_HOOK_TAG,
+  applyAntigravityGateGuardHookToFile,
+  inspectAntigravityGateGuardHookFile,
+  removeAntigravityGateGuardHookFromFile,
+} = require('./antigravity-gateguard-hooks');
+const {
+  ANTIGRAVITY_MESH_HOOK_TAG,
+  applyAntigravityMeshHookToFile,
+  inspectAntigravityMeshHookFile,
+  removeAntigravityMeshHookFromFile,
+} = require('./antigravity-mesh-hooks');
+const {
   ROOCODE_DENYLIST_TAG,
   applyRoocodeDenylistToFile,
   inspectRoocodeDenylistFile,
@@ -73,6 +93,10 @@ const {
   inspectCrushHookFile,
   removeCrushHookFromFile,
 } = require('./crush-settings-hooks');
+const {
+  VIBE_HOOK_OPERATION_HANDLERS,
+  VIBE_PRE_TOOL_EVENT,
+} = require('./vibe-hooks-toml');
 
 const SESSION_START_EVENT = 'SessionStart';
 const STOP_EVENT = 'Stop';
@@ -890,6 +914,20 @@ function createKiroMeshHookFileOperation(targetRoot, hookScriptPath) {
   };
 }
 
+function createKiroV3GuardianHookFileOperation(targetRoot, hookScriptPath) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: BASH_GUARDIAN_HOOK_MODULE_ID,
+    sourceRelativePath: KIRO_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveKiroV3GuardianHookFilePath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: KIRO_V3_GUARDIAN_HOOK_FILE_TAG,
+    hookScriptPath,
+  };
+}
+
 // EGC Guardian command validator (pre-bash-guardian-validate.js): standalone
 // PreToolUse hook, same shape as the Crusher hook above, for hosts other than
 // Claude Code that read hooks.json with the same schema. 2026-07-27 audit
@@ -1024,11 +1062,16 @@ function createAdapterStdinJsonCopyOperation(createRemappedOperation, targetRoot
 // egc-memory-save.js -> lib/state-snapshot.js -> lib/branch-state.js,
 // lib/state-crypto.js and lib/state-integrity.js (which also needs
 // state-crypto.js); every one is required when the hook loads.
+// state-crypto.js now also requires lib/utils.js for its HOME/USERPROFILE
+// resolution (C06, unifying it with the rest of the package), so utils.js
+// must travel with it here too, the same way it already does in
+// HOOK_LIB_SOURCES above.
 const EGC_MEMORY_SAVE_HOOK_LIB_SOURCES = [
   'scripts/lib/state-snapshot.js',
   'scripts/lib/branch-state.js',
   'scripts/lib/state-crypto.js',
   'scripts/lib/state-integrity.js',
+  'scripts/lib/utils.js',
 ];
 
 function resolveEgcMemorySaveHookScriptDestination(targetRoot) {
@@ -1212,6 +1255,11 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeKiroGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
     inspect: operation => inspectKiroGuardianHookFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
   },
+  [KIRO_V3_GUARDIAN_HOOK_FILE_TAG]: {
+    apply: operation => applyKiroV3GuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeKiroV3GuardianHookFromFile(operation.destinationPath),
+    inspect: operation => inspectKiroV3GuardianHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
   [KIRO_MESH_HOOK_FILE_TAG]: {
     // Whole-file ownership: egc-mesh-notice.json exists solely for this
     // entry, so remove deletes the file and never merges user content.
@@ -1240,6 +1288,19 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeAntigravityGuardianHookFromFile(operation.destinationPath),
     inspect: operation => inspectAntigravityGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
   },
+  // The same whole-name ownership for the two other named hooks EGC writes
+  // to Antigravity's hooks.json: the GateGuard gate (PreToolUse) and the
+  // session-mesh notice (PreInvocation).
+  [ANTIGRAVITY_GATEGUARD_HOOK_TAG]: {
+    apply: operation => applyAntigravityGateGuardHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeAntigravityGateGuardHookFromFile(operation.destinationPath),
+    inspect: operation => inspectAntigravityGateGuardHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
+  [ANTIGRAVITY_MESH_HOOK_TAG]: {
+    apply: operation => applyAntigravityMeshHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeAntigravityMeshHookFromFile(operation.destinationPath),
+    inspect: operation => inspectAntigravityMeshHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
   // Recorded by installs of the retired Roo Code adapter (roo-cline.deniedCommands
   // seeded into a workspace's .vscode/settings.json): nothing plans it any
   // more, and the handlers stay so doctor, repair and uninstall still handle
@@ -1254,6 +1315,9 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeCrushHookFromFile(operation.destinationPath, operation.hookScriptPath),
     inspect: operation => inspectCrushHookFile(operation.destinationPath, operation.hookScriptPath, operation.hookMatcher),
   },
+  // Mistral Vibe: [[hooks]] tables in hooks.toml, by hook name
+  // (scripts/lib/vibe-hooks-toml.js).
+  [VIBE_PRE_TOOL_EVENT]: VIBE_HOOK_OPERATION_HANDLERS,
 };
 
 const SESSION_START_HOOK_OPERATION_HANDLERS = {
@@ -1289,6 +1353,7 @@ module.exports = {
   CRUSHER_HOOK_MODULE_ID,
   CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   CRUSH_PRE_TOOL_USE_EVENT,
+  VIBE_PRE_TOOL_EVENT,
   PRE_COMPACT_EVENT,
   POST_COMPACT_EVENT,
   EGC_MEMORY_SAVE_HOOK_MODULE_ID,
@@ -1342,6 +1407,7 @@ module.exports = {
   createMeshNoticeScriptCopyOperations,
   createMeshNoticeHookMergeOperationForDestination,
   createKiroMeshHookFileOperation,
+  createKiroV3GuardianHookFileOperation,
   resolveMeshNoticeHookScriptDestination,
   createBashGuardianScriptCopyOperations,
   createWriteValidatorHookMergeOperationForDestination,

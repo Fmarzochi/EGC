@@ -117,6 +117,37 @@ run('on Windows the browser profiles and the Devin Desktop credentials file are 
   }
 });
 
+run('the Windows tools that keep their credentials under %APPDATA% (Roaming), not %USERPROFILE%, are denied', () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const saved = { APPDATA: process.env.APPDATA, USERPROFILE: process.env.USERPROFILE };
+  const profile = path.join(os.tmpdir(), 'egc-appdata-tools-profile');
+  const appDataStores = ['gcloud', path.join('Composer', 'auth.json'), path.join('configstore', 'firebase-tools.json'), path.join('stripe', 'config.toml'), path.join('supabase', 'access-token')];
+  try {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    delete process.env.APPDATA;
+    process.env.USERPROFILE = profile;
+    const denied = buildDeniedPaths();
+    const roaming = path.join(profile, 'AppData', 'Roaming');
+    for (const store of appDataStores) {
+      const target = path.join(roaming, store);
+      assert.ok(denied.includes(target), `${store} under the profile when APPDATA is unset, got ${denied.join(', ')}`);
+    }
+    const appData = path.join(profile, 'Roaming');
+    process.env.APPDATA = appData;
+    const set = buildDeniedPaths();
+    for (const store of appDataStores) {
+      const target = path.join(appData, store);
+      assert.ok(set.includes(target), `${store} when APPDATA is set, got ${set.join(', ')}`);
+    }
+  } finally {
+    Object.defineProperty(process, 'platform', platform);
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
 run('Devin Desktop\'s own config.json and session history stay readable next to the denied credentials.toml (Windows)', () => {
   const platform = Object.getOwnPropertyDescriptor(process, 'platform');
   const saved = { APPDATA: process.env.APPDATA };
@@ -127,6 +158,12 @@ run('Devin Desktop\'s own config.json and session history stay readable next to 
     const denied = buildDeniedPaths();
     assert.ok(denied.includes(path.join(appData, 'devin', 'credentials.toml')), 'the credentials file is denied');
     assert.ok(!denied.some(p => p === path.join(appData, 'devin')), 'the devin directory itself is not denied as a whole');
+    // Read denial is decided by isReadDeniedPath, which layers
+    // PROTECTED_FILE_PATTERNS on top of the denied list; the title's claim
+    // only holds if these neighbors clear that check too (cubic review,
+    // confidence 6).
+    assert.strictEqual(isReadDeniedPath(path.join(appData, 'devin', 'config.json')), false, 'config.json stays readable');
+    assert.strictEqual(isReadDeniedPath(path.join(appData, 'devin', 'cli', 'sessions.db')), false, 'cli/sessions.db stays readable');
   } finally {
     Object.defineProperty(process, 'platform', platform);
     if (saved.APPDATA === undefined) delete process.env.APPDATA; else process.env.APPDATA = saved.APPDATA;

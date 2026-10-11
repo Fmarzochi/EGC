@@ -931,6 +931,77 @@ function runTests() {
     }
   }));
 
+  tally(test('an amp project install retires the managed copies EGC wrote under .amp/skills and keeps the person\'s (#1671)', () => {
+    const fs = require('fs');
+    const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+    const { applyInstallPlan } = require('../../scripts/lib/install/apply');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-amp-project-upgrade-'));
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-amp-project-upgrade-home-'));
+    try {
+      const sources = ['skills/ai/agent-eval/SKILL.md', 'skills/testing/tdd-workflow/SKILL.md'];
+      const ampSkills = path.join(projectRoot, '.amp', 'skills');
+      const statePath = path.join(projectRoot, '.amp', 'egc-install-state.json');
+      const legacy = sources.map(source => path.join(ampSkills, path.basename(path.dirname(source)), 'SKILL.md'));
+      for (const [index, source] of sources.entries()) {
+        fs.mkdirSync(path.dirname(legacy[index]), { recursive: true });
+        fs.copyFileSync(path.join(repoRoot, source), legacy[index]);
+      }
+      fs.writeFileSync(legacy[1], 'edited by hand');
+      const own = path.join(ampSkills, 'my-skill', 'SKILL.md');
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, '# mine');
+      const stateFields = {
+        request: { profile: 'core', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['skills-amp'], skippedModules: [] },
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      };
+      writeInstallState(statePath, createInstallState({
+        ...stateFields,
+        adapter: { id: 'amp-project', target: 'amp', kind: 'project' },
+        targetRoot: path.join(projectRoot, '.amp'),
+        installStatePath: statePath,
+        operations: sources.map((source, index) => ({
+          kind: 'copy-file',
+          moduleId: 'skills-amp',
+          sourceRelativePath: source,
+          destinationPath: legacy[index],
+          strategy: 'preserve-relative-path',
+          ownership: 'managed',
+          scaffoldOnly: false,
+        })),
+      }));
+
+      const plan = planInstallTargetScaffold({ target: 'amp-project', repoRoot, projectRoot, homeDir, modules: [{ id: 'skills-amp', paths: sources }] });
+      assert.deepStrictEqual(plan.retirements.map(entry => entry.destinationPath).sort(), [...legacy].sort(), 'both recorded .amp/skills copies left the plan and are offered for retirement');
+      const operations = plan.operations.map(operation => ({
+        ...operation,
+        kind: 'copy-file',
+        scaffoldOnly: false,
+        sourcePath: path.join(repoRoot, operation.sourceRelativePath),
+      }));
+      const statePreview = createInstallState({
+        ...stateFields,
+        adapter: plan.adapter,
+        targetRoot: plan.targetRoot,
+        installStatePath: plan.installStatePath,
+        operations,
+      });
+      applyInstallPlan({ ...plan, operations, statePreview }, { homeDir });
+
+      for (const source of sources) {
+        const current = path.join(projectRoot, '.agents', 'skills', path.basename(path.dirname(source)), 'SKILL.md');
+        assert.ok(fs.existsSync(current), `${current} is written under .agents/skills, where Amp reads it`);
+      }
+      assert.ok(!fs.existsSync(legacy[0]), 'the byte-identical copy under .amp/skills is retired');
+      assert.strictEqual(fs.readFileSync(legacy[1], 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', 'the person\'s own skill under .amp/skills stays');
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('throws on unknown target adapter', () => {
     assert.throws(
       () => getInstallTargetAdapter('ghost-target'),
@@ -2116,7 +2187,7 @@ function runTests() {
     assert.strictEqual(statePath, path.join(homeDir, '.amp', 'egc', 'install-state.json'));
   }));
 
-  tally(test('amp adapter strips category from skill paths and installs flat', () => {
+  tally(test('amp adapter strips category from skill paths and installs flat under the shared ~/.agents/skills/ (#1671)', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
 
@@ -2136,9 +2207,42 @@ function runTests() {
     assert.ok(
       plan.operations.some(operation => (
         normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
-        && operation.destinationPath === path.join(homeDir, '.amp', 'skills', 'tdd-workflow')
+        && operation.destinationPath === path.join(homeDir, '.agents', 'skills', 'tdd-workflow')
       )),
-      'Should strip category and install skill flat under ~/.amp/skills/'
+      'Should strip category and install skill flat under ~/.agents/skills/, a directory Amp reads'
+    );
+    assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(homeDir, '.amp', 'skills'))), 'nothing is planned under ~/.amp/skills');
+    const adapter = getInstallTargetAdapter('amp');
+    assert.deepStrictEqual(
+      adapter.resolveManagedRoots({ homeDir }, adapter),
+      [path.join(homeDir, '.amp'), path.join(homeDir, '.config', 'amp'), path.join(homeDir, '.agents')],
+      'the shared ~/.agents root is managed, so retirement and uninstall reach it and see the siblings that share it'
+    );
+  }));
+
+  tally(test('amp project adapter installs the skills flat under the project .agents/skills/ (#1671)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'amp-project',
+      repoRoot,
+      projectRoot,
+      modules: [{ id: 'workflow', paths: ['skills/workflow/tdd-workflow'] }],
+    });
+
+    assert.ok(
+      plan.operations.some(operation => (
+        normalizedRelativePath(operation.sourceRelativePath) === 'skills/workflow/tdd-workflow'
+        && operation.destinationPath === path.join(projectRoot, '.agents', 'skills', 'tdd-workflow')
+      )),
+      'Should install the skill flat under .agents/skills/, a directory Amp reads'
+    );
+    assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(projectRoot, '.amp', 'skills'))), 'nothing is planned under .amp/skills');
+    assert.deepStrictEqual(
+      plan.managedRoots,
+      [path.resolve(projectRoot, '.amp'), path.resolve(projectRoot, '.agents')],
+      'the project .agents root is managed, shared with the antigravity project target'
     );
   }));
 
@@ -2494,14 +2598,14 @@ function runTests() {
     );
   }));
 
-  tally(test('crusher hook is registered on Bash and scaffolded for Copilot and Antigravity', () => {
+  // Antigravity has no Token Crusher hook: its hooks answer a decision, never
+  // a rewritten command (tests/lib/antigravity-mesh-hooks.test.js).
+  tally(test('crusher hook is registered on Bash and scaffolded for Copilot', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
-    const projectRoot = '/workspace/app';
 
     const cases = [
       { target: 'copilot', input: { homeDir }, hooksFilePath: path.join(homeDir, '.copilot', 'hooks', 'hooks.json'), root: path.join(homeDir, '.github') },
-      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
     ];
 
     for (const { target, input, hooksFilePath, root } of cases) {
@@ -2534,19 +2638,16 @@ function runTests() {
     }
   }));
 
-  // Session-mesh wake-signal notice: Antigravity inherited the Gemini CLI
-  // hook loop, which reads the hookSpecificOutput.additionalContext field
-  // mesh-events-inject.js emits, so the same standalone script is registered
-  // on UserPromptSubmit at both the project hooks file (antigravity target)
-  // and the global one (egc target owns ~/.gemini).
-  tally(test('mesh notice hook is registered on UserPromptSubmit and scaffolded for Antigravity, Codex, and Trae', () => {
+  // Session-mesh wake-signal notice on the hosts with a UserPromptSubmit
+  // hook in the Claude format. Antigravity has no such event: its notice is
+  // the egc-mesh-notice named hook on PreInvocation
+  // (tests/lib/antigravity-mesh-hooks.test.js).
+  tally(test('mesh notice hook is registered on UserPromptSubmit and scaffolded for Codex and Trae', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
 
     const cases = [
-      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
-      { target: 'egc', input: { homeDir }, hooksFilePath: path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json'), root: path.join(homeDir, '.gemini') },
       { target: 'codex', input: { homeDir }, hooksFilePath: path.join(homeDir, '.codex', 'hooks.json'), root: path.join(homeDir, '.codex') },
       // Trae feeds plain-text stdout to the model, so its registered command
       // is the host adapter, not the shared JSON-emitting script directly.
@@ -2653,14 +2754,14 @@ function runTests() {
   // had GateGuard + Crusher wired (tests above) but never the Guardian
   // command validator itself -- neither one actually checks a Bash command
   // against the Guardian's allowlist/denylist.
-  tally(test('Guardian hook is registered on Bash and scaffolded for Copilot and Antigravity', () => {
+  // Antigravity's Guardian is the egc-guardian named hook in its own format
+  // (tests/lib/antigravity-guardian-hooks.test.js), not a Claude-format entry.
+  tally(test('Guardian hook is registered on Bash and scaffolded for Copilot', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
-    const projectRoot = '/workspace/app';
 
     const cases = [
       { target: 'copilot', input: { homeDir }, hooksFilePath: path.join(homeDir, '.copilot', 'hooks', 'hooks.json'), root: path.join(homeDir, '.github') },
-      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
     ];
 
     for (const { target, input, hooksFilePath, root } of cases) {
@@ -2944,171 +3045,51 @@ function runTests() {
     }
   }));
 
-  tally(test('antigravity-project adapter registers the GateGuard fact-force hook at .agents/hooks.json', () => {
+  // The three hooks Antigravity runs are named hooks in its own format, at
+  // .agents/hooks.json (antigravity target) and ~/.gemini/config/hooks.json
+  // (egc target); the Claude-format entries once planned beside them, and
+  // the whole ~/.gemini/antigravity-cli/hooks.json, never fired. Their
+  // modules, dispatch and copies are covered in
+  // tests/lib/antigravity-guardian-hooks.test.js,
+  // tests/lib/antigravity-gateguard-hooks.test.js and
+  // tests/lib/antigravity-mesh-hooks.test.js; this checks the two plans as
+  // a whole.
+  tally(test('the Antigravity targets plan exactly the three named hooks in the file Antigravity reads, with no Claude-format entry anywhere', () => {
     const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
     const projectRoot = '/workspace/app';
+    const cases = [
+      { target: 'egc', input: { homeDir }, hooksFilePath: path.join(homeDir, '.gemini', 'config', 'hooks.json'), root: path.join(homeDir, '.gemini') },
+      { target: 'antigravity', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.agents', 'hooks.json'), root: path.join(projectRoot, '.agents') },
+    ];
 
-    const plan = planInstallTargetScaffold({
-      target: 'antigravity',
-      repoRoot,
-      projectRoot,
-      modules: [],
-    });
-    const hooksFilePath = path.join(projectRoot, '.agents', 'hooks.json');
-    const gateGuardScriptPath = path.join(
-      projectRoot, '.agents', 'scripts', 'hooks', 'gateguard-fact-force.js'
-    );
-
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
-        && operation.destinationPath === gateGuardScriptPath
-      )),
-      'Should scaffold the GateGuard script under .agents/ even with no modules selected'
-    );
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/lib/utils.js'
-        && operation.destinationPath === path.join(projectRoot, '.agents', 'scripts', 'lib', 'utils.js')
-      )),
-      'Should scaffold the GateGuard utils.js dependency alongside the hook script'
-    );
-
-    const gateGuardOperations = plan.operations.filter(operation => (
-      operation.kind === 'merge-claude-settings-hooks'
-      && operation.hookEvent === 'PreToolUse'
-      && operation.destinationPath === hooksFilePath
-      && operation.hookScriptPath === gateGuardScriptPath
-    ));
-    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
-    assert.deepStrictEqual(
-      matchers,
-      ['Bash', 'Edit', 'MultiEdit', 'Write'],
-      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity project scope'
-    );
-  }));
-
-  tally(test('egc-home adapter registers the GateGuard fact-force hook for Antigravity global scope too', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const homeDir = '/Users/example';
-
-    const plan = planInstallTargetScaffold({
-      target: 'egc',
-      repoRoot,
-      homeDir,
-      modules: [],
-    });
-    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
-    const gateGuardScriptPath = path.join(
-      homeDir, '.gemini', 'scripts', 'hooks', 'gateguard-fact-force.js'
-    );
-
-    const gateGuardOperations = plan.operations.filter(operation => (
-      operation.kind === 'merge-claude-settings-hooks'
-      && operation.hookEvent === 'PreToolUse'
-      && operation.destinationPath === hooksFilePath
-      && operation.hookScriptPath === gateGuardScriptPath
-    ));
-    const matchers = gateGuardOperations.map(operation => operation.hookMatcher).sort();
-    assert.deepStrictEqual(
-      matchers,
-      ['Bash', 'Edit', 'MultiEdit', 'Write'],
-      'GateGuard should be registered on Edit, Write, MultiEdit and Bash for Antigravity global hooks.json, ' +
-      'separate from Gemini CLI\'s own ~/.gemini/hooks/hooks.json'
-    );
-
-    // cubic-dev-ai review (PR #1052, 2026-07-27): this test already used
-    // modules: [] (no hooks-runtime module selected), so if the script copy
-    // were still implicit/optional the hooks.json entry above would point
-    // at a file that was never actually scaffolded. Asserting the copy
-    // operation exists here, in the same modules: [] scenario, proves the
-    // registration is now self-sufficient regardless of module selection.
-    assert.ok(
-      plan.operations.some(operation => (
-        normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/gateguard-fact-force.js'
-        && operation.destinationPath === gateGuardScriptPath
-      )),
-      'gateguard-fact-force.js must be copied unconditionally, not only via the hooks-runtime module'
-    );
-  }));
-
-  // EGC Guardian: cubic-dev-ai review (PR #1052, 2026-07-27) found
-  // createGlobalBashGuardianHookMergeOperation existed in
-  // antigravity-settings-hooks.js but was never called from gemini-home.js,
-  // so global Antigravity installs never got the Guardian despite GateGuard
-  // (test above) being wired. A follow-up review then found the same
-  // registered-but-never-copied gap once it WAS wired.
-  tally(test('egc-home adapter registers the EGC Guardian on Bash for Antigravity global scope too', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const homeDir = '/Users/example';
-
-    const plan = planInstallTargetScaffold({
-      target: 'egc',
-      repoRoot,
-      homeDir,
-      modules: [],
-    });
-    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
-    const guardianScriptPath = path.join(
-      homeDir, '.gemini', 'scripts', 'hooks', 'pre-bash-guardian-validate.js'
-    );
-
-    const guardianOperations = plan.operations.filter(operation => (
-      operation.kind === 'merge-claude-settings-hooks'
-      && operation.hookEvent === 'PreToolUse'
-      && operation.destinationPath === hooksFilePath
-      && operation.hookScriptPath === guardianScriptPath
-    ));
-    assert.strictEqual(guardianOperations.length, 1, 'Guardian registered once for the Antigravity global hooks.json');
-    assert.strictEqual(guardianOperations[0].hookMatcher, 'Bash', 'Guardian only needs the Bash matcher');
-
-    for (const src of ['scripts/hooks/pre-bash-guardian-validate.js', 'scripts/lib/guardian-bin.js', 'scripts/lib/shell-split.js']) {
-      assert.ok(
-        plan.operations.some(operation => (
-          normalizedRelativePath(operation.sourceRelativePath) === src
-          && operation.destinationPath === path.join(homeDir, '.gemini', ...src.split('/'))
-        )),
-        `${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
+    for (const { target, input, hooksFilePath, root } of cases) {
+      const plan = planInstallTargetScaffold({ target, repoRoot, modules: [], ...input });
+      const hookOperations = plan.operations.filter(operation => operation.kind === 'merge-claude-settings-hooks');
+      assert.deepStrictEqual(
+        hookOperations.map(operation => operation.hookEvent).sort(),
+        ['antigravity:egc-gateguard', 'antigravity:egc-guardian', 'antigravity:egc-mesh-notice'],
+        `${target}: the three named hooks and nothing else`
       );
-    }
-  }));
-
-  // Token Crusher: 2026-07-21 audit left Antigravity's PROJECT-level
-  // registration (.agents/hooks.json, antigravity-project.js) wired but its
-  // GLOBAL registration (this egc-home target, ~/.gemini/antigravity-cli/
-  // hooks.json) unverified/unwired -- same pattern as the GateGuard/Guardian
-  // global gaps above. Closed 2026-07-28.
-  tally(test('egc-home adapter registers the Token Crusher on Bash for Antigravity global scope too', () => {
-    const repoRoot = path.join(__dirname, '..', '..');
-    const homeDir = '/Users/example';
-
-    const plan = planInstallTargetScaffold({
-      target: 'egc',
-      repoRoot,
-      homeDir,
-      modules: [],
-    });
-    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
-    const crusherScriptPath = path.join(
-      homeDir, '.gemini', 'scripts', 'hooks', 'crusher-hook.js'
-    );
-
-    const crusherOperations = plan.operations.filter(operation => (
-      operation.kind === 'merge-claude-settings-hooks'
-      && operation.hookEvent === 'PreToolUse'
-      && operation.destinationPath === hooksFilePath
-      && operation.hookScriptPath === crusherScriptPath
-    ));
-    assert.strictEqual(crusherOperations.length, 1, 'Crusher registered once for the Antigravity global hooks.json');
-    assert.strictEqual(crusherOperations[0].hookMatcher, 'Bash', 'Crusher only needs the Bash matcher');
-
-    for (const src of ['scripts/hooks/crusher-hook.js', 'scripts/hooks/pre-bash-crusher-rewrite.js', 'scripts/hooks/pretooluse-output.js', 'scripts/lib/crusher/engine.js']) {
+      for (const operation of hookOperations) {
+        assert.strictEqual(operation.destinationPath, hooksFilePath, `${target}: ${operation.hookEvent} goes to the file Antigravity reads`);
+        assert.ok(
+          plan.operations.some(copy => copy.kind !== 'merge-claude-settings-hooks' && copy.destinationPath === operation.hookScriptPath),
+          `${target}: the adapter ${path.basename(operation.hookScriptPath)} is copied with no modules selected`
+        );
+      }
+      for (const src of ['scripts/hooks/gateguard-fact-force.js', 'scripts/lib/utils.js', 'scripts/hooks/pre-bash-guardian-validate.js', 'scripts/lib/guardian-bin.js', 'scripts/lib/shell-split.js', 'scripts/lib/wrapper-options.js', 'scripts/hooks/mesh-events-inject.js']) {
+        assert.ok(
+          plan.operations.some(operation => (
+            normalizedRelativePath(operation.sourceRelativePath) === src
+            && operation.destinationPath === path.join(root, ...src.split('/'))
+          )),
+          `${target}: ${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
+        );
+      }
       assert.ok(
-        plan.operations.some(operation => (
-          normalizedRelativePath(operation.sourceRelativePath) === src
-          && operation.destinationPath === path.join(homeDir, '.gemini', ...src.split('/'))
-        )),
-        `${src} must be copied unconditionally (modules: []), not only via the hooks-runtime module`
+        !plan.operations.some(operation => operation.destinationPath.includes(path.join('antigravity-cli', 'hooks.json'))),
+        `${target}: nothing is planned for antigravity-cli/hooks.json`
       );
     }
   }));
@@ -3168,12 +3149,13 @@ function runTests() {
 
     // The hooks.json registrations themselves are unrelated to the copy
     // dedup and must still be present.
-    const hooksFilePath = path.join(homeDir, '.gemini', 'antigravity-cli', 'hooks.json');
-    assert.ok(
-      plan.operations.some(operation => (
+    const hooksFilePath = path.join(homeDir, '.gemini', 'config', 'hooks.json');
+    assert.strictEqual(
+      plan.operations.filter(operation => (
         operation.kind === 'merge-claude-settings-hooks' && operation.destinationPath === hooksFilePath
-      )),
-      'hooks.json registrations must survive the copy dedup'
+      )).length,
+      3,
+      'the three named hook registrations must survive the copy dedup'
     );
   }));
 
@@ -3292,6 +3274,13 @@ function runTests() {
       assert.ok(mergeOperation, `[${target}] Should plan the preToolUse agent-config merge`);
       assert.strictEqual(mergeOperation.destinationPath, path.join(targetRoot, 'agents', 'default.json'));
       assert.strictEqual(mergeOperation.hookScriptPath, adapterScriptDestination);
+
+      const v3Operation = plan.operations.find(
+        operation => operation.kind === 'merge-claude-settings-hooks' && operation.hookEvent === 'kiro-v3-guardian-hook-file'
+      );
+      assert.ok(v3Operation, `[${target}] Should plan the Kiro CLI 3.0 standalone hook document next to the 2.x entry`);
+      assert.strictEqual(v3Operation.destinationPath, path.join(targetRoot, 'hooks', 'egc-guardian.json'));
+      assert.strictEqual(v3Operation.hookScriptPath, adapterScriptDestination, 'both layouts run the same adapter');
     }
   }));
 
@@ -4640,8 +4629,8 @@ function runTests() {
       const amp = planInstallTargetScaffold({ target: 'amp-home', repoRoot, homeDir, modules: [] });
       assert.deepStrictEqual(
         amp.managedRoots.map(normalizedRelativePath).sort(),
-        [path.join(homeDir, '.amp'), path.join(homeDir, '.config', 'amp')].map(normalizedRelativePath).sort(),
-        'amp-home declares its skills root and its plugin config root'
+        [path.join(homeDir, '.amp'), path.join(homeDir, '.config', 'amp'), path.join(homeDir, '.agents')].map(normalizedRelativePath).sort(),
+        'amp-home declares its library root, its plugin config root and the shared skills root'
       );
       const claude = planInstallTargetScaffold({ target: 'claude-home', repoRoot, homeDir, modules: [] });
       assert.deepStrictEqual(claude.managedRoots, [claude.targetRoot], 'a target with one root declares just that root');
@@ -5006,6 +4995,217 @@ function runTests() {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);
     assert.ok(targets.includes('crush'), 'Should include crush target');
+  }));
+
+  tally(test('vibe-home: ids, root, state path, flat skills, library folders and the two hooks.toml entries under ~/.vibe (#1497)', () => {
+    const { VIBE_CRUSHER_MATCHER, VIBE_GUARDIAN_MATCHER } = require('../../scripts/lib/vibe-hooks-toml');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const previous = process.env.VIBE_HOME;
+    delete process.env.VIBE_HOME;
+    try {
+      const adapter = getInstallTargetAdapter('vibe');
+      assert.strictEqual(adapter.id, 'vibe-home');
+      assert.strictEqual(adapter.target, 'vibe');
+      assert.strictEqual(adapter.kind, 'home');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, '.vibe'));
+      assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(homeDir, '.vibe', 'egc', 'install-state.json'));
+      const plan = planInstallTargetScaffold({
+        target: 'vibe',
+        repoRoot,
+        homeDir,
+        modules: [
+          { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+          { id: 'rules-core', paths: ['rules/common/memory.md'] },
+          { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+        ],
+      });
+      const destinations = plan.operations.map(op => op.destinationPath);
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'skills', 'continuous-learning', 'SKILL.md')), 'a skill lands flat under skills/');
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'egc', 'library', 'rules', 'common', 'memory.md')), 'a rule lands under the EGC library folder');
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'egc', 'library', 'agents', 'code-reviewer.md')), 'a Markdown agent stays out of the agents/ directory Vibe reads TOML profiles from');
+      assert.ok(!destinations.some(destination => destination.startsWith(path.join(homeDir, '.vibe', 'agents'))), 'nothing of EGC lands in Vibe\'s own agents/');
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'AGENTS.md')), 'the root AGENTS.md lands as the user-level instructions file');
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'scripts', 'hooks', 'vibe-guardian-adapter.js')), 'the Guardian adapter ships');
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'scripts', 'hooks', 'vibe-crusher-adapter.js')), 'the Crusher adapter ships');
+      assert.ok(destinations.includes(path.join(homeDir, '.vibe', 'scripts', 'hooks', 'pre-bash-crusher-rewrite.js')), 'the rewrite decision ships next to the Crusher adapter');
+      const hooks = plan.operations.filter(op => op.hookEvent === 'vibe:pre_tool');
+      assert.deepStrictEqual(hooks.map(op => [op.moduleId, op.hookMatcher]), [
+        ['egc-bash-guardian-hook', VIBE_GUARDIAN_MATCHER],
+        ['egc-crusher-hook', VIBE_CRUSHER_MATCHER],
+      ]);
+      assert.ok(VIBE_GUARDIAN_MATCHER.startsWith('re:^(bash|') && VIBE_GUARDIAN_MATCHER.includes('|edit)'), 'the Guardian matches the shell tools and edit');
+      assert.ok(VIBE_CRUSHER_MATCHER.startsWith('re:^(bash|') && !VIBE_CRUSHER_MATCHER.includes('edit'), 'the Crusher matches the shell tools only');
+      assert.ok(hooks.every(op => op.destinationPath === path.join(homeDir, '.vibe', 'hooks.toml')), 'both entries go to hooks.toml');
+      assert.deepStrictEqual(plan.managedRoots, [path.resolve(homeDir, '.vibe')], 'vibe-home manages only its own root');
+    } finally {
+      if (previous === undefined) delete process.env.VIBE_HOME;
+      else process.env.VIBE_HOME = previous;
+    }
+  }));
+
+  tally(test('vibe adapters route resolveRoot, every destination and every managed root through VIBE_HOME, with a tilde expanded', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const previous = process.env.VIBE_HOME;
+    const customHome = path.resolve('/custom/egc-vibe-home');
+    try {
+      process.env.VIBE_HOME = customHome;
+      const adapter = getInstallTargetAdapter('vibe');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), customHome, 'resolveRoot honours VIBE_HOME');
+      const plan = planInstallTargetScaffold({ target: 'vibe', repoRoot, homeDir, modules: [{ id: 'rules-core', paths: ['rules/common/memory.md'] }] });
+      assert.strictEqual(plan.targetRoot, customHome);
+      assert.ok(plan.installStatePath.startsWith(customHome), 'the install state sits under VIBE_HOME');
+      for (const operation of plan.operations) {
+        assert.ok(String(operation.destinationPath).startsWith(customHome), 'every destination must sit under VIBE_HOME, found ' + operation.destinationPath);
+      }
+      for (const root of plan.managedRoots) {
+        assert.ok(root.startsWith(customHome), 'every managed root must sit under VIBE_HOME, found ' + root);
+      }
+      process.env.VIBE_HOME = '~/vibe-data';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, 'vibe-data'), 'a leading tilde is the home directory');
+    } finally {
+      if (previous === undefined) delete process.env.VIBE_HOME;
+      else process.env.VIBE_HOME = previous;
+    }
+  }));
+
+  tally(test('vibe-project installs the same shape under the project .vibe, and both vibe adapters are registered', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/work/project';
+    const adapter = getInstallTargetAdapter('vibe-project');
+    assert.strictEqual(adapter.target, 'vibe');
+    assert.strictEqual(adapter.kind, 'project');
+    assert.strictEqual(adapter.resolveRoot({ projectRoot }), path.join(projectRoot, '.vibe'));
+    assert.strictEqual(adapter.getInstallStatePath({ projectRoot }), path.join(projectRoot, '.vibe', 'egc-install-state.json'));
+    const plan = planInstallTargetScaffold({ target: 'vibe-project', repoRoot, projectRoot, modules: [{ id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] }, { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] }] });
+    const destinations = plan.operations.map(op => op.destinationPath);
+    assert.ok(destinations.includes(path.join(projectRoot, '.vibe', 'skills', 'continuous-learning', 'SKILL.md')), 'a skill lands flat under the project skills/');
+    assert.ok(destinations.includes(path.join(projectRoot, '.vibe', 'egc', 'library', 'agents', 'code-reviewer.md')), 'the library folder sits under egc/library in the project too');
+    assert.ok(!destinations.includes(path.join(projectRoot, '.vibe', 'AGENTS.md')), 'Vibe reads the project AGENTS.md from the working directory, so none is planned under .vibe');
+    assert.ok(plan.operations.some(op => op.hookEvent === 'vibe:pre_tool' && op.destinationPath === path.join(projectRoot, '.vibe', 'hooks.toml')), 'the hooks go to the project hooks.toml');
+    const { listInstallTargetAdapters } = require('../../scripts/lib/install-targets/registry');
+    const ids = listInstallTargetAdapters().map(a => a.id);
+    assert.ok(ids.includes('vibe-home') && ids.includes('vibe-project'), 'both vibe adapters are registered');
+  }));
+
+  tally(test('vibe-home warns when ~/.vibe is absent, naming the tool and its repository', () => {
+    const previous = process.env.VIBE_HOME;
+    delete process.env.VIBE_HOME;
+    try {
+      const adapter = getInstallTargetAdapter('vibe');
+      const homeDir = path.join(os.tmpdir(), 'egc-vibe-home-that-does-not-exist');
+      const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+      assert.ok(warning, 'a home without ~/.vibe gets the ide-not-detected warning');
+      assert.match(warning.message, /^Mistral Vibe does not appear to be installed/);
+      assert.match(warning.message, /(^|\s)https:\/\/github\.com\/mistralai\/mistral-vibe(?=$|[\s).,])/, 'the warning names the repository as a link of its own');
+    } finally {
+      if (previous === undefined) delete process.env.VIBE_HOME;
+      else process.env.VIBE_HOME = previous;
+    }
+  }));
+  tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'auggie',
+      repoRoot,
+      homeDir,
+      modules: [
+        { id: 'skills-core', paths: ['skills/workflow/tdd-workflow'] },
+        { id: 'commands-core', paths: ['commands'] },
+        { id: 'rules-core', paths: ['rules'] },
+      ],
+    });
+
+    const skillsDir = path.join(homeDir, '.augment', 'skills');
+    const commandsDir = path.join(homeDir, '.augment', 'commands');
+    const rulesDir = path.join(homeDir, '.augment', 'rules');
+
+    const commandOps = plan.operations.filter(op => op.destinationPath && op.destinationPath.startsWith(commandsDir + path.sep));
+    const ruleOps = plan.operations.filter(op => op.destinationPath && op.destinationPath.startsWith(rulesDir + path.sep));
+
+    assert.ok(
+      plan.operations.some(op => op.destinationPath === path.join(skillsDir, 'tdd-workflow')),
+      'the skill lands flat under ~/.augment/skills, stripped of its category'
+    );
+    assert.ok(commandOps.length > 0, 'commands land under ~/.augment/commands');
+    assert.ok(
+      commandOps.every(op => path.dirname(op.destinationPath) === commandsDir),
+      'each command sits directly under ~/.augment/commands, not a subdirectory'
+    );
+    assert.ok(ruleOps.length > 0, 'rules land under ~/.augment/rules');
+    assert.ok(
+      ruleOps.every(op => path.dirname(op.destinationPath) === rulesDir),
+      'each rule sits directly under ~/.augment/rules, proving the flatten, not just the prefix'
+    );
+    assert.deepStrictEqual(plan.managedRoots, [path.resolve(homeDir, '.augment')], 'auggie-home manages only its own root, no hooks or shared root');
+  }));
+
+  tally(test('auggie-project installs the same three families under the project .augment', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+
+    const plan = planInstallTargetScaffold({
+      target: 'auggie-project',
+      repoRoot,
+      projectRoot,
+      modules: [
+        { id: 'skills-core', paths: ['skills/workflow/tdd-workflow'] },
+        { id: 'commands-core', paths: ['commands'] },
+        { id: 'rules-core', paths: ['rules'] },
+      ],
+    });
+
+    const skillsDir = path.join(projectRoot, '.augment', 'skills');
+    const commandsDir = path.join(projectRoot, '.augment', 'commands');
+    const rulesDir = path.join(projectRoot, '.augment', 'rules');
+    const commandOps = plan.operations.filter(op => op.destinationPath && op.destinationPath.startsWith(commandsDir + path.sep));
+    const ruleOps = plan.operations.filter(op => op.destinationPath && op.destinationPath.startsWith(rulesDir + path.sep));
+
+    assert.ok(
+      plan.operations.some(op => op.destinationPath === path.join(skillsDir, 'tdd-workflow')),
+      'the skill lands flat under the project .augment/skills'
+    );
+    assert.ok(commandOps.length > 0, 'commands land under the project .augment/commands');
+    assert.ok(
+      commandOps.every(op => path.dirname(op.destinationPath) === commandsDir),
+      'each command sits directly under the project .augment/commands, not a subdirectory'
+    );
+    assert.ok(ruleOps.length > 0, 'rules land under the project .augment/rules');
+    assert.ok(
+      ruleOps.every(op => path.dirname(op.destinationPath) === rulesDir),
+      'each rule sits directly under the project .augment/rules, proving the flatten, not just the prefix'
+    );
+  }));
+
+  tally(test('auggie adapters are included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    const ids = adapters.map(a => a.id);
+    assert.ok(ids.includes('auggie-home'), 'Should include auggie-home');
+    assert.ok(ids.includes('auggie-project'), 'Should include auggie-project');
+  }));
+
+  tally(test('auggie-home excludes rules/README.md and the rules/zh mirror, since Auggie treats every rule as always-on (#1825)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'auggie',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'rules-core', paths: ['rules'] }],
+    });
+
+    const rulesDir = path.join(homeDir, '.augment', 'rules');
+    const ruleNames = plan.operations
+      .filter(op => op.destinationPath && op.destinationPath.startsWith(rulesDir + path.sep))
+      .map(op => path.basename(op.destinationPath).toLowerCase());
+
+    assert.ok(ruleNames.length > 0, 'at least one rule is still installed');
+    assert.ok(!ruleNames.some(name => name.includes('readme')), `no README.md should reach ~/.augment/rules, got ${JSON.stringify(ruleNames)}`);
+    assert.ok(!ruleNames.some(name => name.startsWith('zh-')), `the Chinese mirror should not reach ~/.augment/rules, got ${JSON.stringify(ruleNames)}`);
   }));
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

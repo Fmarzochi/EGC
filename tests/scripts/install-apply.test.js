@@ -36,7 +36,7 @@ function run(args = [], options = {}) {
   };
 
   try {
-    const stdout = execFileSync('node', [SCRIPT, ...args], {
+    const stdout = execFileSync('node', [...(options.nodeArgs || []), SCRIPT, ...args], {
       cwd: options.cwd,
       env,
       encoding: 'utf8',
@@ -210,6 +210,119 @@ function runTests() {
         )),
         'Should record the Antigravity CLI skill file operation'
       );
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  // The layout an install before #1707 left behind: Claude-format entries
+  // Antigravity never ran, recorded in the install state as managed hook
+  // operations pointing at the scripts under the target's own root.
+  const LEGACY_CLAUDE_HOOK_ENTRIES = [
+    { event: 'PreToolUse', script: 'gateguard-fact-force.js', matcher: 'Bash', moduleId: 'claude-gateguard-fact-force-hook' },
+    { event: 'PreToolUse', script: 'crusher-hook.js', matcher: 'Bash', moduleId: 'egc-crusher-hook' },
+    { event: 'PreToolUse', script: 'pre-bash-guardian-validate.js', matcher: 'Bash', moduleId: 'egc-bash-guardian-hook' },
+    { event: 'UserPromptSubmit', script: 'mesh-events-inject.js', moduleId: 'egc-mesh-notice-hook' },
+  ];
+
+  function legacyClaudeHooksBlock(hooksDir) {
+    const hooks = {};
+    for (const entry of LEGACY_CLAUDE_HOOK_ENTRIES) {
+      const group = { ...(entry.matcher ? { matcher: entry.matcher } : {}), hooks: [{ type: 'command', command: `"${process.execPath}" "${path.join(hooksDir, entry.script)}"` }] };
+      hooks[entry.event] = [...(hooks[entry.event] || []), group];
+    }
+    return hooks;
+  }
+
+  function recordLegacyClaudeHooks(statePath, hooksFile, hooksDir) {
+    const state = readJson(statePath);
+    state.operations.push(...LEGACY_CLAUDE_HOOK_ENTRIES.map(entry => ({
+      kind: 'merge-claude-settings-hooks',
+      moduleId: entry.moduleId,
+      sourceRelativePath: `scripts/hooks/${entry.script}`,
+      destinationPath: hooksFile,
+      strategy: 'merge-claude-settings-hooks',
+      ownership: 'managed',
+      scaffoldOnly: false,
+      hookEvent: entry.event,
+      hookScriptPath: path.join(hooksDir, entry.script),
+      ...(entry.matcher ? { hookMatcher: entry.matcher } : {}),
+    })));
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  }
+
+  const NAMED_ANTIGRAVITY_HOOKS = ['egc-gateguard', 'egc-guardian', 'egc-mesh-notice'];
+
+  tally(test('an upgrade retires the Claude-format hooks under antigravity-cli, removes the emptied file and keeps the named hooks in config/hooks.json (#1707)', () => {
+    // Real paths: the retirement compares the recorded entries against the
+    // managed roots the installer resolves, and macOS keeps the temporary
+    // directory behind a symbolic link.
+    const homeDir = fs.realpathSync(createTempDir('install-apply-home-'));
+    const projectDir = fs.realpathSync(createTempDir('install-apply-project-'));
+
+    try {
+      const args = ['--target', 'egc', '--profile', 'minimal', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const geminiRoot = path.join(homeDir, '.gemini');
+      const configHooks = path.join(geminiRoot, 'config', 'hooks.json');
+      const legacyHooks = path.join(geminiRoot, 'antigravity-cli', 'hooks.json');
+      const hooksDir = path.join(geminiRoot, 'scripts', 'hooks');
+      const statePath = path.join(geminiRoot, 'egc', 'install-state.json');
+      assert.deepStrictEqual(Object.keys(readJson(configHooks)).sort(), NAMED_ANTIGRAVITY_HOOKS, 'a fresh install writes the three named hooks');
+      assert.ok(!fs.existsSync(legacyHooks), 'and nothing under antigravity-cli');
+      for (const script of ['antigravity-gateguard-adapter.js', 'antigravity-mesh-notice-adapter.js', 'gateguard-fact-force.js', 'mesh-events-inject.js']) {
+        assert.ok(fs.existsSync(path.join(hooksDir, script)), `${script} is installed`);
+      }
+
+      fs.mkdirSync(path.dirname(legacyHooks), { recursive: true });
+      fs.writeFileSync(legacyHooks, JSON.stringify({ hooks: legacyClaudeHooksBlock(hooksDir) }, null, 2));
+      recordLegacyClaudeHooks(statePath, legacyHooks, hooksDir);
+
+      const preview = run([...args, '--dry-run'], { cwd: projectDir, homeDir, env });
+      assert.strictEqual(preview.code, 0, preview.stderr);
+      assert.ok(preview.stdout.includes(`hooks file left empty, to remove: ${legacyHooks}`), `the dry run announces the file removal, got: ${preview.stdout.slice(-600)}`);
+      assert.ok(fs.existsSync(legacyHooks), 'the dry run removes nothing');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assert.ok(upgraded.stdout.includes(`removed emptied hooks file: ${legacyHooks}`), `the apply reports the file removal, got: ${upgraded.stdout.slice(-600)}`);
+      assert.ok(!fs.existsSync(legacyHooks), 'the file that held only EGC entries is gone');
+      assert.deepStrictEqual(Object.keys(readJson(configHooks)).sort(), NAMED_ANTIGRAVITY_HOOKS, 'the named hooks stay');
+      const recorded = readJson(statePath).operations;
+      assert.ok(!recorded.some(operation => operation.destinationPath === legacyHooks), 'the state no longer records the retired entries');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('an upgrade retires the Claude-format hooks beside the named hooks in .agents/hooks.json and keeps the person\'s own hook (#1707)', () => {
+    const homeDir = fs.realpathSync(createTempDir('install-apply-home-'));
+    const projectDir = fs.realpathSync(createTempDir('install-apply-project-'));
+
+    try {
+      const args = ['--target', 'antigravity', '--profile', 'core'];
+      const first = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const hooksFile = path.join(projectDir, '.agents', 'hooks.json');
+      const hooksDir = path.join(projectDir, '.agents', 'scripts', 'hooks');
+      const statePath = path.join(projectDir, '.agents', 'egc-install-state.json');
+      assert.deepStrictEqual(Object.keys(readJson(hooksFile)).sort(), NAMED_ANTIGRAVITY_HOOKS, 'a fresh install writes the three named hooks');
+
+      const own = { PostToolUse: [{ matcher: 'run_command', hooks: [{ command: './lint.sh' }] }] };
+      fs.writeFileSync(hooksFile, JSON.stringify({ 'user-lint': own, ...readJson(hooksFile), hooks: legacyClaudeHooksBlock(hooksDir) }, null, 2));
+      recordLegacyClaudeHooks(statePath, hooksFile, hooksDir);
+
+      const upgraded = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      const after = readJson(hooksFile);
+      assert.deepStrictEqual(Object.keys(after).sort(), [...NAMED_ANTIGRAVITY_HOOKS, 'user-lint'], 'the Claude-format block is gone, the named hooks and the person\'s hook stay');
+      assert.deepStrictEqual(after['user-lint'], own, 'the person\'s hook is untouched');
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
@@ -766,6 +879,90 @@ function runTests() {
       assert.ok(fs.existsSync(shared), 'the skill codex still records stays');
       assert.ok(zed.keptPaths.includes(shared), 'and is reported as kept');
       assert.ok(!fs.existsSync(zedState), 'the zed install state goes');
+      assert.ok(fs.existsSync(path.join(homeDir, '.agents', 'egc', 'codex-install-state.json')), 'the codex install state stays');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('an upgrade moves the managed Amp skills from ~/.amp/skills to the shared ~/.agents/skills and keeps the person\'s files (#1671)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const repoRoot = path.join(__dirname, '..', '..');
+      const args = ['--target', 'amp', '--profile', 'core', '--allow-undetected'];
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const sharedSkills = path.join(homeDir, '.agents', 'skills');
+      const ampSkills = path.join(homeDir, '.amp', 'skills');
+      const statePath = path.join(homeDir, '.amp', 'egc', 'install-state.json');
+      assert.ok(!fs.existsSync(ampSkills), 'a fresh install writes nothing under ~/.amp/skills');
+      const state = readJson(statePath);
+      const moved = [];
+      for (const operation of state.operations) {
+        if (!operation.destinationPath.startsWith(sharedSkills + path.sep)) continue;
+        const legacy = path.join(ampSkills, path.relative(sharedSkills, operation.destinationPath));
+        fs.mkdirSync(path.dirname(legacy), { recursive: true });
+        fs.copyFileSync(path.join(repoRoot, operation.sourceRelativePath), legacy);
+        moved.push({ current: operation.destinationPath, legacy });
+        operation.destinationPath = legacy;
+        delete operation.contentSha256;
+      }
+      assert.ok(moved.length > 10, 'the core profile installs skills');
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      fs.rmSync(sharedSkills, { recursive: true, force: true });
+      const [edited, ...untouched] = moved;
+      fs.writeFileSync(edited.legacy, 'edited by hand');
+      const ownLegacy = path.join(ampSkills, 'my-skill', 'SKILL.md');
+      fs.mkdirSync(path.dirname(ownLegacy), { recursive: true });
+      fs.writeFileSync(ownLegacy, '# mine');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      for (const { current } of moved) {
+        assert.ok(fs.existsSync(current), `${current} is written under ~/.agents/skills`);
+      }
+      for (const { legacy } of untouched) {
+        assert.ok(!fs.existsSync(legacy), `the managed ${legacy} is retired`);
+      }
+      assert.strictEqual(fs.readFileSync(edited.legacy, 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      assert.strictEqual(fs.readFileSync(ownLegacy, 'utf8'), '# mine', 'the person\'s own skill under ~/.amp/skills stays');
+      const recorded = readJson(statePath).operations.map(operation => operation.destinationPath);
+      assert.ok(recorded.some(destination => destination.startsWith(sharedSkills + path.sep)), 'the state records the ~/.agents/skills copies');
+      assert.ok(!recorded.some(destination => destination.startsWith(ampSkills + path.sep)), 'and no ~/.amp/skills copy any more');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('uninstalling Amp keeps the shared ~/.agents/skills files Codex still records (#1671)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const env = { EGC_INSTALL_DELEGATED: '1' };
+      for (const target of ['codex', 'amp']) {
+        const result = run(['--target', target, '--profile', 'core', '--allow-undetected'], { cwd: projectDir, homeDir, env });
+        assert.strictEqual(result.code, 0, `${target}: ${result.stderr}`);
+      }
+      const shared = path.join(homeDir, '.agents', 'skills', 'tdd-workflow', 'SKILL.md');
+      const ampState = path.join(homeDir, '.amp', 'egc', 'install-state.json');
+      const codexRecorded = readJson(path.join(homeDir, '.agents', 'egc', 'codex-install-state.json')).operations.map(operation => operation.destinationPath);
+      assert.ok(codexRecorded.includes(shared), 'codex records the shared skill');
+      assert.ok(readJson(ampState).operations.some(operation => operation.destinationPath === shared), 'amp records it too');
+
+      const { uninstallInstalledStates } = require('../../scripts/lib/install-lifecycle');
+      const report = uninstallInstalledStates({ homeDir, projectRoot: projectDir, targets: ['amp'] });
+      const amp = report.results.find(entry => entry.adapter.id === 'amp-home');
+      assert.strictEqual(amp.status, 'uninstalled');
+      assert.ok(fs.existsSync(shared), 'the skill codex still records stays');
+      assert.ok(amp.keptPaths.includes(shared), 'and is reported as kept');
+      assert.ok(!fs.existsSync(ampState), 'the amp install state goes');
       assert.ok(fs.existsSync(path.join(homeDir, '.agents', 'egc', 'codex-install-state.json')), 'the codex install state stays');
     } finally {
       cleanup(homeDir);
@@ -2035,8 +2232,8 @@ function runTests() {
       const geminiRoot = path.join(homeDir, '.gemini');
       // Antigravity's hooks land in its own files; the hooks/hooks.json and
       // settings.json of the retired Gemini CLI are neither copied nor created.
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'hooks.json')), 'the Antigravity guardian hook is registered in config/hooks.json');
-      assert.ok(fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'hooks.json')), 'the Antigravity CLI hooks are registered in antigravity-cli/hooks.json');
+      assert.ok(fs.existsSync(path.join(geminiRoot, 'config', 'hooks.json')), 'the Antigravity named hooks are registered in config/hooks.json');
+      assert.ok(!fs.existsSync(path.join(geminiRoot, 'antigravity-cli', 'hooks.json')), 'nothing is written to antigravity-cli/hooks.json, which Antigravity never read');
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'hooks', 'hooks.json')), 'the Gemini CLI hooks file is not copied any more');
       assert.ok(!fs.existsSync(path.join(geminiRoot, 'settings.json')), 'settings.json should not be created just to install managed hooks');
     } finally {
@@ -2384,11 +2581,13 @@ function runTests() {
 
   if (process.platform !== 'win32') {
     const asRoot = (args, options = {}) => {
-      const preload = `--require ${path.join(__dirname, '..', 'fixtures', 'simulate-root-uid.js')}`;
-      const inheritedNodeOptions = (options.env && options.env.NODE_OPTIONS) || process.env.NODE_OPTIONS || '';
+      // A node CLI argument, not NODE_OPTIONS: Node splits that env var on
+      // whitespace with no quote-processing, so a checkout path with a
+      // space in it breaks the preload (cubic review, confidence 6).
+      const preloadPath = path.join(__dirname, '..', 'fixtures', 'simulate-root-uid.js');
       return run(args, {
         ...options,
-        env: { ...options.env, NODE_OPTIONS: inheritedNodeOptions ? `${inheritedNodeOptions} ${preload}` : preload },
+        nodeArgs: ['-r', preloadPath],
       });
     };
 
@@ -2451,6 +2650,45 @@ function runTests() {
       }
     }));
   }
+
+  tally(test('the Cursor rule and the Gemini home AGENTS.md are generated, and a populated rule survives a reinstall (#1670)', () => {
+    // Real paths: macOS hands out /var/... for a /private/var/... tree, and the planner records the resolved form.
+    const homeDir = fs.realpathSync(createTempDir('install-apply-home-'));
+    const projectDir = fs.realpathSync(createTempDir('install-apply-project-'));
+    const rulePath = path.join(projectDir, '.cursor', 'rules', 'egc-context.mdc');
+
+    try {
+      const dryRun = run(['--target', 'cursor', '--modules', 'platform-configs', '--dry-run', '--json'], { cwd: projectDir, homeDir });
+      assert.strictEqual(dryRun.code, 0, dryRun.stderr);
+      const planned = JSON.parse(dryRun.stdout).plan.operations;
+      assert.ok(planned.some(operation => operation.kind === 'generate-context-file' && operation.destinationPath === rulePath), 'the dry run plans the generated rule');
+      assert.ok(!planned.some(operation => operation.kind === 'copy-file' && /egc-context/.test(operation.sourceRelativePath)), 'no copy of a propagation-filled file is planned');
+
+      let result = run(['--target', 'cursor', '--modules', 'platform-configs'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const generated = fs.readFileSync(rulePath, 'utf8');
+      assert.ok(generated.startsWith('---\ndescription: EGC project memory (auto-updated)\nalwaysApply: true\n---\n'), 'the rule carries its frontmatter');
+      assert.ok(generated.includes('## EGC Natural Language Interface'), 'the rule carries the intent map');
+      assert.ok(generated.includes('<!-- egc:start -->'), 'with the propagation block ready to be filled');
+      const state = readJson(path.join(projectDir, '.cursor', 'egc-install-state.json'));
+      assert.ok(state.operations.some(operation => operation.kind === 'generate-context-file' && operation.destinationPath === rulePath), 'the install-state records the generated operation');
+
+      const populated = generated.replace('<!-- egc:start -->\n', '<!-- egc:start -->\n## EGC Project Memory\n- decided: keep the cache\n');
+      fs.writeFileSync(rulePath, populated);
+      result = run(['--target', 'cursor', '--modules', 'platform-configs'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      assert.strictEqual(fs.readFileSync(rulePath, 'utf8'), populated, 'a reinstall leaves the populated rule alone');
+
+      result = run(['--profile', 'core'], { cwd: projectDir, homeDir });
+      assert.strictEqual(result.code, 0, result.stderr);
+      const catalog = fs.readFileSync(path.join(homeDir, '.gemini', 'AGENTS.md'), 'utf8');
+      assert.ok(catalog.startsWith('# EGC: Agent Catalog\n'), 'the Gemini home AGENTS.md is the generated catalog');
+      assert.ok(catalog.includes('<!-- egc:start -->'), 'with its propagation block');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

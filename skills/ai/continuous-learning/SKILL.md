@@ -12,7 +12,7 @@ Automatically evaluates AI coding sessions on end to extract reusable patterns t
 
 - Setting up automatic pattern extraction from AI coding sessions
 - Configuring the Stop hook for session evaluation
-- Reviewing or curating learned skills in `skills/learned/` of the EGC directory in use (`~/.claude/skills/learned/` inside Claude Code)
+- Reviewing or curating learned skills stored in `~/.claude/skills/learned/` inside Claude Code (the `skills/learned/` folder of the EGC directory in use)
 - Adjusting extraction thresholds or pattern categories
 - Comparing v1 (this) vs v2 (instinct-based) approaches
 

@@ -11,18 +11,9 @@ const {
   normalizeRelativePath,
   resolveModulesPlan,
 } = require('./helpers');
-const {
-  createGlobalGateGuardHookMergeOperation,
-  createGlobalCrusherHookMergeOperation,
-  createGlobalBashGuardianHookMergeOperation,
-  createGlobalMeshNoticeHookMergeOperation,
-} = require('../antigravity-settings-hooks');
-const {
-  createGateGuardScriptCopyOperations,
-  createCrusherScriptCopyOperations,
-  createMeshNoticeScriptCopyOperations,
-} = require('../claude-settings-hooks');
+const { CRUSHER_HOOK_MODULE_ID } = require('../claude-settings-hooks');
 const { createAntigravityGuardianOperations } = require('../antigravity-guardian-operations');
+const { createAntigravityGateGuardOperations, createAntigravityMeshNoticeOperations } = require('../antigravity-hook-operations');
 const { resolveGlobalHooksJsonPath } = require('../antigravity-guardian-hooks');
 const {
   AGY_RULES_SUBDIR,
@@ -37,9 +28,8 @@ const AGY_SKILLS_SUBDIR = 'config/skills';
 
 // Source paths only the retired Gemini CLI read from this root and that no
 // family of the library counts on: Antigravity keeps its hooks in
-// config/hooks.json and antigravity-cli/hooks.json, its MCP servers in
-// config/mcp_config.json, and reads neither a plugin manifest nor a .agents
-// tree here. What an earlier install wrote for them is retired on the next
+// config/hooks.json, its MCP servers in config/mcp_config.json, and reads
+// neither a plugin manifest nor a .agents tree here. What an earlier install wrote for them is retired on the next
 // apply, file by file and only when byte-identical to what EGC copied
 // (helpers.js, planGenericRetirements); a file the person edited stays.
 // The same retirement collects the rules/egc tree and the agents/ and
@@ -77,77 +67,28 @@ function planAntigravityLibraryOperations(adapter, moduleId, sourceRelativePath,
   });
 }
 
-// Antigravity shares this home root (~/.gemini) for skill discovery (see
-// AGY_SKILLS_SUBDIR above) but reads its own hooks.json at
-// ~/.gemini/antigravity-cli/hooks.json, distinct from Gemini CLI's
-// ~/.gemini/hooks/hooks.json -- so Gemini CLI's existing GateGuard wiring
-// does not automatically cover Antigravity and needs this separate merge.
-// scripts/hooks/gateguard-fact-force.js normally also arrives at this
-// target via the hooks-runtime module's own scaffold (paths: scripts/hooks,
-// scripts/lib) -- but hooks-runtime is only a DEFAULT base module for the
-// 'egc' target's legacy profile, not something every install is guaranteed
-// to select (a minimal/custom module selection can omit it). Copying the
-// script explicitly here, unconditional of module selection, closes that
-// gap: cubic-dev-ai review (PR #1052, 2026-07-27) found a minimal install
-// could register this hooks.json entry while the script it points at was
-// never actually copied anywhere, so every Antigravity Bash/Edit/Write call
-// would try to launch a nonexistent file.
-function createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, createRemap) {
-  const scriptCopyOperations = createGateGuardScriptCopyOperations(createRemap, targetRoot);
-  const mergeOperations = ['Edit', 'Write', 'MultiEdit', 'Bash'].map(matcher => (
-    createGlobalGateGuardHookMergeOperation(targetRoot, homeDir, matcher)
-  ));
-  return [...scriptCopyOperations, ...mergeOperations];
-}
-
-// Token Crusher: same reasoning as GateGuard above -- copy the standalone
-// crusher hook + its deps explicitly (needed for minimal installs that skip
-// hooks-runtime), then register it on Bash only (the Crusher compresses
-// shell output, it does not touch file writes). Antigravity's PROJECT-level
-// registration (.agents/hooks.json, antigravity-project.js) already had this;
-// the GLOBAL registration (this file, ~/.gemini/antigravity-cli/hooks.json)
-// did not, so a user who only installs the `egc` target (not `antigravity`)
-// never got Crusher compression on Antigravity's global-scope Bash calls.
-function createAntigravityGlobalCrusherOperations(targetRoot, homeDir, createRemap) {
-  const scriptCopyOperations = createCrusherScriptCopyOperations(createRemap, targetRoot);
+// The hooks Antigravity runs are the named hooks in the shared
+// ~/.gemini/config/hooks.json, in its own format: egc-guardian
+// (antigravity-guardian-operations.js), egc-gateguard and egc-mesh-notice
+// (antigravity-hook-operations.js). Each comes with the scripts it runs,
+// copied explicitly and unconditionally of module selection: hooks-runtime
+// is only a DEFAULT base module, a minimal or custom selection can omit it,
+// and an entry pointing at a script never copied would make every
+// Antigravity call launch a nonexistent file (the gap a review of PR #1052
+// found on 2026-07-27). The Claude-format entries once written to
+// ~/.gemini/antigravity-cli/hooks.json never fired: their Bash and Edit
+// matchers name no Antigravity tool, and Antigravity has no
+// UserPromptSubmit. An upgrade retires them, since they left the plan
+// (helpers.js, planHookRetirements), and removes the file when nothing else
+// is in it. The Token Crusher keeps no hook here: an Antigravity hook
+// answers a decision, never a rewritten command, so the `egc run` shim and
+// the protocol are its path.
+function createAntigravityGlobalHookOperations(targetRoot, homeDir, createRemap) {
+  const hooksJsonPath = resolveGlobalHooksJsonPath(homeDir);
   return [
-    ...scriptCopyOperations,
-    createGlobalCrusherHookMergeOperation(targetRoot, homeDir, 'Bash'),
-  ];
-}
-
-// EGC Guardian: same reasoning as GateGuard above -- copy
-// pre-bash-guardian-validate.js (and the helpers it requires,
-// BASH_GUARDIAN_HOOK_LIB_SOURCES) explicitly rather than relying on
-// hooks-runtime having scaffolded them, then register it on Bash only
-// (the Guardian validates shell
-// commands, not file writes). cubic-dev-ai review (PR #1052, 2026-07-27)
-// first found createGlobalBashGuardianHookMergeOperation was added to
-// antigravity-settings-hooks.js but never actually called anywhere, then
-// (once wired) found the same missing-script-copy gap GateGuard had.
-// Session-mesh wake-signal notice: same reasoning as the three above -- copy
-// the standalone mesh-events-inject.js explicitly (it is dependency-free, so
-// one copy suffices) and register it on UserPromptSubmit at Antigravity's
-// global hooks file, giving every Antigravity session the native
-// turn-boundary wake signal even when only the `egc` target is installed.
-function createAntigravityGlobalMeshNoticeOperations(targetRoot, homeDir, createRemap) {
-  const scriptCopyOperations = createMeshNoticeScriptCopyOperations(createRemap, targetRoot);
-  return [
-    ...scriptCopyOperations,
-    createGlobalMeshNoticeHookMergeOperation(targetRoot, homeDir),
-  ];
-}
-
-// The entry Antigravity actually runs is the egc-guardian named hook in the
-// shared ~/.gemini/config/hooks.json, in Antigravity's own format
-// (antigravity-guardian-operations.js); it also copies the Guardian scripts.
-// The Claude-format entry in antigravity-cli/hooks.json stays as it was: its
-// Bash matcher never matches an Antigravity tool, and its removal goes with
-// the other Claude-format entries there.
-function createAntigravityGlobalGuardianOperations(targetRoot, homeDir, createRemap) {
-  return [
-    ...createAntigravityGuardianOperations(createRemap, targetRoot, resolveGlobalHooksJsonPath(homeDir)),
-    createGlobalBashGuardianHookMergeOperation(targetRoot, homeDir, 'Bash'),
+    ...createAntigravityGuardianOperations(createRemap, targetRoot, hooksJsonPath),
+    ...createAntigravityGateGuardOperations(createRemap, targetRoot, hooksJsonPath),
+    ...createAntigravityMeshNoticeOperations(createRemap, targetRoot, hooksJsonPath),
   ];
 }
 
@@ -219,6 +160,10 @@ module.exports = createInstallTargetAdapter({
   kind: 'home',
   rootSegments: ['.gemini'],
   installStatePathSegments: ['egc', 'install-state.json'],
+  // The Token Crusher hook once written to antigravity-cli/hooks.json never
+  // fired; an upgrade retires what that module recorded (see
+  // createAntigravityGlobalHookOperations).
+  retiredModuleIds: [CRUSHER_HOOK_MODULE_ID],
   validateMore(input, adapter) {
     if (collectRecordedDestinations(adapter, input)) return [];
     return [buildValidationIssue(
@@ -265,15 +210,12 @@ module.exports = createInstallTargetAdapter({
       createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
     );
 
-    // Deterministic: every egc-home install also registers the GateGuard
-    // fact-forcing gate for Antigravity's global hooks.json, even when no
-    // content modules are selected.
+    // Deterministic: every egc-home install registers the three named hooks
+    // in Antigravity's global hooks.json, even when no content modules are
+    // selected.
     return dedupeCopyOperations([
       ...dropCommandsShadowedBySkills(moduleOperations),
-      ...createAntigravityGlobalGateGuardOperations(targetRoot, homeDir, remap),
-      ...createAntigravityGlobalCrusherOperations(targetRoot, homeDir, remap),
-      ...createAntigravityGlobalGuardianOperations(targetRoot, homeDir, remap),
-      ...createAntigravityGlobalMeshNoticeOperations(targetRoot, homeDir, remap),
+      ...createAntigravityGlobalHookOperations(targetRoot, homeDir, remap),
     ]);
   },
 });

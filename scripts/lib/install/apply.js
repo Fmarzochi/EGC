@@ -26,6 +26,7 @@ const {
   MERGE_MARKDOWN_INDEX_KIND,
   nextSkillIndexContent,
 } = require('../warp-agents-merge');
+const { GENERATE_CONTEXT_FILE_KIND, nextGeneratedContextContent } = require('../generated-context-files');
 
 function readJsonObject(filePath, label) {
   let parsed;
@@ -98,6 +99,18 @@ function applyMergeMarkdownIndexOperation(operation) {
     : null;
   const nextContent = nextSkillIndexContent(existingContent, operation);
   if (nextContent === null || nextContent === existingContent) return;
+  writeManagedText(operation.destinationPath, nextContent);
+}
+
+// Written only when the destination does not yet carry the project-memory
+// section: an installed file, populated by propagation or not, is left as
+// it is (generated-context-files.js).
+function applyGeneratedContextOperation(operation) {
+  const existingContent = fs.existsSync(operation.destinationPath)
+    ? fs.readFileSync(operation.destinationPath, 'utf8')
+    : null;
+  const nextContent = nextGeneratedContextContent(existingContent, operation);
+  if (nextContent === null) return;
   writeManagedText(operation.destinationPath, nextContent);
 }
 
@@ -299,6 +312,61 @@ function retirableHooks(plan) {
 
 function hookEntryKeyOf(operation) {
   return [path.resolve(operation.destinationPath), operation.hookEvent, path.resolve(operation.hookScriptPath)].join('\n');
+}
+
+function isEmptyJsonObjectFile(filePath) {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return false;
+  }
+  return Boolean(parsed) && typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length === 0;
+}
+
+// The hooks files the given retirements would leave with nothing in them,
+// for the dry run to list and the apply to remove: each handler runs its
+// removal on a scratch copy of the file, so the answer is the one the apply
+// gives, whatever the hook format. A file that ends `{}` held only EGC's
+// own entries; nothing of the person's is in it.
+function predictEmptiedHooksFiles(retirements) {
+  const byFile = new Map();
+  for (const retirement of Array.isArray(retirements) ? retirements : []) {
+    const filePath = path.resolve(retirement.destinationPath);
+    byFile.set(filePath, [...(byFile.get(filePath) || []), retirement]);
+  }
+  const emptied = [];
+  for (const [filePath, entries] of byFile) {
+    if (!fs.existsSync(filePath)) continue;
+    const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-hooks-retire-'));
+    const scratch = path.join(scratchDir, path.basename(filePath));
+    try {
+      fs.copyFileSync(filePath, scratch);
+      for (const retirement of entries) {
+        resolveHookOperationHandlers(retirement.hookEvent).remove({ ...retirement, destinationPath: scratch });
+      }
+      if (isEmptyJsonObjectFile(scratch)) emptied.push(filePath);
+    } finally {
+      fs.rmSync(scratchDir, { recursive: true, force: true });
+    }
+  }
+  return emptied;
+}
+
+// The dry-run counterpart of the removal below: the files the retirable
+// entries would empty.
+function retirableEmptiedHooksFiles(plan) {
+  return predictEmptiedHooksFiles(retirableHooks(plan));
+}
+
+// Removes the hooks files the retirements emptied, checked again on disk:
+// a file a current operation wrote into since is no longer empty and stays.
+function removeEmptiedHooksFiles(predicted) {
+  return predicted.filter(filePath => {
+    if (!isEmptyJsonObjectFile(filePath)) return false;
+    fs.unlinkSync(filePath);
+    return true;
+  });
 }
 
 // Removes each hook entry that left the plan through the handler the
@@ -970,6 +1038,34 @@ function performDirToFile(transition) {
   }
 }
 
+// One planned operation, by kind: the merge and hook kinds edit a file in
+// place, a generated context file is written only when it lacks its
+// section, and a copied file lands with its hash recorded for the state.
+function applyPlannedOperation(operation, disabledServers, writtenHashes) {
+  if (operation.kind === HOOK_OPERATION_KIND) {
+    applyManagedHookOperation(operation);
+  } else if (operation.kind === 'merge-json') {
+    applyMergeJsonOperation(operation, disabledServers);
+  } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
+    applyMergeYamlReadListOperation(operation);
+  } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
+    applyMergeMarkdownIndexOperation(operation);
+  } else if (operation.kind === GENERATE_CONTEXT_FILE_KIND) {
+    applyGeneratedContextOperation(operation);
+  } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
+    const landed = applyMcpCopyFileOperation(operation, disabledServers);
+    writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
+  } else if (operation.kind === 'copy-file' && operation.transform) {
+    const landed = plannedFileContent(operation.sourcePath, operation.transform).toString('utf8');
+    writeTextKeepingMode(operation.destinationPath, landed, operation.sourcePath);
+    writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
+  } else {
+    const source = operation.kind === 'copy-file' ? fs.readFileSync(operation.sourcePath) : null;
+    copyFileKeepingMode(operation.sourcePath, operation.destinationPath);
+    if (source) writtenHashes.set(path.resolve(operation.destinationPath), sha256(source));
+  }
+}
+
 function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   const disabledServers = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
 
@@ -1023,26 +1119,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     fs.mkdirSync(path.dirname(operation.destinationPath), { recursive: true });
 
 
-    if (operation.kind === HOOK_OPERATION_KIND) {
-      applyManagedHookOperation(operation);
-    } else if (operation.kind === 'merge-json') {
-      applyMergeJsonOperation(operation, disabledServers);
-    } else if (operation.kind === MERGE_YAML_READ_LIST_KIND) {
-      applyMergeYamlReadListOperation(operation);
-    } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
-      applyMergeMarkdownIndexOperation(operation);
-    } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
-      const landed = applyMcpCopyFileOperation(operation, disabledServers);
-      writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
-    } else if (operation.kind === 'copy-file' && operation.transform) {
-      const landed = plannedFileContent(operation.sourcePath, operation.transform).toString('utf8');
-      writeTextKeepingMode(operation.destinationPath, landed, operation.sourcePath);
-      writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
-    } else {
-      const source = operation.kind === 'copy-file' ? fs.readFileSync(operation.sourcePath) : null;
-      copyFileKeepingMode(operation.sourcePath, operation.destinationPath);
-      if (source) writtenHashes.set(path.resolve(operation.destinationPath), sha256(source));
-    }
+    applyPlannedOperation(operation, disabledServers, writtenHashes);
   }
 
   // A listed transition always has its consuming operation; a transition
@@ -1051,7 +1128,9 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
   performShapeTransitions([...pendingTransitions.values()], plan);
 
   const retiredFiles = retirePlannedFiles(plan);
+  const emptiedHooksFiles = predictEmptiedHooksFiles(plan.hookRetirements);
   const retiredHooks = retirePlannedHooks(plan);
+  const removedHooksFiles = removeEmptiedHooksFiles(emptiedHooksFiles);
   const retiredLegacyLinks = removeStrandedLegacyLinks(findStrandedLegacyLinks(plan), plan.targetRoot);
 
   recordWrittenContentHashes(plan, writtenHashes);
@@ -1078,7 +1157,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
     },
   });
 
-  const result = { ...plan, applied: true, migratedLegacyLinks, retiredLegacyLinks, retiredFiles, retiredHooks, shapeTransitions: shapeResult.transitions };
+  const result = { ...plan, applied: true, migratedLegacyLinks, retiredLegacyLinks, retiredFiles, retiredHooks, removedHooksFiles, shapeTransitions: shapeResult.transitions };
   Object.defineProperty(result, 'syncPromise', {
     value: syncPromise,
     enumerable: false,
@@ -1091,6 +1170,7 @@ function applyInstallPlan(plan, { onWarning, homeDir, dbPath } = {}) {
 module.exports = {
   applyInstallPlan,
   managedRootFor,
+  retirableEmptiedHooksFiles,
   retirableFiles,
   retirableHooks,
   retirePlannedFiles,

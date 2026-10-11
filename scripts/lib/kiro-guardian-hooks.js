@@ -18,9 +18,9 @@
 // Two upstream inconsistencies confirmed via kirodotdev/Kiro's own issue
 // tracker before wiring this (not guessed): the IDE's preToolUse runCommand
 // hooks currently pass an empty tool_input ({}), only the CLI passes the
-// full {tool_name, tool_input, cwd, ...} context (kirodotdev/Kiro#7375) --
-// so this integration targets the CLI's agent-config hooks specifically,
-// not the IDE's separate .kiro/hooks/*.kiro.hook panel. CLI and IDE also
+// full {tool_name, tool_input, cwd, ...} context (kirodotdev/Kiro#7375).
+// This file writes the Kiro CLI 2.x agent-config entry; Kiro CLI 3.0 reads
+// the standalone document kiro-v3-guardian-hooks.js writes. CLI and IDE also
 // read different shapes from the same ~/.kiro/agents/ directory
 // (kirodotdev/Kiro#8040). The exact tool_input field holding the shell
 // command string for execute_bash is undocumented publicly as of this

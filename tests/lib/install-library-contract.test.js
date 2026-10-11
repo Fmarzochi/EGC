@@ -51,6 +51,12 @@ const EXCEPTIONS = {
     commands: () => 0,
     rules: () => 1, // only rules/common/memory.md, merged into the read list
   },
+  auggie: {
+    // Same reasoning as Claude Code above: Auggie's workspace rules carry no
+    // paths-based scoping, so every file under rules/ loads into every
+    // session, and rules/zh would double that cost in Chinese.
+    rules: catalog => catalog.rules.files.filter(file => !normalize(file).startsWith('rules/zh/')).length,
+  },
   warp: {
     agents: () => 0, // Warp reads AGENTS.md; skills go through its index
     commands: () => 0,
@@ -178,8 +184,8 @@ function runTests() {
       }
     })) passed++; else failed++;
 
-    if (test('targets that share the ~/.agents root plan one source per destination (Codex, Crush, Goose, OpenHands, Zed)', () => {
-      const sharedTargets = ['codex', 'crush', 'goose', 'openhands', 'zed'];
+    if (test('targets that share the ~/.agents root plan one source per destination (Amp, Codex, Crush, Goose, OpenHands, Zed)', () => {
+      const sharedTargets = ['amp', 'codex', 'crush', 'goose', 'openhands', 'zed'];
       const plans = {};
       for (const target of sharedTargets) {
         const plan = createManifestInstallPlan({ sourceRoot: REPO_ROOT, projectRoot, homeDir, target, profileId: 'full' });

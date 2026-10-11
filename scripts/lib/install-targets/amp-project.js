@@ -31,6 +31,10 @@ const {
 const PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/amp-guardian-crusher-plugin.ts';
 const MESH_PLUGIN_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/amp-mesh-notice-plugin.ts';
 
+function resolveSharedAgentsRoot(input, adapter) {
+  return path.join(path.dirname(adapter.resolveRoot(input)), '.agents');
+}
+
 function resolvePluginScriptDestination(targetRoot) {
   return path.join(targetRoot, 'plugins', 'egc-guardian-crusher.ts');
 }
@@ -84,6 +88,9 @@ module.exports = createInstallTargetAdapter({
   rootSegments: ['.amp'],
   installStatePathSegments: ['egc-install-state.json'],
   nativeRootRelativePath: '.amp',
+  resolveManagedRoots(input, adapter) {
+    return [adapter.resolveRoot(input), resolveSharedAgentsRoot(input, adapter)];
+  },
   planOperations(input, adapter) {
     const planningInput = {
       repoRoot: input.repoRoot,
@@ -93,7 +100,9 @@ module.exports = createInstallTargetAdapter({
     const targetRoot = adapter.resolveRoot(planningInput);
 
     return [
-      ...createFlatSkillPlanOperations(input, adapter),
+      ...createFlatSkillPlanOperations(input, adapter, {
+        skillsDir: planningInput => path.join(resolveSharedAgentsRoot(planningInput, adapter), 'skills'),
+      }),
       ...createAmpGuardianCrusherOperations(adapter, targetRoot),
       ...createAmpMeshNoticeOperations(adapter, targetRoot),
     ];

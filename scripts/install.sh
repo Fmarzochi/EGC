@@ -210,11 +210,13 @@ if [[ "$DRY_RUN" = false ]]; then
     exit 1
   fi
   cd "$GUARDIAN_DIR"
-  install_deps
   # The published package ships build/ but not src/, so only (re)build from a
   # git checkout where the TypeScript sources are present.
   if [[ -d src ]]; then
+    npm_config_include=dev install_deps
     npm run build
+  else
+    install_deps
   fi
 
   # egc-memory
@@ -225,10 +227,12 @@ if [[ "$DRY_RUN" = false ]]; then
     exit 1
   fi
   cd "$MEMORY_DIR"
-  install_deps
   # Published package ships build/ but not src/; only build from a checkout.
   if [[ -d src ]]; then
+    npm_config_include=dev install_deps
     npm run build
+  else
+    install_deps
   fi
 
   # Initialize database and local directories

@@ -156,6 +156,12 @@ function printHookRetirements(plan, dryRun) {
   for (const entry of entries) {
     console.log(`- ${dryRun ? '' : 'retired hook entry: '}${entry.hookEvent} in ${entry.destinationPath}`);
   }
+  // A hooks file those entries leave with nothing in it goes with them; the
+  // dry run lists the same files the apply removes.
+  const files = dryRun ? plan.emptiedHooksFiles : plan.removedHooksFiles;
+  for (const filePath of Array.isArray(files) ? files : []) {
+    console.log(`- ${dryRun ? 'hooks file left empty, to remove: ' : 'removed emptied hooks file: '}${filePath}`);
+  }
 }
 
 // The links from EGC's own June 2026 layout (one link per Antigravity CLI
@@ -401,9 +407,12 @@ function emitInstallResult(options, result) {
 // Writing as root leaves every config file, hook and state directory
 // owned by root in a home that belongs to a regular user; with a default
 // umask the regular user can still read what root wrote (644/755), but
-// cannot update or overwrite it on the next, unprivileged EGC run. On
-// Linux and macOS process.getuid exists and is 0 only for root; on
-// Windows it is undefined and this check is a no-op there. --dry-run
+// cannot update or overwrite it on the next, unprivileged EGC run. The
+// effective UID, not the real one, decides that ownership (a setuid-root
+// launch keeps a non-zero real UID while still writing as root), so this
+// reads process.geteuid, which on Linux and macOS exists and is 0 only
+// for root; on Windows it is undefined and this check is a no-op there.
+// --dry-run
 // writes nothing, so it is exempt; EGC_ALLOW_ROOT=1 (exactly that value,
 // so EGC_ALLOW_ROOT=0 or =false cannot opt in by accident) opts out for
 // a container image built and provisioned as root by design.
@@ -415,7 +424,7 @@ function emitInstallResult(options, result) {
 // can cut an in-flight async write short in that case.
 function refuseRootUnlessDryRun(options) {
   if (options.dryRun || process.env.EGC_ALLOW_ROOT === '1') return false;
-  if (typeof process.getuid !== 'function' || process.getuid() !== 0) return false;
+  if (typeof process.geteuid !== 'function' || process.geteuid() !== 0) return false;
   console.error('Error: refusing to install as root.');
   console.error('Files written as root in your home directory cannot be updated or overwritten by your own account afterwards.');
   console.error('Run this installer as the regular user. If this is a container provisioned as root by design, set EGC_ALLOW_ROOT=1.');
@@ -465,14 +474,16 @@ function main() {
     enforceTargetDetection(plan, options);
 
     if (options.dryRun) {
-      const { collectShapeTransitions, findLegacyLinks, findStrandedLegacyLinks, retirableFiles, retirableHooks } = require('./lib/install/apply');
+      const { collectShapeTransitions, findLegacyLinks, findStrandedLegacyLinks, retirableEmptiedHooksFiles, retirableFiles, retirableHooks } = require('./lib/install/apply');
       plan.legacyLinks = findLegacyLinks(plan);
       plan.strandedLegacyLinks = findStrandedLegacyLinks(plan);
       // The same test the apply runs: a file the person replaced is not
       // listed, because it would not be removed.
       plan.retirements = retirableFiles(plan);
-      // Likewise a hook entry that is no longer in its file.
+      // Likewise a hook entry that is no longer in its file, and the hooks
+      // files those entries would leave empty.
       plan.hookRetirements = retirableHooks(plan);
+      plan.emptiedHooksFiles = retirableEmptiedHooksFiles(plan);
       // Same again for destinations whose source changed shape: the apply
       // resolves a transition only when every file passes identity, so the
       // dry run lists the resolvable transitions and every refusal.

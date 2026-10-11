@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
-const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { CLI_TIMEOUT_MS, FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.sh');
 
@@ -245,6 +245,34 @@ function runTests() {
         try { fs.chmodSync(path.join(sandbox, d), 0o755); } catch { /* absent */ }
       }
       fs.rmSync(sandbox, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('the server build installs its devDependencies and produces the build under NODE_ENV=production (#1686)', () => {
+    const script = fs.readFileSync(SCRIPT, 'utf8');
+    const helper = /install_deps\(\)\s*\{[\s\S]*?\n\}/.exec(script)[0];
+    const buildBlocks = script.match(/ {2}if \[\[ -d src \]\]; then\n {4}npm_config_include=dev install_deps\n {4}npm run build\n {2}else\n {4}install_deps\n {2}fi\n/g) || [];
+    assert.strictEqual(buildBlocks.length, 2, 'egc-guardian and egc-memory both build with their devDependencies and install plainly when there is nothing to build');
+    assert.ok(/^\s{4}npm ci --silent$/m.test(helper), 'install_deps keeps its npm ci, lifecycle scripts included, so the sqlite3 install of egc-memory is unchanged');
+
+    const repoRoot = path.join(__dirname, '..', '..');
+    const serverRoot = path.join(repoRoot, 'mcp', 'servers', 'egc-guardian');
+    const sandbox = createTempDir('egc-install-node-env-production-');
+    try {
+      const tracked = execFileSync('git', ['ls-files'], { cwd: serverRoot, encoding: 'utf8' }).split('\n').filter(Boolean);
+      for (const file of tracked) {
+        fs.mkdirSync(path.dirname(path.join(sandbox, file)), { recursive: true });
+        fs.copyFileSync(path.join(serverRoot, file), path.join(sandbox, file));
+      }
+      const res = spawnSync('bash', ['-c', `set -e\n${helper}\ncd "$1"\n${buildBlocks[0]}`, 'install-build', sandbox], {
+        encoding: 'utf8',
+        env: { ...process.env, ROOT_DIR: repoRoot, NODE_ENV: 'production' },
+        timeout: FULL_INSTALL_TIMEOUT_MS,
+      });
+      assert.strictEqual(res.status, 0, `${res.stdout}\n${res.stderr}`);
+      assert.ok(fs.existsSync(path.join(sandbox, 'build', 'index.js')), 'the built server exists');
+    } finally {
+      cleanup(sandbox);
     }
   })) passed++; else failed++;
 

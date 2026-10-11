@@ -30,8 +30,10 @@ jobs:
   test:
     name: Test (${{ matrix.os }}, Node ${{ matrix.node }}, ${{ matrix.pm }})
     runs-on: ${{ matrix.os }}
-    # The Guardian suites take the slowest Windows lanes to about 15 minutes.
-    timeout-minutes: 25
+    # The full suite takes a Windows lane 17 to 21 minutes on an idle runner
+    # (main, 2026-10-09) and past 25 when several pull requests share the
+    # runners; Linux and macOS finish well inside 25.
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 40 || 25 }}
 
     strategy:
       fail-fast: false

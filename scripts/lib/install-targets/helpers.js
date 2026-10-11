@@ -28,7 +28,7 @@ function normalizeRelativePath(relativePath) {
 // so a home root such as ~/.amp or ~/.claude never grows either.
 const IDENTITY_SOURCE_PATH_OWNERS = Object.freeze({
   '.agents': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
-  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
+  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe']),
 });
 
 function isForeignPlatformPath(sourceRelativePath, adapterTarget) {
@@ -174,6 +174,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   claude:       { name: 'Claude Code',        url: 'https://claude.ai/download' },
   cursor:       { name: 'Cursor',             url: 'https://cursor.sh' },
   antigravity:  { name: 'Antigravity CLI',    url: 'https://github.com/google-gemini/gemini-cli' },
+  auggie:       { name: 'Auggie',             url: 'https://docs.augmentcode.com/cli/overview' },
   codex:        { name: 'Codex CLI',          url: 'https://github.com/openai/codex' },
   opencode:     { name: 'OpenCode',           url: 'https://opencode.ai' },
   codebuddy:    { name: 'CodeBuddy',          url: 'https://copilot.tencent.com' },
@@ -190,6 +191,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   zed:          { name: 'Zed',               url: 'https://zed.dev' },
   kimi:         { name: 'Kimi Code CLI',     url: 'https://github.com/MoonshotAI/kimi-code' },
   crush:        { name: 'Crush',             url: 'https://github.com/charmbracelet/crush' },
+  vibe:         { name: 'Mistral Vibe',      url: 'https://github.com/mistralai/mistral-vibe' },
 });
 
 // An adapter that picks its root by policy (config.resolveRoot) is detected
@@ -674,7 +676,7 @@ function planGenericRetirements(input, adapter) {
   if (!siblingOwned) return [];
 
   const operations = Array.isArray(input.operations) ? input.operations : adapter.planOperations(input);
-  const activeModuleIds = collectActiveModuleIds(input, operations);
+  const activeModuleIds = collectActiveModuleIds(input, operations, adapter);
   const boundaries = {
     managedRoots: resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root)),
     seen: new Set(),
@@ -702,9 +704,11 @@ function planGenericRetirements(input, adapter) {
 // the ones the adapter plans on its own (hook scripts and their entries,
 // recorded under ids no manifest lists). Whatever such a module no longer
 // plans has left the plan; a module that is no longer installed at all is
-// left to the uninstall.
-function collectActiveModuleIds(input, operations) {
-  const active = new Set();
+// left to the uninstall, unless the adapter declares it retired: then what
+// it recorded leaves with it (the Token Crusher hook on Antigravity, which
+// never fired, is the first).
+function collectActiveModuleIds(input, operations, adapter) {
+  const active = new Set(Array.isArray(adapter?.retiredModuleIds) ? adapter.retiredModuleIds : []);
   for (const module of Array.isArray(input.modules) ? input.modules : []) {
     if (module && typeof module.id === 'string') active.add(module.id);
   }
@@ -762,7 +766,7 @@ function planHookRetirements(input, adapter) {
 
   const operations = Array.isArray(input.operations) ? input.operations : adapter.planOperations(input);
   const planned = new Set(operations.filter(operation => operation?.kind === HOOK_OPERATION_KIND).map(hookEntryIdentity));
-  const activeModuleIds = collectActiveModuleIds(input, operations);
+  const activeModuleIds = collectActiveModuleIds(input, operations, adapter);
   const managedRoots = resolveAdapterManagedRoots(adapter, input).map(root => path.resolve(root));
   const seen = new Set();
   const retirements = [];
@@ -803,6 +807,9 @@ function createInstallTargetAdapter(config) {
     target: config.target,
     kind: config.kind,
     nativeRootRelativePath: config.nativeRootRelativePath || null,
+    // Module ids this adapter stopped planning on purpose: what an earlier
+    // install recorded under them is retired on upgrade like the rest.
+    retiredModuleIds: Array.isArray(config.retiredModuleIds) ? [...config.retiredModuleIds] : [],
     supports(target) {
       return target === config.target || target === config.id;
     },

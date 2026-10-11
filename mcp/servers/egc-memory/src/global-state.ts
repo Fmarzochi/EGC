@@ -1,5 +1,5 @@
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { resolveHome } from './home';
 
 export const GLOBAL_APPENDIX_SECTIONS: Array<{ heading: string; cap: number }> = [
   { heading: 'Preferences', cap: 5 },
@@ -8,7 +8,7 @@ export const GLOBAL_APPENDIX_SECTIONS: Array<{ heading: string; cap: number }> =
 ];
 
 export function globalStateFilePath(): string {
-  return path.join(os.homedir(), '.egc', 'global', 'state.md');
+  return path.join(resolveHome(), '.egc', 'global', 'state.md');
 }
 
 // Trust-domain isolation: global scope is only written via an explicit

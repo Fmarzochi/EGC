@@ -13,20 +13,20 @@
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { assertPrivateKeyFile, pathPresent, readPrivateKeyFile, writePrivateTemp } from './encryption.js';
+import { resolveHome } from './home';
 
 
 const HMAC_ALGORITHM = 'sha256';
 
 // Functions, not module-level constants: see the matching comment on
-// defaultEncKeyPath() in encryption.ts — a frozen os.homedir() would keep
-// resolving to whatever $HOME was in effect when this module first loaded,
-// diverging from getStateDir() (index.ts) if the process later observes a
-// different $HOME.
+// defaultEncKeyPath() in encryption.ts, a frozen resolveHome() would keep
+// resolving to whatever environment was in effect when this module first
+// loaded, diverging from getStateDir() (index.ts) if the process later
+// observes a different one.
 function keyDir(): string {
-  return path.join(os.homedir(), '.egc');
+  return path.join(resolveHome(), '.egc');
 }
 
 function keyPath(): string {

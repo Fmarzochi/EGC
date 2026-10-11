@@ -3,6 +3,7 @@ const path = require('node:path');
 
 const { toCursorAgentFileName } = require('../cursor-agent-names');
 const { assertSafeMcpConfig, isMcpConfigPath } = require('../mcp-config');
+const { createGeneratedContextOperation } = require('../generated-context-files');
 const {
   createFlatFileOperations,
   createFlatRuleOperations,
@@ -259,7 +260,18 @@ function planCursorDirOperations({ module, repoRoot, targetRoot, cursorMcpOperat
     destinationNameTransform: toCursorRuleFileName,
   });
 
+  // The project rule that propagation fills with memory is generated from
+  // the package's canonical text, never copied (the source filter keeps it
+  // out of ruleOperations too), so a clone and a registry install plan the
+  // same file.
+  const contextOperation = createGeneratedContextOperation({
+    moduleId: module.id,
+    sourceRelativePath: '.cursor/rules/egc-context.mdc',
+    destinationPath: path.join(targetRoot, 'rules', 'egc-context.mdc'),
+  });
+
   return takeUniqueOperations([
+    contextOperation,
     ...childOperations,
     ...(cursorMcpOperation ? [guardMcpOperation(cursorMcpOperation)] : []),
     ...ruleOperations,

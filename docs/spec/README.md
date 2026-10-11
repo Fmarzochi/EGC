@@ -19,6 +19,7 @@ A 90-day deprecation window applies for `MAJOR` breaking changes to public-facin
 | Surface | Specified by | Validated by |
 |---------|--------------|--------------|
 | Integration tiers | [`integration-tiers.md`](./integration-tiers.md) | `tests/spec/integration-tiers.test.js` |
+| Install paths per tool | [`tool-paths.md`](./tool-paths.md) (generated from `manifests/tool-paths.json`) | `tests/ci/tool-paths-contract.test.js` |
 | Agent memory interchange | [`agent-memory-interchange.md`](./agent-memory-interchange.md) | `tests/scripts/export.test.js` (export, section 8.1); gap: reference `egc import` planned |
 | Hooks contract | `schemas/hooks.schema.json` | `tests/spec/schemas.test.js` against `hooks/hooks.json`; `scripts/ci/validate-hooks.js` in CI |
 | Plugin manifest | `schemas/plugin.schema.json` | `tests/spec/schemas.test.js` against `.gemini-plugin/plugin.json`; `tests/plugin-manifest.test.js` checks the manifests field by field |
@@ -57,7 +58,7 @@ This section is deliberately public. Honest gap-tracking beats aspirational omis
 
 ## Compatibility commitments
 
-- All 22 `SUPPORTED_INSTALL_TARGETS` identifiers (`egc`, `claude`, `cursor`, `antigravity`, `codex`, `qwen`, `opencode`, `codebuddy`, `windsurf`, `amp`, `copilot`, `zed`, `kiro`, `trae`, `junie`, `goose`, `openhands`, `aider`, `cline`, `warp`, `kimi`, `crush`) are stable. They will not be renamed within `0.x`. The ids `gemini`, `continue` and `roocode` were retired on 2026-08-16 (#1279) and `amazonq` on 2026-09-30; `egc install`, `egc doctor`, `egc repair` and `egc auto-update` still recognize them and explain the retirement, while the catalog queries reject them as unknown targets
+- All 24 `SUPPORTED_INSTALL_TARGETS` identifiers (`egc`, `claude`, `cursor`, `antigravity`, `auggie`, `codex`, `qwen`, `opencode`, `codebuddy`, `windsurf`, `amp`, `copilot`, `zed`, `kiro`, `trae`, `junie`, `goose`, `openhands`, `aider`, `cline`, `warp`, `kimi`, `crush`, `vibe`) are stable. They will not be renamed within `0.x`. The ids `gemini`, `continue` and `roocode` were retired on 2026-08-16 (#1279) and `amazonq` on 2026-09-30; `egc install`, `egc doctor`, `egc repair` and `egc auto-update` still recognize them and explain the retirement, while the catalog queries reject them as unknown targets
 - The Tier 2 install entry points (`.kiro/install.sh`, `.trae/install.sh`, `.codebuddy/install.sh` and its Node twin) were retired after 1.1.22; `egc install --target <tool> --profile full` is the entry point for every tool
 - The Tier 3 protocol injection target paths (`~/.claude/CLAUDE.md` for Claude Code) are stable within `0.x`
 - JSON Schema field names are stable within `MINOR` versions. Removals require a `MAJOR` bump

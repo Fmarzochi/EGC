@@ -30,12 +30,15 @@ const HARNESS_VARIABLES = Object.freeze([
 
 // The variables that move a tool's config directory out of the home a test
 // passes: Crush reads CRUSH_GLOBAL_CONFIG, then XDG_CONFIG_HOME, before the
-// home (scripts/lib/install-targets/crush-home.js). CI runners on Linux
-// export XDG_CONFIG_HOME, so a test that installs into a temporary home
-// would otherwise write into the runner's real config directory, and every
-// later test would find the tool there. tests/run-all.js clears them too.
+// home (scripts/lib/install-targets/crush-home.js), and Mistral Vibe reads
+// VIBE_HOME for its whole data root (scripts/lib/install-targets/vibe-home.js).
+// CI runners on Linux export XDG_CONFIG_HOME, so a test that installs into a
+// temporary home would otherwise write into the runner's real config
+// directory, and every later test would find the tool there.
+// tests/run-all.js clears them too.
 const CONFIG_HOME_VARIABLES = Object.freeze([
   'CRUSH_GLOBAL_CONFIG',
+  'VIBE_HOME',
   'XDG_CONFIG_HOME',
 ]);
 
