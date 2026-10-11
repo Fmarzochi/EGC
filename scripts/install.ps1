@@ -58,6 +58,16 @@ function Install-Deps {
     exit 1
 }
 
+function Install-BuildDeps {
+    $previous = $env:npm_config_include
+    $env:npm_config_include = 'dev'
+    try {
+        Install-Deps
+    } finally {
+        $env:npm_config_include = $previous
+    }
+}
+
 # Forward --help directly to the Node installer
 if ($args -contains '--help') {
     node $EgcInstall @args
@@ -160,11 +170,13 @@ if (-not $DryRun) {
         exit 1
     }
     Set-Location -Path $GuardianDir
-    Install-Deps
     # The published package ships build/ but not src/, so only (re)build from
     # a git checkout where the TypeScript sources are present.
     if (Test-Path "src") {
+        Install-BuildDeps
         npm run build
+    } else {
+        Install-Deps
     }
 
     # egc-memory
@@ -175,10 +187,12 @@ if (-not $DryRun) {
         exit 1
     }
     Set-Location -Path $MemoryDir
-    Install-Deps
     # Published package ships build/ but not src/; only build from a checkout.
     if (Test-Path "src") {
+        Install-BuildDeps
         npm run build
+    } else {
+        Install-Deps
     }
 
     # Initialize database

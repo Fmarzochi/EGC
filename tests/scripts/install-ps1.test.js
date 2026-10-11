@@ -302,7 +302,7 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('installs dependencies via a lockfile-aware helper matching install.sh exactly (no npm install fallback)', () => {
+  if (test('installs dependencies via a lockfile-aware helper matching install.sh exactly (no npm install fallback), with devDependencies for the server build even under NODE_ENV=production (#1686)', () => {
     assert.ok(scriptSource.includes('function Install-Deps'), 'should define the lockfile-aware helper');
     assert.ok(scriptSource.includes('Test-Path "package-lock.json"'));
     assert.ok(scriptSource.includes('npm ci --silent'));
@@ -313,7 +313,13 @@ function runTests() {
     const bareInstallCalls = scriptSource.match(/npm install --silent/g) || [];
     assert.strictEqual(bareInstallCalls.length, 0, 'install.ps1 must not have any npm install fallback; install.sh has none either');
     const helperCalls = scriptSource.match(/^\s*Install-Deps\s*$/gm) || [];
-    assert.strictEqual(helperCalls.length, 3, 'root, egc-guardian and egc-memory should each call Install-Deps');
+    assert.strictEqual(helperCalls.length, 4, 'the root, the published-package branch of each server, and Install-BuildDeps each call Install-Deps');
+    const buildHelper = /function Install-BuildDeps \{[\s\S]*?\n\}/.exec(scriptSource);
+    assert.ok(buildHelper, 'should define Install-BuildDeps');
+    assert.ok(/\$env:npm_config_include = 'dev'/.test(buildHelper[0]), 'the build step asks npm for devDependencies, which NODE_ENV=production would omit');
+    assert.ok(/finally \{\s*\n\s*\$env:npm_config_include = \$previous/.test(buildHelper[0]), 'and restores the setting afterwards');
+    const buildBranches = scriptSource.match(/if \(Test-Path "src"\) \{\s*\n\s*Install-BuildDeps\s*\n\s*npm run build\s*\n\s*\} else \{\s*\n\s*Install-Deps\s*\n\s*\}/g) || [];
+    assert.strictEqual(buildBranches.length, 2, 'egc-guardian and egc-memory both build with their devDependencies and install plainly when there is nothing to build');
   })) passed++; else failed++;
 
   if (test('handles a read-only package directory the way install.sh does (dependency check, loud npm ci failure, guarded convenience copy)', () => {
