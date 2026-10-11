@@ -138,44 +138,50 @@ function normalizeHookResult(previousRaw, output) {
   };
 }
 
+// The hooks run one after the other, each consuming the output the one
+// before produced, so they cannot run concurrently. A hook may answer with
+// a promise: it is awaited, so a deny it resolves to is a deny, never an
+// allow read off a pending object.
 function runHooks(rawInput, hooks) {
-  let currentRaw = rawInput;
-  let stderr = '';
+  const start = { output: rawInput, stderr: '', exitCode: 0, done: false };
+  return hooks
+    .reduce((chain, hook) => chain.then(state => (state.done ? state : runHook(state, hook))), Promise.resolve(start))
+    .then(({ output, stderr, exitCode }) => ({ output, stderr, exitCode }));
+}
 
-  for (const hook of hooks) {
+function appendStderr(stderr, addition) {
+  if (!addition) return stderr;
+  return stderr + (addition.endsWith('\n') ? addition : `${addition}\n`);
+}
+
+async function runHook(state, hook) {
+  try {
+    // A failure while reading hook flags must never silently skip a
+    // security hook: treat an unreadable flag as enabled so the guard runs.
+    let enabled = true;
     try {
-      // A failure while reading hook flags must never silently skip a
-      // security hook: treat an unreadable flag as enabled so the guard runs.
-      let enabled = true;
-      try {
-        enabled = isHookEnabled(hook.id, { profiles: hook.profiles });
-      } catch (flagError) {
-        trace('hook:dispatch:flag-error', { id: hook.id, error: flagError.message });
-      }
-      if (!enabled) {
-        trace('hook:dispatch:skipped', { id: hook.id });
-        continue;
-      }
-
-      trace('hook:dispatch:running', { id: hook.id });
-      const result = normalizeHookResult(currentRaw, hook.run(currentRaw));
-      currentRaw = result.raw;
-      if (result.stderr) {
-        stderr += result.stderr.endsWith('\n') ? result.stderr : `${result.stderr}\n`;
-      }
-      if (result.exitCode !== 0) {
-        trace('hook:dispatch:failed', { id: hook.id, exitCode: result.exitCode });
-        return { output: currentRaw, stderr, exitCode: result.exitCode };
-      }
-      trace('hook:dispatch:success', { id: hook.id });
-    } catch (error) {
-      trace('hook:dispatch:error', { id: hook.id, error: error.message });
-      stderr += `[Hook] ${hook.id} failed: ${error.message}\n`;
-      return { output: currentRaw, stderr, exitCode: 1 };
+      enabled = isHookEnabled(hook.id, { profiles: hook.profiles });
+    } catch (flagError) {
+      trace('hook:dispatch:flag-error', { id: hook.id, error: flagError.message });
     }
-  }
+    if (!enabled) {
+      trace('hook:dispatch:skipped', { id: hook.id });
+      return state;
+    }
 
-  return { output: currentRaw, stderr, exitCode: 0 };
+    trace('hook:dispatch:running', { id: hook.id });
+    const result = normalizeHookResult(state.output, await hook.run(state.output));
+    const stderr = appendStderr(state.stderr, result.stderr);
+    if (result.exitCode !== 0) {
+      trace('hook:dispatch:failed', { id: hook.id, exitCode: result.exitCode });
+      return { output: result.raw, stderr, exitCode: result.exitCode, done: true };
+    }
+    trace('hook:dispatch:success', { id: hook.id });
+    return { output: result.raw, stderr, exitCode: 0, done: false };
+  } catch (error) {
+    trace('hook:dispatch:error', { id: hook.id, error: error.message });
+    return { output: state.output, stderr: `${state.stderr}[Hook] ${hook.id} failed: ${error.message}\n`, exitCode: 1, done: true };
+  }
 }
 
 function runPreBash(rawInput) {
@@ -235,8 +241,8 @@ async function main() {
   }
 
   const result = mode === 'post'
-    ? runPostBash(raw)
-    : runPreBash(raw);
+    ? await runPostBash(raw)
+    : await runPreBash(raw);
 
   if (result.stderr) {
     process.stderr.write(result.stderr);
@@ -263,6 +269,7 @@ if (require.main === module) {
 module.exports = {
   PRE_BASH_HOOKS,
   POST_BASH_HOOKS,
+  runHooks,
   runPreBash,
   runPostBash,
   toPreToolUseOutput,

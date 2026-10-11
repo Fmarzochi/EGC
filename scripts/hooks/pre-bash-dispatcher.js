@@ -4,14 +4,14 @@
 const { runPreBash, resolvePreOutput, failClosedOutput, overLimitOutput } = require('./bash-hook-dispatcher');
 const { readHookInput } = require('../lib/guardian-bin');
 
-readHookInput(({ raw, truncated }) => {
+readHookInput(async ({ raw, truncated }) => {
   if (truncated) {
     process.stdout.write(overLimitOutput());
     process.exitCode = 0;
     return;
   }
   try {
-    const result = runPreBash(raw);
+    const result = await runPreBash(raw);
     if (result.stderr) {
       process.stderr.write(result.stderr);
     }

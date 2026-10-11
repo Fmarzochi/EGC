@@ -556,7 +556,7 @@ function buildActivityRow(input, env = process.env) {
   }
 
   const toolName = String(input?.tool_name || '').trim();
-  const sessionId = String(env.EGC_SESSION_ID || env.ECC_SESSION_ID || '').trim();
+  const sessionId = String(env.EGC_SESSION_ID || '').trim() || String(env.ECC_SESSION_ID || '').trim() || String(input?.session_id || '').trim();
   if (!toolName || !sessionId) {
     return null;
   }

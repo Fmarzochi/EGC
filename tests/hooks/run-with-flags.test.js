@@ -101,6 +101,55 @@ function legacyHookEnvCase() {
   });
 }
 
+function nestedRunCase() {
+  return test('a hook whose module.exports only nests a run inside another property is spawned once, never required', () => {
+    const pluginRoot = makeTempPluginRoot();
+    const marker = path.join(pluginRoot, 'marker.txt');
+    try {
+      fs.writeFileSync(
+        path.join(pluginRoot, 'nested-run.js'),
+        [
+          "require('fs').appendFileSync(process.env.LEGACY_MARKER, 'ran\\n');",
+          "if (require.main === module) process.stdout.write('nested-ok');",
+          'module.exports = { config: { run: true }, label: "a, b" };',
+          '',
+        ].join('\n')
+      );
+      const result = runDispatcher({ pluginRoot, relScriptPath: 'nested-run.js', env: { LEGACY_MARKER: marker } });
+      assert.strictEqual(result.code, 0, `Expected exit 0, got ${result.code}: ${result.stderr}`);
+      assert.strictEqual(result.stdout, 'nested-ok');
+      assert.strictEqual(fs.readFileSync(marker, 'utf8'), 'ran\n', 'the module scope ran exactly once, in the spawned child');
+    } finally {
+      fs.rmSync(pluginRoot, { recursive: true, force: true });
+    }
+  });
+}
+
+function legacyMentionCase() {
+  return test('a hook that only mentions run next to a module.exports of its own is spawned once, never required', () => {
+  const pluginRoot = makeTempPluginRoot();
+  const marker = path.join(pluginRoot, 'marker.txt');
+  try {
+    fs.writeFileSync(
+      path.join(pluginRoot, 'legacy-mention.js'),
+      [
+        '// run this by hand to see the output',
+        "require('fs').appendFileSync(process.env.LEGACY_MARKER, 'ran\\n');",
+        "if (require.main === module) process.stdout.write('legacy-ok');",
+        'module.exports = { other: 1 };',
+        '',
+      ].join('\n')
+    );
+    const result = runDispatcher({ pluginRoot, relScriptPath: 'legacy-mention.js', env: { LEGACY_MARKER: marker } });
+    assert.strictEqual(result.code, 0, `Expected exit 0, got ${result.code}: ${result.stderr}`);
+    assert.strictEqual(result.stdout, 'legacy-ok');
+    assert.strictEqual(fs.readFileSync(marker, 'utf8'), 'ran\n', 'the module scope ran exactly once, in the spawned child');
+  } finally {
+    fs.rmSync(pluginRoot, { recursive: true, force: true });
+  }
+});
+}
+
 function runTests() {
   console.log('\n=== Testing run-with-flags.js ===\n');
 
@@ -292,7 +341,7 @@ function runTests() {
     assert.strictEqual(result.stdout, 'stdin-passthrough');
   })) passed++; else failed++;
 
-  const childEnvCases = [legacyHookEnvCase()];
+  const childEnvCases = [legacyHookEnvCase(), legacyMentionCase(), nestedRunCase()];
   passed += childEnvCases.filter(Boolean).length;
   failed += childEnvCases.filter(ok => !ok).length;
 
