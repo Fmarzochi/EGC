@@ -285,7 +285,9 @@ function readObsFile(filePath: string, limit: number, since?: string): RawObserv
 }
 
 // Marks the event compressed in the CLI state store. False means the store has
-// no row with that id, so the caller moves on to observations.jsonl.
+// no row with that id, or could not take the update (a store the CLI has not
+// migrated to 005 has no compressed_at column yet), so the caller moves on to
+// observations.jsonl, the way loadRawObservations does on a failed read.
 async function markCompressedInStateDb(dbPath: string, id: string, compressedAt: string): Promise<boolean> {
   const db = await openCompatDatabase(dbPath, 'egc-memory');
   try {
@@ -294,6 +296,9 @@ async function markCompressedInStateDb(dbPath: string, id: string, compressedAt:
       [compressedAt, id]
     );
     return ((result as { changes?: number } | undefined)?.changes ?? 0) > 0;
+  } catch (err) {
+    console.error("[EGC compress] state.db compressed_at update failed, using observations.jsonl fallback:", String(err));
+    return false;
   } finally {
     await db.close();
   }

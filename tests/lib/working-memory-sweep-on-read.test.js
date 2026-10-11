@@ -59,23 +59,31 @@ async function main() {
     }
   };
 
-  await test('get deletes every expired row instead of only hiding the one it looked up', async () => {
-    await insertRow(db, 'live', '/proj/a', 'live_key', LIVE);
-    await insertRow(db, 'stale-a', '/proj/a', 'stale_get', EXPIRED);
-    await insertRow(db, 'stale-b', '/proj/b', 'stale_other', EXPIRED);
+  try {
+    await test('the table carries an index on expires_at for the sweep', async () => {
+      const indexes = (await db.all('PRAGMA index_list(working_memory)')).map((row) => row.name);
+      assert.ok(indexes.includes('idx_working_memory_expires_at'), `indexes: ${indexes.join(', ')}`);
+    });
 
-    assert.strictEqual(await getWorkingMemory(db, '/proj/a', 'stale_get'), null);
-    assert.deepStrictEqual(await storedKeys(db), ['live_key']);
-  });
+    await test('get deletes every expired row instead of only hiding the one it looked up', async () => {
+      await insertRow(db, 'live', '/proj/a', 'live_key', LIVE);
+      await insertRow(db, 'stale-a', '/proj/a', 'stale_get', EXPIRED);
+      await insertRow(db, 'stale-b', '/proj/b', 'stale_other', EXPIRED);
 
-  await test('list deletes the expired rows it leaves out', async () => {
-    await insertRow(db, 'stale-c', '/proj/b', 'stale_list', EXPIRED);
+      assert.strictEqual(await getWorkingMemory(db, '/proj/a', 'stale_get'), null);
+      assert.deepStrictEqual(await storedKeys(db), ['live_key']);
+    });
 
-    assert.deepStrictEqual(await listWorkingMemory(db, '/proj/b'), []);
-    assert.deepStrictEqual(await storedKeys(db), ['live_key']);
-  });
+    await test('list deletes the expired rows it leaves out', async () => {
+      await insertRow(db, 'stale-c', '/proj/b', 'stale_list', EXPIRED);
 
-  await db.close();
+      assert.deepStrictEqual(await listWorkingMemory(db, '/proj/b'), []);
+      assert.deepStrictEqual(await storedKeys(db), ['live_key']);
+    });
+  } finally {
+    await db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 
   console.log(`\nPassed: ${passed}`);
   console.log(`Failed: ${failed}`);
