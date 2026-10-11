@@ -13,17 +13,19 @@ const {
   ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
   ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
+  CURSOR_COMMAND_SKILL_TRANSFORM,
   plannedFileContent,
   toAntigravityAgentFrontmatter,
   toAntigravityCommandSkill,
   toAntigravityRule,
   toClaudeAgentFrontmatter,
+  toCursorCommandSkill,
   transformContent,
   toOpenCodeAgentFrontmatter,
 } = require('../../scripts/lib/install/copy-transforms');
 const { planAntigravityRuleFiles } = require('../../scripts/lib/antigravity-rules');
 const { planAntigravityAgentFiles } = require('../../scripts/lib/antigravity-agents');
-const { planAntigravityCommandFiles } = require('../../scripts/lib/antigravity-commands');
+const { planAntigravityCommandFiles, planCommandSkillFiles } = require('../../scripts/lib/antigravity-commands');
 
 function test(name, fn) {
   try {
@@ -392,6 +394,33 @@ function runAntigravityCommandTests() {
       const match = /^---\nname: ([^\n]+)\ndescription: ("[^\n]*")\n---\n/.exec(text);
       assert.ok(match, `${command.sourceRelativePath}: skill frontmatter`);
       assert.strictEqual(match[1], name, `${command.sourceRelativePath}: name`);
+      assert.ok(JSON.parse(match[2]).length > 0, `${command.sourceRelativePath}: description`);
+    }
+  }));
+
+  results.push(test('a Cursor command skill runs only when invoked by its slash name (#1837)', () => {
+    assert.strictEqual(
+      toCursorCommandSkill('---\ndescription: Full audit: scores every dimension.\nargument-hint: [--focus <dimension>]\nagent: reviewer\n---\n\n# Audit\n\n**Input**: $ARGUMENTS\n', { name: 'engineering-audit' }),
+      '---\nname: engineering-audit\ndescription: "Full audit: scores every dimension."\ndisable-model-invocation: true\n---\n\n# Audit\n\n**Input**: $ARGUMENTS\n'
+    );
+    assert.strictEqual(
+      toCursorCommandSkill('# Title\r\nbody\r\n', { name: 'x' }),
+      '---\nname: x\ndescription: "Title"\ndisable-model-invocation: true\n---\n# Title\nbody\n',
+      'a command without frontmatter is described by its first line'
+    );
+  }));
+
+  results.push(test('every shipped command becomes a Cursor skill named after its file, kept to explicit invocation (#1837)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const commands = planCommandSkillFiles(repoRoot, 'commands', CURSOR_COMMAND_SKILL_TRANSFORM);
+    assert.ok(commands.length > 50, 'the catalog commands are planned');
+    for (const command of commands) {
+      const name = path.posix.dirname(command.fileName);
+      assert.match(name, /^[a-z0-9-]+$/, `${command.sourceRelativePath}: Cursor accepts lowercase letters, numbers and hyphens only`);
+      const text = plannedFileContent(path.join(repoRoot, command.sourceRelativePath), command.transform).toString('utf8');
+      const match = /^---\nname: ([^\n]+)\ndescription: ("[^\n]*")\ndisable-model-invocation: true\n---\n/.exec(text);
+      assert.ok(match, `${command.sourceRelativePath}: skill frontmatter`);
+      assert.strictEqual(match[1], name, `${command.sourceRelativePath}: name matches the folder`);
       assert.ok(JSON.parse(match[2]).length > 0, `${command.sourceRelativePath}: description`);
     }
   }));
