@@ -47,14 +47,13 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | --- | --- | --- | --- | --- | --- |
 | library | `<project>/.cursor/.agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | agents | `<project>/.cursor/agents/` | default | documented | <https://cursor.com/docs/context/subagents> |  |
-| commands | `<project>/.cursor/commands/` | default | unverified | <https://cursor.com/docs/context/skills> | Cursor's current docs no longer describe custom commands in .cursor/commands; the skills page talks about moving commands to skills (read on 2026-10-10). |
 | runtime | `<project>/.cursor/hooks/` | default | egc |  | EGC runtime: hook scripts the hook configuration of the tool points at. |
 | hooks | `<project>/.cursor/hooks.json` | default | documented | <https://cursor.com/docs/agent/hooks> | Seeded from the repository's .cursor/hooks.json with documented events only (read on 2026-10-10): sessionStart, sessionEnd, preToolUse, beforeShellExecution, afterShellExecution, afterFileEdit, beforeMCPExecution, afterMCPExecution, beforeReadFile, beforeSubmitPrompt, subagentStart, subagentStop, beforeTabFileRead, afterTabFileEdit, preCompact, stop. beforeFileEdit is not documented: on upgrade only the entry EGC wrote under it is removed, and entries of the person's own stay. |
 | library | `<project>/.cursor/mcp-configs/` | default | egc |  | EGC library: platform configuration sources copied for reference; the tool does not load this path. |
 | mcp | `<project>/.cursor/mcp.json` | default | documented | <https://cursor.com/docs/context/mcp> |  |
 | rules | `<project>/.cursor/rules/` | default | documented | <https://cursor.com/docs/context/rules> |  |
 | runtime | `<project>/.cursor/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
-| skills | `<project>/.cursor/skills/` | default | documented | <https://cursor.com/docs/context/skills> |  |
+| skills | `<project>/.cursor/skills/` | default | documented | <https://cursor.com/docs/context/skills> | Cursor documents custom commands only as skills invoked by /<name> and finds them in nested folders (read on 2026-10-11), so each EGC command is a skill at .cursor/skills/<name>/SKILL.md with disable-model-invocation: true, and a bundled skill of the same name wins. The old .cursor/commands copies are retired only while they hold EGC's bytes. |
 | state | `<project>/.cursor/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## antigravity-project
