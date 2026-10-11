@@ -9,7 +9,7 @@ from llm.providers.deepseek import DEEPSEEK_BASE_URL, DeepSeekProvider
 def _simple_input() -> LLMInput:
     return LLMInput(
         messages=[Message(role=Role.USER, content="hi")],
-        model="deepseek-chat",
+        model="deepseek-flash",
     )
 
 
@@ -99,15 +99,15 @@ def test_validate_config_false_when_no_key(provider: DeepSeekProvider) -> None:
 
 
 @pytest.mark.unit
-def test_default_models_include_deepseek_chat(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_models_include_deepseek_flash(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     with patch("llm.providers.deepseek.OpenAI") as mock_openai, \
          patch("llm.providers.deepseek.ModelResolver.model_infos", return_value=None):
         mock_openai.return_value = MagicMock()
         p = DeepSeekProvider()
     names = [m.name for m in p._models]
-    assert "deepseek-chat" in names
-    assert "deepseek-reasoner" in names
+    assert "deepseek-flash" in names
+    assert "deepseek-v4-pro" in names
 
 
 @pytest.mark.unit
@@ -136,8 +136,8 @@ def test_get_provider_resolves_deepseek(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
-def test_reasoner_strips_tools_before_generate(provider: DeepSeekProvider) -> None:
-    """deepseek-reasoner must not receive tool definitions."""
+def test_retired_reasoner_id_is_sent_as_deepseek_flash_with_its_tools(provider: DeepSeekProvider) -> None:
+    """#1697: deepseek-reasoner was retired on 2026-07-24; the request names deepseek-flash, which takes tools."""
     from llm.core.types import LLMInput, Message, Role, ToolDefinition
     response = MagicMock()
     choice = MagicMock()
@@ -145,7 +145,7 @@ def test_reasoner_strips_tools_before_generate(provider: DeepSeekProvider) -> No
     choice.message.tool_calls = None
     choice.finish_reason = "stop"
     response.choices = [choice]
-    response.model = "deepseek-reasoner"
+    response.model = "deepseek-flash"
     usage = MagicMock()
     usage.prompt_tokens = 10
     usage.completion_tokens = 5
@@ -159,24 +159,25 @@ def test_reasoner_strips_tools_before_generate(provider: DeepSeekProvider) -> No
     )
     provider.generate(llm_input)
     _, kwargs = provider.client.chat.completions.create.call_args
-    assert "tools" not in kwargs or kwargs["tools"] is None
+    assert kwargs["model"] == "deepseek-flash"
+    assert kwargs["tools"] and kwargs["tools"][0]["function"]["name"] == "my_tool"
 
 
 @pytest.mark.unit
-def test_get_default_model_returns_deepseek_chat_when_resolver_bleeds(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_default_model_returns_deepseek_flash_when_resolver_bleeds(monkeypatch: pytest.MonkeyPatch) -> None:
     """get_default_model must not return a non-deepseek model."""
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
     with patch("llm.providers.deepseek.OpenAI") as mock_openai, \
          patch("llm.providers.deepseek.ModelResolver.resolve", return_value="gemini-2.5-pro"):
         mock_openai.return_value = MagicMock()
         p = DeepSeekProvider()
-    assert p.get_default_model() == "deepseek-chat"
+    assert p.get_default_model() == "deepseek-flash"
 
 # ── Tests added for issue #725 ────────────────────────────────────────────────
 
 @pytest.mark.unit
-def test_reasoner_forces_temperature_to_one(provider: DeepSeekProvider) -> None:
-    """fix #1: deepseek-reasoner must always receive temperature=1.0."""
+def test_retired_reasoner_id_keeps_the_requested_temperature(provider: DeepSeekProvider) -> None:
+    """The current models take any temperature, so the old forcing to 1.0 is gone."""
     from llm.core.types import LLMInput, Message, Role
     response = MagicMock()
     choice = MagicMock()
@@ -184,27 +185,27 @@ def test_reasoner_forces_temperature_to_one(provider: DeepSeekProvider) -> None:
     choice.message.tool_calls = None
     choice.finish_reason = "stop"
     response.choices = [choice]
-    response.model = "deepseek-reasoner"
+    response.model = "deepseek-flash"
     usage = MagicMock()
     usage.prompt_tokens = 10
     usage.completion_tokens = 5
     usage.total_tokens = 15
     response.usage = usage
     provider.client.chat.completions.create.return_value = response
-
     llm_input = LLMInput(
         messages=[Message(role=Role.USER, content="hi")],
         model="deepseek-reasoner",
-        temperature=0.0,  # non-default — would be rejected by the API
+        temperature=0.0,
     )
     provider.generate(llm_input)
     _, kwargs = provider.client.chat.completions.create.call_args
-    assert kwargs["temperature"] == 1.0
+    assert kwargs["model"] == "deepseek-flash"
+    assert kwargs["temperature"] == 0.0
 
 
 @pytest.mark.unit
-def test_reasoner_leaves_temperature_unchanged_when_already_one(provider: DeepSeekProvider) -> None:
-    """fix #1: no unnecessary LLMInput rebuild when temperature is already 1.0."""
+def test_current_id_is_sent_unchanged(provider: DeepSeekProvider) -> None:
+    """A current id reaches the API as it was requested."""
     from llm.core.types import LLMInput, Message, Role
     response = MagicMock()
     choice = MagicMock()
@@ -212,21 +213,21 @@ def test_reasoner_leaves_temperature_unchanged_when_already_one(provider: DeepSe
     choice.message.tool_calls = None
     choice.finish_reason = "stop"
     response.choices = [choice]
-    response.model = "deepseek-reasoner"
+    response.model = "deepseek-v4-pro"
     usage = MagicMock()
     usage.prompt_tokens = 10
     usage.completion_tokens = 5
     usage.total_tokens = 15
     response.usage = usage
     provider.client.chat.completions.create.return_value = response
-
     llm_input = LLMInput(
         messages=[Message(role=Role.USER, content="hi")],
-        model="deepseek-reasoner",
+        model="deepseek-v4-pro",
         temperature=1.0,
     )
     provider.generate(llm_input)
     _, kwargs = provider.client.chat.completions.create.call_args
+    assert kwargs["model"] == "deepseek-v4-pro"
     assert kwargs["temperature"] == 1.0
 
 
@@ -258,7 +259,7 @@ def test_provider_for_deepseek_model_names(monkeypatch: pytest.MonkeyPatch) -> N
     """fix #3: ModelResolver._provider_for must return 'deepseek' for both
     current and hypothetical future DeepSeek native model names."""
     from llm.core.model_resolver import ModelResolver
-    assert ModelResolver._provider_for("deepseek-chat") == "deepseek"
+    assert ModelResolver._provider_for("deepseek-flash") == "deepseek"
     assert ModelResolver._provider_for("deepseek-reasoner") == "deepseek"
     # Hypothetical future name that doesn't start with "deepseek" won't be
     # caught by this heuristic, but current names must be correct.
@@ -277,11 +278,11 @@ def test_model_resolver_default_for_deepseek_provider() -> None:
 
 @pytest.mark.unit
 def test_resolve_deepseek_reasoner_is_not_replaced_by_default() -> None:
-    """P2 fix: deepseek-reasoner passed as a hint must resolve to itself,
-    not silently collapse to deepseek-chat via _PROVIDER_DEFAULTS."""
+    """P2 fix: a current id passed as a hint resolves to itself instead of collapsing
+    to the provider default; the retired reasoner id maps to deepseek-flash."""
     from llm.core.model_resolver import ModelResolver
-    resolved = ModelResolver.resolve("deepseek-reasoner", provider="deepseek")
-    assert resolved == "deepseek-reasoner"
+    assert ModelResolver.resolve("deepseek-v4-pro", provider="deepseek") == "deepseek-v4-pro"
+    assert ModelResolver.resolve("deepseek-reasoner", provider="deepseek") == "deepseek-flash"
 
 
 @pytest.mark.unit
@@ -295,7 +296,7 @@ def test_non_streaming_call_unchanged(provider: DeepSeekProvider) -> None:
     choice.message.tool_calls = None
     choice.finish_reason = "stop"
     response.choices = [choice]
-    response.model = "deepseek-chat"
+    response.model = "deepseek-flash"
     usage = MagicMock()
     usage.prompt_tokens = 1
     usage.completion_tokens = 2
@@ -318,7 +319,7 @@ def test_stream_flag_raises_not_implemented(provider: DeepSeekProvider) -> None:
     downgrading to a blocking call."""
     stream_input = LLMInput(
         messages=[Message(role=Role.USER, content="hi")],
-        model="deepseek-chat",
+        model="deepseek-flash",
         stream=True,
     )
 
@@ -337,5 +338,5 @@ def test_bare_deepseek_alias_does_not_claim_deepseek_provider() -> None:
     # bare alias token — must NOT be classified as a native deepseek model
     assert ModelResolver._provider_for("deepseek") != "deepseek"
     # real model IDs — must be classified correctly
-    assert ModelResolver._provider_for("deepseek-chat") == "deepseek"
+    assert ModelResolver._provider_for("deepseek-flash") == "deepseek"
     assert ModelResolver._provider_for("deepseek-reasoner") == "deepseek"

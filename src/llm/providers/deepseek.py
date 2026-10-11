@@ -24,11 +24,7 @@ from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-_DEFAULT_MODEL = "deepseek-chat"
-
-# deepseek-reasoner (R1) only accepts temperature at or near 1.0.
-# Passing any other value causes the API to reject the request.
-_REASONER_TEMPERATURE = 1.0
+_DEFAULT_MODEL = "deepseek-flash"
 
 
 class DeepSeekProvider(OpenAIProvider):
@@ -53,41 +49,42 @@ class DeepSeekProvider(OpenAIProvider):
         )
         self._models = ModelResolver.model_infos("deepseek") or [
             ModelInfo(
-                name="deepseek-chat",
+                name="deepseek-flash",
                 provider=ProviderType.DEEPSEEK,
                 supports_tools=True,
                 supports_vision=False,
-                max_tokens=8192,
-                context_window=64000,
+                max_tokens=393216,
+                context_window=1000000,
             ),
             ModelInfo(
-                name="deepseek-reasoner",
+                name="deepseek-v4-pro",
                 provider=ProviderType.DEEPSEEK,
-                supports_tools=False,
+                supports_tools=True,
                 supports_vision=False,
-                max_tokens=8192,
-                context_window=64000,
+                max_tokens=393216,
+                context_window=1000000,
             ),
         ]
 
     def generate(self, llm_input: "LLMInput") -> "LLMOutput":  # type: ignore[override]
         from llm.core.types import LLMInput, LLMOutput
 
-        model = llm_input.model or self.get_default_model()
-        if model == "deepseek-reasoner":
-            # deepseek-reasoner does not support tool calls or custom
-            # temperature values — normalize both to avoid API rejections.
-            if llm_input.tools or llm_input.temperature != _REASONER_TEMPERATURE:
-                llm_input = LLMInput(
-                    messages=llm_input.messages,
-                    session_id=llm_input.session_id,
-                    model=llm_input.model,
-                    temperature=_REASONER_TEMPERATURE,  # fix #1: force to 1.0
-                    max_tokens=llm_input.max_tokens,
-                    tools=None,
-                    stream=llm_input.stream,
-                    metadata=llm_input.metadata,
-                )
+        # A retired id (deepseek-chat, deepseek-reasoner, deepseek-v4-flash) is
+        # sent as the model the vendor routes it to, so the request names a
+        # model the API still lists; the current models take tools and any
+        # temperature, so nothing else is normalised.
+        model = ModelResolver.resolve(llm_input.model or self.get_default_model(), provider="deepseek")
+        if model != llm_input.model:
+            llm_input = LLMInput(
+                messages=llm_input.messages,
+                session_id=llm_input.session_id,
+                model=model,
+                temperature=llm_input.temperature,
+                max_tokens=llm_input.max_tokens,
+                tools=llm_input.tools,
+                stream=llm_input.stream,
+                metadata=llm_input.metadata,
+            )
         # The try/except that maps LLMError/NotImplementedError/raw SDK
         # exceptions to this provider lives once, on OpenAIProvider - see
         # OpenAIProvider._wrap_generate_errors for the shared behavior.
