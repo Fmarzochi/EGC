@@ -179,18 +179,27 @@ class GeminiProvider(LLMProvider):
         return parts
 
     def _build_contents(self, messages: list) -> tuple[str | None, list]:
-        system_instruction = None
-        contents = []
+        # Gemini takes one system instruction and alternating user and model
+        # turns: every system message joins the instruction in order, and
+        # consecutive messages of the same side (tool results count as the
+        # user side) merge into one content that carries all their parts.
+        system_parts: list[str] = []
+        contents: list = []
         for msg in messages:
             role = msg.role.value
             if role == "system":
-                system_instruction = msg.content
+                if msg.content:
+                    system_parts.append(msg.content)
                 continue
             gemini_role = "model" if role == "assistant" else "user"
             parts = self._build_message_parts(msg)
-            if parts:
+            if not parts:
+                continue
+            if contents and contents[-1].role == gemini_role:
+                contents[-1] = types.Content(role=gemini_role, parts=[*contents[-1].parts, *parts])
+            else:
                 contents.append(types.Content(role=gemini_role, parts=parts))
-        return system_instruction, contents
+        return ("\n\n".join(system_parts) or None), contents
 
     def _build_config_args(
         self, input: LLMInput, tools_mapped: list | None
