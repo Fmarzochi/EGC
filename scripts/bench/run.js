@@ -99,7 +99,7 @@ async function runTask(rank, task, opts) {
     query: task.query,
     recallAt5: recallAtK(rankedAt5, expected, RECALL_DEPTH),
     recallAtTop: recallAtK(ranked, expected, opts.top),
-    reciprocalRank: reciprocalRank(ranked, expected),
+    reciprocalRank: reciprocalRank(rankedAt5, expected),
     latencyMsP50: percentile(latencies, 50),
     latencyMsP95: percentile(latencies, 95),
     briefingTokens: estimateTokens(briefingChars),

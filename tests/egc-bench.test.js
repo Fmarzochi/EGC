@@ -222,6 +222,7 @@ run('loadTasks rejects a task whose fields are not text', () => {
     const shallow = await runTask(rank, task, { top: 3, runs: 1, project: os.tmpdir() });
     assert.strictEqual(shallow.recallAt5, 1, 'recall@5 sees rank 5 even when --top is 3');
     assert.strictEqual(shallow.recallAtTop, 0, 'recall@top only counts the top 3');
+    assert.strictEqual(shallow.reciprocalRank, 0.2, 'MRR uses the five-deep rank (e.js is 5th), not the shallow --top list');
     assert.strictEqual(shallow.briefingTokens, Math.ceil((40 * 3) / 4), 'the briefing keeps the --top size');
 
     const deep = await runTask(rank, task, { top: 6, runs: 1, project: os.tmpdir() });
@@ -254,14 +255,17 @@ run('loadTasks rejects a task whose fields are not text', () => {
 
   try {
     const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bench-traversal-'));
-    const dir = path.join(parent, 'project');
-    fs.mkdirSync(dir);
-    fs.writeFileSync(path.join(parent, 'outside.txt'), 'secret'.repeat(100));
-    const rank = async () => ({ ranked: [], briefing: '' });
-    const task = { id: 't', query: 'q', expected: ['../outside.txt'] };
-    const r = await runTask(rank, task, { top: 5, runs: 1, project: dir });
-    assert.strictEqual(r.wholeFileTokens, 0, 'a path outside the project contributes nothing to the baseline');
-    fs.rmSync(parent, { recursive: true, force: true });
+    try {
+      const dir = path.join(parent, 'project');
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(parent, 'outside.txt'), 'secret'.repeat(100));
+      const rank = async () => ({ ranked: [], briefing: '' });
+      const task = { id: 't', query: 'q', expected: ['../outside.txt'] };
+      const r = await runTask(rank, task, { top: 5, runs: 1, project: dir });
+      assert.strictEqual(r.wholeFileTokens, 0, 'a path outside the project contributes nothing to the baseline');
+    } finally {
+      fs.rmSync(parent, { recursive: true, force: true });
+    }
     console.log('  PASS wholeFileChars does not read outside the project');
     passed++;
   } catch (err) {
