@@ -3297,6 +3297,15 @@ function runTests() {
       ], 'one AGENTS.md, in CODEX_HOME, and no generated catalog in ~/.agents');
       assert.ok(fresh.operations.some(operation => operation.destinationPath === path.join(homeDir, '.agents', 'skills')), 'the skills stay under ~/.agents');
 
+      const bareRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-codex-bare-repo-'));
+      try {
+        const bare = planInstallTargetScaffold({ target: 'codex', repoRoot: bareRepo, homeDir, modules: agentsCore });
+        assert.ok(bare.operations.some(operation => operation.destinationPath === path.join(homeDir, '.codex', 'AGENTS.md')), 'a source tree without .agents still plans the CODEX_HOME file');
+        assert.ok(!bare.operations.some(operation => operation.destinationPath === path.join(homeDir, '.agents') || operation.destinationPath === path.join(homeDir, '.agents', 'AGENTS.md')), 'and never falls back to the whole tree in ~/.agents');
+      } finally {
+        fs.rmSync(bareRepo, { recursive: true, force: true });
+      }
+
       const destination = path.join(homeDir, '.codex', 'AGENTS.md');
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.writeFileSync(destination, 'edited after EGC wrote it\n');

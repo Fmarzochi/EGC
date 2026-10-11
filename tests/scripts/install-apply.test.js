@@ -1621,6 +1621,20 @@ function runTests() {
       assert.strictEqual(fs.readFileSync(path.join(homeDir, '.codex', 'AGENTS.md'), 'utf8'), source, 'AGENTS.md lands where Codex reads it');
       assert.ok(fs.existsSync(path.join(agentsDir, 'skills')), 'the skills stay under ~/.agents');
 
+      fs.writeFileSync(path.join(agentsDir, 'AGENTS.md'), 'edited by hand after EGC wrote it\n');
+      writeInstallState(statePath, createInstallState({
+        adapter: { id: 'codex-home' },
+        targetRoot: agentsDir,
+        installStatePath: statePath,
+        request: { profile: null, modules: ['agents-core'], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['agents-core'], skippedModules: [] },
+        operations: [{ kind: 'copy-file', moduleId: 'agents-core', sourceRelativePath: '.agents/AGENTS.md', destinationPath: path.join(agentsDir, 'AGENTS.md'), strategy: 'sync-root-children', ownership: 'managed', scaffoldOnly: false }],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+      const edited = run(['--target', 'codex', '--modules', 'agents-core', '--allow-undetected'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+      assert.strictEqual(edited.code, 0, edited.stderr);
+      assert.strictEqual(fs.readFileSync(path.join(agentsDir, 'AGENTS.md'), 'utf8'), 'edited by hand after EGC wrote it\n', 'an old copy the person edited is kept');
+
       const ownFile = path.join(ownHome, '.codex', 'AGENTS.md');
       fs.mkdirSync(path.dirname(ownFile), { recursive: true });
       fs.writeFileSync(ownFile, 'My own Codex rules.\n');

@@ -65,13 +65,17 @@ function isSymbolicLink(target) {
   }
 }
 
+const ABSENT_SOURCE_CODES = new Set(['ENOENT', 'ENOTDIR']);
+
 function listNativeRootChildren(repoRoot) {
+  if (!repoRoot) return [];
   try {
     return fs.readdirSync(path.join(repoRoot, NATIVE_ROOT), { withFileTypes: true })
       .filter(entry => (entry.isDirectory() ? !isIgnoredSourceDirectory(entry.name) : !isIgnoredSourceFile(entry.name)))
       .map(entry => entry.name);
-  } catch {
-    return null;
+  } catch (error) {
+    if (ABSENT_SOURCE_CODES.has(error.code)) return [];
+    throw error;
   }
 }
 
@@ -86,13 +90,11 @@ function planContextFileOperation(adapter, moduleId, input, codexHome) {
 }
 
 function planNativeRootOperations(adapter, moduleId, input, planningInput, targetRoot, codexHome) {
-  const children = listNativeRootChildren(planningInput.repoRoot);
-  if (!children) {
-    return [planFlatSkillOperation(adapter, moduleId, NATIVE_ROOT, planningInput, targetRoot)];
-  }
-  return children.flatMap(name => (name === CONTEXT_FILE_NAME
-    ? planContextFileOperation(adapter, moduleId, input, codexHome)
-    : [createRemappedOperation(adapter, moduleId, `${NATIVE_ROOT}/${name}`, path.join(targetRoot, name), { strategy: 'preserve-relative-path' })]));
+  const children = listNativeRootChildren(planningInput.repoRoot).filter(name => name !== CONTEXT_FILE_NAME);
+  return [
+    ...planContextFileOperation(adapter, moduleId, input, codexHome),
+    ...children.map(name => createRemappedOperation(adapter, moduleId, `${NATIVE_ROOT}/${name}`, path.join(targetRoot, name), { strategy: 'preserve-relative-path' })),
+  ];
 }
 
 function planCodexModuleOperations(adapter, module, input, planningInput, targetRoot, codexHome) {
