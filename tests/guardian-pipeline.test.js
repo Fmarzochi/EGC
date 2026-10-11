@@ -32,48 +32,45 @@ if (!fs.existsSync(buildPath)) {
 
 // Write a temp file and call reduce_context via the exported pipeline logic.
 // We test the compressor modules directly since the MCP server requires stdio transport.
-const scannerPath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'egc-volatile-scanner.js');
 const routerPath  = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'egc-chunk-router.js');
-const crusherPath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'egc-array-crusher.js');
 
-const { scanVolatile } = require(scannerPath);
 const { classifyChunk } = require(routerPath);
-const { reduceJsonArray } = require(crusherPath);
 
-// Simulate the pipeline as implemented in index.ts
-function runPipeline(chunks) {
-  const bytesBefore = chunks.reduce((a, c) => a + Buffer.byteLength(c, 'utf8'), 0);
-  let volatileFindings = 0;
-  let chunksCrushed = 0;
-  const seen = new Set();
-  const result = [];
+const pipelinePath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'compression-pipeline.js');
+const { CRUSH_MARKER, runCompressionPipeline: runPipeline, splitAlreadyCrushed } = require(pipelinePath);
 
-  for (const chunk of chunks) {
-    const findings = scanVolatile(chunk);
-    volatileFindings += findings.length;
+if (test('a chunk the Token Crusher already compressed comes back untouched, uncounted and unscanned (#1682)', () => {
+  const rows = Array.from({ length: 20 }, (_, i) => ({ id: i % 5, type: 'event', msg: 'same' }));
+  const crushed = `${CRUSH_MARKER} 20 rows, 5 ids\n${JSON.stringify(rows)}`;
+  const r = runPipeline([crushed, 'session: 550e8400-e29b-41d4-a716-446655440000']);
+  assert.strictEqual(r.chunks[0], crushed, 'the marked chunk is returned byte for byte');
+  assert.strictEqual(r.chunks_crushed, 0, 'and is not crushed again');
+  assert.strictEqual(r.volatile_findings, 1, 'only the unmarked chunk is scanned');
+  const plain = runPipeline([JSON.stringify(rows)]);
+  assert.strictEqual(plain.chunks_crushed, 1, 'the same text without the marker is crushed');
+})) passed++; else failed++;
 
-    const contentType = classifyChunk(chunk);
-    let processed = chunk;
+if (test('a chunk that only quotes the marker mid-line is scanned and crushed like any other', () => {
+  const rows = Array.from({ length: 20 }, (_, i) => ({ id: i % 5, note: `mentions ${CRUSH_MARKER} once` }));
+  const r = runPipeline([JSON.stringify(rows), `session 550e8400-e29b-41d4-a716-446655440000 per the ${CRUSH_MARKER} docs`]);
+  assert.strictEqual(r.chunks_crushed, 1, 'the JSON array is crushed');
+  assert.strictEqual(r.volatile_findings, 1, 'the text chunk is scanned');
+})) passed++; else failed++;
 
-    if (contentType === 'json_array') {
-      const crushed = reduceJsonArray(chunk);
-      if (crushed !== null) {
-        processed = crushed.crushed;
-        chunksCrushed++;
-      }
-    }
+if (test('the chunks the Crusher already compressed are kept apart from the ones Headroom may still compress, in order', () => {
+  const a = 'first fresh';
+  const b = `rows\n${CRUSH_MARKER} saved ~12 tokens`;
+  const c = 'second fresh';
+  const d = `${CRUSH_MARKER} trailer first`;
+  assert.deepStrictEqual(splitAlreadyCrushed([a, b, c, d]), { fresh: [a, c], crushed: [b, d] });
+  assert.deepStrictEqual(splitAlreadyCrushed([]), { fresh: [], crushed: [] });
+})) passed++; else failed++;
 
-    const key = processed.trim();
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(processed);
-    }
-  }
-
-  const bytesAfter = result.reduce((a, c) => a + Buffer.byteLength(c, 'utf8'), 0);
-  const savingsPct = bytesBefore === 0 ? 0 : Math.round((1 - bytesAfter / bytesBefore) * 100);
-  return { chunks: result, bytes_before: bytesBefore, bytes_after: bytesAfter, savings_pct: savingsPct, volatile_findings: volatileFindings, chunks_crushed: chunksCrushed };
-}
+if (test('the marker is the one scripts/lib/crusher/engine.js writes', () => {
+  const engine = require(path.join(__dirname, '..', 'scripts', 'lib', 'crusher', 'engine.js'));
+  const written = typeof engine.CRUSH_MARKER === 'string' ? engine.CRUSH_MARKER : fs.readFileSync(path.join(__dirname, '..', 'scripts', 'lib', 'crusher', 'engine.js'), 'utf8').match(/const CRUSH_MARKER = '([^']+)'/)[1];
+  assert.strictEqual(CRUSH_MARKER, written);
+})) passed++; else failed++;
 
 if (test('pipeline deduplicates identical text chunks', () => {
   const chunks = ['hello world', 'hello world', 'hello world'];

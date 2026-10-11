@@ -17,60 +17,15 @@ function hideEgcRootOnWindows(): void {
   spawnSync(attribPath, ['+h', egcRoot], { stdio: 'ignore', shell: false });
 }
 import { z } from 'zod';
-import { validateCommand, validateWrite, isProtectedPath, resolveWriteTarget } from './validator.js';
+import { validateCommand, validateWrite, isProtectedPath, secretPathChecker, resolveWriteTarget } from './validator.js';
 import { redactPayload, writeAuditEntry } from './audit-log.js';
-import { scanVolatile } from './egc-volatile-scanner.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
-import { classifyChunk } from './egc-chunk-router.js';
-import { reduceJsonArray } from './egc-array-crusher.js';
+import { runCompressionPipeline, splitAlreadyCrushed } from './compression-pipeline.js';
+import { createRateLimiter } from './rate-limit.js';
 import { autoLearn } from './learn-writer.js';
 import { compressViaHeadroom } from './headroom-client.js';
-
-interface PipelineResult {
-  chunks: string[];
-  bytes_before: number;
-  bytes_after: number;
-  savings_pct: number;
-  volatile_findings: number;
-  chunks_crushed: number;
-}
-
-function runCompressionPipeline(chunks: string[]): PipelineResult {
-  const bytesBefore = chunks.reduce((a, c) => a + Buffer.byteLength(c, 'utf8'), 0);
-  let volatileFindings = 0;
-  let chunksCrushed = 0;
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const chunk of chunks) {
-    const findings = scanVolatile(chunk);
-    volatileFindings += findings.length;
-
-    const contentType = classifyChunk(chunk);
-
-    let processed = chunk;
-
-    if (contentType === 'json_array') {
-      const reduced = reduceJsonArray(chunk);
-      if (reduced !== null) {
-        processed = reduced.crushed;
-        chunksCrushed++;
-      }
-    }
-
-    // Exact-match dedup as final safety net
-    const key = processed.trim();
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(processed);
-    }
-  }
-
-  const bytesAfter = result.reduce((a, c) => a + Buffer.byteLength(c, 'utf8'), 0);
-  const savingsPct = bytesBefore === 0 ? 0 : Math.round((1 - bytesAfter / bytesBefore) * 100);
-
-  return { chunks: result, bytes_before: bytesBefore, bytes_after: bytesAfter, savings_pct: savingsPct, volatile_findings: volatileFindings, chunks_crushed: chunksCrushed };
-}
+import { buildRelevantContext, resolveRoot } from './graph-context.js';
+import { rankProjectFiles } from './file-rank.js';
 
 interface RoutingResult {
   agents: string[];
@@ -217,10 +172,22 @@ const ReduceContextSchema = z.object({
   mode: z.enum(['FAST_RESPONSE', 'DEEP_COGNITION']).optional().default('DEEP_COGNITION')
 });
 
+const RankFilesSchema = z.object({
+  query: z.string(),
+  project_path: z.string().optional(),
+  history: z.string().optional(),
+  top_n: z.number().int().min(1).max(50).optional(),
+  use_git: z.boolean().optional(),
+  graph_hops: z.number().int().min(0).max(4).optional(),
+  explain: z.boolean().optional()
+});
+
 const OrchestrateTaskSchema = z.object({
   prompt: z.string(),
   filepaths: z.array(z.string()).optional().default([]),
-  heuristic_sandbox_id: z.string().optional()
+  heuristic_sandbox_id: z.string().optional(),
+  project_path: z.string().optional(),
+  context_budget_tokens: z.number().int().min(200).max(8000).optional()
 });
 
 server.setRequestHandler(ListToolsRequestSchema, () => {
@@ -265,14 +232,33 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
       },
       {
         name: "orchestrate_task",
-        description: "Routes a prompt against the EGC catalog of skills, agents, and rules with local scoring on this machine, no API key needed; the result lists what the active tool has installed and, under not_installed, what only exists in the catalog. Only when EGC_LLM_ROUTING is set to 1, on, true or yes and a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY) is the task prompt sent to that provider for semantic routing instead. Also returns context-reduction metrics for any file payloads.",
+        description: "Routes a prompt against the EGC catalog of skills, agents, and rules with local scoring on this machine, no API key needed; the result lists what the active tool has installed and, under not_installed, what only exists in the catalog. Only when EGC_LLM_ROUTING is set to 1, on, true or yes and a provider API key is available (ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY), OPENAI_API_KEY, or OPENROUTER_API_KEY) is the task prompt sent to that provider for semantic routing instead. Also returns context-reduction metrics for any file payloads, and a relevant_context block of ranked snippets from the project's own JS/TS code, found through a local graph of its files, symbols, imports and references.",
         inputSchema: {
           type: "object",
           properties: {
              prompt: { type: "string" },
-             filepaths: { type: "array", items: { type: "string" } }
+             filepaths: { type: "array", items: { type: "string" } },
+             project_path: { type: "string", description: "Absolute path to the project root for relevant_context. Defaults to the server's working directory." },
+             context_budget_tokens: { type: "number", description: "Token budget for relevant_context snippets (200-8000, default 2000)." }
           },
           required: ["prompt"]
+        }
+      },
+      {
+        name: "rank_files",
+        description: "Ranks the project's files for a task using four signals: BM25 over path, symbols, keywords and summary (weight 1.0), path hits (1.5), local git state (uncommitted, branch, recency, co-change; 1.0), and import-graph propagation two hops from the top files (1.2). Returns the ranking, a three-block briefing, and on request an explain table of each signal's contribution. Pass history from get_state so the briefing includes session decisions.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "The task, in the user's words." },
+            project_path: { type: "string", description: "Absolute project root. Defaults to the server's working directory." },
+            history: { type: "string", description: "Session history to include under PROJECT HISTORY (e.g. the decisions from get_state)." },
+            top_n: { type: "number", description: "How many files to return (1-50, default 10)." },
+            use_git: { type: "boolean", description: "Include local git signals when the project is a repository (default true)." },
+            graph_hops: { type: "number", description: "Import-graph hops from the top files (0-4, default 2; 0 disables)." },
+            explain: { type: "boolean", description: "Include the explain table lines in the result." }
+          },
+          required: ["query"]
         }
       },
       {
@@ -294,21 +280,10 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
 
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX_CALLS = 60;
-const rateLimitMap = new Map<string, number[]>();
+const rateLimiter = createRateLimiter({ windowMs: RATE_WINDOW_MS, maxCalls: RATE_MAX_CALLS });
 
 function checkRateLimit(tool: string, projectPath?: string | null): boolean {
-  const now = Date.now();
-  
-  // Create a composite storage key if projectPath is available, otherwise fall back to global tool name
-  const trimmed = projectPath ? projectPath.trim() : "";
-  const storageKey = trimmed !== "" 
-    ? `${trimmed}::${tool}` 
-    : tool;
-
-  const timestamps = (rateLimitMap.get(storageKey) ?? []).filter(t => now - t < RATE_WINDOW_MS);
-  timestamps.push(now);
-  rateLimitMap.set(storageKey, timestamps);
-  return timestamps.length <= RATE_MAX_CALLS;
+  return rateLimiter.check(tool, projectPath);
 }
 
 function handleValidateCommand(toolArgs: unknown) {
@@ -427,14 +402,17 @@ async function handleReduceContext(toolArgs: unknown) {
 
   const pipeline = runCompressionPipeline(rawPayloads);
 
-  // Phase 2: optional Headroom deep compression (falls back silently if proxy not running)
+  // Phase 2: optional Headroom deep compression (falls back silently if proxy not running).
+  // Chunks the Token Crusher already compressed stay out of this phase and
+  // follow its output unchanged.
   let finalContent = pipeline.chunks.join('\n\n');
   let headroomSavingsPct = 0;
   let headroomTransforms: string[] = [];
-  if (pipeline.chunks.length > 0) {
-    const hr = await compressViaHeadroom(pipeline.chunks);
+  const { fresh, crushed } = splitAlreadyCrushed(pipeline.chunks);
+  if (fresh.length > 0) {
+    const hr = await compressViaHeadroom(fresh);
     if (hr !== null) {
-      finalContent = hr.text;
+      finalContent = [hr.text, ...crushed].join('\n\n');
       headroomSavingsPct = Math.round((1 - hr.bytes_after / hr.bytes_before) * 100);
       headroomTransforms = hr.transforms_applied;
     }
@@ -473,6 +451,34 @@ async function handleReduceContext(toolArgs: unknown) {
   return { content: [{ type: "text", text: `${header}\n\n${finalContent}` }] };
 }
 
+async function handleRankFiles(toolArgs: unknown) {
+  const parsed = RankFilesSchema.parse(toolArgs);
+  const resolved = resolveRoot(parsed.project_path);
+  if ('reason' in resolved) throw new McpError(ErrorCode.InvalidParams, resolved.reason);
+  if (isProtectedPath(resolved.root)) {
+    auditLog('RANK_FILES_PROTECTED_ROOT', 'DENIED', { project_path: resolved.root });
+    throw new McpError(ErrorCode.InvalidParams, 'project_path must not be a protected path');
+  }
+  const result = await rankProjectFiles({
+    projectPath: resolved.root,
+    query: parsed.query,
+    history: parsed.history ? String(redactPayload({ text: parsed.history }).text) : '',
+    topN: parsed.top_n,
+    useGit: parsed.use_git ?? true,
+    graphHops: parsed.graph_hops
+  });
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        ranked: result.ranked,
+        briefing: result.briefing,
+        ...(parsed.explain ? { explain: result.explain } : {})
+      }, null, 2)
+    }]
+  };
+}
+
 async function handleOrchestrateTask(toolArgs: unknown) {
   const parsed = OrchestrateTaskSchema.parse(toolArgs);
   const prompt = parsed.prompt;
@@ -497,6 +503,16 @@ async function handleOrchestrateTask(toolArgs: unknown) {
 
   const hint = routing.provider === 'keyword' ? keywordRoutingHint() : undefined;
 
+  const relevantContext = await buildRelevantContext(prompt, parsed.project_path, parsed.context_budget_tokens, {
+    isProtectedPath: p => isProtectedPath(p),
+    isIndexExcluded: secretPathChecker(),
+    transformSnippet: text => {
+      if (scanForInjection(text).length > 0) return null;
+      return String(redactPayload({ text }).text);
+    },
+    audit: (action, details) => auditLog(action, 'ALLOWED', details)
+  });
+
   return {
     content: [{
       type: 'text',
@@ -510,6 +526,7 @@ async function handleOrchestrateTask(toolArgs: unknown) {
     savings_pct: pipeline.savings_pct,
         },
         files_loaded: filesLoaded,
+        relevant_context: relevantContext,
       }, null, 2),
     }],
   };
@@ -594,6 +611,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "validate_content": return handleValidateContent(request.params.arguments);
       case "reduce_context": return await handleReduceContext(request.params.arguments);
       case "orchestrate_task": return await handleOrchestrateTask(request.params.arguments);
+      case "rank_files": return await handleRankFiles(request.params.arguments);
       case "auto_learn": return await handleAutoLearn(request.params.arguments);
 
       default:

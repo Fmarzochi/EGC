@@ -133,6 +133,10 @@ const COMMANDS = {
     script: 'saved.js',
     description: 'Show accumulated Token Crusher savings (local ledger, zero token cost)',
   },
+  context: {
+    script: 'context.js',
+    description: 'Rank the project files for a task and print the briefing (--explain for the signal table)',
+  },
   gain: {
     script: 'gain.js',
     description: 'Full Token Crusher savings panel: totals, efficiency, breakdown by command kind (--history for the run log)',
@@ -184,6 +188,7 @@ const PRIMARY_COMMANDS = [
   'run',
   'saved',
   'gain',
+  'context',
   'discover',
   'crusher-shim',
   'claw',

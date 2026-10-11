@@ -1593,6 +1593,62 @@ function runTests() {
       cleanup(projectDir);
     }
   }));
+  tally(test('codex puts AGENTS.md in CODEX_HOME, retires the ~/.agents/AGENTS.md copy an earlier install wrote, and leaves a file of the person\'s own alone (#1839)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const source = fs.readFileSync(path.join(repoRoot, '.agents', 'AGENTS.md'), 'utf8');
+    const homeDir = fs.realpathSync(createTempDir('install-apply-home-'));
+    const projectDir = createTempDir('install-apply-project-');
+    const ownHome = fs.realpathSync(createTempDir('install-apply-home-'));
+    try {
+      const agentsDir = path.join(homeDir, '.agents');
+      const statePath = path.join(agentsDir, 'egc', 'codex-install-state.json');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      fs.writeFileSync(path.join(agentsDir, 'AGENTS.md'), source);
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      writeInstallState(statePath, createInstallState({
+        adapter: { id: 'codex-home' },
+        targetRoot: agentsDir,
+        installStatePath: statePath,
+        request: { profile: null, modules: ['agents-core'], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['agents-core'], skippedModules: [] },
+        operations: [{ kind: 'copy-file', moduleId: 'agents-core', sourceRelativePath: '.agents/AGENTS.md', destinationPath: path.join(agentsDir, 'AGENTS.md'), strategy: 'sync-root-children', ownership: 'managed', scaffoldOnly: false }],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+
+      const applied = run(['--target', 'codex', '--modules', 'agents-core', '--allow-undetected'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+      assert.strictEqual(applied.code, 0, applied.stderr);
+      assert.ok(!fs.existsSync(path.join(agentsDir, 'AGENTS.md')), 'the copy Codex never read is retired');
+      assert.strictEqual(fs.readFileSync(path.join(homeDir, '.codex', 'AGENTS.md'), 'utf8'), source, 'AGENTS.md lands where Codex reads it');
+      assert.ok(fs.existsSync(path.join(agentsDir, 'skills')), 'the skills stay under ~/.agents');
+
+      fs.writeFileSync(path.join(agentsDir, 'AGENTS.md'), 'edited by hand after EGC wrote it\n');
+      writeInstallState(statePath, createInstallState({
+        adapter: { id: 'codex-home' },
+        targetRoot: agentsDir,
+        installStatePath: statePath,
+        request: { profile: null, modules: ['agents-core'], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['agents-core'], skippedModules: [] },
+        operations: [{ kind: 'copy-file', moduleId: 'agents-core', sourceRelativePath: '.agents/AGENTS.md', destinationPath: path.join(agentsDir, 'AGENTS.md'), strategy: 'sync-root-children', ownership: 'managed', scaffoldOnly: false }],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+      const edited = run(['--target', 'codex', '--modules', 'agents-core', '--allow-undetected'], { cwd: projectDir, homeDir, env: { EGC_INSTALL_DELEGATED: '1' } });
+      assert.strictEqual(edited.code, 0, edited.stderr);
+      assert.strictEqual(fs.readFileSync(path.join(agentsDir, 'AGENTS.md'), 'utf8'), 'edited by hand after EGC wrote it\n', 'an old copy the person edited is kept');
+
+      const ownFile = path.join(ownHome, '.codex', 'AGENTS.md');
+      fs.mkdirSync(path.dirname(ownFile), { recursive: true });
+      fs.writeFileSync(ownFile, 'My own Codex rules.\n');
+      const ownRun = run(['--target', 'codex', '--modules', 'agents-core', '--allow-undetected'], { cwd: projectDir, homeDir: ownHome, env: { EGC_INSTALL_DELEGATED: '1' } });
+      assert.strictEqual(ownRun.code, 0, ownRun.stderr);
+      assert.strictEqual(fs.readFileSync(ownFile, 'utf8'), 'My own Codex rules.\n', 'a file of the person\'s own is never overwritten');
+      assert.ok(!fs.existsSync(path.join(ownHome, '.agents', 'AGENTS.md')), 'and no copy goes back to ~/.agents');
+    } finally {
+      cleanup(homeDir);
+      cleanup(ownHome);
+      cleanup(projectDir);
+    }
+  }));
+
   // Devin Local reads its hooks from ~/.config/devin/config.json
   // (%APPDATA%\devin\config.json on Windows). APPDATA points inside the
   // temporary home, so a Windows run never touches the runner's own.

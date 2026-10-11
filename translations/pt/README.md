@@ -58,7 +58,7 @@ Duas abas cursoras, um terminal Claude Code e uma sessão antigravity compartilh
 
 ### Guardião: Um Layer de Segurança na Frente de Cada Comando
 
-O Guardião valida os comandos antes que eles executem, portar escritas arriscadas e evita que o contexto transborde, em segundo plano, sem que você invoque nada. A cobertura depende do suporte de gancho próprio de cada ferramenta; [Avaliação de segurança](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) documenta a exceção.
+O Guardião valida os comandos antes que eles executem, portar escritas arriscadas e evita que o contexto transborde, em segundo plano, sem que você invoque nada. A cobertura depende do suporte de gancho próprio de cada ferramenta; [Avaliação de segurança](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) documenta a exceção. Quando uma tarefa começa, `orchestrate_task` também retorna o código do qual a tarefa se trata, encontrado em um gráfico local do seu projeto; veja [Otimização de token](../../docs/token-optimization.md).
 
 ### Cruzador de Token: Ruído Nunca Alcançar o Modelo
 
