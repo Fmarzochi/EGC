@@ -79,6 +79,15 @@ tally(test('a clock that steps backwards cannot evict a key whose newest call is
   assert.strictEqual(limiter.check('t', '/a', 6300), true, 'only the call of 5900 is left inside the window');
 }));
 
+tally(test('a clock that steps backwards does not suspend the sweep until it catches up', () => {
+  const limiter = createRateLimiter({ windowMs: 1000, maxCalls: 60 });
+  limiter.check('t', '/a', 20_000);
+  limiter.check('t', '/b', 15_000);
+  assert.strictEqual(limiter.size(), 2, 'the regressed check swept and kept /a, whose newest call is in the future');
+  limiter.check('t', '/c', 16_100);
+  assert.strictEqual(limiter.size(), 2, '/b was idle for a window and went; /a and /c stay');
+}));
+
 tally(test('a key whose newest call left the window is evicted on the next check of any key', () => {
   const limiter = createRateLimiter({ windowMs: 1000, maxCalls: 60 });
   for (let i = 0; i < 50; i++) limiter.check('validate_command', `/project-${i}`, 10_000 + i);

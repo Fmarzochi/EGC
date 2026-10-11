@@ -23,9 +23,11 @@ export function createRateLimiter({ windowMs, maxCalls }: { windowMs: number; ma
   // call already left the window holds nothing the next check can use,
   // so it goes, and the map stays bounded by the keys active in the
   // last two windows instead of growing for the life of the process
-  // (#1682).
+  // (#1682). A clock that stepped backwards sweeps at once instead of
+  // waiting to catch up with the last sweep; `newest` keeps the live
+  // keys safe.
   function sweep(now: number): void {
-    if (now - lastSweep < windowMs) return;
+    if (now >= lastSweep && now - lastSweep < windowMs) return;
     lastSweep = now;
     for (const [key, entry] of calls) {
       if (now - entry.newest >= windowMs) calls.delete(key);
