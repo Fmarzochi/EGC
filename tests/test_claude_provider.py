@@ -110,15 +110,17 @@ class TestClaudeProviderContentExtraction(unittest.TestCase):
         from llm.core.types import LLMInput, Message, Role, ToolCall
 
         results = tool_messages or [Message(role=Role.TOOL, content="sunny", tool_call_id="call_1")]
+        # The assistant turn declares one tool call per result that follows,
+        # so the fixture is a valid exchange whatever the number of results.
+        calls = [
+            ToolCall(id=result.tool_call_id, name="weather", arguments={"city": "Rio"})
+            for result in results
+        ]
         return LLMInput(
             messages=[
                 Message(role=Role.SYSTEM, content="be brief"),
                 Message(role=Role.USER, content="weather?"),
-                Message(
-                    role=Role.ASSISTANT,
-                    content="checking",
-                    tool_calls=[ToolCall(id="call_1", name="weather", arguments={"city": "Rio"})],
-                ),
+                Message(role=Role.ASSISTANT, content="checking", tool_calls=calls),
                 *results,
             ],
             model="claude-sonnet-4-7",
@@ -167,9 +169,23 @@ class TestClaudeProviderContentExtraction(unittest.TestCase):
         )
         self.assertEqual(len(params["messages"]), 3)
         self.assertEqual(
+            [block["id"] for block in params["messages"][1]["content"] if block["type"] == "tool_use"],
+            ["call_1", "call_2"],
+        )
+        self.assertEqual(
             [block["tool_use_id"] for block in params["messages"][2]["content"]],
             ["call_1", "call_2"],
         )
+
+    def test_tool_message_without_tool_call_id_is_rejected_before_the_call(self):
+        from llm.core.types import Message, Role
+
+        orphan = self._tool_conversation([Message(role=Role.TOOL, content="sunny", tool_call_id="call_1")])
+        orphan.messages[-1] = Message(role=Role.TOOL, content="sunny")
+        with self.assertRaises(ValueError) as ctx:
+            self.provider.generate(orphan)
+        self.assertIn("tool_call_id", str(ctx.exception))
+        self.provider.client.messages.create.assert_not_called()
 
     def test_every_text_block_is_joined_in_order(self):
         """Issue #1687: only the first text block of the response was returned."""

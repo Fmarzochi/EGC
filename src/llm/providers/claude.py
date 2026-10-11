@@ -103,6 +103,8 @@ class ClaudeProvider(LLMProvider):
             if msg.role == Role.SYSTEM:
                 system_parts.append(msg.content)
             elif msg.role == Role.TOOL:
+                if not msg.tool_call_id:
+                    raise ValueError("a tool message needs tool_call_id to answer a tool_use block")
                 block = {"type": "tool_result", "tool_use_id": msg.tool_call_id, "content": msg.content}
                 previous = turns[-1] if turns else None
                 if previous and previous["role"] == "user" and isinstance(previous["content"], list):
