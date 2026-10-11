@@ -241,8 +241,8 @@ async function main() {
   }
 
   const result = mode === 'post'
-    ? runPostBash(raw)
-    : runPreBash(raw);
+    ? await runPostBash(raw)
+    : await runPreBash(raw);
 
   if (result.stderr) {
     process.stderr.write(result.stderr);
