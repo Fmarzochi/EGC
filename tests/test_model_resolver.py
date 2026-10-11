@@ -391,3 +391,8 @@ class TestCatalogRefreshGeminiClaudeOpenAI:
     def test_openai_default_and_chain(self):
         assert ModelResolver.default_model("openai") == "gpt-6.1-sol"
         assert ModelResolver.fallback_chain("gpt-6-astra") == ["gpt-6.1-sol", "gpt-6-luna", "gpt-4o", "gpt-4o-mini"]
+
+    @pytest.mark.parametrize("provider", ["gemini", "claude", "openai"])
+    def test_every_registered_model_has_a_menu_label(self, provider):
+        for model_id, label in ModelResolver.menu_choices(provider):
+            assert label != model_id, model_id
