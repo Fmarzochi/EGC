@@ -206,7 +206,10 @@ export function makeIgnore(gitignoreText: string): IgnoreFn {
 // The rules Git applies to the whole project before any per-directory file:
 // .git/info/exclude (lowest precedence), then the root .gitignore. Each is
 // read like any project file: a link or a named pipe is not followed, an
-// oversized file is dropped, a missing one contributes nothing.
+// oversized file is dropped, a missing one contributes nothing. In a linked
+// worktree .git is a pointer file to a directory outside the project, and
+// that exclude list is not read: the walk never reads outside the root,
+// and an exclude list only trims the index, it never guards it.
 export async function loadRootIgnore(root: string): Promise<IgnoreFn> {
   const sources = ['.git/info/exclude', '.gitignore'];
   const texts = await Promise.all(sources.map(rel => readFileWithin(root, rel, MAX_GITIGNORE_BYTES)));
