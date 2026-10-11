@@ -204,6 +204,28 @@ def test_retired_reasoner_id_keeps_the_requested_temperature(provider: DeepSeekP
 
 
 @pytest.mark.unit
+def test_unknown_custom_id_is_sent_unchanged(provider: DeepSeekProvider) -> None:
+    """An id the catalog does not know (a custom base_url deployment) is not rewritten to the default."""
+    from llm.core.types import LLMInput, Message, Role
+    response = MagicMock()
+    choice = MagicMock()
+    choice.message.content = "answer"
+    choice.message.tool_calls = None
+    choice.finish_reason = "stop"
+    response.choices = [choice]
+    response.model = "my-finetune"
+    usage = MagicMock()
+    usage.prompt_tokens = 10
+    usage.completion_tokens = 5
+    usage.total_tokens = 15
+    response.usage = usage
+    provider.client.chat.completions.create.return_value = response
+    provider.generate(LLMInput(messages=[Message(role=Role.USER, content="hi")], model="my-finetune"))
+    _, kwargs = provider.client.chat.completions.create.call_args
+    assert kwargs["model"] == "my-finetune"
+
+
+@pytest.mark.unit
 def test_current_id_is_sent_unchanged(provider: DeepSeekProvider) -> None:
     """A current id reaches the API as it was requested."""
     from llm.core.types import LLMInput, Message, Role

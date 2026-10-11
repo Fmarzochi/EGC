@@ -19,12 +19,26 @@ except ImportError:  # pragma: no cover - SDK optional
     OpenAI = None  # type: ignore[assignment]
 
 from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMProvider
-from llm.core.model_resolver import ModelResolver
+from llm.core.model_resolver import (
+    DEEPSEEK_CHAT_RETIRED,
+    DEEPSEEK_REASONER_RETIRED,
+    DEEPSEEK_V4_FLASH_RETIRED,
+    DEEPSEEK_V4_FLASH_VISION_RETIRED,
+    ModelResolver,
+)
 from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 _DEFAULT_MODEL = "deepseek-flash"
+# The ids the vendor retired (api-docs.deepseek.com/updates, 2026-10-11); only
+# these are translated before the request, every other id is sent as given.
+_RETIRED_IDS = frozenset({
+    DEEPSEEK_CHAT_RETIRED,
+    DEEPSEEK_REASONER_RETIRED,
+    DEEPSEEK_V4_FLASH_RETIRED,
+    DEEPSEEK_V4_FLASH_VISION_RETIRED,
+})
 
 
 class DeepSeekProvider(OpenAIProvider):
@@ -71,9 +85,12 @@ class DeepSeekProvider(OpenAIProvider):
 
         # A retired id (deepseek-chat, deepseek-reasoner, deepseek-v4-flash) is
         # sent as the model the vendor routes it to, so the request names a
-        # model the API still lists; the current models take tools and any
-        # temperature, so nothing else is normalised.
-        model = ModelResolver.resolve(llm_input.model or self.get_default_model(), provider="deepseek")
+        # model the API still lists. Any other id, including one the catalog
+        # does not know (a custom base_url deployment), goes out as given; the
+        # current models take tools and any temperature, so nothing else is
+        # normalised.
+        requested = llm_input.model or self.get_default_model()
+        model = ModelResolver.resolve(requested, provider="deepseek") if requested in _RETIRED_IDS else requested
         if model != llm_input.model:
             llm_input = LLMInput(
                 messages=llm_input.messages,
