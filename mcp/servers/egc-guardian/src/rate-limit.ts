@@ -7,26 +7,39 @@ export interface RateLimiter {
   size(): number;
 }
 
-export function createRateLimiter({ windowMs, maxCalls }: { windowMs: number; maxCalls: number }): RateLimiter {
-  const calls = new Map<string, number[]>();
+interface Entry {
+  stamps: number[];
+  // The newest call ever recorded for the key, kept apart from the array
+  // because a clock that steps backwards can push an older stamp last.
+  newest: number;
+}
 
-  // A key whose newest call already left the window holds nothing the
-  // next check can use, so it goes; the map stays bounded by the keys
-  // active in the last window instead of growing for the life of the
-  // process (#1682).
-  function evictIdle(now: number): void {
-    for (const [key, stamps] of calls) {
-      if (stamps.length === 0 || now - stamps[stamps.length - 1] >= windowMs) calls.delete(key);
+export function createRateLimiter({ windowMs, maxCalls }: { windowMs: number; maxCalls: number }): RateLimiter {
+  const calls = new Map<string, Entry>();
+  let lastSweep = Number.NEGATIVE_INFINITY;
+
+  // Runs at most once per window, so a check costs one map lookup and
+  // the sweep is spread over the calls of the window: a key whose newest
+  // call already left the window holds nothing the next check can use,
+  // so it goes, and the map stays bounded by the keys active in the
+  // last two windows instead of growing for the life of the process
+  // (#1682).
+  function sweep(now: number): void {
+    if (now - lastSweep < windowMs) return;
+    lastSweep = now;
+    for (const [key, entry] of calls) {
+      if (now - entry.newest >= windowMs) calls.delete(key);
     }
   }
 
   function check(tool: string, projectPath?: string | null, now: number = Date.now()): boolean {
-    evictIdle(now);
+    sweep(now);
     const trimmed = projectPath ? projectPath.trim() : '';
     const key = trimmed !== '' ? `${trimmed}::${tool}` : tool;
-    const stamps = (calls.get(key) ?? []).filter(t => now - t < windowMs);
+    const entry = calls.get(key);
+    const stamps = (entry?.stamps ?? []).filter(t => now - t < windowMs);
     stamps.push(now);
-    calls.set(key, stamps);
+    calls.set(key, { stamps, newest: Math.max(entry?.newest ?? now, now) });
     return stamps.length <= maxCalls;
   }
 

@@ -2,10 +2,12 @@ import { scanVolatile } from './egc-volatile-scanner.js';
 import { classifyChunk } from './egc-chunk-router.js';
 import { reduceJsonArray } from './egc-array-crusher.js';
 
-// The marker the Token Crusher leaves on output it already compressed
-// (scripts/lib/crusher/engine.js keeps the same literal): a chunk that
-// carries it is handed back as it is, so reduce_context never compresses
-// the same text twice (#1682).
+// The marker the Token Crusher stamps at the start of the trailer line of
+// output it already compressed (scripts/lib/crusher/engine.js keeps the
+// same literal): a chunk that carries it at the start of a line is handed
+// back as it is, so reduce_context never compresses the same text twice,
+// while a chunk that merely quotes the marker mid-line is treated like any
+// other (#1682).
 export const CRUSH_MARKER = '[egc-crusher]';
 
 export interface PipelineResult {
@@ -18,7 +20,16 @@ export interface PipelineResult {
 }
 
 export function isAlreadyCrushed(chunk: string): boolean {
-  return chunk.includes(CRUSH_MARKER);
+  return chunk.startsWith(CRUSH_MARKER) || chunk.includes(`\n${CRUSH_MARKER}`);
+}
+
+// Keeps the chunks the Crusher already compressed apart from the ones a
+// later phase may still compress, each list in its original order.
+export function splitAlreadyCrushed(chunks: string[]): { fresh: string[]; crushed: string[] } {
+  const fresh: string[] = [];
+  const crushed: string[] = [];
+  for (const chunk of chunks) (isAlreadyCrushed(chunk) ? crushed : fresh).push(chunk);
+  return { fresh, crushed };
 }
 
 // Scans each chunk for volatile tokens, crushes the JSON arrays, drops

@@ -37,7 +37,7 @@ const routerPath  = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian',
 const { classifyChunk } = require(routerPath);
 
 const pipelinePath = path.join(__dirname, '..', 'mcp', 'servers', 'egc-guardian', 'build', 'compression-pipeline.js');
-const { CRUSH_MARKER, runCompressionPipeline: runPipeline } = require(pipelinePath);
+const { CRUSH_MARKER, runCompressionPipeline: runPipeline, splitAlreadyCrushed } = require(pipelinePath);
 
 if (test('a chunk the Token Crusher already compressed comes back untouched, uncounted and unscanned (#1682)', () => {
   const rows = Array.from({ length: 20 }, (_, i) => ({ id: i % 5, type: 'event', msg: 'same' }));
@@ -48,6 +48,22 @@ if (test('a chunk the Token Crusher already compressed comes back untouched, unc
   assert.strictEqual(r.volatile_findings, 1, 'only the unmarked chunk is scanned');
   const plain = runPipeline([JSON.stringify(rows)]);
   assert.strictEqual(plain.chunks_crushed, 1, 'the same text without the marker is crushed');
+})) passed++; else failed++;
+
+if (test('a chunk that only quotes the marker mid-line is scanned and crushed like any other', () => {
+  const rows = Array.from({ length: 20 }, (_, i) => ({ id: i % 5, note: `mentions ${CRUSH_MARKER} once` }));
+  const r = runPipeline([JSON.stringify(rows), `session 550e8400-e29b-41d4-a716-446655440000 per the ${CRUSH_MARKER} docs`]);
+  assert.strictEqual(r.chunks_crushed, 1, 'the JSON array is crushed');
+  assert.strictEqual(r.volatile_findings, 1, 'the text chunk is scanned');
+})) passed++; else failed++;
+
+if (test('the chunks the Crusher already compressed are kept apart from the ones Headroom may still compress, in order', () => {
+  const a = 'first fresh';
+  const b = `rows\n${CRUSH_MARKER} saved ~12 tokens`;
+  const c = 'second fresh';
+  const d = `${CRUSH_MARKER} trailer first`;
+  assert.deepStrictEqual(splitAlreadyCrushed([a, b, c, d]), { fresh: [a, c], crushed: [b, d] });
+  assert.deepStrictEqual(splitAlreadyCrushed([]), { fresh: [], crushed: [] });
 })) passed++; else failed++;
 
 if (test('the marker is the one scripts/lib/crusher/engine.js writes', () => {

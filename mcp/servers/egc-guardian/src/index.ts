@@ -20,7 +20,7 @@ import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath, resolveWriteTarget } from './validator.js';
 import { redactPayload, writeAuditEntry } from './audit-log.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
-import { runCompressionPipeline } from './compression-pipeline.js';
+import { runCompressionPipeline, splitAlreadyCrushed } from './compression-pipeline.js';
 import { createRateLimiter } from './rate-limit.js';
 import { autoLearn } from './learn-writer.js';
 import { compressViaHeadroom } from './headroom-client.js';
@@ -369,14 +369,17 @@ async function handleReduceContext(toolArgs: unknown) {
 
   const pipeline = runCompressionPipeline(rawPayloads);
 
-  // Phase 2: optional Headroom deep compression (falls back silently if proxy not running)
+  // Phase 2: optional Headroom deep compression (falls back silently if proxy not running).
+  // Chunks the Token Crusher already compressed stay out of this phase and
+  // follow its output unchanged.
   let finalContent = pipeline.chunks.join('\n\n');
   let headroomSavingsPct = 0;
   let headroomTransforms: string[] = [];
-  if (pipeline.chunks.length > 0) {
-    const hr = await compressViaHeadroom(pipeline.chunks);
+  const { fresh, crushed } = splitAlreadyCrushed(pipeline.chunks);
+  if (fresh.length > 0) {
+    const hr = await compressViaHeadroom(fresh);
     if (hr !== null) {
-      finalContent = hr.text;
+      finalContent = [hr.text, ...crushed].join('\n\n');
       headroomSavingsPct = Math.round((1 - hr.bytes_after / hr.bytes_before) * 100);
       headroomTransforms = hr.transforms_applied;
     }
