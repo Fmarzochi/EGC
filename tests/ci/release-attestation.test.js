@@ -13,6 +13,7 @@ const DEPRECATED_ACTION = 'actions/attest-sbom';
 const ATTEST_ACTION = 'actions/attest';
 const SBOM_GENERATOR = 'anchore/sbom-action';
 const PROVENANCE_ACTION = 'actions/attest-build-provenance';
+const PACKED_TARBALL = '${{ steps.pack.outputs.tarball }}';
 const COMMIT_SHA_PIN = /^actions\/attest@[0-9a-f]{40}$/;
 const PIN_LINE_WITH_VERSION_COMMENT = /^uses: actions\/attest@[0-9a-f]{40} # v\d+\.\d+\.\d+$/;
 
@@ -76,7 +77,8 @@ function run() {
     assert.ok(sbomFile, 'the SBOM generator declares no output-file');
     assert.ok(steps.indexOf(generator) < steps.indexOf(attest), 'the SBOM must be generated before it is attested');
     assert.strictEqual(attest.with && attest.with['sbom-path'], sbomFile);
-    assert.strictEqual(attest.with['subject-path'], provenance.with['subject-path']);
+    assert.strictEqual(attest.with['subject-path'], PACKED_TARBALL);
+    assert.strictEqual(provenance.with['subject-path'], PACKED_TARBALL);
     assert.ok(!('predicate-type' in attest.with), 'sbom-path and predicate-type cannot be combined');
     assert.ok(!('predicate-path' in attest.with), 'sbom-path and predicate-path cannot be combined');
   })) passed++; else failed++;
