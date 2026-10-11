@@ -232,6 +232,17 @@ async function main() {
     assert.strictEqual(claim.ok, true, 'lock freed by sweep is claimable');
   });
 
+  await run('a lock past its ttl is swept by the clock the sweep is given, not by the database clock (#1681)', async () => {
+    const db = await freshDb();
+    await bus.announce(db, { sessionId: 'holder', projectPath: '/p' });
+    const claim = await bus.claimPath(db, { sessionId: 'holder', path: 'y.js', ttlSeconds: 60 });
+    assert.strictEqual(claim.ok, true);
+    const later = Date.now() + 120 * 1000;
+    await bus.announce(db, { sessionId: 'holder', projectPath: '/p' }, later);
+    await bus.sweepDead(db, later);
+    assert.strictEqual((await bus.listLocks(db)).length, 0, 'a lock 120 s old by the given clock, with a 60 s ttl, is gone');
+  });
+
   await run('a direct event reaches only a live session of the same project', async () => {
     const db = await freshDb();
     await bus.announce(db, { sessionId: 'a', projectPath: '/p' });
