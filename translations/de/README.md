@@ -58,7 +58,7 @@ Zwei Cursor-Registerkarten, ein Claude Code Terminal und eine Antigravity Sessio
 
 ### Wächter: Eine Sicherheitsebene vor jedem Kommando
 
-Wächter prüft Befehle, bevor sie ausgeführt werden, aktiviert riskante Schreibvorgänge und schützt den Kontext vor Überlaufen im Hintergrund, ohne dass Sie irgendetwas aufrufen. Die Abdeckung hängt von der eigenen Hakenunterstützung jedes Tools ab; die [Sicherheitsprüfung](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) dokumentiert die Ausnahme.
+Wächter prüft Befehle, bevor sie ausgeführt werden, aktiviert riskante Schreibvorgänge und schützt den Kontext vor Überlaufen im Hintergrund, ohne dass Sie irgendetwas aufrufen. Die Abdeckung hängt von der eigenen Hakenunterstützung jedes Tools ab; die [Sicherheitsprüfung](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) dokumentiert die Ausnahme. Wenn eine Aufgabe startet, gibt `orchestrate_task` auch den Code zurück, um den es bei der Aufgabe geht, durch eine lokale Grafik deines Projekts gefunden; siehe [Tokenoptimierung](../../docs/token-optimization.md).
 
 ### Token Crusher: Rauschen erreicht nie das Modell
 
