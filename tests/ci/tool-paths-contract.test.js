@@ -85,12 +85,21 @@ tally(test('a path an adapter plans outside the table fails the contract', () =>
 }));
 
 tally(test('the longest matching row wins, and a variant row only applies in its variant', () => {
-  assert.strictEqual(findRow(table.rows, 'cline-project', 'default', '<project>/.clinerules/hooks/PreToolUse').status, 'unverified');
+  assert.strictEqual(findRow(table.rows, 'cline-project', 'default', '<project>/.clinerules/hooks/PreToolUse').surface, 'hooks');
   assert.strictEqual(findRow(table.rows, 'cline-project', 'default', '<project>/.clinerules/common-memory.md').surface, 'rules');
   assert.strictEqual(findRow(table.rows, 'windsurf-home', 'default', '~/AppData/Roaming/devin/config.json'), null);
   assert.ok(findRow(table.rows, 'windsurf-home', 'win32', '~/AppData/Roaming/devin/config.json'));
   assert.strictEqual(findRow(table.rows, 'zed-home', 'default', '~/AppData/Roaming/Zed/AGENTS.md'), null);
   assert.ok(findRow(table.rows, 'zed-home', 'win32', '~/AppData/Roaming/Zed/AGENTS.md'));
+}));
+
+tally(test('the Cline hook files land in a directory the extension source reads, pinned to a commit (#1838)', () => {
+  for (const hookFile of ['PreToolUse', 'PreToolUse.ps1']) {
+    const row = findRow(table.rows, 'cline-project', 'default', `<project>/.clinerules/hooks/${hookFile}`);
+    assert.strictEqual(row.status, 'documented', `${hookFile} is read by the Cline extension`);
+    assert.match(row.source, /^https:\/\/github\.com\/cline\/cline\/blob\/[0-9a-f]{40}\//, 'the source names the exact commit read');
+  }
+  assert.deepStrictEqual(table.rows.filter(row => row.adapter === 'cline-project' && row.status === 'unverified').map(row => row.path), []);
 }));
 
 tally(test(`${DOC_RELATIVE_PATH} is generated from the table`, () => {
