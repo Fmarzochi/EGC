@@ -75,6 +75,7 @@ function sessionIdFromJsonCase() {
     const input = { tool_name: 'Read', session_id: 'from-json', tool_input: { file_path: 'README.md' } };
     assert.strictEqual(buildActivityRow(input, { GEMINI_HOOK_EVENT_NAME: 'PostToolUse' }).session_id, 'from-json');
     assert.strictEqual(buildActivityRow(input, { GEMINI_HOOK_EVENT_NAME: 'PostToolUse', ECC_SESSION_ID: 'sess' }).session_id, 'sess', 'the environment still wins when set');
+    assert.strictEqual(buildActivityRow(input, { GEMINI_HOOK_EVENT_NAME: 'PostToolUse', EGC_SESSION_ID: '   ' }).session_id, 'from-json', 'a blank environment value does not shadow the JSON');
   });
 }
 

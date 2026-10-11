@@ -12,6 +12,7 @@ const assert = require('node:assert');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const script = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'check-console-log.js');
 const { isExcluded } = require(script);
@@ -55,7 +56,7 @@ tally(test('requiring the module does not start the stdin reader', () => {
 }));
 
 tally(test('run as a script it still passes its input through', () => {
-  const result = spawnSync(process.execPath, [script], { input: '{"x":1}', encoding: 'utf8', timeout: 15000, cwd: os.tmpdir() });
+  const result = spawnSync(process.execPath, [script], { input: '{"x":1}', encoding: 'utf8', timeout: CLI_TIMEOUT_MS, cwd: os.tmpdir() });
   assert.strictEqual(result.status, 0, result.stderr);
   assert.strictEqual(result.stdout, '{"x":1}');
 }));

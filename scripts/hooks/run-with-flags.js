@@ -26,19 +26,74 @@ function writeStderr(stderr) {
   process.stderr.write(stderr.endsWith('\n') ? stderr : `${stderr}\n`);
 }
 
-// A hook is required in-process only when its source exports run() in one
-// of the shapes the hooks use. A hook that merely has a module.exports of
-// its own and the word "run" somewhere (a comment, a helper name) would be
-// required here, run its module scope, and then run it again in the child
-// the legacy path spawns.
-const RUN_EXPORT_SHAPES = [
-  /\bmodule\.exports\s*=\s*\{[^}]*\brun\b/,
-  /\bmodule\.exports\.run\s*=/,
-  /\bexports\.run\s*=/,
-];
+// The text between the braces of the object literal whose `{` sits at
+// openIndex, with nested brackets balanced and string literals skipped,
+// or null when the literal never closes.
+function objectLiteralBody(src, openIndex) {
+  let depth = 0;
+  let quote = null;
+  for (let i = openIndex; i < src.length; i++) {
+    const ch = src[i];
+    if (quote) {
+      if (ch === '\\') i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+    } else if (ch === '{' || ch === '(' || ch === '[') {
+      depth++;
+    } else if (ch === '}' || ch === ')' || ch === ']') {
+      depth--;
+      if (depth === 0) return src.slice(openIndex + 1, i);
+    }
+  }
+  return null;
+}
 
+// The entries of an object literal body, split at the commas of its top
+// level only.
+function topLevelEntries(body) {
+  const entries = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= body.length; i++) {
+    const ch = body[i];
+    if (ch === '{' || ch === '(' || ch === '[') depth++;
+    else if (ch === '}' || ch === ')' || ch === ']') depth--;
+    else if (i === body.length || (ch === ',' && depth === 0)) {
+      entries.push(body.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return entries;
+}
+
+// The property names at the top level of an object literal: `run`,
+// `run: fn`, `run() {}`, `async run() {}`, `'run': fn`. A `run` nested in
+// another property's value is not an export.
+const ENTRY_KEY = /^\s*(?:async\s+)?['"]?([A-Za-z_$][\w$]*)['"]?\s*(?:[:(]|$)/;
+
+function topLevelKeys(body) {
+  const keys = [];
+  for (const entry of topLevelEntries(body)) {
+    const match = ENTRY_KEY.exec(entry);
+    if (match) keys.push(match[1]);
+  }
+  return keys;
+}
+
+// A hook is required in-process only when its source exports run() as a
+// top-level property of module.exports (or assigns module.exports.run or
+// exports.run). A hook that merely mentions "run" in a comment, a helper
+// name or a nested object would be required here, run its module scope,
+// and then run it again in the child the legacy path spawns.
 function exportsRun(src) {
-  return RUN_EXPORT_SHAPES.some(shape => shape.test(src));
+  if (/\bmodule\.exports\.run\s*=/.test(src) || /\bexports\.run\s*=/.test(src)) return true;
+  const open = /\bmodule\.exports\s*=\s*\{/.exec(src);
+  if (!open) return false;
+  const body = objectLiteralBody(src, open.index + open[0].length - 1);
+  return body !== null && topLevelKeys(body).includes('run');
 }
 
 // The required module of a hook whose source exports run(), or null when it
