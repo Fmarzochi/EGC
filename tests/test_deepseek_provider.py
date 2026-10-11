@@ -203,6 +203,58 @@ def test_retired_reasoner_id_keeps_the_requested_temperature(provider: DeepSeekP
     assert kwargs["temperature"] == 0.0
 
 
+def _stub_response(model: str) -> MagicMock:
+    response = MagicMock()
+    choice = MagicMock()
+    choice.message.content = "answer"
+    choice.message.tool_calls = None
+    choice.finish_reason = "stop"
+    response.choices = [choice]
+    response.model = model
+    usage = MagicMock()
+    usage.prompt_tokens = 10
+    usage.completion_tokens = 5
+    usage.total_tokens = 15
+    response.usage = usage
+    return response
+
+
+@pytest.mark.unit
+def test_thinking_metadata_switches_thinking_mode_on_with_tools_kept(provider: DeepSeekProvider) -> None:
+    """Thinking is a request parameter (extra_body) on the current API and supports tool calls."""
+    from llm.core.types import LLMInput, Message, Role, ToolDefinition
+    provider.client.chat.completions.create.return_value = _stub_response("deepseek-flash")
+    provider.generate(LLMInput(
+        messages=[Message(role=Role.USER, content="hi")],
+        model="deepseek-flash",
+        tools=[ToolDefinition(name="my_tool", description="does stuff", parameters={})],
+        metadata={"thinking": True},
+    ))
+    _, kwargs = provider.client.chat.completions.create.call_args
+    assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}}
+    assert kwargs["tools"][0]["function"]["name"] == "my_tool"
+
+
+@pytest.mark.unit
+def test_retired_reasoner_id_switches_thinking_mode_on(provider: DeepSeekProvider) -> None:
+    """deepseek-reasoner meant the thinking mode of V4 Flash: it maps to deepseek-flash with thinking enabled."""
+    from llm.core.types import LLMInput, Message, Role
+    provider.client.chat.completions.create.return_value = _stub_response("deepseek-flash")
+    provider.generate(LLMInput(messages=[Message(role=Role.USER, content="hi")], model="deepseek-reasoner"))
+    _, kwargs = provider.client.chat.completions.create.call_args
+    assert kwargs["model"] == "deepseek-flash"
+    assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}}
+
+
+@pytest.mark.unit
+def test_without_thinking_no_extra_body_is_sent(provider: DeepSeekProvider) -> None:
+    from llm.core.types import LLMInput, Message, Role
+    provider.client.chat.completions.create.return_value = _stub_response("deepseek-flash")
+    provider.generate(LLMInput(messages=[Message(role=Role.USER, content="hi")], model="deepseek-flash"))
+    _, kwargs = provider.client.chat.completions.create.call_args
+    assert "extra_body" not in kwargs
+
+
 @pytest.mark.unit
 def test_unknown_custom_id_is_sent_unchanged(provider: DeepSeekProvider) -> None:
     """An id the catalog does not know (a custom base_url deployment) is not rewritten to the default."""
