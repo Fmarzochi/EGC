@@ -1061,6 +1061,13 @@
     },
     {
       "adapter": "windsurf-project",
+      "surface": "mcp",
+      "path": "<project>/.devin/mcp_config.local.json",
+      "status": "documented",
+      "source": "https://docs.devin.ai/cli/extensibility/mcp"
+    },
+    {
+      "adapter": "windsurf-project",
       "surface": "library",
       "path": "<project>/.devin/rules/",
       "status": "egc",

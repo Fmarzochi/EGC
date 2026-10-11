@@ -1504,6 +1504,53 @@ function runTests() {
     }
   }));
 
+  tally(test('a Devin Desktop project install merges the EGC servers into .devin/mcp_config.local.json beside the person\'s own, and an uninstall takes only the two entries out (#1678)', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+
+    try {
+      const mcpPath = path.join(projectRoot, '.devin', 'mcp_config.local.json');
+      fs.mkdirSync(path.dirname(mcpPath), { recursive: true });
+      fs.writeFileSync(mcpPath, JSON.stringify({
+        mcpServers: { github: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], env: { GITHUB_TOKEN: 'placeholder' } } },
+      }, null, 2));
+
+      const { planInstallTargetScaffold } = require('../../scripts/lib/install-targets/registry');
+      const { applyInstallPlan } = require('../../scripts/lib/install-executor');
+      const scaffold = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot: REPO_ROOT, homeDir, projectRoot, modules: [] });
+      const mcp = scaffold.operations.find(operation => operation.destinationPath === mcpPath);
+      assert.ok(mcp, 'the scaffold plans the MCP file Devin Local reads');
+      const targetRoot = path.join(projectRoot, '.devin');
+      const installStatePath = scaffold.installStatePath;
+      const statePreview = createInstallState({
+        adapter: { id: 'windsurf-project', target: 'windsurf', kind: 'project' },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'minimal', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [mcp],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+      applyInstallPlan({ operations: [mcp], installStatePath, targetRoot, statePreview });
+
+      const written = JSON.parse(fs.readFileSync(mcpPath, 'utf8'));
+      assert.deepStrictEqual(Object.keys(written.mcpServers).sort(), ['egc-guardian', 'egc-memory', 'github']);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [path.join(REPO_ROOT, 'mcp', 'servers', 'egc-guardian', 'build', 'index.js')], env: {} });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [path.join(REPO_ROOT, 'mcp', 'servers', 'egc-memory', 'build', 'index.js')], env: {} });
+      assert.strictEqual(written.mcpServers.github.env.GITHUB_TOKEN, 'placeholder', 'the person\'s server keeps its env');
+      assert.ok(!fs.existsSync(path.join(homeDir, '.config', 'devin', 'mcp_config.json')), 'the legacy Cascade user file is not written');
+
+      const result = uninstallInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] });
+      const outcome = result.results.find(entry => entry.adapter.id === 'windsurf-project');
+      assert.strictEqual(outcome.status, 'uninstalled');
+      const after = JSON.parse(fs.readFileSync(mcpPath, 'utf8'));
+      assert.deepStrictEqual(Object.keys(after.mcpServers), ['github'], 'only the two EGC entries leave; the file stays for the person\'s server');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
   tally(test('uninstall restores JSON merged files from recorded previous content', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');

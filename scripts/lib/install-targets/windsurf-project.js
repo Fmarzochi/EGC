@@ -4,9 +4,11 @@ const {
   buildValidationIssue,
   createFlatSkillPlanOperations,
   createInstallTargetAdapter,
+  createManagedOperation,
   createRemappedOperation,
   resolveBaseRoot,
 } = require('./helpers');
+const { assertSafeMcpConfig } = require('../mcp-config');
 const {
   createWindsurfGateGuardOperations,
 } = require('../windsurf-gateguard-operations');
@@ -15,6 +17,9 @@ const { devinConfigIssues, resolveDevinProjectConfigPath } = require('../devin-l
 const DEVIN_WORKSPACE_DIR = '.devin';
 const WINDSURF_WORKSPACE_DIR = '.windsurf';
 const INSTALL_STATE_FILE = 'egc-install-state.json';
+const DEVIN_MCP_CONFIG_FILE = 'mcp_config.local.json';
+const DEVIN_MCP_MODULE_ID = 'egc-mcp-servers';
+const EGC_MCP_SERVERS = ['egc-guardian', 'egc-memory'];
 
 function isDirectory(candidate) {
   try {
@@ -36,6 +41,40 @@ function resolveWorkspaceDir(projectRoot) {
   if (isDirectory(path.join(projectRoot, DEVIN_WORKSPACE_DIR, 'skills'))) return DEVIN_WORKSPACE_DIR;
   if (isDirectory(path.join(projectRoot, WINDSURF_WORKSPACE_DIR))) return WINDSURF_WORKSPACE_DIR;
   return DEVIN_WORKSPACE_DIR;
+}
+
+// Devin Local, the agent in Devin Desktop and the Devin CLI, reads the MCP
+// servers of a project from .devin/mcp_config.local.json, the gitignored local
+// file (docs.devin.ai/cli/extensibility/mcp, read on 2026-10-11), so the
+// absolute paths of this machine's servers stay out of the committed config.
+// The user-level mcp_config.json the docs also describe belongs to Cascade,
+// the agent Devin Desktop removed on 2026-09-08, and is left alone.
+function resolveDevinMcpConfigPath(projectRoot) {
+  return path.join(projectRoot, DEVIN_WORKSPACE_DIR, DEVIN_MCP_CONFIG_FILE);
+}
+
+function devinMcpServersPayload(repoRoot) {
+  const servers = EGC_MCP_SERVERS.map(name => [name, {
+    command: 'node',
+    args: [path.join(repoRoot, 'mcp', 'servers', name, 'build', 'index.js')],
+    env: {},
+  }]);
+  return { mcpServers: Object.fromEntries(servers) };
+}
+
+function createDevinMcpOperation(repoRoot, projectRoot) {
+  const mergePayload = devinMcpServersPayload(repoRoot);
+  assertSafeMcpConfig(mergePayload, 'the EGC MCP servers for Devin Local');
+  return createManagedOperation({
+    kind: 'merge-json',
+    moduleId: DEVIN_MCP_MODULE_ID,
+    sourceRelativePath: '.mcp.json',
+    destinationPath: resolveDevinMcpConfigPath(projectRoot),
+    strategy: 'merge-json',
+    ownership: 'managed',
+    scaffoldOnly: false,
+    mergePayload,
+  });
 }
 
 module.exports = createInstallTargetAdapter({
@@ -74,17 +113,19 @@ module.exports = createInstallTargetAdapter({
     };
     const targetRoot = adapter.resolveRoot(planningInput);
 
-    // Devin Local reads project hooks only under .devin/, whichever
-    // directory holds the skills, so the config goes there even while the
-    // scripts stay under .windsurf/.
+    // Devin Local reads project hooks and MCP servers only under .devin/,
+    // whichever directory holds the skills, so both configs go there even
+    // while the scripts stay under .windsurf/.
+    const projectRoot = resolveBaseRoot('project', planningInput);
     return [
       ...createFlatSkillPlanOperations(input, adapter),
       ...createWindsurfGateGuardOperations(
         adapter,
         targetRoot,
         createRemappedOperation,
-        resolveDevinProjectConfigPath(resolveBaseRoot('project', planningInput))
+        resolveDevinProjectConfigPath(projectRoot)
       ),
+      createDevinMcpOperation(input.repoRoot, projectRoot),
     ];
   },
 });

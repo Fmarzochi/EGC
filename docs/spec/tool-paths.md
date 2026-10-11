@@ -249,6 +249,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `<project>/.devin/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `<project>/.devin/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | hooks | `<project>/.devin/config.local.json` | default | documented | <https://docs.devin.ai/cli/extensibility/hooks> |  |
+| mcp | `<project>/.devin/mcp_config.local.json` | default | documented | <https://docs.devin.ai/cli/extensibility/mcp> |  |
 | library | `<project>/.devin/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.devin/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `<project>/.devin/skills/` | default | documented | <https://docs.devin.ai/desktop/cascade/skills> |  |
