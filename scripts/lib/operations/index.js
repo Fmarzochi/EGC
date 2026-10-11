@@ -252,4 +252,4 @@ module.exports = {
   // _callBusTool above the raw MCP JSON-RPC line level, so the isError check
   // (#1797) is otherwise unreachable from a test.
   _extractMcpLineResult,
-};
+};
