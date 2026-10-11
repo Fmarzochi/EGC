@@ -106,6 +106,79 @@ class TestClaudeProviderContentExtraction(unittest.TestCase):
         result = self.provider.generate(_simple_input())
         self.assertEqual(result.content, "")
 
+    def _tool_conversation(self, tool_messages=None):
+        from llm.core.types import LLMInput, Message, Role, ToolCall
+
+        results = tool_messages or [Message(role=Role.TOOL, content="sunny", tool_call_id="call_1")]
+        return LLMInput(
+            messages=[
+                Message(role=Role.SYSTEM, content="be brief"),
+                Message(role=Role.USER, content="weather?"),
+                Message(
+                    role=Role.ASSISTANT,
+                    content="checking",
+                    tool_calls=[ToolCall(id="call_1", name="weather", arguments={"city": "Rio"})],
+                ),
+                *results,
+            ],
+            model="claude-sonnet-4-7",
+        )
+
+    def _request_params(self, llm_input):
+        self.provider.client.messages.create.return_value = self._make_response([self._text_block("ok")])
+        self.provider.generate(llm_input)
+        return self.provider.client.messages.create.call_args.kwargs
+
+    def test_system_message_is_sent_as_the_top_level_system_parameter(self):
+        """Issue #1687: the Messages API rejects a system role inside messages."""
+        params = self._request_params(self._tool_conversation())
+        self.assertEqual(params["system"], "be brief")
+        self.assertEqual([m["role"] for m in params["messages"]], ["user", "assistant", "user"])
+
+    def test_assistant_tool_calls_become_tool_use_blocks(self):
+        params = self._request_params(self._tool_conversation())
+        assistant = params["messages"][1]
+        self.assertEqual(assistant["content"][0], {"type": "text", "text": "checking"})
+        self.assertEqual(
+            assistant["content"][1],
+            {"type": "tool_use", "id": "call_1", "name": "weather", "input": {"city": "Rio"}},
+        )
+
+    def test_tool_message_becomes_a_tool_result_block_in_a_user_message(self):
+        params = self._request_params(self._tool_conversation())
+        self.assertEqual(
+            params["messages"][2],
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "call_1", "content": "sunny"}],
+            },
+        )
+
+    def test_consecutive_tool_messages_share_one_user_message(self):
+        from llm.core.types import Message, Role
+
+        params = self._request_params(
+            self._tool_conversation(
+                [
+                    Message(role=Role.TOOL, content="sunny", tool_call_id="call_1"),
+                    Message(role=Role.TOOL, content="25C", tool_call_id="call_2"),
+                ]
+            )
+        )
+        self.assertEqual(len(params["messages"]), 3)
+        self.assertEqual(
+            [block["tool_use_id"] for block in params["messages"][2]["content"]],
+            ["call_1", "call_2"],
+        )
+
+    def test_every_text_block_is_joined_in_order(self):
+        """Issue #1687: only the first text block of the response was returned."""
+        self.provider.client.messages.create.return_value = self._make_response(
+            [self._text_block("first "), self._tool_block(), self._text_block("second")]
+        )
+        result = self.provider.generate(_simple_input())
+        self.assertEqual(result.content, "first second")
+
     def test_stream_flag_raises_not_implemented(self):
         """Regression test for issue #923: LLMInput.stream=True was silently
         ignored, downgrading callers to a blocking call. Streaming must fail
