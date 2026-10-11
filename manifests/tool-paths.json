@@ -11,11 +11,12 @@
     },
     {
       "id": "win32",
-      "description": "Windows, where Devin keeps its user config under %APPDATA%",
+      "description": "Windows, where Devin and Zed keep their user config under %APPDATA%",
       "platform": "win32",
       "env": {},
       "adapters": [
-        "windsurf-home"
+        "windsurf-home",
+        "zed-home"
       ]
     },
     {
@@ -1281,6 +1282,54 @@
       "path": "~/.config/zed/egc/install-state.json",
       "status": "egc",
       "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "library",
+      "path": "~/AppData/Roaming/Zed/.agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "win32"
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "context",
+      "path": "~/AppData/Roaming/Zed/AGENTS.md",
+      "status": "documented",
+      "source": "https://zed.dev/docs/ai/instructions",
+      "variant": "win32"
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "library",
+      "path": "~/AppData/Roaming/Zed/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "win32"
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "library",
+      "path": "~/AppData/Roaming/Zed/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "win32"
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "library",
+      "path": "~/AppData/Roaming/Zed/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "win32"
+    },
+    {
+      "adapter": "zed-home",
+      "surface": "state",
+      "path": "~/AppData/Roaming/Zed/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages.",
+      "variant": "win32"
     },
     {
       "adapter": "trae-project",

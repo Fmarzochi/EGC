@@ -104,6 +104,8 @@ function resolveModulesPlan(input, adapter) {
     repoRoot: input.repoRoot,
     projectRoot: input.projectRoot,
     homeDir: input.homeDir,
+    platform: input.platform,
+    env: input.env,
   };
   const targetRoot = adapter.resolveRoot(planningInput);
   return { modules, planningInput, targetRoot };
