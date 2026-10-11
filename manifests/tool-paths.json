@@ -197,14 +197,6 @@
     },
     {
       "adapter": "cursor-project",
-      "surface": "commands",
-      "path": "<project>/.cursor/commands/",
-      "status": "unverified",
-      "source": "https://cursor.com/docs/context/skills",
-      "note": "Cursor's current docs no longer describe custom commands in .cursor/commands; the skills page talks about moving commands to skills (read on 2026-10-10)."
-    },
-    {
-      "adapter": "cursor-project",
       "surface": "runtime",
       "path": "<project>/.cursor/hooks/",
       "status": "egc",
@@ -251,7 +243,8 @@
       "surface": "skills",
       "path": "<project>/.cursor/skills/",
       "status": "documented",
-      "source": "https://cursor.com/docs/context/skills"
+      "source": "https://cursor.com/docs/context/skills",
+      "note": "Cursor documents custom commands only as skills invoked by /<name> and finds them in nested folders (read on 2026-10-11), so each EGC command is a skill at .cursor/skills/<name>/SKILL.md with disable-model-invocation: true, and a bundled skill of the same name wins. The old .cursor/commands copies are retired only while they hold EGC's bytes."
     },
     {
       "adapter": "cursor-project",
@@ -835,9 +828,9 @@
       "adapter": "cline-project",
       "surface": "hooks",
       "path": "<project>/.clinerules/hooks/",
-      "status": "unverified",
-      "source": "https://docs.cline.bot/customization/hooks",
-      "note": "Cline's current docs move hooks to SDK plugins and no longer name .clinerules/hooks (read on 2026-10-10)."
+      "status": "documented",
+      "source": "https://github.com/cline/cline/blob/c3a40572765b76873c597247941118c1778d02c8/apps/vscode/src/core/storage/disk.ts",
+      "note": "The hooks page now points at SDK plugins, but the plugins page says plugins apply only to the Cline SDK, CLI and Kanban, not to the VS Code and JetBrains extensions (https://docs.cline.bot/customization/plugins, read on 2026-10-11). The extension source at that commit (main on 2026-10-11) still discovers hooks in each workspace root's .clinerules/hooks (disk.ts, hooksDir) and runs a file named after the hook: PreToolUse, executable, on Unix and PreToolUse.ps1 on Windows (apps/vscode/src/core/hooks/hook-factory.ts, findHookInHooksDir)."
     },
     {
       "adapter": "cline-project",
