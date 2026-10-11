@@ -39,6 +39,7 @@ import { loadOrCreateEncKey, readStateFile, writeStateFile, quarantineUndecrypta
 import { propagateStateToTools } from './propagate';
 import {
   createWorkingMemoryTable,
+  createWorkingMemoryExpiryIndex,
   sweepExpired,
   setWorkingMemory,
   getWorkingMemory,
@@ -367,6 +368,14 @@ async function runMigrations(db: Database, dbDir: string) {
     if (!hasV11) {
       await createSessionBusTables(db);
       await db.run('INSERT INTO schema_migrations (version) VALUES (11)');
+    }
+
+    // Migration 12: index on working_memory.expires_at, read by the sweep that
+    // every working memory read now runs.
+    const hasV12 = await db.get('SELECT version FROM schema_migrations WHERE version = 12');
+    if (!hasV12) {
+      await createWorkingMemoryExpiryIndex(db);
+      await db.run('INSERT INTO schema_migrations (version) VALUES (12)');
     }
 
     const bootRow = await db.get<{value: string}>('SELECT value FROM operational_state WHERE id = ?', ['server_boot_count']);

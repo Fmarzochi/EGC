@@ -169,12 +169,9 @@ async function loadRawObservationsFromStateDb(
   const db = await openCompatDatabase(dbPath, 'egc-memory');
 
   try {
-    try {
-      await db.run("ALTER TABLE events ADD COLUMN compressed_at TEXT");
-    } catch {
-      // column already exists
-    }
-
+    // compressed_at is added by migration 005 of the CLI state store. A store
+    // the CLI has not opened since then has no column yet: the query fails and
+    // loadRawObservations falls over to observations.jsonl until it does.
     const projectRoot = resolveProjectRoot(projectPath);
     const sinceFilter = since ?? null;
     const query = `
@@ -287,42 +284,44 @@ function readObsFile(filePath: string, limit: number, since?: string): RawObserv
   return observations.slice(-limit);
 }
 
-export async function replaceObservation(projectPath: string, id: string, compressed: CompressedObservation): Promise<void> { // NOSONAR: dual-backend persistence path kept inline
+// Marks the event compressed in the CLI state store. False means the store has
+// no row with that id, or could not take the update (a store the CLI has not
+// migrated to 005 has no compressed_at column yet), so the caller moves on to
+// observations.jsonl, the way loadRawObservations does on a failed read.
+async function markCompressedInStateDb(dbPath: string, id: string, compressedAt: string): Promise<boolean> {
+  const db = await openCompatDatabase(dbPath, 'egc-memory');
+  try {
+    const result = await db.run(
+      "UPDATE events SET compressed_at = ? WHERE id = ?",
+      [compressedAt, id]
+    );
+    return ((result as { changes?: number } | undefined)?.changes ?? 0) > 0;
+  } catch (err) {
+    console.error("[EGC compress] state.db compressed_at update failed, using observations.jsonl fallback:", String(err));
+    return false;
+  } finally {
+    await db.close();
+  }
+}
+
+// The project's observations.jsonl, else the global one, else null.
+function resolveObservationsFile(projectDir: string): string | null {
+  const projectObsPath = path.join(projectDir, "observations.jsonl");
+  if (fs.existsSync(projectObsPath)) return projectObsPath;
+  const globalObsPath = path.join(learningStoreDir(), "observations.jsonl");
+  return fs.existsSync(globalObsPath) ? globalObsPath : null;
+}
+
+export async function replaceObservation(projectPath: string, id: string, compressed: CompressedObservation): Promise<void> {
   const { projectDir } = getProjectHash(projectPath);
   const dbPath = resolveStateStoreDbPath();
 
-  if (fs.existsSync(dbPath)) {
-    const db = await openCompatDatabase(dbPath, 'egc-memory');
-
-    try {
-      try {
-        await db.run("ALTER TABLE events ADD COLUMN compressed_at TEXT");
-      } catch {
-        // column already exists
-      }
-
-      const result = await db.run(
-        "UPDATE events SET compressed_at = ? WHERE id = ?",
-        [compressed.compressed_at, id]
-      );
-
-      if (((result as { changes?: number } | undefined)?.changes ?? 0) > 0) {
-        return;
-      }
-    } finally {
-      await db.close();
-    }
+  if (fs.existsSync(dbPath) && await markCompressedInStateDb(dbPath, id, compressed.compressed_at)) {
+    return;
   }
 
-  let obsPath = path.join(projectDir, "observations.jsonl");
-  if (!fs.existsSync(obsPath)) {
-    const globalObsPath = path.join(learningStoreDir(), "observations.jsonl");
-    if (fs.existsSync(globalObsPath)) {
-      obsPath = globalObsPath;
-    } else {
-      return;
-    }
-  }
+  const obsPath = resolveObservationsFile(projectDir);
+  if (!obsPath) return;
 
   const content = fs.readFileSync(obsPath, "utf8");
   const lines = content.split("\n");
