@@ -1042,6 +1042,11 @@ function performDirToFile(transition) {
   }
 }
 
+function applyGeneratedContextRecordingHash(operation, writtenHashes) {
+  const landed = applyGeneratedContextOperation(operation);
+  if (landed !== null) writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
+}
+
 // One planned operation, by kind: the merge and hook kinds edit a file in
 // place, a generated context file is written only when it lacks its
 // section, and a copied file lands with its hash recorded for the state.
@@ -1055,8 +1060,7 @@ function applyPlannedOperation(operation, disabledServers, writtenHashes) {
   } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
     applyMergeMarkdownIndexOperation(operation);
   } else if (operation.kind === GENERATE_CONTEXT_FILE_KIND) {
-    const landed = applyGeneratedContextOperation(operation);
-    if (landed !== null) writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
+    applyGeneratedContextRecordingHash(operation, writtenHashes);
   } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
     const landed = applyMcpCopyFileOperation(operation, disabledServers);
     writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));

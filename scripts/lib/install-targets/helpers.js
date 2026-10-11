@@ -696,9 +696,9 @@ function planGenericRetirements(input, adapter) {
     if (!activeModuleIds.has(operation.moduleId)) continue;
     const resolved = path.resolve(operation.destinationPath);
     if (!isRetirementCandidate(resolved, boundaries)) continue;
-    const source = normalizeRelativePath(String(operation.sourceRelativePath || ''));
+    const source = recordedSourceOf(operation);
     if (!source) continue;
-    if (operation.kind === GENERATE_CONTEXT_FILE_KIND && typeof operation.contentSha256 !== 'string' && !isGeneratedContextSource(source)) continue;
+    if (isUnverifiableGeneratedRecord(operation, source)) continue;
     boundaries.seen.add(resolved);
     retirements.push(retirementOf(operation, resolved, source, repoRoot));
   }
@@ -796,6 +796,16 @@ function planHookRetirements(input, adapter) {
     });
   }
   return retirements;
+}
+
+function recordedSourceOf(operation) {
+  return normalizeRelativePath(String(operation.sourceRelativePath || ''));
+}
+
+function isUnverifiableGeneratedRecord(operation, source) {
+  return operation.kind === GENERATE_CONTEXT_FILE_KIND
+    && typeof operation.contentSha256 !== 'string'
+    && !isGeneratedContextSource(source);
 }
 
 function recordedContentSha256(operation, source) {
