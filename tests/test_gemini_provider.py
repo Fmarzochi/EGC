@@ -103,18 +103,22 @@ class TestGeminiProviderMessageHandling(unittest.TestCase):
     def test_tool_result_and_next_user_message_share_one_user_turn(self) -> None:
         from llm.core.types import ToolCall
 
-        call_kwargs = self._request_kwargs(
-            [
-                Message(role=Role.USER, content="weather?"),
-                Message(
-                    role=Role.ASSISTANT,
-                    content="",
-                    tool_calls=[ToolCall(id="call_1", name="weather", arguments={"city": "Rio"})],
-                ),
-                Message(role=Role.TOOL, content='{"sky": "sunny"}', name="weather", tool_call_id="call_1"),
-                Message(role=Role.USER, content="and tomorrow?"),
-            ]
-        )
+        # A tool result also feeds the PostToolUse dispatcher, which runs the
+        # configured hooks; the unit test keeps that out with a mock.
+        with patch.object(self.provider, "_dispatch_post_tool_results") as dispatch:
+            call_kwargs = self._request_kwargs(
+                [
+                    Message(role=Role.USER, content="weather?"),
+                    Message(
+                        role=Role.ASSISTANT,
+                        content="",
+                        tool_calls=[ToolCall(id="call_1", name="weather", arguments={"city": "Rio"})],
+                    ),
+                    Message(role=Role.TOOL, content='{"sky": "sunny"}', name="weather", tool_call_id="call_1"),
+                    Message(role=Role.USER, content="and tomorrow?"),
+                ]
+            )
+        dispatch.assert_called_once()
         contents = call_kwargs["contents"]
         self.assertEqual([c.role for c in contents], ["user", "model", "user"])
         self.assertEqual(contents[1].parts[0].function_call.name, "weather")
