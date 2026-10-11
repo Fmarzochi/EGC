@@ -33,7 +33,7 @@ function test(name, fn) {
 }
 
 function runAdapterCli(input, env = {}) {
-  const result = spawnSync('node', [adapterScript], {
+  const result = spawnSync(process.execPath, [adapterScript], {
     input: typeof input === 'string' ? input : JSON.stringify(input),
     encoding: 'utf8',
     env: { ...process.env, EGC_GUARDIAN_CLI: fakeCli, ...env },

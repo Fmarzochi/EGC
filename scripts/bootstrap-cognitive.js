@@ -725,7 +725,9 @@ function injectTraeUserRule(filepath, label, content) {
 (function bootstrapVibe() {
   try {
     const vibeDir = resolveVibeHome({ homeDir: HOME });
-    if (!fs.existsSync(vibeDir)) return;
+    // The same gate as the MCP registration (mcp-register.js): the data root,
+    // or vibe on PATH, so the protocol lands on the same installs.
+    if (!fs.existsSync(vibeDir) && !commandExists('vibe')) return;
     injectProtocol(path.join(vibeDir, 'AGENTS.md'), 'Mistral Vibe');
   } catch (e) {
     console.log(`  [cognitive] Mistral Vibe: unexpected error: ${e.message}`);

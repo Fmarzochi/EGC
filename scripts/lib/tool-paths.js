@@ -8,7 +8,7 @@ const { listInstallTargetAdapters, planInstallTargetScaffold } = require('./inst
 
 const TABLE_RELATIVE_PATH = 'manifests/tool-paths.json';
 const DOC_RELATIVE_PATH = 'docs/spec/tool-paths.md';
-const OVERRIDE_VARIABLES = ['XDG_CONFIG_HOME', 'CRUSH_GLOBAL_CONFIG', 'KIMI_CODE_HOME', 'TRAE_ENV'];
+const OVERRIDE_VARIABLES = ['XDG_CONFIG_HOME', 'CRUSH_GLOBAL_CONFIG', 'KIMI_CODE_HOME', 'TRAE_ENV', 'VIBE_HOME'];
 
 function loadToolPaths(repoRoot) {
   return JSON.parse(fs.readFileSync(path.join(repoRoot, TABLE_RELATIVE_PATH), 'utf8'));

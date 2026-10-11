@@ -1722,14 +1722,14 @@
     {
       "adapter": "vibe-home",
       "surface": "library",
-      "path": "~/.vibe/agents/",
+      "path": "~/.vibe/egc/library/agents/",
       "status": "egc",
       "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
     },
     {
       "adapter": "vibe-home",
       "surface": "library",
-      "path": "~/.vibe/commands/",
+      "path": "~/.vibe/egc/library/commands/",
       "status": "egc",
       "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
     },
@@ -1743,7 +1743,7 @@
     {
       "adapter": "vibe-home",
       "surface": "library",
-      "path": "~/.vibe/rules/",
+      "path": "~/.vibe/egc/library/rules/",
       "status": "egc",
       "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
     },
@@ -1753,6 +1753,13 @@
       "path": "~/.vibe/scripts/",
       "status": "egc",
       "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "vibe-home",
+      "surface": "context",
+      "path": "~/.vibe/AGENTS.md",
+      "status": "documented",
+      "source": "https://github.com/mistralai/mistral-vibe"
     },
     {
       "adapter": "vibe-home",
@@ -1771,7 +1778,7 @@
     {
       "adapter": "vibe-home",
       "surface": "library",
-      "path": "$VIBE_HOME/agents/",
+      "path": "$VIBE_HOME/egc/library/agents/",
       "status": "egc",
       "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
       "variant": "VIBE_HOME"
@@ -1779,7 +1786,7 @@
     {
       "adapter": "vibe-home",
       "surface": "library",
-      "path": "$VIBE_HOME/commands/",
+      "path": "$VIBE_HOME/egc/library/commands/",
       "status": "egc",
       "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
       "variant": "VIBE_HOME"
@@ -1795,7 +1802,7 @@
     {
       "adapter": "vibe-home",
       "surface": "library",
-      "path": "$VIBE_HOME/rules/",
+      "path": "$VIBE_HOME/egc/library/rules/",
       "status": "egc",
       "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
       "variant": "VIBE_HOME"
@@ -1806,6 +1813,14 @@
       "path": "$VIBE_HOME/scripts/",
       "status": "egc",
       "note": "EGC runtime: the scripts the tool's hook or plugin entries run.",
+      "variant": "VIBE_HOME"
+    },
+    {
+      "adapter": "vibe-home",
+      "surface": "context",
+      "path": "$VIBE_HOME/AGENTS.md",
+      "status": "documented",
+      "source": "https://github.com/mistralai/mistral-vibe",
       "variant": "VIBE_HOME"
     },
     {
@@ -1827,14 +1842,14 @@
     {
       "adapter": "vibe-project",
       "surface": "library",
-      "path": "<project>/.vibe/agents/",
+      "path": "<project>/.vibe/egc/library/agents/",
       "status": "egc",
       "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
     },
     {
       "adapter": "vibe-project",
       "surface": "library",
-      "path": "<project>/.vibe/commands/",
+      "path": "<project>/.vibe/egc/library/commands/",
       "status": "egc",
       "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
     },
@@ -1848,7 +1863,7 @@
     {
       "adapter": "vibe-project",
       "surface": "library",
-      "path": "<project>/.vibe/rules/",
+      "path": "<project>/.vibe/egc/library/rules/",
       "status": "egc",
       "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
     },

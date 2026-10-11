@@ -160,14 +160,20 @@ function runTests() {
   (tally(test('Mistral Vibe: the path is config.toml under the data root, the root alone opens the gate, VIBE_HOME moves both, and the format is toml with transport = "stdio" (#1497)', () => {
     const tmpHome = makeTempDir();
     const previous = process.env.VIBE_HOME;
+    const previousPath = process.env.PATH;
     try {
       delete process.env.VIBE_HOME;
+      // An empty PATH, so a vibe binary on this machine cannot open the gate.
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      process.env.PATH = emptyBin;
       const vibeDir = path.join(tmpHome, '.vibe');
       const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Mistral Vibe');
       assert.ok(absent, 'Mistral Vibe must be a registration target');
       assert.strictEqual(absent.path, path.join(vibeDir, 'config.toml'));
       assert.strictEqual(absent.format, 'toml');
       assert.deepStrictEqual(absent.tomlServerKeys, { transport: 'stdio' });
+      assert.strictEqual(absent.gate(), false, 'no data root and no binary: the gate stays closed');
       fs.mkdirSync(vibeDir, { recursive: true });
       assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Mistral Vibe').gate(), true, 'the data root alone opens the gate');
       const moved = path.join(tmpHome, 'elsewhere', 'vibe');
@@ -175,9 +181,13 @@ function runTests() {
       const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Mistral Vibe');
       assert.strictEqual(target.path, path.join(moved, 'config.toml'));
       assert.strictEqual(target.allowedRoot, moved, 'a root outside the home is allowed because VIBE_HOME put it there');
+      assert.strictEqual(target.gate(), false, 'under VIBE_HOME the gate reads the moved root, not ~/.vibe');
+      fs.mkdirSync(moved, { recursive: true });
+      assert.strictEqual(target.gate(), true, 'the moved root opens it');
     } finally {
       if (previous === undefined) delete process.env.VIBE_HOME;
       else process.env.VIBE_HOME = previous;
+      process.env.PATH = previousPath;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   })));

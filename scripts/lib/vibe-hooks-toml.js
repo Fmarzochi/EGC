@@ -62,12 +62,27 @@ const NAME_LINE_RE = /^\s*name\s*=\s*(?:"([^"]*)"|'([^']*)')\s*(?:#.*)?$/;
 const COMMAND_LINE_RE = /^\s*command\s*=\s*"((?:[^"\\]|\\.)*)"\s*(?:#.*)?$/;
 const MATCH_LINE_RE = /^\s*match\s*=\s*"((?:[^"\\]|\\.)*)"\s*(?:#.*)?$/;
 
+// TOML basic strings: a backslash, a quote and every control character are
+// escaped, so a path with a newline or a tab still gives a file Vibe parses.
+const TOML_ESCAPES = Object.freeze({ '\b': '\\b', '\t': '\\t', '\n': '\\n', '\f': '\\f', '\r': '\\r' });
+const TOML_UNESCAPES = Object.freeze({ b: '\b', t: '\t', n: '\n', f: '\f', r: '\r', '"': '"', '\\': '\\' });
+
+function tomlCharacter(character) {
+  if (character === '\\') return '\\\\';
+  if (character === '"') return '\\"';
+  const code = character.charCodeAt(0);
+  if (code >= 0x20 && code !== 0x7f) return character;
+  return TOML_ESCAPES[character] || ('\\u' + code.toString(16).padStart(4, '0'));
+}
+
 function tomlString(value) {
-  return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  return '"' + Array.from(String(value), tomlCharacter).join('') + '"';
 }
 
 function tomlUnescape(value) {
-  return value.replace(/\\(["\\])/g, '$1');
+  return value.replace(/\\(u[0-9a-fA-F]{4}|[btnfr"\\])/g, (_match, code) => (
+    code.startsWith('u') ? String.fromCharCode(Number.parseInt(code.slice(1), 16)) : TOML_UNESCAPES[code]
+  ));
 }
 
 function resolveVibeHooksTomlPath(targetRoot) {
@@ -230,8 +245,11 @@ function removeVibeHookFromFile(hooksTomlPath, hookScriptPath) {
 }
 
 /**
- * Whether hooks.toml holds the EGC hook of a script with the command and
- * matcher an install writes.
+ * Whether hooks.toml holds the EGC hook of a script exactly as an install
+ * writes it. With the matcher the whole block is compared, so a strict flag
+ * flipped to false or a type changed by hand is drift the doctor reports
+ * and repair rewrites; without it (a retirement check) the name and the
+ * command decide.
  * @param {string} hooksTomlPath
  * @param {string} hookScriptPath
  * @param {string} [matcher]
@@ -241,11 +259,11 @@ function inspectVibeHookFile(hooksTomlPath, hookScriptPath, matcher) {
   try {
     const name = hookNameOfScript(hookScriptPath);
     const command = buildHookCommand(hookScriptPath);
-    const { blocks } = parseHookBlocks(readHooksFile(hooksTomlPath));
+    const { lines, blocks } = parseHookBlocks(readHooksFile(hooksTomlPath));
     const found = blocks.some(block => (
       block.name === name
       && block.command === command
-      && (matcher === undefined || block.match === matcher)
+      && (matcher === undefined || lines.slice(block.start, block.end + 1).join('\n') === renderHookBlock(name, command, matcher))
     ));
     return found ? 'ok' : 'drifted';
   } catch {

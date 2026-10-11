@@ -28,7 +28,7 @@ function normalizeRelativePath(relativePath) {
 // so a home root such as ~/.amp or ~/.claude never grows either.
 const IDENTITY_SOURCE_PATH_OWNERS = Object.freeze({
   '.agents': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
-  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
+  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe']),
 });
 
 function isForeignPlatformPath(sourceRelativePath, adapterTarget) {

@@ -10,15 +10,17 @@
  * envelope, otherwise stdout stays empty and the original command runs.
  * Fail-open: any error leaves the command untouched, and the entry is
  * installed with strict = false so a failure of the adapter itself does the
- * same.
+ * same. The adapter reads stdin on its own so the Crusher module needs no
+ * file of the Guardian module next to it; the cap counts bytes, not
+ * string length, the way the shared Guardian reader does.
  */
 
 'use strict';
 
-const { run: runCrusherRewrite } = require('./pre-bash-crusher-rewrite');
+const { computeCrushedCommand } = require('./pre-bash-crusher-rewrite');
 
 const SHELL_TOOL_RE = /^(bash|git_bash|experimental_bash|experimental_git_bash)$/i;
-const MAX_STDIN = 1024 * 1024;
+const MAX_STDIN_BYTES = 1024 * 1024;
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -37,14 +39,8 @@ function rewriteVibeEvent(event) {
   const toolInput = isPlainObject(event.tool_input) ? event.tool_input : null;
   const command = toolInput?.command;
   if (typeof command !== 'string' || command === '') return null;
-  let decided;
-  try {
-    decided = JSON.parse(runCrusherRewrite({ tool_name: 'Bash', tool_input: { command } }));
-  } catch {
-    return null;
-  }
-  const rewritten = decided?.tool_input?.command;
-  if (typeof rewritten !== 'string' || rewritten === command) return null;
+  const rewritten = computeCrushedCommand(command);
+  if (rewritten === null) return null;
   return { hook_specific_output: { tool_input: { ...toolInput, command: rewritten } } };
 }
 
@@ -57,20 +53,21 @@ function parseJson(raw) {
 }
 
 function main() {
-  let raw = '';
+  const chunks = [];
+  let totalBytes = 0;
   let truncated = false;
-  process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => {
     if (truncated) return;
-    if (raw.length + chunk.length > MAX_STDIN) {
+    if (totalBytes + chunk.length > MAX_STDIN_BYTES) {
       truncated = true;
       return;
     }
-    raw += chunk;
+    chunks.push(chunk);
+    totalBytes += chunk.length;
   });
   process.stdin.on('end', () => {
     if (!truncated) {
-      const output = rewriteVibeEvent(parseJson(raw));
+      const output = rewriteVibeEvent(parseJson(Buffer.concat(chunks).toString('utf8')));
       if (output) process.stdout.write(`${JSON.stringify(output)}\n`);
     }
     process.exitCode = 0;

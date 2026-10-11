@@ -37,7 +37,7 @@ function withEgcCli(fn) {
 }
 
 function runAdapterCli(input, env = {}) {
-  const result = spawnSync('node', [adapterScript], {
+  const result = spawnSync(process.execPath, [adapterScript], {
     input: typeof input === 'string' ? input : JSON.stringify(input),
     encoding: 'utf8',
     env: { ...process.env, EGC_ASSUME_EGC_CLI: '1', ...env },

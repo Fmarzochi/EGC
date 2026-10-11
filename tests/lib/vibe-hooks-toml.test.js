@@ -76,6 +76,8 @@ tally(test('paths: hooks.toml under the root, the adapters under scripts/hooks',
 
 tally(test('renderHookBlock: the Guardian is strict, the Crusher is not, and the command is a TOML basic string', () => {
   const guardian = renderHookBlock('egc-guardian', 'C:\\node.exe "C:\\x\\a.js"', VIBE_GUARDIAN_MATCHER);
+  const odd = TOML.parse(renderHookBlock('egc-crusher', 'node "/tmp/odd\nname\t/a.js"', VIBE_CRUSHER_MATCHER));
+  assert.strictEqual(odd.hooks[0].command, 'node "/tmp/odd\nname\t/a.js"', 'a newline and a tab in a path survive as TOML escapes');
   const parsed = TOML.parse(guardian);
   assert.strictEqual(parsed.hooks[0].name, 'egc-guardian');
   assert.strictEqual(parsed.hooks[0].type, 'pre_tool');
@@ -142,6 +144,11 @@ tally(test('inspect: ok after apply, drifted when the matcher or the command dif
     assert.strictEqual(inspectVibeHookFile(file, script, VIBE_GUARDIAN_MATCHER), 'ok');
     assert.strictEqual(inspectVibeHookFile(file, script), 'ok', 'without a matcher the name and command decide');
     assert.strictEqual(inspectVibeHookFile(file, script, 're:^bash$'), 'drifted');
+    fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('strict = true', 'strict = false'));
+    assert.strictEqual(inspectVibeHookFile(file, script, VIBE_GUARDIAN_MATCHER), 'drifted', 'a strict flag flipped by hand is drift');
+    assert.strictEqual(inspectVibeHookFile(file, script), 'ok', 'a retirement check only needs the name and the command');
+    assert.deepStrictEqual(applyVibeHookToFile(file, script, VIBE_GUARDIAN_MATCHER), { changed: true }, 'repair rewrites the block');
+    assert.strictEqual(inspectVibeHookFile(file, script, VIBE_GUARDIAN_MATCHER), 'ok');
     assert.strictEqual(inspectVibeHookFile(file, path.join(root, 'elsewhere', 'vibe-guardian-adapter.js'), VIBE_GUARDIAN_MATCHER), 'drifted');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

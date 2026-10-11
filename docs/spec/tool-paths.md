@@ -395,18 +395,20 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 
 | Surface | Path | Variant | Status | Source | Note |
 | --- | --- | --- | --- | --- | --- |
-| library | `~/.vibe/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| library | `~/.vibe/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.vibe/egc/library/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.vibe/egc/library/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | hooks | `~/.vibe/hooks.toml` | default | documented | <https://github.com/mistralai/mistral-vibe> |  |
-| library | `~/.vibe/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.vibe/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `~/.vibe/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| context | `~/.vibe/AGENTS.md` | default | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | skills | `~/.vibe/skills/` | default | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | state | `~/.vibe/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
-| library | `$VIBE_HOME/agents/` | VIBE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| library | `$VIBE_HOME/commands/` | VIBE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `$VIBE_HOME/egc/library/agents/` | VIBE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `$VIBE_HOME/egc/library/commands/` | VIBE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | hooks | `$VIBE_HOME/hooks.toml` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
-| library | `$VIBE_HOME/rules/` | VIBE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `$VIBE_HOME/egc/library/rules/` | VIBE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `$VIBE_HOME/scripts/` | VIBE_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| context | `$VIBE_HOME/AGENTS.md` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | skills | `$VIBE_HOME/skills/` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | state | `$VIBE_HOME/egc/install-state.json` | VIBE_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
@@ -414,10 +416,10 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 
 | Surface | Path | Variant | Status | Source | Note |
 | --- | --- | --- | --- | --- | --- |
-| library | `<project>/.vibe/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| library | `<project>/.vibe/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `<project>/.vibe/egc/library/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `<project>/.vibe/egc/library/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | hooks | `<project>/.vibe/hooks.toml` | default | documented | <https://github.com/mistralai/mistral-vibe> |  |
-| library | `<project>/.vibe/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `<project>/.vibe/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.vibe/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `<project>/.vibe/skills/` | default | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | state | `<project>/.vibe/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |

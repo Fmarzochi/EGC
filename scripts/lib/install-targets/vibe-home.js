@@ -20,11 +20,15 @@ const { planVibeOperations } = require('../vibe-operations');
 // .vibe is its own canonical location, the same reasoning as Auggie).
 // Agents, commands and rules have no markdown equivalent there (agents/
 // holds TOML profiles, prompts/ replaces the whole system prompt), so they
-// land as library folders under the root. hooks.toml takes [[hooks]] entries
-// of type pre_tool with a tool-name matcher: the Guardian denies through
+// land as library folders under egc/library/ in the root, where nothing of
+// Vibe's looks. The root AGENTS.md installs as <root>/AGENTS.md, the
+// user-level instructions file, and the cognitive bootstrap keeps the
+// memory protocol in it. hooks.toml takes [[hooks]] entries of type
+// pre_tool with a tool-name matcher: the Guardian denies through
 // vibe-guardian-adapter.js and the Token Crusher rewrites the command
-// through vibe-crusher-adapter.js (scripts/lib/vibe-hooks-toml.js). MCP
-// servers go to [[mcp_servers]] in config.toml (scripts/lib/mcp-register.js).
+// through vibe-crusher-adapter.js (scripts/lib/vibe-hooks-toml.js). The MCP
+// servers are registered by egc init, not by the install, as [[mcp_servers]]
+// tables in config.toml (scripts/lib/mcp-register.js).
 function resolveVibeHome(input = {}) {
   const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
   const configured = process.env.VIBE_HOME;
