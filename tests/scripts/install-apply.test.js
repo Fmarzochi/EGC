@@ -1426,28 +1426,83 @@ function runTests() {
     }
   }));
 
-  tally(test('installs Warp memory protocol via rules-core and writes valid install-state', () => {
+  tally(test('Warp gets the memory rule text in a marked block of AGENTS.md, an earlier .warp/rules copy and its index entry are retired, an edited copy and the person\'s own lines stay, and uninstall takes only the block (#1841)', () => {
+    const memoryRule = fs.readFileSync(path.join(__dirname, '..', '..', 'rules', 'common', 'memory.md'), 'utf8');
     const homeDir = createTempDir('install-apply-home-');
-    const projectDir = createTempDir('install-apply-project-');
+    const projectDir = fs.realpathSync(createTempDir('install-apply-project-'));
+    const warpDir = path.join(projectDir, '.warp');
+    const agentsPath = path.join(projectDir, 'AGENTS.md');
+    const oldCopy = path.join(warpDir, 'rules', 'common', 'memory.md');
+    const statePath = path.join(warpDir, 'egc-install-state.json');
+    const install = () => run(['--target', 'warp', '--modules', 'rules-core'], { cwd: projectDir, homeDir });
+    const countOf = (text, needle) => text.split(needle).length - 1;
+    const layOutEarlierInstall = copyContent => {
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      fs.mkdirSync(path.dirname(oldCopy), { recursive: true });
+      fs.writeFileSync(oldCopy, copyContent);
+      fs.writeFileSync(agentsPath, [
+        '# My project',
+        '',
+        'Run the tests before every commit.',
+        '',
+        '<!-- egc-skills-index:start -->',
+        '## EGC Skills',
+        '',
+        'Skills installed by EGC for this project. Read the referenced file when a task matches its description.',
+        '',
+        '- **EGC Session Memory**: Cross-session memory protocol: call get_state at session start, update_state at session end. (`.warp/rules/common/memory.md`)',
+        '<!-- egc-skills-index:end -->',
+        '',
+      ].join('\n'));
+      const base = { moduleId: 'rules-core', sourceRelativePath: 'rules/common/memory.md', ownership: 'managed', scaffoldOnly: false };
+      writeInstallState(statePath, createInstallState({
+        adapter: { id: 'warp-project' },
+        targetRoot: warpDir,
+        installStatePath: statePath,
+        request: { profile: null, modules: ['rules-core'], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['rules-core'], skippedModules: [] },
+        operations: [
+          { ...base, kind: 'copy-file', destinationPath: oldCopy, strategy: 'preserve-relative-path' },
+          { ...base, kind: 'merge-markdown-skill-index', destinationPath: agentsPath, strategy: 'merge-markdown-skill-index', skillName: 'EGC Session Memory', skillDescription: 'Cross-session memory protocol: call get_state at session start, update_state at session end.', relativePath: '.warp/rules/common/memory.md' },
+        ],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+    };
 
     try {
-      const result = run(['--target', 'warp', '--modules', 'rules-core'], { cwd: projectDir, homeDir });
-      assert.strictEqual(result.code, 0, result.stderr);
+      const fresh = install();
+      assert.strictEqual(fresh.code, 0, fresh.stderr);
+      const freshAgents = fs.readFileSync(agentsPath, 'utf8');
+      assert.ok(freshAgents.includes(`<!-- egc-memory-rule:start -->\n${memoryRule.replace(/\n+$/, '')}\n<!-- egc-memory-rule:end -->`), 'the rule text itself is in the file Warp loads');
+      assert.ok(!fs.existsSync(path.join(warpDir, 'rules')), 'nothing goes to .warp/rules, a directory Warp does not read');
+      assert.ok(readJson(statePath).operations.some(op => op.kind === 'merge-markdown-skill-index' && op.memoryRule === true && op.sourceRelativePath));
 
-      const memoryPath = path.join(projectDir, '.warp', 'rules', 'common', 'memory.md');
-      assert.ok(fs.existsSync(memoryPath), 'memory.md should be copied into .warp/rules/common/');
-      assert.ok(fs.readFileSync(memoryPath, 'utf8').includes('get_state'));
+      const again = install();
+      assert.strictEqual(again.code, 0, again.stderr);
+      assert.strictEqual(fs.readFileSync(agentsPath, 'utf8'), freshAgents, 'a reinstall leaves the file as it was');
 
-      const agentsPath = path.join(projectDir, 'AGENTS.md');
-      assert.ok(fs.existsSync(agentsPath), 'AGENTS.md should be created');
-      const agentsContent = fs.readFileSync(agentsPath, 'utf8');
-      assert.ok(agentsContent.includes('EGC Session Memory'));
-      assert.ok(agentsContent.includes('.warp/rules/common/memory.md'));
+      fs.rmSync(warpDir, { recursive: true, force: true });
+      layOutEarlierInstall(memoryRule);
+      const upgraded = install();
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      const upgradedAgents = fs.readFileSync(agentsPath, 'utf8');
+      assert.ok(!fs.existsSync(oldCopy), 'the copy an earlier install wrote under .warp/rules is retired');
+      assert.ok(!upgradedAgents.includes('EGC Session Memory'), 'and so is the index entry that pointed at it');
+      assert.ok(upgradedAgents.startsWith('# My project\n\nRun the tests before every commit.\n'), 'the person\'s own lines stay as they were');
+      assert.strictEqual(countOf(upgradedAgents, '<!-- egc-memory-rule:start -->'), 1);
 
-      // Same install-state schema regression guard as the Aider test above.
-      const statePath = path.join(projectDir, '.warp', 'egc-install-state.json');
-      const state = readJson(statePath);
-      assert.ok(state.operations.some(op => op.kind === 'merge-markdown-skill-index' && op.sourceRelativePath));
+      fs.rmSync(warpDir, { recursive: true, force: true });
+      layOutEarlierInstall('My own notes on top of the EGC rule.\n');
+      const edited = install();
+      assert.strictEqual(edited.code, 0, edited.stderr);
+      assert.strictEqual(fs.readFileSync(oldCopy, 'utf8'), 'My own notes on top of the EGC rule.\n', 'an old copy the person edited is kept');
+
+      const { uninstallInstalledStates } = require('../../scripts/lib/install-lifecycle');
+      const report = uninstallInstalledStates({ homeDir, projectRoot: projectDir, targets: ['warp'] });
+      assert.strictEqual(report.results.find(entry => entry.adapter.id === 'warp-project').status, 'uninstalled');
+      const afterUninstall = fs.readFileSync(agentsPath, 'utf8');
+      assert.ok(!afterUninstall.includes('egc-memory-rule'), 'uninstall takes the memory rule block');
+      assert.strictEqual(afterUninstall, '# My project\n\nRun the tests before every commit.\n', 'and leaves the person\'s own lines');
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
