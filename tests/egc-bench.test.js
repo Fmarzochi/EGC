@@ -105,11 +105,14 @@ if (!fs.existsSync(buildPath)) {
     const json = JSON.parse(fs.readFileSync(out, 'utf8'));
     assert.ok(json.rows.length >= 6);
     assert.ok(json.summary.meanRecallAtTop >= 0 && json.summary.meanRecallAtTop <= 1);
+    assert.strictEqual(json.passed, true, 'no --min-recall means the run passed');
     const impossible = path.join(tmp, 'impossible.json');
     fs.writeFileSync(impossible, JSON.stringify({ tasks: [{ id: 'none', query: 'chargeCard', expected: ['no/such/file.ts'] }] }));
-    const strict = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--tasks', impossible, '--runs', '1', '--min-recall', '0.5'], { encoding: 'utf8', timeout: FULL_INSTALL_TIMEOUT_MS });
+    const failOut = path.join(tmp, 'fail-out.json');
+    const strict = spawnSync(process.execPath, [path.join(bench, 'run.js'), '--tasks', impossible, '--runs', '1', '--min-recall', '0.5', '--out', failOut], { encoding: 'utf8', timeout: FULL_INSTALL_TIMEOUT_MS });
     assert.strictEqual(strict.status, 1, 'recall 0 is below 0.5');
     assert.ok(strict.stderr.includes('below --min-recall'));
+    assert.strictEqual(JSON.parse(fs.readFileSync(failOut, 'utf8')).passed, false, 'the report itself says the run failed, not just the exit code');
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 }
@@ -232,6 +235,54 @@ run('loadTasks rejects a task whose fields are not text', () => {
     failed++;
   }
 
+  try {
+    const calls = [];
+    const rank = async ({ topN }) => {
+      calls.push(topN);
+      return { ranked: ['a.js', 'b.js', 'c.js', 'd.js', 'e.js'].slice(0, topN).map(p => ({ path: p })), briefing: 'x'.repeat(40 * topN) };
+    };
+    const task = { id: 't', query: 'q', expected: ['e.js'] };
+    await runTask(rank, task, { top: 3, runs: 2, project: os.tmpdir() });
+    assert.deepStrictEqual(calls, [3, 3, 5], 'the timed calls use --top; only the untimed recall@5 pass is deeper');
+    console.log('  PASS latency is measured at --top, not padded to recall@5 depth');
+    passed++;
+  } catch (err) {
+    console.log('  FAIL latency is measured at --top, not padded to recall@5 depth');
+    console.log(`    ${err.message}`);
+    failed++;
+  }
+
+  try {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-bench-traversal-'));
+    const dir = path.join(parent, 'project');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(parent, 'outside.txt'), 'secret'.repeat(100));
+    const rank = async () => ({ ranked: [], briefing: '' });
+    const task = { id: 't', query: 'q', expected: ['../outside.txt'] };
+    const r = await runTask(rank, task, { top: 5, runs: 1, project: dir });
+    assert.strictEqual(r.wholeFileTokens, 0, 'a path outside the project contributes nothing to the baseline');
+    fs.rmSync(parent, { recursive: true, force: true });
+    console.log('  PASS wholeFileChars does not read outside the project');
+    passed++;
+  } catch (err) {
+    console.log('  FAIL wholeFileChars does not read outside the project');
+    console.log(`    ${err.message}`);
+    failed++;
+  }
+
+  try {
+    const rank = async ({ topN }) => ({ ranked: [{ path: 'src/a.js' }].slice(0, topN), briefing: '' });
+    const task = { id: 't', query: 'q', expected: ['src\\a.js'] };
+    const r = await runTask(rank, task, { top: 5, runs: 1, project: os.tmpdir() });
+    assert.strictEqual(r.recallAtTop, 1, 'a backslash expected path still matches the forward-slash ranked path');
+    console.log('  PASS expected paths are normalized the same way as ranked paths');
+    passed++;
+  } catch (err) {
+    console.log('  FAIL expected paths are normalized the same way as ranked paths');
+    console.log(`    ${err.message}`);
+    failed++;
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
-  process.exit(failed ? 1 : 0);
+  process.exitCode = failed ? 1 : 0;
 })();

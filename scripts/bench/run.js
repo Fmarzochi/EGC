@@ -60,8 +60,11 @@ function loadTasks(file) {
 function wholeFileChars(projectRoot, rels) {
   let chars = 0;
   for (const rel of rels) {
+    const abs = path.join(projectRoot, rel);
+    const fromRoot = path.relative(projectRoot, abs);
+    if (fromRoot.startsWith('..') || path.isAbsolute(fromRoot)) continue;
     try {
-      chars += fs.readFileSync(path.join(projectRoot, rel), 'utf8').length;
+      chars += fs.readFileSync(abs, 'utf8').length;
     } catch {
       // a missing expected file adds nothing to the baseline
     }
@@ -76,25 +79,27 @@ const RECALL_DEPTH = 5;
 
 async function runTask(rank, task, opts) {
   const latencies = [];
-  const depth = Math.max(opts.top, RECALL_DEPTH);
   let last = null;
+  // Timed at the depth the caller asked for, so latency reflects --top; the
+  // deeper recall@5 pass (only needed when --top is shallower) runs untimed.
   for (let i = 0; i < opts.runs; i++) {
     const t0 = process.hrtime.bigint();
-    last = await rank({ projectPath: opts.project, query: task.query, topN: depth, useGit: false });
+    last = await rank({ projectPath: opts.project, query: task.query, topN: opts.top, useGit: false });
     latencies.push(Number(process.hrtime.bigint() - t0) / 1e6);
   }
   const ranked = last.ranked.map(f => f.path.replace(/\\/g, '/'));
-  const briefing = opts.top >= RECALL_DEPTH
-    ? last.briefing
-    : (await rank({ projectPath: opts.project, query: task.query, topN: opts.top, useGit: false })).briefing;
-  const briefingChars = briefing.length;
+  const rankedAt5 = opts.top >= RECALL_DEPTH
+    ? ranked
+    : (await rank({ projectPath: opts.project, query: task.query, topN: RECALL_DEPTH, useGit: false })).ranked.map(f => f.path.replace(/\\/g, '/'));
+  const expected = task.expected.map(p => p.replace(/\\/g, '/'));
+  const briefingChars = last.briefing.length;
   const baselineChars = wholeFileChars(opts.project, task.expected);
   return {
     id: task.id,
     query: task.query,
-    recallAt5: recallAtK(ranked, task.expected, RECALL_DEPTH),
-    recallAtTop: recallAtK(ranked, task.expected, opts.top),
-    reciprocalRank: reciprocalRank(ranked, task.expected),
+    recallAt5: recallAtK(rankedAt5, expected, RECALL_DEPTH),
+    recallAtTop: recallAtK(ranked, expected, opts.top),
+    reciprocalRank: reciprocalRank(ranked, expected),
     latencyMsP50: percentile(latencies, 50),
     latencyMsP95: percentile(latencies, 95),
     briefingTokens: estimateTokens(briefingChars),
@@ -157,10 +162,11 @@ async function main() {
   for (const task of tasks) rows.push(await runTask(rankProjectFiles, task, opts));
   const summary = summarise(rows);
   process.stdout.write(table(rows, summary, opts) + '\n');
+  const passed = opts.minRecall === null || summary.meanRecallAtTop >= opts.minRecall;
   if (opts.out) {
-    fs.writeFileSync(opts.out, JSON.stringify({ generatedAt: new Date().toISOString(), options: { top: opts.top, runs: opts.runs, project: opts.project }, summary, rows }, null, 2) + '\n');
+    fs.writeFileSync(opts.out, JSON.stringify({ generatedAt: new Date().toISOString(), options: { top: opts.top, runs: opts.runs, project: opts.project }, passed, summary, rows }, null, 2) + '\n');
   }
-  if (opts.minRecall !== null && summary.meanRecallAtTop < opts.minRecall) {
+  if (!passed) {
     process.stderr.write(`mean recall@${opts.top} ${summary.meanRecallAtTop.toFixed(2)} is below --min-recall ${opts.minRecall}\n`);
     return 1;
   }
