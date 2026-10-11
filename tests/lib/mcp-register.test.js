@@ -1516,8 +1516,9 @@ function runTests() {
     assert.strictEqual(changed, true, 'should register on a fresh settings file');
 
     const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.strictEqual(parsed.context_servers['egc-guardian'].command, 'node', 'command should be "node"');
     assert.strictEqual(
-      parsed.context_servers['egc-guardian'].command.args[0],
+      parsed.context_servers['egc-guardian'].args[0],
       winPath,
       'the Windows path should round-trip exactly through JSON.parse'
     );
@@ -1535,7 +1536,8 @@ function runTests() {
     registerZedContextServers(target, { guardianBin: quotedPath, memoryBin: bins.memoryBin });
 
     const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
-    assert.strictEqual(parsed.context_servers['egc-guardian'].command.args[0], quotedPath, 'a path with a double quote should round-trip exactly');
+    assert.strictEqual(parsed.context_servers['egc-guardian'].command, 'node');
+    assert.strictEqual(parsed.context_servers['egc-guardian'].args[0], quotedPath, 'a path with a double quote should round-trip exactly');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   })));
@@ -1581,6 +1583,39 @@ function runTests() {
 
     fs.writeFileSync(target, JSON.stringify({ context_servers: [1, 2, 3] }));
     assert.throws(() => registerZedContextServers(target, bins), /invalid context_servers object/);
+
+    fs.rmSync(tmpHome, { recursive: true, force: true });
+  })));
+
+  (tally(test('registerZedContextServers migrates legacy nested command: {path, args} shape to modern shape', () => {
+    const tmpHome = makeTempDir();
+    const target = path.join(tmpHome, '.config', 'zed', 'settings.json');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, JSON.stringify({
+      context_servers: {
+        'egc-guardian': {
+          command: {
+            path: 'node',
+            args: ['/old/path/guardian.js'],
+            env: {},
+          },
+          settings: {},
+        },
+      },
+    }, null, 2));
+
+    const changed = registerZedContextServers(target, bins);
+    assert.strictEqual(changed, true, 'legacy shape must trigger an update');
+    const parsed = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.strictEqual(parsed.context_servers['egc-guardian'].command, 'node');
+    assert.deepStrictEqual(parsed.context_servers['egc-guardian'].args, [bins.guardianBin]);
+    assert.strictEqual(parsed.context_servers['egc-guardian'].settings, undefined);
+    assert.strictEqual(parsed.context_servers['egc-memory'].command, 'node');
+    assert.deepStrictEqual(parsed.context_servers['egc-memory'].args, [bins.memoryBin]);
+
+    // Second run should be a no-op
+    const secondChanged = registerZedContextServers(target, bins);
+    assert.strictEqual(secondChanged, false, 'second run must be idempotent');
 
     fs.rmSync(tmpHome, { recursive: true, force: true });
   })));
