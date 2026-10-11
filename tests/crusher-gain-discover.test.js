@@ -72,6 +72,29 @@ run('gain --history --json returns the raw ledger entries', () => {
   assert.strictEqual(entries[0].tokensSaved, entry.tokensSaved, 'savings carry through');
 });
 
+run('gain --history prints local time with its offset and leaves the ledger in UTC (#1659)', () => {
+  const home = tempDir('egc-gain-home-');
+  const ledgerDir = path.join(home, '.egc', 'metrics');
+  fs.mkdirSync(ledgerDir, { recursive: true });
+  const ledger = path.join(ledgerDir, 'crusher.jsonl');
+  const line = `${JSON.stringify({ ts: '2026-07-26T04:00:00Z', kind: 'git-log', cmd: 'git log --stat', tokensSaved: 5000, bytesIn: 100000, bytesOut: 2000 })}\n`;
+  fs.writeFileSync(ledger, line);
+  const historyIn = tz => spawnSync('node', [GAIN, '--history'], {
+    encoding: 'utf8',
+    env: { ...process.env, HOME: home, USERPROFILE: home, EGC_CRUSHER_METRICS_FILE: ledger, TZ: tz },
+  });
+
+  const utc = historyIn('UTC');
+  assert.strictEqual(utc.status, 0, utc.stderr);
+  assert.ok(utc.stdout.includes('2026-07-26 04:00 +00:00  git-log'), `UTC line, got: ${utc.stdout}`);
+
+  const saoPaulo = historyIn('America/Sao_Paulo');
+  assert.strictEqual(saoPaulo.status, 0, saoPaulo.stderr);
+  assert.ok(saoPaulo.stdout.includes('2026-07-26 01:00 -03:00  git-log'), `Sao Paulo line, got: ${saoPaulo.stdout}`);
+
+  assert.strictEqual(fs.readFileSync(ledger, 'utf8'), line, 'the ledger keeps its UTC timestamp');
+});
+
 run('gain summary prints the biggest crush with its command', () => {
   const home = tempDir('egc-gain-home-');
   const ledgerDir = path.join(home, '.egc', 'metrics');

@@ -28,6 +28,23 @@ function bar(fraction, width = BAR_WIDTH) {
   return '█'.repeat(filled) + '░'.repeat(width - filled);
 }
 
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+function formatLocalTimestamp(ts) {
+  const date = new Date(ts);
+  if (!ts || Number.isNaN(date.getTime())) {
+    return String(ts || '').replace('T', ' ').slice(0, 16);
+  }
+  const offset = -date.getTimezoneOffset();
+  const sign = offset < 0 ? '-' : '+';
+  const abs = Math.abs(offset);
+  const day = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+  const time = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+  return `${day} ${time} ${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`;
+}
+
 function printHistory(entries) {
   if (entries.length === 0) {
     console.log('EGC Token Gain: no crushed runs recorded yet.');
@@ -41,7 +58,7 @@ function printHistory(entries) {
     console.log(`  ... ${entries.length - recent.length} earlier run(s) omitted`);
   }
   for (const entry of recent) {
-    const when = (entry.ts || '').replace('T', ' ').slice(0, 16);
+    const when = formatLocalTimestamp(entry.ts);
     console.log(
       `  ${when}  ${String(entry.kind || '?').padEnd(12)} ` +
       `~${formatTokens(entry.tokensSaved || 0).padStart(7)} saved  ${entry.cmd || ''}`
