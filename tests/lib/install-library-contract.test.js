@@ -78,11 +78,11 @@ function parentOf(filePath) {
 }
 
 // Where each target keeps its agent and command files: agents/ and
-// commands/ by default; Antigravity and egc install commands as skills,
-// invoked as /<name>. Cursor prefixes the agent file name with egc-.
+// commands/ by default; Antigravity, Cursor and egc install commands as
+// skills, invoked as /<name>. Cursor prefixes the agent file name with egc-.
 const AGENT_DIRS = { default: ['agents'] };
 const COMMAND_DIRS = { default: ['commands', 'command'] };
-const COMMANDS_AS_SKILLS = new Set(['antigravity', 'egc']);
+const COMMANDS_AS_SKILLS = new Set(['antigravity', 'cursor', 'egc']);
 
 // What lands in the tool, indexed the way each family is discovered: an
 // agent or command by its file name, a skill by its directory (or its flat
