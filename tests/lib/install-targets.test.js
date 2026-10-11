@@ -3516,6 +3516,60 @@ function runTests() {
     }
   }));
 
+  tally(test('codebuddy plans the agent catalog at .codebuddy/rules/egc-agents.md, skips a file of the person\'s own or a link there, and updates a copy EGC recorded (#1840)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const { generatedContextTemplate } = require('../../scripts/lib/generated-context-files');
+    const projectRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-codebuddy-agents-')));
+    const agentsCore = [{ id: 'agents-core', paths: ['agents', 'AGENTS.md'] }];
+    const destination = path.join(projectRoot, '.codebuddy', 'rules', 'egc-agents.md');
+    const contextOps = plan => plan.operations.filter(operation => /(AGENTS|egc-agents)\.md$/.test(operation.destinationPath));
+    const planNow = () => contextOps(planInstallTargetScaffold({ target: 'codebuddy', repoRoot, projectRoot, modules: agentsCore }));
+    try {
+      assert.deepStrictEqual(planNow().map(operation => [operation.sourceRelativePath, operation.destinationPath]), [
+        ['AGENTS.md', destination],
+      ], 'one catalog, in the rules CodeBuddy loads, and nothing at .codebuddy/AGENTS.md');
+
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, generatedContextTemplate('AGENTS.md'));
+      assert.strictEqual(planNow().length, 1, 'a file identical to the catalog is still planned');
+
+      fs.writeFileSync(destination, 'My own CodeBuddy rule.\n');
+      assert.deepStrictEqual(planNow(), [], 'a file of the person\'s own is left alone');
+
+      if (process.platform !== 'win32' && process.getuid?.() !== 0) {
+        fs.chmodSync(destination, 0o000);
+        try {
+          assert.deepStrictEqual(planNow(), [], 'a rule that cannot be read is left alone and the plan goes on');
+        } finally {
+          fs.chmodSync(destination, 0o644);
+        }
+      }
+
+      const statePath = path.join(projectRoot, '.codebuddy', 'egc-install-state.json');
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      writeInstallState(statePath, createInstallState({
+        adapter: { id: 'codebuddy-project' },
+        targetRoot: path.join(projectRoot, '.codebuddy'),
+        installStatePath: statePath,
+        request: { profile: null, modules: ['agents-core'], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['agents-core'], skippedModules: [] },
+        operations: [{ kind: 'generate-context-file', moduleId: 'agents-core', sourceRelativePath: 'AGENTS.md', destinationPath: destination, strategy: 'generate-context-file', ownership: 'managed', scaffoldOnly: false }],
+        source: { repoVersion: '1.0.0', repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+      assert.strictEqual(planNow().length, 1, 'a file EGC recorded is still EGC\'s to update');
+
+      if (process.platform !== 'win32') {
+        fs.rmSync(destination);
+        fs.rmSync(statePath);
+        fs.writeFileSync(path.join(projectRoot, 'shared-rule.md'), 'linked\n');
+        fs.symlinkSync(path.join(projectRoot, 'shared-rule.md'), destination);
+        assert.deepStrictEqual(planNow(), [], 'a link the person made is left alone');
+      }
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('kiro adapters are included in the full adapter list', () => {
     const adapters = listInstallTargetAdapters();
     const targets = adapters.map(a => a.target);

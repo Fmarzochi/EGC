@@ -179,7 +179,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | Surface | Path | Variant | Status | Source | Note |
 | --- | --- | --- | --- | --- | --- |
 | library | `<project>/.codebuddy/.agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| context | `<project>/.codebuddy/AGENTS.md` | default | unverified | <https://www.codebuddy.ai/docs/cli/memory> | CodeBuddy's memory docs list CODEBUDDY.md and .codebuddy/rules, not .codebuddy/AGENTS.md (read on 2026-10-10). |
+| context | `<project>/.codebuddy/rules/egc-agents.md` | default | documented | <https://www.codebuddy.ai/docs/cli/memory> | CodeBuddy loads every .md file in .codebuddy/rules as project memory, alwaysApply true by default (read on 2026-10-11). The agent catalog lands there; planned when the file is absent, identical to the catalog, or recorded by EGC. The old .codebuddy/AGENTS.md, which CodeBuddy never read, is retired only while it holds the catalog EGC wrote. |
 | agents | `<project>/.codebuddy/agents/` | default | documented | <https://www.codebuddy.ai/docs/cli/sub-agents> |  |
 | commands | `<project>/.codebuddy/commands/` | default | documented | <https://www.codebuddy.ai/docs/cli/slash-commands> |  |
 | runtime | `<project>/.codebuddy/hooks/` | default | egc |  | EGC runtime: hook scripts the hook configuration of the tool points at. |

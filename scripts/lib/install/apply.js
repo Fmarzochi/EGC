@@ -26,7 +26,7 @@ const {
   MERGE_MARKDOWN_INDEX_KIND,
   nextSkillIndexContent,
 } = require('../warp-agents-merge');
-const { GENERATE_CONTEXT_FILE_KIND, nextGeneratedContextContent } = require('../generated-context-files');
+const { GENERATE_CONTEXT_FILE_KIND, generatedContextTemplate, nextGeneratedContextContent } = require('../generated-context-files');
 
 function readJsonObject(filePath, label) {
   let parsed;
@@ -104,14 +104,18 @@ function applyMergeMarkdownIndexOperation(operation) {
 
 // Written only when the destination does not yet carry the project-memory
 // section: an installed file, populated by propagation or not, is left as
-// it is (generated-context-files.js).
+// it is (generated-context-files.js). Returns the template text when that
+// is what the file holds afterwards, for the state to record its hash.
 function applyGeneratedContextOperation(operation) {
   const existingContent = fs.existsSync(operation.destinationPath)
     ? fs.readFileSync(operation.destinationPath, 'utf8')
     : null;
   const nextContent = nextGeneratedContextContent(existingContent, operation);
-  if (nextContent === null) return;
+  if (nextContent === null) {
+    return existingContent === generatedContextTemplate(operation.sourceRelativePath) ? existingContent : null;
+  }
   writeManagedText(operation.destinationPath, nextContent);
+  return nextContent;
 }
 
 // The text that was validated is the text that lands (or the filtered form
@@ -627,7 +631,7 @@ function removeStrandedLegacyLinks(links, targetRoot) {
 function recordWrittenContentHashes(plan, written) {
   for (const operation of plan.statePreview?.operations || []) {
     const hash = written.get(path.resolve(String(operation.destinationPath || '')));
-    if (hash && operation.kind === 'copy-file') operation.contentSha256 = hash;
+    if (hash && (operation.kind === 'copy-file' || operation.kind === GENERATE_CONTEXT_FILE_KIND)) operation.contentSha256 = hash;
   }
 }
 
@@ -1038,6 +1042,11 @@ function performDirToFile(transition) {
   }
 }
 
+function applyGeneratedContextRecordingHash(operation, writtenHashes) {
+  const landed = applyGeneratedContextOperation(operation);
+  if (landed !== null) writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));
+}
+
 // One planned operation, by kind: the merge and hook kinds edit a file in
 // place, a generated context file is written only when it lacks its
 // section, and a copied file lands with its hash recorded for the state.
@@ -1051,7 +1060,7 @@ function applyPlannedOperation(operation, disabledServers, writtenHashes) {
   } else if (operation.kind === MERGE_MARKDOWN_INDEX_KIND) {
     applyMergeMarkdownIndexOperation(operation);
   } else if (operation.kind === GENERATE_CONTEXT_FILE_KIND) {
-    applyGeneratedContextOperation(operation);
+    applyGeneratedContextRecordingHash(operation, writtenHashes);
   } else if (operation.kind === 'copy-file' && isMcpConfigPath(operation.destinationPath)) {
     const landed = applyMcpCopyFileOperation(operation, disabledServers);
     writtenHashes.set(path.resolve(operation.destinationPath), sha256(Buffer.from(landed, 'utf8')));

@@ -742,10 +742,10 @@
     {
       "adapter": "codebuddy-project",
       "surface": "context",
-      "path": "<project>/.codebuddy/AGENTS.md",
-      "status": "unverified",
+      "path": "<project>/.codebuddy/rules/egc-agents.md",
+      "status": "documented",
       "source": "https://www.codebuddy.ai/docs/cli/memory",
-      "note": "CodeBuddy's memory docs list CODEBUDDY.md and .codebuddy/rules, not .codebuddy/AGENTS.md (read on 2026-10-10)."
+      "note": "CodeBuddy loads every .md file in .codebuddy/rules as project memory, alwaysApply true by default (read on 2026-10-11). The agent catalog lands there; planned when the file is absent, identical to the catalog, or recorded by EGC. The old .codebuddy/AGENTS.md, which CodeBuddy never read, is retired only while it holds the catalog EGC wrote."
     },
     {
       "adapter": "codebuddy-project",

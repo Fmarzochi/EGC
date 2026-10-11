@@ -1,9 +1,11 @@
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
 const { isGeneratedRuntimeSourcePath, isHostPlacedSourcePath, isIgnoredSourceDirectory, isIgnoredSourceFile } = require('../install-source-filters');
 const { HOOK_OPERATION_KIND } = require('../claude-settings-hooks');
+const { GENERATE_CONTEXT_FILE_KIND, generatedContextTemplate, isGeneratedContextSource } = require('../generated-context-files');
 
 const PLATFORM_SOURCE_PATH_OWNERS = Object.freeze({
   '.gemini-plugin': 'egc',
@@ -511,13 +513,14 @@ function resolveAdapterManagedRoots(adapter, input = {}) {
   return [adapter.resolveRoot(input)];
 }
 
-// The managed copy-file operations an install-state records, the shape both
-// the sibling check and the retirement diff read.
+// The managed copy-file and generated context file operations an
+// install-state records, the shape both the sibling check and the
+// retirement diff read.
 function recordedManagedCopies(state) {
   const operations = Array.isArray(state?.operations) ? state.operations : [];
   return operations.filter(operation => (
     operation.ownership === 'managed'
-    && operation.kind === 'copy-file'
+    && (operation.kind === 'copy-file' || operation.kind === GENERATE_CONTEXT_FILE_KIND)
     && typeof operation.destinationPath === 'string'
     && operation.destinationPath.length > 0
   ));
@@ -630,9 +633,11 @@ function isRetirementCandidate(resolved, { managedRoots, seen, siblingOwned, cov
 // not selected this run: a targeted --modules install, or a narrower profile,
 // leaves the files of the modules it did not select exactly where they are.
 //
-// Only recorded copy-file operations are diffed; merge-json and hook
-// operations (settings.json entries, MCP config merges) have no counterpart
-// here yet, an open question left by #1412.
+// Only recorded copy-file and generated context file operations are diffed;
+// merge-json and hook operations (settings.json entries, MCP config merges)
+// have no counterpart here yet, an open question left by #1412. A generated
+// file is compared against the hash of the text EGC wrote, recorded at
+// install time, or the current template for a state recorded before that.
 //
 // This only decides which destinations are candidates. The identity check
 // that decides whether one is actually safe to delete (a regular file,
@@ -691,8 +696,9 @@ function planGenericRetirements(input, adapter) {
     if (!activeModuleIds.has(operation.moduleId)) continue;
     const resolved = path.resolve(operation.destinationPath);
     if (!isRetirementCandidate(resolved, boundaries)) continue;
-    const source = normalizeRelativePath(String(operation.sourceRelativePath || ''));
+    const source = recordedSourceOf(operation);
     if (!source) continue;
+    if (isUnverifiableGeneratedRecord(operation, source)) continue;
     boundaries.seen.add(resolved);
     retirements.push(retirementOf(operation, resolved, source, repoRoot));
   }
@@ -792,13 +798,32 @@ function planHookRetirements(input, adapter) {
   return retirements;
 }
 
+function recordedSourceOf(operation) {
+  return normalizeRelativePath(String(operation.sourceRelativePath || ''));
+}
+
+function isUnverifiableGeneratedRecord(operation, source) {
+  return operation.kind === GENERATE_CONTEXT_FILE_KIND
+    && typeof operation.contentSha256 !== 'string'
+    && !isGeneratedContextSource(source);
+}
+
+function recordedContentSha256(operation, source) {
+  if (typeof operation.contentSha256 === 'string') return operation.contentSha256;
+  if (operation.kind === GENERATE_CONTEXT_FILE_KIND) {
+    return crypto.createHash('sha256').update(generatedContextTemplate(source), 'utf8').digest('hex');
+  }
+  return null;
+}
+
 function retirementOf(operation, destinationPath, source, repoRoot) {
+  const contentSha256 = recordedContentSha256(operation, source);
   return {
     destinationPath,
     sourceRelativePath: source,
     sourcePath: path.join(repoRoot, ...source.split('/')),
     ...(operation.transform ? { transform: operation.transform } : {}),
-    ...(typeof operation.contentSha256 === 'string' ? { contentSha256: operation.contentSha256 } : {}),
+    ...(contentSha256 ? { contentSha256 } : {}),
     reason: 'file left the install plan',
   };
 }

@@ -1,13 +1,17 @@
+const fs = require('node:fs');
 const path = require('node:path');
 
 const {
+  collectRecordedDestinations,
   createFlatRuleOperations,
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
   normalizeModulesInput,
+  normalizeRelativePath,
   planFlatSkillOperation,
 } = require('./helpers');
+const { generatedContextTemplate } = require('../generated-context-files');
 const {
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -121,6 +125,27 @@ function createHookOperations(adapter, targetRoot, modules) {
   ];
 }
 
+const CONTEXT_FILE_NAME = 'AGENTS.md';
+const CONTEXT_RULE_FILE_NAME = 'egc-agents.md';
+
+function isPersonOwnedRule(destination, recordedDestinations) {
+  const stat = fs.lstatSync(destination, { throwIfNoEntry: false });
+  if (!stat) return false;
+  if (!stat.isFile()) return true;
+  if (recordedDestinations?.includes(path.resolve(destination))) return false;
+  try {
+    return fs.readFileSync(destination, 'utf8') !== generatedContextTemplate(CONTEXT_FILE_NAME);
+  } catch {
+    return true;
+  }
+}
+
+function planContextRuleOperation(adapter, moduleId, input, targetRoot) {
+  const destination = path.join(targetRoot, 'rules', CONTEXT_RULE_FILE_NAME);
+  if (isPersonOwnedRule(destination, collectRecordedDestinations(adapter, input))) return [];
+  return [createRemappedOperation(adapter, moduleId, CONTEXT_FILE_NAME, destination, { strategy: 'preserve-relative-path' })];
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'codebuddy-project',
   target: 'codebuddy',
@@ -147,6 +172,10 @@ module.exports = createInstallTargetAdapter({
       return paths
         .filter(p => !isForeignPlatformPath(p, adapter.target))
         .flatMap(sourceRelativePath => {
+          if (normalizeRelativePath(sourceRelativePath) === CONTEXT_FILE_NAME) {
+            return planContextRuleOperation(adapter, module.id, input, targetRoot);
+          }
+
           if (sourceRelativePath === 'rules') {
             return createFlatRuleOperations({
               moduleId: module.id,
