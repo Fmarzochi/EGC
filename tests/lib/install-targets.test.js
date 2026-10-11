@@ -4390,7 +4390,7 @@ function runTests() {
     assert.strictEqual(plan.operations.length, 0, 'Non-skill, non-rules module paths should not produce operations');
   }));
 
-  tally(test("warp adapter copies rules-core's memory.md and merges an index entry into AGENTS.md", () => {
+  tally(test("warp adapter plans rules-core's memory rule as a marked block of AGENTS.md, the file Warp loads, and nothing under .warp/rules (#1841)", () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -4401,14 +4401,58 @@ function runTests() {
       modules: [{ id: 'rules-core', paths: ['rules'] }],
     });
 
-    assert.strictEqual(plan.operations.length, 2, 'should emit a copy operation and an AGENTS.md merge operation');
-    const copyOp = plan.operations.find(o => o.strategy === 'preserve-relative-path');
-    const mergeOp = plan.operations.find(o => o.kind === 'merge-markdown-skill-index');
-    assert.ok(copyOp, 'must emit a copy operation for memory.md');
-    assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.warp', 'rules', 'common', 'memory.md'));
-    assert.ok(mergeOp, 'must emit a merge-markdown-skill-index operation');
-    assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, 'AGENTS.md'));
-    assert.strictEqual(mergeOp.skillName, 'EGC Session Memory');
+    assert.deepStrictEqual(
+      plan.operations.map(o => [o.kind, o.destinationPath, Boolean(o.memoryRule)]),
+      [['merge-markdown-skill-index', path.join(projectRoot, 'AGENTS.md'), true]]
+    );
+    assert.strictEqual(
+      plan.operations[0].ruleContent,
+      fs.readFileSync(path.join(repoRoot, 'rules', 'common', 'memory.md'), 'utf8')
+    );
+    assert.ok(!plan.operations.some(o => o.destinationPath.includes(path.join('.warp', 'rules'))));
+  }));
+
+  tally(test('warp puts the memory rule in WARP.md when the project has one, takes the block out of the AGENTS.md it recorded before, and fails when the rule cannot be read (#1841)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-warp-rules-file-'));
+    const emptyRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-warp-no-rule-'));
+    const plan = () => planInstallTargetScaffold({ target: 'warp', repoRoot, projectRoot, modules: [{ id: 'rules-core', paths: ['rules'] }] });
+    try {
+      const agentsFile = path.join(projectRoot, 'AGENTS.md');
+      const warpFile = path.join(projectRoot, 'WARP.md');
+      fs.writeFileSync(warpFile, '# Rules I keep in WARP.md\n');
+      assert.deepStrictEqual(
+        plan().operations.map(o => [o.destinationPath, Boolean(o.memoryRule), Boolean(o.removeEntry)]),
+        [[warpFile, true, false]],
+        'WARP.md wins over AGENTS.md in Warp, so the rule goes there'
+      );
+
+      const statePath = path.join(projectRoot, '.warp', 'egc-install-state.json');
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      writeInstallState(statePath, createInstallState({
+        adapter: { id: 'warp-project' },
+        targetRoot: path.join(projectRoot, '.warp'),
+        installStatePath: statePath,
+        request: { profile: null, modules: ['rules-core'], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['rules-core'], skippedModules: [] },
+        operations: [{ kind: 'merge-markdown-skill-index', moduleId: 'rules-core', sourceRelativePath: 'rules/common/memory.md', destinationPath: agentsFile, strategy: 'merge-markdown-skill-index', ownership: 'managed', scaffoldOnly: false, memoryRule: true, ruleContent: 'old rule\n' }],
+        source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+      assert.deepStrictEqual(
+        plan().operations.map(o => [o.destinationPath, Boolean(o.memoryRule), Boolean(o.removeEntry)]),
+        [[agentsFile, true, true], [warpFile, true, false]],
+        'the block an earlier install wrote to AGENTS.md is taken out when the rule moves to WARP.md'
+      );
+
+      assert.throws(
+        () => planInstallTargetScaffold({ target: 'warp', repoRoot: emptyRepo, projectRoot, modules: [{ id: 'rules-core', paths: ['rules'] }] }),
+        /Cannot read the memory rule for Warp/,
+        'a missing rule fails the plan instead of installing without it'
+      );
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+      fs.rmSync(emptyRepo, { recursive: true, force: true });
+    }
   }));
 
   tally(test('warp adapter is included in the full adapter list', () => {
