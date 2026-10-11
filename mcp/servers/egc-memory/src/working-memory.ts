@@ -2,8 +2,9 @@ import type { Database } from 'sqlite';
 import { randomUUID } from 'node:crypto';
 
 // TTL used when the caller does not supply one: one calendar day in seconds.
-// Entries without an explicit TTL are swept the next time get_state is called
-// in a new session, so they function as session-scoped scratch storage.
+// Entries without an explicit TTL are swept by the next get_state or working
+// memory read of a later session, so they function as session-scoped scratch
+// storage.
 export const SESSION_TTL_SECONDS = 86400;
 
 export interface WorkingMemoryEntry {
@@ -28,7 +29,8 @@ export async function createWorkingMemoryTable(db: Database): Promise<void> {
 }
 
 // Remove all entries whose expiry timestamp is in the past.
-// Called from get_state so cleanup happens naturally with zero overhead.
+// Called from get_state and from every working memory read, so a session that
+// never calls get_state does not keep its expired entries around.
 export async function sweepExpired(db: Database): Promise<number> {
   const now = Math.floor(Date.now() / 1000);
   const result = await db.run(
@@ -68,6 +70,7 @@ export async function getWorkingMemory(
   projectPath: string,
   key: string
 ): Promise<WorkingMemoryEntry | null> {
+  await sweepExpired(db);
   const now = Math.floor(Date.now() / 1000);
   const row = await db.get<WorkingMemoryEntry>(
     'SELECT * FROM working_memory WHERE project_path = ? AND key = ? AND expires_at > ?',
@@ -76,10 +79,11 @@ export async function getWorkingMemory(
   return row ?? null;
 }
 
-export function listWorkingMemory(
+export async function listWorkingMemory(
   db: Database,
   projectPath: string
 ): Promise<WorkingMemoryEntry[]> {
+  await sweepExpired(db);
   const now = Math.floor(Date.now() / 1000);
   return db.all<WorkingMemoryEntry[]>(
     'SELECT * FROM working_memory WHERE project_path = ? AND expires_at > ? ORDER BY key',
