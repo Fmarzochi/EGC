@@ -246,7 +246,7 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
       },
       {
         name: "rank_files",
-        description: "Ranks the project's files for a task using four signals: BM25 over path, symbols, keywords and summary (weight 1.0), path hits (1.5), local git state (uncommitted, branch, recency, co-change; 1.0), and import-graph propagation two hops from the top files (1.2). Returns the ranking, a three-block briefing, and on request an explain table of each signal's contribution. Pass history from get_state so the briefing includes session decisions.",
+        description: "Ranks the project's files for a task using four signals: BM25 over path, symbols and first line (weight 1.0), path hits (1.5), local git state (uncommitted, branch, recency, co-change; 1.0), and import-graph propagation two hops from the top files (1.2). Returns the ranking, a three-block briefing, and on request an explain table of each signal's contribution. Pass history from get_state so the briefing includes session decisions.",
         inputSchema: {
           type: "object",
           properties: {

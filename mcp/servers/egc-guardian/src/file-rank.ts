@@ -39,7 +39,9 @@ export interface RankedFile { path: string; score: number; signals: Record<strin
 
 // The guard lives here, not in the callers: the MCP tool and `egc context` both
 // come through this function, and neither may rank a filesystem root, the home
-// directory or a protected path, nor read a protected file inside a project.
+// directory or a protected path, nor read a secret file inside a project (the
+// per-file check is the secret-name check, not the full protected-path check:
+// a hook surface or a git control file in the project is ordinary text here).
 export async function rankProjectFiles(opts: RankOptions): Promise<{ ranked: RankedFile[]; explain: string[]; briefing: string }> {
   const resolved = resolveRoot(opts.projectPath);
   if ('reason' in resolved) throw new Error(resolved.reason);
