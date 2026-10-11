@@ -26,6 +26,91 @@ function writeStderr(stderr) {
   process.stderr.write(stderr.endsWith('\n') ? stderr : `${stderr}\n`);
 }
 
+// The text between the braces of the object literal whose `{` sits at
+// openIndex, with nested brackets balanced and string literals skipped,
+// or null when the literal never closes.
+function objectLiteralBody(src, openIndex) {
+  let depth = 0;
+  let quote = null;
+  for (let i = openIndex; i < src.length; i++) {
+    const ch = src[i];
+    if (quote) {
+      if (ch === '\\') i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+    } else if (ch === '{' || ch === '(' || ch === '[') {
+      depth++;
+    } else if (ch === '}' || ch === ')' || ch === ']') {
+      depth--;
+      if (depth === 0) return src.slice(openIndex + 1, i);
+    }
+  }
+  return null;
+}
+
+// The entries of an object literal body, split at the commas of its top
+// level only.
+function topLevelEntries(body) {
+  const entries = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= body.length; i++) {
+    const ch = body[i];
+    if (ch === '{' || ch === '(' || ch === '[') depth++;
+    else if (ch === '}' || ch === ')' || ch === ']') depth--;
+    else if (i === body.length || (ch === ',' && depth === 0)) {
+      entries.push(body.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return entries;
+}
+
+// The property names at the top level of an object literal: `run`,
+// `run: fn`, `run() {}`, `async run() {}`, `'run': fn`. A `run` nested in
+// another property's value is not an export.
+const ENTRY_KEY = /^\s*(?:async\s+)?['"]?([A-Za-z_$][\w$]*)['"]?\s*(?:[:(]|$)/;
+
+function topLevelKeys(body) {
+  const keys = [];
+  for (const entry of topLevelEntries(body)) {
+    const match = ENTRY_KEY.exec(entry);
+    if (match) keys.push(match[1]);
+  }
+  return keys;
+}
+
+// A hook is required in-process only when its source exports run() as a
+// top-level property of module.exports (or assigns module.exports.run or
+// exports.run). A hook that merely mentions "run" in a comment, a helper
+// name or a nested object would be required here, run its module scope,
+// and then run it again in the child the legacy path spawns.
+function exportsRun(src) {
+  if (/\bmodule\.exports\.run\s*=/.test(src) || /\bexports\.run\s*=/.test(src)) return true;
+  const open = /\bmodule\.exports\s*=\s*\{/.exec(src);
+  if (!open) return false;
+  const body = objectLiteralBody(src, open.index + open[0].length - 1);
+  return body !== null && topLevelKeys(body).includes('run');
+}
+
+// The required module of a hook whose source exports run(), or null when it
+// exports none or cannot be required.
+function loadRunExport(hookId, scriptPath) {
+  const src = fs.readFileSync(scriptPath, 'utf8'); // NOSONAR jssecurity:S8707
+  if (!exportsRun(src)) return null;
+  let hookModule;
+  try {
+    hookModule = require(scriptPath);
+  } catch (requireErr) {
+    process.stderr.write(`[Hook] require() failed for ${hookId}: ${requireErr.message}\n`);
+    return null;
+  }
+  return hookModule && typeof hookModule.run === 'function' ? hookModule : null;
+}
+
 function emitHookResult(raw, output) {
   if (typeof output === 'string' || Buffer.isBuffer(output)) {
     process.stdout.write(String(output));
@@ -118,19 +203,9 @@ async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) { // 
   // SAFETY: Only require() hooks that export run(). Legacy hooks execute
   // side effects at module scope (stdin listeners, process.exit, main() calls)
   // which would interfere with the parent process or cause double execution.
-  let hookModule;
-  const src = fs.readFileSync(scriptPath, 'utf8'); // NOSONAR jssecurity:S8707
-  const hasRunExport = /\bmodule\.exports\b/.test(src) && /\brun\b/.test(src);
+  const hookModule = loadRunExport(hookId, scriptPath);
 
-  if (hasRunExport) {
-    try {
-      hookModule = require(scriptPath);
-    } catch (requireErr) {
-      process.stderr.write(`[Hook] require() failed for ${hookId}: ${requireErr.message}\n`);
-    }
-  }
-
-  if (hookModule && typeof hookModule.run === 'function') {
+  if (hookModule) {
     try {
       const output = hookModule.run(raw, {
         hookId,

@@ -89,6 +89,8 @@ tally(test('the longest matching row wins, and a variant row only applies in its
   assert.strictEqual(findRow(table.rows, 'cline-project', 'default', '<project>/.clinerules/common-memory.md').surface, 'rules');
   assert.strictEqual(findRow(table.rows, 'windsurf-home', 'default', '~/AppData/Roaming/devin/config.json'), null);
   assert.ok(findRow(table.rows, 'windsurf-home', 'win32', '~/AppData/Roaming/devin/config.json'));
+  assert.strictEqual(findRow(table.rows, 'zed-home', 'default', '~/AppData/Roaming/Zed/AGENTS.md'), null);
+  assert.ok(findRow(table.rows, 'zed-home', 'win32', '~/AppData/Roaming/Zed/AGENTS.md'));
 }));
 
 tally(test(`${DOC_RELATIVE_PATH} is generated from the table`, () => {

@@ -13,7 +13,7 @@ const os = require('os');
 const path = require('path');
 
 const accumulator = require('../../scripts/hooks/post-edit-accumulator');
-const { parseAccumulator } = require('../../scripts/hooks/stop-format-typecheck');
+const { parseAccumulator, formatBatch } = require('../../scripts/hooks/stop-format-typecheck');
 
 function test(name, fn) {
   try {
@@ -298,6 +298,41 @@ if (origSessionId === undefined) {
 } else {
   process.env.EGC_SESSION_ID = origSessionId;
 }
+
+function withPlatform(platform, fn) {
+  const original = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+  try {
+    return fn();
+  } finally {
+    Object.defineProperty(process, 'platform', original);
+  }
+}
+
+if (test('on Windows a local formatter with a JS entry formats a batch whose paths carry spaces, with no shell in between (#1704)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-1704-batch-'));
+  try {
+    fs.writeFileSync(path.join(root, 'package.json'), '{"name":"batch-root"}');
+    fs.writeFileSync(path.join(root, '.prettierrc'), '{}');
+    const binDir = path.join(root, 'node_modules', '.bin');
+    const pkgDir = path.join(root, 'node_modules', 'prettier');
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.mkdirSync(path.join(pkgDir, 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(binDir, 'prettier.cmd'), '');
+    fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({ name: 'prettier', bin: './bin/prettier.cjs' }));
+    const record = path.join(root, 'argv.json');
+    fs.writeFileSync(path.join(pkgDir, 'bin', 'prettier.cjs'), "require('fs').writeFileSync(process.env.FORMAT_RECORD, JSON.stringify(process.argv.slice(2)));\n");
+    const target = path.join(root, 'My Dir (x)', 'a.js');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, 'const a = 1;\n');
+    process.env.FORMAT_RECORD = record;
+    withPlatform('win32', () => formatBatch(root, [target], 10000));
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(record, 'utf8')), ['--write', target], 'the path with the space reached the formatter as one argument');
+  } finally {
+    delete process.env.FORMAT_RECORD;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
 
 console.log(`\n=== Test Results ===`);
 console.log(`Passed: ${passed}`);

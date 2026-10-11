@@ -14,9 +14,9 @@ process.stdin.on('data', chunk => {
   }
 });
 
-process.stdin.on('end', () => {
+process.stdin.on('end', async () => {
   try {
-    const result = runPostBash(raw);
+    const result = await runPostBash(raw);
     if (result.stderr) {
       process.stderr.write(result.stderr);
     }

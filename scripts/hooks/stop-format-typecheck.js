@@ -64,6 +64,12 @@ function formatBatch(projectRoot, files, timeoutMs) {
 
   try {
     if (process.platform === 'win32' && resolved.bin.endsWith('.cmd')) {
+      if (resolved.entry) {
+        // The formatter's own JS entry under this Node: no shell, so a path
+        // with spaces or parentheses is one argument.
+        execFileSync(process.execPath, [resolved.entry, ...fileArgs], { cwd: projectRoot, stdio: ['pipe', 'pipe', 'pipe'], timeout: timeoutMs });
+        return;
+      }
       if (existingFiles.some(f => UNSAFE_PATH_CHARS.test(f))) {
         process.stderr.write('[Hook] stop-format-typecheck: skipping batch: unsafe path chars\n');
         return;
@@ -220,4 +226,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { run, parseAccumulator };
+module.exports = { run, parseAccumulator, formatBatch };

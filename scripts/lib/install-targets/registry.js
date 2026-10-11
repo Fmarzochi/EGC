@@ -140,6 +140,8 @@ function planInstallTargetScaffold(options = {}) {
     repoRoot: options.repoRoot,
     projectRoot: options.projectRoot || options.repoRoot,
     homeDir: options.homeDir,
+    platform: options.platform,
+    env: options.env,
   };
   const validationIssues = adapter.validate(planningInput);
   const blockingIssues = validationIssues.filter(issue => issue.severity === 'error');

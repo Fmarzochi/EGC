@@ -37,6 +37,16 @@ const MAX_STDIN = 1024 * 1024; // 1MB limit
  */
 function executeFormatterCommand(resolved, args, resolvedFilePath, projectRoot) {
   if (process.platform === 'win32' && resolved.bin.endsWith('.cmd')) {
+    if (resolved.entry) {
+      // The formatter's own JS entry under this Node: no shell, so the file
+      // path is one argument whatever characters it carries.
+      execFileSync(process.execPath, [resolved.entry, ...args], {
+        cwd: projectRoot,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: 15000
+      });
+      return;
+    }
     // Windows: .cmd files require shell to execute. Guard against
     // command injection by rejecting paths with shell metacharacters.
     if (UNSAFE_PATH_CHARS.test(resolvedFilePath)) {
@@ -115,4 +125,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { run };
+module.exports = { run, executeFormatterCommand };

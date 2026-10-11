@@ -9,7 +9,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | Variant | Platform | Environment | Adapters |
 | --- | --- | --- | --- |
 | default | linux | none | all |
-| win32 | win32 | none | windsurf-home |
+| win32 | win32 | none | windsurf-home, zed-home |
 | XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME` set to an absolute directory, shown as `$XDG_CONFIG_HOME` in the paths | crush-home |
 | CRUSH_GLOBAL_CONFIG | linux | `CRUSH_GLOBAL_CONFIG` set to an absolute directory, shown as `$CRUSH_GLOBAL_CONFIG` in the paths | crush-home |
 | KIMI_CODE_HOME | linux | `KIMI_CODE_HOME` set to an absolute directory, shown as `$KIMI_CODE_HOME` in the paths | kimi-home |
@@ -301,6 +301,12 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `~/.config/zed/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `~/.config/zed/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | state | `~/.config/zed/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| library | `~/AppData/Roaming/Zed/.agents/` | win32 | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| context | `~/AppData/Roaming/Zed/AGENTS.md` | win32 | documented | <https://zed.dev/docs/ai/instructions> |  |
+| library | `~/AppData/Roaming/Zed/agents/` | win32 | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/AppData/Roaming/Zed/commands/` | win32 | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/AppData/Roaming/Zed/rules/` | win32 | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| state | `~/AppData/Roaming/Zed/egc/install-state.json` | win32 | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## trae-project
 

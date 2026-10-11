@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { applyInstallPlan } = require('../../scripts/lib/install/apply');
+const { getInstallTargetAdapter } = require('../../scripts/lib/install-targets/registry');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install-apply.js');
 const { FULL_INSTALL_TIMEOUT_MS, CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
@@ -32,6 +33,7 @@ function run(args = [], options = {}) {
     ...process.env,
     HOME: homeDir,
     USERPROFILE: homeDir,
+    ...(options.homeDir && process.platform === 'win32' ? { APPDATA: path.join(options.homeDir, 'AppData', 'Roaming') } : {}),
     ...(options.env || {}),
   };
 
@@ -814,9 +816,10 @@ function runTests() {
       assert.strictEqual(first.code, 0, first.stderr);
 
       const sharedSkills = path.join(homeDir, '.agents', 'skills');
-      const zedSkills = path.join(homeDir, '.config', 'zed', 'skills');
-      const statePath = path.join(homeDir, '.config', 'zed', 'egc', 'install-state.json');
-      assert.ok(!fs.existsSync(zedSkills), 'a fresh install writes nothing under ~/.config/zed/skills');
+      const zedAdapter = getInstallTargetAdapter('zed');
+      const zedSkills = path.join(zedAdapter.resolveRoot({ homeDir }), 'skills');
+      const statePath = zedAdapter.getInstallStatePath({ homeDir });
+      assert.ok(!fs.existsSync(zedSkills), 'a fresh install writes nothing under zed skills');
       const state = readJson(statePath);
       const moved = [];
       for (const operation of state.operations) {
@@ -867,7 +870,7 @@ function runTests() {
         assert.strictEqual(result.code, 0, `${target}: ${result.stderr}`);
       }
       const shared = path.join(homeDir, '.agents', 'skills', 'tdd-workflow', 'SKILL.md');
-      const zedState = path.join(homeDir, '.config', 'zed', 'egc', 'install-state.json');
+      const zedState = getInstallTargetAdapter('zed').getInstallStatePath({ homeDir });
       const codexRecorded = readJson(path.join(homeDir, '.agents', 'egc', 'codex-install-state.json')).operations.map(operation => operation.destinationPath);
       assert.ok(codexRecorded.includes(shared), 'codex records the shared skill');
       assert.ok(readJson(zedState).operations.some(operation => operation.destinationPath === shared), 'zed records it too');

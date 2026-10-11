@@ -70,6 +70,15 @@ function readMetricRows(homeDir) {
     .map(line => JSON.parse(line));
 }
 
+function sessionIdFromJsonCase() {
+  return test('takes the session id from the hook JSON when no environment variable names one', () => {
+    const input = { tool_name: 'Read', session_id: 'from-json', tool_input: { file_path: 'README.md' } };
+    assert.strictEqual(buildActivityRow(input, { GEMINI_HOOK_EVENT_NAME: 'PostToolUse' }).session_id, 'from-json');
+    assert.strictEqual(buildActivityRow(input, { GEMINI_HOOK_EVENT_NAME: 'PostToolUse', ECC_SESSION_ID: 'sess' }).session_id, 'sess', 'the environment still wins when set');
+    assert.strictEqual(buildActivityRow(input, { GEMINI_HOOK_EVENT_NAME: 'PostToolUse', EGC_SESSION_ID: '   ' }).session_id, 'from-json', 'a blank environment value does not shadow the JSON');
+  });
+}
+
 function runTests() {
   console.log('\n=== Testing session-activity-tracker.js ===\n');
 
@@ -458,6 +467,10 @@ function runTests() {
       { GEMINI_HOOK_EVENT_NAME: 'PostToolUse', ECC_SESSION_ID: 'sess' }
     ), null);
   }) ? passed++ : failed++);
+
+  const jsonSessionCase = sessionIdFromJsonCase();
+  passed += Number(jsonSessionCase);
+  failed += Number(!jsonSessionCase);
 
   (test('sanitizes nested params, long summaries, and output variants', () => {
     const longValue = `start ${'x'.repeat(260)} ghp_${'A'.repeat(20)}`;
