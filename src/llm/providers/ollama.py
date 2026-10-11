@@ -86,17 +86,22 @@ class OllamaProvider(LLMProvider):
             or ModelResolver.default_model("ollama")
         )
         # The catalog lives in the central registry (library ids checked on
-        # 2026-10-11); the inline entry only covers a registry without ollama rows.
-        self._models = ModelResolver.model_infos("ollama") or [
-            ModelInfo(
-                name=self.default_model,
-                provider=ProviderType.OLLAMA,
-                supports_tools=True,
-                supports_vision=False,
-                max_tokens=8192,
-                context_window=40960,
-            ),
-        ]
+        # 2026-10-11). A configured default the registry does not list, such as
+        # a tagged or custom id, is appended with the capabilities of its base
+        # name, so list_models() always carries the model that will be used.
+        self._models = list(ModelResolver.model_infos("ollama"))
+        if self.default_model not in {m.name for m in self._models}:
+            base = ModelResolver.get_model_info(self.default_model.split(":", 1)[0])
+            self._models.append(
+                ModelInfo(
+                    name=self.default_model,
+                    provider=ProviderType.OLLAMA,
+                    supports_tools=bool(base.get("supports_tools", True)),
+                    supports_vision=bool(base.get("supports_vision", False)),
+                    max_tokens=base.get("max_tokens"),
+                    context_window=base.get("context_window"),
+                )
+            )
 
     def generate(self, input: LLMInput) -> LLMOutput:
         if input.stream:

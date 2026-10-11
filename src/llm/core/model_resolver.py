@@ -760,6 +760,10 @@ class ModelResolver:
             if expected in cls._VENDOR_SLASH_PROVIDERS:
                 return expected
             return "openrouter"
+        # An Ollama "name:tag" id (qwen3:8b, gpt-oss:120b) is local by shape,
+        # judged before the vendor prefixes so gpt-oss:120b does not read as OpenAI.
+        if ":" in v and " " not in v:
+            return "ollama"
         if "claude-" in v:
             return "claude"
         if v.startswith(("gpt-", "o1", "o3", "o4")):
@@ -1005,7 +1009,16 @@ class ModelResolver:
             "mistral-large-latest": "Mistral Large - top-tier reasoning and multilingual capabilities",
             OPENAI_GPT_OSS_120B: "GPT-OSS 120B via Groq - fast inference, tool calling",
             "command-a-plus-05-2026": "Command A+ (Cohere) - agentic tool use, vision, multilingual",
-            LLAMA32: "Llama 3.2 - local general purpose",
+            QWEN3: "Qwen3 - local default, tools and thinking",
+            GPT_OSS: "GPT-OSS - local reasoning, 20b default (120b tag available)",
+            LLAMA33: "Llama 3.3 70B - local, tools",
+            LLAMA31: "Llama 3.1 - local, tools",
+            GEMMA4: "Gemma 4 - local, vision and tools",
+            DEEPSEEK_R1_OLLAMA: "DeepSeek R1 - local reasoning",
+            LLAMA32: "Llama 3.2 - local, the previous default",
+            GROQ_GPT_OSS_20B: "GPT-OSS 20B via Groq - fast & affordable",
+            GROQ_LLAMA33_70B: "Llama 3.3 70B via Groq - versatile",
+            GROQ_LLAMA31_8B: "Llama 3.1 8B via Groq - instant",
             OPENROUTER_AUTO: "OpenRouter Auto - broker picks the best model",
             "google/gemini-2.5-pro": "Gemini 2.5 Pro via OpenRouter",
             GOOGLE_GEMINI_25_FLASH: "Gemini 2.5 Flash via OpenRouter",
@@ -1014,7 +1027,10 @@ class ModelResolver:
             OPENAI_GPT_4O_MINI: "GPT-4o-mini via OpenRouter",
             "deepseek/deepseek-r1": "DeepSeek R1 via OpenRouter - strong reasoning",
             cls._DEEPSEEK_CHAT_V3: "DeepSeek Chat V3 via OpenRouter - cost-efficient",
-            "qwen/qwen3-235b-a22b": "Qwen3 235B via OpenRouter - large reasoning model",
+            QWEN35_397B: "Qwen3.5 397B via OpenRouter - large reasoning model",
+            ANTHROPIC_CLAUDE_SONNET_55: "Claude Sonnet 5.5 via OpenRouter",
+            OPENAI_GPT6_ASTRA: "GPT-6 Astra via OpenRouter - most capable",
+            GOOGLE_GEMINI_38_FLASH: "Gemini 3.8 Flash via OpenRouter",
             cls._QWEN3_32B: "Qwen3 32B via OpenRouter - balanced & affordable",
             "meta-llama/llama-4-maverick": "Llama 4 Maverick via OpenRouter - multimodal",
             cls._LLAMA4_SCOUT: "Llama 4 Scout via OpenRouter - fast & long context",

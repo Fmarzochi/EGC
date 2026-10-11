@@ -73,8 +73,8 @@ class TestOllamaProviderCatalog(unittest.TestCase):
 
     def test_default_model_comes_from_the_catalog_when_no_env_is_set(self) -> None:
         with patch.dict("os.environ", {}, clear=False):
-            os.environ.pop("OLLAMA_MODEL", None)
-            os.environ.pop("LLM_MODEL", None)
+            for name in ("OLLAMA_MODEL", "LLM_MODEL", "EGC_MODEL", "ECC_MODEL"):
+                os.environ.pop(name, None)
             provider = OllamaProvider(base_url="http://localhost:11434")
         self.assertEqual(provider.get_default_model(), "qwen3")
 
@@ -85,6 +85,13 @@ class TestOllamaProviderCatalog(unittest.TestCase):
         self.assertIn("llama3.2", by_name)
         self.assertTrue(by_name["qwen3"].supports_tools)
         self.assertTrue(by_name["llama3.2"].supports_tools)
+
+    def test_a_tagged_default_the_registry_does_not_list_is_still_in_the_list(self) -> None:
+        provider = OllamaProvider(base_url="http://localhost:11434", default_model="qwen3:8b")
+        by_name = {m.name: m for m in provider.list_models()}
+        self.assertIn("qwen3:8b", by_name)
+        self.assertTrue(by_name["qwen3:8b"].supports_tools)
+        self.assertEqual(by_name["qwen3:8b"].context_window, 40960)
 
 
 if __name__ == "__main__":

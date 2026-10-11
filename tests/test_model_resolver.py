@@ -359,6 +359,7 @@ class TestDescribeStrategy:
         assert ModelResolver.describe_strategy("vendor/new-model")["preferred_capability"] == "general"
 
 
+@pytest.mark.unit
 class TestCatalogRefreshOctober2026:
     """#1698, #1699, #1700: Groq, OpenRouter and Ollama ids checked against the vendors on 2026-10-11."""
 
@@ -370,6 +371,10 @@ class TestCatalogRefreshOctober2026:
     def test_ollama_tagged_id_passes_through_unchanged(self):
         assert ModelResolver.resolve("qwen3:8b", "ollama") == "qwen3:8b"
         assert ModelResolver.resolve("gpt-oss:120b", "ollama") == "gpt-oss:120b"
+
+    def test_ollama_tagged_id_is_classified_as_ollama_without_a_hint(self):
+        assert ModelResolver.get_model_info("qwen3:8b")["provider"] == "ollama"
+        assert ModelResolver._provider_for("gpt-oss:120b") == "ollama"
 
     def test_groq_catalog_carries_the_four_production_models(self):
         groq = set(ModelResolver.list_models("groq"))
