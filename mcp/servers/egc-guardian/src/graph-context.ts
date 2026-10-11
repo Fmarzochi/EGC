@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildGraph, readFileWithin, withBuildLock, type BuildResult } from './graph-build.js';
+import { buildGraph, DEFAULT_BUILD_MAX_MS, readFileWithin, withBuildLock, type BuildResult } from './graph-build.js';
 import { queryGraph } from './graph-query.js';
 import { graphDbPath, isCorruption, openGraphStoreWithRecovery, removeGraphDatabase, type GraphData, type GraphStore } from './graph-store.js';
 
@@ -42,8 +42,10 @@ export function resolveRoot(projectPath: string | undefined): { root: string } |
 }
 
 const MAX_SNIPPET_FILE_BYTES = 1024 * 1024;
-// How long a caller waits for another process's build before the graph is reported unavailable.
-const LOCK_WAIT_MS = 5000;
+// How long a caller waits for another process's build before the graph is
+// reported unavailable. Must be at least buildGraph's own deadline, or a
+// build that is simply still running within its own budget looks busy.
+const LOCK_WAIT_MS = DEFAULT_BUILD_MAX_MS + 2000;
 
 // The store is opened, built, read and closed while this process holds the
 // build lock. The portable SQL engine keeps the whole database in memory and

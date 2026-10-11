@@ -38,7 +38,8 @@ const childSource = `
   const [moduleFile, project] = process.argv.slice(1);
   import(require('node:url').pathToFileURL(moduleFile).href)
     .then(m => m.buildRelevantContext('change step3 and step9', project, undefined, { env: process.env }))
-    .then(r => process.stdout.write(JSON.stringify({ status: r.status, reason: r.reason })));
+    .then(r => process.stdout.write(JSON.stringify({ status: r.status, reason: r.reason })))
+    .catch(e => { process.stderr.write(String((e && e.stack) || e)); process.exitCode = 1; });
 `;
 
 function child() {

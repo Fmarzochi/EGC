@@ -101,6 +101,8 @@ run('a flag without its value is named, with the usage line, and is not a TypeEr
   }
   const next = spawnSync(process.execPath, [script, 'chargeCard', '--project', '--explain'], { encoding: 'utf8' });
   assert.ok(next.stderr.includes('--project needs a value'), 'a following flag is not taken for the value');
+  const short = spawnSync(process.execPath, [script, 'chargeCard', '--project', '-h'], { encoding: 'utf8' });
+  assert.ok(short.stderr.includes('--project needs a value'), 'a single-dash flag is not taken for the value either');
 });
 
 run('a project that does not exist fails with a one-line message, not a stack trace', () => {
