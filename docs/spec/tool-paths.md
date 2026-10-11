@@ -2,7 +2,7 @@
 
 Generated from `manifests/tool-paths.json` by `node scripts/ci/generate-tool-paths-doc.js`; edit the table, not this file. `tests/ci/tool-paths-contract.test.js` plans every install target in every variant below and fails when a planned path is missing from the table or a row of the table matches no planned path. Sources checked on 2026-10-10.
 
-Status: **documented** paths are read by the tool per the linked docs; **egc** paths are files of EGC itself under the tool root (hook scripts, install state, library copies the tool does not load); **unverified** paths are planned today but not confirmed by the tool's current docs, with the reason in the note.
+Status: **documented** paths are read by the tool per the linked source: its docs, or, where the docs are silent, its own source code at a pinned commit, with the note saying which; **egc** paths are files of EGC itself under the tool root (hook scripts, install state, library copies the tool does not load); **unverified** paths are planned today but not confirmed by the tool's current docs, with the reason in the note.
 
 ## Variants
 
@@ -196,7 +196,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | rules | `<project>/.clinerules/` | default | documented | <https://docs.cline.bot/customization/cline-rules> |  |
 | library | `<project>/.clinerules/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `<project>/.clinerules/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| hooks | `<project>/.clinerules/hooks/` | default | unverified | <https://docs.cline.bot/customization/hooks> | Cline's current docs move hooks to SDK plugins and no longer name .clinerules/hooks (read on 2026-10-10). |
+| hooks | `<project>/.clinerules/hooks/` | default | documented | <https://github.com/cline/cline/blob/c3a40572765b76873c597247941118c1778d02c8/apps/vscode/src/core/storage/disk.ts> | The hooks page now points at SDK plugins, but the plugins page says plugins apply only to the Cline SDK, CLI and Kanban, not to the VS Code and JetBrains extensions (https://docs.cline.bot/customization/plugins, read on 2026-10-11). The extension source at that commit (main on 2026-10-11) still discovers hooks in each workspace root's .clinerules/hooks (disk.ts, hooksDir) and runs a file named after the hook: PreToolUse, executable, on Unix and PreToolUse.ps1 on Windows (apps/vscode/src/core/hooks/hook-factory.ts, findHookInHooksDir). |
 | runtime | `<project>/.clinerules/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `<project>/.clinerules/skills/` | default | documented | <https://docs.cline.bot/customization/skills> |  |
 
