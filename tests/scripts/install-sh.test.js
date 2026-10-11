@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
-const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { CLI_TIMEOUT_MS, FULL_INSTALL_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'install.sh');
 
@@ -267,7 +267,7 @@ function runTests() {
       const res = spawnSync('bash', ['-c', `set -e\n${helper}\ncd "$1"\n${buildBlocks[0]}`, 'install-build', sandbox], {
         encoding: 'utf8',
         env: { ...process.env, ROOT_DIR: repoRoot, NODE_ENV: 'production' },
-        timeout: 300000,
+        timeout: FULL_INSTALL_TIMEOUT_MS,
       });
       assert.strictEqual(res.status, 0, `${res.stdout}\n${res.stderr}`);
       assert.ok(fs.existsSync(path.join(sandbox, 'build', 'index.js')), 'the built server exists');
