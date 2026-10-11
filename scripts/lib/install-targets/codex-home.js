@@ -1,13 +1,18 @@
+const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
 const {
+  collectRecordedDestinations,
   createInstallTargetAdapter,
   createRemappedOperation,
   isForeignPlatformPath,
+  isPersonOwnedDestination,
+  normalizeRelativePath,
   planFlatSkillOperation,
   resolveModulesPlan,
 } = require('./helpers');
+const { isIgnoredSourceDirectory, isIgnoredSourceFile } = require('../install-source-filters');
 const {
   GATEGUARD_HOOK_MODULE_ID,
   GATEGUARD_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
@@ -47,6 +52,60 @@ const {
 // hermeticity and risks writing to a real ~/.codex during a hermetic test run.
 function resolveCodexHome(input) {
   return path.join(input.homeDir || os.homedir(), '.codex');
+}
+
+const NATIVE_ROOT = '.agents';
+const CONTEXT_FILE_NAME = 'AGENTS.md';
+
+function isSymbolicLink(target) {
+  try {
+    return fs.lstatSync(target).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+const ABSENT_SOURCE_CODES = new Set(['ENOENT', 'ENOTDIR']);
+
+function listNativeRootChildren(repoRoot) {
+  if (!repoRoot) return [];
+  try {
+    return fs.readdirSync(path.join(repoRoot, NATIVE_ROOT), { withFileTypes: true })
+      .filter(entry => (entry.isDirectory() ? !isIgnoredSourceDirectory(entry.name) : !isIgnoredSourceFile(entry.name)))
+      .map(entry => entry.name);
+  } catch (error) {
+    if (ABSENT_SOURCE_CODES.has(error.code)) return [];
+    throw error;
+  }
+}
+
+function planContextFileOperation(adapter, moduleId, input, codexHome) {
+  const destination = path.join(codexHome, CONTEXT_FILE_NAME);
+  const sourceRelativePath = `${NATIVE_ROOT}/${CONTEXT_FILE_NAME}`;
+  const sourcePath = input.repoRoot ? path.join(input.repoRoot, NATIVE_ROOT, CONTEXT_FILE_NAME) : null;
+  if (isSymbolicLink(destination) || isPersonOwnedDestination(destination, sourcePath, collectRecordedDestinations(adapter, input))) {
+    return [];
+  }
+  return [createRemappedOperation(adapter, moduleId, sourceRelativePath, destination, { strategy: 'preserve-relative-path' })];
+}
+
+function planNativeRootOperations(adapter, moduleId, input, planningInput, targetRoot, codexHome) {
+  const children = listNativeRootChildren(planningInput.repoRoot).filter(name => name !== CONTEXT_FILE_NAME);
+  return [
+    ...planContextFileOperation(adapter, moduleId, input, codexHome),
+    ...children.map(name => createRemappedOperation(adapter, moduleId, `${NATIVE_ROOT}/${name}`, path.join(targetRoot, name), { strategy: 'preserve-relative-path' })),
+  ];
+}
+
+function planCodexModuleOperations(adapter, module, input, planningInput, targetRoot, codexHome) {
+  return (Array.isArray(module.paths) ? module.paths : [])
+    .filter(p => !isForeignPlatformPath(p, adapter.target))
+    .flatMap(sourceRelativePath => {
+      const normalized = normalizeRelativePath(sourceRelativePath);
+      if (normalized === CONTEXT_FILE_NAME) return [];
+      if (normalized === NATIVE_ROOT) return planNativeRootOperations(adapter, module.id, input, planningInput, targetRoot, codexHome);
+      return [planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot)];
+    });
 }
 
 function buildCodexPreToolUseMergeOperation(codexHome, moduleId, sourceRelativePath, hookScriptPath, matcher) {
@@ -181,14 +240,11 @@ module.exports = createInstallTargetAdapter({
   nativeRootRelativePath: '.agents',
   planOperations(input, adapter) {
     const { modules, planningInput, targetRoot } = resolveModulesPlan(input, adapter);
-
-    const moduleOperations = modules.flatMap(module => {
-      const paths = (Array.isArray(module.paths) ? module.paths : [])
-        .filter(p => !isForeignPlatformPath(p, adapter.target));
-      return paths.map(sourceRelativePath => planFlatSkillOperation(adapter, module.id, sourceRelativePath, planningInput, targetRoot));
-    });
-
     const codexHome = resolveCodexHome(planningInput);
+    const moduleOperations = modules.flatMap(module => (
+      planCodexModuleOperations(adapter, module, input, planningInput, targetRoot, codexHome)
+    ));
+
     return [
       ...moduleOperations,
       ...createCodexGateGuardOperations(adapter, codexHome),

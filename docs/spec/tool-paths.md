@@ -103,9 +103,9 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 
 | Surface | Path | Variant | Status | Source | Note |
 | --- | --- | --- | --- | --- | --- |
-| library | `~/.agents` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `~/.agents/.codex/` | default | egc |  | EGC library: platform configuration sources copied for reference; the tool does not load this path. |
-| context | `~/.agents/AGENTS.md` | default | unverified | <https://learn.chatgpt.com/docs/agent-configuration/agents-md> | Codex reads AGENTS.md from CODEX_HOME (~/.codex) and from the project, not from ~/.agents (read on 2026-10-10). |
+| library | `~/.agents/plugins/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| context | `~/.codex/AGENTS.md` | default | documented | <https://learn.chatgpt.com/docs/agent-configuration/agents-md> | Codex reads the global AGENTS.md (or AGENTS.override.md) from its home, ~/.codex by default (read on 2026-10-11). Planned when the file is absent, identical to the source, or recorded by EGC; a different file of the person's own and a link there are left alone. |
 | library | `~/.agents/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `~/.agents/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `~/.agents/mcp-configs/` | default | egc |  | EGC library: platform configuration sources copied for reference; the tool does not load this path. |
