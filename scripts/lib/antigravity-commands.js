@@ -19,7 +19,7 @@ function commandSkillName(sourceRelativeFile) {
   return relative.slice(0, -'.md'.length).replaceAll('/', '-');
 }
 
-function planAntigravityCommandFiles(repoRoot, sourceRelativePath) {
+function planCommandSkillFiles(repoRoot, sourceRelativePath, transform) {
   if (!repoRoot) {
     return [];
   }
@@ -29,15 +29,19 @@ function planAntigravityCommandFiles(repoRoot, sourceRelativePath) {
       return {
         sourceRelativePath: sourceRelativeFile,
         fileName: name ? `${name}/SKILL.md` : null,
-        transform: ANTIGRAVITY_COMMAND_SKILL_TRANSFORM,
+        transform,
       };
     })
     .filter(command => command.fileName));
 }
 
-function assertUniqueCommandSkills(operations) {
+function planAntigravityCommandFiles(repoRoot, sourceRelativePath) {
+  return planCommandSkillFiles(repoRoot, sourceRelativePath, ANTIGRAVITY_COMMAND_SKILL_TRANSFORM);
+}
+
+function assertUniqueCommandSkills(operations, transform = ANTIGRAVITY_COMMAND_SKILL_TRANSFORM) {
   const owners = new Map();
-  for (const operation of operations.filter(candidate => candidate.transform === ANTIGRAVITY_COMMAND_SKILL_TRANSFORM)) {
+  for (const operation of operations.filter(candidate => candidate.transform === transform)) {
     const destination = path.resolve(operation.destinationPath);
     const source = normalizeSourcePath(operation.sourceRelativePath);
     const owner = owners.get(destination);
@@ -63,7 +67,9 @@ function dropCommandsShadowedBySkills(operations) {
 }
 
 module.exports = {
+  assertUniqueCommandSkills,
   dropCommandsShadowedBySkills,
   isCommandSource,
   planAntigravityCommandFiles,
+  planCommandSkillFiles,
 };
