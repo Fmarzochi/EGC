@@ -1655,7 +1655,8 @@ function runTests() {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = fs.realpathSync(createTempDir('install-apply-project-'));
     const ownProject = fs.realpathSync(createTempDir('install-apply-project-'));
-    const writePreviousState = (codebuddyDir, oldCopy) => {
+    const sha256 = text => require('crypto').createHash('sha256').update(text, 'utf8').digest('hex');
+    const writePreviousState = (codebuddyDir, oldCopy, recordedSha256) => {
       const statePath = path.join(codebuddyDir, 'egc-install-state.json');
       const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
       writeInstallState(statePath, createInstallState({
@@ -1664,7 +1665,7 @@ function runTests() {
         installStatePath: statePath,
         request: { profile: null, modules: ['agents-core'], legacyLanguages: [], legacyMode: false },
         resolution: { selectedModules: ['agents-core'], skippedModules: [] },
-        operations: [{ kind: 'generate-context-file', moduleId: 'agents-core', sourceRelativePath: 'AGENTS.md', destinationPath: oldCopy, strategy: 'generate-context-file', ownership: 'managed', scaffoldOnly: false }],
+        operations: [{ kind: 'generate-context-file', moduleId: 'agents-core', sourceRelativePath: 'AGENTS.md', destinationPath: oldCopy, strategy: 'generate-context-file', ownership: 'managed', scaffoldOnly: false, ...(recordedSha256 ? { contentSha256: recordedSha256 } : {}) }],
         source: { repoVersion: require('../../package.json').version, repoCommit: 'abc123', manifestVersion: 1 },
       }));
     };
@@ -1680,6 +1681,15 @@ function runTests() {
       assert.strictEqual(applied.code, 0, applied.stderr);
       assert.ok(!fs.existsSync(oldCopy), 'the copy CodeBuddy never read is retired');
       assert.strictEqual(fs.readFileSync(path.join(codebuddyDir, 'rules', 'egc-agents.md'), 'utf8'), catalog, 'the catalog lands where CodeBuddy loads project memory');
+      const recorded = JSON.parse(fs.readFileSync(path.join(codebuddyDir, 'egc-install-state.json'), 'utf8')).operations
+        .find(operation => operation.destinationPath === path.join(codebuddyDir, 'rules', 'egc-agents.md'));
+      assert.strictEqual(recorded.contentSha256, sha256(catalog), 'the state records the hash of the catalog EGC wrote');
+
+      fs.writeFileSync(oldCopy, 'An older catalog EGC wrote.\n');
+      writePreviousState(codebuddyDir, oldCopy, sha256('An older catalog EGC wrote.\n'));
+      const older = install(projectDir);
+      assert.strictEqual(older.code, 0, older.stderr);
+      assert.ok(!fs.existsSync(oldCopy), 'a copy written from an older template goes too, by the hash recorded when it was written');
 
       fs.writeFileSync(oldCopy, 'edited by hand after EGC wrote it\n');
       writePreviousState(codebuddyDir, oldCopy);

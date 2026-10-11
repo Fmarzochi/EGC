@@ -634,7 +634,8 @@ function isRetirementCandidate(resolved, { managedRoots, seen, siblingOwned, cov
 // Only recorded copy-file and generated context file operations are diffed;
 // merge-json and hook operations (settings.json entries, MCP config merges)
 // have no counterpart here yet, an open question left by #1412. A generated
-// file is compared against the template it was generated from.
+// file is compared against the hash of the text EGC wrote, recorded at
+// install time, or the current template for a state recorded before that.
 //
 // This only decides which destinations are candidates. The identity check
 // that decides whether one is actually safe to delete (a regular file,
@@ -695,7 +696,7 @@ function planGenericRetirements(input, adapter) {
     if (!isRetirementCandidate(resolved, boundaries)) continue;
     const source = normalizeRelativePath(String(operation.sourceRelativePath || ''));
     if (!source) continue;
-    if (operation.kind === GENERATE_CONTEXT_FILE_KIND && !isGeneratedContextSource(source)) continue;
+    if (operation.kind === GENERATE_CONTEXT_FILE_KIND && typeof operation.contentSha256 !== 'string' && !isGeneratedContextSource(source)) continue;
     boundaries.seen.add(resolved);
     retirements.push(retirementOf(operation, resolved, source, repoRoot));
   }
@@ -796,10 +797,11 @@ function planHookRetirements(input, adapter) {
 }
 
 function recordedContentSha256(operation, source) {
+  if (typeof operation.contentSha256 === 'string') return operation.contentSha256;
   if (operation.kind === GENERATE_CONTEXT_FILE_KIND) {
     return crypto.createHash('sha256').update(generatedContextTemplate(source), 'utf8').digest('hex');
   }
-  return typeof operation.contentSha256 === 'string' ? operation.contentSha256 : null;
+  return null;
 }
 
 function retirementOf(operation, destinationPath, source, repoRoot) {
