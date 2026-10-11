@@ -74,6 +74,7 @@ function run() {
 
     const sbomFile = generator.with && generator.with['output-file'];
     assert.ok(sbomFile, 'the SBOM generator declares no output-file');
+    assert.ok(steps.indexOf(generator) < steps.indexOf(attest), 'the SBOM must be generated before it is attested');
     assert.strictEqual(attest.with && attest.with['sbom-path'], sbomFile);
     assert.strictEqual(attest.with['subject-path'], provenance.with['subject-path']);
     assert.ok(!('predicate-type' in attest.with), 'sbom-path and predicate-type cannot be combined');
