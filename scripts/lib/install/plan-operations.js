@@ -296,9 +296,7 @@ function dedupeCopyFileDestinations(operations, nativeRootRelativePath) {
   const winnerIndexByDestination = new Map();
   const result = [];
   // A generated catalog never shadows a file another module copies to the
-  // same place: on the codex target the native .agents/AGENTS.md lands at
-  // ~/.agents/AGENTS.md, where the root AGENTS.md would also be generated,
-  // and the copied file is what a registry install always had there.
+  // same place, whatever the target: the copied file wins.
   const copiedDestinations = new Set(operations
     .filter(operation => operation.kind === 'copy-file')
     .map(operation => operation.destinationPath));

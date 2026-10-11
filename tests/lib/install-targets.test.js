@@ -3,6 +3,7 @@
  */
 
 const assert = require('assert');
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
@@ -3281,6 +3282,55 @@ function runTests() {
       assert.ok(v3Operation, `[${target}] Should plan the Kiro CLI 3.0 standalone hook document next to the 2.x entry`);
       assert.strictEqual(v3Operation.destinationPath, path.join(targetRoot, 'hooks', 'egc-guardian.json'));
       assert.strictEqual(v3Operation.hookScriptPath, adapterScriptDestination, 'both layouts run the same adapter');
+    }
+  }));
+
+  tally(test('codex plans the native AGENTS.md at ~/.codex/AGENTS.md, skips a link there, and updates a copy EGC recorded (#1839)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-codex-agents-')));
+    const agentsCore = [{ id: 'agents-core', paths: ['.agents', 'agents', 'AGENTS.md'] }];
+    const contextOps = plan => plan.operations.filter(operation => /AGENTS\.md$/.test(operation.destinationPath));
+    try {
+      const fresh = planInstallTargetScaffold({ target: 'codex', repoRoot, homeDir, modules: agentsCore });
+      assert.deepStrictEqual(contextOps(fresh).map(operation => [operation.sourceRelativePath, operation.destinationPath]), [
+        ['.agents/AGENTS.md', path.join(homeDir, '.codex', 'AGENTS.md')],
+      ], 'one AGENTS.md, in CODEX_HOME, and no generated catalog in ~/.agents');
+      assert.ok(fresh.operations.some(operation => operation.destinationPath === path.join(homeDir, '.agents', 'skills')), 'the skills stay under ~/.agents');
+
+      const bareRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-codex-bare-repo-'));
+      try {
+        const bare = planInstallTargetScaffold({ target: 'codex', repoRoot: bareRepo, homeDir, modules: agentsCore });
+        assert.ok(bare.operations.some(operation => operation.destinationPath === path.join(homeDir, '.codex', 'AGENTS.md')), 'a source tree without .agents still plans the CODEX_HOME file');
+        assert.ok(!bare.operations.some(operation => operation.destinationPath === path.join(homeDir, '.agents') || operation.destinationPath === path.join(homeDir, '.agents', 'AGENTS.md')), 'and never falls back to the whole tree in ~/.agents');
+      } finally {
+        fs.rmSync(bareRepo, { recursive: true, force: true });
+      }
+
+      const destination = path.join(homeDir, '.codex', 'AGENTS.md');
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, 'edited after EGC wrote it\n');
+      const statePath = path.join(homeDir, '.agents', 'egc', 'codex-install-state.json');
+      const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
+      writeInstallState(statePath, createInstallState({
+        adapter: { id: 'codex-home' },
+        targetRoot: path.join(homeDir, '.agents'),
+        installStatePath: statePath,
+        request: { profile: null, modules: ['agents-core'], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: ['agents-core'], skippedModules: [] },
+        operations: [{ kind: 'copy-file', moduleId: 'agents-core', sourceRelativePath: '.agents/AGENTS.md', destinationPath: destination, strategy: 'preserve-relative-path', ownership: 'managed', scaffoldOnly: false }],
+        source: { repoVersion: '1.0.0', repoCommit: 'abc123', manifestVersion: 1 },
+      }));
+      assert.strictEqual(contextOps(planInstallTargetScaffold({ target: 'codex', repoRoot, homeDir, modules: agentsCore })).length, 1, 'a file EGC recorded is still EGC\'s to update');
+
+      if (process.platform !== 'win32') {
+        fs.rmSync(destination);
+        fs.rmSync(statePath);
+        fs.writeFileSync(path.join(homeDir, 'dotfiles-AGENTS.md'), 'linked\n');
+        fs.symlinkSync(path.join(homeDir, 'dotfiles-AGENTS.md'), destination);
+        assert.deepStrictEqual(contextOps(planInstallTargetScaffold({ target: 'codex', repoRoot, homeDir, modules: agentsCore })), [], 'a link the person made is left alone');
+      }
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
     }
   }));
 

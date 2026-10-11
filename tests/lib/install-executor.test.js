@@ -278,7 +278,8 @@ function runTests() {
         assert.strictEqual(owners[0].sourceRelativePath.split(path.sep).join('/'), 'skills/testing/demo/SKILL.md');
         assert.strictEqual(byDestination(path.join(homeDir, '.agents', 'skills', 'demo', 'agents', 'openai.yaml')).length, 1, 'the Codex metadata still ships');
         assert.strictEqual(byDestination(path.join(homeDir, '.agents', 'skills', 'lone', 'SKILL.md')).length, 1, 'a skill only the mirror has still ships');
-        assert.strictEqual(byDestination(path.join(homeDir, '.agents', 'AGENTS.md')).length, 1, 'the rest of the native tree still ships');
+        assert.strictEqual(byDestination(path.join(homeDir, '.codex', 'AGENTS.md')).length, 1, 'the native AGENTS.md still ships, to CODEX_HOME where Codex reads it (#1839)');
+        assert.strictEqual(byDestination(path.join(homeDir, '.agents', 'AGENTS.md')).length, 0, 'and not to ~/.agents, which Codex does not read');
         const destinations = copies.map(operation => operation.destinationPath);
         assert.strictEqual(new Set(destinations).size, destinations.length);
       } finally {

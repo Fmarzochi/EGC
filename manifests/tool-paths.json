@@ -418,24 +418,24 @@
     {
       "adapter": "codex-home",
       "surface": "library",
-      "path": "~/.agents",
-      "status": "egc",
-      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
-    },
-    {
-      "adapter": "codex-home",
-      "surface": "library",
       "path": "~/.agents/.codex/",
       "status": "egc",
       "note": "EGC library: platform configuration sources copied for reference; the tool does not load this path."
     },
     {
       "adapter": "codex-home",
+      "surface": "library",
+      "path": "~/.agents/plugins/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "codex-home",
       "surface": "context",
-      "path": "~/.agents/AGENTS.md",
-      "status": "unverified",
+      "path": "~/.codex/AGENTS.md",
+      "status": "documented",
       "source": "https://learn.chatgpt.com/docs/agent-configuration/agents-md",
-      "note": "Codex reads AGENTS.md from CODEX_HOME (~/.codex) and from the project, not from ~/.agents (read on 2026-10-10)."
+      "note": "Codex reads the global AGENTS.md (or AGENTS.override.md) from its home, ~/.codex by default (read on 2026-10-11). Planned when the file is absent, identical to the source, or recorded by EGC; a different file of the person's own and a link there are left alone."
     },
     {
       "adapter": "codex-home",
