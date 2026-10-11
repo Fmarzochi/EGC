@@ -58,7 +58,7 @@ Due schede Cursore, un terminale Codice Claude e una sessione Antigravity condiv
 
 ### Guardian: uno strato di sicurezza davanti ad ogni comando
 
-Guardian convalida i comandi prima di eseguire, cancelli rischiosi scrive e mantiene il contesto da traboccare, in background, senza che si invochi nulla. La copertura dipende dal supporto del gancio di ogni strumento; la [valutazione della sicurezza](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) documenta l'eccezione.
+Guardian convalida i comandi prima di eseguire, cancelli rischiosi scrive e mantiene il contesto da traboccare, in background, senza che si invochi nulla. La copertura dipende dal supporto del gancio di ogni strumento; la [valutazione della sicurezza](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) documenta l'eccezione. Quando un task inizia, `orchestrate_task` restituisce anche il codice di cui si occupa il task attraverso un grafico locale del tuo progetto; vedi [Token Optimization](../../docs/token-optimization.md).
 
 ### Token Crusher: Il rumore non raggiunge mai il modello
 

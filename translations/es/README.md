@@ -58,7 +58,7 @@ Dos pestañas Cursor, un terminal Claude Code y una sesión Antigravity comparte
 
 ### Guardiana: una capa de seguridad frente a cada comando
 
-Guardian valida los comandos antes de que funcionen, compuertas arriesgadas escribe y evita que el contexto se desborde, en segundo plano, sin invocar nada. La cobertura depende del soporte de cada gancho de cada herramienta; la [Evaluación de seguridad](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) documenta la excepción.
+Guardian valida los comandos antes de que funcionen, compuertas arriesgadas escribe y evita que el contexto se desborde, en segundo plano, sin invocar nada. La cobertura depende del soporte de cada gancho de cada herramienta; la [Evaluación de seguridad](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) documenta la excepción. Cuando comienza una tarea, `orchestrate_task` también devuelve el código sobre el que trata la tarea, encontrado a través de una gráfica local de tu proyecto; ver [Optimización de token](../../docs/token-optimization.md).
 
 ### Triturador de Tok: El ruido nunca alcanza el modelo
 
