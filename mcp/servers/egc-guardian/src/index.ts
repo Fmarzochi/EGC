@@ -19,58 +19,11 @@ function hideEgcRootOnWindows(): void {
 import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath, resolveWriteTarget } from './validator.js';
 import { redactPayload, writeAuditEntry } from './audit-log.js';
-import { scanVolatile } from './egc-volatile-scanner.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
-import { classifyChunk } from './egc-chunk-router.js';
-import { reduceJsonArray } from './egc-array-crusher.js';
+import { runCompressionPipeline } from './compression-pipeline.js';
+import { createRateLimiter } from './rate-limit.js';
 import { autoLearn } from './learn-writer.js';
 import { compressViaHeadroom } from './headroom-client.js';
-
-interface PipelineResult {
-  chunks: string[];
-  bytes_before: number;
-  bytes_after: number;
-  savings_pct: number;
-  volatile_findings: number;
-  chunks_crushed: number;
-}
-
-function runCompressionPipeline(chunks: string[]): PipelineResult {
-  const bytesBefore = chunks.reduce((a, c) => a + Buffer.byteLength(c, 'utf8'), 0);
-  let volatileFindings = 0;
-  let chunksCrushed = 0;
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const chunk of chunks) {
-    const findings = scanVolatile(chunk);
-    volatileFindings += findings.length;
-
-    const contentType = classifyChunk(chunk);
-
-    let processed = chunk;
-
-    if (contentType === 'json_array') {
-      const reduced = reduceJsonArray(chunk);
-      if (reduced !== null) {
-        processed = reduced.crushed;
-        chunksCrushed++;
-      }
-    }
-
-    // Exact-match dedup as final safety net
-    const key = processed.trim();
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(processed);
-    }
-  }
-
-  const bytesAfter = result.reduce((a, c) => a + Buffer.byteLength(c, 'utf8'), 0);
-  const savingsPct = bytesBefore === 0 ? 0 : Math.round((1 - bytesAfter / bytesBefore) * 100);
-
-  return { chunks: result, bytes_before: bytesBefore, bytes_after: bytesAfter, savings_pct: savingsPct, volatile_findings: volatileFindings, chunks_crushed: chunksCrushed };
-}
 
 interface RoutingResult {
   agents: string[];
@@ -294,21 +247,10 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
 
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX_CALLS = 60;
-const rateLimitMap = new Map<string, number[]>();
+const rateLimiter = createRateLimiter({ windowMs: RATE_WINDOW_MS, maxCalls: RATE_MAX_CALLS });
 
 function checkRateLimit(tool: string, projectPath?: string | null): boolean {
-  const now = Date.now();
-  
-  // Create a composite storage key if projectPath is available, otherwise fall back to global tool name
-  const trimmed = projectPath ? projectPath.trim() : "";
-  const storageKey = trimmed !== "" 
-    ? `${trimmed}::${tool}` 
-    : tool;
-
-  const timestamps = (rateLimitMap.get(storageKey) ?? []).filter(t => now - t < RATE_WINDOW_MS);
-  timestamps.push(now);
-  rateLimitMap.set(storageKey, timestamps);
-  return timestamps.length <= RATE_MAX_CALLS;
+  return rateLimiter.check(tool, projectPath);
 }
 
 function handleValidateCommand(toolArgs: unknown) {
