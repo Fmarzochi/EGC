@@ -1344,7 +1344,7 @@
       "path": "<project>/.trae/hooks.json",
       "status": "documented",
       "source": "https://docs.trae.ai/ide/hook-configuration-reference",
-      "note": "The Chinese edition reads project hooks from the same $PROJECT_FOLDER/.trae/hooks.json and keeps .trae-cn for its global hooks only (https://docs.trae.cn/ide/hook-configuration-reference, read on 2026-10-11), so TRAE_ENV=cn plans .trae too. An earlier install under <project>/.trae-cn is retired: its copies only while they hold EGC's bytes, and only EGC's entries leave .trae-cn/hooks.json."
+      "note": "The Chinese edition reads project hooks from the same $PROJECT_FOLDER/.trae/hooks.json and keeps ~/.trae-cn for its global hooks only (https://docs.trae.cn/ide/hook-configuration-reference, read on 2026-10-11), so TRAE_ENV=cn plans .trae too. On upgrade from an earlier install under <project>/.trae-cn, EGC removes only the copies that still match the bytes it wrote (an edited copy stays), removes only its own entries from <project>/.trae-cn/hooks.json, and keeps that install's state when it cannot be read."
     },
     {
       "adapter": "trae-project",
