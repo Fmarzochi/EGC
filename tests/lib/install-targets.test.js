@@ -4390,7 +4390,7 @@ function runTests() {
     assert.strictEqual(plan.operations.length, 0, 'Non-skill, non-rules module paths should not produce operations');
   }));
 
-  tally(test("warp adapter copies rules-core's memory.md and merges an index entry into AGENTS.md", () => {
+  tally(test("warp adapter plans rules-core's memory rule as a marked block of AGENTS.md, the file Warp loads, and nothing under .warp/rules (#1841)", () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const projectRoot = '/workspace/app';
 
@@ -4401,14 +4401,15 @@ function runTests() {
       modules: [{ id: 'rules-core', paths: ['rules'] }],
     });
 
-    assert.strictEqual(plan.operations.length, 2, 'should emit a copy operation and an AGENTS.md merge operation');
-    const copyOp = plan.operations.find(o => o.strategy === 'preserve-relative-path');
-    const mergeOp = plan.operations.find(o => o.kind === 'merge-markdown-skill-index');
-    assert.ok(copyOp, 'must emit a copy operation for memory.md');
-    assert.strictEqual(copyOp.destinationPath, path.join(projectRoot, '.warp', 'rules', 'common', 'memory.md'));
-    assert.ok(mergeOp, 'must emit a merge-markdown-skill-index operation');
-    assert.strictEqual(mergeOp.destinationPath, path.join(projectRoot, 'AGENTS.md'));
-    assert.strictEqual(mergeOp.skillName, 'EGC Session Memory');
+    assert.deepStrictEqual(
+      plan.operations.map(o => [o.kind, o.destinationPath, Boolean(o.memoryRule)]),
+      [['merge-markdown-skill-index', path.join(projectRoot, 'AGENTS.md'), true]]
+    );
+    assert.strictEqual(
+      plan.operations[0].ruleContent,
+      fs.readFileSync(path.join(repoRoot, 'rules', 'common', 'memory.md'), 'utf8')
+    );
+    assert.ok(!plan.operations.some(o => o.destinationPath.includes(path.join('.warp', 'rules'))));
   }));
 
   tally(test('warp adapter is included in the full adapter list', () => {

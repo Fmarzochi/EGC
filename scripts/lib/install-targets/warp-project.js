@@ -16,6 +16,8 @@ const { MERGE_MARKDOWN_INDEX_KIND } = require('../warp-agents-merge');
 
 const MAX_DESCRIPTION_LENGTH = 110;
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---/;
+const MEMORY_RULE_SOURCE = 'rules/common/memory.md';
+const LEGACY_MEMORY_INDEX_NAME = 'EGC Session Memory';
 
 // Warp discovers skills natively as .warp/skills/<name>/SKILL.md
 // (docs.warp.dev/agents/capabilities/skills), so each skill directory is
@@ -69,6 +71,33 @@ function isSymbolicLink(target) {
   } catch {
     return false;
   }
+}
+
+function readMemoryRule(repoRoot) {
+  if (!repoRoot) return null;
+  try {
+    return fs.readFileSync(path.join(repoRoot, ...MEMORY_RULE_SOURCE.split('/')), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function planMemoryRuleOperations(moduleId, repoRoot, agentsFilePath, indexedSkillNames) {
+  const base = {
+    kind: MERGE_MARKDOWN_INDEX_KIND,
+    moduleId,
+    sourceRelativePath: MEMORY_RULE_SOURCE,
+    destinationPath: agentsFilePath,
+    strategy: MERGE_MARKDOWN_INDEX_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+  };
+  const operations = indexedSkillNames.has(LEGACY_MEMORY_INDEX_NAME)
+    ? [{ ...base, skillName: LEGACY_MEMORY_INDEX_NAME, removeEntry: true }]
+    : [];
+  const ruleContent = readMemoryRule(repoRoot);
+  if (ruleContent !== null) operations.push({ ...base, memoryRule: true, ruleContent });
+  return operations;
 }
 
 function createWarpPlanOperations(input, adapter) {
@@ -149,38 +178,11 @@ function createWarpPlanOperations(input, adapter) {
           return [copyOperation, mergeOperation];
         }
 
-        // rules-core's static memory protocol file (rules/common/memory.md,
-        // the get_state/update_state instructions). Warp has no separate
-        // rules-discovery mechanism either, so it goes through the same
-        // skill-index merge into AGENTS.md as a named entry pointing at the
-        // copied file -- consistent with how skills stay out of the
-        // always-loaded file to protect context budget. Hardcodes the
-        // single known file under rules/ rather than a recursive scan,
-        // since that's the only file the module ships today.
+        // rules-core's memory protocol (rules/common/memory.md) has to be
+        // loaded every session, and Warp loads only AGENTS.md (or WARP.md),
+        // so its text goes into a marked block of the project's AGENTS.md.
         if (normalized === 'rules') {
-          const destinationPath = path.join(targetRoot, 'rules', 'common', 'memory.md');
-
-          const copyOperation = createManagedOperation({
-            moduleId: module.id,
-            sourceRelativePath: 'rules/common/memory.md',
-            destinationPath,
-            strategy: 'preserve-relative-path',
-          });
-
-          const mergeOperation = {
-            kind: MERGE_MARKDOWN_INDEX_KIND,
-            moduleId: module.id,
-            sourceRelativePath: 'rules/common/memory.md',
-            destinationPath: agentsFilePath,
-            strategy: MERGE_MARKDOWN_INDEX_KIND,
-            ownership: 'managed',
-            scaffoldOnly: false,
-            skillName: 'EGC Session Memory',
-            skillDescription: 'Cross-session memory protocol: call get_state at session start, update_state at session end.',
-            relativePath: normalizeRelativePath(path.relative(projectRoot, destinationPath)),
-          };
-
-          return [copyOperation, mergeOperation];
+          return planMemoryRuleOperations(module.id, input.repoRoot, agentsFilePath, indexedSkillNames);
         }
 
         return [];
