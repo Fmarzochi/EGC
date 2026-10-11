@@ -41,10 +41,10 @@ const EXCEPTIONS = {
     rules: catalog => catalog.rules.files.filter(file => !normalize(file).startsWith('rules/zh/')).length,
     // Claude Code lists commands and skills as the same slash commands, so a
     // command whose name is also a skill stays out (the skill points at it).
-    commands: catalog => {
-      const skills = new Set(catalog.skills.files.map(file => normalize(file).split('/').slice(-2, -1)[0]));
-      return catalog.commands.files.filter(file => !skills.has(stemOf(file))).length;
-    },
+    commands: commandsWithoutSkillNames,
+  },
+  cursor: {
+    commands: commandsWithoutSkillNames,
   },
   aider: {
     agents: () => 0, // Aider has no agent or command discovery
@@ -73,16 +73,24 @@ function stemOf(filePath) {
   return path.posix.basename(filePath).replace(/\.(md|mdc)$/i, '');
 }
 
+function commandsWithoutSkillNames(catalog) {
+  const skills = new Set(catalog.skills.files.map(file => normalize(file).split('/').slice(-2, -1)[0]));
+  return catalog.commands.files.filter(file => !skills.has(stemOf(file))).length;
+}
+
 function parentOf(filePath) {
   return path.posix.basename(path.posix.dirname(filePath));
 }
 
 // Where each target keeps its agent and command files: agents/ and
-// commands/ by default; Antigravity, Cursor and egc install commands as
-// skills, invoked as /<name>. Cursor prefixes the agent file name with egc-.
+// commands/ by default; Antigravity and egc install commands as skills,
+// invoked as /<name>, and so does Cursor, counted by the transform that
+// writes each command skill so a bundled skill is never counted as one.
+// Cursor prefixes the agent file name with egc-.
 const AGENT_DIRS = { default: ['agents'] };
 const COMMAND_DIRS = { default: ['commands', 'command'] };
-const COMMANDS_AS_SKILLS = new Set(['antigravity', 'cursor', 'egc']);
+const COMMANDS_AS_SKILLS = new Set(['antigravity', 'egc']);
+const COMMAND_SKILL_TRANSFORMS = { cursor: 'cursor-command-skill' };
 
 // What lands in the tool, indexed the way each family is discovered: an
 // agent or command by its file name, a skill by its directory (or its flat
@@ -111,6 +119,7 @@ function plannedDestinations(target, homeDir, projectRoot) {
     if (agentDirs.includes(parent)) index.agents.add(stem.replace(/^egc-/, ''));
     if (commandDirs.includes(parent)) index.commands.add(stem);
     if (COMMANDS_AS_SKILLS.has(target) && path.posix.basename(destination) === 'SKILL.md') index.commands.add(parent);
+    if (operation.transform && operation.transform === COMMAND_SKILL_TRANSFORMS[target]) index.commands.add(parent);
     if (path.posix.basename(destination) === 'SKILL.md') index.skills.add(parent);
     if (parent === 'skills') index.skills.add(stem);
     if (destination.includes('/rules/') || destination.includes('/.clinerules/')) {
