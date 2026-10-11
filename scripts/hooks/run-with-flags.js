@@ -26,6 +26,36 @@ function writeStderr(stderr) {
   process.stderr.write(stderr.endsWith('\n') ? stderr : `${stderr}\n`);
 }
 
+// A hook is required in-process only when its source exports run() in one
+// of the shapes the hooks use. A hook that merely has a module.exports of
+// its own and the word "run" somewhere (a comment, a helper name) would be
+// required here, run its module scope, and then run it again in the child
+// the legacy path spawns.
+const RUN_EXPORT_SHAPES = [
+  /\bmodule\.exports\s*=\s*\{[^}]*\brun\b/,
+  /\bmodule\.exports\.run\s*=/,
+  /\bexports\.run\s*=/,
+];
+
+function exportsRun(src) {
+  return RUN_EXPORT_SHAPES.some(shape => shape.test(src));
+}
+
+// The required module of a hook whose source exports run(), or null when it
+// exports none or cannot be required.
+function loadRunExport(hookId, scriptPath) {
+  const src = fs.readFileSync(scriptPath, 'utf8'); // NOSONAR jssecurity:S8707
+  if (!exportsRun(src)) return null;
+  let hookModule;
+  try {
+    hookModule = require(scriptPath);
+  } catch (requireErr) {
+    process.stderr.write(`[Hook] require() failed for ${hookId}: ${requireErr.message}\n`);
+    return null;
+  }
+  return hookModule && typeof hookModule.run === 'function' ? hookModule : null;
+}
+
 function emitHookResult(raw, output) {
   if (typeof output === 'string' || Buffer.isBuffer(output)) {
     process.stdout.write(String(output));
@@ -118,19 +148,9 @@ async function executeHook(hookId, scriptPath, pluginRoot, raw, truncated) { // 
   // SAFETY: Only require() hooks that export run(). Legacy hooks execute
   // side effects at module scope (stdin listeners, process.exit, main() calls)
   // which would interfere with the parent process or cause double execution.
-  let hookModule;
-  const src = fs.readFileSync(scriptPath, 'utf8'); // NOSONAR jssecurity:S8707
-  const hasRunExport = /\bmodule\.exports\b/.test(src) && /\brun\b/.test(src);
+  const hookModule = loadRunExport(hookId, scriptPath);
 
-  if (hasRunExport) {
-    try {
-      hookModule = require(scriptPath);
-    } catch (requireErr) {
-      process.stderr.write(`[Hook] require() failed for ${hookId}: ${requireErr.message}\n`);
-    }
-  }
-
-  if (hookModule && typeof hookModule.run === 'function') {
+  if (hookModule) {
     try {
       const output = hookModule.run(raw, {
         hookId,

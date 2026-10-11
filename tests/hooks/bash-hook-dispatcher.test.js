@@ -24,6 +24,18 @@ function test(name, fn) {
   }
 }
 
+async function asyncCase(name, fn) {
+  try {
+    await fn();
+    console.log(`  \u2713 ${name}`);
+    return true;
+  } catch (error) {
+    console.log(`  \u2717 ${name}`);
+    console.log(`    Error: ${error.message}`);
+    return false;
+  }
+}
+
 function runScript(scriptPath, input, env = {}) {
   return spawnSync('node', [scriptPath], {
     input: typeof input === 'string' ? input : JSON.stringify(input),
@@ -46,7 +58,17 @@ function runScript(scriptPath, input, env = {}) {
   });
 }
 
-function runTests() {
+function asyncDenyCase(dispatcher) {
+  return asyncCase('a hook that answers with a promise is awaited, so the deny it resolves to is a deny', async () => {
+    const result = await dispatcher.runHooks('{"tool_input":{"command":"ls"}}', [
+      { id: 'test:async-deny', profiles: 'minimal,standard,strict', run: async () => ({ exitCode: 2, stderr: 'denied by test' }) },
+    ]);
+    assert.strictEqual(result.exitCode, 2, 'the resolved deny is the chain result');
+    assert.ok(result.stderr.includes('denied by test'));
+  });
+}
+
+async function runTests() {
   console.log('\n=== Testing Bash hook dispatchers ===\n');
 
   let passed = 0;
@@ -154,8 +176,14 @@ function runTests() {
     assert.strictEqual(dispatcher.resolvePreOutput(raw, { output: '', exitCode: 2 }), '');
   })) passed++; else failed++;
 
+  const tally = ok => { if (ok) passed++; else failed++; };
+  tally(await asyncDenyCase(dispatcher));
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
 
-runTests();
+runTests().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

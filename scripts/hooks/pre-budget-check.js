@@ -44,7 +44,9 @@ function run(rawInput) {
   }
 
   if (budgetCheck.warn) {
-    console.error(`[EGC Budget Guardian] WARNING: ${budgetCheck.reason}`);
+    // The warning travels in the hook result, the channel the runner and the
+    // dispatcher forward, instead of a direct write that bypasses them.
+    return { exitCode: 0, stderr: `[EGC Budget Guardian] WARNING: ${budgetCheck.reason}\n` };
   }
 
   return { exitCode: 0 };

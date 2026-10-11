@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const { findProjectRoot, detectFormatter, resolveFormatterBin, clearCaches } = require('../../scripts/lib/resolve-formatter');
+const { findProjectRoot, detectFormatter, resolveFormatterBin, resolveFormatterEntry, clearCaches } = require('../../scripts/lib/resolve-formatter');
 
 /**
  * Run a single test case, printing pass/fail.
@@ -190,6 +190,20 @@ function runTests() {
     const result = resolveFormatterBin(root, 'biome');
     assert.strictEqual(result.bin, path.join(binDir, binName));
     assert.deepStrictEqual(result.prefix, []);
+  });
+
+  run('resolveFormatterBin: carries the JS entry of a local formatter, read from the bin field of its package', () => {
+    const root = makeTmpDir();
+    const binDir = path.join(root, 'node_modules', '.bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(path.join(binDir, process.platform === 'win32' ? 'prettier.cmd' : 'prettier'), '');
+    const pkgDir = path.join(root, 'node_modules', 'prettier');
+    fs.mkdirSync(path.join(pkgDir, 'bin'), { recursive: true });
+    fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({ name: 'prettier', bin: './bin/prettier.cjs' }));
+    fs.writeFileSync(path.join(pkgDir, 'bin', 'prettier.cjs'), '');
+
+    assert.strictEqual(resolveFormatterBin(root, 'prettier').entry, path.join(pkgDir, 'bin', 'prettier.cjs'));
+    assert.strictEqual(resolveFormatterEntry(root, 'biome'), null, 'no package installed, no entry');
   });
 
   run('resolveFormatterBin: falls back to npx for biome', () => {

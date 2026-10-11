@@ -131,6 +131,25 @@ function getRunnerFromPackageManager(projectRoot) {
   return { bin, prefix };
 }
 
+// The JS entry of a locally installed formatter, read from the bin field of
+// its package.json. Run under this Node it needs no shell, so on Windows a
+// file path with spaces or parentheses reaches the formatter as one argument.
+function resolveFormatterEntry(projectRoot, formatter) {
+  const pkg = FORMATTER_PACKAGES[formatter];
+  if (!pkg) return null;
+  const pkgDir = path.join(projectRoot, 'node_modules', ...pkg.pkgName.split('/'));
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+  const bin = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin?.[pkg.binName];
+  if (typeof bin !== 'string' || bin === '') return null;
+  const entry = path.join(pkgDir, bin);
+  return fs.existsSync(entry) ? entry : null;
+}
+
 /**
  * Resolve the formatter binary, preferring the local node_modules/.bin
  * installation over the package manager exec command to avoid
@@ -138,9 +157,10 @@ function getRunnerFromPackageManager(projectRoot) {
  *
  * @param {string} projectRoot - Absolute path to the project root
  * @param {'biome' | 'prettier'} formatter - Detected formatter name
- * @returns {{ bin: string, prefix: string[] } | null}
+ * @returns {{ bin: string, prefix: string[], entry?: string | null } | null}
  *   `bin`    – executable path (absolute local path or runner binary)
  *   `prefix` – extra args to prepend (e.g. ['@biomejs/biome'] when using npx)
+ *   `entry`  – JS entry of the local package when it has one, for a run under this Node
  */
 function resolveFormatterBin(projectRoot, formatter) {
   const cacheKey = `${projectRoot}:${formatter}`;
@@ -156,7 +176,7 @@ function resolveFormatterBin(projectRoot, formatter) {
   const localBin = path.join(projectRoot, 'node_modules', '.bin', isWin ? `${pkg.binName}.cmd` : pkg.binName);
 
   if (fs.existsSync(localBin)) {
-    const result = { bin: localBin, prefix: [] };
+    const result = { bin: localBin, prefix: [], entry: resolveFormatterEntry(projectRoot, formatter) };
     binCache.set(cacheKey, result);
     return result;
   }
@@ -180,5 +200,6 @@ module.exports = {
   findProjectRoot,
   detectFormatter,
   resolveFormatterBin,
+  resolveFormatterEntry,
   clearCaches
 };
