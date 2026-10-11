@@ -58,7 +58,7 @@ Deux onglets Cursor, un terminal Claude Code et une session d'antigravité parta
 
 ### Gardien : Une couche de sécurité devant chaque commande
 
-Guardian valide les commandes avant qu'elles ne s'exécutent, porte des écritures risquées et empêche le contexte de se déverser, en arrière-plan, sans que vous n'invoquiez quoi que ce soit. La couverture dépend du soutien de chaque outil; [Évaluation de la sécurité](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) documente l'exception.
+Guardian valide les commandes avant qu'elles ne s'exécutent, porte des écritures risquées et empêche le contexte de se déverser, en arrière-plan, sans que vous n'invoquiez quoi que ce soit. La couverture dépend du soutien de chaque outil; [Évaluation de la sécurité](../../docs/security/SECURITY-ASSESSMENT.md#known-limitations) documente l'exception. Quand une tâche démarre, `orchestrate_task` renvoie également le code dont elle parle, trouvé à travers un graphe local de votre projet ; voir [Optimisation des jetons](../../docs/token-optimization.md).
 
 ### Ecraseur de jetons : Le bruit ne parvient jamais à atteindre le modèle
 
