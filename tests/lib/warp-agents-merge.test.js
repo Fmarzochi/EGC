@@ -14,7 +14,9 @@ const path = require('path');
 const {
   MERGE_MARKDOWN_INDEX_KIND,
   mergeSkillIndexEntry,
+  removeMemoryRuleBlock,
   removeSkillIndexEntry,
+  upsertMemoryRuleBlock,
 } = require('../../scripts/lib/warp-agents-merge');
 const { applyInstallPlan } = require('../../scripts/lib/install-executor');
 
@@ -188,6 +190,22 @@ function runTests() {
     } finally {
       cleanup(projectRoot);
     }
+  })) passed++; else failed++;
+
+  if (test('an AGENTS.md an editor turned to CRLF keeps one memory rule block and one skills index, and uninstall still finds the block (#1841)', () => {
+    const rule = '# Session Memory\n\nCall get_state at the start.\n';
+    const installed = mergeSkillIndexEntry(upsertMemoryRuleBlock('# My project\n', rule), tddEntry);
+    const crlf = installed.replace(/\n/g, '\r\n');
+
+    const reinstalled = mergeSkillIndexEntry(upsertMemoryRuleBlock(crlf, rule), tddEntry);
+    assert.strictEqual(reinstalled.split('<!-- egc-memory-rule:start -->').length - 1, 1, 'no second memory rule block');
+    assert.strictEqual(reinstalled.split('<!-- egc-skills-index:start -->').length - 1, 1, 'no second skills index');
+    assert.ok(reinstalled.startsWith('# My project\r\n'), 'the person\'s line keeps its line ending');
+
+    const removed = removeMemoryRuleBlock(crlf);
+    assert.ok(!removed.includes('egc-memory-rule'), 'uninstall takes the block out of a CRLF file');
+    assert.ok(!removed.includes('Call get_state at the start.'));
+    assert.ok(removed.startsWith('# My project\r\n'));
   })) passed++; else failed++;
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

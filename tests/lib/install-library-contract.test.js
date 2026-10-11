@@ -87,7 +87,9 @@ const COMMANDS_AS_SKILLS = new Set(['antigravity', 'egc']);
 // What lands in the tool, indexed the way each family is discovered: an
 // agent or command by its file name, a skill by its directory (or its flat
 // file on Warp), a rule by its flattened name or by its namespace folder
-// under a rules directory. Sources are not compared: Cursor, Codex and
+// under a rules directory, or by its source when its text is merged into a
+// file the tool loads (the memory rule in Warp's AGENTS.md). Otherwise
+// sources are not compared: Cursor, Codex and
 // OpenCode take part of the library from the repository's own platform
 // copies, which win the destination dedupe over the catalog files.
 function plannedDestinations(target, homeDir, projectRoot) {
@@ -114,6 +116,10 @@ function plannedDestinations(target, homeDir, projectRoot) {
     if (destination.includes('/rules/') || destination.includes('/.clinerules/')) {
       index.rules.add(stem);
       index.rules.add(`${parent}/${stem}`);
+    }
+    if (operation.memoryRule && typeof operation.sourceRelativePath === 'string') {
+      const source = normalize(operation.sourceRelativePath);
+      index.rules.add(`${parentOf(source)}/${stemOf(source)}`);
     }
   }
   return { plan, index };
