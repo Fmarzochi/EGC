@@ -98,12 +98,14 @@ class ClaudeProvider(LLMProvider):
         return {"type": "tool_result", "tool_use_id": msg.tool_call_id, "content": msg.content}
 
     @staticmethod
-    def _with_tool_result(turns: list[dict[str, Any]], block: dict[str, Any]) -> list[dict[str, Any]]:
-        # Every result of one assistant turn travels in the same user turn.
+    def _add_tool_result(turns: list[dict[str, Any]], block: dict[str, Any]) -> None:
+        # Every result of one assistant turn travels in the same user turn, so
+        # the block joins the user turn the builder just opened when there is one.
         previous = turns[-1] if turns else None
         if previous and previous["role"] == "user" and isinstance(previous["content"], list):
-            return [*turns[:-1], {**previous, "content": [*previous["content"], block]}]
-        return [*turns, {"role": "user", "content": [block]}]
+            previous["content"].append(block)
+        else:
+            turns.append({"role": "user", "content": [block]})
 
     @staticmethod
     def _assistant_turn(msg: Message) -> dict[str, Any]:
@@ -126,7 +128,7 @@ class ClaudeProvider(LLMProvider):
             if msg.role == Role.SYSTEM:
                 system_parts.append(msg.content)
             elif msg.role == Role.TOOL:
-                turns = cls._with_tool_result(turns, cls._tool_result_block(msg))
+                cls._add_tool_result(turns, cls._tool_result_block(msg))
             elif msg.role == Role.ASSISTANT and msg.tool_calls:
                 turns.append(cls._assistant_turn(msg))
             else:
