@@ -25,6 +25,7 @@ from llm.core.types import (
     Message,
     ModelInfo,
     ProviderType,
+    Role,
     ToolCall,
 )
 from llm.core.model_resolver import ModelResolver
@@ -91,6 +92,50 @@ class ClaudeProvider(LLMProvider):
         return calls or None
 
     @staticmethod
+    def _tool_result_block(msg: Message) -> dict[str, Any]:
+        if not msg.tool_call_id:
+            raise ValueError("a tool message needs tool_call_id to answer a tool_use block")
+        return {"type": "tool_result", "tool_use_id": msg.tool_call_id, "content": msg.content}
+
+    @staticmethod
+    def _add_tool_result(turns: list[dict[str, Any]], block: dict[str, Any]) -> None:
+        # Every result of one assistant turn travels in the same user turn, so
+        # the block joins the user turn the builder just opened when there is one.
+        previous = turns[-1] if turns else None
+        if previous and previous["role"] == "user" and isinstance(previous["content"], list):
+            previous["content"].append(block)
+        else:
+            turns.append({"role": "user", "content": [block]})
+
+    @staticmethod
+    def _assistant_turn(msg: Message) -> dict[str, Any]:
+        blocks: list[dict[str, Any]] = [{"type": "text", "text": msg.content}] if msg.content else []
+        blocks.extend(
+            {"type": "tool_use", "id": tc.id, "name": tc.name, "input": tc.arguments}
+            for tc in msg.tool_calls or []
+        )
+        return {"role": "assistant", "content": blocks}
+
+    @classmethod
+    def _build_request(cls, messages: list[Message]) -> tuple[str | None, list[dict[str, Any]]]:
+        # The Messages API takes the system prompt as a top-level parameter and
+        # has no tool role: an assistant turn carries its calls as tool_use
+        # blocks and the results travel as tool_result blocks in the next user
+        # turn.
+        system_parts: list[str] = []
+        turns: list[dict[str, Any]] = []
+        for msg in messages:
+            if msg.role == Role.SYSTEM:
+                system_parts.append(msg.content)
+            elif msg.role == Role.TOOL:
+                cls._add_tool_result(turns, cls._tool_result_block(msg))
+            elif msg.role == Role.ASSISTANT and msg.tool_calls:
+                turns.append(cls._assistant_turn(msg))
+            else:
+                turns.append({"role": msg.role.value, "content": msg.content})
+        return ("\n\n".join(system_parts) or None, turns)
+
+    @staticmethod
     def _map_error(e: Exception) -> None:
         msg = redact_secrets(str(e))
         if "401" in msg or "authentication" in msg.lower():
@@ -108,12 +153,15 @@ class ClaudeProvider(LLMProvider):
             # callers into thinking they are consuming a stream.
             raise NotImplementedError("streaming not supported")
         try:
+            system, turns = self._build_request(input.messages)
             params: dict[str, Any] = {
                 "model": input.model or self.get_default_model(),
-                "messages": [msg.to_dict() for msg in input.messages],
+                "messages": turns,
                 "temperature": input.temperature,
                 "max_tokens": input.max_tokens if input.max_tokens else 8192,
             }
+            if system:
+                params["system"] = system
             if input.tools:
                 params["tools"] = [
                     {
@@ -124,13 +172,10 @@ class ClaudeProvider(LLMProvider):
                     for t in input.tools
                 ]
             response = self.client.messages.create(**params)
-            content = next(
-                (
-                    block.text or ""
-                    for block in response.content
-                    if block.type == "text"
-                ),
-                "",
+            content = "".join(
+                block.text or ""
+                for block in response.content
+                if getattr(block, "type", None) == "text"
             )
             return LLMOutput(
                 content=content,
