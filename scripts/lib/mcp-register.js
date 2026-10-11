@@ -511,6 +511,12 @@ function buildMcpRegistrationTargets(homeDir) {
       format: 'toml',
       tomlServerKeys: { transport: 'stdio' },
     },
+    {
+      name: 'Qwen Code',
+      path: path.join(homeDir, '.qwen', 'settings.json'),
+      gate: () => fs.existsSync(path.join(homeDir, '.qwen')) || commandExists('qwen'),
+      format: 'json',
+    },
   ];
 }
 
