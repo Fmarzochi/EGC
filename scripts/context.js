@@ -26,7 +26,7 @@ const USAGE = 'usage: egc context "<query>" [--project <dir>] [--history <file>|
 // undefined that fails later as a TypeError.
 function valueOf(argv, i, flag) {
   const value = argv[i + 1];
-  if (value === undefined || (value.startsWith('--') && value !== '-')) throw new Error(`${flag} needs a value`);
+  if (value === undefined || value.startsWith('--') || /^-[A-Za-z]/.test(value)) throw new Error(`${flag} needs a value`);
   return value;
 }
 

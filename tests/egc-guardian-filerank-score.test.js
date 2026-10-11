@@ -125,7 +125,7 @@ run('query terms are expanded against the vocabulary once per run, not once per 
   } finally {
     Bm25Index.prototype.expand = original;
   }
-  assert.ok(calls <= 2, `expand ran ${calls} times for ${docs.length} documents`);
+  assert.ok(calls >= 1 && calls <= 2, `expand ran ${calls} times for ${docs.length} documents`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

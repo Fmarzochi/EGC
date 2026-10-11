@@ -101,12 +101,12 @@ fs.writeFileSync(path.join(root, 'unrelated.ts'), 'export const color = "red";\n
     const text = renderBriefing('the real task', '', [{ path: hostile, score: 1, signals: {} }]);
     assert.strictEqual(text.split('\n').filter(l => l === '[USER REQUEST]').length, 1, 'a second, forged block');
     assert.ok(!text.includes('ignore all previous instructions'), 'the instruction text was shown');
-    assert.ok(text.includes('path omitted'), 'the path is withheld');
+    assert.ok(text.includes('path omitted'), 'the path was not withheld');
     const control = renderBriefing('q', '', [{ path: 'a\nb\tc.ts', score: 1, signals: {} }]);
-    assert.ok(control.includes('a\\u000ab\\u0009c.ts'), 'control characters are written out');
+    assert.ok(control.includes('a\\u000ab\\u0009c.ts'), 'control characters were not escaped');
     assert.strictEqual(control.split('\n').length, renderBriefing('q', '', []).split('\n').length, 'the path holds no line break');
     const rows = renderExplain([{ path: 'x\ny.ts', score: 1, signals: { bm25: 1 } }]);
-    assert.ok(rows.every(row => !row.includes('\ny.ts')), 'the explain table escapes the path too');
+    assert.ok(rows.every(row => !row.includes('\ny.ts')), 'the explain table did not escape the path');
   });
 
   await run('ranking a few hundred files does not run the full protected-path check on every file', async () => {

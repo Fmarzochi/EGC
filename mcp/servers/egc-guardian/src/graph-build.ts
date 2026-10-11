@@ -12,6 +12,10 @@ export interface BuildOptions {
   // Reads the symbols of one file; extractFile unless a caller needs another.
   extract?: (text: string) => ExtractResult;
 }
+// buildGraph's own default deadline; a caller waiting on another process's
+// build (withBuildLock's waitMs) must wait at least this long, or it gives up
+// on builds that are simply still running within their own budget.
+export const DEFAULT_BUILD_MAX_MS = 20000;
 // failed counts the files the extractor threw on. They are left out of the
 // graph, so a build with any is partial, not ok.
 export interface BuildResult { status: 'ok' | 'partial'; files: number; refreshed: number; removed: number; failed: number; buildMs: number }
@@ -419,7 +423,7 @@ function tally(outcome: IndexOutcome, rel: string, wanted: Set<string>, counts: 
 export async function buildGraph(projectRoot: string, store: GraphStore, opts: BuildOptions = {}): Promise<BuildResult> {
   const started = Date.now();
   const maxFiles = opts.maxFiles ?? 5000;
-  const maxMs = opts.maxMs ?? 20000;
+  const maxMs = opts.maxMs ?? DEFAULT_BUILD_MAX_MS;
   const maxFileBytes = opts.maxFileBytes ?? 1024 * 1024;
   const deadline = started + maxMs;
   // .native: the JS realpathSync keeps a Windows 8.3 short name (RUNNER~1) in the path.
