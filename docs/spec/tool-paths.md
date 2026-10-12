@@ -10,7 +10,7 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | --- | --- | --- | --- |
 | default | linux | none | all |
 | win32 | win32 | none | windsurf-home, zed-home |
-| XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME` set to an absolute directory, shown as `$XDG_CONFIG_HOME` in the paths | crush-home |
+| XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME` set to an absolute directory, shown as `$XDG_CONFIG_HOME` in the paths | crush-home, kilo-home |
 | CRUSH_GLOBAL_CONFIG | linux | `CRUSH_GLOBAL_CONFIG` set to an absolute directory, shown as `$CRUSH_GLOBAL_CONFIG` in the paths | crush-home |
 | KIMI_CODE_HOME | linux | `KIMI_CODE_HOME` set to an absolute directory, shown as `$KIMI_CODE_HOME` in the paths | kimi-home |
 | TRAE_ENV=cn | linux | `TRAE_ENV=cn` | trae-project |
@@ -431,6 +431,27 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | context | `$GROK_HOME/AGENTS.md` | GROK_HOME | documented | <https://docs.x.ai/build/features/project-rules> | Grok reads global rules from ~/.grok/ before the project ones, AGENTS.md first (read on 2026-10-11). |
 | skills | `$GROK_HOME/skills/` | GROK_HOME | documented | <https://docs.x.ai/build/features/skills-plugins-marketplaces> | Grok discovers skills in ~/.grok/skills/ and ./.grok/skills/ (read on 2026-10-11); GROK_HOME moves the data root (https://docs.x.ai/build/settings/reference). |
 | state | `$GROK_HOME/egc/install-state.json` | GROK_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## kilo-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| agents | `~/.config/kilo/agents/` | default | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/agent.ts> | Kilo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-11). |
+| context | `~/.config/kilo/AGENTS.md` | default | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/session/instruction.ts> | Kilo reads AGENTS.md in its config directory as global instructions (main on 2026-10-11); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `~/.config/kilo/commands/` | default | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/command.ts> | Kilo loads {command,commands}/**/*.md from its config directory (main on 2026-10-11). |
+| library | `~/.config/kilo/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| plugins | `~/.config/kilo/plugins/` | default | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/plugin.ts> | Kilo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-11); EGC ships opencode-egc-plugin.js there. |
+| runtime | `~/.config/kilo/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `~/.config/kilo/skills/` | default | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/skill/index.ts> | Kilo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-11). |
+| state | `~/.config/kilo/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| agents | `$XDG_CONFIG_HOME/kilo/agents/` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/agent.ts> | Kilo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-11). |
+| context | `$XDG_CONFIG_HOME/kilo/AGENTS.md` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/session/instruction.ts> | Kilo reads AGENTS.md in its config directory as global instructions (main on 2026-10-11); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `$XDG_CONFIG_HOME/kilo/commands/` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/command.ts> | Kilo loads {command,commands}/**/*.md from its config directory (main on 2026-10-11). |
+| library | `$XDG_CONFIG_HOME/kilo/egc/library/rules/` | XDG_CONFIG_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| plugins | `$XDG_CONFIG_HOME/kilo/plugins/` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/plugin.ts> | Kilo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-11); EGC ships opencode-egc-plugin.js there. |
+| runtime | `$XDG_CONFIG_HOME/kilo/scripts/` | XDG_CONFIG_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `$XDG_CONFIG_HOME/kilo/skills/` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/skill/index.ts> | Kilo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-11). |
+| state | `$XDG_CONFIG_HOME/kilo/egc/install-state.json` | XDG_CONFIG_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## vibe-project
 

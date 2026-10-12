@@ -27,6 +27,9 @@ const TS_SWAP: Record<string, string[]> = { '.js': ['.ts', '.tsx'], '.mjs': ['.m
 const TRY_EXT = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'];
 
 type IgnoreFn = (rel: string, isDir: boolean) => boolean;
+// Like IgnoreFn, but null when no rule of the file spoke about the path, so a
+// deeper .gitignore can override a shallower one the way Git applies them.
+type IgnoreDecision = (rel: string, isDir: boolean) => boolean | null;
 
 // Rules with more wildcards than this are matched without backtracking: a regex
 // built from many `*` or `**/` groups can take longer than the age of the
@@ -179,7 +182,7 @@ function compileRule(raw: string): IgnoreFn | null {
   return wildcardCount(raw) <= REGEX_WILDCARD_LIMIT ? compileRuleRegex(raw) : compileRuleGlob(raw);
 }
 
-export function makeIgnore(gitignoreText: string): IgnoreFn {
+export function makeIgnoreDecision(gitignoreText: string): IgnoreDecision {
   const rules = gitignoreText
     .split(/\r?\n/)
     .map(l => l.trim())
@@ -189,10 +192,87 @@ export function makeIgnore(gitignoreText: string): IgnoreFn {
     .map(r => ({ negate: r.negate, match: compileRule(r.pattern) }))
     .filter((r): r is { negate: boolean; match: IgnoreFn } => r.match !== null);
   return (rel, isDir) => {
-    let ignored = false;
+    let ignored: boolean | null = null;
     for (const rule of rules) if (rule.match(rel, isDir)) ignored = !rule.negate;
     return ignored;
   };
+}
+
+export function makeIgnore(gitignoreText: string): IgnoreFn {
+  const decide = makeIgnoreDecision(gitignoreText);
+  return (rel, isDir) => decide(rel, isDir) === true;
+}
+
+// The rules Git applies to the whole project before any per-directory file:
+// .git/info/exclude (lowest precedence), then the root .gitignore. Each is
+// read like any project file: a link or a named pipe is not followed, an
+// oversized file is dropped, a missing one contributes nothing. In a linked
+// worktree .git is a pointer file to a directory outside the project, and
+// that exclude list is not read: the walk never reads outside the root,
+// and an exclude list only trims the index, it never guards it.
+export async function loadRootIgnore(root: string): Promise<IgnoreFn> {
+  const sources = ['.git/info/exclude', '.gitignore'];
+  const texts = await Promise.all(sources.map(rel => readFileWithin(root, rel, MAX_GITIGNORE_BYTES)));
+  const decisions = texts.filter((text): text is string => text !== null).map(makeIgnoreDecision);
+  return (rel, isDir) => ignoredBy(() => false, decisions, rel, isDir);
+}
+
+// The verdict of the root rules overridden, shallowest first, by every
+// nested .gitignore that speaks about the path.
+function ignoredBy(ignore: IgnoreFn, chain: IgnoreDecision[], rel: string, isDir: boolean): boolean {
+  let ignored = ignore(rel, isDir);
+  for (const decide of chain) {
+    const d = decide(rel, isDir);
+    if (d !== null) ignored = d;
+  }
+  return ignored;
+}
+
+// What the walk does with one directory entry: descend into it, index it, or
+// pass it by (a link, a skipped or ignored directory, a file the caller does
+// not accept, an ignored file).
+type EntryKind = 'dir' | 'file' | 'skip';
+
+function classifyEntry(
+  entry: fs.Dirent,
+  childRel: string,
+  ignore: IgnoreFn,
+  chain: IgnoreDecision[],
+  accept: (name: string) => boolean
+): EntryKind {
+  if (entry.isSymbolicLink()) return 'skip';
+  if (entry.isDirectory()) {
+    return !SKIP_DIRS.has(entry.name) && !ignoredBy(ignore, chain, childRel, true) ? 'dir' : 'skip';
+  }
+  return entry.isFile() && accept(entry.name) && !ignoredBy(ignore, chain, childRel, false) ? 'file' : 'skip';
+}
+
+function compareNames(a: string, b: string): number {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
+
+// A directory's entries in a stable order, or null when it cannot be read
+// (removed meanwhile, unreadable): the walk goes on with the rest.
+async function readEntries(root: string, rel: string): Promise<fs.Dirent[] | null> {
+  try {
+    const entries = await fs.promises.readdir(path.join(root, rel), { withFileTypes: true });
+    return entries.sort((x, y) => compareNames(x.name, y.name));
+  } catch {
+    return null;
+  }
+}
+
+// A .gitignore inside a directory speaks about paths relative to that
+// directory and overrides the files above it for the paths it names.
+function scopedDecision(dirRel: string, decide: IgnoreDecision): IgnoreDecision {
+  const prefix = dirRel + '/';
+  return (rel, isDir) => (rel.startsWith(prefix) ? decide(rel.slice(prefix.length), isDir) : null);
+}
+
+async function nestedIgnore(root: string, dirRel: string): Promise<IgnoreDecision | null> {
+  const text = await readFileWithin(root, `${dirRel}/.gitignore`, MAX_GITIGNORE_BYTES);
+  return text === null ? null : scopedDecision(dirRel, makeIgnoreDecision(text));
 }
 
 export function resolveSpecifier(fromFile: string, specifier: string, fileSet: Set<string>): string | null {
@@ -301,30 +381,53 @@ export async function walkFiles(
   maxFiles: number,
   deadline: number
 ): Promise<{ files: string[]; truncated: boolean }> {
-  const files: string[] = [];
-  const stack = [''];
-  while (stack.length > 0) {
-    if (Date.now() > deadline) return { files, truncated: true };
-    const rel = stack.pop() as string;
-    let entries: fs.Dirent[];
-    try {
-      entries = await fs.promises.readdir(path.join(root, rel), { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    entries.sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0));
-    for (const e of entries) {
-      if (e.isSymbolicLink()) continue;
-      const childRel = rel ? `${rel}/${e.name}` : e.name;
-      if (e.isDirectory()) {
-        if (!SKIP_DIRS.has(e.name) && !ignore(childRel, true)) stack.push(childRel);
-      } else if (e.isFile() && accept(e.name) && !ignore(childRel, false)) {
-        if (files.length >= maxFiles) return { files, truncated: true };
-        files.push(childRel);
-      }
-    }
+  const walk: Walk = { root, ignore, accept, maxFiles, files: [], stack: [{ rel: '', chain: [] }] };
+  while (walk.stack.length > 0) {
+    if (Date.now() > deadline) return { files: walk.files, truncated: true };
+    const frame = walk.stack.pop() as Frame;
+    const entered = await enterDirectory(root, frame.rel, frame.chain);
+    if (entered !== null && collectEntries(walk, frame.rel, entered)) return { files: walk.files, truncated: true };
   }
-  return { files, truncated: false };
+  return { files: walk.files, truncated: false };
+}
+
+// Each directory carries the chain of nested .gitignore decisions above it,
+// shallowest first; the root rules (`ignore`) sit below all of them.
+type Frame = { rel: string; chain: IgnoreDecision[] };
+type Walk = {
+  root: string;
+  ignore: IgnoreFn;
+  accept: (name: string) => boolean;
+  maxFiles: number;
+  files: string[];
+  stack: Frame[];
+};
+
+// A directory's entries and the chain its children inherit: the directory's
+// own .gitignore is read once, when it is entered, in the same step as the
+// entries. Null when the directory cannot be read.
+async function enterDirectory(
+  root: string,
+  rel: string,
+  inherited: IgnoreDecision[]
+): Promise<{ entries: fs.Dirent[]; chain: IgnoreDecision[] } | null> {
+  const [entries, own] = await Promise.all([readEntries(root, rel), rel ? nestedIgnore(root, rel) : null]);
+  if (entries === null) return null;
+  return { entries, chain: own ? [...inherited, own] : inherited };
+}
+
+// Files of one directory into the walk, its subdirectories onto the stack.
+// True when the file budget is spent.
+function collectEntries(walk: Walk, rel: string, entered: { entries: fs.Dirent[]; chain: IgnoreDecision[] }): boolean {
+  for (const e of entered.entries) {
+    const childRel = rel ? `${rel}/${e.name}` : e.name;
+    const kind = classifyEntry(e, childRel, walk.ignore, entered.chain, walk.accept);
+    if (kind === 'dir') walk.stack.push({ rel: childRel, chain: entered.chain });
+    if (kind !== 'file') continue;
+    if (walk.files.length >= walk.maxFiles) return true;
+    walk.files.push(childRel);
+  }
+  return false;
 }
 
 // Reads a regular file that lies inside root, or null. Null for: a path that
@@ -429,9 +532,9 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
   // .native: the JS realpathSync keeps a Windows 8.3 short name (RUNNER~1) in the path.
   const root = fs.realpathSync.native(projectRoot);
 
-  // Read like any project file: a .gitignore that is a link or a named pipe is not followed.
-  const gitignore = await readFileWithin(root, '.gitignore', MAX_GITIGNORE_BYTES);
-  const ignore: IgnoreFn = gitignore === null ? () => false : makeIgnore(gitignore);
+  // The root rules (.git/info/exclude, then .gitignore); the walk reads the
+  // nested .gitignore files itself.
+  const ignore = await loadRootIgnore(root);
 
   const walked = await walkFiles(root, ignore, name => SOURCE_EXT.test(name), maxFiles, deadline);
   const known = await store.getFiles();

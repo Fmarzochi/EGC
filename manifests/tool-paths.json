@@ -21,13 +21,14 @@
     },
     {
       "id": "XDG_CONFIG_HOME",
-      "description": "XDG_CONFIG_HOME set to an absolute directory, which moves the Crush config directory (a relative value is ignored and Crush stays in ~/.config/crush)",
+      "description": "XDG_CONFIG_HOME set to an absolute directory, which moves the Crush and Kilo Code CLI config directories (a relative value is ignored and they stay in ~/.config/crush and ~/.config/kilo)",
       "platform": "linux",
       "env": {
         "XDG_CONFIG_HOME": "$XDG_CONFIG_HOME"
       },
       "adapters": [
-        "crush-home"
+        "crush-home",
+        "kilo-home"
       ]
     },
     {
@@ -1965,6 +1966,136 @@
       "status": "egc",
       "note": "EGC runtime: the install state EGC writes to track the files it manages.",
       "variant": "GROK_HOME"
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "agents",
+      "path": "~/.config/kilo/agents/",
+      "status": "documented",
+      "source": "https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/agent.ts",
+      "note": "Kilo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-11)."
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "context",
+      "path": "~/.config/kilo/AGENTS.md",
+      "status": "documented",
+      "source": "https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/session/instruction.ts",
+      "note": "Kilo reads AGENTS.md in its config directory as global instructions (main on 2026-10-11); the cognitive bootstrap keeps the memory protocol there."
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "commands",
+      "path": "~/.config/kilo/commands/",
+      "status": "documented",
+      "source": "https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/command.ts",
+      "note": "Kilo loads {command,commands}/**/*.md from its config directory (main on 2026-10-11)."
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "library",
+      "path": "~/.config/kilo/egc/library/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "plugins",
+      "path": "~/.config/kilo/plugins/",
+      "status": "documented",
+      "source": "https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/plugin.ts",
+      "note": "Kilo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-11); EGC ships opencode-egc-plugin.js there."
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "runtime",
+      "path": "~/.config/kilo/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "skills",
+      "path": "~/.config/kilo/skills/",
+      "status": "documented",
+      "source": "https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/skill/index.ts",
+      "note": "Kilo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-11)."
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "state",
+      "path": "~/.config/kilo/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "agents",
+      "path": "$XDG_CONFIG_HOME/kilo/agents/",
+      "status": "documented",
+      "source": "https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/agent.ts",
+      "note": "Kilo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-11).",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "context",
+      "path": "$XDG_CONFIG_HOME/kilo/AGENTS.md",
+      "status": "documented",
+      "source": "https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/session/instruction.ts",
+      "note": "Kilo reads AGENTS.md in its config directory as global instructions (main on 2026-10-11); the cognitive bootstrap keeps the memory protocol there.",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "commands",
+      "path": "$XDG_CONFIG_HOME/kilo/commands/",
+      "status": "documented",
+      "source": "https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/command.ts",
+      "note": "Kilo loads {command,commands}/**/*.md from its config directory (main on 2026-10-11).",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "library",
+      "path": "$XDG_CONFIG_HOME/kilo/egc/library/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "plugins",
+      "path": "$XDG_CONFIG_HOME/kilo/plugins/",
+      "status": "documented",
+      "source": "https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/plugin.ts",
+      "note": "Kilo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-11); EGC ships opencode-egc-plugin.js there.",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "runtime",
+      "path": "$XDG_CONFIG_HOME/kilo/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run.",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "skills",
+      "path": "$XDG_CONFIG_HOME/kilo/skills/",
+      "status": "documented",
+      "source": "https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/skill/index.ts",
+      "note": "Kilo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-11).",
+      "variant": "XDG_CONFIG_HOME"
+    },
+    {
+      "adapter": "kilo-home",
+      "surface": "state",
+      "path": "$XDG_CONFIG_HOME/kilo/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages.",
+      "variant": "XDG_CONFIG_HOME"
     },
     {
       "adapter": "vibe-project",

@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { extractFile, type ExtractedImport } from './graph-extract.js';
-import { makeIgnore, MAX_GITIGNORE_BYTES, readFileWithin, resolveSpecifier, TEXT_EXT, walkFiles } from './graph-build.js';
+import { loadRootIgnore, readFileWithin, resolveSpecifier, TEXT_EXT, walkFiles } from './graph-build.js';
 import { tokenize, type FileDoc, type ImportEdge } from './file-ranker.js';
 
 export const MAX_FILE_BYTES = 256 * 1024;
@@ -65,11 +65,6 @@ async function indexFile(
   };
 }
 
-async function loadIgnore(root: string): Promise<(rel: string, isDir: boolean) => boolean> {
-  // A .gitignore that is a link, a named pipe or too large is not read; the project is indexed without it.
-  const text = await readFileWithin(root, '.gitignore', MAX_GITIGNORE_BYTES);
-  return text === null ? () => false : makeIgnore(text);
-}
 
 const compareText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -78,7 +73,9 @@ export async function buildFileIndex(
   opts: FileIndexOptions = {}
 ): Promise<{ docs: FileDoc[]; edges: ImportEdge[]; skipped: number }> {
   const root = await fs.promises.realpath(projectRoot);
-  const ignore = await loadIgnore(root);
+  // The root rules (.git/info/exclude, then .gitignore), each read like any
+  // project file; the walk reads the nested .gitignore files itself.
+  const ignore = await loadRootIgnore(root);
   const deadline = Date.now() + DEADLINE_MS;
   const walked = await walkFiles(root, ignore, name => TEXT_EXT.test(name), MAX_FILES, deadline);
   const fileSet = new Set<string>(walked.files);
