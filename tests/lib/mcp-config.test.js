@@ -54,7 +54,10 @@ function runTests() {
     assert.doesNotThrow(() => assertSafeMcpConfig({ _comments: {} }, 'no servers'));
     assert.strictEqual(isMcpConfigPath('/repo/.cursor/mcp.json'), true);
     assert.strictEqual(isMcpConfigPath('/repo/.mcp.json'), true);
+    assert.strictEqual(isMcpConfigPath('/repo/.devin/mcp_config.local.json'), true, 'the Devin CLI project file carries MCP servers too');
+    assert.strictEqual(isMcpConfigPath('/home/person/.config/devin/mcp_config.json'), true, 'so does the Devin CLI and Antigravity user file');
     assert.strictEqual(isMcpConfigPath('/repo/.cursor/hooks.json'), false);
+    assert.strictEqual(isMcpConfigPath('/repo/.devin/config.local.json'), false, 'the Devin hooks file is not an MCP config');
   })) passed++; else failed++;
 
   if (test('parseMcpConfigText returns the object or names the file that is not one', () => {

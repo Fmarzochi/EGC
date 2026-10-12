@@ -223,3 +223,22 @@ def test_stream_flag_raises_not_implemented(provider: CohereProvider) -> None:
     with pytest.raises(NotImplementedError, match="streaming not supported"):
         provider.generate(stream_input)
     provider.client.chat.assert_not_called()
+
+
+@pytest.mark.unit
+def test_catalog_models_include_the_live_cohere_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    # #1696: the live ids of docs.cohere.com/docs/models on 2026-10-11.
+    monkeypatch.setenv("COHERE_API_KEY", "co-test")
+    with patch("llm.providers.cohere.cohere") as mock_cohere:
+        mock_cohere.ClientV2.return_value = MagicMock()
+        p = CohereProvider()
+    names = {m.name for m in p.list_models()}
+    assert {"command-a-plus-05-2026", "command-a-03-2025", "command-a-reasoning-08-2025", "command-r7b-12-2024"} <= names
+
+
+@pytest.mark.unit
+def test_deprecated_cohere_ids_resolve_to_a_live_model() -> None:
+    from llm.core.model_resolver import ModelResolver
+
+    assert ModelResolver.resolve("command-r-plus", provider="cohere") == "command-r-plus-08-2024"
+    assert ModelResolver.resolve("command", provider="cohere") == "command-r7b-12-2024"

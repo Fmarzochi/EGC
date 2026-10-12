@@ -879,6 +879,27 @@ function runTests() {
     }
   }));
 
+  tally(test('windsurf-project registers egc-guardian and egc-memory in .devin/mcp_config.local.json, the file Devin Local reads (#1678)', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-windsurf-mcp-'));
+    const repoRoot = path.join(__dirname, '..', '..');
+    try {
+      const plan = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot, projectRoot, modules: [] });
+      const mcp = plan.operations.find(operation => operation.destinationPath === path.join(projectRoot, '.devin', 'mcp_config.local.json'));
+      assert.ok(mcp, 'the plan registers the servers in .devin/mcp_config.local.json');
+      assert.strictEqual(mcp.kind, 'merge-json');
+      assert.strictEqual(mcp.strategy, 'merge-json');
+      assert.deepStrictEqual(mcp.mergePayload, {
+        mcpServers: {
+          'egc-guardian': { command: 'node', args: [path.join(repoRoot, 'mcp', 'servers', 'egc-guardian', 'build', 'index.js')], env: {} },
+          'egc-memory': { command: 'node', args: [path.join(repoRoot, 'mcp', 'servers', 'egc-memory', 'build', 'index.js')], env: {} },
+        },
+      });
+      assert.ok(!plan.operations.some(operation => path.basename(operation.destinationPath) === 'mcp_config.json'), 'the legacy Cascade user file is not written');
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  }));
+
   tally(test('windsurf-project reports the install state it recorded under .windsurf/ once the root moved to .devin/', () => {
     const fs = require('fs');
     const adapter = getInstallTargetAdapter('windsurf-project');
