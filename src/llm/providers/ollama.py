@@ -151,6 +151,8 @@ class OllamaProvider(LLMProvider):
                     "total_tokens": prompt_tokens + completion_tokens,
                 },
             )
+        except LLMError:
+            raise
         except Exception as e:
             _raise_classified_error(e)
 

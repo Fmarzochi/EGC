@@ -9,8 +9,16 @@ from llm.core.interface import ToolArgumentsError
 from llm.core.types import ProviderType
 
 
+class _NonStandardConstantError(ValueError):
+    pass
+
+
+def _reject_constant(name: str) -> Any:
+    raise _NonStandardConstantError(name)
+
+
 def parse_tool_arguments(raw: Any, provider: ProviderType | None = None) -> dict[str, Any]:
-    if raw is None or raw == "":
+    if raw is None:
         return {}
     if isinstance(raw, dict):
         return dict(raw)
@@ -19,11 +27,23 @@ def parse_tool_arguments(raw: Any, provider: ProviderType | None = None) -> dict
             f"Tool-call arguments must be a JSON object, got {type(raw).__name__}",
             provider=provider,
         )
+    if not raw:
+        return {}
     try:
-        value = json.loads(raw)
+        value = json.loads(raw, parse_constant=_reject_constant)
+    except UnicodeDecodeError as exc:
+        raise ToolArgumentsError(
+            f"Tool-call arguments are not valid UTF-8 (at byte {exc.start})",
+            provider=provider,
+        ) from exc
     except json.JSONDecodeError as exc:
         raise ToolArgumentsError(
             f"Tool-call arguments are not valid JSON ({exc.msg} at position {exc.pos})",
+            provider=provider,
+        ) from exc
+    except _NonStandardConstantError as exc:
+        raise ToolArgumentsError(
+            f"Tool-call arguments are not valid JSON ({exc} is not a JSON value)",
             provider=provider,
         ) from exc
     if not isinstance(value, dict):

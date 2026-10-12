@@ -97,10 +97,10 @@ class TestOllamaProviderCatalog(unittest.TestCase):
 
 class TestOllamaToolCallArguments(unittest.TestCase):
     @staticmethod
-    def _function(arguments):
+    def _function(arguments: object) -> dict[str, object]:
         return {"name": "read_file", "arguments": arguments}
 
-    def _arguments(self, function):
+    def _arguments(self, function: dict[str, object]) -> dict[str, object]:
         message = {"tool_calls": [{"id": "call_1", "function": function}]}
         return _parse_tool_calls(message)[0].arguments
 
@@ -113,10 +113,19 @@ class TestOllamaToolCallArguments(unittest.TestCase):
         self.assertEqual(self._arguments({"name": "read_file"}), {})
 
     def test_a_scalar_or_malformed_arguments_raise_tool_arguments_error(self) -> None:
-        for raw in (42, "42", '"text"', "[1, 2]", "{not valid json"):
+        for raw in (42, "42", '"text"', "[1, 2]", "{not valid json", '{"path": NaN}'):
             with self.subTest(raw=raw), self.assertRaises(ToolArgumentsError) as ctx:
                 self._arguments(self._function(raw))
             self.assertEqual(ctx.exception.provider, ProviderType.OLLAMA)
+
+    def test_generate_raises_the_provider_tagged_error_for_malformed_arguments(self) -> None:
+        provider = OllamaProvider(base_url="http://localhost:11434", default_model="llama3")
+        body = {"message": {"content": "", "tool_calls": [{"id": "call_1", "function": self._function("[1, 2]")}]}}
+        with patch.object(_Response, "read", return_value=json.dumps(body).encode("utf-8")), \
+                patch("urllib.request.urlopen", return_value=_Response()), \
+                self.assertRaises(ToolArgumentsError) as ctx:
+            provider.generate(LLMInput(messages=[Message(role=Role.USER, content="hi")], model="llama3"))
+        self.assertEqual(ctx.exception.provider, ProviderType.OLLAMA)
 
 
 if __name__ == "__main__":

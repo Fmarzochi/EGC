@@ -7,6 +7,7 @@ import pytest
 from llm.core.interface import LLMError, ToolArgumentsError
 from llm.core.types import LLMInput, Message, ProviderType, Role
 from llm.providers.openai import OpenAIProvider
+from llm.providers.openrouter import OpenRouterProvider
 
 
 def _simple_input() -> LLMInput:
@@ -67,7 +68,7 @@ def test_missing_content_field_defaults_to_empty_string(provider: OpenAIProvider
     assert result.content == ""
 
 
-def _tool_call_choice(arguments):
+def _tool_call_choice(arguments: object) -> MagicMock:
     choice = MagicMock()
     choice.message.content = ""
     choice.finish_reason = "tool_calls"
@@ -81,7 +82,7 @@ def _tool_call_choice(arguments):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("arguments", ['{"path": "a.txt"}', {"path": "a.txt"}])
-def test_tool_call_arguments_parse_to_a_dict_from_a_json_object_string_or_a_dict(provider: OpenAIProvider, arguments) -> None:
+def test_tool_call_arguments_parse_to_a_dict_from_a_json_object_string_or_a_dict(provider: OpenAIProvider, arguments: object) -> None:
     usage = MagicMock(prompt_tokens=1, completion_tokens=2, total_tokens=3)
     provider.client.chat.completions.create.return_value = _make_response(_tool_call_choice(arguments), usage)
 
@@ -91,8 +92,8 @@ def test_tool_call_arguments_parse_to_a_dict_from_a_json_object_string_or_a_dict
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("arguments", ["42", '"text"', "[1, 2]", "{not valid json"])
-def test_scalar_or_malformed_tool_call_arguments_raise_tool_arguments_error(provider: OpenAIProvider, arguments) -> None:
+@pytest.mark.parametrize("arguments", ["42", '"text"', "[1, 2]", "{not valid json", '{"path": NaN}'])
+def test_scalar_or_malformed_tool_call_arguments_raise_tool_arguments_error(provider: OpenAIProvider, arguments: object) -> None:
     usage = MagicMock(prompt_tokens=1, completion_tokens=2, total_tokens=3)
     provider.client.chat.completions.create.return_value = _make_response(_tool_call_choice(arguments), usage)
 
@@ -100,6 +101,20 @@ def test_scalar_or_malformed_tool_call_arguments_raise_tool_arguments_error(prov
         provider.generate(_simple_input())
 
     assert exc.value.provider == ProviderType.OPENAI
+
+
+@pytest.mark.unit
+def test_an_openai_compatible_subclass_tags_tool_argument_errors_with_its_own_provider() -> None:
+    provider = OpenRouterProvider.__new__(OpenRouterProvider)
+    provider.client = MagicMock()
+    provider._models = []
+    usage = MagicMock(prompt_tokens=1, completion_tokens=2, total_tokens=3)
+    provider.client.chat.completions.create.return_value = _make_response(_tool_call_choice("[1, 2]"), usage)
+
+    with pytest.raises(ToolArgumentsError) as exc:
+        provider.generate(_simple_input())
+
+    assert exc.value.provider == ProviderType.OPENROUTER
 
 
 @pytest.mark.unit

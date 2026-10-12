@@ -84,13 +84,12 @@ class OpenAIProvider(LLMProvider):
             ),
         ]
 
-    @staticmethod
-    def _extract_tool_calls(choice) -> list[ToolCall] | None:
+    def _extract_tool_calls(self, choice) -> list[ToolCall] | None:
         if not choice.message.tool_calls:
             return None
         calls = []
         for tc in choice.message.tool_calls:
-            args = parse_tool_arguments(tc.function.arguments, ProviderType.OPENAI)
+            args = parse_tool_arguments(tc.function.arguments, self.provider_type)
             calls.append(
                 ToolCall(id=tc.id or "", name=tc.function.name, arguments=args)
             )
