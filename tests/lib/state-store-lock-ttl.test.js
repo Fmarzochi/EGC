@@ -47,8 +47,8 @@ function makeTempLockPath() {
 }
 
 function cleanupTemp(dir, lockPath) {
-  try { fs.unlinkSync(lockPath); } catch (_) {}
-  try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+  try { fs.unlinkSync(lockPath); } catch (_) { /* ignore */ }
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
 }
 
 async function runTests() {
@@ -381,7 +381,7 @@ async function runTests() {
       await db.close();
     } finally {
       delete process.env.EGC_SQLITE_ENGINE;
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     }
   });
 
@@ -410,7 +410,7 @@ async function runTests() {
       await db.close();
     } finally {
       delete process.env.EGC_SQLITE_ENGINE;
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     }
   });
 
@@ -447,8 +447,8 @@ async function runTests() {
       await db.close();
     } finally {
       delete process.env.EGC_SQLITE_ENGINE;
-      try { fs.chmodSync(dir, 0o755); } catch (_) {}
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.chmodSync(dir, 0o755); } catch (_) { /* ignore */ }
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     }
   });
 
@@ -472,7 +472,7 @@ async function runTests() {
       await db2.close();
     } finally {
       delete process.env.EGC_SQLITE_ENGINE;
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     }
   });
 
@@ -621,7 +621,7 @@ async function runTests() {
       await db.close();
     } finally {
       delete process.env.EGC_SQLITE_ENGINE;
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     }
   });
 
@@ -648,7 +648,7 @@ async function runTests() {
       await db.close();
     } finally {
       delete process.env.EGC_SQLITE_ENGINE;
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     }
   });
 
@@ -686,7 +686,7 @@ async function runTests() {
       await verifyDb.close();
     } finally {
       delete process.env.EGC_SQLITE_ENGINE;
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     }
   });
 
@@ -726,7 +726,7 @@ async function runTests() {
       releaseFileLock(lockPath, token);
       assert.ok(!fs.existsSync(lockPath));
     } finally {
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     }
   });
 

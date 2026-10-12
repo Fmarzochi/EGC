@@ -256,6 +256,48 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('failed first write before file exists resets in-memory database and does not persist later', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-first-write-'));
+    const file = path.join(dir, 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test-first');
+      assert.ok(!fs.existsSync(file), 'Database file must not exist before first write');
+
+      // Inject persistence failure on the very first write
+      const originalPersist = db.persistNow.bind(db);
+      db.persistNow = () => {
+        throw new Error('Disk full on first persist simulation');
+      };
+      await assert.rejects(
+        () => db.exec("CREATE TABLE bad_table (id TEXT); INSERT INTO bad_table VALUES ('corrupt');"),
+        /Disk full on first persist simulation/
+      );
+
+      // Restore persistNow
+      db.persistNow = originalPersist;
+      assert.ok(!fs.existsSync(file), 'Failed first write must not have created the database file');
+
+      // Now perform a clean, valid first write on the same handle
+      await db.exec("CREATE TABLE good_table (id TEXT); INSERT INTO good_table VALUES ('valid');");
+
+      // Verify on disk and in memory that only good_table exists and bad_table was discarded
+      const goodRows = await db.all('SELECT * FROM good_table;');
+      assert.strictEqual(goodRows.length, 1);
+      assert.strictEqual(goodRows[0].id, 'valid');
+
+      // bad_table must NOT exist
+      await assert.rejects(
+        () => db.all('SELECT * FROM bad_table;'),
+        /no such table: bad_table/
+      );
+
+      await db.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (await test('the native engine is used by default when it loads', async () => {
     delete process.env.EGC_SQLITE_ENGINE;
     let native = true;

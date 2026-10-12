@@ -97,7 +97,7 @@ function tryAcquireLockOnce(lockPath, token) {
     fs.writeFileSync(fd, payload);
     return true;
   } catch (writeErr) {
-    let isOurFile = false;
+    let isOurFile;
     try {
       const fstat = fs.fstatSync(fd);
       const stat = fs.statSync(lockPath);
@@ -251,6 +251,26 @@ function normalizeParams(params) {
   return [nullForUndefined(only)];
 }
 
+function stripSqlComments(s) {
+  return s.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+}
+
+function parseTransactionBounds(pieces) {
+  const isBeginStmt = (s) => /^\s*BEGIN\b/i.test(stripSqlComments(s));
+  const isCommitStmt = (s) => /^\s*(COMMIT|END TRANSACTION|END)\b/i.test(stripSqlComments(s));
+  const isRollbackStmt = (s) => /^\s*ROLLBACK\b/i.test(stripSqlComments(s));
+
+  const firstStmt = pieces[0];
+  const lastStmt = pieces[pieces.length - 1];
+
+  return {
+    isBeginFirst: isBeginStmt(firstStmt),
+    hasCommitOrRollback: pieces.some(s => isCommitStmt(s) || isRollbackStmt(s)),
+    isCommitLast: isCommitStmt(lastStmt),
+    isRollbackLast: isRollbackStmt(lastStmt),
+  };
+}
+
 class WasmDatabase {
   constructor(db, filename, SQL) {
     this.db = db;
@@ -287,6 +307,12 @@ class WasmDatabase {
       }
       this.db = new this.SQL.Database(data);
       this._updateMtime();
+    } else {
+      if (this.db) {
+        try { this.db.close(); } catch (_) { /* ignore close error */ }
+      }
+      this.db = new this.SQL.Database();
+      this._updateMtime();
     }
   }
 
@@ -308,7 +334,7 @@ class WasmDatabase {
       throw err;
     } finally {
       if (token) {
-        try { releaseFileLock(this.getLockPath(), token); } catch (_) {}
+        try { releaseFileLock(this.getLockPath(), token); } catch (_) { /* ignore release error */ }
       }
       mutex.release();
     }
@@ -368,6 +394,37 @@ class WasmDatabase {
     }
   }
 
+  async _beginTransaction(text) {
+    if (this.filename !== ':memory:') {
+      const mutex = getFileMutex(this.filename);
+      await mutex.acquire();
+      let token = null;
+      try {
+        token = await acquireFileLock(this.getLockPath());
+        this.reloadFromDisk();
+        this.db.exec(text);
+        this._txToken = token;
+        this._inTransaction = true;
+        return;
+      } catch (err) {
+        if (token) {
+          try { releaseFileLock(this.getLockPath(), token); } catch (_) { /* ignore release error */ }
+        }
+        mutex.release();
+        this._txToken = null;
+        this._inTransaction = false;
+        throw err;
+      }
+    }
+    this._inTransaction = true;
+    try {
+      this.db.exec(text);
+    } catch (err) {
+      this._inTransaction = false;
+      throw err;
+    }
+  }
+
   async exec(sql) {
     const text = withoutSkippedPragmas(sql);
     if (!text.trim()) return;
@@ -377,25 +434,14 @@ class WasmDatabase {
       return;
     }
 
-    const stripComments = (s) => s.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
     const rawPieces = splitStatements(text).map(s => s.trim()).filter(Boolean);
-    const pieces = rawPieces.filter(s => stripComments(s) !== '');
+    const pieces = rawPieces.filter(s => stripSqlComments(s) !== '');
     if (pieces.length === 0) {
       if (rawPieces.length > 0) this.db.exec(text);
       return;
     }
 
-    const isBeginStmt = (s) => /^\s*BEGIN\b/i.test(stripComments(s));
-    const isCommitStmt = (s) => /^\s*(COMMIT|END TRANSACTION|END)\b/i.test(stripComments(s));
-    const isRollbackStmt = (s) => /^\s*ROLLBACK\b/i.test(stripComments(s));
-
-    const firstStmt = pieces[0];
-    const lastStmt = pieces[pieces.length - 1];
-
-    const isBeginFirst = isBeginStmt(firstStmt);
-    const hasCommitOrRollback = pieces.some(s => isCommitStmt(s) || isRollbackStmt(s));
-    const isCommitLast = isCommitStmt(lastStmt);
-    const isRollbackLast = isRollbackStmt(lastStmt);
+    const { isBeginFirst, hasCommitOrRollback, isCommitLast, isRollbackLast } = parseTransactionBounds(pieces);
 
     // Case 1: Standalone complete transaction block (e.g. BEGIN; ...; COMMIT/ROLLBACK;)
     if (isBeginFirst && (isCommitLast || isRollbackLast) && !this._inTransaction) {
@@ -406,35 +452,7 @@ class WasmDatabase {
 
     // Case 2: Opening a multi-statement transaction (BEGIN without matching COMMIT/ROLLBACK in same script)
     if (isBeginFirst && !hasCommitOrRollback && !this._inTransaction) {
-      if (this.filename !== ':memory:') {
-        const mutex = getFileMutex(this.filename);
-        await mutex.acquire();
-        let token = null;
-        try {
-          token = await acquireFileLock(this.getLockPath());
-          this.reloadFromDisk();
-          this.db.exec(text);
-          this._txToken = token;
-          this._inTransaction = true;
-          return;
-        } catch (err) {
-          if (token) {
-            try { releaseFileLock(this.getLockPath(), token); } catch (_) {}
-          }
-          mutex.release();
-          this._txToken = null;
-          this._inTransaction = false;
-          throw err;
-        }
-      }
-      this._inTransaction = true;
-      try {
-        this.db.exec(text);
-      } catch (err) {
-        this._inTransaction = false;
-        throw err;
-      }
-      return;
+      return this._beginTransaction(text);
     }
 
     // Case 3: Committing an open transaction
