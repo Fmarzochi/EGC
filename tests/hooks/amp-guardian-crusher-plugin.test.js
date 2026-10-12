@@ -65,6 +65,7 @@ function buildInstalledLayout() {
   for (const relativePath of [
     'scripts/hooks/pre-bash-guardian-validate.js',
     'scripts/lib/guardian-bin.js',
+    'scripts/lib/hook-stdin.js',
     'scripts/lib/shell-split.js',
     'scripts/lib/wrapper-options.js',
     'scripts/lib/shell-bindings.js',

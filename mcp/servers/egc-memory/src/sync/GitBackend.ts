@@ -2,6 +2,7 @@ import { simpleGit, SimpleGit } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { SyncBackend, SyncConfig, SyncStatus } from './SyncBackend';
 
 const SYNC_STATE_DIR = path.join(os.homedir(), '.egc', 'team-sync');
@@ -11,9 +12,9 @@ export class GitBackend extends SyncBackend {
   private config: SyncConfig | null = null;
   private readonly repoDir: string;
 
-  constructor() {
+  constructor(repoDir?: string) {
     super();
-    this.repoDir = SYNC_STATE_DIR;
+    this.repoDir = repoDir || SYNC_STATE_DIR;
     if (!fs.existsSync(this.repoDir)) {
       fs.mkdirSync(this.repoDir, { recursive: true });
     }
@@ -185,11 +186,71 @@ export class GitBackend extends SyncBackend {
     }
   }
 
-  private mirrorCopy(src: string, dest: string): void {
-    if (fs.existsSync(dest)) {
-      fs.rmSync(dest, { recursive: true, force: true });
+  private static removeQuietly(target: string): void {
+    fs.rmSync(target, { recursive: true, force: true });
+  }
+
+  // Leftovers are scoped to the destination name so a sibling copy in the same parent is never swept.
+  private static restoreAndSweepTemporaries(parent: string, dest: string): void {
+    const base = path.basename(dest);
+    const entries = fs.readdirSync(parent);
+    const backups = entries.filter(entry => entry.startsWith(`.tmp-old-${base}-`)).sort();
+
+    // A crash between the two renames leaves only the backup: bring the newest one back before sweeping.
+    if (!fs.existsSync(dest) && backups.length > 0) {
+      const newest = backups.pop() as string;
+      fs.renameSync(path.join(parent, newest), dest);
     }
-    fs.mkdirSync(dest, { recursive: true });
-    fs.cpSync(src, dest, { recursive: true });
+
+    for (const entry of entries) {
+      if (entry.startsWith(`.tmp-sync-${base}-`) || backups.includes(entry)) {
+        GitBackend.removeQuietly(path.join(parent, entry));
+      }
+    }
+  }
+
+  private static temporaryName(parent: string, prefix: string, dest: string): string {
+    return path.join(parent, `${prefix}-${path.basename(dest)}-${Date.now()}-${randomBytes(6).toString('hex')}`);
+  }
+
+  // Copy into a sibling temporary directory, then swap it in with renames, so a failed copy never leaves dest half-written.
+  mirrorCopy(src: string, dest: string): void {
+    const parent = path.dirname(dest);
+    fs.mkdirSync(parent, { recursive: true });
+    GitBackend.restoreAndSweepTemporaries(parent, dest);
+
+    const tmpDest = GitBackend.temporaryName(parent, '.tmp-sync', dest);
+    try {
+      fs.cpSync(src, tmpDest, { recursive: true });
+      if (!fs.existsSync(dest)) {
+        fs.renameSync(tmpDest, dest);
+        return;
+      }
+    } catch (error) {
+      GitBackend.removeQuietly(tmpDest);
+      throw error;
+    }
+
+    const backupDest = GitBackend.temporaryName(parent, '.tmp-old', dest);
+    try {
+      fs.renameSync(dest, backupDest);
+      fs.renameSync(tmpDest, dest);
+    } catch (error) {
+      if (!fs.existsSync(dest) && fs.existsSync(backupDest)) {
+        try {
+          fs.renameSync(backupDest, dest);
+        } catch {
+          // keep the backup in place when the rollback itself fails
+        }
+      }
+      GitBackend.removeQuietly(tmpDest);
+      throw error;
+    }
+
+    try {
+      GitBackend.removeQuietly(backupDest);
+    } catch {
+      // the swap already succeeded; a leftover backup is swept on the next copy
+    }
   }
 }

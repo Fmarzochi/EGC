@@ -14,9 +14,7 @@
 'use strict';
 
 const path = require('node:path');
-
-const MAX_STDIN = 1024 * 1024;
-let raw = '';
+const { readHookStdin, MAX_HOOK_INPUT_BYTES, MAX_STDIN } = require('../lib/hook-stdin');
 
 const PROTECTED_FILES = new Set([
   // ESLint (legacy + v9 flat config, JS/TS/MJS/CJS)
@@ -110,22 +108,11 @@ function run(inputOrRaw, options = {}) {
 module.exports = { run };
 
 // Stdin fallback for spawnSync execution
-let truncated = /^(1|true|yes)$/i.test(String(process.env.EGC_HOOK_INPUT_TRUNCATED || process.env.ECC_HOOK_INPUT_TRUNCATED || ''));
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => {
-  if (raw.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - raw.length;
-    raw += chunk.substring(0, remaining);
-    if (chunk.length > remaining) truncated = true;
-  } else {
-    truncated = true;
-  }
-});
-
-process.stdin.on('end', () => {
+const envTruncated = /^(1|true|yes)$/i.test(String(process.env.EGC_HOOK_INPUT_TRUNCATED || process.env.ECC_HOOK_INPUT_TRUNCATED || ''));
+readHookStdin(({ raw, truncated }) => {
   const result = run(raw, {
-    truncated,
-    maxStdin: Number(process.env.EGC_HOOK_INPUT_MAX_BYTES || process.env.ECC_HOOK_INPUT_MAX_BYTES) || MAX_STDIN,
+    truncated: envTruncated || truncated,
+    maxStdin: Number(process.env.EGC_HOOK_INPUT_MAX_BYTES || process.env.ECC_HOOK_INPUT_MAX_BYTES) || MAX_HOOK_INPUT_BYTES,
   });
 
   if (result.stderr) {

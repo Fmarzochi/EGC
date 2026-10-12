@@ -40,6 +40,14 @@ function run(homeDir, extraEnv = {}) {
   });
 }
 
+// A PATH holding node and, on Windows, the `where` the lookup runs, but no
+// tool CLI unless a fake one is put first.
+function isolatedPath(fakeBin) {
+  const dirs = [path.dirname(process.execPath)];
+  if (process.platform === 'win32') dirs.push(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'));
+  return [fakeBin, ...dirs].filter(Boolean).join(path.delimiter);
+}
+
 // Copies bootstrap-cognitive.js into a throwaway "fake repo" whose
 // .opencode/.codebuddy source files are intentionally absent, so __dirname
 // resolution inside the copy sees them as missing without ever touching
@@ -1501,6 +1509,51 @@ async function runVibeTests() {
   return [passed, failed];
 }
 
+async function runGrokTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('writes the Grok Build AGENTS.md when ~/.grok exists (#1495)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.grok'), { recursive: true });
+      const output = run(home, { GROK_HOME: '' });
+      assert.ok(/Grok Build: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const content = fs.readFileSync(path.join(home, '.grok', 'AGENTS.md'), 'utf8');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Grok Build when ~/.grok does not exist and grok is not on PATH (#1495)', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home, { GROK_HOME: '', PATH: isolatedPath(null) });
+      assert.ok(!/\[cognitive\] Grok Build:/.test(output), 'should not mention Grok at all');
+      assert.ok(!fs.existsSync(path.join(home, '.grok')), 'nothing is created');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the Grok Build AGENTS.md under GROK_HOME when it is set (#1495)', () => {
+    const home = mktempHome();
+    try {
+      const moved = path.join(home, 'grok-data');
+      fs.mkdirSync(moved, { recursive: true });
+      const output = run(home, { GROK_HOME: moved });
+      assert.ok(/Grok Build: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(moved, 'AGENTS.md')), 'the file lands under GROK_HOME');
+      assert.ok(!fs.existsSync(path.join(home, '.grok')), 'and not under ~/.grok');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 async function runKiroTests() {
   let passed = 0;
   let failed = 0;
@@ -1832,6 +1885,12 @@ async function runRemainingHarnessTests() {
     failed += vibeFailed;
   }
 
+  {
+    const [grokPassed, grokFailed] = await runGrokTests();
+    passed += grokPassed;
+    failed += grokFailed;
+  }
+
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {
     const home = mktempHome();
     try {
@@ -1922,18 +1981,10 @@ async function runRemainingHarnessTests() {
     }
   })) passed++; else failed++;
 
-  // A PATH holding node and, on Windows, the `where` the lookup runs, but no
-  // crush unless a fake one is put first.
-  function crushPath(fakeBin) {
-    const dirs = [path.dirname(process.execPath)];
-    if (process.platform === 'win32') dirs.push(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'));
-    return [fakeBin, ...dirs].filter(Boolean).join(path.delimiter);
-  }
-
   if (await test('skips Crush when ~/.config/crush does not exist and crush is not on PATH', () => {
     const home = mktempHome();
     try {
-      const output = run(home, { PATH: crushPath(null) });
+      const output = run(home, { PATH: isolatedPath(null) });
       assert.ok(!output.includes('Crush:'), `output should not mention Crush when dir absent: ${output}`);
     } finally {
       cleanup(home);
@@ -1946,7 +1997,7 @@ async function runRemainingHarnessTests() {
     try {
       fs.writeFileSync(path.join(fakeBin, 'crush'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
       fs.writeFileSync(path.join(fakeBin, 'crush.cmd'), '@exit /b 0\r\n');
-      const output = run(home, { PATH: crushPath(fakeBin) });
+      const output = run(home, { PATH: isolatedPath(fakeBin) });
       assert.ok(/Crush: memory protocol installed/.test(output), `should report install, got: ${output}`);
       const target = path.join(home, '.config', 'crush', 'CRUSH.md');
       assert.ok(fs.existsSync(target), 'CRUSH.md must be written on the first run');

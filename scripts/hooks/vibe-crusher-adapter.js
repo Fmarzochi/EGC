@@ -18,9 +18,9 @@
 'use strict';
 
 const { computeCrushedCommand } = require('./pre-bash-crusher-rewrite');
+const { readHookStdin } = require('../lib/hook-stdin');
 
 const SHELL_TOOL_RE = /^(bash|git_bash|experimental_bash|experimental_git_bash)$/i;
-const MAX_STDIN_BYTES = 1024 * 1024;
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -53,26 +53,11 @@ function parseJson(raw) {
 }
 
 function main() {
-  const chunks = [];
-  let totalBytes = 0;
-  let truncated = false;
-  process.stdin.on('data', chunk => {
-    if (truncated) return;
-    if (totalBytes + chunk.length > MAX_STDIN_BYTES) {
-      truncated = true;
-      return;
-    }
-    chunks.push(chunk);
-    totalBytes += chunk.length;
-  });
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw, truncated }) => {
     if (!truncated) {
-      const output = rewriteVibeEvent(parseJson(Buffer.concat(chunks).toString('utf8')));
+      const output = rewriteVibeEvent(parseJson(raw));
       if (output) process.stdout.write(`${JSON.stringify(output)}\n`);
     }
-    process.exitCode = 0;
-  });
-  process.stdin.on('error', () => {
     process.exitCode = 0;
   });
 }

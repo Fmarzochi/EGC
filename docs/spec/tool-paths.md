@@ -15,6 +15,7 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | KIMI_CODE_HOME | linux | `KIMI_CODE_HOME` set to an absolute directory, shown as `$KIMI_CODE_HOME` in the paths | kimi-home |
 | TRAE_ENV=cn | linux | `TRAE_ENV=cn` | trae-project |
 | VIBE_HOME | linux | `VIBE_HOME` set to an absolute directory, shown as `$VIBE_HOME` in the paths | vibe-home |
+| GROK_HOME | linux | `GROK_HOME` set to an absolute directory, shown as `$GROK_HOME` in the paths | grok-home |
 
 ## egc-home
 
@@ -314,18 +315,11 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | --- | --- | --- | --- | --- | --- |
 | library | `<project>/.trae/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `<project>/.trae/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| hooks | `<project>/.trae/hooks.json` | default | documented | <https://docs.trae.ai/ide/hook-configuration-reference> |  |
+| hooks | `<project>/.trae/hooks.json` | default | documented | <https://docs.trae.ai/ide/hook-configuration-reference> | The Chinese edition reads project hooks from the same $PROJECT_FOLDER/.trae/hooks.json and keeps ~/.trae-cn for its global hooks only (https://docs.trae.cn/ide_hook-configuration-reference, read on 2026-10-11), so TRAE_ENV=cn plans .trae too. On upgrade from an earlier install under <project>/.trae-cn, EGC removes only the copies that still match the bytes it wrote (an edited copy stays), removes only its own entries from <project>/.trae-cn/hooks.json, and keeps that install's state when it cannot be read. |
 | library | `<project>/.trae/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.trae/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
-| skills | `<project>/.trae/skills/` | default | documented | <https://docs.trae.ai/ide/skills> |  |
-| library | `<project>/.trae-cn/agents/` | TRAE_ENV=cn | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| library | `<project>/.trae-cn/commands/` | TRAE_ENV=cn | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| hooks | `<project>/.trae-cn/hooks.json` | TRAE_ENV=cn | unverified | <https://docs.trae.ai/ide/hook-configuration-reference> | The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10). |
-| library | `<project>/.trae-cn/rules/` | TRAE_ENV=cn | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| runtime | `<project>/.trae-cn/scripts/` | TRAE_ENV=cn | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
-| skills | `<project>/.trae-cn/skills/` | TRAE_ENV=cn | unverified | <https://docs.trae.ai/ide/skills> | The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10). |
+| skills | `<project>/.trae/skills/` | default | documented | <https://docs.trae.ai/ide/skills> | The Chinese edition reads project skills from the same .trae/skills/ and keeps ~/.trae-cn/skills for its global skills only (https://docs.trae.cn/ide/skills, read on 2026-10-11). |
 | state | `<project>/.trae/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
-| state | `<project>/.trae-cn/egc-install-state.json` | TRAE_ENV=cn | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## junie-home
 
@@ -416,6 +410,27 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | context | `$VIBE_HOME/AGENTS.md` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | skills | `$VIBE_HOME/skills/` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | state | `$VIBE_HOME/egc/install-state.json` | VIBE_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## grok-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| library | `~/.grok/egc/library/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.grok/egc/library/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `~/.grok/hooks/egc-guardian.json` | default | documented | <https://docs.x.ai/build/features/hooks> | Personal hooks live in ~/.grok/hooks/*.json in the Claude Code shape; a PreToolUse hook on the Bash, Edit and Write tools denies with exit code 2 or {"decision": "deny"} (read on 2026-10-11). EGC owns this whole file. |
+| library | `~/.grok/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| runtime | `~/.grok/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| context | `~/.grok/AGENTS.md` | default | documented | <https://docs.x.ai/build/features/project-rules> | Grok reads global rules from ~/.grok/ before the project ones, AGENTS.md first (read on 2026-10-11). |
+| skills | `~/.grok/skills/` | default | documented | <https://docs.x.ai/build/features/skills-plugins-marketplaces> | Grok discovers skills in ~/.grok/skills/ and ./.grok/skills/ (read on 2026-10-11); GROK_HOME moves the data root (https://docs.x.ai/build/settings/reference). |
+| state | `~/.grok/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| library | `$GROK_HOME/egc/library/agents/` | GROK_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `$GROK_HOME/egc/library/commands/` | GROK_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `$GROK_HOME/hooks/egc-guardian.json` | GROK_HOME | documented | <https://docs.x.ai/build/features/hooks> | Personal hooks live in ~/.grok/hooks/*.json in the Claude Code shape; a PreToolUse hook on the Bash, Edit and Write tools denies with exit code 2 or {"decision": "deny"} (read on 2026-10-11). EGC owns this whole file. |
+| library | `$GROK_HOME/egc/library/rules/` | GROK_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| runtime | `$GROK_HOME/scripts/` | GROK_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| context | `$GROK_HOME/AGENTS.md` | GROK_HOME | documented | <https://docs.x.ai/build/features/project-rules> | Grok reads global rules from ~/.grok/ before the project ones, AGENTS.md first (read on 2026-10-11). |
+| skills | `$GROK_HOME/skills/` | GROK_HOME | documented | <https://docs.x.ai/build/features/skills-plugins-marketplaces> | Grok discovers skills in ~/.grok/skills/ and ./.grok/skills/ (read on 2026-10-11); GROK_HOME moves the data root (https://docs.x.ai/build/settings/reference). |
+| state | `$GROK_HOME/egc/install-state.json` | GROK_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## vibe-project
 

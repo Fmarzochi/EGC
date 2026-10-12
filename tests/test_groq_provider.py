@@ -109,6 +109,17 @@ def test_default_models_include_gpt_oss_120b(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.unit
+def test_catalog_models_include_the_four_production_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    # #1698: the four production ids of console.groq.com/docs/models on 2026-10-11.
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    with patch("llm.providers.groq.OpenAI") as mock_openai:
+        mock_openai.return_value = MagicMock()
+        p = GroqProvider()
+    names = {m.name for m in p.list_models()}
+    assert {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"} <= names
+
+
+@pytest.mark.unit
 def test_empty_choices_raises_llm_error(provider: GroqProvider) -> None:
     response = MagicMock()
     response.choices = []

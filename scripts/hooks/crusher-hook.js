@@ -12,6 +12,7 @@
 
 const { run: runCrusherRewrite } = require('./pre-bash-crusher-rewrite');
 const { toPreToolUseOutput } = require('./pretooluse-output');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 function run(rawInput) {
   try {
@@ -21,22 +22,10 @@ function run(rawInput) {
   }
 }
 
-const MAX_STDIN = 1024 * 1024;
-
 function main() {
-  let raw = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      raw += chunk.substring(0, MAX_STDIN - raw.length);
-    }
-  });
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw, truncated }) => {
+    exitOnTruncatedInput(truncated, 0);
     process.stdout.write(run(raw));
-    process.exit(0);
-  });
-  process.stdin.on('error', () => {
-    process.stdout.write(raw);
     process.exit(0);
   });
 }

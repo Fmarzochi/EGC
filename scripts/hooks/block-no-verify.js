@@ -15,8 +15,7 @@
 
 'use strict';
 
-const MAX_STDIN = 1024 * 1024;
-let raw = '';
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 /**
  * Git commands that support the --no-verify flag.
@@ -509,15 +508,8 @@ module.exports = { run };
 
 // Stdin fallback for spawnSync execution: only when invoked directly, not via require()
 if (require.main === module) {
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - raw.length;
-      raw += chunk.substring(0, remaining);
-    }
-  });
-
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw, truncated }) => {
+    exitOnTruncatedInput(truncated, 2);
     const command = extractCommand(raw);
     const result = checkCommand(command);
 

@@ -12,17 +12,7 @@
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
-
-const MAX_STDIN = 1024 * 1024; // 1MB limit
-let data = "";
-process.stdin.setEncoding("utf8");
-
-process.stdin.on("data", (chunk) => {
-  if (data.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - data.length;
-    data += chunk.substring(0, remaining);
-  }
-});
+const { readHookStdin } = require("../lib/hook-stdin");
 
 function findTsConfig(startDir) {
   let dir = startDir;
@@ -101,7 +91,7 @@ function runTypeCheck(dir, filePath, resolvedPath) {
   }
 }
 
-process.stdin.on("end", () => {
+readHookStdin(({ raw: data }) => {
   try {
     const input = JSON.parse(data);
     const filePath = input.tool_input?.file_path;
