@@ -265,6 +265,26 @@ function runTests() {
     }
   })));
 
+  (tally(test('Qwen Code: registerMcpServers dispatches the Qwen target and merges into ~/.qwen/settings.json (#1678)', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const settingsPath = path.join(tmpHome, '.qwen', 'settings.json');
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      const own = { model: { name: 'qwen3-coder-plus' }, hooks: { PreToolUse: [] } };
+      fs.writeFileSync(settingsPath, JSON.stringify(own, null, 2));
+      const registered = [];
+      registerIsolated(tmpHome, { onRegister: target => registered.push(target.name) });
+      assert.ok(registered.includes('Qwen Code'), `the Qwen target is registered, got ${registered.join(', ')}`);
+      const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      assert.deepStrictEqual(written.model, own.model);
+      assert.deepStrictEqual(written.hooks, own.hooks);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
   (tally(test('Auggie: the gate opens on the ~/.augment directory, and the path is settings.json under it', () => {
     const tmpHome = makeTempDir();
     try {
