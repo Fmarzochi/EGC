@@ -3,7 +3,7 @@
 
 const { run: runBashGuardian } = require('./pre-bash-guardian-validate');
 const { run: runWriteGuardian } = require('./pre-write-guardian-validate');
-const { runJsonEnvelopeGuardianAdapter } = require('../lib/adapter-stdin-json');
+const { decideGuardianAdapterEvent, runJsonEnvelopeGuardianAdapter } = require('../lib/adapter-stdin-json');
 
 const SHELL_TOOL_RE = /^bash$/i;
 const WRITE_TOOL_RE = /^(edit|write)$/i;
@@ -44,32 +44,22 @@ function runGuardian(target, options) {
   return target.kind === 'bash' ? runBashGuardian(target.input, options) : runWriteGuardian(target.input, options);
 }
 
-function respond(blocked, message) {
+function respond(blocked, reason = 'Blocked by the EGC Guardian.') {
   if (!blocked) {
     process.exitCode = 0;
     return;
   }
-  const reason = message || 'Blocked by the EGC Guardian.';
   process.stdout.write(`${JSON.stringify({ decision: 'deny', reason })}\n`);
   process.stderr.write(`${reason}\n`);
   process.exitCode = 2;
 }
 
 function runGrokGuardianAdapter(eventOrRaw, options = {}) {
-  if (options.truncated) return { blocked: true, reason: TRUNCATED_REASON };
-  let event = eventOrRaw;
-  if (typeof event === 'string') {
-    try {
-      event = JSON.parse(event);
-    } catch {
-      return { blocked: false };
-    }
-  }
-  const target = buildGuardianInput(event);
-  if (!target) return { blocked: false };
-  const result = runGuardian(target, options);
-  if (result?.exitCode === 2) return { blocked: true, reason: result.stderr || 'Blocked by the EGC Guardian.' };
-  return { blocked: false };
+  return decideGuardianAdapterEvent(eventOrRaw, options, {
+    buildGuardianInput,
+    runGuardian,
+    truncatedReason: TRUNCATED_REASON,
+  });
 }
 
 if (require.main === module) {
