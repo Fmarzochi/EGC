@@ -17,6 +17,7 @@
 
 const { spawnSync } = require('node:child_process');
 const { isMacOS, log } = require('../lib/utils');
+const { readHookStdin } = require('../lib/hook-stdin');
 
 const TITLE = 'EGC';
 const MAX_BODY_LENGTH = 100;
@@ -152,17 +153,8 @@ module.exports = { run };
 
 // Legacy stdin path (when invoked directly rather than via run-with-flags)
 if (require.main === module) {
-  const MAX_STDIN = 1024 * 1024;
-  let data = '';
-
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (data.length < MAX_STDIN) {
-      data += chunk.substring(0, MAX_STDIN - data.length);
-    }
-  });
-  process.stdin.on('end', () => {
-    const output = run(data);
+  readHookStdin(({ raw }) => {
+    const output = run(raw);
     if (output) process.stdout.write(output);
   });
 }

@@ -1083,7 +1083,7 @@ class ModelResolver:
     _VENDOR_SLASH_PROVIDERS = frozenset({"groq", "openrouter"})
 
     @classmethod
-    def _provider_for(cls, model_id: str, expected: Optional[str] = None) -> str:
+    def _recognized_provider(cls, model_id: str, expected: Optional[str] = None) -> Optional[str]:
         info = cls._REGISTRY.get(model_id)
         if info and info.get("provider"):
             return str(info["provider"])
@@ -1121,16 +1121,25 @@ class ModelResolver:
         # via _ALIASES before _provider_for is ever called.
         if v.startswith("command-"):
             return "cohere"
-        # Nothing above recognized the shape (e.g. a native Groq id with no
+        return None
+
+    @classmethod
+    def _provider_for(cls, model_id: str, expected: Optional[str] = None) -> str:
+        # Nothing recognized the shape (e.g. a native Groq id with no
         # "/", such as "llama-3.3-70b-versatile"). The caller's own expected
         # provider is a stronger signal at this point than the global
         # default, since the id has already been cleared of every other
         # provider's native shape.
-        return expected or cls._DEFAULT_PROVIDER
+        return cls._recognized_provider(model_id, expected) or expected or cls._DEFAULT_PROVIDER
 
     # ------------------------------------------------------------------ #
     # Public resolution API
     # ------------------------------------------------------------------ #
+    @classmethod
+    def provider_of(cls, model_id: str) -> Optional[str]:
+        """Return the provider that recognizes ``model_id``, or None when none does."""
+        return cls._recognized_provider(model_id)
+
     @classmethod
     def resolve(cls, model_hint: Optional[str] = None, provider: Optional[str] = None) -> str:
         """Resolve a model hint / alias to a concrete model ID.

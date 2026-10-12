@@ -18,8 +18,7 @@
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
-
-const MAX_STDIN = 1024 * 1024; // 1MB limit
+const { readHookStdin } = require('../lib/hook-stdin');
 
 /**
  * Detect staged files for commit
@@ -485,17 +484,7 @@ function run(rawInput) {
 
 // ── stdin entry point ────────────────────────────────────────────
 if (require.main === module) {
-  let data = '';
-  process.stdin.setEncoding('utf8');
-  
-  process.stdin.on('data', chunk => {
-    if (data.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - data.length;
-      data += chunk.substring(0, remaining);
-    }
-  });
-  
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw: data }) => {
     const result = evaluate(data);
     process.stdout.write(result.output);
     process.exit(result.exitCode);

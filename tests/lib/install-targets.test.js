@@ -825,6 +825,30 @@ function runTests() {
     );
   }));
 
+  tally(test('a copy planned twice for the same source and destination is kept once', () => {
+    const { createRemappedOperation } = require('../../scripts/lib/install-targets/helpers');
+    const adapter = createInstallTargetAdapter({
+      id: 'egc-repeated-copy-target',
+      target: 'egc-repeated-copy-target',
+      kind: 'home',
+      rootSegments: ['egc-repeated-copy-target'],
+      installStatePathSegments: ['egc', 'install-state.json'],
+      planOperations: (input, self) => [
+        createRemappedOperation(self, 'module-a', 'scripts/lib/hook-stdin.js', '/dest/hook-stdin.js'),
+        createRemappedOperation(self, 'module-b', 'scripts/lib/hook-stdin.js', '/dest/hook-stdin.js'),
+        createRemappedOperation(self, 'module-b', 'scripts/lib/utils.js', '/dest/utils.js'),
+        createRemappedOperation(self, 'module-b', 'scripts/lib/hook-stdin.js', '/other/hook-stdin.js'),
+      ],
+    });
+
+    const planned = adapter.planOperations({ repoRoot: '/repo', homeDir: '/home/u', modules: [] });
+
+    assert.deepStrictEqual(
+      planned.map(operation => [operation.moduleId, operation.destinationPath]),
+      [['module-a', '/dest/hook-stdin.js'], ['module-b', '/dest/utils.js'], ['module-b', '/other/hook-stdin.js']]
+    );
+  }));
+
   tally(test('the missing-IDE warning names Devin Desktop and links to it, not to Windsurf', () => {
     const adapter = getInstallTargetAdapter('windsurf-home');
     const homeDir = path.join(os.tmpdir(), 'egc-devin-desktop-home-that-does-not-exist');
@@ -5221,16 +5245,35 @@ function runTests() {
     assert.deepStrictEqual(foreign, [], 'files other targets keep on their roots stay out of Kiro');
   }));
 
-  tally(test('the Trae adapter resolves .trae-cn when TRAE_ENV=cn at resolution time, as the retired .trae/install.sh allowed', () => {
+  tally(test('both Trae editions get the project .trae, and an earlier .trae-cn install stays EGC\'s to retire (#1842)', () => {
+    const fs = require('fs');
     const trae = require('../../scripts/lib/install-targets/trae-project');
     const previous = process.env.TRAE_ENV;
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-trae-cn-'));
     try {
+      for (const edition of ['cn', undefined]) {
+        if (edition) process.env.TRAE_ENV = edition; else delete process.env.TRAE_ENV;
+        assert.strictEqual(trae.resolveRoot({ projectRoot }), path.join(projectRoot, '.trae'), `TRAE_ENV=${edition}: the CN edition reads project files from .trae too`);
+        assert.deepStrictEqual(trae.resolveManagedRoots({ projectRoot }), [path.join(projectRoot, '.trae'), path.join(projectRoot, '.trae-cn')]);
+      }
+      assert.deepStrictEqual(trae.resolveLegacyInstallStatePaths({ projectRoot }), [], 'no earlier install, no legacy state');
+      const legacyState = path.join(projectRoot, '.trae-cn', 'egc-install-state.json');
+      fs.mkdirSync(path.dirname(legacyState), { recursive: true });
+      fs.writeFileSync(legacyState, '{}');
+      assert.deepStrictEqual(trae.resolveLegacyInstallStatePaths({ projectRoot }), [legacyState]);
+
+      const atHome = { projectRoot, homeDir: projectRoot };
       process.env.TRAE_ENV = 'cn';
-      assert.strictEqual(trae.resolveRoot({ projectRoot: '/p' }), path.join('/p', '.trae-cn'));
+      assert.strictEqual(trae.resolveRoot(atHome), path.join(projectRoot, '.trae-cn'), 'at home the CN edition keeps its global ~/.trae-cn');
+      assert.deepStrictEqual(trae.resolveManagedRoots(atHome), [path.join(projectRoot, '.trae-cn')]);
+      assert.deepStrictEqual(trae.resolveLegacyInstallStatePaths(atHome), [], 'the global CN install is never a legacy state');
       delete process.env.TRAE_ENV;
-      assert.strictEqual(trae.resolveRoot({ projectRoot: '/p' }), path.join('/p', '.trae'), 'the choice follows the environment at resolution time, not at require time');
+      assert.strictEqual(trae.resolveRoot(atHome), path.join(projectRoot, '.trae'));
+      assert.deepStrictEqual(trae.resolveManagedRoots(atHome), [path.join(projectRoot, '.trae')], 'the international edition at home never touches ~/.trae-cn');
+      assert.deepStrictEqual(trae.resolveLegacyInstallStatePaths(atHome), []);
     } finally {
       if (previous === undefined) delete process.env.TRAE_ENV; else process.env.TRAE_ENV = previous;
+      fs.rmSync(projectRoot, { recursive: true, force: true });
     }
   }));
 
