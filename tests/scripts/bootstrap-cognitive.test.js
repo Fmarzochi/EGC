@@ -1526,10 +1526,10 @@ async function runKiloCliTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('skips Kilo Code CLI when ~/.config/kilo does not exist (#1496)', () => {
+  if (await test('skips Kilo Code CLI when ~/.config/kilo does not exist and kilo is not on PATH (#1496)', () => {
     const home = mktempHome();
     try {
-      const output = run(home, { XDG_CONFIG_HOME: '' });
+      const output = run(home, { XDG_CONFIG_HOME: '', PATH: isolatedPath(null) });
       assert.ok(!/\[cognitive\] Kilo Code CLI:/.test(output), 'should not mention Kilo at all');
       assert.ok(!fs.existsSync(path.join(home, '.config', 'kilo')), 'nothing is created');
     } finally {
