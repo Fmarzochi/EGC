@@ -14,6 +14,7 @@ just through GCP service-account/ADC auth instead of an API key.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 try:
@@ -27,6 +28,24 @@ from llm.core.types import LLMInput, LLMOutput, ProviderType
 from llm.providers.gemini import GeminiProvider
 
 _DEFAULT_LOCATION = "us-central1"
+_PROJECT_ID = re.compile(r"^(?:[a-z0-9.-]+:)?[a-z][a-z0-9-]{4,28}[a-z0-9]$")
+_LOCATION = re.compile(r"^(?:global|us|eu|[a-z]+-[a-z]+\d+)$")
+
+
+def _config_issue(project: str | None, location: str | None) -> str | None:
+    if not project:
+        return "No Google Cloud project configured for Vertex AI (set GOOGLE_CLOUD_PROJECT)"
+    if not _PROJECT_ID.match(project):
+        return (
+            f"Vertex AI project {project!r} is not a Google Cloud project ID "
+            "(6 to 30 lowercase letters, digits or hyphens, starting with a letter)"
+        )
+    if not location or not _LOCATION.match(location):
+        return (
+            f"Vertex AI location {location!r} is not a Google Cloud location "
+            "such as us-central1 or global (set GOOGLE_CLOUD_LOCATION)"
+        )
+    return None
 
 
 class VertexAIProvider(GeminiProvider):
@@ -44,11 +63,9 @@ class VertexAIProvider(GeminiProvider):
         self._location = (
             location or os.environ.get("GOOGLE_CLOUD_LOCATION") or _DEFAULT_LOCATION
         )
-        if not self._project:
-            raise AuthenticationError(
-                "No Google Cloud project configured for Vertex AI (set GOOGLE_CLOUD_PROJECT)",
-                provider=ProviderType.VERTEX_AI,
-            )
+        issue = _config_issue(self._project, self._location)
+        if issue:
+            raise AuthenticationError(issue, provider=ProviderType.VERTEX_AI)
 
         self.client = genai.Client(
             vertexai=True,
@@ -80,7 +97,7 @@ class VertexAIProvider(GeminiProvider):
             raise
 
     def validate_config(self) -> bool:
-        return bool(self._project) and bool(self._location)
+        return _config_issue(self._project, self._location) is None
 
     def get_default_model(self) -> str:
         return ModelResolver.resolve(None, provider="gemini")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from llm.core.interface import LLMProvider
@@ -30,19 +31,43 @@ _PROVIDER_MAP: dict[ProviderType, type[LLMProvider]] = {
     ProviderType.COHERE: CohereProvider,
 }
 
+logger = logging.getLogger(__name__)
+
+_UNRESOLVED = "__unresolved__"
+
+
+def _default_provider() -> str:
+    return os.environ.get("LLM_PROVIDER", "gemini").lower()
+
+
+def _provider_from_hint(model_hint: str) -> str:
+    try:
+        from llm.core.model_resolver import ModelResolver
+
+        resolved = ModelResolver._provider_for(model_hint, expected=_UNRESOLVED)
+    except Exception as exc:
+        fallback = _default_provider()
+        logger.warning(
+            "Could not resolve a provider for model %r (%s); falling back to %r. "
+            "Pass provider_type or set LLM_PROVIDER to choose one.",
+            model_hint, exc, fallback,
+        )
+        return fallback
+    if resolved != _UNRESOLVED:
+        return resolved
+    fallback = _default_provider()
+    logger.warning(
+        "No provider recognizes model %r; falling back to %r. "
+        "Pass provider_type or set LLM_PROVIDER to choose one.",
+        model_hint, fallback,
+    )
+    return fallback
+
 
 def get_provider(provider_type: ProviderType | str | None = None, **kwargs: str) -> LLMProvider:
     if provider_type is None:
         model_hint = kwargs.get("model")
-        if model_hint:
-            try:
-                from llm.core.model_resolver import ModelResolver
-
-                provider_type = ModelResolver._provider_for(model_hint)
-            except Exception:
-                provider_type = os.environ.get("LLM_PROVIDER", "gemini").lower()
-        else:
-            provider_type = os.environ.get("LLM_PROVIDER", "gemini").lower()
+        provider_type = _provider_from_hint(model_hint) if model_hint else _default_provider()
 
     if isinstance(provider_type, str):
         try:
