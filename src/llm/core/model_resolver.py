@@ -56,6 +56,27 @@ GEMINI_25_FLASH_LITE = "gemini-2.5-flash-lite"
 GEMINI_20_FLASH_LITE = "gemini-2.0-flash-lite"
 GEMINI_15_FLASH = "gemini-1.5-flash"
 GEMINI_15_FLASH_8B = "gemini-1.5-flash-8b"
+# Gemini API ids checked on 2026-10-11 (ai.google.dev/gemini-api/docs/models and
+# docs/deprecations): the 3.x line is current, the 2.5 line is still served to
+# accounts that used it, 2.0 and 1.5 are shut down and map to a replacement.
+GEMINI_38_FLASH = "gemini-3.8-flash"
+GEMINI_36_FLASH = "gemini-3.6-flash"
+GEMINI_35_FLASH_LITE = "gemini-3.5-flash-lite"
+GEMINI_31_FLASH_LITE = "gemini-3.1-flash-lite"
+GEMINI_31_PRO_PREVIEW = "gemini-3.1-pro-preview"
+GEMINI_20_FLASH_RETIRED = "gemini-2.0-flash"
+GEMINI_15_PRO_RETIRED = "gemini-1.5-pro"
+# Claude API ids checked on 2026-10-11 (platform.claude.com, models overview).
+CLAUDE_OPUS_55 = "claude-opus-5-5"
+CLAUDE_FABLE_51 = "claude-fable-5-1"
+CLAUDE_SONNET_55 = "claude-sonnet-5-5"
+CLAUDE_HAIKU_55 = "claude-haiku-5-5"
+CLAUDE_SONNET_47_RETIRED = "claude-sonnet-4-7"
+CLAUDE_HAIKU_47_RETIRED = "claude-haiku-4-7"
+# OpenAI ids checked on 2026-10-11 (developers.openai.com/api/docs/models).
+GPT6_ASTRA = "gpt-6-astra"
+GPT61_SOL = "gpt-6.1-sol"
+GPT6_LUNA = "gpt-6-luna"
 OPENAI_GPT_4O_MINI = "openai/gpt-4o-mini"
 OPENROUTER_AUTO = "openrouter/auto"
 OPENAI_GPT_OSS_120B = "openai/gpt-oss-120b"
@@ -76,14 +97,20 @@ class ModelResolver:
     _GEMINI_20_FLASH_LITE = GEMINI_20_FLASH_LITE
     _GEMINI_15_FLASH = GEMINI_15_FLASH
     _GEMINI_15_FLASH_8B = GEMINI_15_FLASH_8B
+    _GEMINI_38_FLASH = GEMINI_38_FLASH
+    _GEMINI_36_FLASH = GEMINI_36_FLASH
+    _GEMINI_35_FLASH_LITE = GEMINI_35_FLASH_LITE
+    _GEMINI_31_FLASH_LITE = GEMINI_31_FLASH_LITE
+    _GEMINI_31_PRO_PREVIEW = GEMINI_31_PRO_PREVIEW
+    _GPT61_SOL = GPT61_SOL
     _OPENAI_GPT_4O_MINI = OPENAI_GPT_4O_MINI
     _GPT_4O = "gpt-4o"
-    _CLAUDE_SONNET = "claude-sonnet-4-7"
+    _CLAUDE_SONNET = CLAUDE_SONNET_55
     _OPENROUTER_AUTO = OPENROUTER_AUTO
     _OPENAI_GPT_OSS_120B = OPENAI_GPT_OSS_120B
     _LLAMA32 = LLAMA32
     _GOOGLE_GEMINI_25_FLASH = GOOGLE_GEMINI_25_FLASH
-    _CLAUDE_HAIKU = "claude-haiku-4-7"
+    _CLAUDE_HAIKU = CLAUDE_HAIKU_55
     _GPT_4O_MINI = "gpt-4o-mini"
     _OPENAI_GPT_4O_OR = OPENAI_GPT_4O
     _DEEPSEEK_CHAT_V3 = "deepseek/deepseek-chat-v3-0324"
@@ -96,7 +123,84 @@ class ModelResolver:
     # (403 / 404 / 429 / quota), forming a degradation chain.
     # ------------------------------------------------------------------ #
     _REGISTRY: Dict[str, Dict[str, Any]] = {
-        # --- Gemini 2.5 generation (State of the Art) ---
+        # --- Gemini 3.x generation (current line, 2026-10-11) ---
+        GEMINI_38_FLASH: {
+            "provider": "gemini",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+                ModelCapability.CODE,
+                ModelCapability.SPEED,
+            ],
+            "fallback": _GEMINI_36_FLASH,
+            "context_window": 1048576,
+            "max_tokens": 65536,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        GEMINI_31_PRO_PREVIEW: {
+            "provider": "gemini",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+                ModelCapability.CODE,
+            ],
+            "fallback": _GEMINI_38_FLASH,
+            "context_window": 1048576,
+            "max_tokens": 65536,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        GEMINI_36_FLASH: {
+            "provider": "gemini",
+            "capabilities": [
+                ModelCapability.SPEED,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+                ModelCapability.COST_EFFICIENT,
+            ],
+            "fallback": _GEMINI_35_FLASH_LITE,
+            "context_window": 1048576,
+            "max_tokens": 65536,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        GEMINI_35_FLASH_LITE: {
+            "provider": "gemini",
+            "capabilities": [
+                ModelCapability.SPEED,
+                ModelCapability.LOW_LATENCY,
+                ModelCapability.COST_EFFICIENT,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.MULTIMODAL,
+            ],
+            "fallback": _GEMINI_31_FLASH_LITE,
+            "context_window": 1048576,
+            "max_tokens": 65536,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        # Shutdown announced for 2027-05-07 (replacement: gemini-3.5-flash-lite).
+        GEMINI_31_FLASH_LITE: {
+            "provider": "gemini",
+            "capabilities": [
+                ModelCapability.SPEED,
+                ModelCapability.LOW_LATENCY,
+                ModelCapability.COST_EFFICIENT,
+                ModelCapability.TOOL_CALLING,
+            ],
+            "fallback": None,
+            "context_window": 1048576,
+            "max_tokens": 65536,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        # --- Gemini 2.5 generation (still served to accounts that used it; no shutdown date) ---
         GEMINI_25_PRO: {
             "provider": "gemini",
             "capabilities": [
@@ -106,7 +210,7 @@ class ModelResolver:
                 ModelCapability.LONG_CONTEXT,
                 ModelCapability.CODE,
             ],
-            "fallback": _GEMINI_25_FLASH,
+            "fallback": _GEMINI_38_FLASH,
             "context_window": 2000000,
             "max_tokens": 65536,
             "supports_vision": True,
@@ -122,7 +226,7 @@ class ModelResolver:
                 ModelCapability.LOW_LATENCY,
                 ModelCapability.COST_EFFICIENT,
             ],
-            "fallback": _GEMINI_25_FLASH_LITE,
+            "fallback": _GEMINI_36_FLASH,
             "context_window": 1000000,
             "max_tokens": 65536,
             "supports_vision": True,
@@ -136,88 +240,79 @@ class ModelResolver:
                 ModelCapability.COST_EFFICIENT,
                 ModelCapability.TOOL_CALLING,
             ],
-            "fallback": _GEMINI_20_FLASH_LITE,
+            "fallback": _GEMINI_35_FLASH_LITE,
             "context_window": 1000000,
             "max_tokens": 65536,
             "supports_vision": True,
             "supports_tools": True,
         },
-        # --- Gemini 2.0 generation (High Performance) ---
-        "gemini-2.0-flash": {
-            "provider": "gemini",
-            "capabilities": [
-                ModelCapability.SPEED,
-                ModelCapability.MULTIMODAL,
-                ModelCapability.TOOL_CALLING,
-                ModelCapability.LONG_CONTEXT,
-                ModelCapability.LOW_LATENCY,
-                ModelCapability.COST_EFFICIENT,
-            ],
-            "fallback": _GEMINI_20_FLASH_LITE,
-            "context_window": 1000000,
-            "max_tokens": 8192,
-            "supports_vision": True,
-            "supports_tools": True,
-        },
-        GEMINI_20_FLASH_LITE: {
-            "provider": "gemini",
-            "capabilities": [
-                ModelCapability.SPEED,
-                ModelCapability.LOW_LATENCY,
-                ModelCapability.COST_EFFICIENT,
-                ModelCapability.TOOL_CALLING,
-            ],
-            "fallback": _GEMINI_15_FLASH,
-            "context_window": 1000000,
-            "max_tokens": 8192,
-            "supports_vision": True,
-            "supports_tools": True,
-        },
-        # --- Gemini 1.5 generation (Legacy Robustness) ---
-        "gemini-1.5-pro": {
-            "provider": "gemini",
+        # Gemini 2.0 and 1.5 are shut down (deprecations page, 2026-10-11): their
+        # ids live in _ALIASES as pointers to the replacement the page names.
+        # --- Other providers (kept minimal; the runtime stays provider-aware) ---
+        # --- Claude (platform.claude.com models overview, 2026-10-11): dateless
+        # pinned ids, 1M context and 128K output on the 5.5 generation ---
+        CLAUDE_OPUS_55: {
+            "provider": "claude",
             "capabilities": [
                 ModelCapability.REASONING,
-                ModelCapability.MULTIMODAL,
                 ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.MULTIMODAL,
                 ModelCapability.LONG_CONTEXT,
             ],
-            "fallback": _GEMINI_25_FLASH,  # Prioritize SOTA flash over legacy flash
-            "context_window": 2000000,
-            "max_tokens": 8192,
-            "supports_vision": True,
-            "supports_tools": True,
-        },
-        GEMINI_15_FLASH: {
-            "provider": "gemini",
-            "capabilities": [
-                ModelCapability.SPEED,
-                ModelCapability.MULTIMODAL,
-                ModelCapability.TOOL_CALLING,
-                ModelCapability.LOW_LATENCY,
-                ModelCapability.COST_EFFICIENT,
-            ],
-            "fallback": _GEMINI_15_FLASH_8B,
+            "fallback": _CLAUDE_SONNET,
             "context_window": 1000000,
-            "max_tokens": 8192,
+            "max_tokens": 128000,
             "supports_vision": True,
             "supports_tools": True,
         },
-        GEMINI_15_FLASH_8B: {
-            "provider": "gemini",
+        CLAUDE_FABLE_51: {
+            "provider": "claude",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.LONG_CONTEXT,
+            ],
+            "fallback": CLAUDE_OPUS_55,
+            "context_window": 1000000,
+            "max_tokens": 128000,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        CLAUDE_SONNET_55: {
+            "provider": "claude",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.LONG_CONTEXT,
+                ModelCapability.SPEED,
+            ],
+            "fallback": _CLAUDE_HAIKU,
+            "context_window": 1000000,
+            "max_tokens": 128000,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        CLAUDE_HAIKU_55: {
+            "provider": "claude",
             "capabilities": [
                 ModelCapability.SPEED,
                 ModelCapability.LOW_LATENCY,
                 ModelCapability.COST_EFFICIENT,
                 ModelCapability.TOOL_CALLING,
+                ModelCapability.MULTIMODAL,
             ],
             "fallback": None,
             "context_window": 1000000,
-            "max_tokens": 8192,
+            "max_tokens": 128000,
             "supports_vision": True,
             "supports_tools": True,
         },
-        # --- Other providers (kept minimal; the runtime stays provider-aware) ---
+        # Legacy, still available per the overview page.
         "claude-opus-4-5": {
             "provider": "claude",
             "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING, ModelCapability.CODE],
@@ -227,22 +322,51 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "claude-sonnet-4-7": {
-            "provider": "claude",
-            "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING, ModelCapability.CODE],
-            "fallback": _CLAUDE_HAIKU,
-            "context_window": 200000,
-            "max_tokens": 8192,
+        # --- OpenAI (developers.openai.com models page, 2026-10-11): the GPT-6 line
+        # at 1.05M context and 128K output; gpt-4o and gpt-4o-mini still served ---
+        GPT6_ASTRA: {
+            "provider": "openai",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+                ModelCapability.CODE,
+            ],
+            "fallback": GPT61_SOL,
+            "context_window": 1050000,
+            "max_tokens": 128000,
             "supports_vision": True,
             "supports_tools": True,
         },
-        "claude-haiku-4-7": {
-            "provider": "claude",
-            "capabilities": [ModelCapability.SPEED, ModelCapability.LOW_LATENCY, ModelCapability.TOOL_CALLING],
-            "fallback": None,
-            "context_window": 200000,
-            "max_tokens": 4096,
-            "supports_vision": False,
+        GPT61_SOL: {
+            "provider": "openai",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+                ModelCapability.CODE,
+            ],
+            "fallback": GPT6_LUNA,
+            "context_window": 1050000,
+            "max_tokens": 128000,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        GPT6_LUNA: {
+            "provider": "openai",
+            "capabilities": [
+                ModelCapability.SPEED,
+                ModelCapability.COST_EFFICIENT,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+            ],
+            "fallback": _GPT_4O,
+            "context_window": 1050000,
+            "max_tokens": 128000,
+            "supports_vision": True,
             "supports_tools": True,
         },
         "gpt-4o": {
@@ -502,40 +626,51 @@ class ModelResolver:
     # previous EGC symbolic names (pro/flash/flash-legacy/ultra) valid.
     _ALIASES: Dict[str, str] = {
         # Generic capability tiers.
-        "reasoning": _GEMINI_25_PRO,
-        "balanced": _GEMINI_25_FLASH,
-        "fast": _GEMINI_25_FLASH,
-        "low-latency": _GEMINI_25_FLASH_LITE,
-        "low_latency": _GEMINI_25_FLASH_LITE,
-        "cheap": _GEMINI_25_FLASH_LITE,
-        "lite": _GEMINI_25_FLASH_LITE,
+        # The reasoning tier is the only Pro of the current line, a preview; the
+        # generally available default is the 3.8 Flash the models page presents first.
+        "reasoning": _GEMINI_31_PRO_PREVIEW,
+        "balanced": _GEMINI_38_FLASH,
+        "fast": _GEMINI_38_FLASH,
+        "low-latency": _GEMINI_35_FLASH_LITE,
+        "low_latency": _GEMINI_35_FLASH_LITE,
+        "cheap": _GEMINI_35_FLASH_LITE,
+        "lite": _GEMINI_35_FLASH_LITE,
         # Previous EGC symbolic names.
-        "pro": _GEMINI_25_PRO,
-        "flash": _GEMINI_25_FLASH,
-        "flash-lite": _GEMINI_25_FLASH_LITE,
-        "flash-legacy": _GEMINI_15_FLASH,
-        "ultra": _GEMINI_25_PRO,
+        "pro": _GEMINI_31_PRO_PREVIEW,
+        "flash": _GEMINI_38_FLASH,
+        "flash-lite": _GEMINI_35_FLASH_LITE,
+        "flash-legacy": _GEMINI_36_FLASH,
+        "ultra": _GEMINI_31_PRO_PREVIEW,
         # Legacy ECC / Anthropic-style tier names used in older agent frontmatter.
-        "opus": _GEMINI_25_PRO,
-        "sonnet": _GEMINI_25_FLASH,
-        "haiku": _GEMINI_25_FLASH_LITE,
+        "opus": _GEMINI_31_PRO_PREVIEW,
+        "sonnet": _GEMINI_38_FLASH,
+        "haiku": _GEMINI_35_FLASH_LITE,
         # Common provider defaults referenced symbolically.
-        "default": _GEMINI_25_PRO,
-        "gemini": _GEMINI_25_PRO,
+        "default": _GEMINI_38_FLASH,
+        "gemini": _GEMINI_38_FLASH,
         "claude": _CLAUDE_SONNET,
-        "openai": _GPT_4O,
+        "openai": _GPT61_SOL,
         "ollama": _LLAMA32,
         "openrouter": _OPENROUTER_AUTO,
         "mistral": "mistral-large-latest",
         "groq": _OPENAI_GPT_OSS_120B,
         "cohere": "command-a-plus-05-2026",
+        # Ids the vendors shut down, each pointing at the replacement its vendor
+        # names, so an old config keeps working (deprecations pages, 2026-10-11).
+        GEMINI_20_FLASH_RETIRED: _GEMINI_36_FLASH,
+        _GEMINI_20_FLASH_LITE: _GEMINI_31_FLASH_LITE,
+        GEMINI_15_PRO_RETIRED: _GEMINI_38_FLASH,
+        _GEMINI_15_FLASH: _GEMINI_36_FLASH,
+        _GEMINI_15_FLASH_8B: _GEMINI_35_FLASH_LITE,
+        CLAUDE_SONNET_47_RETIRED: CLAUDE_SONNET_55,
+        CLAUDE_HAIKU_47_RETIRED: CLAUDE_HAIKU_55,
     }
 
     # Per-provider default model ID (single place provider defaults live).
     _PROVIDER_DEFAULTS: Dict[str, str] = {
-        "gemini": _GEMINI_25_PRO,
+        "gemini": _GEMINI_38_FLASH,
         "claude": _CLAUDE_SONNET,
-        "openai": _GPT_4O,
+        "openai": _GPT61_SOL,
         "ollama": _LLAMA32,
         "openrouter": _OPENROUTER_AUTO,
         "mistral": "mistral-large-latest",
@@ -686,7 +821,7 @@ class ModelResolver:
         for model_id in extra_models:
             if model_id and model_id not in mapping and model_id not in cls._REGISTRY:
                 # Point unknown models at the strongest in-generation fallback.
-                seed = cls._GEMINI_25_FLASH if "gemini" in model_id.lower() else None
+                seed = cls._GEMINI_38_FLASH if "gemini" in model_id.lower() else None
                 if seed and seed in cls._REGISTRY:
                     mapping[model_id] = seed
         return mapping
@@ -718,7 +853,7 @@ class ModelResolver:
         return {
             "provider": provider,
             "capabilities": [ModelCapability.TOOL_CALLING],
-            "fallback": cls._PROVIDER_DEFAULTS.get(provider) if provider != cls._DEFAULT_PROVIDER else "gemini-2.5-flash",
+            "fallback": cls._PROVIDER_DEFAULTS.get(provider) if provider != cls._DEFAULT_PROVIDER else cls._GEMINI_38_FLASH,
             "context_window": 32768,
             "max_tokens": 4096,
             "supports_vision": False,
@@ -816,19 +951,24 @@ class ModelResolver:
     def menu_choices(cls, provider: str) -> List[tuple]:
         """``(model_id, human_label)`` pairs for interactive selectors."""
         labels = {
-            GEMINI_25_PRO: "Gemini 2.5 Pro - deepest reasoning, multimodal",
-            GEMINI_25_FLASH: "Gemini 2.5 Flash - balanced, fast, multimodal",
-            GEMINI_25_FLASH_LITE: "Gemini 2.5 Flash-Lite - lowest latency / cost",
-            "gemini-2.0-flash": "Gemini 2.0 Flash - fast, multimodal",
-            GEMINI_20_FLASH_LITE: "Gemini 2.0 Flash-Lite - low cost",
-            "gemini-1.5-pro": "Gemini 1.5 Pro - 2M context (legacy capable)",
-            GEMINI_15_FLASH: "Gemini 1.5 Flash - free-tier friendly",
-            GEMINI_15_FLASH_8B: "Gemini 1.5 Flash-8B - cheapest legacy",
-            "claude-opus-4-5": "Claude Opus 4.5 - most capable",
-            "claude-sonnet-4-7": "Claude Sonnet 4.7 - balanced",
-            "claude-haiku-4-7": "Claude Haiku 4.7 - fast",
-            "gpt-4o": "GPT-4o - most capable",
-            "gpt-4o-mini": "GPT-4o-mini - fast & affordable",
+            GEMINI_38_FLASH: "Gemini 3.8 Flash - current default, multimodal, agents",
+            GEMINI_31_PRO_PREVIEW: "Gemini 3.1 Pro (preview) - deepest reasoning",
+            GEMINI_36_FLASH: "Gemini 3.6 Flash - balanced, fast, multimodal",
+            GEMINI_35_FLASH_LITE: "Gemini 3.5 Flash-Lite - lowest latency / cost",
+            GEMINI_31_FLASH_LITE: "Gemini 3.1 Flash-Lite - low cost, shuts down 2027-05-07",
+            GEMINI_25_PRO: "Gemini 2.5 Pro - previous generation, 2M context",
+            GEMINI_25_FLASH: "Gemini 2.5 Flash - previous generation, balanced",
+            GEMINI_25_FLASH_LITE: "Gemini 2.5 Flash-Lite - previous generation, low cost",
+            CLAUDE_OPUS_55: "Claude Opus 5.5 - most capable",
+            CLAUDE_FABLE_51: "Claude Fable 5.1 - frontier tier, 1M context",
+            CLAUDE_SONNET_55: "Claude Sonnet 5.5 - balanced default",
+            CLAUDE_HAIKU_55: "Claude Haiku 5.5 - fast",
+            "claude-opus-4-5": "Claude Opus 4.5 - previous generation",
+            GPT6_ASTRA: "GPT-6 Astra - most capable",
+            GPT61_SOL: "GPT-6.1 Sol - balanced default",
+            GPT6_LUNA: "GPT-6 Luna - fast & affordable",
+            "gpt-4o": "GPT-4o - previous generation",
+            "gpt-4o-mini": "GPT-4o-mini - previous generation, affordable",
             "mistral-large-latest": "Mistral Large - top-tier reasoning and multilingual capabilities",
             OPENAI_GPT_OSS_120B: "GPT-OSS 120B via Groq - fast inference, tool calling",
             "command-a-plus-05-2026": "Command A+ (Cohere) - agentic tool use, vision, multilingual",
