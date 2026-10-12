@@ -85,10 +85,9 @@ const RECALL_DEPTH = 5;
 // The timed runs must not overlap, or they would measure each other.
 async function inSequence(count, step) {
   const results = [];
-  await Array.from({ length: count }).reduce(
-    (previous, _unused, index) => previous.then(async () => { results.push(await step(index)); }),
-    Promise.resolve()
-  );
+  for (let index = 0; index < count; index++) {
+    results.push(await step(index)); // NOSONAR: the timed runs must not overlap (S9382)
+  }
   return results;
 }
 
