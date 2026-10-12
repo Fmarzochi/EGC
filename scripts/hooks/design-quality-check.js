@@ -11,9 +11,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { readHookStdin } = require('../lib/hook-stdin');
 
 const FRONTEND_EXTENSIONS = /\.(astro|css|html|jsx|scss|svelte|tsx|vue)$/i;
-const MAX_STDIN = 1024 * 1024;
 
 const GENERIC_SIGNALS = [
   { pattern: /\bget started\b/i, label: '"Get Started" CTA copy' },
@@ -114,15 +114,7 @@ function run(inputOrRaw) {
 module.exports = { run };
 
 if (require.main === module) {
-  let raw = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - raw.length;
-      raw += chunk.substring(0, remaining);
-    }
-  });
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw }) => {
     const result = run(raw);
     if (result.stderr) process.stderr.write(`${result.stderr}\n`);
     process.stdout.write(typeof result.stdout === 'string' ? result.stdout : raw);

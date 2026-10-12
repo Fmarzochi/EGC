@@ -1,8 +1,6 @@
 'use strict';
 
-const os = require('node:os');
-const path = require('node:path');
-
+const { resolveHomeOverride } = require('../home-override');
 const { createInstallTargetAdapter } = require('./helpers');
 const { planVibeOperations } = require('../vibe-operations');
 
@@ -30,15 +28,7 @@ const { planVibeOperations } = require('../vibe-operations');
 // servers are registered by egc init, not by the install, as [[mcp_servers]]
 // tables in config.toml (scripts/lib/mcp-register.js).
 function resolveVibeHome(input = {}) {
-  const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
-  const configured = process.env.VIBE_HOME;
-  if (configured) {
-    if (configured === '~' || configured.startsWith('~/')) {
-      return path.join(home, configured.slice(1));
-    }
-    return path.resolve(configured);
-  }
-  return path.join(home, '.vibe');
+  return resolveHomeOverride(input, 'VIBE_HOME', ['.vibe']);
 }
 
 const baseAdapter = createInstallTargetAdapter({

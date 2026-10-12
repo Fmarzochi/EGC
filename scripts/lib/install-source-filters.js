@@ -60,6 +60,7 @@ const HOST_PLACED_SOURCES = new Set([
   'scripts/hooks/amp-mesh-notice-plugin.ts',
   'scripts/hooks/cline-pretooluse-shim.js',
   'scripts/hooks/opencode-egc-plugin.js',
+  'scripts/hooks/pi-egc-extension.js',
 ]);
 
 function isHostPlacedSourcePath(sourceRelativePath) {

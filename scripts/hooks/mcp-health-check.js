@@ -20,8 +20,9 @@ const https = require('node:https');
 const { spawn, spawnSync } = require('node:child_process');
 
 const { getEGCDir } = require('../lib/utils');
+const { readHookStdin, MAX_HOOK_INPUT_BYTES } = require('../lib/hook-stdin');
 
-const MAX_STDIN = 1024 * 1024;
+const MAX_STDIN = MAX_HOOK_INPUT_BYTES;
 const DEFAULT_TTL_MS = 2 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_BACKOFF_MS = 30 * 1000;
@@ -125,22 +126,10 @@ function saveState(filePath, state) {
 
 function readRawStdin() {
   return new Promise(resolve => {
-    let raw = '';
-    let truncated = /^(1|true|yes)$/i.test(String(envValue('EGC_HOOK_INPUT_TRUNCATED') || ''));
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', chunk => {
-      if (raw.length < MAX_STDIN) {
-        const remaining = MAX_STDIN - raw.length;
-        raw += chunk.substring(0, remaining);
-        if (chunk.length > remaining) {
-          truncated = true;
-        }
-      } else {
-        truncated = true;
-      }
+    const envTruncated = /^(1|true|yes)$/i.test(String(envValue('EGC_HOOK_INPUT_TRUNCATED') || ''));
+    readHookStdin(({ raw, truncated }) => {
+      resolve({ raw, truncated: envTruncated || truncated });
     });
-    process.stdin.on('end', () => resolve({ raw, truncated }));
-    process.stdin.on('error', () => resolve({ raw, truncated }));
   });
 }
 

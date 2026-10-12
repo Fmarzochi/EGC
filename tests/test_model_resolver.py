@@ -35,19 +35,19 @@ class TestResolve:
     @pytest.mark.parametrize(
         ("alias", "expected"),
         [
-            ("reasoning", "gemini-2.5-pro"),
-            ("fast", "gemini-2.5-flash"),
-            ("cheap", "gemini-2.5-flash-lite"),
-            ("flash-legacy", "gemini-1.5-flash"),
-            ("ultra", "gemini-2.5-pro"),
-            ("opus", "gemini-2.5-pro"),
-            ("sonnet", "gemini-2.5-flash"),
-            ("haiku", "gemini-2.5-flash-lite"),
-            ("claude", "claude-sonnet-4-7"),
-            ("openai", "gpt-4o"),
-            ("ollama", "llama3.2"),
+            ("reasoning", "gemini-3.1-pro-preview"),
+            ("fast", "gemini-3.8-flash"),
+            ("cheap", "gemini-3.5-flash-lite"),
+            ("flash-legacy", "gemini-3.6-flash"),
+            ("ultra", "gemini-3.1-pro-preview"),
+            ("opus", "gemini-3.1-pro-preview"),
+            ("sonnet", "gemini-3.8-flash"),
+            ("haiku", "gemini-3.5-flash-lite"),
+            ("claude", "claude-sonnet-5-5"),
+            ("openai", "gpt-6.1-sol"),
+            ("ollama", "qwen3"),
             ("openrouter", "openrouter/auto"),
-            ("mistral", "mistral-large-latest"),
+            ("mistral", "mistral-medium-latest"),
             ("groq", "openai/gpt-oss-120b"),
             ("cohere", "command-a-plus-05-2026"),
         ],
@@ -56,7 +56,7 @@ class TestResolve:
         assert ModelResolver.resolve(alias) == expected
 
     def test_aliases_ignore_case_and_surrounding_spaces(self):
-        assert ModelResolver.resolve("  SONNET ") == "gemini-2.5-flash"
+        assert ModelResolver.resolve("  SONNET ") == "gemini-3.8-flash"
 
     def test_registered_ids_are_normalized_to_lowercase(self):
         assert ModelResolver.resolve("GEMINI-2.5-FLASH") == "gemini-2.5-flash"
@@ -70,7 +70,7 @@ class TestResolve:
             "gpt-5",
             "o3-mini",
             "deepseek-v4",
-            "command-r-plus",
+            "command-r-plus-99-2099",
             "codestral-2601",
             "Vendor/New-Model",
             "projects/p/locations/us/publishers/google/models/gemini-9.9-test",
@@ -80,13 +80,13 @@ class TestResolve:
         assert ModelResolver.resolve(model_id) == model_id
 
     def test_unknown_symbolic_hint_falls_back_to_the_provider_default(self):
-        assert ModelResolver.resolve("turbo-max", "claude") == "claude-sonnet-4-7"
-        assert ModelResolver.resolve("turbo-max") == "gemini-2.5-pro"
+        assert ModelResolver.resolve("turbo-max", "claude") == "claude-sonnet-5-5"
+        assert ModelResolver.resolve("turbo-max") == "gemini-3.8-flash"
 
     @pytest.mark.parametrize("hint", [None, ""])
     def test_no_hint_resolves_to_the_default(self, hint):
-        assert ModelResolver.resolve(hint) == "gemini-2.5-pro"
-        assert ModelResolver.resolve(hint, "openai") == "gpt-4o"
+        assert ModelResolver.resolve(hint) == "gemini-3.8-flash"
+        assert ModelResolver.resolve(hint, "openai") == "gpt-6.1-sol"
 
 
 @pytest.mark.unit
@@ -94,27 +94,27 @@ class TestDefaultModel:
     @pytest.mark.parametrize(
         ("provider", "expected"),
         [
-            ("gemini", "gemini-2.5-pro"),
-            ("claude", "claude-sonnet-4-7"),
-            ("openai", "gpt-4o"),
-            ("ollama", "llama3.2"),
+            ("gemini", "gemini-3.8-flash"),
+            ("claude", "claude-sonnet-5-5"),
+            ("openai", "gpt-6.1-sol"),
+            ("ollama", "qwen3"),
             ("openrouter", "openrouter/auto"),
-            ("mistral", "mistral-large-latest"),
-            ("deepseek", "deepseek-chat"),
+            ("mistral", "mistral-medium-latest"),
+            ("deepseek", "deepseek-flash"),
             ("groq", "openai/gpt-oss-120b"),
             ("cohere", "command-a-plus-05-2026"),
-            ("CLAUDE", "claude-sonnet-4-7"),
+            ("CLAUDE", "claude-sonnet-5-5"),
         ],
     )
     def test_each_provider_has_a_default(self, provider, expected):
         assert ModelResolver.default_model(provider) == expected
 
     def test_unknown_provider_gets_the_global_default(self):
-        assert ModelResolver.default_model("no-such-provider") == "gemini-2.5-pro"
+        assert ModelResolver.default_model("no-such-provider") == "gemini-3.8-flash"
 
     def test_llm_provider_picks_the_provider_when_none_is_given(self, monkeypatch):
         monkeypatch.setenv("LLM_PROVIDER", "openai")
-        assert ModelResolver.default_model() == "gpt-4o"
+        assert ModelResolver.default_model() == "gpt-6.1-sol"
 
     def test_env_model_is_used_for_its_own_provider(self, monkeypatch):
         monkeypatch.setenv("LLM_MODEL", "claude-opus-9")
@@ -122,17 +122,18 @@ class TestDefaultModel:
 
     def test_env_model_of_another_provider_is_ignored(self, monkeypatch):
         monkeypatch.setenv("LLM_MODEL", "claude-opus-9")
-        assert ModelResolver.default_model("gemini") == "gemini-2.5-pro"
+        assert ModelResolver.default_model("gemini") == "gemini-3.8-flash"
 
     def test_env_model_alias_is_resolved(self, monkeypatch):
         monkeypatch.setenv("EGC_MODEL", "sonnet")
-        assert ModelResolver.default_model("gemini") == "gemini-2.5-flash"
+        assert ModelResolver.default_model("gemini") == "gemini-3.8-flash"
 
     def test_env_model_precedence_and_legacy_name(self, monkeypatch):
+        # Both ids are shut down: the alias points at the replacement the vendor names.
         monkeypatch.setenv("ECC_MODEL", "gemini-2.0-flash")
-        assert ModelResolver.default_model("gemini") == "gemini-2.0-flash"
+        assert ModelResolver.default_model("gemini") == "gemini-3.6-flash"
         monkeypatch.setenv("EGC_MODEL", "gemini-1.5-pro")
-        assert ModelResolver.default_model("gemini") == "gemini-1.5-pro"
+        assert ModelResolver.default_model("gemini") == "gemini-3.8-flash"
         monkeypatch.setenv("LLM_MODEL", "gemini-2.5-flash-lite")
         assert ModelResolver.default_model("gemini") == "gemini-2.5-flash-lite"
 
@@ -193,11 +194,10 @@ class TestFallbacks:
     def test_chain_follows_the_registry_without_repeating(self):
         chain = ModelResolver.fallback_chain("gemini-2.5-pro")
         assert chain == [
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-2.0-flash-lite",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-8b",
+            "gemini-3.8-flash",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
         ]
         assert "gemini-2.5-pro" not in chain
 
@@ -213,8 +213,8 @@ class TestFallbacks:
         assert ModelResolver.fallback_chain("a") == ["b"]
 
     def test_get_fallback_single_step(self):
-        assert ModelResolver.get_fallback("claude-opus-4-5") == "claude-sonnet-4-7"
-        assert ModelResolver.get_fallback("claude-haiku-4-7") is None
+        assert ModelResolver.get_fallback("claude-opus-4-5") == "claude-sonnet-5-5"
+        assert ModelResolver.get_fallback("claude-haiku-5-5") is None
         assert ModelResolver.get_fallback("no-such-model") is None
 
     def test_get_fallback_ignores_targets_outside_the_registry(self, monkeypatch):
@@ -223,16 +223,16 @@ class TestFallbacks:
 
     def test_fallback_map_points_only_at_registered_models(self):
         mapping = ModelResolver.fallback_map()
-        assert mapping["gemini-2.5-pro"] == "gemini-2.5-flash"
+        assert mapping["gemini-2.5-pro"] == "gemini-3.8-flash"
         assert all(target in ModelResolver._REGISTRY for target in mapping.values())
         assert "gemini-1.5-flash-8b" not in mapping
 
     def test_fallback_map_seeds_unknown_gemini_extras_only(self):
         mapping = ModelResolver.fallback_map("gemini-9.9-test", "vendor/new-model", "", "gemini-2.5-pro")
-        assert mapping["gemini-9.9-test"] == "gemini-2.5-flash"
+        assert mapping["gemini-9.9-test"] == "gemini-3.8-flash"
         assert "vendor/new-model" not in mapping
         assert "" not in mapping
-        assert mapping["gemini-2.5-pro"] == "gemini-2.5-flash"
+        assert mapping["gemini-2.5-pro"] == "gemini-3.8-flash"
 
 
 @pytest.mark.unit
@@ -246,12 +246,12 @@ class TestMetadata:
         info = ModelResolver.get_model_info("claude-opus-9")
         assert info["unknown"] is True
         assert info["capabilities"] == [ModelCapability.TOOL_CALLING]
-        assert info["fallback"] == "claude-sonnet-4-7"
+        assert info["fallback"] == "claude-sonnet-5-5"
         assert info["supports_vision"] is False
         assert info["context_window"] == 32768
 
     def test_unknown_gemini_ids_fall_back_to_flash(self):
-        assert ModelResolver.get_model_info("gemini-9.9-test")["fallback"] == "gemini-2.5-flash"
+        assert ModelResolver.get_model_info("gemini-9.9-test")["fallback"] == "gemini-3.8-flash"
 
     def test_capabilities_and_supports(self):
         assert ModelResolver.supports("gemini-2.5-pro", ModelCapability.REASONING)
@@ -259,18 +259,18 @@ class TestMetadata:
         assert ModelResolver.capabilities("vendor/new-model") == [ModelCapability.TOOL_CALLING]
 
     def test_pick_by_capability_takes_the_first_registered_match(self):
-        assert ModelResolver.pick_by_capability(ModelCapability.REASONING) == "gemini-2.5-pro"
-        assert ModelResolver.pick_by_capability(ModelCapability.LOW_LATENCY, "claude") == "claude-haiku-4-7"
+        assert ModelResolver.pick_by_capability(ModelCapability.REASONING) == "gemini-3.8-flash"
+        assert ModelResolver.pick_by_capability(ModelCapability.LOW_LATENCY, "claude") == "claude-haiku-5-5"
 
     def test_pick_by_capability_without_a_match_uses_the_provider_default(self):
-        assert ModelResolver.pick_by_capability(ModelCapability.MULTIMODAL, "ollama") == "llama3.2"
+        assert ModelResolver.pick_by_capability(ModelCapability.LONG_CONTEXT, "ollama") == "qwen3"
 
 
 @pytest.mark.unit
 class TestListing:
     def test_list_models_filters_by_provider_case_insensitively(self):
         models = ModelResolver.list_models("CLAUDE")
-        assert models == ["claude-opus-4-5", "claude-sonnet-4-7", "claude-haiku-4-7"]
+        assert models == ["claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-4-5"]
         assert set(ModelResolver.list_models()) == set(ModelResolver._REGISTRY)
 
     def test_extra_models_are_appended_once_and_filtered(self, monkeypatch):
@@ -322,9 +322,9 @@ class TestDescribeStrategy:
         assert info["strategy"] == "Dynamic Routing"
         assert info["provider_id"] == "gemini"
         assert info["provider"] == "Google Gemini"
-        assert info["resolved_model"] == "gemini-2.5-pro"
+        assert info["resolved_model"] == "gemini-3.8-flash"
         assert info["preferred_capability"] == "reasoning"
-        assert info["fallback_chain"].startswith("gemini-2.5-pro -> gemini-2.5-flash")
+        assert info["fallback_chain"].startswith("gemini-3.8-flash -> gemini-3.6-flash")
 
     def test_explicit_model_is_fallback_protected(self):
         info = ModelResolver.describe_strategy("gpt-4o-mini")
@@ -357,3 +357,109 @@ class TestDescribeStrategy:
         })
         assert ModelResolver.describe_strategy("gemini-code-only")["preferred_capability"] == "code"
         assert ModelResolver.describe_strategy("vendor/new-model")["preferred_capability"] == "general"
+
+
+@pytest.mark.unit
+class TestCatalogRefreshOctober2026:
+    """#1698, #1699, #1700: Groq, OpenRouter and Ollama ids checked against the vendors on 2026-10-11."""
+
+    def test_ollama_default_is_a_current_model_and_the_old_default_stays_registered(self):
+        assert ModelResolver.default_model("ollama") == "qwen3"
+        assert ModelResolver.resolve("llama3.2") == "llama3.2"
+        assert ModelResolver.supports("llama3.2", ModelCapability.TOOL_CALLING)
+
+    def test_ollama_tagged_id_passes_through_unchanged(self):
+        assert ModelResolver.resolve("qwen3:8b", "ollama") == "qwen3:8b"
+        assert ModelResolver.resolve("gpt-oss:120b", "ollama") == "gpt-oss:120b"
+
+    def test_ollama_tagged_id_is_classified_as_ollama_without_a_hint(self):
+        assert ModelResolver.get_model_info("qwen3:8b")["provider"] == "ollama"
+        assert ModelResolver._provider_for("gpt-oss:120b") == "ollama"
+
+    def test_groq_catalog_carries_the_four_production_models(self):
+        groq = set(ModelResolver.list_models("groq"))
+        assert {"openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"} <= groq
+        assert ModelResolver.get_fallback("openai/gpt-oss-120b") == "openai/gpt-oss-20b"
+
+    def test_retired_openrouter_qwen_id_resolves_to_its_replacement(self):
+        assert ModelResolver.resolve("qwen/qwen3-235b-a22b") == "qwen/qwen3.5-397b-a17b"
+        assert "qwen/qwen3-235b-a22b" not in ModelResolver.list_models("openrouter")
+
+    def test_openrouter_catalog_carries_the_current_flagships(self):
+        router = set(ModelResolver.list_models("openrouter"))
+        assert {"anthropic/claude-sonnet-5.5", "openai/gpt-6-astra", "google/gemini-3.8-flash", "qwen/qwen3.5-397b-a17b"} <= router
+
+
+@pytest.mark.unit
+class TestCatalogRefreshMistralCohereDeepSeek:
+    """#1695, #1696, #1697: Mistral, Cohere and DeepSeek ids checked against the vendors on 2026-10-11."""
+
+    def test_mistral_default_is_the_model_the_vendor_recommends(self):
+        assert ModelResolver.default_model("mistral") == "mistral-medium-latest"
+        assert ModelResolver.fallback_chain("mistral-large-4") == ["mistral-medium-latest", "mistral-large-latest", "mistral-small-latest", "ministral-14b-latest", "ministral-8b-latest", "ministral-3b-latest"]
+
+    def test_retired_mistral_ids_resolve_to_the_replacement_the_vendor_names(self):
+        assert ModelResolver.resolve("mistral-large-2411") == "mistral-medium-latest"
+        assert ModelResolver.resolve("mistral-medium-2508") == "mistral-medium-latest"
+        assert ModelResolver.resolve("mistral-small-2506") == "mistral-small-latest"
+        assert ModelResolver.resolve("codestral-2508") == "codestral-2508"
+
+    def test_cohere_catalog_carries_the_live_models_and_maps_the_deprecated_ids(self):
+        live = set(ModelResolver.list_models("cohere"))
+        assert {"command-a-plus-05-2026", "command-a-03-2025", "command-a-reasoning-08-2025", "command-r-plus-08-2024", "command-r-08-2024", "command-r7b-12-2024"} <= live
+        assert ModelResolver.resolve("command-r-plus") == "command-r-plus-08-2024"
+        assert ModelResolver.resolve("command-r") == "command-r-08-2024"
+        assert ModelResolver.resolve("command-light") == "command-r7b-12-2024"
+        assert ModelResolver.default_model("cohere") == "command-a-plus-05-2026"
+
+    def test_deepseek_default_and_retired_ids(self):
+        assert ModelResolver.default_model("deepseek") == "deepseek-flash"
+        assert ModelResolver.resolve("deepseek-chat") == "deepseek-flash"
+        assert ModelResolver.resolve("deepseek-reasoner") == "deepseek-flash"
+        assert ModelResolver.resolve("deepseek-v4-flash") == "deepseek-flash"
+        assert ModelResolver.get_fallback("deepseek-v4-pro") == "deepseek-flash"
+        assert ModelResolver.supports("deepseek-flash", ModelCapability.TOOL_CALLING)
+
+    @pytest.mark.parametrize("provider", ["mistral", "cohere", "deepseek"])
+    def test_every_registered_model_has_a_menu_label(self, provider):
+        for model_id, label in ModelResolver.menu_choices(provider):
+            assert label != model_id, model_id
+
+
+@pytest.mark.unit
+class TestCatalogRefreshGeminiClaudeOpenAI:
+    """#1692, #1693, #1694: Gemini, Vertex AI, Claude and OpenAI ids checked against the vendors on 2026-10-11."""
+
+    def test_gemini_default_is_the_flash_the_models_page_presents_first(self):
+        assert ModelResolver.default_model("gemini") == "gemini-3.8-flash"
+        assert ModelResolver.get_fallback("gemini-3.1-pro-preview") == "gemini-3.8-flash"
+
+    def test_shut_down_gemini_ids_resolve_to_the_replacement_the_vendor_names(self):
+        assert ModelResolver.resolve("gemini-2.0-flash") == "gemini-3.6-flash"
+        assert ModelResolver.resolve("gemini-2.0-flash-lite") == "gemini-3.1-flash-lite"
+        assert ModelResolver.resolve("gemini-1.5-flash-8b") == "gemini-3.5-flash-lite"
+        assert "gemini-2.0-flash" not in ModelResolver.list_models("gemini")
+
+    def test_gemini_25_line_stays_registered_for_the_accounts_that_still_have_it(self):
+        assert ModelResolver.resolve("gemini-2.5-flash") == "gemini-2.5-flash"
+        assert ModelResolver.get_fallback("gemini-2.5-flash") == "gemini-3.6-flash"
+
+    def test_vertex_ai_borrows_the_current_gemini_catalog(self):
+        from llm.core.types import ProviderType
+        names = {m.name for m in ModelResolver.model_infos("gemini", tag_as=ProviderType.VERTEX_AI)}
+        assert {"gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview"} <= names
+
+    def test_claude_default_and_retired_ids(self):
+        assert ModelResolver.default_model("claude") == "claude-sonnet-5-5"
+        assert ModelResolver.resolve("claude-sonnet-4-7") == "claude-sonnet-5-5"
+        assert ModelResolver.resolve("claude-haiku-4-7") == "claude-haiku-5-5"
+        assert ModelResolver.fallback_chain("claude-fable-5-1") == ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]
+
+    def test_openai_default_and_chain(self):
+        assert ModelResolver.default_model("openai") == "gpt-6.1-sol"
+        assert ModelResolver.fallback_chain("gpt-6-astra") == ["gpt-6.1-sol", "gpt-6-luna", "gpt-4o", "gpt-4o-mini"]
+
+    @pytest.mark.parametrize("provider", ["gemini", "claude", "openai"])
+    def test_every_registered_model_has_a_menu_label(self, provider):
+        for model_id, label in ModelResolver.menu_choices(provider):
+            assert label != model_id, model_id

@@ -18,8 +18,8 @@
 'use strict';
 
 const { evaluateReceipt } = require('../lib/verify-receipt');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
-const MAX_STDIN = 1024 * 1024;
 const GATE_MODE_ENV = 'EGC_VERIFY_GATE';
 const TRIGGER_REGEX = /\bgit\b[^|;&\n]*\s(commit|push)\b/;
 
@@ -114,14 +114,8 @@ function run(rawInput) {
 }
 
 if (require.main === module) {
-  let data = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (data.length < MAX_STDIN) {
-      data += chunk.substring(0, MAX_STDIN - data.length);
-    }
-  });
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw: data, truncated }) => {
+    exitOnTruncatedInput(truncated, process.env.EGC_VERIFY_GATE === 'block' ? 2 : 0);
     const result = evaluate(data);
     if (result.stderr) {
       process.stderr.write(`${result.stderr}\n`);

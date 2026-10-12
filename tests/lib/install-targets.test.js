@@ -218,6 +218,39 @@ function runTests() {
     }
   }));
 
+  tally(test('Cursor gets each command as a skill under .cursor/skills, and a bundled skill of the same name wins (#1837)', () => {
+    const { plannedFileContent } = require('../../scripts/lib/install/copy-transforms');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const cursorRoot = path.join(projectRoot, '.cursor');
+    const skillsRoot = path.join(cursorRoot, 'skills');
+    const plan = planInstallTargetScaffold({
+      target: 'cursor',
+      repoRoot,
+      homeDir: '/Users/example',
+      projectRoot,
+      modules: [
+        { id: 'commands-core', paths: ['commands'] },
+        { id: 'security', paths: ['skills/security/security-scan'] },
+      ],
+    });
+    const destinations = plan.operations.map(operation => operation.destinationPath);
+    const commandsRoot = path.join(cursorRoot, 'commands');
+    assert.ok(!destinations.some(destination => destination === commandsRoot || destination.startsWith(commandsRoot + path.sep)), 'nothing is planned under .cursor/commands, which Cursor no longer documents');
+    const commandOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('commands/'));
+    const expected = require('fs').readdirSync(path.join(repoRoot, 'commands'))
+      .filter(name => name.endsWith('.md') && name !== 'security-scan.md')
+      .map(name => path.join(skillsRoot, name.slice(0, -3), 'SKILL.md'));
+    assert.deepStrictEqual(commandOperations.map(operation => operation.destinationPath).sort(), expected.sort(), 'each command is a skill invoked as /<name>');
+    assert.ok(commandOperations.every(operation => operation.transform === 'cursor-command-skill'));
+    assert.ok(!destinations.includes(path.join(skillsRoot, 'security-scan', 'SKILL.md')), 'the bundled security-scan skill answers /security-scan');
+    assert.ok(destinations.includes(path.join(skillsRoot, 'security', 'security-scan')), 'and is planned where it always was');
+    const planCommand = commandOperations.find(operation => operation.destinationPath === path.join(skillsRoot, 'plan', 'SKILL.md'));
+    const text = plannedFileContent(path.join(repoRoot, planCommand.sourceRelativePath), planCommand.transform).toString('utf8');
+    assert.ok(text.startsWith('---\nname: plan\ndescription: '), text.slice(0, 80));
+    assert.ok(text.includes('\ndisable-model-invocation: true\n---\n'), 'a command runs only when the person invokes it');
+  }));
+
   tally(test('two selected command paths that would install as one skill are refused (#1706)', () => {
     const fs = require('fs');
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-command-collision-'));
@@ -225,7 +258,7 @@ function runTests() {
       fs.mkdirSync(path.join(repoRoot, 'commands', 'foo'), { recursive: true });
       fs.writeFileSync(path.join(repoRoot, 'commands', 'foo', 'bar.md'), '---\ndescription: a\n---\n');
       fs.writeFileSync(path.join(repoRoot, 'commands', 'foo-bar.md'), '---\ndescription: b\n---\n');
-      for (const target of ['egc', 'antigravity']) {
+      for (const target of ['egc', 'antigravity', 'cursor']) {
         assert.throws(() => planInstallTargetScaffold({
           target,
           repoRoot,
@@ -792,6 +825,30 @@ function runTests() {
     );
   }));
 
+  tally(test('a copy planned twice for the same source and destination is kept once', () => {
+    const { createRemappedOperation } = require('../../scripts/lib/install-targets/helpers');
+    const adapter = createInstallTargetAdapter({
+      id: 'egc-repeated-copy-target',
+      target: 'egc-repeated-copy-target',
+      kind: 'home',
+      rootSegments: ['egc-repeated-copy-target'],
+      installStatePathSegments: ['egc', 'install-state.json'],
+      planOperations: (input, self) => [
+        createRemappedOperation(self, 'module-a', 'scripts/lib/hook-stdin.js', '/dest/hook-stdin.js'),
+        createRemappedOperation(self, 'module-b', 'scripts/lib/hook-stdin.js', '/dest/hook-stdin.js'),
+        createRemappedOperation(self, 'module-b', 'scripts/lib/utils.js', '/dest/utils.js'),
+        createRemappedOperation(self, 'module-b', 'scripts/lib/hook-stdin.js', '/other/hook-stdin.js'),
+      ],
+    });
+
+    const planned = adapter.planOperations({ repoRoot: '/repo', homeDir: '/home/u', modules: [] });
+
+    assert.deepStrictEqual(
+      planned.map(operation => [operation.moduleId, operation.destinationPath]),
+      [['module-a', '/dest/hook-stdin.js'], ['module-b', '/dest/utils.js'], ['module-b', '/other/hook-stdin.js']]
+    );
+  }));
+
   tally(test('the missing-IDE warning names Devin Desktop and links to it, not to Windsurf', () => {
     const adapter = getInstallTargetAdapter('windsurf-home');
     const homeDir = path.join(os.tmpdir(), 'egc-devin-desktop-home-that-does-not-exist');
@@ -841,6 +898,27 @@ function runTests() {
         [path.join(projectRoot, '.devin'), path.join(projectRoot, '.windsurf')],
         'retirement may clean both directories'
       );
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  }));
+
+  tally(test('windsurf-project registers egc-guardian and egc-memory in .devin/mcp_config.local.json, the file Devin Local reads (#1678)', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-windsurf-mcp-'));
+    const repoRoot = path.join(__dirname, '..', '..');
+    try {
+      const plan = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot, projectRoot, modules: [] });
+      const mcp = plan.operations.find(operation => operation.destinationPath === path.join(projectRoot, '.devin', 'mcp_config.local.json'));
+      assert.ok(mcp, 'the plan registers the servers in .devin/mcp_config.local.json');
+      assert.strictEqual(mcp.kind, 'merge-json');
+      assert.strictEqual(mcp.strategy, 'merge-json');
+      assert.deepStrictEqual(mcp.mergePayload, {
+        mcpServers: {
+          'egc-guardian': { command: 'node', args: [path.join(repoRoot, 'mcp', 'servers', 'egc-guardian', 'build', 'index.js')], env: {} },
+          'egc-memory': { command: 'node', args: [path.join(repoRoot, 'mcp', 'servers', 'egc-memory', 'build', 'index.js')], env: {} },
+        },
+      });
+      assert.ok(!plan.operations.some(operation => path.basename(operation.destinationPath) === 'mcp_config.json'), 'the legacy Cascade user file is not written');
     } finally {
       fs.rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -5167,16 +5245,35 @@ function runTests() {
     assert.deepStrictEqual(foreign, [], 'files other targets keep on their roots stay out of Kiro');
   }));
 
-  tally(test('the Trae adapter resolves .trae-cn when TRAE_ENV=cn at resolution time, as the retired .trae/install.sh allowed', () => {
+  tally(test('both Trae editions get the project .trae, and an earlier .trae-cn install stays EGC\'s to retire (#1842)', () => {
+    const fs = require('fs');
     const trae = require('../../scripts/lib/install-targets/trae-project');
     const previous = process.env.TRAE_ENV;
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-trae-cn-'));
     try {
+      for (const edition of ['cn', undefined]) {
+        if (edition) process.env.TRAE_ENV = edition; else delete process.env.TRAE_ENV;
+        assert.strictEqual(trae.resolveRoot({ projectRoot }), path.join(projectRoot, '.trae'), `TRAE_ENV=${edition}: the CN edition reads project files from .trae too`);
+        assert.deepStrictEqual(trae.resolveManagedRoots({ projectRoot }), [path.join(projectRoot, '.trae'), path.join(projectRoot, '.trae-cn')]);
+      }
+      assert.deepStrictEqual(trae.resolveLegacyInstallStatePaths({ projectRoot }), [], 'no earlier install, no legacy state');
+      const legacyState = path.join(projectRoot, '.trae-cn', 'egc-install-state.json');
+      fs.mkdirSync(path.dirname(legacyState), { recursive: true });
+      fs.writeFileSync(legacyState, '{}');
+      assert.deepStrictEqual(trae.resolveLegacyInstallStatePaths({ projectRoot }), [legacyState]);
+
+      const atHome = { projectRoot, homeDir: projectRoot };
       process.env.TRAE_ENV = 'cn';
-      assert.strictEqual(trae.resolveRoot({ projectRoot: '/p' }), path.join('/p', '.trae-cn'));
+      assert.strictEqual(trae.resolveRoot(atHome), path.join(projectRoot, '.trae-cn'), 'at home the CN edition keeps its global ~/.trae-cn');
+      assert.deepStrictEqual(trae.resolveManagedRoots(atHome), [path.join(projectRoot, '.trae-cn')]);
+      assert.deepStrictEqual(trae.resolveLegacyInstallStatePaths(atHome), [], 'the global CN install is never a legacy state');
       delete process.env.TRAE_ENV;
-      assert.strictEqual(trae.resolveRoot({ projectRoot: '/p' }), path.join('/p', '.trae'), 'the choice follows the environment at resolution time, not at require time');
+      assert.strictEqual(trae.resolveRoot(atHome), path.join(projectRoot, '.trae'));
+      assert.deepStrictEqual(trae.resolveManagedRoots(atHome), [path.join(projectRoot, '.trae')], 'the international edition at home never touches ~/.trae-cn');
+      assert.deepStrictEqual(trae.resolveLegacyInstallStatePaths(atHome), []);
     } finally {
       if (previous === undefined) delete process.env.TRAE_ENV; else process.env.TRAE_ENV = previous;
+      fs.rmSync(projectRoot, { recursive: true, force: true });
     }
   }));
 
@@ -5434,6 +5531,320 @@ function runTests() {
       else process.env.VIBE_HOME = previous;
     }
   }));
+
+  tally(test('grok-home: ids, root, state path, flat skills, library folders, AGENTS.md and the Guardian hook file under ~/.grok (#1495)', () => {
+    const { GUARDIAN_MATCHER, OPERATION_DISPATCH_TAG } = require('../../scripts/lib/grok-hooks');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const previous = process.env.GROK_HOME;
+    delete process.env.GROK_HOME;
+    try {
+      const adapter = getInstallTargetAdapter('grok');
+      assert.strictEqual(adapter.id, 'grok-home');
+      assert.strictEqual(adapter.target, 'grok');
+      assert.strictEqual(adapter.kind, 'home');
+      const root = path.join(homeDir, '.grok');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root);
+      assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(root, 'egc', 'install-state.json'));
+      const plan = planInstallTargetScaffold({
+        target: 'grok',
+        repoRoot,
+        homeDir,
+        modules: [
+          { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+          { id: 'rules-core', paths: ['rules/common/memory.md'] },
+          { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+          { id: 'commands-core', paths: ['commands/plan.md'] },
+        ],
+      });
+      const destinations = plan.operations.map(op => op.destinationPath);
+      assert.ok(destinations.includes(path.join(root, 'skills', 'continuous-learning', 'SKILL.md')), 'a skill lands flat under skills/, where Grok discovers it');
+      assert.ok(destinations.includes(path.join(root, 'AGENTS.md')), 'the root AGENTS.md lands where Grok reads global rules');
+      for (const family of ['rules/common/memory.md', 'agents/code-reviewer.md', 'commands/plan.md']) {
+        assert.ok(destinations.includes(path.join(root, 'egc', 'library', ...family.split('/'))), `${family} lands under the EGC library folder`);
+      }
+      assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'rules') + path.sep) || destination.startsWith(path.join(root, 'agents') + path.sep)), 'nothing of EGC lands in Grok\'s own rules/ or agents/');
+      for (const script of ['grok-guardian-adapter.js', 'pre-bash-guardian-validate.js', 'pre-write-guardian-validate.js']) {
+        assert.ok(destinations.includes(path.join(root, 'scripts', 'hooks', script)), `${script} ships`);
+      }
+      const hooks = plan.operations.filter(op => op.hookEvent === OPERATION_DISPATCH_TAG);
+      assert.strictEqual(hooks.length, 1, 'one Guardian hook file');
+      assert.strictEqual(hooks[0].destinationPath, path.join(root, 'hooks', 'egc-guardian.json'));
+      assert.strictEqual(hooks[0].hookScriptPath, path.join(root, 'scripts', 'hooks', 'grok-guardian-adapter.js'));
+      assert.strictEqual(GUARDIAN_MATCHER, 'Bash|Edit|Write|run_terminal_command|monitor|search_replace|write', 'the Guardian judges the shell and the file writes, by Claude name and by Grok native name');
+      assert.deepStrictEqual(plan.managedRoots, [path.resolve(root)], 'grok-home manages only its own root');
+    } finally {
+      if (previous === undefined) delete process.env.GROK_HOME;
+      else process.env.GROK_HOME = previous;
+    }
+  }));
+
+  tally(test('grok-home routes resolveRoot, every destination and every managed root through GROK_HOME, with a tilde expanded (#1495)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const previous = process.env.GROK_HOME;
+    const customHome = path.resolve('/custom/egc-grok-home');
+    const underGrokHome = target => {
+      const relative = path.relative(customHome, String(target));
+      return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+    };
+    try {
+      process.env.GROK_HOME = customHome;
+      const adapter = getInstallTargetAdapter('grok');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), customHome);
+      const plan = planInstallTargetScaffold({ target: 'grok', repoRoot, homeDir, modules: [{ id: 'rules-core', paths: ['rules/common/memory.md'] }] });
+      assert.strictEqual(plan.targetRoot, customHome);
+      assert.ok(underGrokHome(plan.installStatePath));
+      for (const operation of plan.operations) {
+        assert.ok(underGrokHome(operation.destinationPath), 'every destination sits under GROK_HOME, found ' + operation.destinationPath);
+      }
+      for (const managedRoot of plan.managedRoots) {
+        assert.ok(underGrokHome(managedRoot), 'every managed root sits under GROK_HOME, found ' + managedRoot);
+      }
+      process.env.GROK_HOME = '~/grok-data';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, 'grok-data'));
+    } finally {
+      if (previous === undefined) delete process.env.GROK_HOME;
+      else process.env.GROK_HOME = previous;
+    }
+  }));
+
+  tally(test('grok-home warns when ~/.grok is absent, naming the tool and its docs (#1495)', () => {
+    const previous = process.env.GROK_HOME;
+    delete process.env.GROK_HOME;
+    try {
+      const adapter = getInstallTargetAdapter('grok');
+      const homeDir = path.join(os.tmpdir(), 'egc-grok-home-that-does-not-exist');
+      const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+      assert.ok(warning, 'a home without ~/.grok gets the ide-not-detected warning');
+      assert.match(warning.message, /^Grok Build does not appear to be installed/);
+      assert.match(warning.message, /https:\/\/docs\.x\.ai\/build\/overview/);
+    } finally {
+      if (previous === undefined) delete process.env.GROK_HOME;
+      else process.env.GROK_HOME = previous;
+    }
+  }));
+
+  tally(test('the Grok Guardian hook file is written whole in the Claude Code shape, reported drifted when edited, and removed on uninstall (#1495)', () => {
+    const fs = require('fs');
+    const { resolveHookOperationHandlers } = require('../../scripts/lib/claude-settings-hooks');
+    const { GUARDIAN_MATCHER, OPERATION_DISPATCH_TAG, buildGrokGuardianHookDocument } = require('../../scripts/lib/grok-hooks');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-grok-hook-'));
+    try {
+      const operation = { hookEvent: OPERATION_DISPATCH_TAG, destinationPath: path.join(dir, 'hooks', 'egc-guardian.json'), hookScriptPath: path.join(dir, 'scripts', 'hooks', 'grok-guardian-adapter.js') };
+      const handlers = resolveHookOperationHandlers(OPERATION_DISPATCH_TAG);
+      assert.deepStrictEqual(handlers.apply(operation), { changed: true });
+      const written = JSON.parse(fs.readFileSync(operation.destinationPath, 'utf8'));
+      assert.deepStrictEqual(written, buildGrokGuardianHookDocument(operation.hookScriptPath));
+      const [entry] = written.hooks.PreToolUse;
+      assert.strictEqual(entry.matcher, GUARDIAN_MATCHER);
+      assert.strictEqual(entry.hooks[0].type, 'command');
+      assert.ok(entry.hooks[0].command.includes('grok-guardian-adapter.js'));
+      assert.deepStrictEqual(handlers.apply(operation), { changed: false }, 'a second apply is a no-op');
+      assert.strictEqual(handlers.inspect(operation), 'ok');
+      fs.writeFileSync(operation.destinationPath, '{"hooks":{}}');
+      assert.strictEqual(handlers.inspect(operation), 'drifted');
+      assert.deepStrictEqual(handlers.remove(operation), { changed: true });
+      assert.ok(!fs.existsSync(operation.destinationPath), 'uninstall removes the file EGC owns');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }));
+  tally(test('kilo-home: ids, root, state path, flat skills, OpenCode-shaped agents, native commands, library rules, AGENTS.md and the EGC plugin under ~/.config/kilo (#1496)', () => runWithoutConfigHomeVariables(() => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const adapter = getInstallTargetAdapter('kilo');
+    assert.strictEqual(adapter.id, 'kilo-home');
+    assert.strictEqual(adapter.target, 'kilo');
+    assert.strictEqual(adapter.kind, 'home');
+    const root = path.join(homeDir, '.config', 'kilo');
+    assert.strictEqual(adapter.resolveRoot({ homeDir }), root);
+    assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(root, 'egc', 'install-state.json'));
+    const plan = planInstallTargetScaffold({
+      target: 'kilo',
+      repoRoot,
+      homeDir,
+      modules: [
+        { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+        { id: 'rules-core', paths: ['rules/common/memory.md'] },
+        { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+        { id: 'commands-core', paths: ['commands/plan.md'] },
+        { id: 'opencode-package', paths: ['.opencode'] },
+      ],
+    });
+    const destinations = plan.operations.map(op => op.destinationPath);
+    assert.ok(destinations.includes(path.join(root, 'skills', 'continuous-learning', 'SKILL.md')), 'a skill lands flat under skills/');
+    const agent = plan.operations.find(op => op.destinationPath === path.join(root, 'agents', 'code-reviewer.md'));
+    assert.ok(agent, 'an agent lands under agents/, which Kilo loads');
+    assert.strictEqual(agent.transform, 'opencode-agent-frontmatter', 'in the OpenCode agent shape Kilo parses');
+    assert.ok(destinations.includes(path.join(root, 'commands', 'plan.md')), 'a command lands under commands/, which Kilo loads');
+    assert.ok(destinations.includes(path.join(root, 'egc', 'library', 'rules', 'common', 'memory.md')), 'a rule lands under the EGC library folder');
+    assert.ok(destinations.includes(path.join(root, 'AGENTS.md')), 'the root AGENTS.md lands where Kilo reads global instructions');
+    assert.ok(destinations.includes(path.join(root, 'plugins', 'opencode-egc-plugin.js')), 'the EGC plugin lands under plugins/');
+    for (const script of ['pre-bash-guardian-validate.js', 'pre-write-guardian-validate.js', 'pre-bash-crusher-rewrite.js', 'opencode-session-start.js']) {
+      assert.ok(destinations.includes(path.join(root, 'scripts', 'hooks', script)), `${script} ships next to the plugin`);
+    }
+    assert.ok(!destinations.some(destination => destination.includes(`${path.sep}.opencode`)), 'nothing of the OpenCode npm package lands in the Kilo config');
+    assert.deepStrictEqual(plan.managedRoots, [path.resolve(root)], 'kilo-home manages only its own root');
+  })));
+
+  tally(test('kilo-home follows XDG_CONFIG_HOME for its root, every destination and the warning when Kilo is absent (#1496)', () => runWithoutConfigHomeVariables(() => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = path.join(os.tmpdir(), 'egc-kilo-home-that-does-not-exist');
+    const adapter = getInstallTargetAdapter('kilo');
+    const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+    assert.ok(warning, 'a home without ~/.config/kilo gets the ide-not-detected warning');
+    assert.match(warning.message, /^Kilo Code CLI does not appear to be installed/);
+    assert.match(warning.message, /https:\/\/kilo\.ai\/docs\/code-with-ai\/platforms\/cli/);
+    const xdg = path.resolve('/custom/xdg-config');
+    process.env.XDG_CONFIG_HOME = xdg;
+    assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(xdg, 'kilo'));
+    const plan = planInstallTargetScaffold({ target: 'kilo', repoRoot, homeDir, modules: [{ id: 'rules-core', paths: ['rules/common/memory.md'] }] });
+    for (const operation of plan.operations) {
+      assert.ok(String(operation.destinationPath).startsWith(path.join(xdg, 'kilo') + path.sep), 'every destination sits under XDG_CONFIG_HOME/kilo, found ' + operation.destinationPath);
+    }
+  })));
+
+  tally(test('mimo-home: the OpenCode fork layout under ~/.config/mimocode, moved by an absolute XDG_CONFIG_HOME or MIMOCODE_HOME/config (#1498)', () => runWithoutConfigHomeVariables(() => {
+    const fs = require('fs');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const previous = process.env.MIMOCODE_HOME;
+    delete process.env.MIMOCODE_HOME;
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mimo-home-'));
+    try {
+      const adapter = getInstallTargetAdapter('mimo');
+      assert.strictEqual(adapter.id, 'mimo-home');
+      assert.strictEqual(adapter.target, 'mimo');
+      assert.strictEqual(adapter.kind, 'home');
+      const root = path.join(homeDir, '.config', 'mimocode');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root, 'the XDG config directory by default');
+      assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(root, 'egc', 'install-state.json'));
+      const plan = planInstallTargetScaffold({
+        target: 'mimo',
+        repoRoot,
+        homeDir,
+        modules: [
+          { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+          { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+          { id: 'commands-core', paths: ['commands/plan.md'] },
+          { id: 'rules-core', paths: ['rules/common/memory.md'] },
+        ],
+      });
+      const destinations = plan.operations.map(op => op.destinationPath);
+      for (const expected of [
+        ['skills', 'continuous-learning', 'SKILL.md'],
+        ['agents', 'code-reviewer.md'],
+        ['commands', 'plan.md'],
+        ['egc', 'library', 'rules', 'common', 'memory.md'],
+        ['AGENTS.md'],
+        ['plugins', 'opencode-egc-plugin.js'],
+      ]) {
+        assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
+      }
+      fs.mkdirSync(path.join(homeDir, '.mimocode'));
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root, 'a ~/.mimocode directory, which MiMo also reads, does not move the install');
+      const xdg = path.join(homeDir, 'xdg');
+      process.env.XDG_CONFIG_HOME = xdg;
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(xdg, 'mimocode'), 'an absolute XDG_CONFIG_HOME moves the config directory');
+      const xdgPlan = planInstallTargetScaffold({ target: 'mimo', repoRoot, homeDir, modules: [{ id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] }] });
+      assert.ok(xdgPlan.operations.some(op => op.destinationPath === path.join(xdg, 'mimocode', 'skills', 'continuous-learning', 'SKILL.md')), 'the plan follows XDG_CONFIG_HOME');
+      process.env.XDG_CONFIG_HOME = path.join('relative', 'config');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root, 'a relative XDG_CONFIG_HOME is ignored');
+      delete process.env.XDG_CONFIG_HOME;
+      const custom = path.join(homeDir, 'mimo-data');
+      process.env.MIMOCODE_HOME = custom;
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(custom, 'config'), 'MIMOCODE_HOME moves config under its config/ directory');
+      process.env.MIMOCODE_HOME = 'relative/path';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root, 'a relative MIMOCODE_HOME, which MiMo itself refuses, is ignored');
+    } finally {
+      if (previous === undefined) delete process.env.MIMOCODE_HOME; else process.env.MIMOCODE_HOME = previous;
+      delete process.env.XDG_CONFIG_HOME;
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })));
+
+  tally(test('mimo-home warns when MiMo Code is absent, naming the tool and its repository (#1498)', () => runWithoutConfigHomeVariables(() => {
+    const previous = process.env.MIMOCODE_HOME;
+    delete process.env.MIMOCODE_HOME;
+    try {
+      const adapter = getInstallTargetAdapter('mimo');
+      const homeDir = path.join(os.tmpdir(), 'egc-mimo-home-that-does-not-exist');
+      const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+      assert.ok(warning, 'a home without the MiMo config directory gets the ide-not-detected warning');
+      assert.match(warning.message, /^MiMo Code does not appear to be installed/);
+      assert.match(warning.message, /https:\/\/github\.com\/XiaomiMiMo\/MiMo-Code/);
+    } finally {
+      if (previous === undefined) delete process.env.MIMOCODE_HOME; else process.env.MIMOCODE_HOME = previous;
+    }
+  })));
+
+  tally(test('pi-home: skills, commands as prompt templates, library agents and rules, AGENTS.md and the Guardian extension under ~/.pi/agent, moved by PI_CODING_AGENT_DIR (#1499)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const previous = process.env.PI_CODING_AGENT_DIR;
+    delete process.env.PI_CODING_AGENT_DIR;
+    try {
+      const adapter = getInstallTargetAdapter('pi');
+      assert.strictEqual(adapter.id, 'pi-home');
+      assert.strictEqual(adapter.target, 'pi');
+      assert.strictEqual(adapter.kind, 'home');
+      const root = path.join(homeDir, '.pi', 'agent');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root);
+      assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(root, 'egc', 'install-state.json'));
+      const plan = planInstallTargetScaffold({
+        target: 'pi',
+        repoRoot,
+        homeDir,
+        modules: [
+          { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+          { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+          { id: 'commands-core', paths: ['commands'] },
+          { id: 'rules-core', paths: ['rules/common/memory.md'] },
+        ],
+      });
+      const destinations = plan.operations.map(op => op.destinationPath);
+      for (const expected of [
+        ['skills', 'continuous-learning', 'SKILL.md'],
+        ['prompts', 'plan.md'],
+        ['egc', 'library', 'agents', 'code-reviewer.md'],
+        ['egc', 'library', 'rules', 'common', 'memory.md'],
+        ['AGENTS.md'],
+        ['extensions', 'egc-guardian.js'],
+        ['scripts', 'hooks', 'pre-bash-guardian-validate.js'],
+        ['scripts', 'hooks', 'pre-write-guardian-validate.js'],
+        ['scripts', 'hooks', 'pre-bash-crusher-rewrite.js'],
+      ]) {
+        assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
+      }
+      assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'commands') + path.sep)), 'commands land as prompt templates, not under commands/');
+      process.env.PI_CODING_AGENT_DIR = '~/pi-data';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, 'pi-data'), 'a leading tilde is the home directory');
+      const custom = path.resolve('/custom/pi-agent');
+      process.env.PI_CODING_AGENT_DIR = custom;
+      const moved = planInstallTargetScaffold({ target: 'pi', repoRoot, homeDir, modules: [{ id: 'rules-core', paths: ['rules/common/memory.md'] }] });
+      for (const operation of moved.operations) {
+        assert.ok(String(operation.destinationPath).startsWith(custom + path.sep), 'every destination sits under PI_CODING_AGENT_DIR, found ' + operation.destinationPath);
+      }
+    } finally {
+      if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;
+    }
+  }));
+
+  tally(test('pi-home warns when ~/.pi/agent is absent, naming the tool and its site (#1499)', () => {
+    const previous = process.env.PI_CODING_AGENT_DIR;
+    delete process.env.PI_CODING_AGENT_DIR;
+    try {
+      const adapter = getInstallTargetAdapter('pi');
+      const homeDir = path.join(os.tmpdir(), 'egc-pi-home-that-does-not-exist');
+      const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+      assert.ok(warning, 'a home without ~/.pi/agent gets the ide-not-detected warning');
+      assert.match(warning.message, /^Pi does not appear to be installed/);
+      assert.match(warning.message, /https:\/\/pi\.dev/);
+    } finally {
+      if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;
+    }
+  }));
+
   tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

@@ -4,6 +4,14 @@ const path = require('node:path');
 const { toCursorAgentFileName } = require('../cursor-agent-names');
 const { assertSafeMcpConfig, isMcpConfigPath } = require('../mcp-config');
 const { createGeneratedContextOperation } = require('../generated-context-files');
+const { CURSOR_COMMAND_SKILL_TRANSFORM } = require('../install/copy-transforms');
+const { assertUniqueCommandSkills, isCommandSource, planCommandSkillFiles } = require('../antigravity-commands');
+const {
+  listSourceFiles,
+  normalizeSourcePath,
+  planAntigravityCopyOperations,
+  readRecordedDestinations,
+} = require('../antigravity-rules');
 const {
   createFlatFileOperations,
   createFlatRuleOperations,
@@ -296,6 +304,64 @@ function planDefaultOperations({ module, sourceRelativePath, planningInput, adap
   ]);
 }
 
+function planCommandsOperations({
+  module, repoRoot, sourceRelativePath, targetRoot, adapter, recordedDestinations, plannedCommandSkills,
+  takeUniqueOperations,
+}) {
+  const operations = planAntigravityCopyOperations({
+    adapter,
+    moduleId: module.id,
+    files: planCommandSkillFiles(repoRoot, sourceRelativePath, CURSOR_COMMAND_SKILL_TRANSFORM),
+    destinationDir: path.join(targetRoot, 'skills'),
+    repoRoot: repoRoot || '',
+    recordedDestinations,
+  });
+  plannedCommandSkills.push(...operations);
+  assertUniqueCommandSkills(plannedCommandSkills, CURSOR_COMMAND_SKILL_TRANSFORM);
+  return takeUniqueOperations(operations);
+}
+
+function plannedSkillNames(operations, repoRoot, skillsRoot) {
+  const names = new Set();
+  for (const operation of operations) {
+    const destination = path.resolve(operation.destinationPath);
+    if (operation.transform === CURSOR_COMMAND_SKILL_TRANSFORM) continue;
+    if (destination !== skillsRoot && !destination.startsWith(skillsRoot + path.sep)) continue;
+    for (const file of listSourceFiles(repoRoot, normalizeSourcePath(operation.sourceRelativePath))) {
+      if (path.posix.basename(file) === 'SKILL.md') names.add(path.posix.basename(path.posix.dirname(file)));
+    }
+  }
+  return names;
+}
+
+function dropCommandsShadowedBySkills(operations, repoRoot, targetRoot) {
+  if (!repoRoot) {
+    return operations;
+  }
+  const skillNames = plannedSkillNames(operations, repoRoot, path.resolve(targetRoot, 'skills'));
+  return operations.filter(operation => !(
+    operation.transform === CURSOR_COMMAND_SKILL_TRANSFORM
+    && skillNames.has(path.basename(path.dirname(operation.destinationPath)))
+  ));
+}
+
+const PLANNERS_BY_SOURCE = Object.freeze({
+  'AGENTS.md': planAgentsMdOperations,
+  rules: planRulesOperations,
+  agents: planAgentsOperations,
+  '.cursor': planCursorDirOperations,
+  'mcp-configs': planMcpConfigsOperations,
+});
+
+function selectPlanner(sourceRelativePath) {
+  if (isCommandSource(sourceRelativePath)) {
+    return planCommandsOperations;
+  }
+  return Object.hasOwn(PLANNERS_BY_SOURCE, sourceRelativePath)
+    ? PLANNERS_BY_SOURCE[sourceRelativePath]
+    : planDefaultOperations;
+}
+
 module.exports = createInstallTargetAdapter({
   id: 'cursor-project',
   target: 'cursor',
@@ -372,38 +438,28 @@ module.exports = createInstallTargetAdapter({
     // planXOperations helper above instead of inlining all six branches'
     // logic here -- same operations, same order, same dedup as before, just
     // no longer all flattened into one ~150-line closure.
-    return [...entries.flatMap(({ module, sourceRelativePath }) => {
-      const cursorMcpOperation = createJsonMergeOperation({
+    const recordedDestinations = readRecordedDestinations(adapter.getInstallStatePath(planningInput));
+    const plannedCommandSkills = [];
+    const moduleOperations = entries.flatMap(({ module, sourceRelativePath }) => selectPlanner(sourceRelativePath)({
+      module,
+      repoRoot,
+      sourceRelativePath,
+      targetRoot,
+      planningInput,
+      adapter,
+      recordedDestinations,
+      plannedCommandSkills,
+      takeUniqueOperations,
+      cursorMcpOperation: createJsonMergeOperation({
         moduleId: module.id,
         repoRoot,
         sourceRelativePath: '.mcp.json',
         destinationPath: path.join(targetRoot, 'mcp.json'),
-      });
+      }),
+    }));
 
-      if (sourceRelativePath === 'AGENTS.md') {
-        return planAgentsMdOperations();
-      }
-
-      if (sourceRelativePath === 'rules') {
-        return planRulesOperations({ module, repoRoot, sourceRelativePath, targetRoot, takeUniqueOperations });
-      }
-
-      if (sourceRelativePath === 'agents') {
-        return planAgentsOperations({ module, repoRoot, sourceRelativePath, targetRoot, takeUniqueOperations });
-      }
-
-      if (sourceRelativePath === '.cursor') {
-        return planCursorDirOperations({ module, repoRoot, targetRoot, cursorMcpOperation, takeUniqueOperations });
-      }
-
-      if (sourceRelativePath === 'mcp-configs') {
-        return planMcpConfigsOperations({
-          module, sourceRelativePath, planningInput, adapter, cursorMcpOperation, takeUniqueOperations,
-        });
-      }
-
-      return planDefaultOperations({ module, sourceRelativePath, planningInput, adapter, takeUniqueOperations });
-    }), ...createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot),
-    ...createCursorCrusherOperations(adapter, targetRoot, modules)];
+    return [...dropCommandsShadowedBySkills(moduleOperations, repoRoot, targetRoot),
+      ...createCursorGuardianOperations(adapter, targetRoot, modules, repoRoot),
+      ...createCursorCrusherOperations(adapter, targetRoot, modules)];
   },
 });

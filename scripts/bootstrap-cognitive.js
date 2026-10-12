@@ -11,9 +11,12 @@ try {
 } catch {
   TOML = null;
 }
-const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, assertLandsInside, resolveCrushConfigDir } = require('./lib/mcp-register');
+const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, assertLandsInside, resolveCrushConfigDir, kiloConfigDir } = require('./lib/mcp-register');
 const { commandExists } = require('./lib/utils');
 const { resolveVibeHome } = require('./lib/install-targets/vibe-home');
+const { resolveGrokHome } = require('./lib/install-targets/grok-home');
+const { resolveMimoConfigDir } = require('./lib/mimo-paths');
+const { resolvePiAgentDir } = require('./lib/pi-paths');
 const { writeProtocolFile } = require('./lib/protocol-file-write');
 
 // Bump when BLOCK's content changes in a way that already-configured installs
@@ -689,6 +692,50 @@ function injectTraeUserRule(filepath, label, content) {
     injectProtocol(path.join(vibeDir, 'AGENTS.md'), 'Mistral Vibe');
   } catch (e) {
     console.log(`  [cognitive] Mistral Vibe: unexpected error: ${e.message}`);
+  }
+})();
+
+// ── Grok Build (<GROK_HOME or ~/.grok>/AGENTS.md) ───────────────────────
+(function bootstrapGrok() {
+  try {
+    const grokDir = resolveGrokHome({ homeDir: HOME });
+    if (!fs.existsSync(grokDir) && !commandExists('grok')) return;
+    injectProtocol(path.join(grokDir, 'AGENTS.md'), 'Grok Build');
+  } catch (e) {
+    console.log(`  [cognitive] Grok Build: unexpected error: ${e.message}`);
+  }
+})();
+
+// ── Kilo Code CLI (<XDG_CONFIG_HOME or ~/.config>/kilo/AGENTS.md) ─────────
+(function bootstrapKilo() {
+  try {
+    const kiloDir = kiloConfigDir(HOME);
+    if (!fs.existsSync(kiloDir) && !commandExists('kilo')) return;
+    injectProtocol(path.join(kiloDir, 'AGENTS.md'), 'Kilo Code CLI');
+  } catch (e) {
+    console.log(`  [cognitive] Kilo Code CLI: unexpected error: ${e.message}`);
+  }
+})();
+
+// ── MiMo Code (<MiMo config dir>/AGENTS.md) ────────────────────────────────
+(function bootstrapMimo() {
+  try {
+    const mimoDir = resolveMimoConfigDir({ homeDir: HOME });
+    if (!fs.existsSync(mimoDir) && !commandExists('mimo')) return;
+    injectProtocol(path.join(mimoDir, 'AGENTS.md'), 'MiMo Code');
+  } catch (e) {
+    console.log(`  [cognitive] MiMo Code: unexpected error: ${e.message}`);
+  }
+})();
+
+// ── Pi (<PI_CODING_AGENT_DIR or ~/.pi/agent>/AGENTS.md) ─────────────────
+(function bootstrapPi() {
+  try {
+    const piDir = resolvePiAgentDir({ homeDir: HOME });
+    if (!fs.existsSync(piDir) && !commandExists('pi')) return;
+    injectProtocol(path.join(piDir, 'AGENTS.md'), 'Pi');
+  } catch (e) {
+    console.log(`  [cognitive] Pi: unexpected error: ${e.message}`);
   }
 })();
 

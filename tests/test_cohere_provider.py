@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMError
+from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMError, ToolArgumentsError
 from llm.core.types import LLMInput, Message, ProviderType, Role, ToolDefinition
 from llm.providers.cohere import COHERE_DEFAULT_MODEL, CohereProvider
 
@@ -28,7 +28,7 @@ def _text_response(text: str = "hello") -> SimpleNamespace:
 def _tool_call_response(
     name: str = "calculator",
     tool_id: str = "call_1",
-    arguments: str = '{"expr": "2+2"}',
+    arguments: str | dict[str, str] | None = '{"expr": "2+2"}',
 ) -> SimpleNamespace:
     function = SimpleNamespace(name=name, arguments=arguments)
     tool_call = SimpleNamespace(id=tool_id, type="function", function=function)
@@ -223,3 +223,46 @@ def test_stream_flag_raises_not_implemented(provider: CohereProvider) -> None:
     with pytest.raises(NotImplementedError, match="streaming not supported"):
         provider.generate(stream_input)
     provider.client.chat.assert_not_called()
+
+
+@pytest.mark.unit
+def test_catalog_models_include_the_live_cohere_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+    # #1696: the live ids of docs.cohere.com/docs/models on 2026-10-11.
+    monkeypatch.setenv("COHERE_API_KEY", "co-test")
+    with patch("llm.providers.cohere.cohere") as mock_cohere:
+        mock_cohere.ClientV2.return_value = MagicMock()
+        p = CohereProvider()
+    names = {m.name for m in p.list_models()}
+    assert {"command-a-plus-05-2026", "command-a-03-2025", "command-a-reasoning-08-2025", "command-r7b-12-2024"} <= names
+
+
+@pytest.mark.unit
+def test_deprecated_cohere_ids_resolve_to_a_live_model() -> None:
+    from llm.core.model_resolver import ModelResolver
+
+    assert ModelResolver.resolve("command-r-plus", provider="cohere") == "command-r-plus-08-2024"
+    assert ModelResolver.resolve("command", provider="cohere") == "command-r7b-12-2024"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("arguments", ['{"expr": "2+2"}', {"expr": "2+2"}])
+def test_tool_call_arguments_parse_to_a_dict_from_a_json_object_string_or_a_dict(provider: CohereProvider, arguments: object) -> None:
+    provider.client.chat.return_value = _tool_call_response(arguments=arguments)
+    result = provider.generate(_simple_input())
+    assert result.tool_calls[0].arguments == {"expr": "2+2"}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("arguments", ["42", '"text"', "[1, 2]", "{not valid json", '{"expr": NaN}'])
+def test_scalar_or_malformed_tool_call_arguments_raise_tool_arguments_error(provider: CohereProvider, arguments: object) -> None:
+    provider.client.chat.return_value = _tool_call_response(arguments=arguments)
+    with pytest.raises(ToolArgumentsError) as exc:
+        provider.generate(_simple_input())
+    assert exc.value.provider == ProviderType.COHERE
+
+
+@pytest.mark.unit
+def test_missing_tool_call_arguments_parse_to_an_empty_dict(provider: CohereProvider) -> None:
+    provider.client.chat.return_value = _tool_call_response(arguments=None)
+    result = provider.generate(_simple_input())
+    assert result.tool_calls[0].arguments == {}

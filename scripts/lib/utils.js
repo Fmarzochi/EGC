@@ -8,6 +8,7 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
+const { readHookStdin, readHookInput } = require('./hook-stdin');
 
 // Platform detection
 const isWindows = process.platform === 'win32';
@@ -908,6 +909,8 @@ module.exports = {
 
   // Hook I/O
   readStdinJson,
+  readHookStdin,
+  readHookInput,
   log,
   output,
 

@@ -44,6 +44,24 @@ function project(files) {
 }
 
 (async () => {
+  await run('honours nested .gitignore files and .git/info/exclude the way Git does (#1884)', async () => {
+    const root = project({
+      '.gitignore': 'root-ignored.txt\nkeep.js\n',
+      '.git/info/exclude': 'excluded.txt\n',
+      'sub/.gitignore': 'generated/\n!keep.js\n',
+      'a.txt': 'control file',
+      'keep.js': 'ignored at the root by the root rule',
+      'excluded.txt': 'ignored by .git/info/exclude',
+      'sub/keep.js': 'the nested negation re-includes it',
+      'sub/root-ignored.txt': 'the root rule still applies under sub',
+      'sub/src/a.js': 'export const a = 1;',
+      'sub/generated/out.js': 'ignored by the nested rule',
+      'sub/deep/generated/out.js': 'the nested rule applies to every depth under sub',
+    });
+    const paths = (await buildFileIndex(root)).docs.map(d => d.path).sort();
+    assert.deepStrictEqual(paths, ['a.txt', 'sub/keep.js', 'sub/src/a.js']);
+  });
+
   await run('indexes text files, skips node_modules, dist and .gitignore matches', async () => {
     const root = project({
       'billing/payments.ts': 'export function chargeCard() {}\n',

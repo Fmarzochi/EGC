@@ -74,6 +74,15 @@ function createGateGuardScriptCopyOperationsIfMissing(adapter, targetRoot, modul
     ));
   }
 
+  if (!isPathCovered(modules, 'scripts/lib', 'scripts/lib/hook-stdin.js')) {
+    operations.push(remap(
+      GATEGUARD_HOOK_MODULE_ID,
+      'scripts/lib/hook-stdin.js',
+      path.join(targetRoot, 'scripts', 'lib', 'hook-stdin.js'),
+      { strategy: 'preserve-relative-path' }
+    ));
+  }
+
   return operations;
 }
 

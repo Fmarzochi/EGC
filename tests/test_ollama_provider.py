@@ -1,11 +1,13 @@
 """Tests for OllamaProvider request payload handling."""
 
 import json
+import os
 import unittest
 from unittest.mock import patch
 
-from llm.core.types import LLMInput, Message, Role
-from llm.providers.ollama import OllamaProvider
+from llm.core.interface import ToolArgumentsError
+from llm.core.types import LLMInput, Message, ProviderType, Role
+from llm.providers.ollama import OllamaProvider, _parse_tool_calls
 
 
 class _Response:
@@ -64,6 +66,66 @@ class TestOllamaProviderStreamGuard(unittest.TestCase):
                 provider.generate(stream_input)
         self.assertIn("streaming not supported", str(ctx.exception))
         urlopen.assert_not_called()
+
+
+
+class TestOllamaProviderCatalog(unittest.TestCase):
+    """#1700: the default and the model list come from the catalog checked on 2026-10-11."""
+
+    def test_default_model_comes_from_the_catalog_when_no_env_is_set(self) -> None:
+        with patch.dict("os.environ", {}, clear=False):
+            for name in ("OLLAMA_MODEL", "LLM_MODEL", "EGC_MODEL", "ECC_MODEL"):
+                os.environ.pop(name, None)
+            provider = OllamaProvider(base_url="http://localhost:11434")
+        self.assertEqual(provider.get_default_model(), "qwen3")
+
+    def test_models_list_carries_the_current_and_the_legacy_default(self) -> None:
+        provider = OllamaProvider(base_url="http://localhost:11434", default_model="qwen3")
+        by_name = {m.name: m for m in provider.list_models()}
+        self.assertIn("qwen3", by_name)
+        self.assertIn("llama3.2", by_name)
+        self.assertTrue(by_name["qwen3"].supports_tools)
+        self.assertTrue(by_name["llama3.2"].supports_tools)
+
+    def test_a_tagged_default_the_registry_does_not_list_is_still_in_the_list(self) -> None:
+        provider = OllamaProvider(base_url="http://localhost:11434", default_model="qwen3:8b")
+        by_name = {m.name: m for m in provider.list_models()}
+        self.assertIn("qwen3:8b", by_name)
+        self.assertTrue(by_name["qwen3:8b"].supports_tools)
+        self.assertEqual(by_name["qwen3:8b"].context_window, 40960)
+
+
+class TestOllamaToolCallArguments(unittest.TestCase):
+    @staticmethod
+    def _function(arguments: object) -> dict[str, object]:
+        return {"name": "read_file", "arguments": arguments}
+
+    def _arguments(self, function: dict[str, object]) -> dict[str, object]:
+        message = {"tool_calls": [{"id": "call_1", "function": function}]}
+        return _parse_tool_calls(message)[0].arguments
+
+    def test_a_json_object_string_or_a_dict_parses_to_a_dict(self) -> None:
+        for raw in ('{"path": "a.txt"}', {"path": "a.txt"}):
+            with self.subTest(raw=raw):
+                self.assertEqual(self._arguments(self._function(raw)), {"path": "a.txt"})
+
+    def test_missing_arguments_parse_to_an_empty_dict(self) -> None:
+        self.assertEqual(self._arguments({"name": "read_file"}), {})
+
+    def test_a_scalar_or_malformed_arguments_raise_tool_arguments_error(self) -> None:
+        for raw in (42, "42", '"text"', "[1, 2]", "{not valid json", '{"path": NaN}'):
+            with self.subTest(raw=raw), self.assertRaises(ToolArgumentsError) as ctx:
+                self._arguments(self._function(raw))
+            self.assertEqual(ctx.exception.provider, ProviderType.OLLAMA)
+
+    def test_generate_raises_the_provider_tagged_error_for_malformed_arguments(self) -> None:
+        provider = OllamaProvider(base_url="http://localhost:11434", default_model="llama3")
+        body = {"message": {"content": "", "tool_calls": [{"id": "call_1", "function": self._function("[1, 2]")}]}}
+        with patch.object(_Response, "read", return_value=json.dumps(body).encode("utf-8")), \
+                patch("urllib.request.urlopen", return_value=_Response()), \
+                self.assertRaises(ToolArgumentsError) as ctx:
+            provider.generate(LLMInput(messages=[Message(role=Role.USER, content="hi")], model="llama3"))
+        self.assertEqual(ctx.exception.provider, ProviderType.OLLAMA)
 
 
 if __name__ == "__main__":

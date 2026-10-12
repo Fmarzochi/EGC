@@ -600,12 +600,12 @@ function runTests() {
     }
   }));
 
-  const moveCommandsBack = ({ statePath, fromDir, toDir }) => {
+  const moveCommandsBack = ({ statePath, fromDir, toDir, transform = 'antigravity-command-skill' }) => {
     const repoRoot = path.join(__dirname, '..', '..');
     const state = readJson(statePath);
     const moved = [];
     for (const operation of state.operations) {
-      if (operation.transform !== 'antigravity-command-skill' || !operation.destinationPath.startsWith(fromDir + path.sep)) continue;
+      if (operation.transform !== transform || !operation.destinationPath.startsWith(fromDir + path.sep)) continue;
       const legacy = path.join(toDir, `${path.basename(path.dirname(operation.destinationPath))}.md`);
       fs.mkdirSync(path.dirname(legacy), { recursive: true });
       fs.copyFileSync(path.join(repoRoot, operation.sourceRelativePath), legacy);
@@ -677,6 +677,66 @@ function runTests() {
       assert.strictEqual(upgraded.code, 0, upgraded.stderr);
       assertAgentsMoved({ statePath, moved, fromDir: projectSkills, ownLegacy, ownCurrent });
       assert.ok(fs.existsSync(path.join(projectSkills, 'tdd-workflow', 'SKILL.md')), 'the bundled skills stay');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('an upgrade moves the managed Cursor commands from .cursor/commands to skills under .cursor/skills and keeps the person\'s files (#1837)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'cursor', '--profile', 'core'];
+      const first = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const cursorRoot = path.join(fs.realpathSync(projectDir), '.cursor');
+      const projectSkills = path.join(cursorRoot, 'skills');
+      const legacyCommands = path.join(cursorRoot, 'commands');
+      assert.ok(!fs.existsSync(legacyCommands), 'a fresh install writes nothing under .cursor/commands');
+      const statePath = path.join(cursorRoot, 'egc-install-state.json');
+      const moved = moveCommandsBack({ statePath, fromDir: projectSkills, toDir: legacyCommands, transform: 'cursor-command-skill' });
+      assert.ok(moved.length > 50, 'the core profile installs the commands');
+      fs.writeFileSync(moved[0].legacy, 'edited by hand');
+      const ownLegacy = path.join(legacyCommands, 'my-command.md');
+      fs.writeFileSync(ownLegacy, '# mine');
+      const ownCurrent = path.join(projectSkills, 'mine', 'SKILL.md');
+      fs.mkdirSync(path.dirname(ownCurrent), { recursive: true });
+      fs.writeFileSync(ownCurrent, '---\nname: mine\ndescription: mine\n---\n');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assertAgentsMoved({ statePath, moved, fromDir: projectSkills, ownLegacy, ownCurrent });
+      for (const { current } of moved) {
+        assert.ok(fs.readFileSync(current, 'utf8').includes('\ndisable-model-invocation: true\n---\n'), `${current} runs only when invoked`);
+      }
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('a skill the person keeps under .cursor/skills with the name of an EGC command is never overwritten (#1837)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'cursor', '--profile', 'core'];
+      const cursorRoot = path.join(fs.realpathSync(projectDir), '.cursor');
+      const own = path.join(cursorRoot, 'skills', 'plan', 'SKILL.md');
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, '# mine');
+
+      for (const pass of ['install', 'reinstall']) {
+        const result = run(args, { cwd: projectDir, homeDir });
+        assert.strictEqual(result.code, 0, `${pass}: ${result.stderr}`);
+        assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', `${pass}: the person's plan skill stays theirs`);
+      }
+      const recorded = readJson(path.join(cursorRoot, 'egc-install-state.json')).operations.map(operation => operation.destinationPath);
+      assert.ok(!recorded.includes(own), 'the person\'s skill is never recorded as managed');
+      assert.ok(recorded.includes(path.join(cursorRoot, 'skills', 'code-review', 'SKILL.md')), 'the other commands still land as skills');
     } finally {
       cleanup(homeDir);
       cleanup(projectDir);
@@ -1342,6 +1402,97 @@ function runTests() {
     }
   }));
 
+  tally(test('the Trae CN edition installs into the project .trae and an upgrade retires what EGC wrote under .trae-cn (#1842)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'trae', '--profile', 'core'];
+      const env = { TRAE_ENV: 'cn' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const projectRoot = fs.realpathSync(projectDir);
+      const traeDir = path.join(projectRoot, '.trae');
+      const cnDir = path.join(projectRoot, '.trae-cn');
+      assert.ok(fs.existsSync(path.join(traeDir, 'hooks.json')), 'the CN edition reads project hooks from .trae/hooks.json');
+      assert.ok(!fs.existsSync(cnDir), 'nothing is written under the project .trae-cn');
+
+      const toLegacy = value => (typeof value === 'string' ? value.split(traeDir + path.sep).join(cnDir + path.sep) : value);
+      const rewrite = value => {
+        if (Array.isArray(value)) return value.map(rewrite);
+        if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, rewrite(entry)]));
+        return toLegacy(value);
+      };
+      fs.renameSync(traeDir, cnDir);
+      const legacyStatePath = path.join(cnDir, 'egc-install-state.json');
+      const legacyState = rewrite(readJson(legacyStatePath));
+      legacyState.target.root = cnDir;
+      fs.writeFileSync(legacyStatePath, JSON.stringify(legacyState, null, 2));
+      const legacyHooksPath = path.join(cnDir, 'hooks.json');
+      const legacyHooks = rewrite(readJson(legacyHooksPath));
+      legacyHooks.hooks.PreToolUse.push({ matcher: 'Mine', hooks: [{ type: 'command', command: 'echo mine' }] });
+      fs.writeFileSync(legacyHooksPath, JSON.stringify(legacyHooks, null, 2));
+
+      const copies = legacyState.operations.filter(operation => operation.kind === 'copy-file' && operation.ownership === 'managed');
+      assert.ok(copies.length > 10, 'the core profile records managed copies');
+      const [edited, untouched] = copies;
+      fs.writeFileSync(edited.destinationPath, 'edited by hand');
+      const own = path.join(cnDir, 'skills', 'mine', 'SKILL.md');
+      fs.mkdirSync(path.dirname(own), { recursive: true });
+      fs.writeFileSync(own, '# mine');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+
+      assert.ok(!fs.existsSync(legacyStatePath), 'the state recorded under .trae-cn leaves');
+      assert.ok(fs.existsSync(path.join(traeDir, 'egc-install-state.json')), 'the new state lives under .trae');
+      assert.ok(!fs.existsSync(untouched.destinationPath), `the managed ${untouched.destinationPath} is retired`);
+      assert.ok(fs.existsSync(untouched.destinationPath.split(cnDir + path.sep).join(traeDir + path.sep)), 'and written under .trae');
+      assert.strictEqual(fs.readFileSync(edited.destinationPath, 'utf8'), 'edited by hand', 'an edited managed copy stays');
+      assert.strictEqual(fs.readFileSync(own, 'utf8'), '# mine', 'the person\'s own file stays');
+      const leftHooks = JSON.stringify(readJson(legacyHooksPath));
+      assert.ok(leftHooks.includes('echo mine'), 'the person\'s hook entry in .trae-cn/hooks.json stays');
+      assert.ok(!leftHooks.includes('pre-bash-guardian-validate'), 'the Guardian entry EGC wrote there leaves');
+      assert.ok(JSON.stringify(readJson(path.join(traeDir, 'hooks.json'))).includes('pre-bash-guardian-validate'), 'the Guardian is registered in .trae/hooks.json');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
+  tally(test('an unreadable state under the project .trae-cn stays, and so do the copies it records (#1842)', () => {
+    const homeDir = createTempDir('install-apply-home-');
+    const projectDir = createTempDir('install-apply-project-');
+
+    try {
+      const args = ['--target', 'trae', '--profile', 'core'];
+      const env = { TRAE_ENV: 'cn' };
+      const first = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(first.code, 0, first.stderr);
+
+      const projectRoot = fs.realpathSync(projectDir);
+      const traeDir = path.join(projectRoot, '.trae');
+      const cnDir = path.join(projectRoot, '.trae-cn');
+      const copy = readJson(path.join(traeDir, 'egc-install-state.json')).operations
+        .find(operation => operation.kind === 'copy-file' && operation.ownership === 'managed');
+      fs.renameSync(traeDir, cnDir);
+      const legacyStatePath = path.join(cnDir, 'egc-install-state.json');
+      fs.writeFileSync(legacyStatePath, '{not json');
+      const legacyCopy = copy.destinationPath.split(traeDir + path.sep).join(cnDir + path.sep);
+      assert.ok(fs.existsSync(legacyCopy), 'sanity: the earlier copy sits under .trae-cn');
+
+      const upgraded = run(args, { cwd: projectDir, homeDir, env });
+      assert.strictEqual(upgraded.code, 0, upgraded.stderr);
+      assert.strictEqual(fs.readFileSync(legacyStatePath, 'utf8'), '{not json', 'a state that cannot be read is never removed');
+      assert.ok(fs.existsSync(legacyCopy), 'and the copies it records are not retired on its word');
+      assert.ok(fs.existsSync(path.join(traeDir, 'egc-install-state.json')), 'the new install still lands under .trae');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectDir);
+    }
+  }));
+
   tally(test('installs Cursor configs and writes install-state', () => {
     const homeDir = createTempDir('install-apply-home-');
     const projectDir = createTempDir('install-apply-project-');
@@ -1357,7 +1508,8 @@ function runTests() {
       assert.ok(!fs.existsSync(path.join(projectDir, '.cursor', 'rules', 'README.mdc')));
       assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'agents', 'egc-architect.md')));
       assert.ok(!fs.existsSync(path.join(projectDir, '.cursor', 'agents', 'architect.md')));
-      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'commands', 'plan.md')));
+      assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'skills', 'plan', 'SKILL.md')));
+      assert.ok(!fs.existsSync(path.join(projectDir, '.cursor', 'commands')));
       assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'hooks.json')));
       assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'mcp.json')));
       assert.ok(fs.existsSync(path.join(projectDir, '.cursor', 'hooks', 'session-start.js')));
@@ -1385,9 +1537,9 @@ function runTests() {
       assert.ok(state.resolution.selectedModules.includes('framework-language'));
       assert.ok(
         state.operations.some(operation => (
-          operation.destinationPath === path.join(normalizedProjectDir, '.cursor', 'commands', 'plan.md')
+          operation.destinationPath === path.join(normalizedProjectDir, '.cursor', 'skills', 'plan', 'SKILL.md')
         )),
-        'Should record manifest command file copy operation'
+        'Should record the command as a skill copy operation'
       );
     } finally {
       cleanup(homeDir);

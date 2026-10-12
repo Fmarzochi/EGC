@@ -26,6 +26,7 @@ const {
   stripAnsi,
   log
 } = require('../lib/utils');
+const { readHookStdin } = require('../lib/hook-stdin');
 
 const SUMMARY_START_MARKER = '<!-- EGC:SUMMARY:START -->';
 const SUMMARY_END_MARKER = '<!-- EGC:SUMMARY:END -->';
@@ -117,18 +118,9 @@ function extractSessionSummary(transcriptPath) {
   };
 }
 
-const MAX_STDIN = 1024 * 1024;
 let stdinData = '';
-process.stdin.setEncoding('utf8');
-
-process.stdin.on('data', chunk => {
-  if (stdinData.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - stdinData.length;
-    stdinData += chunk.substring(0, remaining);
-  }
-});
-
-process.stdin.on('end', () => {
+readHookStdin(({ raw }) => {
+  stdinData = raw;
   runMain();
 });
 

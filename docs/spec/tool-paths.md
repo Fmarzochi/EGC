@@ -2,7 +2,7 @@
 
 Generated from `manifests/tool-paths.json` by `node scripts/ci/generate-tool-paths-doc.js`; edit the table, not this file. `tests/ci/tool-paths-contract.test.js` plans every install target in every variant below and fails when a planned path is missing from the table or a row of the table matches no planned path. Sources checked on 2026-10-10.
 
-Status: **documented** paths are read by the tool per the linked docs; **egc** paths are files of EGC itself under the tool root (hook scripts, install state, library copies the tool does not load); **unverified** paths are planned today but not confirmed by the tool's current docs, with the reason in the note.
+Status: **documented** paths are read by the tool per the linked source: its docs, or, where the docs are silent, its own source code at a pinned commit, with the note saying which; **egc** paths are files of EGC itself under the tool root (hook scripts, install state, library copies the tool does not load); **unverified** paths are planned today but not confirmed by the tool's current docs, with the reason in the note.
 
 ## Variants
 
@@ -10,11 +10,14 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | --- | --- | --- | --- |
 | default | linux | none | all |
 | win32 | win32 | none | windsurf-home, zed-home |
-| XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME` set to an absolute directory, shown as `$XDG_CONFIG_HOME` in the paths | crush-home |
+| XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME` set to an absolute directory, shown as `$XDG_CONFIG_HOME` in the paths | crush-home, kilo-home, mimo-home |
 | CRUSH_GLOBAL_CONFIG | linux | `CRUSH_GLOBAL_CONFIG` set to an absolute directory, shown as `$CRUSH_GLOBAL_CONFIG` in the paths | crush-home |
 | KIMI_CODE_HOME | linux | `KIMI_CODE_HOME` set to an absolute directory, shown as `$KIMI_CODE_HOME` in the paths | kimi-home |
 | TRAE_ENV=cn | linux | `TRAE_ENV=cn` | trae-project |
 | VIBE_HOME | linux | `VIBE_HOME` set to an absolute directory, shown as `$VIBE_HOME` in the paths | vibe-home |
+| GROK_HOME | linux | `GROK_HOME` set to an absolute directory, shown as `$GROK_HOME` in the paths | grok-home |
+| MIMOCODE_HOME | linux | `MIMOCODE_HOME` set to an absolute directory, shown as `$MIMOCODE_HOME` in the paths | mimo-home |
+| PI_CODING_AGENT_DIR | linux | `PI_CODING_AGENT_DIR` set to an absolute directory, shown as `$PI_CODING_AGENT_DIR` in the paths | pi-home |
 
 ## egc-home
 
@@ -47,14 +50,13 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | --- | --- | --- | --- | --- | --- |
 | library | `<project>/.cursor/.agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | agents | `<project>/.cursor/agents/` | default | documented | <https://cursor.com/docs/context/subagents> |  |
-| commands | `<project>/.cursor/commands/` | default | unverified | <https://cursor.com/docs/context/skills> | Cursor's current docs no longer describe custom commands in .cursor/commands; the skills page talks about moving commands to skills (read on 2026-10-10). |
 | runtime | `<project>/.cursor/hooks/` | default | egc |  | EGC runtime: hook scripts the hook configuration of the tool points at. |
 | hooks | `<project>/.cursor/hooks.json` | default | documented | <https://cursor.com/docs/agent/hooks> | Seeded from the repository's .cursor/hooks.json with documented events only (read on 2026-10-10): sessionStart, sessionEnd, preToolUse, beforeShellExecution, afterShellExecution, afterFileEdit, beforeMCPExecution, afterMCPExecution, beforeReadFile, beforeSubmitPrompt, subagentStart, subagentStop, beforeTabFileRead, afterTabFileEdit, preCompact, stop. beforeFileEdit is not documented: on upgrade only the entry EGC wrote under it is removed, and entries of the person's own stay. |
 | library | `<project>/.cursor/mcp-configs/` | default | egc |  | EGC library: platform configuration sources copied for reference; the tool does not load this path. |
 | mcp | `<project>/.cursor/mcp.json` | default | documented | <https://cursor.com/docs/context/mcp> |  |
 | rules | `<project>/.cursor/rules/` | default | documented | <https://cursor.com/docs/context/rules> |  |
 | runtime | `<project>/.cursor/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
-| skills | `<project>/.cursor/skills/` | default | documented | <https://cursor.com/docs/context/skills> |  |
+| skills | `<project>/.cursor/skills/` | default | documented | <https://cursor.com/docs/context/skills> | Cursor documents custom commands only as skills invoked by /<name> and finds them in nested folders (read on 2026-10-11), so each EGC command is a skill at .cursor/skills/<name>/SKILL.md with disable-model-invocation: true, and a bundled skill of the same name wins. The old .cursor/commands copies are retired only while they hold EGC's bytes. |
 | state | `<project>/.cursor/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## antigravity-project
@@ -197,7 +199,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | rules | `<project>/.clinerules/` | default | documented | <https://docs.cline.bot/customization/cline-rules> |  |
 | library | `<project>/.clinerules/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `<project>/.clinerules/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| hooks | `<project>/.clinerules/hooks/` | default | unverified | <https://docs.cline.bot/customization/hooks> | Cline's current docs move hooks to SDK plugins and no longer name .clinerules/hooks (read on 2026-10-10). |
+| hooks | `<project>/.clinerules/hooks/` | default | documented | <https://github.com/cline/cline/blob/c3a40572765b76873c597247941118c1778d02c8/apps/vscode/src/core/storage/disk.ts> | The hooks page now points at SDK plugins, but the plugins page says plugins apply only to the Cline SDK, CLI and Kanban, not to the VS Code and JetBrains extensions (https://docs.cline.bot/customization/plugins, read on 2026-10-11). The extension source at that commit (main on 2026-10-11) still discovers hooks in each workspace root's .clinerules/hooks (disk.ts, hooksDir) and runs a file named after the hook: PreToolUse, executable, on Unix and PreToolUse.ps1 on Windows (apps/vscode/src/core/hooks/hook-factory.ts, findHookInHooksDir). |
 | runtime | `<project>/.clinerules/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `<project>/.clinerules/skills/` | default | documented | <https://docs.cline.bot/customization/skills> |  |
 
@@ -249,6 +251,7 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | library | `<project>/.devin/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `<project>/.devin/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | hooks | `<project>/.devin/config.local.json` | default | documented | <https://docs.devin.ai/cli/extensibility/hooks> |  |
+| mcp | `<project>/.devin/mcp_config.local.json` | default | documented | <https://docs.devin.ai/cli/extensibility/mcp/configuration> | Project-scope MCP file of Devin Local (Devin Desktop and the Devin CLI), gitignored; the docs, read on 2026-10-11, also list .devin/mcp_config.json and the user file ~/.config/devin/mcp_config.json, which EGC does not write. |
 | library | `<project>/.devin/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.devin/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `<project>/.devin/skills/` | default | documented | <https://docs.devin.ai/desktop/cascade/skills> |  |
@@ -314,18 +317,11 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | --- | --- | --- | --- | --- | --- |
 | library | `<project>/.trae/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `<project>/.trae/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| hooks | `<project>/.trae/hooks.json` | default | documented | <https://docs.trae.ai/ide/hook-configuration-reference> |  |
+| hooks | `<project>/.trae/hooks.json` | default | documented | <https://docs.trae.ai/ide/hook-configuration-reference> | The Chinese edition reads project hooks from the same $PROJECT_FOLDER/.trae/hooks.json and keeps ~/.trae-cn for its global hooks only (https://docs.trae.cn/ide_hook-configuration-reference, read on 2026-10-11), so TRAE_ENV=cn plans .trae too. On upgrade from an earlier install under <project>/.trae-cn, EGC removes only the copies that still match the bytes it wrote (an edited copy stays), removes only its own entries from <project>/.trae-cn/hooks.json, and keeps that install's state when it cannot be read. |
 | library | `<project>/.trae/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.trae/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
-| skills | `<project>/.trae/skills/` | default | documented | <https://docs.trae.ai/ide/skills> |  |
-| library | `<project>/.trae-cn/agents/` | TRAE_ENV=cn | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| library | `<project>/.trae-cn/commands/` | TRAE_ENV=cn | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| hooks | `<project>/.trae-cn/hooks.json` | TRAE_ENV=cn | unverified | <https://docs.trae.ai/ide/hook-configuration-reference> | The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10). |
-| library | `<project>/.trae-cn/rules/` | TRAE_ENV=cn | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| runtime | `<project>/.trae-cn/scripts/` | TRAE_ENV=cn | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
-| skills | `<project>/.trae-cn/skills/` | TRAE_ENV=cn | unverified | <https://docs.trae.ai/ide/skills> | The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10). |
+| skills | `<project>/.trae/skills/` | default | documented | <https://docs.trae.ai/ide/skills> | The Chinese edition reads project skills from the same .trae/skills/ and keeps ~/.trae-cn/skills for its global skills only (https://docs.trae.cn/ide/skills, read on 2026-10-11). |
 | state | `<project>/.trae/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
-| state | `<project>/.trae-cn/egc-install-state.json` | TRAE_ENV=cn | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## junie-home
 
@@ -416,6 +412,98 @@ Status: **documented** paths are read by the tool per the linked docs; **egc** p
 | context | `$VIBE_HOME/AGENTS.md` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | skills | `$VIBE_HOME/skills/` | VIBE_HOME | documented | <https://github.com/mistralai/mistral-vibe> |  |
 | state | `$VIBE_HOME/egc/install-state.json` | VIBE_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## grok-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| library | `~/.grok/egc/library/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.grok/egc/library/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `~/.grok/hooks/egc-guardian.json` | default | documented | <https://docs.x.ai/build/features/hooks> | Personal hooks live in ~/.grok/hooks/*.json in the Claude Code shape; a PreToolUse hook on the Bash, Edit and Write tools denies with exit code 2 or {"decision": "deny"} (read on 2026-10-11). EGC owns this whole file. |
+| library | `~/.grok/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| runtime | `~/.grok/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| context | `~/.grok/AGENTS.md` | default | documented | <https://docs.x.ai/build/features/project-rules> | Grok reads global rules from ~/.grok/ before the project ones, AGENTS.md first (read on 2026-10-11). |
+| skills | `~/.grok/skills/` | default | documented | <https://docs.x.ai/build/features/skills-plugins-marketplaces> | Grok discovers skills in ~/.grok/skills/ and ./.grok/skills/ (read on 2026-10-11); GROK_HOME moves the data root (https://docs.x.ai/build/settings/reference). |
+| state | `~/.grok/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| library | `$GROK_HOME/egc/library/agents/` | GROK_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `$GROK_HOME/egc/library/commands/` | GROK_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `$GROK_HOME/hooks/egc-guardian.json` | GROK_HOME | documented | <https://docs.x.ai/build/features/hooks> | Personal hooks live in ~/.grok/hooks/*.json in the Claude Code shape; a PreToolUse hook on the Bash, Edit and Write tools denies with exit code 2 or {"decision": "deny"} (read on 2026-10-11). EGC owns this whole file. |
+| library | `$GROK_HOME/egc/library/rules/` | GROK_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| runtime | `$GROK_HOME/scripts/` | GROK_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| context | `$GROK_HOME/AGENTS.md` | GROK_HOME | documented | <https://docs.x.ai/build/features/project-rules> | Grok reads global rules from ~/.grok/ before the project ones, AGENTS.md first (read on 2026-10-11). |
+| skills | `$GROK_HOME/skills/` | GROK_HOME | documented | <https://docs.x.ai/build/features/skills-plugins-marketplaces> | Grok discovers skills in ~/.grok/skills/ and ./.grok/skills/ (read on 2026-10-11); GROK_HOME moves the data root (https://docs.x.ai/build/settings/reference). |
+| state | `$GROK_HOME/egc/install-state.json` | GROK_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## kilo-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| agents | `~/.config/kilo/agents/` | default | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/agent.ts> | Kilo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-11). |
+| context | `~/.config/kilo/AGENTS.md` | default | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/session/instruction.ts> | Kilo reads AGENTS.md in its config directory as global instructions (main on 2026-10-11); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `~/.config/kilo/commands/` | default | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/command.ts> | Kilo loads {command,commands}/**/*.md from its config directory (main on 2026-10-11). |
+| library | `~/.config/kilo/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| plugins | `~/.config/kilo/plugins/` | default | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/plugin.ts> | Kilo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-11); EGC ships opencode-egc-plugin.js there. |
+| runtime | `~/.config/kilo/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `~/.config/kilo/skills/` | default | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/skill/index.ts> | Kilo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-11). |
+| state | `~/.config/kilo/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| agents | `$XDG_CONFIG_HOME/kilo/agents/` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/agent.ts> | Kilo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-11). |
+| context | `$XDG_CONFIG_HOME/kilo/AGENTS.md` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/session/instruction.ts> | Kilo reads AGENTS.md in its config directory as global instructions (main on 2026-10-11); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `$XDG_CONFIG_HOME/kilo/commands/` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/command.ts> | Kilo loads {command,commands}/**/*.md from its config directory (main on 2026-10-11). |
+| library | `$XDG_CONFIG_HOME/kilo/egc/library/rules/` | XDG_CONFIG_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| plugins | `$XDG_CONFIG_HOME/kilo/plugins/` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/config/plugin.ts> | Kilo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-11); EGC ships opencode-egc-plugin.js there. |
+| runtime | `$XDG_CONFIG_HOME/kilo/scripts/` | XDG_CONFIG_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `$XDG_CONFIG_HOME/kilo/skills/` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/skill/index.ts> | Kilo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-11). |
+| state | `$XDG_CONFIG_HOME/kilo/egc/install-state.json` | XDG_CONFIG_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## mimo-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| agents | `~/.config/mimocode/agents/` | default | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/agent.ts> | MiMo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-12). |
+| context | `~/.config/mimocode/AGENTS.md` | default | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/session/instruction.ts> | MiMo reads AGENTS.md in its config directory as global instructions (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `~/.config/mimocode/commands/` | default | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/command.ts> | MiMo loads {command,commands}/**/*.md from its config directory (main on 2026-10-12). |
+| library | `~/.config/mimocode/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| plugins | `~/.config/mimocode/plugins/` | default | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/plugin.ts> | MiMo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-12); EGC ships opencode-egc-plugin.js there. |
+| runtime | `~/.config/mimocode/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `~/.config/mimocode/skills/` | default | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/skill/index.ts> | MiMo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-12). |
+| state | `~/.config/mimocode/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| agents | `$XDG_CONFIG_HOME/mimocode/agents/` | XDG_CONFIG_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/agent.ts> | MiMo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-12). |
+| context | `$XDG_CONFIG_HOME/mimocode/AGENTS.md` | XDG_CONFIG_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/session/instruction.ts> | MiMo reads AGENTS.md in its config directory as global instructions (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `$XDG_CONFIG_HOME/mimocode/commands/` | XDG_CONFIG_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/command.ts> | MiMo loads {command,commands}/**/*.md from its config directory (main on 2026-10-12). |
+| library | `$XDG_CONFIG_HOME/mimocode/egc/library/rules/` | XDG_CONFIG_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| plugins | `$XDG_CONFIG_HOME/mimocode/plugins/` | XDG_CONFIG_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/plugin.ts> | MiMo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-12); EGC ships opencode-egc-plugin.js there. |
+| runtime | `$XDG_CONFIG_HOME/mimocode/scripts/` | XDG_CONFIG_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `$XDG_CONFIG_HOME/mimocode/skills/` | XDG_CONFIG_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/skill/index.ts> | MiMo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-12). |
+| state | `$XDG_CONFIG_HOME/mimocode/egc/install-state.json` | XDG_CONFIG_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| agents | `$MIMOCODE_HOME/config/agents/` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/agent.ts> | MiMo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-12). |
+| context | `$MIMOCODE_HOME/config/AGENTS.md` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/session/instruction.ts> | MiMo reads AGENTS.md in its config directory as global instructions (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `$MIMOCODE_HOME/config/commands/` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/command.ts> | MiMo loads {command,commands}/**/*.md from its config directory (main on 2026-10-12). |
+| library | `$MIMOCODE_HOME/config/egc/library/rules/` | MIMOCODE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| plugins | `$MIMOCODE_HOME/config/plugins/` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/plugin.ts> | MiMo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-12); EGC ships opencode-egc-plugin.js there. |
+| runtime | `$MIMOCODE_HOME/config/scripts/` | MIMOCODE_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `$MIMOCODE_HOME/config/skills/` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/skill/index.ts> | MiMo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-12). |
+| state | `$MIMOCODE_HOME/config/egc/install-state.json` | MIMOCODE_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## pi-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| context | `~/.pi/agent/AGENTS.md` | default | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/configuration.md> | Pi loads AGENTS.md from its agent directory at startup (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| library | `~/.pi/agent/egc/library/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.pi/agent/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `~/.pi/agent/extensions/egc-guardian.js` | default | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/extensions.md> | Pi loads JavaScript and TypeScript files from <agent-dir>/extensions/; a tool_call handler can block a call or mutate its input (main on 2026-10-12). EGC ships its Guardian and Token Crusher extension there. |
+| commands | `~/.pi/agent/prompts/` | default | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/prompt-templates.md> | Pi exposes the Markdown files in <agent-dir>/prompts/ as /<name> slash commands (main on 2026-10-12). |
+| runtime | `~/.pi/agent/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `~/.pi/agent/skills/` | default | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/skills.md> | Pi discovers directories containing SKILL.md recursively in <agent-dir>/skills/ (main on 2026-10-12). |
+| state | `~/.pi/agent/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| context | `$PI_CODING_AGENT_DIR/AGENTS.md` | PI_CODING_AGENT_DIR | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/configuration.md> | Pi loads AGENTS.md from its agent directory at startup (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| library | `$PI_CODING_AGENT_DIR/egc/library/agents/` | PI_CODING_AGENT_DIR | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `$PI_CODING_AGENT_DIR/egc/library/rules/` | PI_CODING_AGENT_DIR | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `$PI_CODING_AGENT_DIR/extensions/egc-guardian.js` | PI_CODING_AGENT_DIR | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/extensions.md> | Pi loads JavaScript and TypeScript files from <agent-dir>/extensions/; a tool_call handler can block a call or mutate its input (main on 2026-10-12). EGC ships its Guardian and Token Crusher extension there. |
+| commands | `$PI_CODING_AGENT_DIR/prompts/` | PI_CODING_AGENT_DIR | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/prompt-templates.md> | Pi exposes the Markdown files in <agent-dir>/prompts/ as /<name> slash commands (main on 2026-10-12). |
+| runtime | `$PI_CODING_AGENT_DIR/scripts/` | PI_CODING_AGENT_DIR | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `$PI_CODING_AGENT_DIR/skills/` | PI_CODING_AGENT_DIR | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/skills.md> | Pi discovers directories containing SKILL.md recursively in <agent-dir>/skills/ (main on 2026-10-12). |
+| state | `$PI_CODING_AGENT_DIR/egc/install-state.json` | PI_CODING_AGENT_DIR | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## vibe-project
 

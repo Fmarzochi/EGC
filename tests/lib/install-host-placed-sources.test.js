@@ -25,7 +25,8 @@ const HOSTS = {
   'scripts/hooks/amp-guardian-crusher-plugin.ts': { target: 'amp', destination: /\/plugins\/egc-guardian-crusher\.ts$/ },
   'scripts/hooks/amp-mesh-notice-plugin.ts': { target: 'amp', destination: /\/plugins\/egc-mesh-notice\.ts$/ },
   'scripts/hooks/cline-pretooluse-shim.js': { target: 'cline', destination: /\/hooks\/PreToolUse$/ },
-  'scripts/hooks/opencode-egc-plugin.js': { target: 'opencode', destination: /\/plugins\/opencode-egc-plugin\.js$/ },
+  'scripts/hooks/opencode-egc-plugin.js': { target: ['opencode', 'kilo', 'mimo'], destination: /\/plugins\/opencode-egc-plugin\.js$/ },
+  'scripts/hooks/pi-egc-extension.js': { target: 'pi', destination: /\/extensions\/egc-guardian\.js$/ },
 };
 
 let passed = 0;
@@ -62,7 +63,7 @@ for (const target of [...new Set(listInstallTargetAdapters().map(adapter => adap
         if (op.kind !== 'copy-file' || !Object.hasOwn(HOSTS, source)) continue;
         const host = HOSTS[source];
         const destination = normalized(op.destinationPath);
-        if (host.target === target && host.destination.test(destination)) reached.add(source);
+        if ([].concat(host.target).includes(target) && host.destination.test(destination)) reached.add(`${source} @ ${target}`);
         else wrong.push(`${source} -> ${normalized(path.relative(home, op.destinationPath))}`);
       }
       assert.deepStrictEqual(wrong, []);
@@ -72,8 +73,9 @@ for (const target of [...new Set(listInstallTargetAdapters().map(adapter => adap
   });
 }
 
-run('each host-placed source reaches its host', () => {
-  assert.deepStrictEqual([...reached].sort(), Object.keys(HOSTS).sort());
+run('each host-placed source reaches every host that places it', () => {
+  const expected = Object.entries(HOSTS).flatMap(([source, host]) => [].concat(host.target).map(target => `${source} @ ${target}`));
+  assert.deepStrictEqual([...reached].sort(), expected.sort());
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);

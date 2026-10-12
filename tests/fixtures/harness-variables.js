@@ -39,6 +39,9 @@ const HARNESS_VARIABLES = Object.freeze([
 const CONFIG_HOME_VARIABLES = Object.freeze([
   'CRUSH_GLOBAL_CONFIG',
   'VIBE_HOME',
+  'GROK_HOME',
+  'MIMOCODE_HOME',
+  'PI_CODING_AGENT_DIR',
   'XDG_CONFIG_HOME',
 ]);
 

@@ -51,10 +51,13 @@ test('drops the variables a tool session sets and keeps the rest', () => {
 });
 
 test('drops the variables that move a config directory out of the home a test passes', () => {
-  const env = suiteEnv({ PATH: '/bin', XDG_CONFIG_HOME: '/home/runner/.config', CRUSH_GLOBAL_CONFIG: '/somewhere/crush', VIBE_HOME: '/somewhere/vibe' });
+  const env = suiteEnv({ PATH: '/bin', XDG_CONFIG_HOME: '/home/runner/.config', CRUSH_GLOBAL_CONFIG: '/somewhere/crush', VIBE_HOME: '/somewhere/vibe', GROK_HOME: '/somewhere/grok', MIMOCODE_HOME: '/somewhere/mimo', PI_CODING_AGENT_DIR: '/somewhere/pi' });
   assert.strictEqual(env.XDG_CONFIG_HOME, undefined);
   assert.strictEqual(env.CRUSH_GLOBAL_CONFIG, undefined);
   assert.strictEqual(env.VIBE_HOME, undefined);
+  assert.strictEqual(env.GROK_HOME, undefined);
+  assert.strictEqual(env.MIMOCODE_HOME, undefined);
+  assert.strictEqual(env.PI_CODING_AGENT_DIR, undefined);
   assert.strictEqual(env.PATH, '/bin');
 });
 

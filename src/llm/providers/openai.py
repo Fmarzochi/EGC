@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Any
 
@@ -31,6 +30,7 @@ from llm.core.types import (
 )
 from llm.core.model_resolver import ModelResolver
 from llm.core.redact import redact_secrets
+from llm.core.tool_arguments import parse_tool_arguments
 
 
 class OpenAIProvider(LLMProvider):
@@ -84,18 +84,12 @@ class OpenAIProvider(LLMProvider):
             ),
         ]
 
-    @staticmethod
-    def _extract_tool_calls(choice) -> list[ToolCall] | None:
+    def _extract_tool_calls(self, choice) -> list[ToolCall] | None:
         if not choice.message.tool_calls:
             return None
         calls = []
         for tc in choice.message.tool_calls:
-            try:
-                args = (
-                    json.loads(tc.function.arguments) if tc.function.arguments else {}
-                )
-            except json.JSONDecodeError:
-                args = {}
+            args = parse_tool_arguments(tc.function.arguments, self.provider_type)
             calls.append(
                 ToolCall(id=tc.id or "", name=tc.function.name, arguments=args)
             )
@@ -144,6 +138,16 @@ class OpenAIProvider(LLMProvider):
                 provider=self.provider_type,
             ) from exc
 
+    def _extra_request_params(self, input: LLMInput) -> dict[str, Any]:
+        """Request parameters a compatible vendor adds on top of the OpenAI shape.
+
+        The base sends none; a provider that needs a vendor extension (such as
+        DeepSeek's thinking switch in ``extra_body``) returns it here instead of
+        rewriting ``generate``.
+        """
+        del input
+        return {}
+
     def generate(self, input: LLMInput) -> LLMOutput:
         if input.stream:
             # Streaming is not implemented in this adapter. Fail loudly instead
@@ -160,6 +164,7 @@ class OpenAIProvider(LLMProvider):
                 params["max_tokens"] = input.max_tokens
             if input.tools:
                 params["tools"] = [tool.to_dict() for tool in input.tools]
+            params.update(self._extra_request_params(input))
             response = self.client.chat.completions.create(**params)
             if not response.choices:
                 raise LLMError(

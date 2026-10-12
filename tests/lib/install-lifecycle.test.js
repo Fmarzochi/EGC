@@ -68,6 +68,11 @@ function test(name, fn) {
   }
 }
 
+function restoreEnv(name, value) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -1504,6 +1509,106 @@ function runTests() {
     }
   }));
 
+  tally(test('a Devin Desktop project install merges the EGC servers into .devin/mcp_config.local.json beside the person\'s own, and an uninstall takes only the two entries out (#1678)', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+    const savedDisabled = { EGC: process.env.EGC_DISABLED_MCPS, ECC: process.env.ECC_DISABLED_MCPS };
+    delete process.env.EGC_DISABLED_MCPS;
+    delete process.env.ECC_DISABLED_MCPS;
+
+    try {
+      const mcpPath = path.join(projectRoot, '.devin', 'mcp_config.local.json');
+      fs.mkdirSync(path.dirname(mcpPath), { recursive: true });
+      fs.writeFileSync(mcpPath, JSON.stringify({
+        mcpServers: { github: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'], env: { GITHUB_TOKEN: 'placeholder' } } },
+      }, null, 2));
+
+      const { planInstallTargetScaffold } = require('../../scripts/lib/install-targets/registry');
+      const { applyInstallPlan } = require('../../scripts/lib/install-executor');
+      const scaffold = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot: REPO_ROOT, homeDir, projectRoot, modules: [] });
+      const mcp = scaffold.operations.find(operation => operation.destinationPath === mcpPath);
+      assert.ok(mcp, 'the scaffold plans the MCP file Devin Local reads');
+      const targetRoot = path.join(projectRoot, '.devin');
+      const installStatePath = scaffold.installStatePath;
+      const statePreview = createInstallState({
+        adapter: { id: 'windsurf-project', target: 'windsurf', kind: 'project' },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'minimal', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [mcp],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+      applyInstallPlan({ operations: [mcp], installStatePath, targetRoot, statePreview });
+
+      const written = JSON.parse(fs.readFileSync(mcpPath, 'utf8'));
+      assert.deepStrictEqual(Object.keys(written.mcpServers).sort(), ['egc-guardian', 'egc-memory', 'github']);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [path.join(REPO_ROOT, 'mcp', 'servers', 'egc-guardian', 'build', 'index.js')], env: {} });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [path.join(REPO_ROOT, 'mcp', 'servers', 'egc-memory', 'build', 'index.js')], env: {} });
+      assert.strictEqual(written.mcpServers.github.env.GITHUB_TOKEN, 'placeholder', 'the person\'s server keeps its env');
+      assert.ok(!fs.existsSync(path.join(homeDir, '.config', 'devin', 'mcp_config.json')), 'the legacy Cascade user file is not written');
+
+      const result = uninstallInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] });
+      const outcome = result.results.find(entry => entry.adapter.id === 'windsurf-project');
+      assert.strictEqual(outcome.status, 'uninstalled');
+      const after = JSON.parse(fs.readFileSync(mcpPath, 'utf8'));
+      assert.deepStrictEqual(Object.keys(after.mcpServers), ['github'], 'only the two EGC entries leave; the file stays for the person\'s server');
+    } finally {
+      restoreEnv('EGC_DISABLED_MCPS', savedDisabled.EGC);
+      restoreEnv('ECC_DISABLED_MCPS', savedDisabled.ECC);
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('a Devin Desktop project install leaves out the MCP servers named in EGC_DISABLED_MCPS, and inspect and repair do not bring them back (#1678)', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+    const savedDisabled = { EGC: process.env.EGC_DISABLED_MCPS, ECC: process.env.ECC_DISABLED_MCPS };
+    delete process.env.ECC_DISABLED_MCPS;
+    process.env.EGC_DISABLED_MCPS = 'egc-memory';
+
+    try {
+      const mcpPath = path.join(projectRoot, '.devin', 'mcp_config.local.json');
+      const { planInstallTargetScaffold } = require('../../scripts/lib/install-targets/registry');
+      const { applyInstallPlan } = require('../../scripts/lib/install-executor');
+      const scaffold = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot: REPO_ROOT, homeDir, projectRoot, modules: [] });
+      const mcp = scaffold.operations.find(operation => operation.destinationPath === mcpPath);
+      assert.ok(mcp, 'the scaffold plans the MCP file when one server stays enabled');
+      assert.deepStrictEqual(Object.keys(mcp.mergePayload.mcpServers), ['egc-guardian'], 'the recorded payload already omits the disabled server');
+
+      const targetRoot = path.join(projectRoot, '.devin');
+      const installStatePath = scaffold.installStatePath;
+      const statePreview = createInstallState({
+        adapter: { id: 'windsurf-project', target: 'windsurf', kind: 'project' },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'minimal', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [mcp],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+      applyInstallPlan({ operations: [mcp], installStatePath, targetRoot, statePreview });
+      assert.deepStrictEqual(Object.keys(JSON.parse(fs.readFileSync(mcpPath, 'utf8')).mcpServers), ['egc-guardian']);
+
+      fs.writeFileSync(mcpPath, JSON.stringify({ mcpServers: {} }, null, 2));
+      delete process.env.EGC_DISABLED_MCPS;
+      const repaired = repairInstalledStates({ homeDir, projectRoot, repoRoot: REPO_ROOT, targets: ['windsurf'] });
+      assert.ok(repaired, 'repair ran');
+      assert.deepStrictEqual(Object.keys(JSON.parse(fs.readFileSync(mcpPath, 'utf8')).mcpServers), ['egc-guardian'], 'repair replays the recorded payload, so the disabled server stays out');
+
+      process.env.EGC_DISABLED_MCPS = 'egc-guardian,egc-memory';
+      const noOperation = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot: REPO_ROOT, homeDir, projectRoot, modules: [] })
+        .operations.find(operation => operation.destinationPath === mcpPath);
+      assert.strictEqual(noOperation, undefined, 'with every EGC server disabled nothing is planned for the file');
+    } finally {
+      restoreEnv('EGC_DISABLED_MCPS', savedDisabled.EGC);
+      restoreEnv('ECC_DISABLED_MCPS', savedDisabled.ECC);
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
   tally(test('uninstall restores JSON merged files from recorded previous content', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
@@ -2045,7 +2150,7 @@ function runTests() {
     }
   }));
 
-  tally(test('doctor reports a removed Claude SessionStart hook as drift', () => {
+  tally(test('doctor reports a removed Claude SessionStart hook as a lost hook entry, an error', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
@@ -2072,12 +2177,13 @@ function runTests() {
         projectRoot,
         targets: ['claude'],
       });
-      assert.strictEqual(report.results[0].status, 'warning');
-      const driftIssue = report.results[0].issues.find(
-        issue => issue.code === 'drifted-managed-files'
+      assert.strictEqual(report.results[0].status, 'error');
+      const hookIssue = report.results[0].issues.find(
+        issue => issue.code === 'missing-hook-entries'
       );
-      assert.ok(driftIssue, 'Should flag the missing hook entry as drift');
-      assert.ok(driftIssue.paths.includes(installed.settingsPath));
+      assert.ok(hookIssue, 'Should flag the missing hook entry as a lost hook (#1713)');
+      assert.ok(hookIssue.paths.includes('SessionStart in ' + installed.settingsPath));
+      assert.ok(!report.results[0].issues.some(issue => issue.code === 'drifted-managed-files'), 'a lost hook is not file drift');
 
       fs.rmSync(installed.settingsPath);
       report = buildDoctorReport({
@@ -2271,7 +2377,7 @@ function runTests() {
   // healthy install (it checked for that same bogus group), and uninstall
   // left the real hooks.json entry behind pointing at a script the
   // copy-file uninstall step had already deleted.
-  tally(test('doctor reports a removed Devin Desktop Guardian hook as drift, not a false positive on a healthy install', () => {
+  tally(test('doctor reports a removed Devin Desktop Guardian hook as a lost hook entry, not a false positive on a healthy install', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
@@ -2286,10 +2392,10 @@ function runTests() {
       }, null, 2));
 
       report = buildDoctorReport({ homeDir, projectRoot, targets: ['windsurf'] });
-      assert.strictEqual(report.results[0].status, 'warning');
-      const driftIssue = report.results[0].issues.find(issue => issue.code === 'drifted-managed-files');
-      assert.ok(driftIssue, 'Should flag the missing pre_run_command entry as drift');
-      assert.ok(driftIssue.paths.includes(installed.hooksJsonPath));
+      assert.strictEqual(report.results[0].status, 'error');
+      const hookIssue = report.results[0].issues.find(issue => issue.code === 'missing-hook-entries');
+      assert.ok(hookIssue, 'Should flag the missing pre_run_command entry as a lost hook (#1713)');
+      assert.ok(hookIssue.paths.includes('pre_run_command in ' + installed.hooksJsonPath));
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
@@ -2366,7 +2472,7 @@ function runTests() {
       fs.writeFileSync(installed.hooksJsonPath, JSON.stringify(guardianOnly, null, 2));
 
       let report = buildDoctorReport({ homeDir, projectRoot, targets: ['windsurf'] });
-      assert.strictEqual(report.results[0].status, 'warning', 'the displaced GateGuard entry must surface as drift');
+      assert.strictEqual(report.results[0].status, 'error', 'the displaced GateGuard entry must surface as a lost hook');
 
       const result = repairInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] });
       assert.strictEqual(result.results[0].status, 'repaired');

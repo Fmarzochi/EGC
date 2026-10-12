@@ -155,6 +155,7 @@ function createManifestInstallPlan(options = {}) {
     targetRoot: plan.targetRoot,
     installRoot: plan.targetRoot,
     installStatePath: plan.installStatePath,
+    legacyInstallStatePaths: toValidationIssueArray(plan.legacyInstallStatePaths),
     retirements: toValidationIssueArray(plan.retirements),
     hookRetirements: toValidationIssueArray(plan.hookRetirements),
     managedRoots: toValidationIssueArray(plan.managedRoots),

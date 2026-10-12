@@ -14,24 +14,14 @@ const {
   getEGCDir,
 } = require('../lib/utils');
 const { estimateModelCost } = require('../lib/llm-costs');
-
-const MAX_STDIN = 1024 * 1024;
-let raw = '';
+const { readHookStdin } = require('../lib/hook-stdin');
 
 function toNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
 }
 
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => {
-  if (raw.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - raw.length;
-    raw += chunk.substring(0, remaining);
-  }
-});
-
-process.stdin.on('end', () => {
+readHookStdin(({ raw }) => {
   try {
     const input = raw.trim() ? JSON.parse(raw) : {};
     const usage = input.usage || input.token_usage || {};

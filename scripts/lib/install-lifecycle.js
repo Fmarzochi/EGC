@@ -884,7 +884,11 @@ function summarizeManagedOperationHealth(repoRoot, operations) {
     if (inspection.status === 'missing') {
       summary.missing.push(inspection);
     } else if (inspection.status === 'drifted') {
+      // Repair re-applies every drifted operation, hooks included; the doctor
+      // reports a hook whose entry left the tool's config on its own, so the
+      // hook inspections sit in both lists.
       summary.drifted.push(inspection);
+      if (inspection.operation?.kind === HOOK_OPERATION_KIND) summary.missingHooks.push(inspection);
     } else if (inspection.status === 'missing-source') {
       summary.missingSource.push(inspection);
     } else if (inspection.status === 'unverified' || inspection.status === 'invalid-destination') {
@@ -896,6 +900,7 @@ function summarizeManagedOperationHealth(repoRoot, operations) {
     drifted: [],
     missingSource: [],
     unverified: [],
+    missingHooks: [],
   });
 }
 
@@ -1111,13 +1116,29 @@ function checkManagedOperationHealth(state, context) {
     ));
   }
 
-  if (operationHealth.drifted.length > 0) {
+  const driftedFiles = operationHealth.drifted.filter(entry => entry.operation?.kind !== HOOK_OPERATION_KIND);
+  if (driftedFiles.length > 0) {
     issues.push(buildIssue(
       'warning',
       'drifted-managed-files',
-      `${operationHealth.drifted.length} managed file(s) differ from the source repo`,
+      `${driftedFiles.length} managed file(s) differ from the source repo`,
       {
-        paths: operationHealth.drifted.map(entry => entry.destinationPath),
+        paths: driftedFiles.map(entry => entry.destinationPath),
+      }
+    ));
+  }
+
+  // A hook entry EGC wrote into a tool's config and that is no longer there is
+  // not drift of a file but a tool that silently lost its hook: an error, named
+  // by event and config, so the regression is seen the first time doctor runs.
+  if (operationHealth.missingHooks.length > 0) {
+    const count = operationHealth.missingHooks.length;
+    issues.push(buildIssue(
+      'error',
+      'missing-hook-entries',
+      `${count} hook entr${count === 1 ? 'y' : 'ies'} EGC installed ${count === 1 ? 'is' : 'are'} absent from the config the tool reads (run 'egc repair' to put ${count === 1 ? 'it' : 'them'} back)`,
+      {
+        paths: operationHealth.missingHooks.map(entry => `${entry.operation.hookEvent || 'hook'} in ${entry.destinationPath}`),
       }
     ));
   }
