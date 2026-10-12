@@ -81,8 +81,28 @@ OPENAI_GPT_4O_MINI = "openai/gpt-4o-mini"
 OPENROUTER_AUTO = "openrouter/auto"
 OPENAI_GPT_OSS_120B = "openai/gpt-oss-120b"
 LLAMA32 = "llama3.2"
+# Ollama library ids checked on 2026-10-11 (https://ollama.com/library): the
+# bare name is the library default tag; a tagged id such as "qwen3:8b" passes
+# through resolve() unchanged.
+QWEN3 = "qwen3"
+GPT_OSS = "gpt-oss"
+LLAMA33 = "llama3.3"
+LLAMA31 = "llama3.1"
+GEMMA4 = "gemma4"
+DEEPSEEK_R1_OLLAMA = "deepseek-r1"
+# Groq production ids checked on 2026-10-11 (https://console.groq.com/docs/models).
+GROQ_GPT_OSS_20B = "openai/gpt-oss-20b"
+GROQ_LLAMA33_70B = "llama-3.3-70b-versatile"
+GROQ_LLAMA31_8B = "llama-3.1-8b-instant"
+# OpenRouter ids checked on 2026-10-11 (https://openrouter.ai/<vendor>/<model>).
+QWEN35_397B = "qwen/qwen3.5-397b-a17b"
+QWEN3_235B_RETIRED = "qwen/qwen3-235b-a22b"
+ANTHROPIC_CLAUDE_SONNET_55 = "anthropic/claude-sonnet-5.5"
+OPENAI_GPT6_ASTRA = "openai/gpt-6-astra"
+GOOGLE_GEMINI_38_FLASH = "google/gemini-3.8-flash"
 GOOGLE_GEMINI_25_FLASH = "google/gemini-2.5-flash"
 OPENAI_GPT_4O = "openai/gpt-4o"
+ANTHROPIC_CLAUDE_SONNET_45 = "anthropic/claude-sonnet-4.5"
 
 # Mistral ids checked on 2026-10-11 (docs.mistral.ai: models overview, changelog,
 # vibe/code/cli/configuration and studio/conversations/function-calling). The
@@ -139,6 +159,7 @@ class ModelResolver:
     _OPENROUTER_AUTO = OPENROUTER_AUTO
     _OPENAI_GPT_OSS_120B = OPENAI_GPT_OSS_120B
     _LLAMA32 = LLAMA32
+    _QWEN3 = QWEN3
     _GOOGLE_GEMINI_25_FLASH = GOOGLE_GEMINI_25_FLASH
     _CLAUDE_HAIKU = CLAUDE_HAIKU_55
     _GPT_4O_MINI = "gpt-4o-mini"
@@ -517,7 +538,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        # --- Groq ---
+        # --- Groq (production models, console.groq.com/docs/models, 2026-10-11) ---
         OPENAI_GPT_OSS_120B: {
             "provider": "groq",
             "capabilities": [
@@ -526,9 +547,51 @@ class ModelResolver:
                 ModelCapability.CODE,
                 ModelCapability.SPEED,
             ],
-            "fallback": None,
+            "fallback": GROQ_GPT_OSS_20B,
             "context_window": 131072,
             "max_tokens": 65536,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        GROQ_GPT_OSS_20B: {
+            "provider": "groq",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.SPEED,
+                ModelCapability.COST_EFFICIENT,
+            ],
+            "fallback": GROQ_LLAMA33_70B,
+            "context_window": 131072,
+            "max_tokens": 65536,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        GROQ_LLAMA33_70B: {
+            "provider": "groq",
+            "capabilities": [
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.SPEED,
+            ],
+            "fallback": GROQ_LLAMA31_8B,
+            "context_window": 131072,
+            "max_tokens": 32768,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        GROQ_LLAMA31_8B: {
+            "provider": "groq",
+            "capabilities": [
+                ModelCapability.SPEED,
+                ModelCapability.LOW_LATENCY,
+                ModelCapability.COST_EFFICIENT,
+                ModelCapability.TOOL_CALLING,
+            ],
+            "fallback": None,
+            "context_window": 131072,
+            "max_tokens": 131072,
             "supports_vision": False,
             "supports_tools": True,
         },
@@ -676,8 +739,9 @@ class ModelResolver:
             "supports_vision": False,
             "supports_tools": True,
         },
-        # --- Qwen via OpenRouter ---
-        "qwen/qwen3-235b-a22b": {
+        # --- Qwen via OpenRouter (qwen/qwen3-235b-a22b left the catalog; its
+        # id is an alias of this replacement) ---
+        QWEN35_397B: {
             "provider": "openrouter",
             "capabilities": [
                 ModelCapability.REASONING,
@@ -748,14 +812,76 @@ class ModelResolver:
             "supports_vision": False,
             "supports_tools": True,
         },
+        # --- Ollama (library ids, ollama.com/library, 2026-10-11) ---
+        QWEN3: {
+            "provider": "ollama",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.COST_EFFICIENT,
+            ],
+            "fallback": LLAMA32,
+            "context_window": 40960,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        GPT_OSS: {
+            "provider": "ollama",
+            "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING, ModelCapability.CODE],
+            "fallback": QWEN3,
+            "context_window": 131072,
+            "max_tokens": 65536,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        LLAMA33: {
+            "provider": "ollama",
+            "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING, ModelCapability.CODE],
+            "fallback": QWEN3,
+            "context_window": 131072,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        LLAMA31: {
+            "provider": "ollama",
+            "capabilities": [ModelCapability.TOOL_CALLING, ModelCapability.CODE],
+            "fallback": LLAMA32,
+            "context_window": 131072,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        GEMMA4: {
+            "provider": "ollama",
+            "capabilities": [ModelCapability.MULTIMODAL, ModelCapability.TOOL_CALLING, ModelCapability.REASONING],
+            "fallback": QWEN3,
+            "context_window": 131072,
+            "max_tokens": 8192,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        DEEPSEEK_R1_OLLAMA: {
+            "provider": "ollama",
+            "capabilities": [ModelCapability.REASONING, ModelCapability.CODE, ModelCapability.TOOL_CALLING],
+            "fallback": QWEN3,
+            "context_window": 131072,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        # Still served by the library (updated two years ago); the default until
+        # 2026-10-11, kept so existing configs keep working.
         LLAMA32: {
             "provider": "ollama",
-            "capabilities": [ModelCapability.SPEED, ModelCapability.COST_EFFICIENT],
+            "capabilities": [ModelCapability.SPEED, ModelCapability.COST_EFFICIENT, ModelCapability.TOOL_CALLING],
             "fallback": None,
-            "context_window": 128000,
+            "context_window": 131072,
             "max_tokens": 4096,
             "supports_vision": False,
-            "supports_tools": False,
+            "supports_tools": True,
         },
         # --- OpenRouter (broker; any vendor/model ID is also accepted directly) ---
         OPENROUTER_AUTO: {
@@ -764,6 +890,51 @@ class ModelResolver:
             "fallback": _GOOGLE_GEMINI_25_FLASH,
             "context_window": 128000,
             "max_tokens": 8192,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        ANTHROPIC_CLAUDE_SONNET_55: {
+            "provider": "openrouter",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.LONG_CONTEXT,
+            ],
+            "fallback": ANTHROPIC_CLAUDE_SONNET_45,
+            "context_window": 1000000,
+            "max_tokens": 128000,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        OPENAI_GPT6_ASTRA: {
+            "provider": "openrouter",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+                ModelCapability.CODE,
+            ],
+            "fallback": OPENAI_GPT_4O,
+            "context_window": 1050000,
+            "max_tokens": 128000,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        GOOGLE_GEMINI_38_FLASH: {
+            "provider": "openrouter",
+            "capabilities": [
+                ModelCapability.SPEED,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+                ModelCapability.COST_EFFICIENT,
+            ],
+            "fallback": GOOGLE_GEMINI_25_FLASH,
+            "context_window": 1048576,
+            "max_tokens": 65536,
             "supports_vision": True,
             "supports_tools": True,
         },
@@ -785,7 +956,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "anthropic/claude-sonnet-4.5": {
+        ANTHROPIC_CLAUDE_SONNET_45: {
             "provider": "openrouter",
             "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING, ModelCapability.CODE],
             "fallback": _OPENAI_GPT_4O_OR,
@@ -841,8 +1012,8 @@ class ModelResolver:
         "default": _GEMINI_38_FLASH,
         "gemini": _GEMINI_38_FLASH,
         "claude": _CLAUDE_SONNET,
+        "ollama": _QWEN3,
         "openai": _GPT61_SOL,
-        "ollama": _LLAMA32,
         "openrouter": _OPENROUTER_AUTO,
         "mistral": MISTRAL_MEDIUM_LATEST,
         "groq": _OPENAI_GPT_OSS_120B,
@@ -869,14 +1040,15 @@ class ModelResolver:
         _GEMINI_15_FLASH_8B: _GEMINI_35_FLASH_LITE,
         CLAUDE_SONNET_47_RETIRED: CLAUDE_SONNET_55,
         CLAUDE_HAIKU_47_RETIRED: CLAUDE_HAIKU_55,
+        QWEN3_235B_RETIRED: QWEN35_397B,
     }
 
     # Per-provider default model ID (single place provider defaults live).
     _PROVIDER_DEFAULTS: Dict[str, str] = {
         "gemini": _GEMINI_38_FLASH,
         "claude": _CLAUDE_SONNET,
+        "ollama": _QWEN3,
         "openai": _GPT61_SOL,
-        "ollama": _LLAMA32,
         "openrouter": _OPENROUTER_AUTO,
         "mistral": MISTRAL_MEDIUM_LATEST,
         "deepseek": DEEPSEEK_FLASH,
@@ -902,6 +1074,7 @@ class ModelResolver:
                               "command-"))   # native Cohere IDs
             or "/models/" in v          # Vertex AI fully-qualified path
             or ("/" in v and not v.startswith("/"))  # OpenRouter "vendor/model" style
+            or (":" in v and "/" not in v and " " not in v)  # Ollama "name:tag" style
         )
 
     # Providers whose native model IDs also use the "vendor/model" shape,
@@ -927,6 +1100,14 @@ class ModelResolver:
             if expected in cls._VENDOR_SLASH_PROVIDERS:
                 return expected
             return "openrouter"
+        # An Ollama "name:tag" id (qwen3:8b, gpt-oss:120b) is local by shape,
+        # judged before the vendor prefixes so gpt-oss:120b does not read as OpenAI.
+        if ":" in v and " " not in v:
+            return "ollama"
+        return cls._native_provider_from_name(v)
+
+    @staticmethod
+    def _native_provider_from_name(v: str) -> Optional[str]:
         if "claude-" in v:
             return "claude"
         if v.startswith(("gpt-", "o1", "o3", "o4")):
@@ -1192,6 +1373,16 @@ class ModelResolver:
             MINISTRAL_8B_LATEST: "Ministral 3 8B - lightweight edge model, vision",
             MINISTRAL_3B_LATEST: "Ministral 3 3B - smallest edge model, vision",
             OPENAI_GPT_OSS_120B: "GPT-OSS 120B via Groq - fast inference, tool calling",
+            QWEN3: "Qwen3 - local default, tools and thinking",
+            GPT_OSS: "GPT-OSS - local reasoning, 20b default (120b tag available)",
+            LLAMA33: "Llama 3.3 70B - local, tools",
+            LLAMA31: "Llama 3.1 - local, tools",
+            GEMMA4: "Gemma 4 - local, vision and tools",
+            DEEPSEEK_R1_OLLAMA: "DeepSeek R1 - local reasoning",
+            LLAMA32: "Llama 3.2 - local, the previous default",
+            GROQ_GPT_OSS_20B: "GPT-OSS 20B via Groq - fast & affordable",
+            GROQ_LLAMA33_70B: "Llama 3.3 70B via Groq - versatile",
+            GROQ_LLAMA31_8B: "Llama 3.1 8B via Groq - instant",
             COHERE_COMMAND_A_PLUS: "Command A+ (Cohere) - agentic tool use, vision, multilingual",
             COHERE_COMMAND_A: "Command A (Cohere) - agents and tool use, 256k context",
             COHERE_COMMAND_A_REASONING: "Command A Reasoning (Cohere) - reasoning with tool use",
@@ -1202,16 +1393,18 @@ class ModelResolver:
             COHERE_COMMAND_R7B: "Command R7B (Cohere) - smallest, lowest latency",
             DEEPSEEK_FLASH: "DeepSeek V4.1 Flash - fast, tools, 1M context (default)",
             DEEPSEEK_V4_PRO: "DeepSeek V4 Pro - strongest reasoning, 1M context",
-            LLAMA32: "Llama 3.2 - local general purpose",
             OPENROUTER_AUTO: "OpenRouter Auto - broker picks the best model",
             "google/gemini-2.5-pro": "Gemini 2.5 Pro via OpenRouter",
             GOOGLE_GEMINI_25_FLASH: "Gemini 2.5 Flash via OpenRouter",
-            "anthropic/claude-sonnet-4.5": "Claude Sonnet 4.5 via OpenRouter",
+            ANTHROPIC_CLAUDE_SONNET_45: "Claude Sonnet 4.5 via OpenRouter",
             OPENAI_GPT_4O: "GPT-4o via OpenRouter",
             OPENAI_GPT_4O_MINI: "GPT-4o-mini via OpenRouter",
             "deepseek/deepseek-r1": "DeepSeek R1 via OpenRouter - strong reasoning",
             cls._DEEPSEEK_CHAT_V3: "DeepSeek Chat V3 via OpenRouter - cost-efficient",
-            "qwen/qwen3-235b-a22b": "Qwen3 235B via OpenRouter - large reasoning model",
+            QWEN35_397B: "Qwen3.5 397B via OpenRouter - large reasoning model",
+            ANTHROPIC_CLAUDE_SONNET_55: "Claude Sonnet 5.5 via OpenRouter",
+            OPENAI_GPT6_ASTRA: "GPT-6 Astra via OpenRouter - most capable",
+            GOOGLE_GEMINI_38_FLASH: "Gemini 3.8 Flash via OpenRouter",
             cls._QWEN3_32B: "Qwen3 32B via OpenRouter - balanced & affordable",
             "meta-llama/llama-4-maverick": "Llama 4 Maverick via OpenRouter - multimodal",
             cls._LLAMA4_SCOUT: "Llama 4 Scout via OpenRouter - fast & long context",
