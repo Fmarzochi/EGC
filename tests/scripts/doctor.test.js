@@ -61,6 +61,8 @@ function computeEGCDirForHome(homeDir) {
   }
 }
 
+const HOST_CONFIG_PATH_OVERRIDES = ['XDG_CONFIG_HOME', 'KIMI_CODE_HOME', 'CRUSH_GLOBAL_CONFIG', 'VIBE_HOME', 'CODEX_HOME', 'APPDATA'];
+
 function run(args = [], options = {}) {
   const env = {
     ...process.env,
@@ -68,6 +70,11 @@ function run(args = [], options = {}) {
     USERPROFILE: options.homeDir || process.env.USERPROFILE,
     ...(options.env || {}),
   };
+  if (options.homeDir) {
+    for (const key of HOST_CONFIG_PATH_OVERRIDES) {
+      if (!Object.hasOwn(options.env || {}, key)) delete env[key];
+    }
+  }
 
   try {
     const stdout = execFileSync('node', [SCRIPT, ...args], {
@@ -1086,6 +1093,70 @@ function runTests() {
       assert.ok(result.stdout.includes('[ERROR] egc-guardian at ' + gone + ': registered path does not exist (run egc init after an update)'), result.stdout);
       assert.ok(result.stdout.includes('[OK] egc-memory at ' + servers.ok + ': answers tools/list (2 tools) (registered in Auggie)'), result.stdout);
       assert.ok(result.stdout.includes('MCP summary: registrations=2, registered=2, servers=4, answering=1, warnings=0, errors=3'), result.stdout);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('a server that answers with a non-object line is an error naming the line, not a crash of the doctor (#1713)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const dir = path.join(homeDir, 'fake-servers');
+      fs.mkdirSync(dir, { recursive: true });
+      const nullServer = path.join(dir, 'null-server.js');
+      fs.writeFileSync(nullServer, "process.stdout.write('null\\n');\nprocess.stdin.resume();\nsetInterval(() => {}, 1000);\n");
+      writeJson(path.join(homeDir, '.cursor', 'mcp.json'), mcpServersConfig(nullServer, nullServer));
+
+      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '3000' } });
+      assert.strictEqual(result.code, 1, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes('answered with an error: not a JSON-RPC message: null'), result.stdout);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('the probe starts a server the way the config registers it: command, arguments and environment (#1713)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const dir = path.join(homeDir, 'fake-servers');
+      fs.mkdirSync(dir, { recursive: true });
+      const guarded = path.join(dir, 'guarded-server.js');
+      fs.writeFileSync(guarded, "if (process.argv[2] !== 'serve' || process.env.EGC_FAKE_TOKEN !== 'on') {\n  process.stderr.write('launched without its registered arguments or environment');\n  process.exit(4);\n}\n" + OK_SERVER_SOURCE);
+      const entry = { command: process.execPath, args: [guarded, 'serve'], env: { EGC_FAKE_TOKEN: 'on' } };
+      writeJson(path.join(homeDir, '.cursor', 'mcp.json'), { mcpServers: { 'egc-guardian': entry, 'egc-memory': entry } });
+
+      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '3000' } });
+      assert.strictEqual(result.code, 0, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes('[OK] egc-guardian at ' + guarded + ': answers tools/list (2 tools)'), result.stdout);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('Zed servers are read in the current flat form and in the legacy nested form (#1713)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const servers = writeFakeServers(homeDir);
+      writeJson(path.join(homeDir, '.config', 'zed', 'settings.json'), {
+        context_servers: {
+          'egc-guardian': { command: 'node', args: [servers.ok] },
+          'egc-memory': { command: { path: 'node', args: [servers.ok] } },
+        },
+      });
+
+      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '3000' } });
+      assert.strictEqual(result.code, 0, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes('[OK] egc-guardian at ' + servers.ok), result.stdout);
+      assert.ok(result.stdout.includes('[OK] egc-memory at ' + servers.ok), result.stdout);
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

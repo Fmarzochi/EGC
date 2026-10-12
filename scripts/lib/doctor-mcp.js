@@ -23,24 +23,47 @@ const KILL_GRACE_MS = 500;
 const STDERR_TAIL_CHARS = 300;
 const MCP_PROTOCOL_VERSION = '2024-11-05';
 
-function stringAt(list, index) {
-  return Array.isArray(list) && typeof list[index] === 'string' ? list[index] : null;
-}
-
 function entryOf(container, name) {
   return container && typeof container === 'object' && !Array.isArray(container) && Object.hasOwn(container, name)
     ? container[name]
     : undefined;
 }
 
-// Each reader answers {name: binPath | null} for the EGC servers a parsed
-// config names; a server that is named without a path it can be probed at
-// keeps null, which the probe reports as a registration without a file.
+// A launch is what the tool runs for one server: its command, arguments and
+// environment. `bin` is the script the arguments name first, the file the
+// probe checks before starting anything.
+function stringList(list) {
+  return Array.isArray(list) ? list.filter(item => typeof item === 'string') : [];
+}
+
+function stringMap(map) {
+  const out = {};
+  if (map && typeof map === 'object' && !Array.isArray(map)) {
+    for (const [key, value] of Object.entries(map)) {
+      if (typeof value === 'string') out[key] = value;
+    }
+  }
+  return out;
+}
+
+function launchOf(command, args, env) {
+  const list = stringList(args);
+  return {
+    command: typeof command === 'string' && command.length > 0 ? command : null,
+    args: list,
+    env: stringMap(env),
+    bin: list.length > 0 ? list[0] : null,
+  };
+}
+
+// Each reader answers {name: launch | null} for the EGC servers a parsed
+// config names; a server that is named without anything the probe can start
+// keeps null, which the report shows as a registration without a file.
 function serversFromMcpServers(obj) {
   const found = {};
   for (const name of EGC_SERVER_NAMES) {
     const entry = entryOf(obj.mcpServers, name);
-    if (entry) found[name] = stringAt(entry.args, 0);
+    if (entry) found[name] = launchOf(entry.command, entry.args, entry.env);
   }
   return found;
 }
@@ -49,7 +72,9 @@ function serversFromOpenCode(obj) {
   const found = {};
   for (const name of EGC_SERVER_NAMES) {
     const entry = entryOf(obj.mcp, name);
-    if (entry) found[name] = stringAt(entry.command, 1);
+    if (!entry) continue;
+    const [command, ...args] = stringList(entry.command);
+    found[name] = launchOf(command, args, entry.environment);
   }
   return found;
 }
@@ -58,7 +83,7 @@ function serversFromCrush(obj) {
   const found = {};
   for (const name of EGC_SERVER_NAMES) {
     const entry = entryOf(obj.mcp, name);
-    if (entry) found[name] = stringAt(entry.args, 0);
+    if (entry) found[name] = launchOf(entry.command, entry.args, entry.env);
   }
   return found;
 }
@@ -67,7 +92,11 @@ function serversFromZed(obj) {
   const found = {};
   for (const name of EGC_SERVER_NAMES) {
     const entry = entryOf(obj.context_servers, name);
-    if (entry) found[name] = stringAt(entry.command?.args, 0);
+    if (!entry) continue;
+    const legacy = entry.command && typeof entry.command === 'object' ? entry.command : null;
+    found[name] = legacy
+      ? launchOf(legacy.path, legacy.args, legacy.env)
+      : launchOf(entry.command, entry.args, entry.env);
   }
   return found;
 }
@@ -89,13 +118,13 @@ function serversFromToml(text) {
   const found = {};
   if (Array.isArray(servers)) {
     for (const server of servers) {
-      if (server && EGC_SERVER_NAMES.includes(server.name)) found[server.name] = stringAt(server.args, 0);
+      if (server && EGC_SERVER_NAMES.includes(server.name)) found[server.name] = launchOf(server.command, server.args, server.env);
     }
     return found;
   }
   for (const name of EGC_SERVER_NAMES) {
     const entry = entryOf(servers, name);
-    if (entry) found[name] = stringAt(entry.args, 0);
+    if (entry) found[name] = launchOf(entry.command, entry.args, entry.env);
   }
   return found;
 }
@@ -171,9 +200,9 @@ function probeMcpServer(binPath, options = {}) {
     return Promise.resolve({ status: 'missing-file' });
   }
   return new Promise(resolve => {
-    const child = spawn(process.execPath, [binPath], {
+    const child = spawn(options.command || process.execPath, options.args || [binPath], {
       cwd: options.cwd || process.cwd(),
-      env: { ...process.env, ...(options.env || {}) },
+      env: { ...process.env, ...options.env },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     let buffer = '';
@@ -200,6 +229,10 @@ function probeMcpServer(binPath, options = {}) {
       }
     };
     const onMessage = message => {
+      if (message === null || typeof message !== 'object' || Array.isArray(message)) {
+        finish({ status: 'bad-answer', detail: `not a JSON-RPC message: ${JSON.stringify(message)}` });
+        return;
+      }
       if (message.id === 1) {
         if (message.error) {
           finish({ status: 'bad-answer', detail: `initialize: ${JSON.stringify(message.error)}` });
@@ -258,9 +291,9 @@ function probeMcpServer(binPath, options = {}) {
 function registeredServers(registrations) {
   const pairs = new Map();
   for (const registration of registrations) {
-    for (const [name, bin] of Object.entries(registration.servers || {})) {
-      const key = `${name}\u0000${bin ?? ''}`;
-      const pair = pairs.get(key) || { name, bin, registeredIn: [] };
+    for (const [name, launch] of Object.entries(registration.servers || {})) {
+      const key = JSON.stringify([name, launch]);
+      const pair = pairs.get(key) || { name, bin: launch?.bin ?? null, launch, registeredIn: [] };
       pair.registeredIn.push(registration.name);
       pairs.set(key, pair);
     }
@@ -277,8 +310,13 @@ function probeRegisteredServers(registrations, options = {}) {
     (chain, pair) => chain.then(async results => {
       const probe = pair.bin === null
         ? { status: 'missing-file' }
-        : await probeMcpServer(pair.bin, options);
-      return [...results, { ...pair, ...probe }];
+        : await probeMcpServer(pair.bin, {
+          ...options,
+          command: pair.launch.command || undefined,
+          args: pair.launch.args,
+          env: { ...options.env, ...pair.launch.env },
+        });
+      return [...results, { name: pair.name, bin: pair.bin, registeredIn: pair.registeredIn, ...probe }];
     }),
     Promise.resolve([])
   );
