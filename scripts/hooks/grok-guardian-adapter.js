@@ -5,8 +5,8 @@ const { run: runBashGuardian } = require('./pre-bash-guardian-validate');
 const { run: runWriteGuardian } = require('./pre-write-guardian-validate');
 const { decideGuardianAdapterEvent, runJsonEnvelopeGuardianAdapter } = require('../lib/adapter-stdin-json');
 
-const SHELL_TOOL_RE = /^bash$/i;
-const WRITE_TOOL_RE = /^(edit|write)$/i;
+const SHELL_TOOL_RE = /^(bash|run_terminal_command|monitor)$/i;
+const WRITE_TOOL_RE = /^(edit|write|search_replace)$/i;
 const TRUNCATED_REASON = 'EGC Guardian BLOCKED this tool call: the event payload exceeded the size '
   + 'this validator can safely read, so it could not be parsed or validated.';
 

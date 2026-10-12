@@ -40,6 +40,14 @@ function run(homeDir, extraEnv = {}) {
   });
 }
 
+// A PATH holding node and, on Windows, the `where` the lookup runs, but no
+// tool CLI unless a fake one is put first.
+function isolatedPath(fakeBin) {
+  const dirs = [path.dirname(process.execPath)];
+  if (process.platform === 'win32') dirs.push(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'));
+  return [fakeBin, ...dirs].filter(Boolean).join(path.delimiter);
+}
+
 // Copies bootstrap-cognitive.js into a throwaway "fake repo" whose
 // .opencode/.codebuddy source files are intentionally absent, so __dirname
 // resolution inside the copy sees them as missing without ever touching
@@ -1518,10 +1526,10 @@ async function runGrokTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('skips Grok Build when ~/.grok does not exist (#1495)', () => {
+  if (await test('skips Grok Build when ~/.grok does not exist and grok is not on PATH (#1495)', () => {
     const home = mktempHome();
     try {
-      const output = run(home, { GROK_HOME: '' });
+      const output = run(home, { GROK_HOME: '', PATH: isolatedPath(null) });
       assert.ok(!/\[cognitive\] Grok Build:/.test(output), 'should not mention Grok at all');
       assert.ok(!fs.existsSync(path.join(home, '.grok')), 'nothing is created');
     } finally {
@@ -1973,18 +1981,10 @@ async function runRemainingHarnessTests() {
     }
   })) passed++; else failed++;
 
-  // A PATH holding node and, on Windows, the `where` the lookup runs, but no
-  // crush unless a fake one is put first.
-  function crushPath(fakeBin) {
-    const dirs = [path.dirname(process.execPath)];
-    if (process.platform === 'win32') dirs.push(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'));
-    return [fakeBin, ...dirs].filter(Boolean).join(path.delimiter);
-  }
-
   if (await test('skips Crush when ~/.config/crush does not exist and crush is not on PATH', () => {
     const home = mktempHome();
     try {
-      const output = run(home, { PATH: crushPath(null) });
+      const output = run(home, { PATH: isolatedPath(null) });
       assert.ok(!output.includes('Crush:'), `output should not mention Crush when dir absent: ${output}`);
     } finally {
       cleanup(home);
@@ -1997,7 +1997,7 @@ async function runRemainingHarnessTests() {
     try {
       fs.writeFileSync(path.join(fakeBin, 'crush'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
       fs.writeFileSync(path.join(fakeBin, 'crush.cmd'), '@exit /b 0\r\n');
-      const output = run(home, { PATH: crushPath(fakeBin) });
+      const output = run(home, { PATH: isolatedPath(fakeBin) });
       assert.ok(/Crush: memory protocol installed/.test(output), `should report install, got: ${output}`);
       const target = path.join(home, '.config', 'crush', 'CRUSH.md');
       assert.ok(fs.existsSync(target), 'CRUSH.md must be written on the first run');

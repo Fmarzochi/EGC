@@ -66,6 +66,20 @@ tally(test('buildGuardianInput maps Edit and Write to the write Guardian, and le
   assert.strictEqual(buildGuardianInput({ toolInput: { command: 'ls' } }), null, 'no tool name, no judgement');
 }));
 
+tally(test('buildGuardianInput maps the Grok native tool names: run_terminal_command and monitor to the Bash Guardian, search_replace and write to the write Guardian (#1495)', () => {
+  for (const tool of ['run_terminal_command', 'monitor']) {
+    const mapped = buildGuardianInput({ hookEventName: 'PreToolUse', toolName: tool, toolInput: { command: 'echo hello' } });
+    assert.strictEqual(mapped.kind, 'bash', tool);
+    assert.strictEqual(mapped.input.tool_input.command, 'echo hello');
+  }
+  for (const tool of ['search_replace', 'write']) {
+    const mapped = buildGuardianInput({ toolName: tool, toolInput: { file_path: '/work/a.js' } });
+    assert.strictEqual(mapped.kind, 'write', tool);
+  }
+  const denied = runGrokGuardianAdapter({ toolName: 'run_terminal_command', toolInput: { command: 'rm -rf /' } });
+  assert.strictEqual(denied.blocked, true, 'a destructive command under the native shell tool name is denied');
+}));
+
 tally(test('runGrokGuardianAdapter allows a harmless command, denies a destructive one and a protected edit, and fails closed on a truncated payload (#1495)', () => {
   assert.deepStrictEqual(runGrokGuardianAdapter({ toolName: 'Bash', toolInput: { command: 'echo hello' } }), { blocked: false });
   const denied = runGrokGuardianAdapter({ toolName: 'Bash', toolInput: { command: 'rm -rf /' } });

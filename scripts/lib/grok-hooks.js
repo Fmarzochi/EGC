@@ -7,7 +7,7 @@ const { inspectOwnedHookFile, removeOwnedHookFile, writeOwnedHookFile } = requir
 const OPERATION_DISPATCH_TAG = 'grok-guardian-hook-file';
 const GROK_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH = 'scripts/hooks/grok-guardian-adapter.js';
 const GUARDIAN_HOOK_FILE_NAME = 'egc-guardian.json';
-const GUARDIAN_MATCHER = 'Bash|Edit|Write';
+const GUARDIAN_MATCHER = 'Bash|Edit|Write|run_terminal_command|monitor|search_replace|write';
 
 function resolveGrokGuardianHookFilePath(targetRoot) {
   return path.join(targetRoot, 'hooks', GUARDIAN_HOOK_FILE_NAME);

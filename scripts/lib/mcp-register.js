@@ -29,6 +29,7 @@ const { isInsideReal, realizePath } = require('./path-safety');
 const { replaceFileWith } = require('./install/preserving-write');
 const { resolveCrushConfigDir, resolveCrushConfigPath } = require('./install-targets/crush-home');
 const { resolveVibeHome } = require('./install-targets/vibe-home');
+const { resolveGrokHome } = require('./install-targets/grok-home');
 
 let TOML = null;
 try {
@@ -631,6 +632,14 @@ function buildMcpRegistrationTargets(homeDir) {
       path: path.join(homeDir, '.qwen', 'settings.json'),
       gate: () => fs.existsSync(path.join(homeDir, '.qwen')) || commandExists('qwen'),
       format: 'json',
+    },
+    {
+      name: 'Grok Build',
+      path: path.join(resolveGrokHome(homeDir), 'config.toml'),
+      gate: () => fs.existsSync(resolveGrokHome(homeDir)) || commandExists('grok'),
+      allowedRoot: resolveGrokHome(homeDir),
+      format: 'toml',
+      tomlTables: 'per-server',
     },
   ];
 }

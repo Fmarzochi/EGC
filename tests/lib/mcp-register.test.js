@@ -153,7 +153,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build',
     ]);
   })));
 
@@ -325,6 +325,41 @@ function runTests() {
       assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
       assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
     } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Grok Build: config.toml under GROK_HOME (default ~/.grok) as [mcp_servers.<id>] tables, dispatched by registerMcpServers and keeping the keys already there (#1495)', () => {
+    const tmpHome = makeTempDir();
+    const previous = process.env.GROK_HOME;
+    try {
+      delete process.env.GROK_HOME;
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Grok Build');
+      assert.strictEqual(target.path, path.join(tmpHome, '.grok', 'config.toml'));
+      assert.strictEqual(target.allowedRoot, path.join(tmpHome, '.grok'));
+      assert.strictEqual(target.format, 'toml');
+      assert.strictEqual(target.tomlTables, 'per-server');
+
+      const configPath = path.join(tmpHome, '.grok', 'config.toml');
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(configPath, 'model = "grok-build"\n');
+      const registered = [];
+      registerIsolated(tmpHome, { onRegister: t => registered.push(t.name) });
+      assert.ok(registered.includes('Grok Build'), `the Grok target is registered, got ${registered.join(', ')}`);
+      const content = fs.readFileSync(configPath, 'utf8');
+      assert.ok(content.includes('model = "grok-build"'), 'the existing keys stay');
+      assert.ok(content.includes('[mcp_servers.egc-guardian]'));
+      assert.ok(content.includes('[mcp_servers.egc-memory]'));
+      assert.ok(!content.includes('[[mcp_servers]]'));
+
+      const moved = path.join(tmpHome, 'grok-data');
+      process.env.GROK_HOME = moved;
+      const relocated = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Grok Build');
+      assert.strictEqual(relocated.path, path.join(moved, 'config.toml'));
+      assert.strictEqual(relocated.allowedRoot, moved);
+    } finally {
+      if (previous === undefined) delete process.env.GROK_HOME;
+      else process.env.GROK_HOME = previous;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   })));
