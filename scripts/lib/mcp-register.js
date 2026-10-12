@@ -465,6 +465,10 @@ function openCodeConfigDir(homeDir) {
   return path.join(process.env.XDG_CONFIG_HOME || path.join(homeDir, '.config'), 'opencode');
 }
 
+function kiloConfigDir(homeDir) {
+  return path.join(process.env.XDG_CONFIG_HOME || path.join(homeDir, '.config'), 'kilo');
+}
+
 // The file the servers go into: the documented name when it exists, the
 // legacy name when only that exists, the documented name when creating.
 // A jsonc file is never edited (comments would not survive a rewrite);
@@ -640,6 +644,13 @@ function buildMcpRegistrationTargets(homeDir) {
       allowedRoot: resolveGrokHome(homeDir),
       format: 'toml',
       tomlTables: 'per-server',
+    },
+    {
+      name: 'Kilo Code CLI',
+      path: path.join(kiloConfigDir(homeDir), 'kilo.json'),
+      gate: () => fs.existsSync(kiloConfigDir(homeDir)) || commandExists('kilo'),
+      allowedRoot: kiloConfigDir(homeDir),
+      format: 'opencode-mcp',
     },
   ];
 }
@@ -1230,6 +1241,7 @@ module.exports = {
   registerToml,
   registerZedContextServers,
   registerOpenCodeMcp,
+  kiloConfigDir,
   openCodeConfigDir,
   openCodeConfigPath,
   registerOpenCodeInstructions,

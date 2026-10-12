@@ -153,8 +153,49 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI',
     ]);
+  })));
+
+  (tally(test('Kilo Code CLI: the gate opens on ~/.config/kilo, XDG_CONFIG_HOME moves it, and the servers go under mcp in kilo.json (#1496)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    try {
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kilo Code CLI');
+      assert.ok(absent, 'Kilo Code CLI must be a registration target');
+      assert.strictEqual(typeof absent.gate(), 'boolean', 'the gate returns a boolean when Kilo is absent');
+      const kiloDir = path.join(tmpHome, '.config', 'kilo');
+      fs.mkdirSync(kiloDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kilo Code CLI');
+      assert.strictEqual(target.path, path.join(kiloDir, 'kilo.json'));
+      assert.strictEqual(target.format, 'opencode-mcp', 'Kilo reads the OpenCode mcp shape');
+      assert.strictEqual(target.allowedRoot, kiloDir);
+      assert.strictEqual(target.gate(), true, 'the config directory alone opens the gate');
+      const xdg = path.join(tmpHome, 'xdg');
+      process.env.XDG_CONFIG_HOME = xdg;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kilo Code CLI').path, path.join(xdg, 'kilo', 'kilo.json'));
+    } finally {
+      delete process.env.XDG_CONFIG_HOME;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('Kilo Code CLI: registration keeps the person\'s settings and servers in kilo.json, in the local command-array shape (#1496)', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const configPath = path.join(tmpHome, '.config', 'kilo', 'kilo.json');
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      const own = { model: 'anthropic/claude-sonnet-4', permission: { bash: 'ask' }, mcp: { mine: { type: 'local', command: ['my-server'] } } };
+      fs.writeFileSync(configPath, JSON.stringify(own, null, 2));
+      assert.strictEqual(registerOpenCodeMcp(configPath, bins), true);
+      const written = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      assert.strictEqual(written.model, own.model);
+      assert.deepStrictEqual(written.permission, own.permission);
+      assert.deepStrictEqual(written.mcp.mine, own.mcp.mine);
+      assert.deepStrictEqual(written.mcp['egc-guardian'], { type: 'local', command: ['node', bins.guardianBin] });
+      assert.deepStrictEqual(written.mcp['egc-memory'], { type: 'local', command: ['node', bins.memoryBin] });
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
   })));
 
   (tally(test('Mistral Vibe: the path is config.toml under the data root, the root alone opens the gate, VIBE_HOME moves both, and the format is toml with transport = "stdio" (#1497)', () => {

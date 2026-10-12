@@ -1509,6 +1509,51 @@ async function runVibeTests() {
   return [passed, failed];
 }
 
+async function runKiloCliTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('writes the Kilo Code CLI AGENTS.md when ~/.config/kilo exists (#1496)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.config', 'kilo'), { recursive: true });
+      const output = run(home, { XDG_CONFIG_HOME: '' });
+      assert.ok(/Kilo Code CLI: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const content = fs.readFileSync(path.join(home, '.config', 'kilo', 'AGENTS.md'), 'utf8');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Kilo Code CLI when ~/.config/kilo does not exist (#1496)', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home, { XDG_CONFIG_HOME: '' });
+      assert.ok(!/\[cognitive\] Kilo Code CLI:/.test(output), 'should not mention Kilo at all');
+      assert.ok(!fs.existsSync(path.join(home, '.config', 'kilo')), 'nothing is created');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the Kilo Code CLI AGENTS.md under XDG_CONFIG_HOME when it is set (#1496)', () => {
+    const home = mktempHome();
+    try {
+      const xdg = path.join(home, 'xdg');
+      fs.mkdirSync(path.join(xdg, 'kilo'), { recursive: true });
+      const output = run(home, { XDG_CONFIG_HOME: xdg });
+      assert.ok(/Kilo Code CLI: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(xdg, 'kilo', 'AGENTS.md')), 'the file lands under XDG_CONFIG_HOME/kilo');
+      assert.ok(!fs.existsSync(path.join(home, '.config', 'kilo')), 'and not under ~/.config/kilo');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 async function runGrokTests() {
   let passed = 0;
   let failed = 0;
@@ -1889,6 +1934,12 @@ async function runRemainingHarnessTests() {
     const [grokPassed, grokFailed] = await runGrokTests();
     passed += grokPassed;
     failed += grokFailed;
+  }
+
+  {
+    const [kiloPassed, kiloFailed] = await runKiloCliTests();
+    passed += kiloPassed;
+    failed += kiloFailed;
   }
 
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {
