@@ -354,49 +354,64 @@ function tomlHasTableServer(content, serverName) {
   return content.includes(`[mcp_servers.${serverName}]`);
 }
 
+const LEGACY_ARRAY_HEADER = /^\s*\[\[\s*mcp_servers\s*\]\]/;
+const LEGACY_CHILD_HEADER = /^\s*\[{1,2}\s*mcp_servers\s*\./;
+const ANY_TABLE_HEADER = /^\s*\[\[?[^\]]+\]\]?/;
+
+// A header classified for the legacy [[mcp_servers]] scanners. A dotted header
+// such as [mcp_servers.env] that follows an array entry is TOML for a child of
+// that entry, so it belongs to the entry's block and is not a new table.
+function classifyLegacyHeader(line) {
+  if (LEGACY_ARRAY_HEADER.test(line)) return 'array';
+  if (LEGACY_CHILD_HEADER.test(line)) return 'child';
+  if (ANY_TABLE_HEADER.test(line)) return 'other';
+  return null;
+}
+
+function legacyNameOf(line) {
+  const withoutComment = line.replace(/#.*$/, '');
+  const nameMatch = withoutComment.match(/^\s*name\s*=\s*["']([^"']+)["']/);
+  return nameMatch ? nameMatch[1] : null;
+}
+
 function removeLegacyTomlServer(content, serverName) {
   const lines = content.split('\n');
   const result = [];
   let inBlock = false;
+  let inChild = false;
   let blockLines = [];
   let blockHasServer = false;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const isMcpServersHeader = /^\s*\[\[\s*mcp_servers\s*\]\]/.test(line);
-    const isTableHeader = /^\s*\[\[?[^\]]+\]\]?/.test(line);
+  const closeBlock = () => {
+    if (!blockHasServer) {
+      result.push(...blockLines);
+    }
+    inBlock = false;
+  };
 
-    if (isMcpServersHeader) {
-      if (inBlock) {
-        if (!blockHasServer) {
-          result.push(...blockLines);
-        }
-      }
+  for (const line of lines) {
+    const kind = classifyLegacyHeader(line);
+
+    if (kind === 'array') {
+      if (inBlock) closeBlock();
       inBlock = true;
+      inChild = false;
       blockLines = [line];
       blockHasServer = false;
-    } else if (inBlock) {
-      if (isTableHeader && !isMcpServersHeader) {
-        if (!blockHasServer) {
-          result.push(...blockLines);
-        }
-        inBlock = false;
-        result.push(line);
-      } else {
-        blockLines.push(line);
-        const withoutComment = line.replace(/#.*$/, '');
-        const nameMatch = withoutComment.match(/^\s*name\s*=\s*["']([^"']+)["']/);
-        if (nameMatch && nameMatch[1] === serverName) {
-          blockHasServer = true;
-        }
-      }
-    } else {
+    } else if (!inBlock) {
       result.push(line);
+    } else if (kind === 'other') {
+      closeBlock();
+      result.push(line);
+    } else {
+      if (kind === 'child') inChild = true;
+      blockLines.push(line);
+      if (!inChild && legacyNameOf(line) === serverName) {
+        blockHasServer = true;
+      }
     }
   }
-  if (inBlock && !blockHasServer) {
-    result.push(...blockLines);
-  }
+  if (inBlock) closeBlock();
   return result.join('\n');
 }
 
@@ -404,29 +419,27 @@ function findRemainingLegacyMcpServers(content) {
   const names = [];
   const lines = content.split('\n');
   let inBlock = false;
+  let inChild = false;
   let currentName = null;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const isMcpServersHeader = /^\s*\[\[\s*mcp_servers\s*\]\]/.test(line);
-    const isTableHeader = /^\s*\[\[?[^\]]+\]\]?/.test(line);
+  for (const line of lines) {
+    const kind = classifyLegacyHeader(line);
 
-    if (isMcpServersHeader) {
+    if (kind === 'array') {
       if (inBlock && currentName) names.push(currentName);
       inBlock = true;
+      inChild = false;
       currentName = 'unnamed';
-    } else if (inBlock) {
-      if (isTableHeader && !isMcpServersHeader) {
-        if (currentName) names.push(currentName);
-        inBlock = false;
-        currentName = null;
-      } else {
-        const withoutComment = line.replace(/#.*$/, '');
-        const nameMatch = withoutComment.match(/^\s*name\s*=\s*["']([^"']+)["']/);
-        if (nameMatch) {
-          currentName = nameMatch[1];
-        }
-      }
+    } else if (!inBlock) {
+      continue;
+    } else if (kind === 'other') {
+      if (currentName) names.push(currentName);
+      inBlock = false;
+      currentName = null;
+    } else {
+      if (kind === 'child') inChild = true;
+      const name = inChild ? null : legacyNameOf(line);
+      if (name) currentName = name;
     }
   }
   if (inBlock && currentName) {

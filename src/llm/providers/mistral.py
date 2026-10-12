@@ -43,12 +43,12 @@ class MistralProvider(OpenAIProvider):
         # Catalogue resolved through the centralized registry fallback pattern
         self._models = ModelResolver.model_infos("mistral") or [
             ModelInfo(
-                name="mistral-large-latest",
+                name="mistral-medium-latest",
                 provider=ProviderType.MISTRAL,
                 supports_tools=True,
-                supports_vision=False,  # Large is text-only; Pixtral is the vision model
-                max_tokens=8192,
-                context_window=128000,
+                supports_vision=True,
+                max_tokens=32768,
+                context_window=262144,
             ),
         ]
 

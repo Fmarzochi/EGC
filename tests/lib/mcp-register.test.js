@@ -311,6 +311,50 @@ function runTests() {
     }
   })));
 
+  (tally(test('Codex CLI removes the nested [mcp_servers.env] table together with the legacy entry it belongs to', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const codexPath = path.join(tmpHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexPath), { recursive: true });
+      fs.writeFileSync(codexPath, 'developer_instructions = "keep this"\n\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["/old/guardian.js"]\n\n[mcp_servers.env]\nNAME = "name-of-env"\nTOKEN = "x"\n\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["/old/memory.js"]\n');
+
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const codexTarget = targets.find(t => t.name === 'Codex CLI');
+
+      assert.strictEqual(registerToml(codexPath, bins, codexTarget), true);
+
+      const content = fs.readFileSync(codexPath, 'utf8');
+      assert.ok(!content.includes('[mcp_servers.env]'), 'the child table must leave with its legacy entry');
+      assert.ok(!content.includes('TOKEN'), 'no key of the child table may be left behind');
+      assert.ok(content.includes('[mcp_servers.egc-guardian]'));
+      assert.ok(content.includes('[mcp_servers.egc-memory]'));
+      assert.ok(content.includes('developer_instructions = "keep this"'));
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Codex CLI names a foreign legacy entry by its own name, not by a key inside its nested table', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const codexPath = path.join(tmpHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexPath), { recursive: true });
+      const original = '[[mcp_servers]]\nname = "foreign-server"\ncommand = "node"\n\n[mcp_servers.env]\nname = "not-a-server"\n';
+      fs.writeFileSync(codexPath, original);
+
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const codexTarget = targets.find(t => t.name === 'Codex CLI');
+
+      assert.throws(
+        () => registerToml(codexPath, bins, codexTarget),
+        /entry "foreign-server" - left untouched/
+      );
+      assert.strictEqual(fs.readFileSync(codexPath, 'utf8'), original, 'file must remain byte-identical');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
   (tally(test('Codex CLI drops empty mcp_servers = [] inline array before adding tables', () => {
     const tmpHome = makeTempDir();
     try {
