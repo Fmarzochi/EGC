@@ -137,7 +137,8 @@ test('passes stdin through when the child writes nothing', () => {
 test('exits with the fallback status of the entry when the child reports none', () => {
   withRoot(KILLED_STUB, root => {
     assert.strictEqual(runIn(root, argsFor('pre:compact:egc-memory-save'), 'payload').status, 1);
-    assert.strictEqual(runIn(root, argsFor(KNOWN_ID), 'payload').status, 0);
+    // Windows reports a killed child as exit code 1, so only the entry whose fallback is 1 is checked there.
+    if (process.platform !== 'win32') assert.strictEqual(runIn(root, argsFor(KNOWN_ID), 'payload').status, 0);
   });
 });
 
