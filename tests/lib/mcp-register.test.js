@@ -625,7 +625,7 @@ function runTests() {
     }
   }))));
 
-  (tally(test('Pi: the servers go under mcpServers in mcp.json in the agent directory, gated on it or pi on PATH, moved by PI_CODING_AGENT_DIR (#1499)', () => {
+  (tally(test('Pi: the servers go under mcpServers in mcp.json in the agent directory, gated on it or pi on PATH, moved by PI_CODING_AGENT_DIR (#1499)', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
     const previous = process.env.PI_CODING_AGENT_DIR;
     const savedPath = process.env.PATH;
@@ -665,7 +665,7 @@ function runTests() {
       if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
-  })));
+  }))));
 
   (tally(test('Auggie: the gate opens on the ~/.augment directory, and the path is settings.json under it', () => {
     const tmpHome = makeTempDir();

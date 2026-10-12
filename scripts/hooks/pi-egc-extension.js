@@ -13,7 +13,34 @@ const { run: runGuardian } = loadHook('pre-bash-guardian-validate');
 const { run: runWriteGuardian } = loadHook('pre-write-guardian-validate');
 const { run: runCrusherRewrite } = loadHook('pre-bash-crusher-rewrite');
 
-const WRITE_TOOLS = { edit: 'Edit', write: 'Write' };
+const WRITE_TOOLS = { edit: 'MultiEdit', write: 'Write' };
+
+function parsedEdits(edits) {
+  if (typeof edits !== 'string') return edits;
+  try {
+    return JSON.parse(edits);
+  } catch {
+    return undefined;
+  }
+}
+
+function piEdits(input) {
+  let edits = parsedEdits(input.edits);
+  if (edits && !Array.isArray(edits)) edits = [edits];
+  if (!Array.isArray(edits)) edits = [{ oldText: input.oldText, newText: input.newText }];
+  return edits
+    .filter(edit => typeof edit?.newText === 'string')
+    .map(edit => ({ old_string: typeof edit.oldText === 'string' ? edit.oldText : '', new_string: edit.newText }));
+}
+
+function writeToolInput(input) {
+  return {
+    file_path: input.path,
+    path: input.path,
+    content: typeof input.content === 'string' ? input.content : undefined,
+    edits: piEdits(input),
+  };
+}
 
 function guardianDenial(toolName, input, cwd) {
   if (!input || typeof input !== 'object') return null;
@@ -21,11 +48,7 @@ function guardianDenial(toolName, input, cwd) {
   if (toolName === 'bash' && typeof input.command === 'string') {
     verdict = runGuardian({ tool_name: 'Bash', tool_input: { command: input.command }, cwd });
   } else if (WRITE_TOOLS[toolName] && typeof input.path === 'string') {
-    verdict = runWriteGuardian({
-      tool_name: WRITE_TOOLS[toolName],
-      tool_input: { file_path: input.path, path: input.path, content: typeof input.content === 'string' ? input.content : undefined },
-      cwd,
-    });
+    verdict = runWriteGuardian({ tool_name: WRITE_TOOLS[toolName], tool_input: writeToolInput(input), cwd });
   }
   return verdict?.exitCode === 2 ? (verdict.stderr || 'Blocked by the EGC Guardian.') : null;
 }

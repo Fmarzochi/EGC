@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('node:assert');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 process.env.EGC_GUARDIAN_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
@@ -53,6 +55,40 @@ async function main() {
     assert.strictEqual(extension.handleToolCall({ toolName: 'read', input: { path: '/home/person/.ssh/id_rsa' } }, {}), undefined);
     assert.strictEqual(extension.handleToolCall({ toolName: 'bash', input: {} }, {}), undefined);
     assert.strictEqual(extension.handleToolCall({}, {}), undefined);
+  });
+
+  await test('an edit that puts a denied command into a shell script is blocked, in every shape Pi sends (#1499)', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-pi-edit-'));
+    try {
+      const script = path.join(dir, 'deploy.sh');
+      fs.writeFileSync(script, '#!/bin/sh\necho ready\n');
+      const edit = { oldText: 'echo ready', newText: 'rm -rf /' };
+      for (const input of [
+        { path: script, edits: [edit] },
+        { path: script, edits: JSON.stringify([edit]) },
+        { path: script, edits: edit },
+        { path: script, ...edit },
+      ]) {
+        const result = extension.handleToolCall({ toolName: 'edit', input }, { cwd: dir });
+        assert.strictEqual(result?.block, true, JSON.stringify(input.edits ?? 'top-level'));
+      }
+      const harmless = extension.handleToolCall({ toolName: 'edit', input: { path: script, edits: [{ oldText: 'echo ready', newText: 'echo done' }] } }, { cwd: dir });
+      assert.strictEqual(harmless, undefined);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  await test('a bash command the Crusher compresses is rewritten in place (#1499)', async () => {
+    const saved = process.env.EGC_ASSUME_EGC_CLI;
+    process.env.EGC_ASSUME_EGC_CLI = '1';
+    try {
+      const event = { toolName: 'bash', input: { command: 'git log' } };
+      assert.strictEqual(extension.handleToolCall(event, {}), undefined);
+      assert.strictEqual(event.input.command, 'egc run git log');
+    } finally {
+      if (saved === undefined) delete process.env.EGC_ASSUME_EGC_CLI; else process.env.EGC_ASSUME_EGC_CLI = saved;
+    }
   });
 
   await test('the handler pi calls returns the same answer (#1499)', async () => {
