@@ -104,6 +104,7 @@ def test_a_project_that_is_not_a_project_id_is_refused_by_name(monkeypatch: pyte
             VertexAIProvider(project=project)
     assert repr(project) in str(exc.value)
     assert "not a Google Cloud project ID" in str(exc.value)
+    assert "GOOGLE_CLOUD_PROJECT" in str(exc.value)
     assert exc.value.provider == ProviderType.VERTEX_AI
     mock_genai.Client.assert_not_called()
 
