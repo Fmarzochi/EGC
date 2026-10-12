@@ -40,7 +40,7 @@ async function initSchema(db: Database): Promise<void> {
   await db.exec('CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)');
   const row = await db.get<{ value: string }>("SELECT value FROM meta WHERE key = 'version'");
   if (row && row.value !== String(GRAPH_SCHEMA_VERSION)) {
-    for (const t of TABLES) await db.exec(`DROP TABLE IF EXISTS ${t}`);
+    for (const t of TABLES) await db.exec(`DROP TABLE IF EXISTS ${t}`); // NOSONAR: the tables are dropped one after the other (S9382)
     await db.run("DELETE FROM meta WHERE key = 'edges_dirty'");
   }
   await db.exec(`
@@ -87,13 +87,13 @@ export async function openGraphStore(dbPath: string): Promise<GraphStore> {
         await db.run('DELETE FROM imports WHERE file = ?', file.path);
         await db.run('INSERT OR REPLACE INTO files(path, mtime_ms, ctime_ms, size, hash) VALUES (?, ?, ?, ?, ?)', file.path, file.mtimeMs, file.ctimeMs ?? 0, file.size, file.hash);
         for (const s of extracted.symbols) {
-          await db.run(
+          await db.run( // NOSONAR: the rows go in one at a time inside the transaction (S9382)
             'INSERT INTO symbols(file, name, kind, exported, start_line, end_line, refs) VALUES (?, ?, ?, ?, ?, ?, ?)',
             file.path, s.name, s.kind, s.exported ? 1 : 0, s.startLine, s.endLine, JSON.stringify(s.refs)
           );
         }
         for (const im of extracted.imports) {
-          await db.run('INSERT INTO imports(file, specifier, bindings, reexport) VALUES (?, ?, ?, ?)', file.path, im.specifier, JSON.stringify(im.bindings), im.reexport ? 1 : 0);
+          await db.run('INSERT INTO imports(file, specifier, bindings, reexport) VALUES (?, ?, ?, ?)', file.path, im.specifier, JSON.stringify(im.bindings), im.reexport ? 1 : 0); // NOSONAR: the rows go in one at a time inside the transaction (S9382)
         }
       });
     },
@@ -103,23 +103,23 @@ export async function openGraphStore(dbPath: string): Promise<GraphStore> {
     async removeFiles(paths) {
       await inTransaction(db, async () => {
         for (const p of paths) {
-          await db.run('DELETE FROM symbols WHERE file = ?', p);
-          await db.run('DELETE FROM imports WHERE file = ?', p);
-          await db.run('DELETE FROM files WHERE path = ?', p);
+          await db.run('DELETE FROM symbols WHERE file = ?', p); // NOSONAR: the deletes run in order inside the transaction (S9382)
+          await db.run('DELETE FROM imports WHERE file = ?', p); // NOSONAR: the deletes run in order inside the transaction (S9382)
+          await db.run('DELETE FROM files WHERE path = ?', p); // NOSONAR: the deletes run in order inside the transaction (S9382)
         }
       });
     },
     async replaceEdges(edges) {
       await inTransaction(db, async () => {
         await db.run('DELETE FROM edges');
-        for (const e of edges) await db.run('INSERT INTO edges(src, dst, kind) VALUES (?, ?, ?)', e.src, e.dst, e.kind);
+        for (const e of edges) await db.run('INSERT INTO edges(src, dst, kind) VALUES (?, ?, ?)', e.src, e.dst, e.kind); // NOSONAR: the rows go in one at a time inside the transaction (S9382)
         await db.run("INSERT OR REPLACE INTO meta(key, value) VALUES ('edges_dirty', '0')");
       });
     },
     // A graph with no recorded flag (new, or written before the flag existed) is dirty.
     async edgesDirty() {
       const row = await db.get<{ value: string }>("SELECT value FROM meta WHERE key = 'edges_dirty'");
-      return !row || row.value !== '0';
+      return row?.value !== '0';
     },
     async markEdgesDirty() {
       await db.run("INSERT OR REPLACE INTO meta(key, value) VALUES ('edges_dirty', '1')");
@@ -148,7 +148,11 @@ const CORRUPTION = /SQLITE_CORRUPT|SQLITE_NOTADB|malformed|not a database|disk i
 
 export function isCorruption(err: unknown): boolean {
   const e = err as { code?: unknown; message?: unknown } | null;
-  return CORRUPTION.test(`${String(e?.code ?? '')} ${String(e?.message ?? err)}`);
+  const code = typeof e?.code === 'string' ? e.code : '';
+  let message = '';
+  if (typeof e?.message === 'string') message = e.message;
+  else if (typeof err === 'string') message = err;
+  return CORRUPTION.test(`${code} ${message}`);
 }
 
 // Removes the database and the files the native engine keeps beside it.
