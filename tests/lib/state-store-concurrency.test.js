@@ -172,8 +172,19 @@ async function runTests() {
   let passed = 0;
   let failed = 0;
 
+  const originalEnvEngine = process.env.EGC_SQLITE_ENGINE;
+
   const runCase = async (name, fn) => {
-    if (await test(name, fn)) passed += 1; else failed += 1;
+    const savedEngine = process.env.EGC_SQLITE_ENGINE;
+    try {
+      if (await test(name, fn)) passed += 1; else failed += 1;
+    } finally {
+      if (savedEngine === undefined) {
+        delete process.env.EGC_SQLITE_ENGINE;
+      } else {
+        process.env.EGC_SQLITE_ENGINE = savedEngine;
+      }
+    }
   };
 
   // 1. Regression test: Concurrent state-db-writer hook processes
@@ -529,7 +540,11 @@ async function runTests() {
         assert.strictEqual(integrityStatus, 'ok', `integrity_check failed: ${JSON.stringify(integrityRows)}`);
 
         const migrations = await verifyDb.all('SELECT version, name FROM schema_migrations ORDER BY version ASC');
-        assert.ok(migrations.length > 0, 'Expected migrations to be recorded in schema_migrations');
+        assert.deepStrictEqual(
+          migrations.map(row => row.version),
+          [1, 2, 3, 4, 5, 6],
+          'All 6 WASM migrations must be recorded in schema_migrations in ascending order'
+        );
       } finally {
         await verifyDb.close();
       }
@@ -593,7 +608,11 @@ async function runTests() {
           assert.strictEqual(integrityStatus, 'ok', `integrity_check failed: ${JSON.stringify(integrityRows)}`);
 
           const migrations = await verifyDb.all('SELECT version, name FROM schema_migrations ORDER BY version ASC');
-          assert.ok(migrations.length > 0, 'Expected migrations to be recorded in schema_migrations');
+          assert.deepStrictEqual(
+            migrations.map(row => row.version),
+            [1, 2, 3, 4, 5, 6],
+            'All 6 native migrations must be recorded in schema_migrations in ascending order'
+          );
         } finally {
           await verifyDb.close();
         }
@@ -968,6 +987,176 @@ async function runTests() {
         cleanupTempDir(tempDir);
       }
     });
+  }
+
+  // 11. Regression test: Composite SQL transaction handling in WasmDatabase.exec()
+  await runCase('test_composite_sql_transactions', async () => {
+    const tempDir = createTempDir('egc-comp-tx-');
+    const dbPath = path.join(tempDir, 'state_comp.db');
+
+    try {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const db = await openCompatDatabase(dbPath, 'test-comp');
+      try {
+        await db.run('CREATE TABLE test_tx (id TEXT PRIMARY KEY, val TEXT);');
+
+        // Test single-line BEGIN ... COMMIT
+        await db.exec("BEGIN; INSERT INTO test_tx VALUES ('k1', 'v1'); COMMIT;");
+        assert.strictEqual(db._inTransaction, false, 'Transaction flag must be false after composite commit');
+        assert.strictEqual(db._txToken, null, 'Lock token must be null after composite commit');
+        assert.ok(!fs.existsSync(db.getLockPath()), 'Lock file must be released after composite commit');
+
+        // Verify write persisted to disk
+        const verifyDb = await openCompatDatabase(dbPath, 'verify-comp');
+        const rows = await verifyDb.all('SELECT * FROM test_tx;');
+        assert.strictEqual(rows.length, 1);
+        assert.strictEqual(rows[0].id, 'k1');
+        await verifyDb.close();
+
+        // Test single-line BEGIN ... ROLLBACK
+        await db.exec("BEGIN; INSERT INTO test_tx VALUES ('k2', 'v2'); ROLLBACK;");
+        assert.strictEqual(db._inTransaction, false, 'Transaction flag must be false after composite rollback');
+        assert.strictEqual(db._txToken, null, 'Lock token must be null after composite rollback');
+        assert.ok(!fs.existsSync(db.getLockPath()), 'Lock file must be released after composite rollback');
+
+        // Verify k2 was not persisted
+        const rowsAfterRollback = await db.all('SELECT * FROM test_tx;');
+        assert.strictEqual(rowsAfterRollback.length, 1);
+        assert.strictEqual(rowsAfterRollback[0].id, 'k1');
+
+        // Test composite transaction with comments containing semicolons and strings containing semicolons
+        await db.exec(`
+          -- comment with semicolon; and another note;
+          /* block comment; with semicolon; */
+          BEGIN;
+          INSERT INTO test_tx VALUES ('k3', 'val;with;semicolons');
+          COMMIT;
+        `);
+        assert.strictEqual(db._inTransaction, false, 'Transaction flag must be false after commented commit');
+        assert.ok(!fs.existsSync(db.getLockPath()), 'Lock file must be released');
+        const rowsWithSemicolons = await db.all("SELECT * FROM test_tx WHERE id = 'k3';");
+        assert.strictEqual(rowsWithSemicolons.length, 1);
+        assert.strictEqual(rowsWithSemicolons[0].val, 'val;with;semicolons');
+      } finally {
+        await db.close();
+      }
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  // 12. Regression test: Partially migrated schema with duplicate column
+  await runCase('test_partially_migrated_schema_duplicate_column', async () => {
+    const tempDir = createTempDir('egc-part-mig-');
+    const dbPath = path.join(tempDir, 'state_part.db');
+
+    try {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const db = await openCompatDatabase(dbPath, 'test-mig');
+      try {
+        const { applyMigrations, applyMigrationsAsync } = require(MIGRATIONS_PATH);
+
+        // Bootstrap schema migrations up to version 5 manually,
+        // but simulate an older store that already had 'input_tokens' added to 'sessions'
+        await db.exec(`
+          CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            adapter_id TEXT NOT NULL,
+            harness TEXT NOT NULL,
+            state TEXT NOT NULL,
+            repo_root TEXT,
+            started_at TEXT,
+            ended_at TEXT,
+            snapshot TEXT NOT NULL,
+            input_tokens INTEGER
+          );
+          INSERT INTO schema_migrations VALUES (1, '001_initial_state_store', datetime('now'));
+          INSERT INTO schema_migrations VALUES (2, '002_instincts_and_events', datetime('now'));
+          INSERT INTO schema_migrations VALUES (3, '003_lessons_confidence_decay', datetime('now'));
+          INSERT INTO schema_migrations VALUES (4, '004_patterns', datetime('now'));
+          INSERT INTO schema_migrations VALUES (5, '005_events_compressed_at', datetime('now'));
+        `);
+
+        // Now run applyMigrationsAsync: should tolerate duplicate column on input_tokens,
+        // add output_tokens/total_tokens/token_cost, record version 6, and commit
+        await applyMigrationsAsync(db);
+
+        const recorded = await db.all('SELECT version FROM schema_migrations ORDER BY version ASC;');
+        assert.deepStrictEqual(
+          recorded.map(r => r.version),
+          [1, 2, 3, 4, 5, 6],
+          'Migration 6 must be recorded even if input_tokens column already existed'
+        );
+
+        // Verify remaining columns were added and are writable
+        await db.run(
+          'INSERT INTO sessions (id, adapter_id, harness, state, snapshot, input_tokens, output_tokens, total_tokens, token_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
+          ['s1', 'a1', 'h1', 'active', '{}', 10, 20, 30, 0.05]
+        );
+        const sessionRow = await db.get('SELECT * FROM sessions WHERE id = ?;', ['s1']);
+        assert.strictEqual(sessionRow.input_tokens, 10);
+        assert.strictEqual(sessionRow.output_tokens, 20);
+        assert.strictEqual(sessionRow.total_tokens, 30);
+        assert.strictEqual(sessionRow.token_cost, 0.05);
+      } finally {
+        await db.close();
+      }
+
+      // Also verify synchronous applyMigrations on a partially migrated schema
+      const { openDatabase } = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'state-store', 'db-adapter'));
+      const syncDbPath = path.join(tempDir, 'state_mig_sync_dup.db');
+      const syncDb = await openDatabase(syncDbPath);
+      try {
+        syncDb.exec(`
+          CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            adapter_id TEXT NOT NULL,
+            harness TEXT NOT NULL,
+            state TEXT NOT NULL,
+            repo_root TEXT,
+            started_at TEXT,
+            ended_at TEXT,
+            snapshot TEXT NOT NULL,
+            input_tokens INTEGER
+          );
+          INSERT INTO schema_migrations VALUES (1, '001_initial_state_store', datetime('now'));
+          INSERT INTO schema_migrations VALUES (2, '002_instincts_and_events', datetime('now'));
+          INSERT INTO schema_migrations VALUES (3, '003_lessons_confidence_decay', datetime('now'));
+          INSERT INTO schema_migrations VALUES (4, '004_patterns', datetime('now'));
+          INSERT INTO schema_migrations VALUES (5, '005_events_compressed_at', datetime('now'));
+        `);
+
+        const { applyMigrations } = require(MIGRATIONS_PATH);
+        applyMigrations(syncDb);
+
+        const recordedSync = syncDb.prepare('SELECT version FROM schema_migrations ORDER BY version ASC').all();
+        assert.deepStrictEqual(
+          recordedSync.map(r => r.version),
+          [1, 2, 3, 4, 5, 6],
+          'Sync applyMigrations must record version 6 even if input_tokens column already existed'
+        );
+      } finally {
+        syncDb.close();
+      }
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  if (originalEnvEngine === undefined) {
+    delete process.env.EGC_SQLITE_ENGINE;
+  } else {
+    process.env.EGC_SQLITE_ENGINE = originalEnvEngine;
   }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

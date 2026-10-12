@@ -415,6 +415,10 @@ async function runTests() {
   });
 
   await test('no double mutex release on permission error during BEGIN', async () => {
+    if (process.platform === 'win32' || (typeof process.getuid === 'function' && process.getuid() === 0)) {
+      console.log('    - skipped: directory permission bits are not enforced here (root, or Windows)');
+      return;
+    }
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-eacces-'));
     const dbFile = path.join(dir, 'test.db');
     try {
@@ -644,6 +648,84 @@ async function runTests() {
       await db.close();
     } finally {
       delete process.env.EGC_SQLITE_ENGINE;
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+    }
+  });
+
+  await test('closing a stale connection does not overwrite newer persisted data', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-stale-close-'));
+    const dbFile = path.join(dir, 'test.db');
+    try {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const db1 = await openCompatDatabase(dbFile, 'p1');
+      await db1.run('CREATE TABLE items (id TEXT PRIMARY KEY, val TEXT);');
+      await db1.run('INSERT INTO items VALUES (?, ?);', ['key1', 'val1']);
+
+      // A second connection opens, writes newer data, persists, and closes
+      const db2 = await openCompatDatabase(dbFile, 'p2');
+      await db2.run('INSERT INTO items VALUES (?, ?);', ['key2', 'val2']);
+      await db2.close();
+
+      // Verify on disk both key1 and key2 exist
+      const checkDb = await openCompatDatabase(dbFile, 'check');
+      const rowsBefore = await checkDb.all('SELECT id FROM items ORDER BY id;');
+      assert.deepStrictEqual(rowsBefore.map(r => r.id), ['key1', 'key2']);
+      await checkDb.close();
+
+      // The first connection (whose in-memory snapshot lacks key2) closes
+      await db1.close();
+
+      // Verify on disk key2 was NOT clobbered by db1 closing
+      const verifyDb = await openCompatDatabase(dbFile, 'verify');
+      const rowsAfter = await verifyDb.all('SELECT id FROM items ORDER BY id;');
+      assert.deepStrictEqual(
+        rowsAfter.map(r => r.id),
+        ['key1', 'key2'],
+        'Closing db1 must not overwrite key2 persisted by db2'
+      );
+      await verifyDb.close();
+    } finally {
+      delete process.env.EGC_SQLITE_ENGINE;
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+    }
+  });
+
+  await test('tryAcquireLockOnce write failure unlinks empty lock without deleting another lock', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-write-fail-'));
+    const lockPath = path.join(dir, 'test.lock');
+    try {
+      // Simulate fs.writeFileSync failure during tryAcquireLockOnce
+      const originalWriteFileSync = fs.writeFileSync;
+      let injected = false;
+      fs.writeFileSync = (targetFd, data, options) => {
+        if (typeof targetFd === 'number' && !injected) {
+          injected = true;
+          throw new Error('ENOSPC: no space left on device simulation');
+        }
+        return originalWriteFileSync(targetFd, data, options);
+      };
+
+      try {
+        await assert.rejects(
+          async () => {
+            await acquireFileLock(lockPath, { timeoutMs: 200, retryIntervalMs: 25 });
+          },
+          /ENOSPC/
+        );
+      } finally {
+        fs.writeFileSync = originalWriteFileSync;
+      }
+
+      // Lock file must not remain as an empty/corrupted file
+      assert.ok(!fs.existsSync(lockPath), 'Failed lock creation must clean up empty lock file');
+
+      // Subsequent acquisition must succeed cleanly
+      const token = await acquireFileLock(lockPath, { timeoutMs: 1000 });
+      assert.ok(token);
+      assert.ok(fs.existsSync(lockPath));
+      releaseFileLock(lockPath, token);
+      assert.ok(!fs.existsSync(lockPath));
+    } finally {
       try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
     }
   });

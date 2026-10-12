@@ -263,12 +263,25 @@ function applyMigrations(db) {
       if (appliedVersions.has(migration.version)) {
         continue;
       }
-      db.exec(migration.sql);
+      const statements = migration.sql.split(';').map(s => s.trim()).filter(Boolean);
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt);
+        } catch (stmtErr) {
+          const isAddColumn = /^ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN/i.test(stmt);
+          const isDuplicateCol = stmtErr && stmtErr.message && /duplicate column/i.test(stmtErr.message);
+          if (isAddColumn && isDuplicateCol) {
+            continue;
+          }
+          throw stmtErr;
+        }
+      }
       insertMigration.run({
         version: migration.version,
         name: migration.name,
         applied_at: new Date().toISOString(),
       });
+      appliedVersions.add(migration.version);
     }
   });
 
@@ -297,7 +310,19 @@ async function applyMigrationsAsync(db) {
     try {
       const checkRows = await db.all('SELECT version FROM schema_migrations WHERE version = ?', [migration.version]);
       if (checkRows.length === 0) {
-        await db.exec(migration.sql);
+        const statements = migration.sql.split(';').map(s => s.trim()).filter(Boolean);
+        for (const stmt of statements) {
+          try {
+            await db.exec(stmt);
+          } catch (stmtErr) {
+            const isAddColumn = /^ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN/i.test(stmt);
+            const isDuplicateCol = stmtErr && stmtErr.message && /duplicate column/i.test(stmtErr.message);
+            if (isAddColumn && isDuplicateCol) {
+              continue;
+            }
+            throw stmtErr;
+          }
+        }
         await db.run(
           'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
           [migration.version, migration.name, new Date().toISOString()]
@@ -307,10 +332,6 @@ async function applyMigrationsAsync(db) {
       appliedVersions.add(migration.version);
     } catch (err) {
       try { await db.exec('ROLLBACK'); } catch (_) { /* ignore rollback error */ }
-      if (err.message && (err.message.includes('duplicate column') || err.message.includes('already exists'))) {
-        appliedVersions.add(migration.version);
-        continue;
-      }
       throw err;
     }
   }

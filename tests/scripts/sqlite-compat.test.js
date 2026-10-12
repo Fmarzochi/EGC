@@ -229,6 +229,33 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('a persistence failure during persistNow is propagated and releases lock', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-persist-'));
+    const file = path.join(dir, 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test');
+      await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
+      const originalPersist = db.persistNow.bind(db);
+      db.persistNow = () => {
+        throw new Error('Disk full during persistNow simulation');
+      };
+      await assert.rejects(
+        () => db.run('INSERT INTO items DEFAULT VALUES'),
+        /Disk full during persistNow simulation/
+      );
+      db.persistNow = originalPersist;
+      assert.ok(!fs.existsSync(db.getLockPath()), 'Lock file must be released after persist failure');
+      // Subsequent write should succeed cleanly
+      await db.run('INSERT INTO items DEFAULT VALUES');
+      const rows = await db.all('SELECT COUNT(*) AS count FROM items');
+      assert.strictEqual(rows[0].count, 1);
+      await db.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
   if (await test('the native engine is used by default when it loads', async () => {
     delete process.env.EGC_SQLITE_ENGINE;
     let native = true;

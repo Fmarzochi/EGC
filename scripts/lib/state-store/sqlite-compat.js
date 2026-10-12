@@ -96,6 +96,21 @@ function tryAcquireLockOnce(lockPath, token) {
     });
     fs.writeFileSync(fd, payload);
     return true;
+  } catch (writeErr) {
+    let isOurFile = false;
+    try {
+      const fstat = fs.fstatSync(fd);
+      const stat = fs.statSync(lockPath);
+      isOurFile = (fstat.ino && stat.ino) ? fstat.ino === stat.ino : stat.size === 0;
+    } catch (_) {
+      isOurFile = false;
+    }
+    try { fs.closeSync(fd); } catch (_) { /* ignore close error */ }
+    fd = undefined;
+    if (isOurFile) {
+      try { fs.unlinkSync(lockPath); } catch (_) { /* ignore unlink error */ }
+    }
+    throw writeErr;
   } finally {
     if (fd !== undefined) {
       try { fs.closeSync(fd); } catch (_) { /* ignore close error */ }
@@ -150,7 +165,7 @@ async function acquireFileLock(lockPath, { timeoutMs = 15000, retryIntervalMs = 
       }
     }
 
-    const jitter = Math.floor(Math.random() * 20);
+    const jitter = crypto.randomInt(0, 20);
     await new Promise(r => setTimeout(r, retryIntervalMs + jitter));
   }
 
@@ -288,6 +303,9 @@ class WasmDatabase {
       const result = await fn();
       this.persistNow();
       return result;
+    } catch (err) {
+      try { this.reloadFromDisk(); } catch (_) { /* ignore reload error */ }
+      throw err;
     } finally {
       if (token) {
         try { releaseFileLock(this.getLockPath(), token); } catch (_) {}
@@ -359,13 +377,35 @@ class WasmDatabase {
       return;
     }
 
-    const trimmed = text.trim();
-    const hasCommitOrRollback = /^\s*(COMMIT|END TRANSACTION|ROLLBACK)\b/im.test(trimmed);
-    const isBegin = /^\s*BEGIN\b/i.test(trimmed) && !hasCommitOrRollback;
-    const isCommit = /^\s*(COMMIT|END TRANSACTION)\b/i.test(trimmed);
-    const isRollback = /^\s*ROLLBACK\b/i.test(trimmed);
+    const stripComments = (s) => s.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+    const rawPieces = splitStatements(text).map(s => s.trim()).filter(Boolean);
+    const pieces = rawPieces.filter(s => stripComments(s) !== '');
+    if (pieces.length === 0) {
+      if (rawPieces.length > 0) this.db.exec(text);
+      return;
+    }
 
-    if (isBegin && !this._inTransaction) {
+    const isBeginStmt = (s) => /^\s*BEGIN\b/i.test(stripComments(s));
+    const isCommitStmt = (s) => /^\s*(COMMIT|END TRANSACTION|END)\b/i.test(stripComments(s));
+    const isRollbackStmt = (s) => /^\s*ROLLBACK\b/i.test(stripComments(s));
+
+    const firstStmt = pieces[0];
+    const lastStmt = pieces[pieces.length - 1];
+
+    const isBeginFirst = isBeginStmt(firstStmt);
+    const hasCommitOrRollback = pieces.some(s => isCommitStmt(s) || isRollbackStmt(s));
+    const isCommitLast = isCommitStmt(lastStmt);
+    const isRollbackLast = isRollbackStmt(lastStmt);
+
+    // Case 1: Standalone complete transaction block (e.g. BEGIN; ...; COMMIT/ROLLBACK;)
+    if (isBeginFirst && (isCommitLast || isRollbackLast) && !this._inTransaction) {
+      return this.withWriteLock(() => {
+        this.db.exec(text);
+      });
+    }
+
+    // Case 2: Opening a multi-statement transaction (BEGIN without matching COMMIT/ROLLBACK in same script)
+    if (isBeginFirst && !hasCommitOrRollback && !this._inTransaction) {
       if (this.filename !== ':memory:') {
         const mutex = getFileMutex(this.filename);
         await mutex.acquire();
@@ -397,7 +437,8 @@ class WasmDatabase {
       return;
     }
 
-    if (isCommit && this._inTransaction) {
+    // Case 3: Committing an open transaction
+    if (isCommitLast && this._inTransaction) {
       try {
         this.db.exec(text);
         this.persistNow();
@@ -407,20 +448,24 @@ class WasmDatabase {
       return;
     }
 
-    if (isRollback && this._inTransaction) {
+    // Case 4: Rolling back an open transaction
+    if (isRollbackLast && this._inTransaction) {
       try {
         this.db.exec(text);
       } finally {
+        try { this.reloadFromDisk(); } catch (_) { /* ignore reload error */ }
         this._exitTransaction();
       }
       return;
     }
 
+    // Case 5: Statements inside an ongoing transaction
     if (this._inTransaction) {
       this.db.exec(text);
       return;
     }
 
+    // Case 6: Non-transactional mutating script outside of a transaction
     return this.withWriteLock(() => {
       this.db.exec(text);
     });
@@ -450,11 +495,12 @@ class WasmDatabase {
       process.removeListener('exit', this._exitHandler);
       this._exitHandler = null;
     }
-    if (!wasInTransaction && this.filename !== ':memory:' && this.db) {
-      try {
-        this.persistNow();
-      } catch (_) { /* ignore persist error on close */ }
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
     }
+    // Every committed mutation is already persisted under the file lock.
+    // Persisting here without the lock would overwrite concurrent writers.
     if (this.db) {
       try { this.db.close(); } catch (_) { /* ignore close error */ }
       this.db = null;
