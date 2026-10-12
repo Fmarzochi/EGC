@@ -33,8 +33,6 @@ _PROVIDER_MAP: dict[ProviderType, type[LLMProvider]] = {
 
 logger = logging.getLogger(__name__)
 
-_UNRESOLVED = "__unresolved__"
-
 
 def _default_provider() -> str:
     return os.environ.get("LLM_PROVIDER", "gemini").lower()
@@ -44,16 +42,17 @@ def _provider_from_hint(model_hint: str) -> str:
     try:
         from llm.core.model_resolver import ModelResolver
 
-        resolved = ModelResolver._provider_for(model_hint, expected=_UNRESOLVED)
-    except Exception as exc:
+        resolved = ModelResolver.provider_of(model_hint)
+    except (ImportError, AttributeError, KeyError, TypeError, ValueError) as exc:
         fallback = _default_provider()
         logger.warning(
-            "Could not resolve a provider for model %r (%s); falling back to %r. "
+            "Could not resolve a provider for model %r (%r); falling back to %r. "
             "Pass provider_type or set LLM_PROVIDER to choose one.",
             model_hint, exc, fallback,
+            exc_info=True,
         )
         return fallback
-    if resolved != _UNRESOLVED:
+    if resolved:
         return resolved
     fallback = _default_provider()
     logger.warning(

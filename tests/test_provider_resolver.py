@@ -44,10 +44,22 @@ def test_recognized_model_resolves_without_a_warning(caplog: pytest.LogCaptureFi
 @pytest.mark.unit
 def test_a_resolver_error_falls_back_with_the_error_in_the_warning(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
-    with patch.object(ModelResolver, "_provider_for", side_effect=RuntimeError("catalog unreadable")):
-        with caplog.at_level(logging.WARNING, logger="llm.providers.resolver"):
-            assert resolver._provider_from_hint("any-model") == "gemini"
-    assert "catalog unreadable" in caplog.text
+    with (
+        patch.object(ModelResolver, "provider_of", side_effect=ValueError("catalog unreadable")),
+        caplog.at_level(logging.WARNING, logger="llm.providers.resolver"),
+    ):
+        assert resolver._provider_from_hint("any-model") == "gemini"
+    assert "ValueError('catalog unreadable')" in caplog.text
+    assert "Traceback" in caplog.text
+
+
+@pytest.mark.unit
+def test_provider_of_names_the_provider_or_returns_none() -> None:
+    assert ModelResolver.provider_of("claude-sonnet-4-5") == "claude"
+    assert ModelResolver.provider_of("meta-llama/llama-3-70b") == "openrouter"
+    assert ModelResolver.provider_of("llama-3.3-70b-versatile") is None
+    assert ModelResolver._provider_for("llama-3.3-70b-versatile") == "gemini"
+    assert ModelResolver._provider_for("llama-3.3-70b-versatile", expected="groq") == "groq"
 
 
 @pytest.mark.unit

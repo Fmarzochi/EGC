@@ -28,7 +28,10 @@ from llm.core.types import LLMInput, LLMOutput, ProviderType
 from llm.providers.gemini import GeminiProvider
 
 _DEFAULT_LOCATION = "us-central1"
-_PROJECT_ID = re.compile(r"^(?:[a-z0-9.-]+:)?[a-z][a-z0-9-]{4,28}[a-z0-9]$")
+_DOMAIN_LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+_PROJECT_ID = re.compile(
+    rf"^(?:{_DOMAIN_LABEL}(?:\.{_DOMAIN_LABEL})*:)?[a-z][a-z0-9-]{{4,28}}[a-z0-9]$"
+)
 _LOCATION = re.compile(r"^(?:global|us|eu|[a-z]+-[a-z]+\d+)$")
 
 
@@ -38,7 +41,8 @@ def _config_issue(project: str | None, location: str | None) -> str | None:
     if not _PROJECT_ID.match(project):
         return (
             f"Vertex AI project {project!r} is not a Google Cloud project ID "
-            "(6 to 30 lowercase letters, digits or hyphens, starting with a letter)"
+            "(6 to 30 lowercase letters, digits or hyphens, starting with a letter, "
+            "optionally prefixed by a domain as in example.com:my-project)"
         )
     if not location or not _LOCATION.match(location):
         return (
