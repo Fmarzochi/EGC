@@ -599,6 +599,7 @@ function buildInstallPlanResult({
     targetAdapterId: scaffoldPlan ? scaffoldPlan.adapter.id : null,
     targetRoot: scaffoldPlan ? scaffoldPlan.targetRoot : null,
     installStatePath: scaffoldPlan ? scaffoldPlan.installStatePath : null,
+    legacyInstallStatePaths: scaffoldPlan ? (scaffoldPlan.legacyInstallStatePaths || []) : [],
     validationIssues: scaffoldPlan ? scaffoldPlan.validationIssues : [],
     operations: scaffoldPlan ? scaffoldPlan.operations : [],
     retirements: scaffoldPlan ? (scaffoldPlan.retirements || []) : [],

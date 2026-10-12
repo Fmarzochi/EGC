@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const MAX_STDIN = 1024 * 1024;
-let raw = '';
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 function run(rawInput) {
   const passthrough = typeof rawInput === 'string' ? rawInput : JSON.stringify(rawInput);
@@ -35,15 +34,8 @@ function run(rawInput) {
 }
 
 if (require.main === module) {
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - raw.length;
-      raw += chunk.substring(0, remaining);
-    }
-  });
-
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw, truncated }) => {
+    exitOnTruncatedInput(truncated, 0);
     const result = run(raw);
     if (result.stderr) {
       process.stderr.write(`${result.stderr}\n`);

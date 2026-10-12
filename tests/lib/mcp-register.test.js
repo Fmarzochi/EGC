@@ -153,7 +153,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code',
     ]);
   })));
 
@@ -205,6 +205,290 @@ function runTests() {
       const codex = path.join(tmpHome, 'codex.toml');
       registerToml(codex, bins);
       assert.ok(!fs.readFileSync(codex, 'utf8').includes('transport'), 'Codex keeps the shape it always had');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Qwen Code: the gate opens on ~/.qwen or qwen on PATH, and the servers go under mcpServers in ~/.qwen/settings.json (#1678)', () => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const qwenBin = path.join(tmpHome, 'qwen-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(qwenBin, { recursive: true });
+      fs.writeFileSync(path.join(qwenBin, 'qwen'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(qwenBin, 'qwen.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Qwen Code');
+      assert.ok(absent, 'Qwen Code must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no ~/.qwen and no qwen on PATH: the gate stays closed');
+      process.env.PATH = `${qwenBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Qwen Code').gate(), true, 'a qwen on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      const qwenDir = path.join(tmpHome, '.qwen');
+      fs.mkdirSync(qwenDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Qwen Code');
+      assert.strictEqual(target.path, path.join(qwenDir, 'settings.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the settings directory alone opens the gate');
+    } finally {
+      process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Qwen Code: registration keeps the person\'s settings, hooks and servers in ~/.qwen/settings.json (#1678)', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const settingsPath = path.join(tmpHome, '.qwen', 'settings.json');
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      const own = {
+        model: { name: 'qwen3-coder-plus' },
+        hooks: { PreToolUse: [{ matcher: 'run_shell_command', hooks: [{ type: 'command', command: 'echo mine' }] }] },
+        mcpServers: { mine: { command: 'my-server' } },
+      };
+      fs.writeFileSync(settingsPath, JSON.stringify(own, null, 2));
+      assert.strictEqual(registerJson(settingsPath, bins), true);
+      const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      assert.deepStrictEqual(written.model, own.model);
+      assert.deepStrictEqual(written.hooks, own.hooks);
+      assert.deepStrictEqual(written.mcpServers.mine, own.mcpServers.mine);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Codex CLI registers MCP servers as [mcp_servers.<id>] tables in config.toml', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const codexPath = path.join(tmpHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexPath), { recursive: true });
+
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const codexTarget = targets.find(t => t.name === 'Codex CLI');
+      assert.ok(codexTarget, 'Codex CLI target must exist');
+      assert.strictEqual(codexTarget.format, 'toml');
+      assert.strictEqual(codexTarget.tomlTables, 'per-server');
+
+      const changed = registerToml(codexPath, bins, codexTarget);
+      assert.strictEqual(changed, true);
+
+      const content = fs.readFileSync(codexPath, 'utf8');
+      assert.ok(content.includes('[mcp_servers.egc-guardian]'), 'must contain [mcp_servers.egc-guardian]');
+      assert.ok(content.includes('[mcp_servers.egc-memory]'), 'must contain [mcp_servers.egc-memory]');
+      assert.ok(!content.includes('[[mcp_servers]]'), 'must not use [[mcp_servers]] array of tables');
+
+      let TOML;
+      try {
+        TOML = require('@iarna/toml');
+      } catch (_) {
+        // parser skipped
+      }
+      if (TOML) {
+        const parsed = TOML.parse(content);
+        assert.strictEqual(typeof parsed.mcp_servers, 'object');
+        assert.strictEqual(Array.isArray(parsed.mcp_servers), false);
+        assert.strictEqual(parsed.mcp_servers['egc-guardian'].command, 'node');
+        assert.deepStrictEqual(parsed.mcp_servers['egc-guardian'].args, [bins.guardianBin]);
+        assert.strictEqual(parsed.mcp_servers['egc-memory'].command, 'node');
+        assert.deepStrictEqual(parsed.mcp_servers['egc-memory'].args, [bins.memoryBin]);
+      }
+
+      // Second run is idempotent
+      const secondChanged = registerToml(codexPath, bins, codexTarget);
+      assert.strictEqual(secondChanged, false, 'second run must be idempotent');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Qwen Code: registerMcpServers dispatches the Qwen target and merges into ~/.qwen/settings.json (#1678)', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const settingsPath = path.join(tmpHome, '.qwen', 'settings.json');
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      const own = { model: { name: 'qwen3-coder-plus' }, hooks: { PreToolUse: [] } };
+      fs.writeFileSync(settingsPath, JSON.stringify(own, null, 2));
+      const registered = [];
+      registerIsolated(tmpHome, { onRegister: target => registered.push(target.name) });
+      assert.ok(registered.includes('Qwen Code'), `the Qwen target is registered, got ${registered.join(', ')}`);
+      const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      assert.deepStrictEqual(written.model, own.model);
+      assert.deepStrictEqual(written.hooks, own.hooks);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Codex CLI migrates legacy [[mcp_servers]] array entries to [mcp_servers.<id>] tables', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const codexPath = path.join(tmpHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexPath), { recursive: true });
+      fs.writeFileSync(codexPath, 'developer_instructions = "keep this"\n\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["/old/guardian.js"]\n\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["/old/memory.js"]\n');
+
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const codexTarget = targets.find(t => t.name === 'Codex CLI');
+
+      const changed = registerToml(codexPath, bins, codexTarget);
+      assert.strictEqual(changed, true, 'legacy shape must trigger an update');
+
+      const content = fs.readFileSync(codexPath, 'utf8');
+      assert.ok(content.includes('developer_instructions = "keep this"'), 'existing keys must be kept');
+      assert.ok(content.includes('[mcp_servers.egc-guardian]'), 'must contain [mcp_servers.egc-guardian]');
+      assert.ok(content.includes('[mcp_servers.egc-memory]'), 'must contain [mcp_servers.egc-memory]');
+      assert.ok(!content.includes('[[mcp_servers]]'), 'must not contain [[mcp_servers]]');
+
+      let TOML;
+      try {
+        TOML = require('@iarna/toml');
+      } catch (_) {
+        // parser skipped
+      }
+      if (TOML) {
+        const parsed = TOML.parse(content);
+        assert.strictEqual(parsed.developer_instructions, 'keep this');
+        assert.strictEqual(parsed.mcp_servers['egc-guardian'].command, 'node');
+        assert.deepStrictEqual(parsed.mcp_servers['egc-guardian'].args, [bins.guardianBin]);
+      }
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Codex CLI refuses to migrate when foreign [[mcp_servers]] entry remains, leaving file untouched', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const codexPath = path.join(tmpHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexPath), { recursive: true });
+      const original = 'developer_instructions = "keep this"\n\n[[mcp_servers]]\nname = "foreign-server"\ncommand = "node"\nargs = ["/path/server.js"]\n';
+      fs.writeFileSync(codexPath, original);
+
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const codexTarget = targets.find(t => t.name === 'Codex CLI');
+
+      assert.throws(
+        () => registerToml(codexPath, bins, codexTarget),
+        /contains legacy \[\[mcp_servers\]\] entry "foreign-server" - left untouched/
+      );
+      assert.strictEqual(fs.readFileSync(codexPath, 'utf8'), original, 'file must remain byte-identical');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Codex CLI removes the nested [mcp_servers.env] table together with the legacy entry it belongs to', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const codexPath = path.join(tmpHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexPath), { recursive: true });
+      fs.writeFileSync(codexPath, 'developer_instructions = "keep this"\n\n[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\nargs = ["/old/guardian.js"]\n\n[mcp_servers.env]\nNAME = "name-of-env"\nTOKEN = "x"\n\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\nargs = ["/old/memory.js"]\n');
+
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const codexTarget = targets.find(t => t.name === 'Codex CLI');
+
+      assert.strictEqual(registerToml(codexPath, bins, codexTarget), true);
+
+      const content = fs.readFileSync(codexPath, 'utf8');
+      assert.ok(!content.includes('[mcp_servers.env]'), 'the child table must leave with its legacy entry');
+      assert.ok(!content.includes('TOKEN'), 'no key of the child table may be left behind');
+      assert.ok(content.includes('[mcp_servers.egc-guardian]'));
+      assert.ok(content.includes('[mcp_servers.egc-memory]'));
+      assert.ok(content.includes('developer_instructions = "keep this"'));
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Codex CLI names a foreign legacy entry by its own name, not by a key inside its nested table', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const codexPath = path.join(tmpHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexPath), { recursive: true });
+      const original = '[[mcp_servers]]\nname = "foreign-server"\ncommand = "node"\n\n[mcp_servers.env]\nname = "not-a-server"\n';
+      fs.writeFileSync(codexPath, original);
+
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const codexTarget = targets.find(t => t.name === 'Codex CLI');
+
+      assert.throws(
+        () => registerToml(codexPath, bins, codexTarget),
+        /entry "foreign-server" - left untouched/
+      );
+      assert.strictEqual(fs.readFileSync(codexPath, 'utf8'), original, 'file must remain byte-identical');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Codex CLI ignores a name = "egc-guardian" line written inside a multi-line string of a foreign entry', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const codexPath = path.join(tmpHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexPath), { recursive: true });
+      const original = '[[mcp_servers]]\nname = "foreign-server"\ndescription = """\nname = "egc-guardian"\n[[mcp_servers]]\n"""\ncommand = "node"\n';
+      fs.writeFileSync(codexPath, original);
+
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const codexTarget = targets.find(t => t.name === 'Codex CLI');
+
+      assert.throws(
+        () => registerToml(codexPath, bins, codexTarget),
+        /entry "foreign-server" - left untouched/
+      );
+      assert.strictEqual(fs.readFileSync(codexPath, 'utf8'), original, 'the foreign entry must survive byte for byte');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Codex CLI removes a child table whose root key is quoted together with its legacy entry', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const codexPath = path.join(tmpHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexPath), { recursive: true });
+      fs.writeFileSync(codexPath, '[[mcp_servers]]\nname = "egc-guardian"\ncommand = "node"\n\n["mcp_servers".env]\nTOKEN = "x"\n\n[[mcp_servers]]\nname = "egc-memory"\ncommand = "node"\n');
+
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const codexTarget = targets.find(t => t.name === 'Codex CLI');
+
+      assert.strictEqual(registerToml(codexPath, bins, codexTarget), true);
+
+      const content = fs.readFileSync(codexPath, 'utf8');
+      assert.ok(!content.includes('TOKEN'), 'the quoted child table must leave with its legacy entry');
+      assert.ok(content.includes('[mcp_servers.egc-guardian]'));
+      assert.ok(content.includes('[mcp_servers.egc-memory]'));
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Codex CLI drops empty mcp_servers = [] inline array before adding tables', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const codexPath = path.join(tmpHome, '.codex', 'config.toml');
+      fs.mkdirSync(path.dirname(codexPath), { recursive: true });
+      fs.writeFileSync(codexPath, 'developer_instructions = "keep this"\nmcp_servers = []\n');
+
+      const targets = buildMcpRegistrationTargets(tmpHome);
+      const codexTarget = targets.find(t => t.name === 'Codex CLI');
+
+      const changed = registerToml(codexPath, bins, codexTarget);
+      assert.strictEqual(changed, true);
+
+      const content = fs.readFileSync(codexPath, 'utf8');
+      assert.ok(content.includes('[mcp_servers.egc-guardian]'));
+      assert.ok(content.includes('[mcp_servers.egc-memory]'));
+      assert.ok(!content.includes('mcp_servers = []'));
     } finally {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }

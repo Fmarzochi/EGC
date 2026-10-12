@@ -54,7 +54,7 @@
     },
     {
       "id": "TRAE_ENV=cn",
-      "description": "TRAE_ENV=cn, the Chinese edition of Trae",
+      "description": "TRAE_ENV=cn, the Chinese edition of Trae, which reads the same project .trae directory",
       "platform": "linux",
       "env": {
         "TRAE_ENV": "cn"
@@ -1065,6 +1065,14 @@
     },
     {
       "adapter": "windsurf-project",
+      "surface": "mcp",
+      "path": "<project>/.devin/mcp_config.local.json",
+      "status": "documented",
+      "source": "https://docs.devin.ai/cli/extensibility/mcp/configuration",
+      "note": "Project-scope MCP file of Devin Local (Devin Desktop and the Devin CLI), gitignored; the docs, read on 2026-10-11, also list .devin/mcp_config.json and the user file ~/.config/devin/mcp_config.json, which EGC does not write."
+    },
+    {
+      "adapter": "windsurf-project",
       "surface": "library",
       "path": "<project>/.devin/rules/",
       "status": "egc",
@@ -1354,7 +1362,8 @@
       "surface": "hooks",
       "path": "<project>/.trae/hooks.json",
       "status": "documented",
-      "source": "https://docs.trae.ai/ide/hook-configuration-reference"
+      "source": "https://docs.trae.ai/ide/hook-configuration-reference",
+      "note": "The Chinese edition reads project hooks from the same $PROJECT_FOLDER/.trae/hooks.json and keeps ~/.trae-cn for its global hooks only (https://docs.trae.cn/ide_hook-configuration-reference, read on 2026-10-11), so TRAE_ENV=cn plans .trae too. On upgrade from an earlier install under <project>/.trae-cn, EGC removes only the copies that still match the bytes it wrote (an edited copy stays), removes only its own entries from <project>/.trae-cn/hooks.json, and keeps that install's state when it cannot be read."
     },
     {
       "adapter": "trae-project",
@@ -1375,57 +1384,8 @@
       "surface": "skills",
       "path": "<project>/.trae/skills/",
       "status": "documented",
-      "source": "https://docs.trae.ai/ide/skills"
-    },
-    {
-      "adapter": "trae-project",
-      "surface": "library",
-      "path": "<project>/.trae-cn/agents/",
-      "status": "egc",
-      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
-      "variant": "TRAE_ENV=cn"
-    },
-    {
-      "adapter": "trae-project",
-      "surface": "library",
-      "path": "<project>/.trae-cn/commands/",
-      "status": "egc",
-      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
-      "variant": "TRAE_ENV=cn"
-    },
-    {
-      "adapter": "trae-project",
-      "surface": "hooks",
-      "path": "<project>/.trae-cn/hooks.json",
-      "status": "unverified",
-      "source": "https://docs.trae.ai/ide/hook-configuration-reference",
-      "note": "The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10).",
-      "variant": "TRAE_ENV=cn"
-    },
-    {
-      "adapter": "trae-project",
-      "surface": "library",
-      "path": "<project>/.trae-cn/rules/",
-      "status": "egc",
-      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
-      "variant": "TRAE_ENV=cn"
-    },
-    {
-      "adapter": "trae-project",
-      "surface": "runtime",
-      "path": "<project>/.trae-cn/scripts/",
-      "status": "egc",
-      "note": "EGC runtime: the scripts the tool's hook or plugin entries run.",
-      "variant": "TRAE_ENV=cn"
-    },
-    {
-      "adapter": "trae-project",
-      "surface": "skills",
-      "path": "<project>/.trae-cn/skills/",
-      "status": "unverified",
       "source": "https://docs.trae.ai/ide/skills",
-      "note": "The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10).",
-      "variant": "TRAE_ENV=cn"
+      "note": "The Chinese edition reads project skills from the same .trae/skills/ and keeps ~/.trae-cn/skills for its global skills only (https://docs.trae.cn/ide/skills, read on 2026-10-11)."
     },
     {
       "adapter": "trae-project",
@@ -1433,14 +1393,6 @@
       "path": "<project>/.trae/egc-install-state.json",
       "status": "egc",
       "note": "EGC runtime: the install state EGC writes to track the files it manages."
-    },
-    {
-      "adapter": "trae-project",
-      "surface": "state",
-      "path": "<project>/.trae-cn/egc-install-state.json",
-      "status": "egc",
-      "note": "EGC runtime: the install state EGC writes to track the files it manages.",
-      "variant": "TRAE_ENV=cn"
     },
     {
       "adapter": "junie-home",

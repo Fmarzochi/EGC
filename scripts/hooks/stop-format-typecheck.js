@@ -24,8 +24,7 @@ const path = require('node:path');
 
 const { findProjectRoot, detectFormatter, resolveFormatterBin } = require('../lib/resolve-formatter');
 const { readFileNoFollow } = require('../lib/no-follow-accumulator');
-
-const MAX_STDIN = 1024 * 1024;
+const { readHookStdin } = require('../lib/hook-stdin');
 // Total ms budget reserved for all batches (leaves headroom below the 300s Stop timeout)
 const TOTAL_BUDGET_MS = 270_000;
 
@@ -215,12 +214,7 @@ function run(rawInput) {
 }
 
 if (require.main === module) {
-  let stdinData = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (stdinData.length < MAX_STDIN) stdinData += chunk.substring(0, MAX_STDIN - stdinData.length);
-  });
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw: stdinData }) => {
     process.stdout.write(run(stdinData));
     process.exit(0);
   });

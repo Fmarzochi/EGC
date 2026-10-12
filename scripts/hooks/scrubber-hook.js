@@ -10,6 +10,7 @@
 
 const { clean } = require('../lib/scrubber/engine');
 const { looksBinary, hasTextExtension } = require('../lib/scrubber/binary-guard');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
 
@@ -90,17 +91,9 @@ function run(rawInput) {
 }
 
 function main() {
-  // Accumulate the whole payload: truncating a tool_input would echo malformed
-  // JSON back and corrupt the write. Exit only after stdout has flushed, so a
-  // large updatedInput is never cut off mid-write.
-  const chunks = [];
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => chunks.push(chunk));
-  process.stdin.on('end', () => {
-    process.stdout.write(run(chunks.join('')), () => process.exit(0));
-  });
-  process.stdin.on('error', () => {
-    process.stdout.write(chunks.join(''), () => process.exit(0));
+  readHookStdin(({ raw, truncated }) => {
+    exitOnTruncatedInput(truncated, 2);
+    process.stdout.write(run(raw), () => process.exit(0));
   });
 }
 

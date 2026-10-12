@@ -14,9 +14,7 @@
 'use strict';
 
 const path = require('node:path');
-
-const MAX_STDIN = 1024 * 1024;
-let data = '';
+const { readHookStdin } = require('../lib/hook-stdin');
 
 // Known ad-hoc filenames that indicate impulse/scratch files (case-sensitive, uppercase only)
 const ADHOC_FILENAMES = /^(NOTES|TODO|SCRATCH|TEMP|DRAFT|BRAINSTORM|SPIKE|DEBUG|WIP)\.(md|txt)$/;
@@ -77,15 +75,7 @@ function run(inputOrRaw, _options = {}) {
 module.exports = { run };
 
 // Stdin fallback for spawnSync execution
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', c => {
-  if (data.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - data.length;
-    data += c.substring(0, remaining);
-  }
-});
-
-process.stdin.on('end', () => {
+readHookStdin(({ raw: data }) => {
   const result = run(data);
 
   if (result.stderr) {

@@ -502,12 +502,23 @@ function legacyInstallStatePathsOf(plan) {
   return Array.isArray(plan.legacyInstallStatePaths) ? plan.legacyInstallStatePaths : [];
 }
 
+function isReadableInstallState(statePath) {
+  try {
+    readInstallState(statePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // The states the adapter wrote under a root it no longer picks: replaced by
-// the state just written, so they leave (each is EGC's own file).
+// the state just written, so they leave (each is EGC's own file). One that
+// cannot be read stays, since the copies it records were not retired.
 function removeLegacyInstallStates(plan) {
   const current = path.resolve(plan.installStatePath);
   for (const statePath of legacyInstallStatePathsOf(plan)) {
     if (path.resolve(statePath) === current) continue;
+    if (!isReadableInstallState(statePath)) continue;
     fs.rmSync(statePath, { force: true });
   }
 }

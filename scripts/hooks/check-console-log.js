@@ -15,6 +15,7 @@
 
 const fs = require('node:fs');
 const { isGitRepo, getGitModifiedFiles, readFile, log } = require('../lib/utils');
+const { readHookStdin } = require('../lib/hook-stdin');
 
 // Files where console.log is expected and should not trigger warnings. The
 // directory patterns accept both separators, since git reports forward
@@ -33,20 +34,8 @@ function isExcluded(file) {
   return EXCLUDED_PATTERNS.some(pattern => pattern.test(file));
 }
 
-const MAX_STDIN = 1024 * 1024; // 1MB limit
-
 function main() {
-  let data = '';
-  process.stdin.setEncoding('utf8');
-
-  process.stdin.on('data', chunk => {
-    if (data.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - data.length;
-      data += chunk.substring(0, remaining);
-    }
-  });
-
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw: data }) => {
     try {
       if (!isGitRepo()) {
         process.stdout.write(data);

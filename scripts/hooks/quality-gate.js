@@ -19,8 +19,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const { findProjectRoot, detectFormatter, resolveFormatterBin } = require('../lib/resolve-formatter');
-
-const MAX_STDIN = 1024 * 1024;
+const { readHookStdin } = require('../lib/hook-stdin');
 
 /**
  * Execute a command synchronously, returning the spawnSync result.
@@ -202,16 +201,7 @@ function run(rawInput) {
 
 // ── stdin entry point (backwards-compatible) ────────────────────
 if (require.main === module) {
-  let raw = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - raw.length;
-      raw += chunk.substring(0, remaining);
-    }
-  });
-
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw }) => {
     const result = run(raw);
     process.stdout.write(result);
   });

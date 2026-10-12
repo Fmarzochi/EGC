@@ -249,6 +249,7 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | library | `<project>/.devin/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `<project>/.devin/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | hooks | `<project>/.devin/config.local.json` | default | documented | <https://docs.devin.ai/cli/extensibility/hooks> |  |
+| mcp | `<project>/.devin/mcp_config.local.json` | default | documented | <https://docs.devin.ai/cli/extensibility/mcp/configuration> | Project-scope MCP file of Devin Local (Devin Desktop and the Devin CLI), gitignored; the docs, read on 2026-10-11, also list .devin/mcp_config.json and the user file ~/.config/devin/mcp_config.json, which EGC does not write. |
 | library | `<project>/.devin/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.devin/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `<project>/.devin/skills/` | default | documented | <https://docs.devin.ai/desktop/cascade/skills> |  |
@@ -314,18 +315,11 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | --- | --- | --- | --- | --- | --- |
 | library | `<project>/.trae/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `<project>/.trae/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| hooks | `<project>/.trae/hooks.json` | default | documented | <https://docs.trae.ai/ide/hook-configuration-reference> |  |
+| hooks | `<project>/.trae/hooks.json` | default | documented | <https://docs.trae.ai/ide/hook-configuration-reference> | The Chinese edition reads project hooks from the same $PROJECT_FOLDER/.trae/hooks.json and keeps ~/.trae-cn for its global hooks only (https://docs.trae.cn/ide_hook-configuration-reference, read on 2026-10-11), so TRAE_ENV=cn plans .trae too. On upgrade from an earlier install under <project>/.trae-cn, EGC removes only the copies that still match the bytes it wrote (an edited copy stays), removes only its own entries from <project>/.trae-cn/hooks.json, and keeps that install's state when it cannot be read. |
 | library | `<project>/.trae/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | runtime | `<project>/.trae/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
-| skills | `<project>/.trae/skills/` | default | documented | <https://docs.trae.ai/ide/skills> |  |
-| library | `<project>/.trae-cn/agents/` | TRAE_ENV=cn | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| library | `<project>/.trae-cn/commands/` | TRAE_ENV=cn | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| hooks | `<project>/.trae-cn/hooks.json` | TRAE_ENV=cn | unverified | <https://docs.trae.ai/ide/hook-configuration-reference> | The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10). |
-| library | `<project>/.trae-cn/rules/` | TRAE_ENV=cn | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
-| runtime | `<project>/.trae-cn/scripts/` | TRAE_ENV=cn | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
-| skills | `<project>/.trae-cn/skills/` | TRAE_ENV=cn | unverified | <https://docs.trae.ai/ide/skills> | The CN edition keeps its files under .trae-cn; docs.trae.ai names only .trae (read on 2026-10-10). |
+| skills | `<project>/.trae/skills/` | default | documented | <https://docs.trae.ai/ide/skills> | The Chinese edition reads project skills from the same .trae/skills/ and keeps ~/.trae-cn/skills for its global skills only (https://docs.trae.cn/ide/skills, read on 2026-10-11). |
 | state | `<project>/.trae/egc-install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
-| state | `<project>/.trae-cn/egc-install-state.json` | TRAE_ENV=cn | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## junie-home
 
