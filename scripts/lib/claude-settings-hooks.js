@@ -52,6 +52,14 @@ const {
   resolveGuardianHookFilePath: resolveKiroV3GuardianHookFilePath,
 } = require('./kiro-v3-guardian-hooks');
 const {
+  GROK_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH,
+  OPERATION_DISPATCH_TAG: GROK_GUARDIAN_HOOK_FILE_TAG,
+  applyGrokGuardianHookToFile,
+  inspectGrokGuardianHookFile,
+  removeGrokGuardianHookFromFile,
+  resolveGrokGuardianHookFilePath,
+} = require('./grok-hooks');
+const {
   OPERATION_DISPATCH_TAG: AMAZONQ_OPERATION_DISPATCH_TAG,
   applyAmazonQGuardianHookToFile,
   inspectAmazonQGuardianHookFile,
@@ -922,6 +930,20 @@ function createKiroMeshHookFileOperation(targetRoot, hookScriptPath) {
   };
 }
 
+function createGrokGuardianHookFileOperation(targetRoot, hookScriptPath) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: BASH_GUARDIAN_HOOK_MODULE_ID,
+    sourceRelativePath: GROK_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveGrokGuardianHookFilePath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: GROK_GUARDIAN_HOOK_FILE_TAG,
+    hookScriptPath,
+  };
+}
+
 function createKiroV3GuardianHookFileOperation(targetRoot, hookScriptPath) {
   return {
     kind: HOOK_OPERATION_KIND,
@@ -1265,6 +1287,11 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeKiroGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
     inspect: operation => inspectKiroGuardianHookFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
   },
+  [GROK_GUARDIAN_HOOK_FILE_TAG]: {
+    apply: operation => applyGrokGuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeGrokGuardianHookFromFile(operation.destinationPath),
+    inspect: operation => inspectGrokGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
   [KIRO_V3_GUARDIAN_HOOK_FILE_TAG]: {
     apply: operation => applyKiroV3GuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
     remove: operation => removeKiroV3GuardianHookFromFile(operation.destinationPath),
@@ -1417,6 +1444,7 @@ module.exports = {
   createMeshNoticeScriptCopyOperations,
   createMeshNoticeHookMergeOperationForDestination,
   createKiroMeshHookFileOperation,
+  createGrokGuardianHookFileOperation,
   createKiroV3GuardianHookFileOperation,
   resolveMeshNoticeHookScriptDestination,
   createBashGuardianScriptCopyOperations,

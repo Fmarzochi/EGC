@@ -31,6 +31,7 @@ const HOME_TARGET_COMMANDS = Object.freeze({
   kimi: ['kimi'],
   crush: ['crush'],
   vibe: ['vibe'],
+  grok: ['grok'],
 });
 
 // Codex, Goose and OpenHands share the ~/.agents root, so that root says
@@ -68,6 +69,7 @@ const TARGET_LABELS = Object.freeze({
   kimi: 'Kimi Code CLI',
   crush: 'Crush',
   vibe: 'Mistral Vibe',
+  grok: 'Grok Build',
   trae: 'Trae',
   codebuddy: 'CodeBuddy',
 });

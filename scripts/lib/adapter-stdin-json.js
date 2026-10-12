@@ -200,10 +200,28 @@ function createBashToolGuardianInputMapper({ shellToolName, cwdKey }) {
   };
 }
 
+function decideGuardianAdapterEvent(eventOrRaw, options, { buildGuardianInput, runGuardian, truncatedReason }) {
+  if (options.truncated) return { blocked: true, reason: truncatedReason };
+  let event = eventOrRaw;
+  if (typeof event === 'string') {
+    try {
+      event = JSON.parse(event);
+    } catch {
+      return { blocked: false };
+    }
+  }
+  const target = buildGuardianInput(event);
+  if (!target) return { blocked: false };
+  const result = runGuardian(target, options);
+  if (result?.exitCode === 2) return { blocked: true, reason: result.stderr || 'Blocked by the EGC Guardian.' };
+  return { blocked: false };
+}
+
 module.exports = {
   MAX_STDIN,
   bootstrapPlainExitCodeAdapter,
   createBashToolGuardianInputMapper,
+  decideGuardianAdapterEvent,
   readAdapterStdinJson,
   runJsonEnvelopeGuardianAdapter,
   runPlainExitCodeGuardianAdapter,
