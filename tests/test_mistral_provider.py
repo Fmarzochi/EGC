@@ -173,25 +173,35 @@ def test_validate_config_false(provider):
 def test_resolver_mistral_metadata():
     info = ModelResolver.get_model_info("mistral-large-latest")
     assert info["provider"] == "mistral"
-    assert info["context_window"] == 128000
-    assert info["max_tokens"] == 8192
-    assert info["supports_vision"] is False   # Large is text-only; Pixtral is the vision model
+    assert info["context_window"] == 262144
+    assert info["max_tokens"] == 32768
+    assert info["supports_vision"] is True   # Mistral Large 3 is multimodal
     assert info["supports_tools"] is True
     assert ModelCapability.REASONING in info["capabilities"]
-    assert ModelCapability.MULTIMODAL not in info["capabilities"]
+    assert ModelCapability.MULTIMODAL in info["capabilities"]
 
 
 def test_resolver_mistral_aliases():
-    assert ModelResolver.resolve("mistral") == "mistral-large-latest"
+    assert ModelResolver.resolve("mistral") == "mistral-medium-latest"
     assert ModelResolver.resolve("mistral-large-latest") == "mistral-large-latest"
-    assert ModelResolver.default_model(provider="mistral") == "mistral-large-latest"
+    assert ModelResolver.default_model(provider="mistral") == "mistral-medium-latest"
 
 
 def test_resolver_menu_and_strategy():
     choices = ModelResolver.menu_choices(provider="mistral")
-    assert len(choices) == 1
-    assert choices[0][0] == "mistral-large-latest"
+    assert len(choices) == 8
+    assert choices[0][0] == "mistral-medium-latest"
     
     desc = ModelResolver.describe_strategy(model_hint="mistral")
     assert desc["provider"] == "Mistral AI"
     assert desc["provider_id"] == "mistral"
+
+
+def test_provider_model_list_comes_from_the_catalog(monkeypatch):
+    monkeypatch.setenv("MISTRAL_API_KEY", "ms-test")
+    with patch("llm.providers.mistral.OpenAI") as mock_sdk:
+        mock_sdk.return_value = MagicMock()
+        provider = MistralProvider()
+    names = {m.name for m in provider.list_models()}
+    assert {"mistral-medium-latest", "mistral-large-latest", "mistral-small-latest", "codestral-latest", "ministral-8b-latest"} <= names
+    assert provider.get_default_model() == "mistral-medium-latest"

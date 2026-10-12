@@ -14,6 +14,7 @@ const ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM = 'antigravity-rule-frontmatter';
 const ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM = 'antigravity-manual-rule-frontmatter';
 const ANTIGRAVITY_AGENT_FRONTMATTER_TRANSFORM = 'antigravity-agent-frontmatter';
 const ANTIGRAVITY_COMMAND_SKILL_TRANSFORM = 'antigravity-command-skill';
+const CURSOR_COMMAND_SKILL_TRANSFORM = 'cursor-command-skill';
 
 // Model names Claude Code resolves itself. Anything else in an agent's
 // frontmatter (the catalog's Gemini ids) would be sent to the API as-is and
@@ -445,7 +446,7 @@ function commandDescription(parts) {
   return firstLine ? firstLine.replace(/^#+\s*/, '').trim() : null;
 }
 
-function toAntigravityCommandSkill(text, { name = null } = {}) {
+function toCommandSkill(text, name, extraFrontmatter) {
   const source = stripByteOrderMark(text);
   const parts = splitFrontmatter(source) || { frontmatter: [], body: source.split(/\r?\n/) };
   const description = commandDescription(parts);
@@ -456,7 +457,15 @@ function toAntigravityCommandSkill(text, { name = null } = {}) {
   if (description) {
     frontmatter.push(`description: ${JSON.stringify(description)}`);
   }
-  return ['---', ...frontmatter, '---', ...parts.body].join('\n');
+  return ['---', ...frontmatter, ...extraFrontmatter, '---', ...parts.body].join('\n');
+}
+
+function toAntigravityCommandSkill(text, { name = null } = {}) {
+  return toCommandSkill(text, name, []);
+}
+
+function toCursorCommandSkill(text, { name = null } = {}) {
+  return toCommandSkill(text, name, ['disable-model-invocation: true']);
 }
 
 function commandName(sourcePath) {
@@ -494,6 +503,10 @@ const TRANSFORMS = Object.freeze({
     toAntigravityRule(content.toString('utf8'), { manual: true, directory: ruleDirectory(sourcePath) }),
     'utf8'
   ),
+  [CURSOR_COMMAND_SKILL_TRANSFORM]: (content, sourcePath) => Buffer.from(
+    toCursorCommandSkill(content.toString('utf8'), { name: commandName(sourcePath) }),
+    'utf8'
+  ),
 });
 
 function transformContent(content, transform, sourcePath = null) {
@@ -517,12 +530,14 @@ module.exports = {
   ANTIGRAVITY_MANUAL_RULE_FRONTMATTER_TRANSFORM,
   ANTIGRAVITY_RULE_FRONTMATTER_TRANSFORM,
   CLAUDE_AGENT_FRONTMATTER_TRANSFORM,
+  CURSOR_COMMAND_SKILL_TRANSFORM,
   OPENCODE_AGENT_FRONTMATTER_TRANSFORM,
   plannedFileContent,
   toAntigravityAgentFrontmatter,
   toAntigravityCommandSkill,
   toAntigravityRule,
   toClaudeAgentFrontmatter,
+  toCursorCommandSkill,
   toOpenCodeAgentFrontmatter,
   transformContent,
 };

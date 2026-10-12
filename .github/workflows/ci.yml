@@ -41,6 +41,22 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node: ['20.x', '22.x']
         pm: [npm, yarn, bun]
+        # GitHub runs a handful of macOS jobs at a time and each lane takes
+        # six to ten minutes, so six macOS lanes on every pull request put
+        # every open PR in a queue of hours (eight PRs waited most of
+        # 2026-10-11 on macOS alone). A pull request keeps one macOS lane,
+        # Node 22 with npm: what macOS checks differently (paths, realpath,
+        # permissions) shows on any lane, and the package managers are
+        # covered by the Linux and Windows lanes. Pushes to main, release
+        # branches and tags still run all six. The expressions are empty
+        # strings outside pull requests, and an empty exclude matches nothing.
+        exclude:
+          - os: macos-latest
+            node: ${{ github.event_name == 'pull_request' && '20.x' || '' }}
+          - os: macos-latest
+            pm: ${{ github.event_name == 'pull_request' && 'yarn' || '' }}
+          - os: macos-latest
+            pm: ${{ github.event_name == 'pull_request' && 'bun' || '' }}
 
     steps:
       - name: Checkout
