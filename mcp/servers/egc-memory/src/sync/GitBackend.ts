@@ -186,65 +186,60 @@ export class GitBackend extends SyncBackend {
     }
   }
 
+  private static removeQuietly(target: string): void {
+    fs.rmSync(target, { recursive: true, force: true });
+  }
+
+  private static sweepStaleTemporaries(parent: string): void {
+    for (const entry of fs.readdirSync(parent)) {
+      if (entry.startsWith('.tmp-sync-') || entry.startsWith('.tmp-old-')) {
+        GitBackend.removeQuietly(path.join(parent, entry));
+      }
+    }
+  }
+
+  private static temporaryName(parent: string, prefix: string): string {
+    return path.join(parent, `${prefix}-${Date.now()}-${randomBytes(6).toString('hex')}`);
+  }
+
+  // Copy into a sibling temporary directory, then swap it in with renames, so a failed copy never leaves dest half-written.
   mirrorCopy(src: string, dest: string): void {
     const parent = path.dirname(dest);
-    if (!fs.existsSync(parent)) {
-      fs.mkdirSync(parent, { recursive: true });
-    } else {
-      for (const entry of fs.readdirSync(parent)) {
-        if (entry.startsWith('.tmp-sync-') || entry.startsWith('.tmp-old-')) {
-          fs.rmSync(path.join(parent, entry), { recursive: true, force: true });
-        }
-      }
-    }
-    const tmpDest = path.join(parent, `.tmp-sync-${Date.now()}-${randomBytes(6).toString('hex')}`);
+    fs.mkdirSync(parent, { recursive: true });
+    GitBackend.sweepStaleTemporaries(parent);
+
+    const tmpDest = GitBackend.temporaryName(parent, '.tmp-sync');
     try {
       fs.cpSync(src, tmpDest, { recursive: true });
-    } catch (error) {
-      if (fs.existsSync(tmpDest)) {
-        fs.rmSync(tmpDest, { recursive: true, force: true });
+      if (!fs.existsSync(dest)) {
+        fs.renameSync(tmpDest, dest);
+        return;
       }
+    } catch (error) {
+      GitBackend.removeQuietly(tmpDest);
       throw error;
     }
 
-    if (!fs.existsSync(dest)) {
-      try {
-        fs.renameSync(tmpDest, dest);
-      } catch (error) {
-        if (fs.existsSync(tmpDest)) {
-          fs.rmSync(tmpDest, { recursive: true, force: true });
-        }
-        throw error;
-      }
-      return;
-    }
-
-    const backupDest = path.join(parent, `.tmp-old-${Date.now()}-${randomBytes(6).toString('hex')}`);
+    const backupDest = GitBackend.temporaryName(parent, '.tmp-old');
     try {
       fs.renameSync(dest, backupDest);
-    } catch (error) {
-      fs.rmSync(tmpDest, { recursive: true, force: true });
-      throw error;
-    }
-
-    try {
       fs.renameSync(tmpDest, dest);
     } catch (error) {
-      try {
-        fs.renameSync(backupDest, dest);
-      } catch {
-        // preserve backup if rollback failed
+      if (!fs.existsSync(dest) && fs.existsSync(backupDest)) {
+        try {
+          fs.renameSync(backupDest, dest);
+        } catch {
+          // keep the backup in place when the rollback itself fails
+        }
       }
-      if (fs.existsSync(tmpDest)) {
-        fs.rmSync(tmpDest, { recursive: true, force: true });
-      }
+      GitBackend.removeQuietly(tmpDest);
       throw error;
     }
 
     try {
-      fs.rmSync(backupDest, { recursive: true, force: true });
+      GitBackend.removeQuietly(backupDest);
     } catch {
-      // non-fatal if backup deletion throws after swap succeeds
+      // the swap already succeeded; a leftover backup is swept on the next copy
     }
   }
 }
