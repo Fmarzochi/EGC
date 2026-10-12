@@ -933,6 +933,18 @@ function registerToml(targetPath, bins, target = {}) {
   return true;
 }
 
+function hasEntries(value) {
+  return Boolean(value) && Object.keys(value).length > 0;
+}
+
+function migrateLegacyZedServer(template, existing) {
+  return {
+    ...template,
+    ...(hasEntries(existing.command.env) ? { env: existing.command.env } : {}),
+    ...(hasEntries(existing.settings) ? { settings: existing.settings } : {})
+  };
+}
+
 /**
  * Merges egc-guardian / egc-memory into Zed's settings.json under the
  * context_servers key. Reads mcp-configs/zed-context-servers.json as a
@@ -964,16 +976,9 @@ function registerZedContextServers(targetPath, bins) {
   for (const [key, value] of Object.entries(incoming.context_servers)) {
     const existing = settings.context_servers[key];
     const isLegacyShape = existing && typeof existing.command === 'object' && existing.command !== null;
-    if (!existing || isLegacyShape) {
-      settings.context_servers[key] = isLegacyShape
-        ? {
-            ...value,
-            ...(existing.command.env && Object.keys(existing.command.env).length > 0 ? { env: existing.command.env } : {}),
-            ...(existing.settings && Object.keys(existing.settings).length > 0 ? { settings: existing.settings } : {})
-          }
-        : value;
-      changed = true;
-    }
+    if (existing && !isLegacyShape) continue;
+    settings.context_servers[key] = isLegacyShape ? migrateLegacyZedServer(value, existing) : value;
+    changed = true;
   }
   if (!changed) return false;
   writeConfig(targetPath, JSON.stringify(settings, null, 2) + '\n');

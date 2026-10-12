@@ -310,7 +310,7 @@ function retireCursorSettingsRules(settingsFile) {
 const CODEX_TABLE_HEADER_RE = /^[ \t]*\[\[?[ \t]*[A-Za-z0-9_."'-][A-Za-z0-9_."' \t-]*\]\]?[ \t]*(?:#.*)?$/;
 
 function codexKeyRe(key) {
-  return new RegExp(`^\\s*(?:${key}|"${key}"|'${key}')\\s*=`);
+  return new RegExp(String.raw`^\s*(?:${key}|"${key}"|'${key}')\s*=`);
 }
 
 function codexTopLevelEnd(lines) {
@@ -353,7 +353,7 @@ function insertCodexKey(lines, end) {
   if (end < out.length) {
     out.splice(end, 0, line, '');
   } else if (out.at(-1) === '') {
-    out.splice(out.length - 1, 0, line);
+    out.splice(-1, 0, line);
   } else {
     out.push(line, '');
   }

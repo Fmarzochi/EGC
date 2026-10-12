@@ -45,7 +45,7 @@ function parse(argv) {
     else throw new Error(`unexpected argument ${a}`);
   }
   if (opts.help) return opts;
-  if (!opts.query || !opts.query.trim()) throw new Error('missing query');
+  if (!opts.query?.trim()) throw new Error('missing query');
   if (!Number.isInteger(opts.top) || opts.top < 1 || opts.top > 50) throw new Error('--top must be 1-50');
   return opts;
 }
