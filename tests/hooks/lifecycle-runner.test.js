@@ -98,7 +98,8 @@ const ECHO_STUB = [
 ].join('\n');
 
 const SILENT_STUB = "require('fs').readFileSync(0, 'utf8');";
-const KILLED_STUB = "require('fs').readFileSync(0, 'utf8'); process.kill(process.pid, 'SIGKILL');";
+const HANG_STUB = "require('fs').readFileSync(0, 'utf8'); setInterval(() => {}, 1000);";
+const SHORT_TIMEOUT_MS = 500;
 
 function withRoot(stub, fn) {
   const root = makeRoot(stub);
@@ -134,11 +135,13 @@ test('passes stdin through when the child writes nothing', () => {
   });
 });
 
-test('exits with the fallback status of the entry when the child reports none', () => {
-  withRoot(KILLED_STUB, root => {
+test('exits with the fallback status of the entry when the child is stopped by its timeout and reports none', () => {
+  withRoot(HANG_STUB, root => {
+    const tablePath = path.join(root, 'scripts', 'hooks', 'lifecycle-hooks.json');
+    const shortTable = Object.fromEntries(Object.entries(TABLE).map(([id, entry]) => [id, { ...entry, timeoutMs: SHORT_TIMEOUT_MS }]));
+    fs.writeFileSync(tablePath, JSON.stringify(shortTable));
     assert.strictEqual(runIn(root, argsFor('pre:compact:egc-memory-save'), 'payload').status, 1);
-    // Windows reports a killed child as exit code 1, so only the entry whose fallback is 1 is checked there.
-    if (process.platform !== 'win32') assert.strictEqual(runIn(root, argsFor(KNOWN_ID), 'payload').status, 0);
+    assert.strictEqual(runIn(root, argsFor(KNOWN_ID), 'payload').status, 0);
   });
 });
 
