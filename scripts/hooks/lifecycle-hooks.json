@@ -1,0 +1,11 @@
+{
+  "pre:compact:egc-memory-save": { "target": "scripts/hooks/egc-memory-save.js", "profiles": "minimal,standard,strict", "timeoutMs": 30000, "fallbackStatus": 1 },
+  "session:end:marker": { "target": "scripts/hooks/session-end-marker.js", "profiles": "minimal,standard,strict", "timeoutMs": 30000, "fallbackStatus": 0 },
+  "stop:check-console-log": { "target": "scripts/hooks/check-console-log.js", "profiles": "standard,strict", "timeoutMs": 30000, "fallbackStatus": 0 },
+  "stop:cost-tracker": { "target": "scripts/hooks/cost-tracker.js", "profiles": "minimal,standard,strict", "timeoutMs": 30000, "fallbackStatus": 0 },
+  "stop:desktop-notify": { "target": "scripts/hooks/desktop-notify.js", "profiles": "standard,strict", "timeoutMs": 30000, "fallbackStatus": 0 },
+  "stop:egc-memory-save": { "target": "scripts/hooks/egc-memory-save.js", "profiles": "minimal,standard,strict", "timeoutMs": 30000, "fallbackStatus": 0 },
+  "stop:evaluate-session": { "target": "scripts/hooks/evaluate-session.js", "profiles": "minimal,standard,strict", "timeoutMs": 30000, "fallbackStatus": 0 },
+  "stop:format-typecheck": { "target": "scripts/hooks/stop-format-typecheck.js", "profiles": "standard,strict", "timeoutMs": 300000, "fallbackStatus": 0 },
+  "stop:session-end": { "target": "scripts/hooks/session-end.js", "profiles": "minimal,standard,strict", "timeoutMs": 30000, "fallbackStatus": 0 }
+}

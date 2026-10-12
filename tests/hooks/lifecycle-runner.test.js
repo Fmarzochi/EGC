@@ -1,13 +1,15 @@
 'use strict';
 
 /**
- * Tests for scripts/hooks/lifecycle-runner.js and the hook commands that run it.
+ * Tests for scripts/hooks/lifecycle-runner.js, scripts/hooks/lifecycle-hooks.json
+ * and the hook commands that run them.
  *
  * The PreCompact, Stop and SessionEnd entries of hooks/hooks.json used to carry
  * a 2.5 KB inline `node -e` program each. They now find the lifecycle runner with
- * the shared resolver and pass it the hook id, target script, profiles, timeout
- * and fallback exit status. These tests cover the runner on its own and run every
- * such command from hooks/hooks.json and docs/hooks/memory-persistence/hooks.json.
+ * the shared resolver and pass it the hook id and target script; the profiles,
+ * timeout and fallback exit status live in lifecycle-hooks.json. These tests cover
+ * the runner on its own and run every such command from hooks/hooks.json and
+ * docs/hooks/memory-persistence/hooks.json.
  *
  * Run with: node tests/hooks/lifecycle-runner.test.js
  */
@@ -17,10 +19,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const REPO = path.join(__dirname, '..', '..');
-const RUNNER_SOURCE = path.join(REPO, 'scripts', 'hooks', 'lifecycle-runner.js');
+const HOOKS_DIR = path.join(REPO, 'scripts', 'hooks');
+const TABLE = JSON.parse(fs.readFileSync(path.join(HOOKS_DIR, 'lifecycle-hooks.json'), 'utf8'));
 const RUNNER_MARK = 'scripts/hooks/lifecycle-runner.js';
+const KNOWN_ID = 'stop:cost-tracker';
 
 let passed = 0;
 let failed = 0;
@@ -50,23 +55,34 @@ function lifecycleCommands(file) {
   return commands;
 }
 
-function argsOf(command) {
-  return command.slice(command.lastIndexOf('" ') + 2).split(' ');
+function argsFor(id) {
+  return [id, TABLE[id].target];
+}
+
+function idOf(command) {
+  return command.slice(command.lastIndexOf('" ') + 2).split(' ')[0];
+}
+
+function targetOf(command) {
+  return command.slice(command.lastIndexOf('" ') + 2).split(' ')[1];
 }
 
 function makeRoot(stub) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-lifecycle-'));
   const hooksDir = path.join(root, 'scripts', 'hooks');
   fs.mkdirSync(hooksDir, { recursive: true });
-  fs.copyFileSync(RUNNER_SOURCE, path.join(hooksDir, 'lifecycle-runner.js'));
+  fs.copyFileSync(path.join(HOOKS_DIR, 'lifecycle-runner.js'), path.join(hooksDir, 'lifecycle-runner.js'));
+  fs.copyFileSync(path.join(HOOKS_DIR, 'lifecycle-hooks.json'), path.join(hooksDir, 'lifecycle-hooks.json'));
   if (stub) fs.writeFileSync(path.join(hooksDir, 'run-with-flags.js'), stub);
   return root;
 }
 
-function runIn(root, args, input) {
+function runIn(root, args, input, extraEnv = {}) {
   return spawnSync(process.execPath, [path.join(root, 'scripts', 'hooks', 'lifecycle-runner.js'), ...args], {
     input,
     encoding: 'utf8',
+    timeout: CLI_TIMEOUT_MS,
+    env: { ...process.env, ...extraEnv },
   });
 }
 
@@ -78,7 +94,7 @@ const ECHO_STUB = [
 ].join('\n');
 
 const SILENT_STUB = "require('fs').readFileSync(0, 'utf8');";
-const SLEEP_STUB = 'setTimeout(() => {}, 5000);';
+const KILLED_STUB = "require('fs').readFileSync(0, 'utf8'); process.kill(process.pid, 'SIGKILL');";
 
 function withRoot(stub, fn) {
   const root = makeRoot(stub);
@@ -89,10 +105,11 @@ function withRoot(stub, fn) {
   }
 }
 
-test('hands the hook id, target and profiles to run-with-flags and returns its output', () => {
+test('hands the hook id, target and profiles from the table to run-with-flags and returns its output', () => {
   withRoot(ECHO_STUB, root => {
-    const result = runIn(root, ['stop:cost-tracker', 'scripts/hooks/cost-tracker.js', 'minimal,standard,strict', '30000', '0'], 'payload');
-    assert.strictEqual(result.stdout, 'child:stop:cost-tracker|scripts/hooks/cost-tracker.js|minimal,standard,strict:payload');
+    const { target, profiles } = TABLE[KNOWN_ID];
+    const result = runIn(root, argsFor(KNOWN_ID), 'payload');
+    assert.strictEqual(result.stdout, `child:${KNOWN_ID}|${target}|${profiles}:payload`);
     assert.strictEqual(result.stderr, 'child-stderr');
     assert.strictEqual(result.status, 0);
   });
@@ -100,55 +117,74 @@ test('hands the hook id, target and profiles to run-with-flags and returns its o
 
 test('forwards the exit status of the child', () => {
   withRoot(ECHO_STUB, root => {
-    const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'hooks', 'lifecycle-runner.js'), 'stop:probe', 'scripts/hooks/probe.js', 'standard', '30000', '0'], {
-      input: 'payload',
-      encoding: 'utf8',
-      env: { ...process.env, STUB_STATUS: '2' },
-    });
+    const result = runIn(root, argsFor(KNOWN_ID), 'payload', { STUB_STATUS: '2' });
     assert.strictEqual(result.status, 2);
   });
 });
 
 test('passes stdin through when the child writes nothing', () => {
   withRoot(SILENT_STUB, root => {
-    const result = runIn(root, ['stop:probe', 'scripts/hooks/probe.js', 'standard', '30000', '0'], 'payload');
+    const result = runIn(root, argsFor(KNOWN_ID), 'payload');
     assert.strictEqual(result.stdout, 'payload');
     assert.strictEqual(result.status, 0);
   });
 });
 
-test('reports a child that outlives its timeout and exits with the fallback status', () => {
-  withRoot(SLEEP_STUB, root => {
-    const result = runIn(root, ['stop:probe', 'scripts/hooks/probe.js', 'standard', '300', '1'], 'payload');
-    assert.strictEqual(result.stdout, 'payload');
-    assert.match(result.stderr, /\[hook error\]/);
-    assert.strictEqual(result.status, 1);
+test('exits with the fallback status of the entry when the child reports none', () => {
+  withRoot(KILLED_STUB, root => {
+    assert.strictEqual(runIn(root, argsFor('pre:compact:egc-memory-save'), 'payload').status, 1);
+    assert.strictEqual(runIn(root, argsFor(KNOWN_ID), 'payload').status, 0);
   });
 });
 
 test('passes stdin through and exits 0 when the root has no run-with-flags.js', () => {
   withRoot(null, root => {
-    const result = runIn(root, ['stop:probe', 'scripts/hooks/probe.js', 'standard', '30000', '1'], 'payload');
+    const result = runIn(root, argsFor(KNOWN_ID), 'payload');
     assert.strictEqual(result.stdout, 'payload');
     assert.strictEqual(result.status, 0);
   });
 });
 
-test('refuses arguments outside the hook grammar, passes stdin through and never starts the child', () => {
+test('refuses ids missing from the table, passes stdin through and never starts the child', () => {
   withRoot(ECHO_STUB, root => {
     const bad = [
-      ['stop:cost-tracker', '../../etc/passwd', 'standard', '30000', '0'],
-      ['stop:cost-tracker', 'scripts/hooks/cost-tracker.js', 'standard; id', '30000', '0'],
-      ['--inspect', 'scripts/hooks/cost-tracker.js', 'standard', '30000', '0'],
-      ['stop:cost-tracker', 'scripts/hooks/cost-tracker.js', 'standard', 'abc', '0'],
+      [],
+      [KNOWN_ID],
+      ['--inspect', TABLE[KNOWN_ID].target],
+      ['stop:unknown', TABLE[KNOWN_ID].target],
+      ['constructor', TABLE[KNOWN_ID].target],
+      ['__proto__', TABLE[KNOWN_ID].target],
+      [KNOWN_ID, '../../etc/passwd'],
+      [KNOWN_ID, TABLE['stop:session-end'].target],
     ];
     for (const args of bad) {
       const result = runIn(root, args, 'payload');
       assert.strictEqual(result.stdout, 'payload', args.join(' '));
-      assert.match(result.stderr, /does not accept/, args.join(' '));
+      assert.match(result.stderr, /does not know this hook id and script/, args.join(' '));
       assert.strictEqual(result.status, 0, args.join(' '));
     }
   });
+});
+
+test('every table entry names a script under scripts/hooks, known profiles, a timeout and a 0 or 1 fallback status', () => {
+  const ids = Object.keys(TABLE);
+  assert.ok(ids.length > 0, 'empty table');
+  for (const id of ids) {
+    const { target, profiles, timeoutMs, fallbackStatus } = TABLE[id];
+    assert.match(id, /^[a-z]+(?::[a-z-]+)+$/, id);
+    assert.match(target, /^scripts\/hooks\/[a-z-]+\.js$/, id);
+    assert.match(profiles, /^(minimal,)?standard,strict$/, id);
+    assert.ok(Number.isInteger(timeoutMs) && timeoutMs > 0, id);
+    assert.ok(fallbackStatus === 0 || fallbackStatus === 1, id);
+    assert.ok(fs.existsSync(path.join(REPO, target)), `${target} does not exist`);
+  }
+});
+
+test('Stop keeps the 300 s budget of the format and typecheck hook, and PreCompact exits 1 without a child status', () => {
+  for (const [id, entry] of Object.entries(TABLE)) {
+    assert.strictEqual(entry.timeoutMs, id === 'stop:format-typecheck' ? 300000 : 30000, id);
+    assert.strictEqual(entry.fallbackStatus, id === 'pre:compact:egc-memory-save' ? 1 : 0, id);
+  }
 });
 
 for (const file of ['hooks/hooks.json', 'docs/hooks/memory-persistence/hooks.json']) {
@@ -161,43 +197,48 @@ for (const file of ['hooks/hooks.json', 'docs/hooks/memory-persistence/hooks.jso
     assert.deepStrictEqual(everyCommand.filter(command => command.includes('spawnSync')), []);
   });
 
-  test(`${file} gives every lifecycle command a hook id, a script under scripts/hooks, profiles, a timeout and a fallback status`, () => {
+  test(`${file} gives every lifecycle command a hook id and the target script the table lists for it`, () => {
     for (const { command } of entries) {
-      const [hookId, target, profiles, timeout, fallback] = argsOf(command);
-      assert.match(hookId, /^[a-z]+:[a-z:-]+$/, command.slice(-120));
-      assert.match(target, /^scripts\/hooks\/[a-z-]+\.js$/, command.slice(-120));
-      assert.match(profiles, /^(minimal,)?standard,strict$/, command.slice(-120));
-      assert.match(timeout, /^\d+$/, command.slice(-120));
-      assert.match(fallback, /^[01]$/, command.slice(-120));
-      assert.ok(fs.existsSync(path.join(REPO, target)), `${target} does not exist`);
+      assert.ok(Object.hasOwn(TABLE, idOf(command)), command.slice(-120));
+      assert.strictEqual(targetOf(command), TABLE[idOf(command)].target, command.slice(-120));
     }
   });
 
   test(`${file} lifecycle commands run: a disabled hook passes its input through with status 0`, () => {
-    const ids = entries.map(({ command }) => argsOf(command)[0]);
+    const ids = entries.map(({ command }) => idOf(command));
     for (const { command } of entries) {
       const result = spawnSync(command, {
         shell: true,
         input: '{"session_id":"lifecycle-runner-test"}',
         encoding: 'utf8',
+        timeout: CLI_TIMEOUT_MS,
         env: { ...process.env, EGC_PLUGIN_ROOT: REPO, EGC_DISABLED_HOOKS: ids.join(',') },
       });
       assert.strictEqual(result.status, 0, `${command.slice(-90)}: ${result.stderr}`);
       assert.strictEqual(result.stdout, '{"session_id":"lifecycle-runner-test"}', command.slice(-90));
+      assert.strictEqual(result.stderr, '', command.slice(-90));
+    }
+  });
+
+  test(`${file} lifecycle commands pass stdin through when no EGC root can be found`, () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-lifecycle-home-'));
+    try {
+      for (const { command } of entries) {
+        const result = spawnSync(command, {
+          shell: true,
+          input: '{"session_id":"lifecycle-runner-test"}',
+          encoding: 'utf8',
+          timeout: CLI_TIMEOUT_MS,
+          env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH },
+        });
+        assert.strictEqual(result.status, 0, `${command.slice(-60)}: ${result.stderr}`);
+        assert.strictEqual(result.stdout, '{"session_id":"lifecycle-runner-test"}', command.slice(-60));
+      }
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
     }
   });
 }
-
-test('Stop keeps the 300 s budget of the format and typecheck hook, and PreCompact exits 1 without a child status', () => {
-  const entries = lifecycleCommands('hooks/hooks.json');
-  const byId = new Map(entries.map(({ command }) => [argsOf(command)[0], argsOf(command)]));
-  assert.strictEqual(byId.get('stop:format-typecheck')[3], '300000');
-  assert.strictEqual(byId.get('pre:compact:egc-memory-save')[4], '1');
-  for (const [id, args] of byId) {
-    if (id !== 'stop:format-typecheck') assert.strictEqual(args[3], '30000', id);
-    if (id !== 'pre:compact:egc-memory-save') assert.strictEqual(args[4], '0', id);
-  }
-});
 
 console.log(`Passed: ${passed}`);
 console.log(`Failed: ${failed}`);
