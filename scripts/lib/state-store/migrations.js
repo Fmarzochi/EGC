@@ -276,8 +276,49 @@ function applyMigrations(db) {
   return getAppliedMigrations(db);
 }
 
+async function applyMigrationsAsync(db) {
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      applied_at TEXT NOT NULL
+    );
+  `);
+
+  const appliedRows = await db.all('SELECT version FROM schema_migrations');
+  const appliedVersions = new Set(appliedRows.map(row => row.version));
+
+  for (const migration of MIGRATIONS) {
+    if (appliedVersions.has(migration.version)) {
+      continue;
+    }
+
+    await db.exec('BEGIN IMMEDIATE');
+    try {
+      const checkRows = await db.all('SELECT version FROM schema_migrations WHERE version = ?', [migration.version]);
+      if (checkRows.length === 0) {
+        await db.exec(migration.sql);
+        await db.run(
+          'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
+          [migration.version, migration.name, new Date().toISOString()]
+        );
+      }
+      await db.exec('COMMIT');
+      appliedVersions.add(migration.version);
+    } catch (err) {
+      try { await db.exec('ROLLBACK'); } catch (_) { /* ignore rollback error */ }
+      if (err.message && (err.message.includes('duplicate column') || err.message.includes('already exists'))) {
+        appliedVersions.add(migration.version);
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 module.exports = {
   MIGRATIONS,
   applyMigrations,
+  applyMigrationsAsync,
   getAppliedMigrations,
 };

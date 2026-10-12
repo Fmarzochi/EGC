@@ -14,6 +14,8 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
+const os = require('node:os');
 
 // Pragmas that only mean something to the native engine (WAL, busy
 // timeout, synchronous) are dropped from the text before sql.js sees it.
@@ -30,6 +32,132 @@ const NATIVE_FAILURE_MESSAGE = /GLIBC|dlopen|bindings file|\.node'?:|invalid ELF
 let sqlJsPromise = null;
 let fallbackAnnounced = false;
 let selected = 'native';
+
+class InProcessMutex {
+  constructor() {
+    this._queue = [];
+    this._locked = false;
+  }
+
+  async acquire() {
+    if (!this._locked) {
+      this._locked = true;
+      return;
+    }
+    await new Promise(resolve => this._queue.push(resolve));
+  }
+
+  release() {
+    if (this._queue.length > 0) {
+      const next = this._queue.shift();
+      next();
+    } else {
+      this._locked = false;
+    }
+  }
+}
+
+const fileMutexes = new Map();
+function getFileMutex(filepath) {
+  let m = fileMutexes.get(filepath);
+  if (!m) {
+    m = new InProcessMutex();
+    fileMutexes.set(filepath, m);
+  }
+  return m;
+}
+
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    if (err && err.code === 'ESRCH') return false;
+    return true;
+  }
+}
+
+function tryAcquireLockOnce(lockPath, token) {
+  let fd;
+  try {
+    fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+    fd = fs.openSync(lockPath, 'wx');
+  } catch (err) {
+    if (err && err.code === 'EEXIST') return false;
+    throw err;
+  }
+  try {
+    const payload = JSON.stringify({
+      token,
+      pid: process.pid,
+      acquiredAt: Date.now(),
+      hostname: os.hostname(),
+    });
+    fs.writeFileSync(fd, payload);
+    return true;
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch (_) { /* ignore close error */ }
+    }
+  }
+}
+
+function releaseFileLock(lockPath, token) {
+  if (!token || typeof token !== 'string') return;
+  try {
+    if (!fs.existsSync(lockPath)) return;
+    const raw = fs.readFileSync(lockPath, 'utf8');
+    const data = JSON.parse(raw);
+    if (data && data.token === token) {
+      fs.unlinkSync(lockPath);
+    }
+  } catch (_) { /* ignore release error */ }
+}
+
+async function acquireFileLock(lockPath, { timeoutMs = 15000, retryIntervalMs = 25 } = {}) {
+  const token = crypto.randomUUID();
+  const deadline = Date.now() + timeoutMs;
+  let lastHolder = null;
+
+  while (Date.now() < deadline) {
+    if (tryAcquireLockOnce(lockPath, token)) {
+      return token;
+    }
+
+    let holder = null;
+    try {
+      const raw = fs.readFileSync(lockPath, 'utf8');
+      if (raw.trim()) {
+        holder = JSON.parse(raw);
+        lastHolder = holder;
+      }
+    } catch (err) {
+      if (err.code === 'ENOENT') continue;
+      // Malformed JSON or transient read error: fail closed by continuing to wait
+    }
+
+    if (holder) {
+      const sameHost = holder.hostname === os.hostname();
+      const isValidPid = Number.isInteger(holder.pid) && holder.pid > 0;
+      const isDeadLocalPid = sameHost && isValidPid && !isProcessAlive(holder.pid);
+      if (isDeadLocalPid && fs.existsSync(lockPath)) {
+        throw new Error(
+          `[sqlite-compat] Lock file "${lockPath}" is held by dead process PID ${holder.pid} on host ${holder.hostname}. ` +
+          `Automatic stale-lock recovery is disabled to ensure strict mutual exclusion. ` +
+          `To recover manually, verify that process ${holder.pid} is not running, then remove the lock file: rm "${lockPath}"`
+        );
+      }
+    }
+
+    const jitter = Math.floor(Math.random() * 20);
+    await new Promise(r => setTimeout(r, retryIntervalMs + jitter));
+  }
+
+  const hostInfo = (lastHolder && lastHolder.hostname && lastHolder.hostname !== os.hostname()) ? ` on host ${lastHolder.hostname}` : '';
+  const holderInfo = lastHolder ? ` (held by PID ${lastHolder.pid}${hostInfo}, token ${lastHolder.token})` : '';
+  throw new Error(`[sqlite-compat] Lock timeout after ${timeoutMs}ms acquiring ${lockPath}${holderInfo}`);
+}
 
 function errorMessage(error) {
   if (error instanceof Error) return error.message.split('\n')[0];
@@ -109,19 +237,91 @@ function normalizeParams(params) {
 }
 
 class WasmDatabase {
-  constructor(db, filename) {
+  constructor(db, filename, SQL) {
     this.db = db;
     this.filename = filename;
+    this.SQL = SQL || null;
     this.persistTimer = null;
     this.closed = false;
+    this._inTransaction = false;
+    this._txToken = null;
+    this._lastMtimeMs = 0;
+    this._updateMtime();
+  }
+
+  getLockPath() {
+    return `${this.filename}.db-lock`;
+  }
+
+  _updateMtime() {
+    if (this.filename === ':memory:') return;
+    try {
+      if (fs.existsSync(this.filename)) {
+        this._lastMtimeMs = fs.statSync(this.filename).mtimeMs;
+      }
+    } catch (_) { /* ignore stat error */ }
+  }
+
+  reloadFromDisk() {
+    if (this.filename === ':memory:' || !this.SQL) return;
+    if (fs.existsSync(this.filename)) {
+      assertNoPendingWal(this.filename);
+      const data = new Uint8Array(fs.readFileSync(this.filename));
+      if (this.db) {
+        try { this.db.close(); } catch (_) { /* ignore close error */ }
+      }
+      this.db = new this.SQL.Database(data);
+      this._updateMtime();
+    }
+  }
+
+  async withWriteLock(fn) {
+    if (this.filename === ':memory:') {
+      return fn();
+    }
+    const mutex = getFileMutex(this.filename);
+    await mutex.acquire();
+    let token = null;
+    try {
+      token = await acquireFileLock(this.getLockPath());
+      this.reloadFromDisk();
+      const result = await fn();
+      this.persistNow();
+      return result;
+    } finally {
+      if (token) {
+        try { releaseFileLock(this.getLockPath(), token); } catch (_) {}
+      }
+      mutex.release();
+    }
   }
 
   async run(sql, ...params) {
-    this.db.run(sql, normalizeParams(params));
-    const changes = this.db.getRowsModified();
-    const row = await this.get('SELECT last_insert_rowid() AS id');
-    if (mutates(sql)) this.schedulePersist();
-    return { lastID: Number(row?.id ?? 0), changes };
+    const execute = () => {
+      this.db.run(sql, normalizeParams(params));
+      const changes = this.db.getRowsModified();
+      const statement = this.db.prepare('SELECT last_insert_rowid() AS id');
+      let lastID = 0;
+      try {
+        if (statement.step()) {
+          const row = statement.getAsObject();
+          lastID = Number(row?.id ?? 0);
+        }
+      } finally {
+        statement.free();
+      }
+      return { lastID, changes };
+    };
+
+    if (!mutates(sql)) {
+      return execute();
+    }
+
+    if (this._inTransaction) {
+      return execute();
+    }
+
+    return this.withWriteLock(execute);
   }
 
   async get(sql, ...params) {
@@ -130,6 +330,14 @@ class WasmDatabase {
   }
 
   async all(sql, ...params) {
+    if (this.filename !== ':memory:' && !this._inTransaction && fs.existsSync(this.filename)) {
+      try {
+        const currentMtime = fs.statSync(this.filename).mtimeMs;
+        if (currentMtime !== this._lastMtimeMs) {
+          this.reloadFromDisk();
+        }
+      } catch (_) { /* ignore stat error */ }
+    }
     const statement = this.db.prepare(sql);
     try {
       const bound = normalizeParams(params);
@@ -142,29 +350,121 @@ class WasmDatabase {
     }
   }
 
-  // sql.js runs a multi-statement string itself (so trigger bodies with
-  // BEGIN ... END stay intact) and stops at the first error, like the native
-  // driver. WAL, busy timeout and synchronous pragmas only mean something to
-  // the native engine, so they are dropped from the text rather than failed.
   async exec(sql) {
     const text = withoutSkippedPragmas(sql);
-    if (text.trim()) this.db.exec(text);
-    if (mutates(sql)) this.schedulePersist();
+    if (!text.trim()) return;
+
+    if (!mutates(sql)) {
+      this.db.exec(text);
+      return;
+    }
+
+    const trimmed = text.trim();
+    const hasCommitOrRollback = /^\s*(COMMIT|END TRANSACTION|ROLLBACK)\b/im.test(trimmed);
+    const isBegin = /^\s*BEGIN\b/i.test(trimmed) && !hasCommitOrRollback;
+    const isCommit = /^\s*(COMMIT|END TRANSACTION)\b/i.test(trimmed);
+    const isRollback = /^\s*ROLLBACK\b/i.test(trimmed);
+
+    if (isBegin && !this._inTransaction) {
+      if (this.filename !== ':memory:') {
+        const mutex = getFileMutex(this.filename);
+        await mutex.acquire();
+        let token = null;
+        try {
+          token = await acquireFileLock(this.getLockPath());
+          this.reloadFromDisk();
+          this.db.exec(text);
+          this._txToken = token;
+          this._inTransaction = true;
+          return;
+        } catch (err) {
+          if (token) {
+            try { releaseFileLock(this.getLockPath(), token); } catch (_) {}
+          }
+          mutex.release();
+          this._txToken = null;
+          this._inTransaction = false;
+          throw err;
+        }
+      }
+      this._inTransaction = true;
+      try {
+        this.db.exec(text);
+      } catch (err) {
+        this._inTransaction = false;
+        throw err;
+      }
+      return;
+    }
+
+    if (isCommit && this._inTransaction) {
+      try {
+        this.db.exec(text);
+        this.persistNow();
+      } finally {
+        this._exitTransaction();
+      }
+      return;
+    }
+
+    if (isRollback && this._inTransaction) {
+      try {
+        this.db.exec(text);
+      } finally {
+        this._exitTransaction();
+      }
+      return;
+    }
+
+    if (this._inTransaction) {
+      this.db.exec(text);
+      return;
+    }
+
+    return this.withWriteLock(() => {
+      this.db.exec(text);
+    });
+  }
+
+  _exitTransaction() {
+    if (this.filename !== ':memory:') {
+      if (this._txToken) {
+        releaseFileLock(this.getLockPath(), this._txToken);
+        this._txToken = null;
+      }
+      const mutex = getFileMutex(this.filename);
+      mutex.release();
+    }
+    this._inTransaction = false;
   }
 
   async close() {
     if (this.closed) return;
     this.closed = true;
-    this.persistNow();
-    this.db.close();
+    const wasInTransaction = this._inTransaction;
+    if (wasInTransaction) {
+      try { this.db.exec('ROLLBACK'); } catch (_) { /* ignore rollback error on close */ }
+      this._exitTransaction();
+    }
+    if (this._exitHandler) {
+      process.removeListener('exit', this._exitHandler);
+      this._exitHandler = null;
+    }
+    if (!wasInTransaction && this.filename !== ':memory:' && this.db) {
+      try {
+        this.persistNow();
+      } catch (_) { /* ignore persist error on close */ }
+    }
+    if (this.db) {
+      try { this.db.close(); } catch (_) { /* ignore close error */ }
+      this.db = null;
+    }
   }
 
   schedulePersist() {
     if (this.persistTimer) return;
     this.persistTimer = setTimeout(() => {
       this.persistTimer = null;
-      // A failed background write must not take the server down; the next
-      // mutation retries, and close() surfaces the error to its caller.
       try {
         this.persistNow();
       } catch (error) {
@@ -179,11 +479,19 @@ class WasmDatabase {
       clearTimeout(this.persistTimer);
       this.persistTimer = null;
     }
-    if (this.filename === ':memory:') return;
-    const tmp = `${this.filename}.${process.pid}.tmp`;
-    fs.mkdirSync(path.dirname(this.filename), { recursive: true });
-    fs.writeFileSync(tmp, Buffer.from(this.db.export()));
-    fs.renameSync(tmp, this.filename);
+    if (this.filename === ':memory:' || !this.db) return;
+    const dir = path.dirname(this.filename);
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = path.join(dir, `.${path.basename(this.filename)}.${process.pid}.${crypto.randomUUID()}.tmp`);
+    try {
+      fs.writeFileSync(tmp, Buffer.from(this.db.export()));
+      fs.renameSync(tmp, this.filename);
+      this._updateMtime();
+    } finally {
+      try {
+        if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+      } catch (_) { /* ignore unlink error */ }
+    }
   }
 }
 
@@ -214,8 +522,9 @@ async function openWasmDatabase(filename) {
   const data = filename !== ':memory:' && fs.existsSync(filename)
     ? new Uint8Array(fs.readFileSync(filename))
     : undefined;
-  const wasm = new WasmDatabase(new SQL.Database(data), filename);
-  process.once('exit', () => { void wasm.close(); });
+  const wasm = new WasmDatabase(new SQL.Database(data), filename, SQL);
+  wasm._exitHandler = () => { void wasm.close(); };
+  process.once('exit', wasm._exitHandler);
   return wasm;
 }
 
@@ -232,6 +541,11 @@ async function openCompatDatabase(filename, serverName) {
       const sqlite3 = require('sqlite3');
       const { open } = require('sqlite');
       const db = await open({ filename, driver: sqlite3.Database });
+      if (filename !== ':memory:') {
+        await db.exec('PRAGMA busy_timeout = 5000;');
+        await db.exec('PRAGMA journal_mode = WAL;');
+        await db.exec('PRAGMA synchronous = NORMAL;');
+      }
       selected = 'native';
       return db;
     } catch (error) {
@@ -248,4 +562,4 @@ function selectedEngine() {
   return selected;
 }
 
-module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase };
+module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase, acquireFileLock, releaseFileLock, isProcessAlive };

@@ -204,7 +204,7 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('a failed background persist is reported, not thrown', async () => {
+  if (await test('a write failure due to permissions is thrown to the caller', async () => {
     if (!permissionBitsEnforced()) {
       console.log('    - skipped: directory permission bits are not enforced here (root, or Windows)');
       return;
@@ -217,18 +217,10 @@ async function runTests() {
       await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
       await new Promise(r => setTimeout(r, 60));
       fs.chmodSync(dir, 0o555);
-      const captured = [];
-      const originalWrite = process.stderr.write;
-      process.stderr.write = (chunk, ...rest) => { captured.push(String(chunk)); return originalWrite.call(process.stderr, chunk, ...rest); };
-      try {
-        await db.run('INSERT INTO items DEFAULT VALUES');
-        await new Promise(r => setTimeout(r, 80));
-      } finally {
-        process.stderr.write = originalWrite;
-      }
-      assert.ok(captured.some(line => line.includes('[sqlite-compat] could not persist')), `expected the persist failure on stderr, got: ${captured.join('|').slice(0, 200)}`);
-      const rows = await db.all('SELECT COUNT(*) AS n FROM items');
-      assert.strictEqual(rows[0].n, 1, 'the in-memory database keeps working');
+      await assert.rejects(
+        () => db.run('INSERT INTO items DEFAULT VALUES'),
+        /EACCES/
+      );
       fs.chmodSync(dir, 0o755);
       await db.close();
     } finally {

@@ -10,8 +10,14 @@ const { spawnSync, spawn } = require('child_process');
 const {
   createStateStore,
 } = require('../../scripts/lib/state-store');
+const {
+  openCompatDatabase,
+} = require('../../scripts/lib/state-store/sqlite-compat');
 
 const PROJECT_ID = 'egc-concurrency-suite';
+const HOOK_WRITER_PATH = path.resolve(__dirname, '../../scripts/hooks/state-db-writer.js');
+const SQLITE_COMPAT_PATH = path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat.js');
+const MIGRATIONS_PATH = path.resolve(__dirname, '../../scripts/lib/state-store/migrations.js');
 
 function detectPython3() {
   const result = spawnSync('python3', ['-c', 'import sqlite3; print(sqlite3.sqlite_version)'], {
@@ -20,7 +26,17 @@ function detectPython3() {
   return result.status === 0;
 }
 
+function detectNativeSqlite() {
+  try {
+    const sqlite3 = require('sqlite3');
+    return { available: true, version: sqlite3.VERSION };
+  } catch (error) {
+    return { available: false, reason: error.message };
+  }
+}
+
 const PYTHON_AVAILABLE = detectPython3();
+const NATIVE_SQLITE = detectNativeSqlite();
 
 async function test(name, fn) {
   try {
@@ -151,7 +167,7 @@ async function detectWalSupport() {
 }
 
 async function runTests() {
-  console.log('\n=== Testing state-store concurrency (Node + Python writers) ===\n');
+  console.log('\n=== Testing state-store concurrency (hook writer, sqlite-compat, multi-process) ===\n');
 
   let passed = 0;
   let failed = 0;
@@ -160,11 +176,701 @@ async function runTests() {
     if (await test(name, fn)) passed += 1; else failed += 1;
   };
 
+  // 1. Regression test: Concurrent state-db-writer hook processes
+  await runCase('test_concurrent_hook_writers_lost_updates', async () => {
+    const tempDir = createTempDir('egc-conc-hook-');
+    const egcDir = path.join(tempDir, 'egc');
+    fs.mkdirSync(egcDir, { recursive: true });
+    const dbPath = path.join(egcDir, 'state.db');
+
+    try {
+      // Bootstrap state database with schema and migrations
+      const bootstrap = await createStateStore({ dbPath });
+      bootstrap.close();
+
+      const CONCURRENT_WORKERS = 10;
+      const promises = [];
+
+      for (let i = 0; i < CONCURRENT_WORKERS; i += 1) {
+        const p = new Promise((resolve, reject) => {
+          const child = spawn(process.execPath, [HOOK_WRITER_PATH], {
+            env: {
+              ...process.env,
+              EGC_DIR: tempDir,
+            },
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+
+          let stderr = '';
+          child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+          child.on('error', reject);
+          child.on('close', code => {
+            resolve({ code, stderr, index: i });
+          });
+
+          const payload = {
+            session_id: `session-worker-${i}`,
+            event_type: `tool_use_worker_${i}`,
+            hook_event_name: 'test_hook',
+            payload: { workerIndex: i, testUuid: crypto.randomUUID() },
+          };
+          child.stdin.end(JSON.stringify(payload));
+        });
+        promises.push(p);
+      }
+
+      const results = await Promise.all(promises);
+      for (const res of results) {
+        assert.strictEqual(
+          res.code,
+          0,
+          `hook writer worker ${res.index} exited with non-zero code ${res.code}: ${res.stderr}`
+        );
+      }
+
+      // Verify database integrity
+      const verifyDb = await openCompatDatabase(dbPath, 'verify');
+      try {
+        const integrityRows = await verifyDb.all('PRAGMA integrity_check');
+        const integrityStatus = integrityRows[0] ? (integrityRows[0].integrity_check || Object.values(integrityRows[0])[0]) : null;
+        assert.strictEqual(integrityStatus, 'ok', `integrity_check failed: ${JSON.stringify(integrityRows)}`);
+
+        const events = await verifyDb.all('SELECT id, session_id, event_type FROM events');
+        const uniqueSessions = new Set(events.map(e => e.session_id));
+
+        console.log(`    hook_writer_results: expected=${CONCURRENT_WORKERS} actual=${events.length} unique_sessions=${uniqueSessions.size}`);
+
+        assert.strictEqual(
+          events.length,
+          CONCURRENT_WORKERS,
+          `Expected ${CONCURRENT_WORKERS} events after concurrent hook writes, but got ${events.length} (lost-update race occurred: ${CONCURRENT_WORKERS - events.length} events lost)`
+        );
+        assert.strictEqual(
+          uniqueSessions.size,
+          CONCURRENT_WORKERS,
+          `Expected ${CONCURRENT_WORKERS} unique sessions, got ${uniqueSessions.size}`
+        );
+      } finally {
+        await verifyDb.close();
+      }
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  // 2. Regression test: Concurrent WASM compat writers (WasmDatabase)
+  await runCase('test_concurrent_wasm_compat_writers_lost_updates', async () => {
+    const tempDir = createTempDir('egc-conc-wasm-');
+    const dbPath = path.join(tempDir, 'state_wasm.db');
+
+    try {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const initDb = await openCompatDatabase(dbPath, 'init');
+      await initDb.exec(`
+        CREATE TABLE IF NOT EXISTS test_records (
+          id TEXT PRIMARY KEY,
+          worker_id INTEGER NOT NULL,
+          created_at TEXT NOT NULL
+        );
+      `);
+      await initDb.close();
+
+      const CONCURRENT_WORKERS = 10;
+      const promises = [];
+
+      for (let i = 0; i < CONCURRENT_WORKERS; i += 1) {
+        const workerScript = `
+          const { openCompatDatabase } = require(${JSON.stringify(SQLITE_COMPAT_PATH)});
+          async function run() {
+            process.env.EGC_SQLITE_ENGINE = 'wasm';
+            const db = await openCompatDatabase(${JSON.stringify(dbPath)}, 'worker-${i}');
+            await db.run(
+              'INSERT INTO test_records (id, worker_id, created_at) VALUES (?, ?, ?)',
+              ['wasm-worker-${i}', ${i}, new Date().toISOString()]
+            );
+            await db.close();
+          }
+          run().catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+        `;
+
+        const p = new Promise((resolve, reject) => {
+          const child = spawn(process.execPath, ['-e', workerScript], {
+            env: { ...process.env, EGC_SQLITE_ENGINE: 'wasm' },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          let stderr = '';
+          child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+          child.on('error', reject);
+          child.on('close', code => resolve({ code, stderr, index: i }));
+        });
+        promises.push(p);
+      }
+
+      const results = await Promise.all(promises);
+      for (const res of results) {
+        assert.strictEqual(
+          res.code,
+          0,
+          `WASM worker ${res.index} exited with non-zero code ${res.code}: ${res.stderr}`
+        );
+      }
+
+      const verifyDb = await openCompatDatabase(dbPath, 'verify');
+      try {
+        const integrityRows = await verifyDb.all('PRAGMA integrity_check');
+        const integrityStatus = integrityRows[0] ? (integrityRows[0].integrity_check || Object.values(integrityRows[0])[0]) : null;
+        assert.strictEqual(integrityStatus, 'ok', `integrity_check failed: ${JSON.stringify(integrityRows)}`);
+
+        const rows = await verifyDb.all('SELECT id, worker_id FROM test_records');
+        console.log(`    wasm_compat_results: expected=${CONCURRENT_WORKERS} actual=${rows.length}`);
+
+        assert.strictEqual(
+          rows.length,
+          CONCURRENT_WORKERS,
+          `Expected ${CONCURRENT_WORKERS} rows after concurrent WASM writes, but got ${rows.length} (lost-update race occurred: ${CONCURRENT_WORKERS - rows.length} writes lost)`
+        );
+      } finally {
+        await verifyDb.close();
+      }
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  // 3. Regression test: Concurrent native compat writers
+  if (!NATIVE_SQLITE.available) {
+    testSkip(
+      'test_concurrent_native_compat_writers',
+      `Native sqlite3 engine is not available in this environment (${NATIVE_SQLITE.reason})`
+    );
+  } else {
+    await runCase('test_concurrent_native_compat_writers', async () => {
+      const tempDir = createTempDir('egc-conc-native-');
+      const dbPath = path.join(tempDir, 'state_native.db');
+
+      try {
+        process.env.EGC_SQLITE_ENGINE = 'native';
+        const initDb = await openCompatDatabase(dbPath, 'init');
+        await initDb.exec(`
+          CREATE TABLE IF NOT EXISTS test_records (
+            id TEXT PRIMARY KEY,
+            worker_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+          );
+        `);
+        await initDb.close();
+
+        const CONCURRENT_WORKERS = 10;
+        const promises = [];
+
+        for (let i = 0; i < CONCURRENT_WORKERS; i += 1) {
+          const workerScript = `
+            const { openCompatDatabase } = require(${JSON.stringify(SQLITE_COMPAT_PATH)});
+            async function run() {
+              process.env.EGC_SQLITE_ENGINE = 'native';
+              const db = await openCompatDatabase(${JSON.stringify(dbPath)}, 'worker-${i}');
+              await db.run(
+                'INSERT INTO test_records (id, worker_id, created_at) VALUES (?, ?, ?)',
+                ['native-worker-${i}', ${i}, new Date().toISOString()]
+              );
+              await db.close();
+            }
+            run().catch(err => {
+              console.error(err);
+              process.exit(1);
+            });
+          `;
+
+          const p = new Promise((resolve, reject) => {
+            const child = spawn(process.execPath, ['-e', workerScript], {
+              env: { ...process.env, EGC_SQLITE_ENGINE: 'native' },
+              stdio: ['ignore', 'pipe', 'pipe'],
+            });
+            let stderr = '';
+            child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+            child.on('error', reject);
+            child.on('close', code => resolve({ code, stderr, index: i }));
+          });
+          promises.push(p);
+        }
+
+        const results = await Promise.all(promises);
+        for (const res of results) {
+          assert.strictEqual(
+            res.code,
+            0,
+            `Native worker ${res.index} exited with non-zero code ${res.code}: ${res.stderr}`
+          );
+        }
+
+        const verifyDb = await openCompatDatabase(dbPath, 'verify');
+        try {
+          const integrityRows = await verifyDb.all('PRAGMA integrity_check');
+          const integrityStatus = integrityRows[0] ? (integrityRows[0].integrity_check || Object.values(integrityRows[0])[0]) : null;
+          assert.strictEqual(integrityStatus, 'ok', `integrity_check failed: ${JSON.stringify(integrityRows)}`);
+
+          const rows = await verifyDb.all('SELECT id, worker_id FROM test_records');
+          console.log(`    native_compat_results: expected=${CONCURRENT_WORKERS} actual=${rows.length}`);
+
+          assert.strictEqual(
+            rows.length,
+            CONCURRENT_WORKERS,
+            `Expected ${CONCURRENT_WORKERS} rows after concurrent native writes, but got ${rows.length}`
+          );
+        } finally {
+          await verifyDb.close();
+        }
+      } finally {
+        cleanupTempDir(tempDir);
+      }
+    });
+  }
+
+  // 4. Native WAL vs db-adapter (WASM) mixed-engine collision risk
+  if (!NATIVE_SQLITE.available) {
+    testSkip(
+      'test_mixed_engine_uncoordinated_writes_risk',
+      `Native sqlite3 engine is not available in this environment (${NATIVE_SQLITE.reason})`
+    );
+  } else {
+    await runCase('test_mixed_engine_uncoordinated_writes_risk', async () => {
+      const tempDir = createTempDir('egc-conc-mixed-');
+      const dbPath = path.join(tempDir, 'state_mixed.db');
+
+      try {
+        process.env.EGC_SQLITE_ENGINE = 'native';
+        const nativeDb = await openCompatDatabase(dbPath, 'native-writer');
+        await nativeDb.exec('PRAGMA journal_mode = WAL;');
+        await nativeDb.exec('CREATE TABLE test_shared (id TEXT PRIMARY KEY, val TEXT);');
+        await nativeDb.run('INSERT INTO test_shared VALUES (?, ?)', ['n1', 'native-val-1']);
+        await nativeDb.close();
+
+        // Check if WAL file exists with uncheckpointed data
+        const walPath = `${dbPath}-wal`;
+        const walExists = fs.existsSync(walPath);
+        console.log(`    native_wal_exists: ${walExists}`);
+
+        // Hook writer uses db-adapter (WASM sql.js), which opens with fs.readFileSync(dbPath)
+        // and does not understand WAL sidecars.
+        const wasmStore = await createStateStore({ dbPath });
+        try {
+          // If uncoordinated mixed engine writes occur, wasmStore reads stale snapshot
+          // without WAL changes and rewrites whole file on export, clobbering native WAL.
+          const walSupported = wasmStore._database._supportsWal === true;
+          assert.strictEqual(
+            walSupported,
+            false,
+            'db-adapter currently does not support WAL mode; concurrent native WAL + WASM writes are unsafe without coordination'
+          );
+        } finally {
+          wasmStore.close();
+        }
+      } finally {
+        cleanupTempDir(tempDir);
+      }
+    });
+  }
+
+  // 5. Test concurrent migrations startup (multi-process migration race)
+  await runCase('test_concurrent_migrations_startup_wasm', async () => {
+    const tempDir = createTempDir('egc-mig-wasm-');
+    const dbPath = path.join(tempDir, 'state_mig_wasm.db');
+
+    try {
+      const CONCURRENT_WORKERS = 10;
+      const promises = [];
+
+      for (let i = 0; i < CONCURRENT_WORKERS; i += 1) {
+        const workerScript = `
+          const { openCompatDatabase } = require(${JSON.stringify(SQLITE_COMPAT_PATH)});
+          const { applyMigrationsAsync } = require(${JSON.stringify(MIGRATIONS_PATH)});
+          async function run() {
+            process.env.EGC_SQLITE_ENGINE = 'wasm';
+            const db = await openCompatDatabase(${JSON.stringify(dbPath)}, 'mig-worker-${i}');
+            await applyMigrationsAsync(db);
+            await db.close();
+          }
+          run().then(() => process.exit(0)).catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+        `;
+
+        const p = new Promise((resolve, reject) => {
+          const child = spawn(process.execPath, ['-e', workerScript], {
+            env: { ...process.env, EGC_SQLITE_ENGINE: 'wasm' },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          let stderr = '';
+          child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+          child.on('error', reject);
+          child.on('close', code => resolve({ code, stderr, index: i }));
+        });
+        promises.push(p);
+      }
+
+      const results = await Promise.all(promises);
+      for (const res of results) {
+        assert.strictEqual(
+          res.code,
+          0,
+          `Migration worker ${res.index} exited with code ${res.code}: ${res.stderr}`
+        );
+      }
+
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const verifyDb = await openCompatDatabase(dbPath, 'verify');
+      try {
+        const integrityRows = await verifyDb.all('PRAGMA integrity_check');
+        const integrityStatus = integrityRows[0] ? (integrityRows[0].integrity_check || Object.values(integrityRows[0])[0]) : null;
+        assert.strictEqual(integrityStatus, 'ok', `integrity_check failed: ${JSON.stringify(integrityRows)}`);
+
+        const migrations = await verifyDb.all('SELECT version, name FROM schema_migrations ORDER BY version ASC');
+        assert.ok(migrations.length > 0, 'Expected migrations to be recorded in schema_migrations');
+      } finally {
+        await verifyDb.close();
+      }
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  if (NATIVE_SQLITE.available) {
+    await runCase('test_concurrent_migrations_startup_native', async () => {
+      const tempDir = createTempDir('egc-mig-native-');
+      const dbPath = path.join(tempDir, 'state_mig_native.db');
+
+      try {
+        const CONCURRENT_WORKERS = 10;
+        const promises = [];
+
+        for (let i = 0; i < CONCURRENT_WORKERS; i += 1) {
+          const workerScript = `
+            const { openCompatDatabase } = require(${JSON.stringify(SQLITE_COMPAT_PATH)});
+            const { applyMigrationsAsync } = require(${JSON.stringify(MIGRATIONS_PATH)});
+            async function run() {
+              process.env.EGC_SQLITE_ENGINE = 'native';
+              const db = await openCompatDatabase(${JSON.stringify(dbPath)}, 'mig-worker-${i}');
+              await applyMigrationsAsync(db);
+              await db.close();
+            }
+            run().then(() => process.exit(0)).catch(err => {
+              console.error(err);
+              process.exit(1);
+            });
+          `;
+
+          const p = new Promise((resolve, reject) => {
+            const child = spawn(process.execPath, ['-e', workerScript], {
+              env: { ...process.env, EGC_SQLITE_ENGINE: 'native' },
+              stdio: ['ignore', 'pipe', 'pipe'],
+            });
+            let stderr = '';
+            child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+            child.on('error', reject);
+            child.on('close', code => resolve({ code, stderr, index: i }));
+          });
+          promises.push(p);
+        }
+
+        const results = await Promise.all(promises);
+        for (const res of results) {
+          assert.strictEqual(
+            res.code,
+            0,
+            `Native migration worker ${res.index} exited with code ${res.code}: ${res.stderr}`
+          );
+        }
+
+        process.env.EGC_SQLITE_ENGINE = 'native';
+        const verifyDb = await openCompatDatabase(dbPath, 'verify');
+        try {
+          const integrityRows = await verifyDb.all('PRAGMA integrity_check');
+          const integrityStatus = integrityRows[0] ? (integrityRows[0].integrity_check || Object.values(integrityRows[0])[0]) : null;
+          assert.strictEqual(integrityStatus, 'ok', `integrity_check failed: ${JSON.stringify(integrityRows)}`);
+
+          const migrations = await verifyDb.all('SELECT version, name FROM schema_migrations ORDER BY version ASC');
+          assert.ok(migrations.length > 0, 'Expected migrations to be recorded in schema_migrations');
+        } finally {
+          await verifyDb.close();
+        }
+      } finally {
+        cleanupTempDir(tempDir);
+      }
+    });
+  }
+
+  // 6. Test mixed-engine safety: WASM refusing uncheckpointed WAL file
+  await runCase('test_mixed_engine_safety_uncheckpointed_wal_refusal', async () => {
+    const tempDir = createTempDir('egc-mixed-safe-');
+    const dbPath = path.join(tempDir, 'state_uncheckpointed.db');
+    const walPath = `${dbPath}-wal`;
+
+    try {
+      fs.writeFileSync(dbPath, Buffer.alloc(100));
+      fs.writeFileSync(walPath, Buffer.alloc(64, 1));
+
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      let caughtError = null;
+      try {
+        await openCompatDatabase(dbPath, 'wasm-test');
+      } catch (err) {
+        caughtError = err;
+      }
+
+      assert.ok(caughtError !== null, 'Expected openCompatDatabase to throw on non-empty WAL file');
+      assert.match(
+        caughtError.message,
+        /write-ahead data/,
+        `Expected error message mentioning write-ahead data, got: ${caughtError.message}`
+      );
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  // 7. Test MCP server style concurrency with simultaneous hook writers
+  await runCase('test_mcp_server_style_concurrency_with_hook_writers', async () => {
+    const tempDir = createTempDir('egc-server-hook-');
+    const egcDir = path.join(tempDir, 'egc');
+    fs.mkdirSync(egcDir, { recursive: true });
+    const dbPath = path.join(egcDir, 'state.db');
+
+    try {
+      const bootstrap = await openCompatDatabase(dbPath, 'bootstrap');
+      const { applyMigrationsAsync } = require(MIGRATIONS_PATH);
+      await applyMigrationsAsync(bootstrap);
+      await bootstrap.close();
+
+      const SERVER_TRANSACTIONS = 5;
+      const serverWorkerScript = `
+        const { openCompatDatabase } = require(${JSON.stringify(SQLITE_COMPAT_PATH)});
+        async function run() {
+          const db = await openCompatDatabase(${JSON.stringify(dbPath)}, 'simulated-mcp-server');
+          for (let i = 0; i < ${SERVER_TRANSACTIONS}; i += 1) {
+            await db.exec('BEGIN IMMEDIATE');
+            await db.run(
+              'INSERT INTO decisions (id, session_id, title, rationale, alternatives, supersedes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+              ['dec-' + i, 'sess-server', 'title-' + i, 'rationale-' + i, '[]', null, 'approved', new Date().toISOString()]
+            );
+            await new Promise(r => setTimeout(r, 20));
+            await db.exec('COMMIT');
+          }
+          await db.close();
+        }
+        run().then(() => process.exit(0)).catch(err => {
+          console.error(err);
+          process.exit(1);
+        });
+      `;
+
+      const serverChild = spawn(process.execPath, ['-e', serverWorkerScript], {
+        env: { ...process.env },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let serverStderr = '';
+      serverChild.stderr.on('data', chunk => { serverStderr += chunk.toString('utf8'); });
+      const serverPromise = new Promise((resolve, reject) => {
+        serverChild.on('error', reject);
+        serverChild.on('close', code => resolve({ code, stderr: serverStderr }));
+      });
+
+      const HOOK_WORKERS = 5;
+      const hookPromises = [];
+      for (let i = 0; i < HOOK_WORKERS; i += 1) {
+        const hp = new Promise((resolve, reject) => {
+          const child = spawn(process.execPath, [HOOK_WRITER_PATH], {
+            env: {
+              ...process.env,
+              EGC_DIR: tempDir,
+            },
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+          let stderr = '';
+          child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+          child.on('error', reject);
+          child.on('close', code => resolve({ code, stderr, index: i }));
+
+          const payload = {
+            session_id: 'session-hook-' + i,
+            event_type: 'tool_use_hook_' + i,
+            hook_event_name: 'test_hook',
+            payload: { hookIndex: i, testUuid: crypto.randomUUID() },
+          };
+          child.stdin.end(JSON.stringify(payload));
+        });
+        hookPromises.push(hp);
+      }
+
+      const [serverResult, hookResults] = await Promise.all([
+        serverPromise,
+        Promise.all(hookPromises),
+      ]);
+
+      assert.strictEqual(
+        serverResult.code,
+        0,
+        `Simulated MCP server failed with code ${serverResult.code}: ${serverResult.stderr}`
+      );
+
+      for (const hr of hookResults) {
+        assert.strictEqual(
+          hr.code,
+          0,
+          `Hook worker ${hr.index} failed with code ${hr.code}: ${hr.stderr}`
+        );
+      }
+
+      const verifyDb = await openCompatDatabase(dbPath, 'verify');
+      try {
+        const integrityRows = await verifyDb.all('PRAGMA integrity_check');
+        const integrityStatus = integrityRows[0] ? (integrityRows[0].integrity_check || Object.values(integrityRows[0])[0]) : null;
+        assert.strictEqual(integrityStatus, 'ok', `integrity_check failed: ${JSON.stringify(integrityRows)}`);
+
+        const decisions = await verifyDb.all('SELECT id FROM decisions');
+        const events = await verifyDb.all('SELECT id FROM events');
+
+        console.log('    server_hook_results: decisions=' + decisions.length + '/' + SERVER_TRANSACTIONS + ' events=' + events.length + '/' + HOOK_WORKERS);
+        assert.strictEqual(decisions.length, SERVER_TRANSACTIONS, 'Expected ' + SERVER_TRANSACTIONS + ' decisions from server');
+        assert.strictEqual(events.length, HOOK_WORKERS, 'Expected ' + HOOK_WORKERS + ' events from hooks');
+      } finally {
+        await verifyDb.close();
+      }
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  // 8. Test concurrent startup against an existing initialized database
+  await runCase('test_concurrent_startup_existing_database', async () => {
+    const tempDir = createTempDir('egc-mig-existing-');
+    const dbPath = path.join(tempDir, 'state_existing.db');
+
+    try {
+      const initDb = await openCompatDatabase(dbPath, 'init');
+      const { applyMigrationsAsync } = require(MIGRATIONS_PATH);
+      await applyMigrationsAsync(initDb);
+      await initDb.run(
+        'INSERT INTO sessions (id, adapter_id, harness, state, snapshot) VALUES (?, ?, ?, ?, ?)',
+        ['existing-session-1', 'test-adapter', 'test-harness', 'active', '{}']
+      );
+      await initDb.close();
+
+      const CONCURRENT_WORKERS = 10;
+      const promises = [];
+
+      for (let i = 0; i < CONCURRENT_WORKERS; i += 1) {
+        const workerScript = `
+          const { openCompatDatabase } = require(${JSON.stringify(SQLITE_COMPAT_PATH)});
+          const { applyMigrationsAsync } = require(${JSON.stringify(MIGRATIONS_PATH)});
+          async function run() {
+            const db = await openCompatDatabase(${JSON.stringify(dbPath)}, 'worker-${i}');
+            await applyMigrationsAsync(db);
+            const row = await db.get('SELECT id FROM sessions WHERE id = ?', ['existing-session-1']);
+            if (!row || row.id !== 'existing-session-1') throw new Error('Existing row not found');
+            await db.close();
+          }
+          run().then(() => process.exit(0)).catch(err => {
+            console.error(err);
+            process.exit(1);
+          });
+        `;
+
+        const p = new Promise((resolve, reject) => {
+          const child = spawn(process.execPath, ['-e', workerScript], {
+            env: { ...process.env },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          let stderr = '';
+          child.stderr.on('data', chunk => { stderr += chunk.toString('utf8'); });
+          child.on('error', reject);
+          child.on('close', code => resolve({ code, stderr, index: i }));
+        });
+        promises.push(p);
+      }
+
+      const results = await Promise.all(promises);
+      for (const res of results) {
+        assert.strictEqual(
+          res.code,
+          0,
+          `Worker ${res.index} failed on existing DB: ${res.stderr}`
+        );
+      }
+
+      const verifyDb = await openCompatDatabase(dbPath, 'verify');
+      try {
+        const row = await verifyDb.get('SELECT id FROM sessions WHERE id = ?', ['existing-session-1']);
+        assert.strictEqual(row.id, 'existing-session-1', 'Existing row must remain intact');
+      } finally {
+        await verifyDb.close();
+      }
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  // 9. Actual MCP memory server integration test
+  const MEMORY_SERVER_BUILT = fs.existsSync(path.resolve(__dirname, '../../mcp/servers/egc-memory/build/index.js'));
+  if (!MEMORY_SERVER_BUILT) {
+    testSkip('test_actual_egc_memory_mcp_server_integration', 'mcp/servers/egc-memory/build/index.js not found');
+  } else {
+    await runCase('test_actual_egc_memory_mcp_server_integration', async () => {
+      const { startMemoryServer, initialize: initMemServer, callTool: callMemTool } = require('../fixtures/memory-server-client');
+      const tempHome = createTempDir('egc-mcp-home-');
+      const projectDir = path.join(tempHome, 'test-project');
+      fs.mkdirSync(projectDir, { recursive: true });
+
+      const server = startMemoryServer({
+        home: tempHome,
+        projectDir,
+        env: { EGC_PROJECT: projectDir },
+      });
+
+      try {
+        await initMemServer(server, 'mcp-integration-test');
+
+        await callMemTool(server, 'store_decision', {
+          project_path: projectDir,
+          context: 'concurrency verification',
+          decision: 'atomic multi-process SQLite coordination verified',
+        });
+
+        const searchOutput = await callMemTool(server, 'search_history', {
+          query: 'atomic multi-process',
+        });
+        assert.ok(
+          searchOutput.includes('atomic multi-process SQLite coordination verified'),
+          `Expected decision in search output, got: ${searchOutput}`
+        );
+
+        const dbPath = path.join(tempHome, '.egc', 'memory', 'state.db');
+        assert.ok(fs.existsSync(dbPath), 'egc-memory state.db must exist');
+
+        const db = await openCompatDatabase(dbPath, 'verify-mcp');
+        try {
+          const integrityRows = await db.all('PRAGMA integrity_check');
+          const integrityStatus = integrityRows[0] ? (integrityRows[0].integrity_check || Object.values(integrityRows[0])[0]) : null;
+          assert.strictEqual(integrityStatus, 'ok', `integrity_check failed on egc-memory db: ${JSON.stringify(integrityRows)}`);
+        } finally {
+          await db.close();
+        }
+      } finally {
+        await server.stop();
+        cleanupTempDir(tempHome);
+      }
+    });
+  }
+
+  // 10. Preserved Python + Node tests
   const WAL_SUPPORTED = await detectWalSupport();
 
   if (!PYTHON_AVAILABLE) {
-    testSkip('test_python_writes_survive_subsequent_node_open', 'python3 not available');
-    testSkip('test_concurrent_node_python_writes_no_lost_writes', 'python3 not available');
+    testSkip('test_python_writes_survive_subsequent_node_open', 'python3 not available in this environment');
+    testSkip('test_concurrent_node_python_writes_no_lost_writes', 'python3 not available in this environment');
   } else {
     await runCase('test_python_writes_survive_subsequent_node_open', async () => {
       const tempDir = createTempDir('egc-conc-baseline-');
@@ -193,66 +899,76 @@ async function runTests() {
     });
 
     if (!WAL_SUPPORTED) {
-      testSkip('test_concurrent_node_python_writes_no_lost_writes', 'database adapter uses in-memory model without WAL; concurrent external writes not supported');
-    } else await runCase('test_concurrent_node_python_writes_no_lost_writes', async () => {
-      const tempDir = createTempDir('egc-conc-race-');
+      testSkip(
+        'test_concurrent_node_python_writes_no_lost_writes',
+        'database adapter uses in-memory model without WAL; concurrent external writes not supported'
+      );
+    } else {
+      await runCase('test_concurrent_node_python_writes_no_lost_writes', async () => {
+        const tempDir = createTempDir('egc-conc-race-');
+        const dbPath = path.join(tempDir, 'state.db');
+        try {
+          const bootstrap = await createStateStore({ dbPath });
+          bootstrap.close();
+
+          const { exitPromise } = spawnPythonInserts({
+            dbPath,
+            projectId: PROJECT_ID,
+            count: 50,
+            sleepMs: 5,
+            tag: 'race',
+          });
+
+          await insertNodeRows(dbPath, 50, 'race');
+
+          await exitPromise;
+
+          const counted = await countInstincts(dbPath);
+          const split = classifyRows(counted.rows);
+          console.log(`    python_rows=${split.python} node_rows=${split.node} total=${counted.totalCount}`);
+          assert.ok(
+            counted.totalCount >= 99,
+            `expected >= 99 rows after concurrent writes, got total=${counted.totalCount} (python=${split.python} node=${split.node})`,
+          );
+        } finally {
+          cleanupTempDir(tempDir);
+        }
+      });
+    }
+  }
+
+  if (!WAL_SUPPORTED) {
+    testSkip(
+      'test_wal_mode_active_on_real_file_db',
+      'database adapter uses in-memory model; WAL journal mode not applicable'
+    );
+  } else {
+    await runCase('test_wal_mode_active_on_real_file_db', async () => {
+      const tempDir = createTempDir('egc-conc-wal-');
       const dbPath = path.join(tempDir, 'state.db');
       try {
-        const bootstrap = await createStateStore({ dbPath });
-        bootstrap.close();
-
-        const { exitPromise } = spawnPythonInserts({
-          dbPath,
-          projectId: PROJECT_ID,
-          count: 50,
-          sleepMs: 5,
-          tag: 'race',
-        });
-
-        await insertNodeRows(dbPath, 50, 'race');
-
-        await exitPromise;
-
-        const counted = await countInstincts(dbPath);
-        const split = classifyRows(counted.rows);
-        console.log(`    python_rows=${split.python} node_rows=${split.node} total=${counted.totalCount}`);
-        assert.ok(
-          counted.totalCount >= 99,
-          `expected >= 99 rows after concurrent writes, got total=${counted.totalCount} (python=${split.python} node=${split.node})`,
-        );
+        const store = await createStateStore({ dbPath });
+        try {
+          const pragmaResult = store._database.pragma('journal_mode');
+          let mode = null;
+          if (Array.isArray(pragmaResult) && pragmaResult.length > 0) {
+            mode = pragmaResult[0].journal_mode;
+          } else if (typeof pragmaResult === 'string') {
+            mode = pragmaResult;
+          } else if (pragmaResult && typeof pragmaResult === 'object') {
+            mode = pragmaResult.journal_mode;
+          }
+          const modeStr = mode ? String(mode).toLowerCase() : '';
+          console.log(`    journal_mode=${modeStr}`);
+          assert.ok(modeStr.includes('wal'), `expected journal_mode to include 'wal', got '${modeStr}'`);
+        } finally {
+          store.close();
+        }
       } finally {
         cleanupTempDir(tempDir);
       }
     });
   }
-
-  if (!WAL_SUPPORTED) {
-    testSkip('test_wal_mode_active_on_real_file_db', 'database adapter uses in-memory model; WAL journal mode not applicable');
-  } else await runCase('test_wal_mode_active_on_real_file_db', async () => {
-    const tempDir = createTempDir('egc-conc-wal-');
-    const dbPath = path.join(tempDir, 'state.db');
-    try {
-      const store = await createStateStore({ dbPath });
-      try {
-        const pragmaResult = store._database.pragma('journal_mode');
-        let mode = null;
-        if (Array.isArray(pragmaResult) && pragmaResult.length > 0) {
-          mode = pragmaResult[0].journal_mode;
-        } else if (typeof pragmaResult === 'string') {
-          mode = pragmaResult;
-        } else if (pragmaResult && typeof pragmaResult === 'object') {
-          mode = pragmaResult.journal_mode;
-        }
-        const modeStr = mode ? String(mode).toLowerCase() : '';
-        console.log(`    journal_mode=${modeStr}`);
-        assert.ok(modeStr.includes('wal'), `expected journal_mode to include 'wal', got '${modeStr}'`);
-      } finally {
-        store.close();
-      }
-    } finally {
-      cleanupTempDir(tempDir);
-    }
-  });
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exitCode = failed > 0 ? 1 : 0;
