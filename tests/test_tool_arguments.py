@@ -25,7 +25,7 @@ def test_a_json_object_parses_to_a_dict(raw: object) -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("raw", ['{"secret": NaN}', '{"secret": Infinity}', '{"secret": -Infinity}', b'{"secret": "\xff"}', '{"secret": oops'])
+@pytest.mark.parametrize("raw", ['{"secret": NaN}', '{"secret": Infinity}', '{"secret": -Infinity}', b'{"secret": "\xff"}', '{"secret": 1}'.encode("utf-16"), '{"secret": oops'])
 def test_invalid_json_raises_without_echoing_the_arguments(raw: object) -> None:
     with pytest.raises(ToolArgumentsError) as exc:
         parse_tool_arguments(raw, ProviderType.OPENAI)

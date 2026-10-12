@@ -30,7 +30,8 @@ def parse_tool_arguments(raw: Any, provider: ProviderType | None = None) -> dict
     if not raw:
         return {}
     try:
-        value = json.loads(raw, parse_constant=_reject_constant)
+        text = raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw
+        value = json.loads(text, parse_constant=_reject_constant)
     except UnicodeDecodeError as exc:
         raise ToolArgumentsError(
             f"Tool-call arguments are not valid UTF-8 (at byte {exc.start})",
