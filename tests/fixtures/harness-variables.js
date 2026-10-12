@@ -40,6 +40,7 @@ const CONFIG_HOME_VARIABLES = Object.freeze([
   'CRUSH_GLOBAL_CONFIG',
   'VIBE_HOME',
   'GROK_HOME',
+  'MIMOCODE_HOME',
   'XDG_CONFIG_HOME',
 ]);
 

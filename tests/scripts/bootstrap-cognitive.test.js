@@ -1509,6 +1509,80 @@ async function runVibeTests() {
   return [passed, failed];
 }
 
+async function runMimoTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('writes the MiMo Code AGENTS.md when ~/.config/mimocode exists (#1498)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.config', 'mimocode'), { recursive: true });
+      const output = run(home, { XDG_CONFIG_HOME: '', MIMOCODE_HOME: '' });
+      assert.ok(/MiMo Code: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const content = fs.readFileSync(path.join(home, '.config', 'mimocode', 'AGENTS.md'), 'utf8');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips MiMo Code when its config directory does not exist and mimo is not on PATH (#1498)', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home, { XDG_CONFIG_HOME: '', MIMOCODE_HOME: '', PATH: isolatedPath(null) });
+      assert.ok(!/\[cognitive\] MiMo Code:/.test(output), 'should not mention MiMo at all');
+      assert.ok(!fs.existsSync(path.join(home, '.config', 'mimocode')), 'nothing is created');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the MiMo Code AGENTS.md when mimo is on PATH before its config directory exists (#1498)', () => {
+    const home = mktempHome();
+    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-fake-mimo-'));
+    try {
+      fs.writeFileSync(path.join(fakeBin, 'mimo'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(fakeBin, 'mimo.cmd'), '@exit /b 0\r\n');
+      const output = run(home, { XDG_CONFIG_HOME: '', MIMOCODE_HOME: '', PATH: isolatedPath(fakeBin) });
+      assert.ok(/MiMo Code: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(home, '.config', 'mimocode', 'AGENTS.md')), 'AGENTS.md is written on the first run');
+    } finally {
+      cleanup(home);
+      cleanup(fakeBin);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the MiMo Code AGENTS.md under MIMOCODE_HOME/config when it is set (#1498)', () => {
+    const home = mktempHome();
+    try {
+      const moved = path.join(home, 'mimo-data');
+      fs.mkdirSync(path.join(moved, 'config'), { recursive: true });
+      const output = run(home, { XDG_CONFIG_HOME: '', MIMOCODE_HOME: moved });
+      assert.ok(/MiMo Code: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(moved, 'config', 'AGENTS.md')), 'the file lands under MIMOCODE_HOME/config');
+      assert.ok(!fs.existsSync(path.join(home, '.config', 'mimocode')), 'and not under ~/.config/mimocode');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('ignores a relative XDG_CONFIG_HOME and writes the MiMo Code AGENTS.md under ~/.config/mimocode (#1498)', () => {
+    const home = mktempHome();
+    const relative = 'egc-relative-xdg-mimo';
+    try {
+      fs.mkdirSync(path.join(home, '.config', 'mimocode'), { recursive: true });
+      const output = run(home, { XDG_CONFIG_HOME: relative, MIMOCODE_HOME: '' });
+      assert.ok(/MiMo Code: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(home, '.config', 'mimocode', 'AGENTS.md')), 'the file lands under ~/.config/mimocode');
+      assert.ok(!fs.existsSync(path.resolve(relative)), 'nothing is written under the relative path');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 async function runKiloCliTests() {
   let passed = 0;
   let failed = 0;
@@ -1955,6 +2029,12 @@ async function runRemainingHarnessTests() {
     const [kiloPassed, kiloFailed] = await runKiloCliTests();
     passed += kiloPassed;
     failed += kiloFailed;
+  }
+
+  {
+    const [mimoPassed, mimoFailed] = await runMimoTests();
+    passed += mimoPassed;
+    failed += mimoFailed;
   }
 
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {

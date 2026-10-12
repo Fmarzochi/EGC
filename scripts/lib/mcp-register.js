@@ -18,6 +18,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { resolveMimoConfigDir } = require('./mimo-paths');
 const { isDeepStrictEqual } = require('node:util');
 // A tool the person installed but never launched owns no config directory,
 // so an existence check alone would skip it. The shell installers used to
@@ -651,6 +652,13 @@ function buildMcpRegistrationTargets(homeDir) {
       path: path.join(kiloConfigDir(homeDir), 'kilo.json'),
       gate: () => fs.existsSync(kiloConfigDir(homeDir)) || commandExists('kilo'),
       allowedRoot: kiloConfigDir(homeDir),
+      format: 'opencode-mcp',
+    },
+    {
+      name: 'MiMo Code',
+      path: path.join(resolveMimoConfigDir(homeDir), 'mimocode.json'),
+      gate: () => fs.existsSync(resolveMimoConfigDir(homeDir)) || commandExists('mimo'),
+      allowedRoot: resolveMimoConfigDir(homeDir),
       format: 'opencode-mcp',
     },
   ];
