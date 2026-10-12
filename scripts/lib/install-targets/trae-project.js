@@ -1,3 +1,5 @@
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const {
@@ -5,6 +7,7 @@ const {
   createRemappedOperation,
   isForeignPlatformPath,
   normalizeModulesInput,
+  resolveBaseRoot,
 } = require('./helpers');
 const {
   createBashGuardianHookMergeOperationForDestination,
@@ -17,6 +20,30 @@ const {
   createMeshNoticeScriptCopyOperations,
   createMeshNoticeHookMergeOperationForDestination,
 } = require('../claude-settings-hooks');
+
+const TRAE_DIR = '.trae';
+const TRAE_CN_DIR = '.trae-cn';
+const INSTALL_STATE_FILE = 'egc-install-state.json';
+
+function canonicalPath(target) {
+  try {
+    return fs.realpathSync(target);
+  } catch {
+    return path.resolve(target);
+  }
+}
+
+function isHomeScope(input) {
+  return canonicalPath(resolveBaseRoot('project', input)) === canonicalPath(input.homeDir || os.homedir());
+}
+
+function traeDirName(input) {
+  return process.env.TRAE_ENV === 'cn' && isHomeScope(input) ? TRAE_CN_DIR : TRAE_DIR;
+}
+
+function legacyCnProjectDir(input) {
+  return isHomeScope(input) ? null : path.join(resolveBaseRoot('project', input), TRAE_CN_DIR);
+}
 
 // Trae reads the same {hooks: {PreToolUse: [{matcher, hooks: [{type,
 // command}]}]}} JSON schema as Claude Code, including
@@ -132,15 +159,23 @@ module.exports = createInstallTargetAdapter({
   id: 'trae-project',
   target: 'trae',
   kind: 'project',
-  // The Chinese edition of Trae keeps its files under .trae-cn; TRAE_ENV=cn
-  // selects it, the way the retired .trae/install.sh did. Read when a root
-  // is resolved, not when the module loads, so the choice follows the
-  // environment of the install, doctor or repair that runs.
-  get rootSegments() {
-    return [process.env.TRAE_ENV === 'cn' ? '.trae-cn' : '.trae'];
+  rootSegments: [TRAE_DIR],
+  installStatePathSegments: [INSTALL_STATE_FILE],
+  nativeRootRelativePath: TRAE_DIR,
+  resolveRoot(input = {}) {
+    return path.join(resolveBaseRoot('project', input), traeDirName(input));
   },
-  installStatePathSegments: ['egc-install-state.json'],
-  nativeRootRelativePath: '.trae',
+  resolveManagedRoots(input, adapter) {
+    const legacyDir = legacyCnProjectDir(input);
+    return [adapter.resolveRoot(input), ...(legacyDir ? [legacyDir] : [])];
+  },
+  resolveLegacyInstallStatePaths(input, adapter) {
+    const legacyDir = legacyCnProjectDir(input);
+    if (!legacyDir) return [];
+    const legacyStatePath = path.join(legacyDir, INSTALL_STATE_FILE);
+    if (legacyStatePath === adapter.getInstallStatePath(input) || !fs.existsSync(legacyStatePath)) return [];
+    return [legacyStatePath];
+  },
   planOperations(input, adapter) {
     // Same default scaffold createInstallTargetAdapter() itself would use
     // when planOperations is omitted (this file's previous behavior) --
