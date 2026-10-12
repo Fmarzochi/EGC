@@ -210,12 +210,25 @@ function runTests() {
     }
   })));
 
-  (tally(test('Qwen Code: the gate opens on ~/.qwen, and the servers go under mcpServers in ~/.qwen/settings.json (#1678)', () => {
+  (tally(test('Qwen Code: the gate opens on ~/.qwen or qwen on PATH, and the servers go under mcpServers in ~/.qwen/settings.json (#1678)', () => {
     const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
     try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const qwenBin = path.join(tmpHome, 'qwen-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(qwenBin, { recursive: true });
+      fs.writeFileSync(path.join(qwenBin, 'qwen'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(qwenBin, 'qwen.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
       const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Qwen Code');
       assert.ok(absent, 'Qwen Code must be a registration target');
-      assert.strictEqual(typeof absent.gate(), 'boolean', 'the gate returns a boolean when Qwen Code is absent');
+      assert.strictEqual(absent.gate(), false, 'no ~/.qwen and no qwen on PATH: the gate stays closed');
+      process.env.PATH = `${qwenBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Qwen Code').gate(), true, 'a qwen on PATH opens the gate');
+      process.env.PATH = emptyBin;
       const qwenDir = path.join(tmpHome, '.qwen');
       fs.mkdirSync(qwenDir, { recursive: true });
       const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Qwen Code');
@@ -223,6 +236,8 @@ function runTests() {
       assert.strictEqual(target.format, 'json');
       assert.strictEqual(target.gate(), true, 'the settings directory alone opens the gate');
     } finally {
+      process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   })));
