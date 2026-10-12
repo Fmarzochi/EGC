@@ -182,7 +182,7 @@ function runTests() {
       process.env.XDG_CONFIG_HOME = path.join('relative', 'config');
       assert.strictEqual(find().path, path.join(kiloDir, 'kilo.json'), 'a relative XDG_CONFIG_HOME is ignored, as the XDG spec asks');
     } finally {
-      process.env.PATH = savedPath;
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
       delete process.env.XDG_CONFIG_HOME;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
