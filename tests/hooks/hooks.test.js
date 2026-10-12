@@ -300,6 +300,7 @@ function runPatchedRunAll(tempRoot, env = process.env) {
   let source = fs.readFileSync(path.join(__dirname, '..', 'run-all.js'), 'utf8');
   source = source.replace('const testsDir = __dirname;', `const testsDir = ${JSON.stringify(tempTestsDir)};`);
   source = source.replace("require('./fixtures/suite-env')", `require(${JSON.stringify(path.join(__dirname, '..', 'fixtures', 'suite-env'))})`);
+  source = source.replace("require('./fixtures/run-durations')", `require(${JSON.stringify(path.join(__dirname, '..', 'fixtures', 'run-durations'))})`);
   fs.writeFileSync(wrapperPath, source);
 
   const result = spawnSync('node', [wrapperPath], {

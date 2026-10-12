@@ -396,6 +396,14 @@ function toAntigravityAgentFrontmatter(text) {
   return ['---', ...rewriteAntigravityAgentFrontmatter(parts.frontmatter), '---', ...parts.body].join('\n');
 }
 
+function trimNewlines(text) {
+  let start = 0;
+  let end = text.length;
+  while (start < end && text.charAt(start) === '\n') start++;
+  while (end > start && text.charAt(end - 1) === '\n') end--;
+  return text.slice(start, end);
+}
+
 function foldBlockLines(lines) {
   const paragraphs = [];
   let current = [];
@@ -419,7 +427,7 @@ function readBlockScalar(indicator, lines, start) {
   const indents = body.filter(line => line.trim() !== '').map(line => line.length - line.trimStart().length);
   const indent = indents.length > 0 ? Math.min(...indents) : 0;
   const dedented = body.map(line => (line.trim() === '' ? '' : line.slice(indent).trimEnd()));
-  return indicator.startsWith('>') ? foldBlockLines(dedented) : dedented.join('\n').replace(/^\n+|\n+$/g, '');
+  return indicator.startsWith('>') ? foldBlockLines(dedented) : trimNewlines(dedented.join('\n'));
 }
 
 function yamlScalar(value) {

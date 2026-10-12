@@ -601,6 +601,14 @@ function isScannableDirectory(directory, root) {
   }
 }
 
+function readDirectoryEntries(directory) {
+  try {
+    return fs.readdirSync(directory);
+  } catch {
+    return [];
+  }
+}
+
 function findStrandedLegacyLinks(plan) {
   const root = plan.targetRoot ? path.resolve(plan.targetRoot) : null;
   if (!root) return [];
@@ -609,13 +617,7 @@ function findStrandedLegacyLinks(plan) {
   for (const segments of FORMER_LEGACY_LINK_DIRECTORIES) {
     const directory = path.join(root, ...segments);
     if (!isScannableDirectory(directory, root)) continue;
-    let entries;
-    try {
-      entries = fs.readdirSync(directory);
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
+    for (const entry of readDirectoryEntries(directory)) {
       const linkPath = path.join(directory, entry);
       if (planned.has(linkPath) || !isSymbolicLink(linkPath)) continue;
       const pointedAt = pointsIntoLegacyRoot(linkPath, root);

@@ -37,8 +37,8 @@ const NON_REF = new Set([
   'implements', 'public', 'private', 'protected', 'readonly', 'abstract', 'declare', 'string', 'number', 'boolean', 'any', 'unknown', 'never'
 ]);
 
-const isIdStart = (c: string): boolean => /[A-Za-z_$]/.test(c) || c.charCodeAt(0) > 127;
-const isIdPart = (c: string): boolean => /[\w$]/.test(c) || c.charCodeAt(0) > 127;
+const isIdStart = (c: string): boolean => /[A-Za-z_$]/.test(c) || (c.codePointAt(0) ?? 0) > 127;
+const isIdPart = (c: string): boolean => /[\w$]/.test(c) || (c.codePointAt(0) ?? 0) > 127;
 const isOpen = (tk?: Tok): boolean => !!tk && tk.t === 'p' && (tk.v === '{' || tk.v === '(' || tk.v === '[');
 const isId = (tk: Tok | undefined, v?: string): boolean => !!tk && tk.t === 'id' && (v === undefined || tk.v === v);
 const isP = (tk: Tok | undefined, v: string): boolean => !!tk && tk.t === 'p' && tk.v === v;
@@ -145,7 +145,7 @@ export function tokenize(src: string): Tok[] {
   let braces = 0;
 
   function openBrace(): void {
-    const prev = toks[toks.length - 1];
+    const prev = toks.at(-1);
     const block = prev === undefined
       || (prev.t === 'p' && (prev.v === ')' || prev.v === ';' || prev.v === '{' || prev.v === '}'))
       || (prev.t === 'id' && BLOCK_KEYWORDS.has(prev.v));
@@ -154,7 +154,7 @@ export function tokenize(src: string): Tok[] {
   }
   // The } that ends a ${ is not a token: the template text goes on from it.
   function closesInterpolation(): boolean {
-    if (interpolations.length === 0 || interpolations[interpolations.length - 1] !== braces) return false;
+    if (interpolations.length === 0 || interpolations.at(-1) !== braces) return false;
     interpolations.pop();
     i++;
     if (scanTemplateText()) openInterpolation();
@@ -169,7 +169,7 @@ export function tokenize(src: string): Tok[] {
   function pushPunct(c: string): void {
     const tk: Tok = { t: 'p', v: c, line };
     if (c === '(') {
-      const prev = toks[toks.length - 1];
+      const prev = toks.at(-1);
       parens.push(prev?.t === 'id' && CONTROL_HEAD.has(prev.v));
     } else if (c === ')') {
       tk.ctl = parens.pop() === true;
@@ -194,7 +194,7 @@ export function tokenize(src: string): Tok[] {
       i++;
       toks.push({ t: 'lit', v: '', line: at });
       if (scanTemplateText()) openInterpolation();
-    } else if (c === '/' && regexAllowed(toks[toks.length - 1])) {
+    } else if (c === '/' && regexAllowed(toks.at(-1))) {
       skipRegex();
       toks.push({ t: 'lit', v: '', line: at });
     } else if (isIdStart(c)) {
@@ -338,34 +338,40 @@ export function extractFile(source: string): ExtractResult {
     return isId(a) && isP(toks[eq + 2], '=') && isP(toks[eq + 3], '>');
   };
 
+  // First token at or after from, below limit, that is one of the stops; bracketed groups are hopped over.
+  const skipUntil = (from: number, limit: number, stops: string[]): number => {
+    let at = from;
+    while (at < limit && !stops.some(ch => isP(toks[at], ch))) at = isOpen(toks[at]) ? close(at) + 1 : at + 1;
+    return at;
+  };
+
+  const methodEnd = (k: number, bodyClose: number): number => {
+    if (!isId(toks[k]) || !isP(toks[k + 1], '(') || match[k + 1] < 0) return -1;
+    const m = skipUntil(match[k + 1] + 1, bodyClose, ['{', ';']);
+    return m < bodyClose && isP(toks[m], '{') ? close(m) : -1;
+  };
+
   const addMethods = (cls: string, bodyOpen: number, exported: boolean): void => {
     const bodyClose = close(bodyOpen);
     let k = bodyOpen + 1;
     while (k < bodyClose) {
       const tk = toks[k];
-      if (isId(tk) && isP(toks[k + 1], '(') && match[k + 1] >= 0) {
-        let m = match[k + 1] + 1;
-        while (m < bodyClose && !isP(toks[m], '{') && !isP(toks[m], ';')) m = isOpen(toks[m]) ? close(m) + 1 : m + 1;
-        if (m < bodyClose && isP(toks[m], '{')) {
-          const end = close(m);
-          addSymbol(`${cls}.${tk.v}`, 'method', exported, k, end, tk.v);
-          k = end + 1;
-          continue;
-        }
+      const end = methodEnd(k, bodyClose);
+      if (end >= 0) {
+        addSymbol(`${cls}.${tk.v}`, 'method', exported, k, end, tk.v);
+        k = end + 1;
+      } else {
+        k = isOpen(tk) ? close(k) + 1 : k + 1;
       }
-      k = isOpen(tk) ? close(k) + 1 : k + 1;
     }
   };
 
-  const parseImport = (i: number): number => {
-    let j = i + 1;
-    if (isId(toks[j], 'type') && (isId(toks[j + 1]) || isP(toks[j + 1], '{') || isP(toks[j + 1], '*')) && !isId(toks[j + 1], 'from')) j++;
-    if (toks[j]?.t === 'str') {
-      imports.push({ specifier: toks[j].v, bindings: [], reexport: false });
-      return j + 1;
-    }
+  const typeModifierAt = (j: number): boolean =>
+    isId(toks[j], 'type') && (isId(toks[j + 1]) || isP(toks[j + 1], '{') || isP(toks[j + 1], '*')) && !isId(toks[j + 1], 'from');
+
+  const readImportClause = (from: number): { bindings: ImportBinding[]; at: number } => {
     const bindings: ImportBinding[] = [];
-    let k = j;
+    let k = from;
     while (k <= last && !isId(toks[k], 'from') && toks[k].t !== 'str') {
       const tk = toks[k];
       if (tk.t === 'id') {
@@ -381,9 +387,21 @@ export function extractFile(source: string): ExtractResult {
         k++;
       }
     }
+    return { bindings, at: k };
+  };
+
+  const parseImport = (i: number): number => {
+    let j = i + 1;
+    if (typeModifierAt(j)) j++;
+    if (toks[j]?.t === 'str') {
+      imports.push({ specifier: toks[j].v, bindings: [], reexport: false });
+      return j + 1;
+    }
+    const clause = readImportClause(j);
+    let k = clause.at;
     if (isId(toks[k], 'from')) k++;
     if (toks[k]?.t === 'str') {
-      imports.push({ specifier: toks[k].v, bindings, reexport: false });
+      imports.push({ specifier: toks[k].v, bindings: clause.bindings, reexport: false });
       return k + 1;
     }
     return Math.max(k, i + 1);
@@ -503,10 +521,9 @@ export function extractFile(source: string): ExtractResult {
     const nameTok = isId(toks[k]) ? toks[k] : undefined;
     let p = nameTok ? k + 1 : k;
     while (p <= last && !isP(toks[p], '(')) p++;
-    let b = p <= last ? close(p) + 1 : last + 1;
-    while (b <= last && !isP(toks[b], '{') && !isP(toks[b], ';')) b = isOpen(toks[b]) ? close(b) + 1 : b + 1;
+    const b = skipUntil(p <= last ? close(p) + 1 : last + 1, last + 1, ['{', ';']);
     const end = isP(toks[b], '{') ? close(b) : Math.min(b, last);
-    const name = nameTok ? nameTok.v : isDefault ? 'default' : null;
+    const name = nameTok?.v ?? (isDefault ? 'default' : null);
     if (name) addSymbol(name, 'function', exported, i, end);
     if (name && nameTok && isDefault) addExportAlias('default', name);
     return end + 1;
@@ -516,8 +533,7 @@ export function extractFile(source: string): ExtractResult {
     const keyword = toks[j].v;
     const next = toks[j + 1];
     const nameTok = isId(next) && !isId(next, 'extends') && !isId(next, 'implements') ? next : undefined;
-    let b = j + 1;
-    while (b <= last && !isP(toks[b], '{')) b = isOpen(toks[b]) ? close(b) + 1 : b + 1;
+    const b = skipUntil(j + 1, last + 1, ['{']);
     const end = b <= last ? close(b) : last;
     const name = nameTok?.v ?? (isDefault ? 'default' : undefined);
     if (name) {
