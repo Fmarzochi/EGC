@@ -153,7 +153,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code',
     ]);
   })));
 
@@ -210,6 +210,61 @@ function runTests() {
     }
   })));
 
+  (tally(test('Qwen Code: the gate opens on ~/.qwen or qwen on PATH, and the servers go under mcpServers in ~/.qwen/settings.json (#1678)', () => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const qwenBin = path.join(tmpHome, 'qwen-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(qwenBin, { recursive: true });
+      fs.writeFileSync(path.join(qwenBin, 'qwen'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(qwenBin, 'qwen.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Qwen Code');
+      assert.ok(absent, 'Qwen Code must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no ~/.qwen and no qwen on PATH: the gate stays closed');
+      process.env.PATH = `${qwenBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Qwen Code').gate(), true, 'a qwen on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      const qwenDir = path.join(tmpHome, '.qwen');
+      fs.mkdirSync(qwenDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Qwen Code');
+      assert.strictEqual(target.path, path.join(qwenDir, 'settings.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the settings directory alone opens the gate');
+    } finally {
+      process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Qwen Code: registration keeps the person\'s settings, hooks and servers in ~/.qwen/settings.json (#1678)', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const settingsPath = path.join(tmpHome, '.qwen', 'settings.json');
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      const own = {
+        model: { name: 'qwen3-coder-plus' },
+        hooks: { PreToolUse: [{ matcher: 'run_shell_command', hooks: [{ type: 'command', command: 'echo mine' }] }] },
+        mcpServers: { mine: { command: 'my-server' } },
+      };
+      fs.writeFileSync(settingsPath, JSON.stringify(own, null, 2));
+      assert.strictEqual(registerJson(settingsPath, bins), true);
+      const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      assert.deepStrictEqual(written.model, own.model);
+      assert.deepStrictEqual(written.hooks, own.hooks);
+      assert.deepStrictEqual(written.mcpServers.mine, own.mcpServers.mine);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
   (tally(test('Codex CLI registers MCP servers as [mcp_servers.<id>] tables in config.toml', () => {
     const tmpHome = makeTempDir();
     try {
@@ -249,6 +304,26 @@ function runTests() {
       // Second run is idempotent
       const secondChanged = registerToml(codexPath, bins, codexTarget);
       assert.strictEqual(secondChanged, false, 'second run must be idempotent');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
+
+  (tally(test('Qwen Code: registerMcpServers dispatches the Qwen target and merges into ~/.qwen/settings.json (#1678)', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const settingsPath = path.join(tmpHome, '.qwen', 'settings.json');
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      const own = { model: { name: 'qwen3-coder-plus' }, hooks: { PreToolUse: [] } };
+      fs.writeFileSync(settingsPath, JSON.stringify(own, null, 2));
+      const registered = [];
+      registerIsolated(tmpHome, { onRegister: target => registered.push(target.name) });
+      assert.ok(registered.includes('Qwen Code'), `the Qwen target is registered, got ${registered.join(', ')}`);
+      const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      assert.deepStrictEqual(written.model, own.model);
+      assert.deepStrictEqual(written.hooks, own.hooks);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
     } finally {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
