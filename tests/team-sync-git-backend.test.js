@@ -36,6 +36,70 @@ function test(name, fn) {
   }
 }
 
+async function runRecoveryTests(GitBackend, tempBase) {
+  let passed = 0;
+  let failed = 0;
+
+  // 7. a failed swap after the backup rename restores the original destination
+  if (await test('mirrorCopy restores the original destination when installing the new tree fails', () => {
+    const backend = new GitBackend(path.join(tempBase, 'repo-rollback'));
+    const src = path.join(tempBase, 'src-rollback');
+    const dest = path.join(tempBase, 'dest-rollback');
+
+    fs.mkdirSync(dest, { recursive: true });
+    fs.writeFileSync(path.join(dest, 'keep.txt'), 'original state');
+    fs.mkdirSync(src, { recursive: true });
+    fs.writeFileSync(path.join(src, 'incoming.txt'), 'incoming');
+
+    const originalRename = fs.renameSync;
+    let calls = 0;
+    fs.renameSync = (from, to) => {
+      calls++;
+      if (calls === 2) throw new Error('Simulated rename failure');
+      return originalRename(from, to);
+    };
+    try {
+      assert.throws(() => backend.mirrorCopy(src, dest), /Simulated rename failure/);
+    } finally {
+      fs.renameSync = originalRename;
+    }
+
+    assert.strictEqual(fs.readFileSync(path.join(dest, 'keep.txt'), 'utf8'), 'original state');
+    const leaked = fs.readdirSync(tempBase).filter(f => f.startsWith('.tmp-sync-dest-rollback') || f.startsWith('.tmp-old-dest-rollback'));
+    assert.deepStrictEqual(leaked, [], 'no temporary directory may leak after the rollback');
+  })) passed++; else failed++;
+
+  // 8. a backup left by a crash is restored instead of swept, and sibling temporaries stay untouched
+  if (await test('mirrorCopy restores a surviving backup when the destination is missing', () => {
+    const backend = new GitBackend(path.join(tempBase, 'repo-crash'));
+    const src = path.join(tempBase, 'src-crash');
+    const dest = path.join(tempBase, 'dest-crash');
+    const backup = path.join(tempBase, '.tmp-old-dest-crash-1-aa');
+    const siblingBackup = path.join(tempBase, '.tmp-old-other-dest-1-bb');
+
+    fs.mkdirSync(backup, { recursive: true });
+    fs.writeFileSync(path.join(backup, 'state.txt'), 'only surviving copy');
+    fs.mkdirSync(siblingBackup, { recursive: true });
+    fs.writeFileSync(path.join(siblingBackup, 'state.txt'), 'belongs to another destination');
+    fs.mkdirSync(src, { recursive: true });
+
+    const originalCpSync = fs.cpSync;
+    fs.cpSync = () => {
+      throw new Error('Simulated disk failure during copy');
+    };
+    try {
+      assert.throws(() => backend.mirrorCopy(src, dest), /Simulated disk failure/);
+    } finally {
+      fs.cpSync = originalCpSync;
+    }
+
+    assert.strictEqual(fs.readFileSync(path.join(dest, 'state.txt'), 'utf8'), 'only surviving copy');
+    assert.ok(fs.existsSync(siblingBackup), 'a backup of another destination must not be swept');
+  })) passed++; else failed++;
+
+  return { passed, failed };
+}
+
 async function runTests() {
   console.log('\n=== Testing GitBackend team sync ===\n');
 
@@ -166,13 +230,13 @@ async function runTests() {
     })) passed++; else failed++;
 
     // 6. mirrorCopy sweeps stale temporary siblings (.tmp-sync-* and .tmp-old-*) before copying
-    if (await test('mirrorCopy sweeps stale temporary siblings before copying', () => {
+    if (await test('mirrorCopy sweeps stale temporaries of its own destination before copying', () => {
       const repoDir = path.join(tempBase, 'repo-sweep');
       const backend = new GitBackend(repoDir);
       const src = path.join(tempBase, 'src-sweep');
       const dest = path.join(tempBase, 'dest-sweep');
-      const staleTemp1 = path.join(tempBase, '.tmp-sync-x');
-      const staleTemp2 = path.join(tempBase, '.tmp-old-x');
+      const staleTemp1 = path.join(tempBase, '.tmp-sync-dest-sweep-1-x');
+      const staleTemp2 = path.join(tempBase, '.tmp-old-dest-sweep-1-x');
 
       fs.mkdirSync(staleTemp1, { recursive: true });
       fs.writeFileSync(path.join(staleTemp1, 'orphan.txt'), 'stale sync data');
@@ -184,10 +248,14 @@ async function runTests() {
 
       backend.mirrorCopy(src, dest);
 
-      assert.strictEqual(fs.existsSync(staleTemp1), false, 'stale .tmp-sync-x must be swept');
-      assert.strictEqual(fs.existsSync(staleTemp2), false, 'stale .tmp-old-x must be swept');
+      assert.strictEqual(fs.existsSync(staleTemp1), false, 'stale .tmp-sync leftover of this destination must be swept');
+      assert.strictEqual(fs.existsSync(staleTemp2), false, 'stale .tmp-old leftover of this destination must be swept');
       assert.strictEqual(fs.readFileSync(path.join(dest, 'data.txt'), 'utf8'), 'live data');
     })) passed++; else failed++;
+
+    const recovery = await runRecoveryTests(GitBackend, tempBase);
+    passed += recovery.passed;
+    failed += recovery.failed;
   } finally {
     fs.rmSync(tempBase, { recursive: true, force: true });
   }

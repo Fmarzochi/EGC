@@ -190,25 +190,36 @@ export class GitBackend extends SyncBackend {
     fs.rmSync(target, { recursive: true, force: true });
   }
 
-  private static sweepStaleTemporaries(parent: string): void {
-    for (const entry of fs.readdirSync(parent)) {
-      if (entry.startsWith('.tmp-sync-') || entry.startsWith('.tmp-old-')) {
+  // Leftovers are scoped to the destination name so a sibling copy in the same parent is never swept.
+  private static restoreAndSweepTemporaries(parent: string, dest: string): void {
+    const base = path.basename(dest);
+    const entries = fs.readdirSync(parent);
+    const backups = entries.filter(entry => entry.startsWith(`.tmp-old-${base}-`)).sort();
+
+    // A crash between the two renames leaves only the backup: bring the newest one back before sweeping.
+    if (!fs.existsSync(dest) && backups.length > 0) {
+      const newest = backups.pop() as string;
+      fs.renameSync(path.join(parent, newest), dest);
+    }
+
+    for (const entry of entries) {
+      if (entry.startsWith(`.tmp-sync-${base}-`) || backups.includes(entry)) {
         GitBackend.removeQuietly(path.join(parent, entry));
       }
     }
   }
 
-  private static temporaryName(parent: string, prefix: string): string {
-    return path.join(parent, `${prefix}-${Date.now()}-${randomBytes(6).toString('hex')}`);
+  private static temporaryName(parent: string, prefix: string, dest: string): string {
+    return path.join(parent, `${prefix}-${path.basename(dest)}-${Date.now()}-${randomBytes(6).toString('hex')}`);
   }
 
   // Copy into a sibling temporary directory, then swap it in with renames, so a failed copy never leaves dest half-written.
   mirrorCopy(src: string, dest: string): void {
     const parent = path.dirname(dest);
     fs.mkdirSync(parent, { recursive: true });
-    GitBackend.sweepStaleTemporaries(parent);
+    GitBackend.restoreAndSweepTemporaries(parent, dest);
 
-    const tmpDest = GitBackend.temporaryName(parent, '.tmp-sync');
+    const tmpDest = GitBackend.temporaryName(parent, '.tmp-sync', dest);
     try {
       fs.cpSync(src, tmpDest, { recursive: true });
       if (!fs.existsSync(dest)) {
@@ -220,7 +231,7 @@ export class GitBackend extends SyncBackend {
       throw error;
     }
 
-    const backupDest = GitBackend.temporaryName(parent, '.tmp-old');
+    const backupDest = GitBackend.temporaryName(parent, '.tmp-old', dest);
     try {
       fs.renameSync(dest, backupDest);
       fs.renameSync(tmpDest, dest);
