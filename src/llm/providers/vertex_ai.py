@@ -38,13 +38,13 @@ _LOCATION = re.compile(r"^(?:global|us|eu|[a-z]+-[a-z]+\d+)$")
 def _config_issue(project: str | None, location: str | None) -> str | None:
     if not project:
         return "No Google Cloud project configured for Vertex AI (set GOOGLE_CLOUD_PROJECT)"
-    if not _PROJECT_ID.match(project):
+    if not _PROJECT_ID.fullmatch(project):
         return (
             f"Vertex AI project {project!r} is not a Google Cloud project ID "
             "(6 to 30 lowercase letters, digits or hyphens, starting with a letter, "
             "optionally prefixed by a domain as in example.com:my-project; set GOOGLE_CLOUD_PROJECT)"
         )
-    if not location or not _LOCATION.match(location):
+    if not location or not _LOCATION.fullmatch(location):
         return (
             f"Vertex AI location {location!r} is not a Google Cloud location "
             "such as us-central1 or global (set GOOGLE_CLOUD_LOCATION)"

@@ -96,7 +96,7 @@ def test_location_defaults_to_us_central1(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("project", ["My_Project", "abc", "1starts-with-digit", "ends-with-hyphen-", "x" * 31, "-.:my-project", "a..b:my-project"])
+@pytest.mark.parametrize("project", ["My_Project", "abc", "1starts-with-digit", "ends-with-hyphen-", "x" * 31, "-.:my-project", "a..b:my-project", "my-gcp-project\n"])
 def test_a_project_that_is_not_a_project_id_is_refused_by_name(monkeypatch: pytest.MonkeyPatch, project: str) -> None:
     monkeypatch.delenv("GOOGLE_CLOUD_LOCATION", raising=False)
     with patch("llm.providers.vertex_ai.genai") as mock_genai:
@@ -110,7 +110,7 @@ def test_a_project_that_is_not_a_project_id_is_refused_by_name(monkeypatch: pyte
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("location", ["mars", "US-CENTRAL1", "us central1", "us-central"])
+@pytest.mark.parametrize("location", ["mars", "US-CENTRAL1", "us central1", "us-central", "us-central1\n"])
 def test_a_location_that_is_not_a_location_is_refused_by_name(location: str) -> None:
     with patch("llm.providers.vertex_ai.genai") as mock_genai:
         with pytest.raises(AuthenticationError) as exc:
