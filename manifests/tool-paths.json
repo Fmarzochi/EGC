@@ -1,7 +1,7 @@
 {
   "version": 1,
   "description": "Every path an install target plans, with the tool surface it serves and the source that says the tool reads it. tests/ci/tool-paths-contract.test.js plans every adapter in every variant and fails when a planned path is outside this table or a row matches nothing; docs/spec/tool-paths.md is generated from it.",
-  "checkedOn": "2026-10-10",
+  "checkedOn": "2026-10-12",
   "variants": [
     {
       "id": "default",

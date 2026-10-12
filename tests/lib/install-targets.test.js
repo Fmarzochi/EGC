@@ -5889,12 +5889,17 @@ function runTests() {
   }));
 
   tally(test('droid-home warns when ~/.factory is absent, naming the tool and its docs (#1493)', () => {
+    const fs = require('fs');
     const adapter = getInstallTargetAdapter('droid');
-    const homeDir = path.join(os.tmpdir(), 'egc-droid-home-that-does-not-exist');
-    const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
-    assert.ok(warning, 'a home without ~/.factory gets the ide-not-detected warning');
-    assert.match(warning.message, /^Droid \(Factory\) does not appear to be installed/);
-    assert.match(warning.message, /https:\/\/docs\.factory\.com/);
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-droid-home-'));
+    try {
+      const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+      assert.ok(warning, 'a home without ~/.factory gets the ide-not-detected warning');
+      assert.match(warning.message, /^Droid \(Factory\) does not appear to be installed/);
+      assert.match(warning.message, /https:\/\/docs\.factory\.com/);
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
   }));
 
   tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {

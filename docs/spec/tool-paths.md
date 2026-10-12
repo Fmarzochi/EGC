@@ -1,6 +1,6 @@
 # Install paths per tool
 
-Generated from `manifests/tool-paths.json` by `node scripts/ci/generate-tool-paths-doc.js`; edit the table, not this file. `tests/ci/tool-paths-contract.test.js` plans every install target in every variant below and fails when a planned path is missing from the table or a row of the table matches no planned path. Sources checked on 2026-10-10.
+Generated from `manifests/tool-paths.json` by `node scripts/ci/generate-tool-paths-doc.js`; edit the table, not this file. `tests/ci/tool-paths-contract.test.js` plans every install target in every variant below and fails when a planned path is missing from the table or a row of the table matches no planned path. Sources checked on 2026-10-12.
 
 Status: **documented** paths are read by the tool per the linked source: its docs, or, where the docs are silent, its own source code at a pinned commit, with the note saying which; **egc** paths are files of EGC itself under the tool root (hook scripts, install state, library copies the tool does not load); **unverified** paths are planned today but not confirmed by the tool's current docs, with the reason in the note.
 
