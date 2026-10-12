@@ -11,7 +11,7 @@ try {
 } catch {
   TOML = null;
 }
-const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, assertLandsInside, resolveCrushConfigDir } = require('./lib/mcp-register');
+const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, assertLandsInside, resolveCrushConfigDir, kiloConfigDir } = require('./lib/mcp-register');
 const { commandExists } = require('./lib/utils');
 const { resolveVibeHome } = require('./lib/install-targets/vibe-home');
 const { resolveGrokHome } = require('./lib/install-targets/grok-home');
@@ -701,6 +701,17 @@ function injectTraeUserRule(filepath, label, content) {
     injectProtocol(path.join(grokDir, 'AGENTS.md'), 'Grok Build');
   } catch (e) {
     console.log(`  [cognitive] Grok Build: unexpected error: ${e.message}`);
+  }
+})();
+
+// ── Kilo Code CLI (<XDG_CONFIG_HOME or ~/.config>/kilo/AGENTS.md) ─────────
+(function bootstrapKilo() {
+  try {
+    const kiloDir = kiloConfigDir(HOME);
+    if (!fs.existsSync(kiloDir) && !commandExists('kilo')) return;
+    injectProtocol(path.join(kiloDir, 'AGENTS.md'), 'Kilo Code CLI');
+  } catch (e) {
+    console.log(`  [cognitive] Kilo Code CLI: unexpected error: ${e.message}`);
   }
 })();
 

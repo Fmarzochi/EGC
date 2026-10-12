@@ -28,6 +28,7 @@ from llm.core.interface import (
 )
 from llm.core.model_resolver import ModelResolver
 from llm.core.redact import redact_secrets
+from llm.core.tool_arguments import parse_tool_arguments
 from llm.core.types import (
     LLMInput,
     LLMOutput,
@@ -122,7 +123,7 @@ class CohereProvider(LLMProvider):
             ToolCall(
                 id=tc.id,
                 name=tc.function.name,
-                arguments=_json_loads(tc.function.arguments),
+                arguments=parse_tool_arguments(tc.function.arguments, ProviderType.COHERE),
             )
             for tc in raw
         ]
@@ -199,13 +200,6 @@ class CohereProvider(LLMProvider):
 
 def _json_dumps(value: dict[str, Any]) -> str:
     return json.dumps(value)
-
-
-def _json_loads(value: str) -> dict[str, Any]:
-    try:
-        return json.loads(value)
-    except (json.JSONDecodeError, TypeError):
-        return {}
 
 
 __all__ = ["CohereProvider", "COHERE_DEFAULT_MODEL"]

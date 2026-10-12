@@ -15,6 +15,7 @@ from llm.core.interface import (
 )
 from llm.core.interface import CLIENT_TIMEOUT
 from llm.core.redact import redact_secrets
+from llm.core.tool_arguments import parse_tool_arguments
 from llm.core.model_resolver import ModelResolver
 from llm.core.types import (
     LLMInput,
@@ -44,7 +45,7 @@ def _parse_tool_calls(message: dict[str, Any]) -> list[ToolCall] | None:
         ToolCall(
             id=tc.get("id", ""),
             name=tc.get("function", {}).get("name", ""),
-            arguments=tc.get("function", {}).get("arguments", {}),
+            arguments=parse_tool_arguments(tc.get("function", {}).get("arguments"), ProviderType.OLLAMA),
         )
         for tc in message["tool_calls"]
     ]
@@ -150,6 +151,8 @@ class OllamaProvider(LLMProvider):
                     "total_tokens": prompt_tokens + completion_tokens,
                 },
             )
+        except LLMError:
+            raise
         except Exception as e:
             _raise_classified_error(e)
 
