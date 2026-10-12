@@ -26,6 +26,7 @@ const HOSTS = {
   'scripts/hooks/amp-mesh-notice-plugin.ts': { target: 'amp', destination: /\/plugins\/egc-mesh-notice\.ts$/ },
   'scripts/hooks/cline-pretooluse-shim.js': { target: 'cline', destination: /\/hooks\/PreToolUse$/ },
   'scripts/hooks/opencode-egc-plugin.js': { target: ['opencode', 'kilo', 'mimo'], destination: /\/plugins\/opencode-egc-plugin\.js$/ },
+  'scripts/hooks/pi-egc-extension.js': { target: 'pi', destination: /\/extensions\/egc-guardian\.js$/ },
 };
 
 let passed = 0;

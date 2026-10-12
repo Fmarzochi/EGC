@@ -41,6 +41,7 @@ const CONFIG_HOME_VARIABLES = Object.freeze([
   'VIBE_HOME',
   'GROK_HOME',
   'MIMOCODE_HOME',
+  'PI_CODING_AGENT_DIR',
   'XDG_CONFIG_HOME',
 ]);
 

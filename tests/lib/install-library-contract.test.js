@@ -88,7 +88,7 @@ function parentOf(filePath) {
 // writes each command skill so a bundled skill is never counted as one.
 // Cursor prefixes the agent file name with egc-.
 const AGENT_DIRS = { default: ['agents'] };
-const COMMAND_DIRS = { default: ['commands', 'command'] };
+const COMMAND_DIRS = { default: ['commands', 'command'], pi: ['prompts'] };
 const COMMANDS_AS_SKILLS = new Set(['antigravity', 'egc']);
 const COMMAND_SKILL_TRANSFORMS = { cursor: 'cursor-command-skill' };
 

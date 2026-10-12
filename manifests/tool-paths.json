@@ -97,6 +97,17 @@
       "adapters": [
         "mimo-home"
       ]
+    },
+    {
+      "id": "PI_CODING_AGENT_DIR",
+      "description": "PI_CODING_AGENT_DIR set, which moves the Pi agent directory",
+      "platform": "linux",
+      "env": {
+        "PI_CODING_AGENT_DIR": "$PI_CODING_AGENT_DIR"
+      },
+      "adapters": [
+        "pi-home"
+      ]
     }
   ],
   "rows": [
@@ -2307,6 +2318,134 @@
       "status": "egc",
       "note": "EGC runtime: the install state EGC writes to track the files it manages.",
       "variant": "MIMOCODE_HOME"
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "context",
+      "path": "~/.pi/agent/AGENTS.md",
+      "status": "documented",
+      "source": "https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/configuration.md",
+      "note": "Pi loads AGENTS.md from its agent directory at startup (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there."
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "library",
+      "path": "~/.pi/agent/egc/library/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "library",
+      "path": "~/.pi/agent/egc/library/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "hooks",
+      "path": "~/.pi/agent/extensions/egc-guardian.js",
+      "status": "documented",
+      "source": "https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/extensions.md",
+      "note": "Pi loads JavaScript and TypeScript files from <agent-dir>/extensions/; a tool_call handler can block a call or mutate its input (main on 2026-10-12). EGC ships its Guardian and Token Crusher extension there."
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "commands",
+      "path": "~/.pi/agent/prompts/",
+      "status": "documented",
+      "source": "https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/prompt-templates.md",
+      "note": "Pi exposes the Markdown files in <agent-dir>/prompts/ as /<name> slash commands (main on 2026-10-12)."
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "runtime",
+      "path": "~/.pi/agent/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "skills",
+      "path": "~/.pi/agent/skills/",
+      "status": "documented",
+      "source": "https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/skills.md",
+      "note": "Pi discovers directories containing SKILL.md recursively in <agent-dir>/skills/ (main on 2026-10-12)."
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "state",
+      "path": "~/.pi/agent/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "context",
+      "path": "$PI_CODING_AGENT_DIR/AGENTS.md",
+      "status": "documented",
+      "source": "https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/configuration.md",
+      "note": "Pi loads AGENTS.md from its agent directory at startup (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there.",
+      "variant": "PI_CODING_AGENT_DIR"
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "library",
+      "path": "$PI_CODING_AGENT_DIR/egc/library/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "PI_CODING_AGENT_DIR"
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "library",
+      "path": "$PI_CODING_AGENT_DIR/egc/library/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own.",
+      "variant": "PI_CODING_AGENT_DIR"
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "hooks",
+      "path": "$PI_CODING_AGENT_DIR/extensions/egc-guardian.js",
+      "status": "documented",
+      "source": "https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/extensions.md",
+      "note": "Pi loads JavaScript and TypeScript files from <agent-dir>/extensions/; a tool_call handler can block a call or mutate its input (main on 2026-10-12). EGC ships its Guardian and Token Crusher extension there.",
+      "variant": "PI_CODING_AGENT_DIR"
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "commands",
+      "path": "$PI_CODING_AGENT_DIR/prompts/",
+      "status": "documented",
+      "source": "https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/prompt-templates.md",
+      "note": "Pi exposes the Markdown files in <agent-dir>/prompts/ as /<name> slash commands (main on 2026-10-12).",
+      "variant": "PI_CODING_AGENT_DIR"
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "runtime",
+      "path": "$PI_CODING_AGENT_DIR/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run.",
+      "variant": "PI_CODING_AGENT_DIR"
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "skills",
+      "path": "$PI_CODING_AGENT_DIR/skills/",
+      "status": "documented",
+      "source": "https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/skills.md",
+      "note": "Pi discovers directories containing SKILL.md recursively in <agent-dir>/skills/ (main on 2026-10-12).",
+      "variant": "PI_CODING_AGENT_DIR"
+    },
+    {
+      "adapter": "pi-home",
+      "surface": "state",
+      "path": "$PI_CODING_AGENT_DIR/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages.",
+      "variant": "PI_CODING_AGENT_DIR"
     },
     {
       "adapter": "vibe-project",

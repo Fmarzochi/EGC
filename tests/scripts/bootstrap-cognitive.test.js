@@ -1509,6 +1509,66 @@ async function runVibeTests() {
   return [passed, failed];
 }
 
+async function runPiTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('writes the Pi AGENTS.md when ~/.pi/agent exists (#1499)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.pi', 'agent'), { recursive: true });
+      const output = run(home, { PI_CODING_AGENT_DIR: '' });
+      assert.ok(/Pi: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const content = fs.readFileSync(path.join(home, '.pi', 'agent', 'AGENTS.md'), 'utf8');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Pi when ~/.pi/agent does not exist and pi is not on PATH (#1499)', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home, { PI_CODING_AGENT_DIR: '', PATH: isolatedPath(null) });
+      assert.ok(!/\[cognitive\] Pi:/.test(output), 'should not mention Pi at all');
+      assert.ok(!fs.existsSync(path.join(home, '.pi')), 'nothing is created');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the Pi AGENTS.md when pi is on PATH before ~/.pi/agent exists (#1499)', () => {
+    const home = mktempHome();
+    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-fake-pi-'));
+    try {
+      fs.writeFileSync(path.join(fakeBin, 'pi'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(fakeBin, 'pi.cmd'), '@exit /b 0\r\n');
+      const output = run(home, { PI_CODING_AGENT_DIR: '', PATH: isolatedPath(fakeBin) });
+      assert.ok(/Pi: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(home, '.pi', 'agent', 'AGENTS.md')), 'AGENTS.md is written on the first run');
+    } finally {
+      cleanup(home);
+      cleanup(fakeBin);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the Pi AGENTS.md under PI_CODING_AGENT_DIR when it is set (#1499)', () => {
+    const home = mktempHome();
+    try {
+      const moved = path.join(home, 'pi-data');
+      fs.mkdirSync(moved, { recursive: true });
+      const output = run(home, { PI_CODING_AGENT_DIR: moved });
+      assert.ok(/Pi: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(moved, 'AGENTS.md')), 'the file lands under PI_CODING_AGENT_DIR');
+      assert.ok(!fs.existsSync(path.join(home, '.pi')), 'and not under ~/.pi/agent');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 async function runMimoTests() {
   let passed = 0;
   let failed = 0;
@@ -2035,6 +2095,12 @@ async function runRemainingHarnessTests() {
     const [mimoPassed, mimoFailed] = await runMimoTests();
     passed += mimoPassed;
     failed += mimoFailed;
+  }
+
+  {
+    const [piPassed, piFailed] = await runPiTests();
+    passed += piPassed;
+    failed += piFailed;
   }
 
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {

@@ -17,6 +17,7 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | VIBE_HOME | linux | `VIBE_HOME` set to an absolute directory, shown as `$VIBE_HOME` in the paths | vibe-home |
 | GROK_HOME | linux | `GROK_HOME` set to an absolute directory, shown as `$GROK_HOME` in the paths | grok-home |
 | MIMOCODE_HOME | linux | `MIMOCODE_HOME` set to an absolute directory, shown as `$MIMOCODE_HOME` in the paths | mimo-home |
+| PI_CODING_AGENT_DIR | linux | `PI_CODING_AGENT_DIR` set to an absolute directory, shown as `$PI_CODING_AGENT_DIR` in the paths | pi-home |
 
 ## egc-home
 
@@ -482,6 +483,27 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | runtime | `$MIMOCODE_HOME/config/scripts/` | MIMOCODE_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `$MIMOCODE_HOME/config/skills/` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/skill/index.ts> | MiMo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-12). |
 | state | `$MIMOCODE_HOME/config/egc/install-state.json` | MIMOCODE_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## pi-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| context | `~/.pi/agent/AGENTS.md` | default | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/configuration.md> | Pi loads AGENTS.md from its agent directory at startup (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| library | `~/.pi/agent/egc/library/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.pi/agent/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `~/.pi/agent/extensions/egc-guardian.js` | default | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/extensions.md> | Pi loads JavaScript and TypeScript files from <agent-dir>/extensions/; a tool_call handler can block a call or mutate its input (main on 2026-10-12). EGC ships its Guardian and Token Crusher extension there. |
+| commands | `~/.pi/agent/prompts/` | default | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/prompt-templates.md> | Pi exposes the Markdown files in <agent-dir>/prompts/ as /<name> slash commands (main on 2026-10-12). |
+| runtime | `~/.pi/agent/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `~/.pi/agent/skills/` | default | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/skills.md> | Pi discovers directories containing SKILL.md recursively in <agent-dir>/skills/ (main on 2026-10-12). |
+| state | `~/.pi/agent/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| context | `$PI_CODING_AGENT_DIR/AGENTS.md` | PI_CODING_AGENT_DIR | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/configuration.md> | Pi loads AGENTS.md from its agent directory at startup (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| library | `$PI_CODING_AGENT_DIR/egc/library/agents/` | PI_CODING_AGENT_DIR | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `$PI_CODING_AGENT_DIR/egc/library/rules/` | PI_CODING_AGENT_DIR | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| hooks | `$PI_CODING_AGENT_DIR/extensions/egc-guardian.js` | PI_CODING_AGENT_DIR | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/extensions.md> | Pi loads JavaScript and TypeScript files from <agent-dir>/extensions/; a tool_call handler can block a call or mutate its input (main on 2026-10-12). EGC ships its Guardian and Token Crusher extension there. |
+| commands | `$PI_CODING_AGENT_DIR/prompts/` | PI_CODING_AGENT_DIR | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/prompt-templates.md> | Pi exposes the Markdown files in <agent-dir>/prompts/ as /<name> slash commands (main on 2026-10-12). |
+| runtime | `$PI_CODING_AGENT_DIR/scripts/` | PI_CODING_AGENT_DIR | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `$PI_CODING_AGENT_DIR/skills/` | PI_CODING_AGENT_DIR | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/skills.md> | Pi discovers directories containing SKILL.md recursively in <agent-dir>/skills/ (main on 2026-10-12). |
+| state | `$PI_CODING_AGENT_DIR/egc/install-state.json` | PI_CODING_AGENT_DIR | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## vibe-project
 

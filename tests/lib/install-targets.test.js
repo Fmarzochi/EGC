@@ -5778,6 +5778,73 @@ function runTests() {
     }
   })));
 
+  tally(test('pi-home: skills, commands as prompt templates, library agents and rules, AGENTS.md and the Guardian extension under ~/.pi/agent, moved by PI_CODING_AGENT_DIR (#1499)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const previous = process.env.PI_CODING_AGENT_DIR;
+    delete process.env.PI_CODING_AGENT_DIR;
+    try {
+      const adapter = getInstallTargetAdapter('pi');
+      assert.strictEqual(adapter.id, 'pi-home');
+      assert.strictEqual(adapter.target, 'pi');
+      assert.strictEqual(adapter.kind, 'home');
+      const root = path.join(homeDir, '.pi', 'agent');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root);
+      assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(root, 'egc', 'install-state.json'));
+      const plan = planInstallTargetScaffold({
+        target: 'pi',
+        repoRoot,
+        homeDir,
+        modules: [
+          { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+          { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+          { id: 'commands-core', paths: ['commands'] },
+          { id: 'rules-core', paths: ['rules/common/memory.md'] },
+        ],
+      });
+      const destinations = plan.operations.map(op => op.destinationPath);
+      for (const expected of [
+        ['skills', 'continuous-learning', 'SKILL.md'],
+        ['prompts', 'plan.md'],
+        ['egc', 'library', 'agents', 'code-reviewer.md'],
+        ['egc', 'library', 'rules', 'common', 'memory.md'],
+        ['AGENTS.md'],
+        ['extensions', 'egc-guardian.js'],
+        ['scripts', 'hooks', 'pre-bash-guardian-validate.js'],
+        ['scripts', 'hooks', 'pre-write-guardian-validate.js'],
+        ['scripts', 'hooks', 'pre-bash-crusher-rewrite.js'],
+      ]) {
+        assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
+      }
+      assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'commands'))), 'commands land as prompt templates, not under commands/');
+      process.env.PI_CODING_AGENT_DIR = '~/pi-data';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, 'pi-data'), 'a leading tilde is the home directory');
+      const custom = path.resolve('/custom/pi-agent');
+      process.env.PI_CODING_AGENT_DIR = custom;
+      const moved = planInstallTargetScaffold({ target: 'pi', repoRoot, homeDir, modules: [{ id: 'rules-core', paths: ['rules/common/memory.md'] }] });
+      for (const operation of moved.operations) {
+        assert.ok(String(operation.destinationPath).startsWith(custom + path.sep), 'every destination sits under PI_CODING_AGENT_DIR, found ' + operation.destinationPath);
+      }
+    } finally {
+      if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;
+    }
+  }));
+
+  tally(test('pi-home warns when ~/.pi/agent is absent, naming the tool and its site (#1499)', () => {
+    const previous = process.env.PI_CODING_AGENT_DIR;
+    delete process.env.PI_CODING_AGENT_DIR;
+    try {
+      const adapter = getInstallTargetAdapter('pi');
+      const homeDir = path.join(os.tmpdir(), 'egc-pi-home-that-does-not-exist');
+      const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+      assert.ok(warning, 'a home without ~/.pi/agent gets the ide-not-detected warning');
+      assert.match(warning.message, /^Pi does not appear to be installed/);
+      assert.match(warning.message, /https:\/\/pi\.dev/);
+    } finally {
+      if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;
+    }
+  }));
+
   tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
