@@ -5,8 +5,9 @@ import os
 import unittest
 from unittest.mock import patch
 
-from llm.core.types import LLMInput, Message, Role
-from llm.providers.ollama import OllamaProvider
+from llm.core.interface import ToolArgumentsError
+from llm.core.types import LLMInput, Message, ProviderType, Role
+from llm.providers.ollama import OllamaProvider, _parse_tool_calls
 
 
 class _Response:
@@ -92,6 +93,30 @@ class TestOllamaProviderCatalog(unittest.TestCase):
         self.assertIn("qwen3:8b", by_name)
         self.assertTrue(by_name["qwen3:8b"].supports_tools)
         self.assertEqual(by_name["qwen3:8b"].context_window, 40960)
+
+
+class TestOllamaToolCallArguments(unittest.TestCase):
+    @staticmethod
+    def _function(arguments):
+        return {"name": "read_file", "arguments": arguments}
+
+    def _arguments(self, function):
+        message = {"tool_calls": [{"id": "call_1", "function": function}]}
+        return _parse_tool_calls(message)[0].arguments
+
+    def test_a_json_object_string_or_a_dict_parses_to_a_dict(self) -> None:
+        for raw in ('{"path": "a.txt"}', {"path": "a.txt"}):
+            with self.subTest(raw=raw):
+                self.assertEqual(self._arguments(self._function(raw)), {"path": "a.txt"})
+
+    def test_missing_arguments_parse_to_an_empty_dict(self) -> None:
+        self.assertEqual(self._arguments({"name": "read_file"}), {})
+
+    def test_a_scalar_or_malformed_arguments_raise_tool_arguments_error(self) -> None:
+        for raw in (42, "42", '"text"', "[1, 2]", "{not valid json"):
+            with self.subTest(raw=raw), self.assertRaises(ToolArgumentsError) as ctx:
+                self._arguments(self._function(raw))
+            self.assertEqual(ctx.exception.provider, ProviderType.OLLAMA)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Any
 
@@ -31,6 +30,7 @@ from llm.core.types import (
 )
 from llm.core.model_resolver import ModelResolver
 from llm.core.redact import redact_secrets
+from llm.core.tool_arguments import parse_tool_arguments
 
 
 class OpenAIProvider(LLMProvider):
@@ -90,12 +90,7 @@ class OpenAIProvider(LLMProvider):
             return None
         calls = []
         for tc in choice.message.tool_calls:
-            try:
-                args = (
-                    json.loads(tc.function.arguments) if tc.function.arguments else {}
-                )
-            except json.JSONDecodeError:
-                args = {}
+            args = parse_tool_arguments(tc.function.arguments, ProviderType.OPENAI)
             calls.append(
                 ToolCall(id=tc.id or "", name=tc.function.name, arguments=args)
             )

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMError
+from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMError, ToolArgumentsError
 from llm.core.types import LLMInput, Message, ProviderType, Role, ToolDefinition
 from llm.providers.cohere import COHERE_DEFAULT_MODEL, CohereProvider
 
@@ -242,3 +242,20 @@ def test_deprecated_cohere_ids_resolve_to_a_live_model() -> None:
 
     assert ModelResolver.resolve("command-r-plus", provider="cohere") == "command-r-plus-08-2024"
     assert ModelResolver.resolve("command", provider="cohere") == "command-r7b-12-2024"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("arguments", ['{"expr": "2+2"}', {"expr": "2+2"}])
+def test_tool_call_arguments_parse_to_a_dict_from_a_json_object_string_or_a_dict(provider: CohereProvider, arguments) -> None:
+    provider.client.chat.return_value = _tool_call_response(arguments=arguments)
+    result = provider.generate(_simple_input())
+    assert result.tool_calls[0].arguments == {"expr": "2+2"}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("arguments", ["42", '"text"', "[1, 2]", "{not valid json"])
+def test_scalar_or_malformed_tool_call_arguments_raise_tool_arguments_error(provider: CohereProvider, arguments) -> None:
+    provider.client.chat.return_value = _tool_call_response(arguments=arguments)
+    with pytest.raises(ToolArgumentsError) as exc:
+        provider.generate(_simple_input())
+    assert exc.value.provider == ProviderType.COHERE
