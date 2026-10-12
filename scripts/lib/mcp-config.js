@@ -19,9 +19,13 @@ const ENV_NAME_DENYLIST = new Set([
 const ENV_PREFIX_DENYLIST_RE = /^(?:LD_|DYLD_|PIP_|NPM_CONFIG_|UV_)/i;
 const MAX_ARG_LENGTH = 512;
 
+// The file names the tools give their MCP server lists: .mcp.json and mcp.json
+// (Claude Code, Cursor, Kiro, Kimi), mcp_config.json (Antigravity, the Cascade
+// user file) and mcp_config.local.json (Devin Local, per project).
+const MCP_CONFIG_BASENAMES = new Set(['.mcp.json', 'mcp.json', 'mcp_config.json', 'mcp_config.local.json']);
+
 function isMcpConfigPath(filePath) {
-  const basename = path.basename(String(filePath || ''));
-  return basename === '.mcp.json' || basename === 'mcp.json';
+  return MCP_CONFIG_BASENAMES.has(path.basename(String(filePath || '')));
 }
 
 function describeUnsafeCommand(server) {
