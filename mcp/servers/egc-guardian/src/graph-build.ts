@@ -55,11 +55,11 @@ export function compileRuleRegex(raw: string): IgnoreFn {
   const { body: pat, rooted, dirOnly } = shapeOf(raw);
   // `**/` is any number of directories, none included; a bare `**` is anything.
   const body = pat
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*\//g, '\u0001')
-    .replace(/\*\*/g, '\u0002')
-    .replace(/\*/g, '[^/]*')
-    .replace(/\?/g, '[^/]')
+    .replaceAll(/[.+^${}()|[\]\\]/g, String.raw`\$&`)
+    .replaceAll('**/', '\u0001')
+    .replaceAll('**', '\u0002')
+    .replaceAll('*', '[^/]*')
+    .replaceAll('?', '[^/]')
     .replaceAll('\u0001', '(?:.*/)?')
     .replaceAll('\u0002', '.*');
   const re = new RegExp(`${rooted ? '^' : '(?:^|/)'}${body}${dirOnly ? '/' : '(?:/|$)'}`);
@@ -79,15 +79,30 @@ type GlobToken =
 // is one `glob`; a single star is a `star`. Neighbours are merged so the
 // token list stays short.
 function pushStars(tokens: GlobToken[], run: number, dirs: boolean): void {
-  const prev = tokens[tokens.length - 1]?.k;
+  const prev = tokens.at(-1)?.k;
   if (dirs) {
     if (prev !== 'dirsBody') tokens.push({ k: 'dirs' }, { k: 'dirsBody' });
   } else if (run >= 2 || prev === 'glob') {
     if (prev === 'star') tokens.pop();
-    if (tokens[tokens.length - 1]?.k !== 'glob') tokens.push({ k: 'glob' });
+    if (tokens.at(-1)?.k !== 'glob') tokens.push({ k: 'glob' });
   } else if (prev !== 'star') {
     tokens.push({ k: 'star' });
   }
+}
+
+// Reads the run of stars that starts at `start` and returns where the next token starts.
+function pushStarRun(tokens: GlobToken[], pat: string, start: number): number {
+  let run = 1;
+  while (pat[start + run] === '*') run++;
+  const after = start + run;
+  if (run >= 2 && pat[after] === '/') {
+    // The last two stars and the slash are the directories; any stars before them are a plain wildcard.
+    if (run > 2) pushStars(tokens, run - 2, false);
+    pushStars(tokens, 2, true);
+    return after + 1;
+  }
+  pushStars(tokens, run, false);
+  return after;
 }
 
 function globTokens(pat: string, dirOnly: boolean): GlobToken[] {
@@ -95,18 +110,7 @@ function globTokens(pat: string, dirOnly: boolean): GlobToken[] {
   for (let i = 0; i < pat.length; ) {
     const c = pat[i];
     if (c === '*') {
-      let run = 1;
-      while (pat[i + run] === '*') run++;
-      i += run;
-      const dirs = run >= 2 && pat[i] === '/';
-      if (dirs) {
-        i++;
-        // The last two stars and the slash are the directories; any stars before them are a plain wildcard.
-        if (run > 2) pushStars(tokens, run - 2, false);
-        pushStars(tokens, 2, true);
-      } else {
-        pushStars(tokens, run, false);
-      }
+      i = pushStarRun(tokens, pat, i);
     } else {
       tokens.push(c === '?' ? { k: 'one' } : { k: 'lit', c });
       i++;
@@ -119,30 +123,31 @@ function globTokens(pat: string, dirOnly: boolean): GlobToken[] {
 // What one pattern position does at one character: marks the positions alive
 // in this column (cur, for moves that eat nothing) and in the next (next).
 function step(t: GlobToken, i: number, ch: string, cur: Uint8Array, next: Uint8Array): void {
+  const eatsAny = ch !== '';
+  const eatsInSegment = eatsAny && ch !== '/';
   switch (t.k) {
     case 'lit':
       if (ch === t.c) next[i + 1] = 1;
       break;
     case 'one':
-      if (ch !== '' && ch !== '/') next[i + 1] = 1;
+      if (eatsInSegment) next[i + 1] = 1;
       break;
     case 'star':
       cur[i + 1] = 1;
-      if (ch !== '' && ch !== '/') next[i] = 1;
+      if (eatsInSegment) next[i] = 1;
       break;
     case 'glob':
       cur[i + 1] = 1;
-      if (ch !== '') next[i] = 1;
+      if (eatsAny) next[i] = 1;
       break;
     case 'dirs':
       cur[i + 1] = 1;
       cur[i + 2] = 1;
       break;
     case 'dirsBody':
-      if (ch !== '') {
-        next[i] = 1;
-        if (ch === '/') next[i + 1] = 1;
-      }
+      if (!eatsAny) break;
+      next[i] = 1;
+      if (ch === '/') next[i + 1] = 1;
       break;
   }
 }
@@ -151,6 +156,9 @@ function step(t: GlobToken, i: number, ch: string, cur: Uint8Array, next: Uint8A
 // visited once with the set of pattern positions still alive, so the cost is
 // the pattern length times the path length, whatever the wildcards are.
 // (Exported for tests, which check it agrees with the regex above.)
+const startsHere = (s: string, j: number, rooted: boolean): boolean => j === 0 || (!rooted && s[j - 1] === '/');
+const endsHere = (s: string, j: number, dirOnly: boolean): boolean => dirOnly || j === s.length || s[j] === '/';
+
 export function compileRuleGlob(raw: string): IgnoreFn {
   const { body: pat, rooted, dirOnly } = shapeOf(raw);
   const tokens = globTokens(pat, dirOnly);
@@ -162,11 +170,11 @@ export function compileRuleGlob(raw: string): IgnoreFn {
     let cur = new Uint8Array(p + 2);
     let next = new Uint8Array(p + 2);
     for (let j = 0; j <= n; j++) {
-      if (j === 0 || (!rooted && s[j - 1] === '/')) cur[0] = 1;
+      if (startsHere(s, j, rooted)) cur[0] = 1;
       next.fill(0);
       const ch = j < n ? s[j] : '';
       for (let i = 0; i < p; i++) if (cur[i]) step(tokens[i], i, ch, cur, next);
-      if (cur[p] && (dirOnly || j === n || s[j] === '/')) return true;
+      if (cur[p] && endsHere(s, j, dirOnly)) return true;
       [cur, next] = [next, cur];
     }
     return false;
@@ -300,76 +308,107 @@ function groupByFile<T extends { file: string }>(rows: T[]): Map<string, T[]> {
 }
 
 type BindingTarget = { target: string; imported: string };
+type AddEdge = (src: string, dst: string, kind: EdgeRow['kind']) => void;
+
+interface EdgeContext {
+  fileSet: Set<string>;
+  byFile: Map<string, SymbolRow[]>;
+  importsByFile: Map<string, GraphData['imports']>;
+}
+
+function findExport(ctx: EdgeContext, file: string, name: string, depth: number): string | null {
+  const sym = (ctx.byFile.get(file) ?? []).find(s => s.exported && s.name === name);
+  if (sym) return `s:${sym.id}`;
+  return depth >= 3 ? null : findReexport(ctx, file, name, depth);
+}
+
+function findReexport(ctx: EdgeContext, file: string, name: string, depth: number): string | null {
+  for (const im of ctx.importsByFile.get(file) ?? []) {
+    if (!im.reexport) continue;
+    // An empty specifier is an alias of a symbol in this very file (export { a as b }).
+    const target = im.specifier === '' ? file : resolveSpecifier(file, im.specifier, ctx.fileSet);
+    if (!target) continue;
+    const hit = findThroughBindings(ctx, target, im.bindings, name, depth);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function findThroughBindings(
+  ctx: EdgeContext,
+  target: string,
+  bindings: GraphData['imports'][number]['bindings'],
+  name: string,
+  depth: number
+): string | null {
+  for (const b of bindings) {
+    let hit: string | null = null;
+    if (b.local === name && b.imported !== '*') hit = findExport(ctx, target, b.imported, depth + 1);
+    else if (b.local === '*' && b.imported === '*') hit = findExport(ctx, target, name, depth + 1);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function refTarget(
+  ctx: EdgeContext,
+  s: SymbolRow,
+  ref: string,
+  sameFile: Map<string, SymbolRow>,
+  bindingTarget: Map<string, BindingTarget>
+): string | null {
+  if (ref.startsWith('.')) {
+    const cls = s.name.includes('.') ? s.name.split('.')[0] : null;
+    const hit = cls ? sameFile.get(`${cls}.${ref.slice(1)}`) : undefined;
+    return hit ? `s:${hit.id}` : null;
+  }
+  const dot = ref.indexOf('.');
+  if (dot > 0) {
+    const bt = bindingTarget.get(ref.slice(0, dot));
+    return bt?.imported === '*' ? findExport(ctx, bt.target, ref.slice(dot + 1), 0) : null;
+  }
+  const bt = bindingTarget.get(ref);
+  if (bt) return bt.imported === '*' ? `f:${bt.target}` : (findExport(ctx, bt.target, bt.imported, 0) ?? `f:${bt.target}`);
+  const local = sameFile.get(ref);
+  return local ? `s:${local.id}` : null;
+}
+
+function bindImports(ctx: EdgeContext, file: string, add: AddEdge): Map<string, BindingTarget> {
+  const bindingTarget = new Map<string, BindingTarget>();
+  for (const im of ctx.importsByFile.get(file) ?? []) {
+    const target = resolveSpecifier(file, im.specifier, ctx.fileSet);
+    if (!target) continue;
+    add(`f:${file}`, `f:${target}`, 'import');
+    if (im.reexport) continue;
+    for (const b of im.bindings) bindingTarget.set(b.local, { target, imported: b.imported });
+  }
+  return bindingTarget;
+}
+
+function addRefEdges(ctx: EdgeContext, file: string, bindingTarget: Map<string, BindingTarget>, add: AddEdge): void {
+  const syms = ctx.byFile.get(file) ?? [];
+  const sameFile = new Map<string, SymbolRow>();
+  for (const s of syms) if (!sameFile.has(s.name)) sameFile.set(s.name, s);
+  for (const s of syms) {
+    for (const ref of s.refs) {
+      const hit = refTarget(ctx, s, ref, sameFile, bindingTarget);
+      if (hit) add(`s:${s.id}`, hit, 'ref');
+    }
+  }
+}
 
 export function computeEdges(data: Pick<GraphData, 'files' | 'symbols' | 'imports'>): EdgeRow[] {
-  const fileSet = new Set(data.files.map(f => f.path));
-  const byFile = groupByFile(data.symbols);
-  const importsByFile = groupByFile(data.imports);
+  const ctx: EdgeContext = {
+    fileSet: new Set(data.files.map(f => f.path)),
+    byFile: groupByFile(data.symbols),
+    importsByFile: groupByFile(data.imports)
+  };
   const edges = new Map<string, EdgeRow>();
-  const add = (src: string, dst: string, kind: EdgeRow['kind']): void => {
+  const add: AddEdge = (src, dst, kind) => {
     if (src !== dst) edges.set(`${kind}|${src}|${dst}`, { src, dst, kind });
   };
-
-  const findExport = (file: string, name: string, depth: number): string | null => {
-    const sym = (byFile.get(file) ?? []).find(s => s.exported && s.name === name);
-    if (sym) return `s:${sym.id}`;
-    if (depth >= 3) return null;
-    for (const im of importsByFile.get(file) ?? []) {
-      if (!im.reexport) continue;
-      // An empty specifier is an alias of a symbol in this very file (export { a as b }).
-      const target = im.specifier === '' ? file : resolveSpecifier(file, im.specifier, fileSet);
-      if (!target) continue;
-      for (const b of im.bindings) {
-        let hit: string | null = null;
-        if (b.local === name && b.imported !== '*') hit = findExport(target, b.imported, depth + 1);
-        else if (b.local === '*' && b.imported === '*') hit = findExport(target, name, depth + 1);
-        if (hit) return hit;
-      }
-    }
-    return null;
-  };
-
-  const refTarget = (
-    s: SymbolRow,
-    ref: string,
-    sameFile: Map<string, SymbolRow>,
-    bindingTarget: Map<string, BindingTarget>
-  ): string | null => {
-    if (ref.startsWith('.')) {
-      const cls = s.name.includes('.') ? s.name.split('.')[0] : null;
-      const hit = cls ? sameFile.get(`${cls}.${ref.slice(1)}`) : undefined;
-      return hit ? `s:${hit.id}` : null;
-    }
-    const dot = ref.indexOf('.');
-    if (dot > 0) {
-      const bt = bindingTarget.get(ref.slice(0, dot));
-      return bt && bt.imported === '*' ? findExport(bt.target, ref.slice(dot + 1), 0) : null;
-    }
-    const bt = bindingTarget.get(ref);
-    if (bt) return bt.imported === '*' ? `f:${bt.target}` : (findExport(bt.target, bt.imported, 0) ?? `f:${bt.target}`);
-    const local = sameFile.get(ref);
-    return local ? `s:${local.id}` : null;
-  };
-
   for (const file of data.files) {
-    const bindingTarget = new Map<string, BindingTarget>();
-    for (const im of importsByFile.get(file.path) ?? []) {
-      const target = resolveSpecifier(file.path, im.specifier, fileSet);
-      if (!target) continue;
-      add(`f:${file.path}`, `f:${target}`, 'import');
-      if (im.reexport) continue;
-      for (const b of im.bindings) bindingTarget.set(b.local, { target, imported: b.imported });
-    }
-    const syms = byFile.get(file.path) ?? [];
-    const sameFile = new Map<string, SymbolRow>();
-    for (const s of syms) if (!sameFile.has(s.name)) sameFile.set(s.name, s);
-
-    for (const s of syms) {
-      for (const ref of s.refs) {
-        const hit = refTarget(s, ref, sameFile, bindingTarget);
-        if (hit) add(`s:${s.id}`, hit, 'ref');
-      }
-    }
+    addRefEdges(ctx, file.path, bindImports(ctx, file.path, add), add);
   }
   return [...edges.values()];
 }
@@ -558,7 +597,8 @@ export async function buildGraph(projectRoot: string, store: GraphStore, opts: B
       for (const rest of walked.files.slice(k)) if (known.has(rest)) wanted.add(rest);
       break;
     }
-    const outcome = await indexFile(root, rel, known.get(rel), store, opts, maxFileBytes, markEdgesDirty);
+    const outcome = await indexFile( // NOSONAR: files are indexed one at a time, in walk order, on purpose (S9382)
+      root, rel, known.get(rel), store, opts, maxFileBytes, markEdgesDirty);
     tally(outcome, rel, wanted, counts);
   }
 

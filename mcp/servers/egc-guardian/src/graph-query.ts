@@ -37,8 +37,13 @@ interface Ranked extends Reach { s: SymbolRow }
 interface AdjacentEdge { to: string; kind: 'import' | 'ref'; forward: boolean }
 interface FileEntry { score: number; why: Set<string>; snippets: Snippet[] }
 
+const compareText = (a: string, b: string): number => {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+};
+
 const byRank = (a: { s: SymbolRow; score: number }, b: { s: SymbolRow; score: number }): number =>
-  b.score - a.score || (a.s.file < b.s.file ? -1 : a.s.file > b.s.file ? 1 : 0) || a.s.startLine - b.s.startLine;
+  b.score - a.score || compareText(a.s.file, b.s.file) || a.s.startLine - b.s.startLine;
 
 function indexTokens(graph: GraphData): {
   nameTokens: Map<number, Set<string>>;
@@ -170,13 +175,48 @@ function fitSnippet(lines: string[], maxOne: number): { lines: string[]; cut: bo
   return { lines: kept, cut };
 }
 
+type Fitted = ReturnType<typeof fitSnippet>;
+type Taken = Map<string, Array<[number, number]>>;
+
+async function linesOf(cache: Map<string, string[] | null>, file: string, opts: QueryOptions): Promise<string[] | null> {
+  if (!cache.has(file)) {
+    const text = await opts.readFile(file);
+    cache.set(file, text === null ? null : text.split('\n'));
+  }
+  return cache.get(file) ?? null;
+}
+
+const overlapsTaken = (ranges: Array<[number, number]>, s: SymbolRow): boolean =>
+  ranges.some(([a, b]) => s.startLine <= b && s.endLine >= a);
+
+function snippetFor(c: Ranked, all: string[], maxOne: number, opts: QueryOptions): { text: string; fitted: Fitted } | null {
+  const fitted = fitSnippet(all.slice(c.s.startLine - 1, c.s.endLine), maxOne);
+  const text = fitted.lines.join('\n');
+  const out = opts.transformSnippet ? opts.transformSnippet(text) : text;
+  return out === null ? null : { text: out, fitted };
+}
+
+function recordSnippet(perFile: Map<string, FileEntry>, taken: Taken, c: Ranked, snippet: { text: string; fitted: Fitted }): void {
+  const lastLine = c.s.startLine + snippet.fitted.lines.length - 1;
+  // The lines the reader was given, not the whole symbol: a snippet that was cut short must not hide
+  // a symbol that sits in the part that was cut away.
+  const ranges = taken.get(c.s.file) ?? [];
+  ranges.push([c.s.startLine, lastLine]);
+  taken.set(c.s.file, ranges);
+  const entry = perFile.get(c.s.file) ?? { score: c.score, why: new Set<string>(), snippets: [] };
+  entry.score = Math.max(entry.score, c.score);
+  entry.why.add(c.why);
+  entry.snippets.push({ symbol: c.s.name, startLine: c.s.startLine, endLine: lastLine, text: snippet.text, ...(snippet.fitted.cut ? { truncated: true } : {}) });
+  perFile.set(c.s.file, entry);
+}
+
 async function cutSnippets(
   ranked: Ranked[],
   budget: number,
   opts: QueryOptions
 ): Promise<{ perFile: Map<string, FileEntry>; used: number; truncated: boolean; dropped: number }> {
   const fileLines = new Map<string, string[] | null>();
-  const taken = new Map<string, Array<[number, number]>>();
+  const taken: Taken = new Map();
   const perFile = new Map<string, FileEntry>();
   let used = 0;
   let truncated = false;
@@ -188,41 +228,22 @@ async function cutSnippets(
       truncated = true;
       break;
     }
-    const ranges = taken.get(c.s.file) ?? [];
-    if (ranges.some(([a, b]) => c.s.startLine <= b && c.s.endLine >= a)) continue;
-    if (!fileLines.has(c.s.file)) {
-      const text = await opts.readFile(c.s.file);
-      fileLines.set(c.s.file, text === null ? null : text.split('\n'));
-    }
-    const all = fileLines.get(c.s.file);
+    if (overlapsTaken(taken.get(c.s.file) ?? [], c.s)) continue;
+    const all = await linesOf(fileLines, c.s.file, opts); // NOSONAR: the files are read one at a time, in rank order, on purpose (S9382)
     if (!all) continue;
-
-    const fitted = fitSnippet(all.slice(c.s.startLine - 1, c.s.endLine), maxOne);
-    let text = fitted.lines.join('\n');
-    if (opts.transformSnippet) {
-      const out = opts.transformSnippet(text);
-      if (out === null) {
-        dropped++;
-        continue;
-      }
-      text = out;
+    const snippet = snippetFor(c, all, maxOne, opts);
+    if (snippet === null) {
+      dropped++;
+      continue;
     }
-    const tokens = estimateTokens(text);
+    const tokens = estimateTokens(snippet.text);
     if (used + tokens > budget) {
       truncated = true;
       continue;
     }
     used += tokens;
-    // The lines the reader was given, not the whole symbol: a snippet that was cut short must not hide
-    // a symbol that sits in the part that was cut away.
-    ranges.push([c.s.startLine, c.s.startLine + fitted.lines.length - 1]);
-    taken.set(c.s.file, ranges);
-    const entry = perFile.get(c.s.file) ?? { score: c.score, why: new Set<string>(), snippets: [] };
-    entry.score = Math.max(entry.score, c.score);
-    entry.why.add(c.why);
-    entry.snippets.push({ symbol: c.s.name, startLine: c.s.startLine, endLine: c.s.startLine + fitted.lines.length - 1, text, ...(fitted.cut ? { truncated: true } : {}) });
-    perFile.set(c.s.file, entry);
-    if (fitted.cut) truncated = true;
+    recordSnippet(perFile, taken, c, snippet);
+    if (snippet.fitted.cut) truncated = true;
   }
   return { perFile, used, truncated, dropped };
 }
@@ -247,7 +268,7 @@ export async function queryGraph(prompt: string, graph: GraphData, opts: QueryOp
   const { perFile, used, truncated, dropped } = await cutSnippets(ranked, budget, opts);
 
   const files: ContextFile[] = [...perFile.entries()]
-    .map(([p, e]) => ({ path: p, score: Math.round(e.score * 100) / 100, why: [...e.why].slice(0, 3), snippets: e.snippets.sort((a, b) => a.startLine - b.startLine) }))
-    .sort((a, b) => b.score - a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    .map(([p, e]) => ({ path: p, score: Math.round(e.score * 100) / 100, why: [...e.why].slice(0, 3), snippets: [...e.snippets].sort((a, b) => a.startLine - b.startLine) }))
+    .sort((a, b) => b.score - a.score || compareText(a.path, b.path));
   return { files, tokensEstimated: used, truncated, dropped };
 }

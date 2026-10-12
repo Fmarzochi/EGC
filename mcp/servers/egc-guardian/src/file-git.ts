@@ -117,7 +117,7 @@ async function branchPaths(projectPath: string): Promise<Set<string>> {
   }
   if (!base) return new Set();
   const head = await runGit(projectPath, ['rev-parse', 'HEAD']);
-  if (head && head.trim() === base) return new Set();
+  if (head?.trim() === base) return new Set();
   // -z: names come NUL-separated and unquoted, whatever characters they hold.
   const diff = await runGit(projectPath, ['diff', '-z', '--no-ext-diff', '--no-textconv', '--name-only', `${base}...HEAD`]);
   return new Set((diff ?? '').split('\0').filter(l => l.trim()).map(norm));

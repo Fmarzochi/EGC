@@ -16,8 +16,8 @@
  * TypeScript port of thelink/scoring.py at commit 4f607a4 (github.com/UnforGBeast/thelink).
  */
 
-const TOKEN_RE = /[a-zA-Z0-9]+/g;
-const CAMEL_RE = /[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+/g;
+const TOKEN_RE = /[a-zA-Z\d]+/g;
+const CAMEL_RE = /[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+/g;
 
 const STOP = new Set([
   'the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'is', 'are',
@@ -218,13 +218,21 @@ signal('path_hit', 1.5, (doc, ctx) => {
   return hits;
 });
 
+function trimSlashes(text: string): string {
+  let start = 0;
+  let end = text.length;
+  while (start < end && text[start] === '/') start++;
+  while (end > start && text[end - 1] === '/') end--;
+  return text.slice(start, end);
+}
+
 // Import edges hold project-relative paths, so a target resolves by its exact
 // path (with or without extension) and never by file name alone, which would
 // credit a different file that happens to share the name.
 function resolveImportTarget(target: string, byKey: Map<string, string>): string | undefined {
   if (byKey.has(target)) return byKey.get(target);
-  const dotted = target.replace(/\./g, '/').replace(/^\/+|\/+$/g, '');
-  for (const cand of [dotted, `${dotted}/__init__`, target.replace(/\\/g, '/').replace(/^\.\//, '')]) {
+  const dotted = trimSlashes(target.replaceAll('.', '/'));
+  for (const cand of [dotted, `${dotted}/__init__`, target.replaceAll('\\', '/').replace(/^\.\//, '')]) {
     if (byKey.has(cand)) return byKey.get(cand);
   }
   return undefined;
@@ -233,7 +241,7 @@ function resolveImportTarget(target: string, byKey: Map<string, string>): string
 function buildKeyIndex(paths: Iterable<string>): Map<string, string> {
   const byKey = new Map<string, string>();
   for (const p of paths) {
-    const norm = p.replace(/\\/g, '/');
+    const norm = p.replaceAll('\\', '/');
     if (!byKey.has(norm)) byKey.set(norm, p);
     const noExt = norm.replace(/\.[^./]+$/, '');
     if (!byKey.has(noExt)) byKey.set(noExt, p);
@@ -246,7 +254,7 @@ function buildImportAdjacency(paths: string[], edges: ImportEdge[], byKey: Map<s
   for (const p of paths) adj.set(p, new Set());
   for (const e of edges) {
     if (e.rel !== 'imports') continue;
-    const src = byKey.get(e.from.replace(/\\/g, '/')) ?? byKey.get(e.from.replace(/\\/g, '/').replace(/\.[^./]+$/, ''));
+    const src = byKey.get(e.from.replaceAll('\\', '/')) ?? byKey.get(e.from.replaceAll('\\', '/').replace(/\.[^./]+$/, ''));
     const dst = resolveImportTarget(e.to, byKey);
     if (src && dst && src !== dst) {
       adj.get(src)?.add(dst);

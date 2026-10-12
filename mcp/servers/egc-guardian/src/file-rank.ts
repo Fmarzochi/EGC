@@ -20,7 +20,7 @@
 import { collectGitContext } from './file-git.js';
 import { buildFileIndex } from './file-index.js';
 import { scoreDocuments } from './file-ranker.js';
-import { redactPayload } from './audit-log.js';
+import { redactText } from './audit-log.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
 import { resolveRoot } from './graph-context.js';
 import { isProtectedPath as isProtectedByDefault, secretPathChecker } from './validator.js';
@@ -87,7 +87,7 @@ export function renderExplain(files: RankedFile[]): string[] {
   const out = [`explain: ${files.length} file(s) ranked (signals: ${names.join(', ')})`];
   for (const r of rows) {
     const cells = r.slice(0, -1).map((cell, c) => cell.padStart(widths[c]));
-    out.push('  ' + [...cells, r[r.length - 1]].join('  '));
+    out.push('  ' + [...cells, r.at(-1)].join('  '));
   }
   return out;
 }
@@ -98,18 +98,18 @@ export function renderExplain(files: RankedFile[]): string[] {
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f\u2028\u2029]/g;
 function escapeControl(text: string): string {
-  return text.replace(CONTROL_CHARS, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  return text.replace(CONTROL_CHARS, c => String.raw`\u${(c.codePointAt(0) ?? 0).toString(16).padStart(4, '0')}`);
 }
 
 function safePath(p: string): string {
   const shown = escapeControl(p);
   if (scanForInjection(shown).length > 0) return '[path omitted: flagged by prompt-injection scan]';
-  return String(redactPayload({ text: shown }).text);
+  return redactText(shown);
 }
 
 function safeText(text: string): string {
   if (scanForInjection(text).length > 0) return '[omitted: flagged by prompt-injection scan]';
-  return String(redactPayload({ text }).text);
+  return redactText(text);
 }
 
 export function renderBriefing(query: string, history: string, files: RankedFile[]): string {

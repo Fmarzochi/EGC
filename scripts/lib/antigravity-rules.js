@@ -15,7 +15,10 @@ const AGY_RULES_SUBDIR = 'config/rules';
 const MANUAL_RULE_LANGUAGES = new Set(['zh']);
 
 function normalizeSourcePath(sourceRelativePath) {
-  return String(sourceRelativePath).replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  const normalized = String(sourceRelativePath).replaceAll('\\', '/').replace(/^\.\//, '');
+  let end = normalized.length;
+  while (end > 0 && normalized.charAt(end - 1) === '/') end--;
+  return normalized.slice(0, end);
 }
 
 function isRuleSource(sourceRelativePath) {

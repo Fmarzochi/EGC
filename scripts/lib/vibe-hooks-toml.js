@@ -64,15 +64,15 @@ const MATCH_LINE_RE = /^\s*match\s*=\s*"((?:[^"\\]|\\.)*)"\s*(?:#.*)?$/;
 
 // TOML basic strings: a backslash, a quote and every control character are
 // escaped, so a path with a newline or a tab still gives a file Vibe parses.
-const TOML_ESCAPES = Object.freeze({ '\b': '\\b', '\t': '\\t', '\n': '\\n', '\f': '\\f', '\r': '\\r' });
+const TOML_ESCAPES = Object.freeze({ '\b': String.raw`\b`, '\t': String.raw`\t`, '\n': String.raw`\n`, '\f': String.raw`\f`, '\r': String.raw`\r` });
 const TOML_UNESCAPES = Object.freeze({ b: '\b', t: '\t', n: '\n', f: '\f', r: '\r', '"': '"', '\\': '\\' });
 
 function tomlCharacter(character) {
   if (character === '\\') return '\\\\';
-  if (character === '"') return '\\"';
-  const code = character.charCodeAt(0);
+  if (character === '"') return String.raw`\"`;
+  const code = character.codePointAt(0);
   if (code >= 0x20 && code !== 0x7f) return character;
-  return TOML_ESCAPES[character] || ('\\u' + code.toString(16).padStart(4, '0'));
+  return TOML_ESCAPES[character] || (String.raw`\u` + code.toString(16).padStart(4, '0'));
 }
 
 function tomlString(value) {
@@ -81,7 +81,7 @@ function tomlString(value) {
 
 function tomlUnescape(value) {
   return value.replace(/\\(u[0-9a-fA-F]{4}|[btnfr"\\])/g, (_match, code) => (
-    code.startsWith('u') ? String.fromCharCode(Number.parseInt(code.slice(1), 16)) : TOML_UNESCAPES[code]
+    code.startsWith('u') ? String.fromCodePoint(Number.parseInt(code.slice(1), 16)) : TOML_UNESCAPES[code]
   ));
 }
 

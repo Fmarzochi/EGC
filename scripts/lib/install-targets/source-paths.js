@@ -29,7 +29,7 @@ function normalizeRelativePath(relativePath) {
 // grows either.
 const IDENTITY_SOURCE_PATH_OWNERS = Object.freeze({
   '.agents': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
-  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe', 'grok', 'kilo', 'mimo', 'pi']),
+  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe', 'grok', 'kilo', 'mimo', 'pi', 'droid']),
 });
 
 function isForeignPlatformPath(sourceRelativePath, adapterTarget) {

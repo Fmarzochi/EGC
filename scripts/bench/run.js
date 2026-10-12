@@ -16,17 +16,22 @@ function valueOf(argv, i, flag) {
   return value;
 }
 
+const FLAG_SETTERS = new Map([
+  ['--tasks', (opts, value) => { opts.tasks = path.resolve(value); }],
+  ['--project', (opts, value) => { opts.project = path.resolve(value); }],
+  ['--top', (opts, value) => { opts.top = Number(value); }],
+  ['--runs', (opts, value) => { opts.runs = Number(value); }],
+  ['--out', (opts, value) => { opts.out = path.resolve(value); }],
+  ['--min-recall', (opts, value) => { opts.minRecall = Number(value); }]
+]);
+
 function parse(argv) {
   const opts = { tasks: DEFAULT_TASKS, project: REPO_ROOT, top: 10, runs: 3, out: null, minRecall: null, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    const setFlag = FLAG_SETTERS.get(a);
     if (a === '--help' || a === '-h') opts.help = true;
-    else if (a === '--tasks') opts.tasks = path.resolve(valueOf(argv, i++, a));
-    else if (a === '--project') opts.project = path.resolve(valueOf(argv, i++, a));
-    else if (a === '--top') opts.top = Number(valueOf(argv, i++, a));
-    else if (a === '--runs') opts.runs = Number(valueOf(argv, i++, a));
-    else if (a === '--out') opts.out = path.resolve(valueOf(argv, i++, a));
-    else if (a === '--min-recall') opts.minRecall = Number(valueOf(argv, i++, a));
+    else if (setFlag) setFlag(opts, valueOf(argv, i++, a));
     else throw new Error(`unknown argument ${a}`);
   }
   if (opts.help) return opts;
@@ -77,21 +82,32 @@ function wholeFileChars(projectRoot, rels) {
 // size --top asks for.
 const RECALL_DEPTH = 5;
 
+// The timed runs must not overlap, or they would measure each other.
+async function inSequence(count, step) {
+  const results = [];
+  for (let index = 0; index < count; index++) {
+    results.push(await step(index)); // NOSONAR: the timed runs must not overlap (S9382)
+  }
+  return results;
+}
+
+const toPosix = p => p.replaceAll('\\', '/');
+
 async function runTask(rank, task, opts) {
   const latencies = [];
   let last = null;
   // Timed at the depth the caller asked for, so latency reflects --top; the
   // deeper recall@5 pass (only needed when --top is shallower) runs untimed.
-  for (let i = 0; i < opts.runs; i++) {
+  await inSequence(opts.runs, async () => {
     const t0 = process.hrtime.bigint();
     last = await rank({ projectPath: opts.project, query: task.query, topN: opts.top, useGit: false });
     latencies.push(Number(process.hrtime.bigint() - t0) / 1e6);
-  }
-  const ranked = last.ranked.map(f => f.path.replace(/\\/g, '/'));
+  });
+  const ranked = last.ranked.map(f => toPosix(f.path));
   const rankedAt5 = opts.top >= RECALL_DEPTH
     ? ranked
-    : (await rank({ projectPath: opts.project, query: task.query, topN: RECALL_DEPTH, useGit: false })).ranked.map(f => f.path.replace(/\\/g, '/'));
-  const expected = task.expected.map(p => p.replace(/\\/g, '/'));
+    : (await rank({ projectPath: opts.project, query: task.query, topN: RECALL_DEPTH, useGit: false })).ranked.map(f => toPosix(f.path));
+  const expected = task.expected.map(p => toPosix(p));
   const briefingChars = last.briefing.length;
   const baselineChars = wholeFileChars(opts.project, task.expected);
   return {
@@ -131,11 +147,10 @@ function table(rows, summary, opts) {
       `${f(r.latencyMsP50).padStart(6)}  ${f(r.latencyMsP95).padStart(6)}  ${String(r.briefingTokens).padStart(8)}  ${String(r.wholeFileTokens).padStart(10)}`
     );
   }
-  lines.push('');
-  lines.push(`mean recall@5 ${f(summary.meanRecallAt5)}, mean recall@${opts.top} ${f(summary.meanRecallAtTop)}, mean MRR ${f(summary.meanReciprocalRank)}`);
-  lines.push(`latency p50 ${f(summary.latencyMsP50)} ms, p95 ${f(summary.latencyMsP95)} ms (end to end, index rebuilt per call)`);
-  lines.push(`tokens: briefing ${summary.briefingTokensTotal} vs whole expected files ${summary.wholeFileTokensTotal}`);
-  lines.push('  (the briefing lists paths only; an agent that opens the top files pays for them too)');
+  lines.push('', `mean recall@5 ${f(summary.meanRecallAt5)}, mean recall@${opts.top} ${f(summary.meanRecallAtTop)}, mean MRR ${f(summary.meanReciprocalRank)}`,
+    `latency p50 ${f(summary.latencyMsP50)} ms, p95 ${f(summary.latencyMsP95)} ms (end to end, index rebuilt per call)`,
+    `tokens: briefing ${summary.briefingTokensTotal} vs whole expected files ${summary.wholeFileTokensTotal}`,
+    '  (the briefing lists paths only; an agent that opens the top files pays for them too)');
   return lines.join('\n');
 }
 
@@ -158,8 +173,7 @@ async function main() {
   }
   const { rankProjectFiles } = await import(pathToFileURL(buildPath).href);
   const tasks = loadTasks(opts.tasks);
-  const rows = [];
-  for (const task of tasks) rows.push(await runTask(rankProjectFiles, task, opts));
+  const rows = await inSequence(tasks.length, index => runTask(rankProjectFiles, tasks[index], opts));
   const summary = summarise(rows);
   process.stdout.write(table(rows, summary, opts) + '\n');
   const passed = opts.minRecall === null || summary.meanRecallAtTop >= opts.minRecall;
