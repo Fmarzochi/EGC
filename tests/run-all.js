@@ -2,13 +2,18 @@
 /**
  * Run all tests
  *
- * Usage: node tests/run-all.js
+ * Usage: node tests/run-all.js [--durations <file>]
+ *
+ * --durations writes how long each test file took to <file> as JSON and
+ * prints the longest file and the wall time 8 workers could reach. Without
+ * it the output and the exit code are exactly the same as always.
  */
 
 const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { suiteEnv } = require('./fixtures/suite-env');
+const { summarizeDurations, formatDurationReport, parseDurationsFlag } = require('./fixtures/run-durations');
 
 const testsDir = __dirname;
 const repoRoot = path.resolve(testsDir, '..');
@@ -51,6 +56,8 @@ function discoverTestFiles() {
 }
 
 const testFiles = discoverTestFiles();
+const durationsFile = parseDurationsFlag(process.argv.slice(2));
+const durations = [];
 
 const BOX_W = 58; // inner width between ║ delimiters
 const boxLine = s => `║${s.padEnd(BOX_W)}║`;
@@ -80,11 +87,13 @@ for (const testFile of testFiles) {
 
   console.log(`\n━━━ Running ${displayPath} ━━━`);
 
+  const startedAt = process.hrtime.bigint();
   const result = spawnSync('node', [testPath], {
     encoding: 'utf8',
     env: TEST_ENV,
     stdio: ['pipe', 'pipe', 'pipe']
   });
+  durations.push({ file: displayPath, ms: Number((process.hrtime.bigint() - startedAt) / 1000000n) });
 
   const stdout = result.stdout || '';
   const stderr = result.stderr || '';
@@ -133,5 +142,12 @@ console.log(boxLine(`  Total Tests: ${String(totalTests).padStart(4)}`));
 console.log(boxLine(`  Passed:      ${String(totalPassed).padStart(4)}  ✓`));
 console.log(boxLine(`  Failed:      ${String(totalFailed).padStart(4)}  ${totalFailed > 0 ? '✗' : ' '}`));
 console.log('╚' + '═'.repeat(BOX_W) + '╝');
+
+if (durationsFile) {
+  const summary = summarizeDurations(durations);
+  fs.writeFileSync(durationsFile, JSON.stringify({ summary, files: durations }, null, 2) + '\n');
+  console.log('\n' + formatDurationReport(summary));
+  console.log(`  Per-file durations written to ${durationsFile}`);
+}
 
 process.exit(totalFailed > 0 ? 1 : 0);
