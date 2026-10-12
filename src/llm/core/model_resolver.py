@@ -102,6 +102,7 @@ OPENAI_GPT6_ASTRA = "openai/gpt-6-astra"
 GOOGLE_GEMINI_38_FLASH = "google/gemini-3.8-flash"
 GOOGLE_GEMINI_25_FLASH = "google/gemini-2.5-flash"
 OPENAI_GPT_4O = "openai/gpt-4o"
+ANTHROPIC_CLAUDE_SONNET_45 = "anthropic/claude-sonnet-4.5"
 
 # Mistral ids checked on 2026-10-11 (docs.mistral.ai: models overview, changelog,
 # vibe/code/cli/configuration and studio/conversations/function-calling). The
@@ -901,7 +902,7 @@ class ModelResolver:
                 ModelCapability.MULTIMODAL,
                 ModelCapability.LONG_CONTEXT,
             ],
-            "fallback": "anthropic/claude-sonnet-4.5",
+            "fallback": ANTHROPIC_CLAUDE_SONNET_45,
             "context_window": 1000000,
             "max_tokens": 128000,
             "supports_vision": True,
@@ -955,7 +956,7 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        "anthropic/claude-sonnet-4.5": {
+        ANTHROPIC_CLAUDE_SONNET_45: {
             "provider": "openrouter",
             "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING, ModelCapability.CODE],
             "fallback": _OPENAI_GPT_4O_OR,
@@ -1103,6 +1104,10 @@ class ModelResolver:
         # judged before the vendor prefixes so gpt-oss:120b does not read as OpenAI.
         if ":" in v and " " not in v:
             return "ollama"
+        return cls._native_provider_from_name(v)
+
+    @staticmethod
+    def _native_provider_from_name(v: str) -> Optional[str]:
         if "claude-" in v:
             return "claude"
         if v.startswith(("gpt-", "o1", "o3", "o4")):
@@ -1391,7 +1396,7 @@ class ModelResolver:
             OPENROUTER_AUTO: "OpenRouter Auto - broker picks the best model",
             "google/gemini-2.5-pro": "Gemini 2.5 Pro via OpenRouter",
             GOOGLE_GEMINI_25_FLASH: "Gemini 2.5 Flash via OpenRouter",
-            "anthropic/claude-sonnet-4.5": "Claude Sonnet 4.5 via OpenRouter",
+            ANTHROPIC_CLAUDE_SONNET_45: "Claude Sonnet 4.5 via OpenRouter",
             OPENAI_GPT_4O: "GPT-4o via OpenRouter",
             OPENAI_GPT_4O_MINI: "GPT-4o-mini via OpenRouter",
             "deepseek/deepseek-r1": "DeepSeek R1 via OpenRouter - strong reasoning",
