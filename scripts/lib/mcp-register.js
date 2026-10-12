@@ -19,6 +19,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { resolveMimoConfigDir } = require('./mimo-paths');
+const { resolvePiAgentDir } = require('./pi-paths');
 const { isDeepStrictEqual } = require('node:util');
 // A tool the person installed but never launched owns no config directory,
 // so an existence check alone would skip it. The shell installers used to
@@ -660,6 +661,13 @@ function buildMcpRegistrationTargets(homeDir) {
       gate: () => fs.existsSync(resolveMimoConfigDir(homeDir)) || commandExists('mimo'),
       allowedRoot: resolveMimoConfigDir(homeDir),
       format: 'opencode-mcp',
+    },
+    {
+      name: 'Pi',
+      path: path.join(resolvePiAgentDir(homeDir), 'mcp.json'),
+      gate: () => fs.existsSync(resolvePiAgentDir(homeDir)) || commandExists('pi'),
+      allowedRoot: resolvePiAgentDir(homeDir),
+      format: 'json',
     },
   ];
 }

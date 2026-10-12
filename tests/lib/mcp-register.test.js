@@ -153,7 +153,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi',
     ]);
   })));
 
@@ -621,6 +621,48 @@ function runTests() {
       if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
       if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
       delete process.env.XDG_CONFIG_HOME;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('Pi: the servers go under mcpServers in mcp.json in the agent directory, gated on it or pi on PATH, moved by PI_CODING_AGENT_DIR (#1499)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const previous = process.env.PI_CODING_AGENT_DIR;
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    delete process.env.PI_CODING_AGENT_DIR;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const piBin = path.join(tmpHome, 'pi-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(piBin, { recursive: true });
+      fs.writeFileSync(path.join(piBin, 'pi'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(piBin, 'pi.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Pi');
+      assert.ok(absent, 'Pi must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no agent directory and no pi on PATH keep the gate closed');
+      process.env.PATH = `${piBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Pi').gate(), true, 'a pi on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      const agentDir = path.join(tmpHome, '.pi', 'agent');
+      fs.mkdirSync(agentDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Pi');
+      assert.strictEqual(target.path, path.join(agentDir, 'mcp.json'));
+      assert.strictEqual(target.format, 'json', 'Pi reads the standard mcpServers shape');
+      assert.strictEqual(target.allowedRoot, agentDir);
+      assert.strictEqual(target.gate(), true, 'the agent directory alone opens the gate');
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+      process.env.PI_CODING_AGENT_DIR = path.join(tmpHome, 'pi-data');
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Pi').path, path.join(tmpHome, 'pi-data', 'mcp.json'));
+    } finally {
+      if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   }))));

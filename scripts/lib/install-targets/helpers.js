@@ -31,7 +31,7 @@ function normalizeRelativePath(relativePath) {
 // grows either.
 const IDENTITY_SOURCE_PATH_OWNERS = Object.freeze({
   '.agents': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
-  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe', 'grok', 'kilo', 'mimo']),
+  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe', 'grok', 'kilo', 'mimo', 'pi']),
 });
 
 function isForeignPlatformPath(sourceRelativePath, adapterTarget) {
@@ -214,6 +214,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   grok:         { name: 'Grok Build',        url: 'https://docs.x.ai/build/overview' },
   kilo:         { name: 'Kilo Code CLI',     url: 'https://kilo.ai/docs/code-with-ai/platforms/cli' },
   mimo:         { name: 'MiMo Code',         url: 'https://github.com/XiaomiMiMo/MiMo-Code' },
+  pi:           { name: 'Pi',                url: 'https://pi.dev' },
 });
 
 // An adapter that picks its root by policy (config.resolveRoot) is detected

@@ -16,6 +16,7 @@ const { commandExists } = require('./lib/utils');
 const { resolveVibeHome } = require('./lib/install-targets/vibe-home');
 const { resolveGrokHome } = require('./lib/install-targets/grok-home');
 const { resolveMimoConfigDir } = require('./lib/mimo-paths');
+const { resolvePiAgentDir } = require('./lib/pi-paths');
 const { writeProtocolFile } = require('./lib/protocol-file-write');
 
 // Bump when BLOCK's content changes in a way that already-configured installs
@@ -724,6 +725,17 @@ function injectTraeUserRule(filepath, label, content) {
     injectProtocol(path.join(mimoDir, 'AGENTS.md'), 'MiMo Code');
   } catch (e) {
     console.log(`  [cognitive] MiMo Code: unexpected error: ${e.message}`);
+  }
+})();
+
+// ── Pi (<PI_CODING_AGENT_DIR or ~/.pi/agent>/AGENTS.md) ─────────────────
+(function bootstrapPi() {
+  try {
+    const piDir = resolvePiAgentDir({ homeDir: HOME });
+    if (!fs.existsSync(piDir) && !commandExists('pi')) return;
+    injectProtocol(path.join(piDir, 'AGENTS.md'), 'Pi');
+  } catch (e) {
+    console.log(`  [cognitive] Pi: unexpected error: ${e.message}`);
   }
 })();
 
