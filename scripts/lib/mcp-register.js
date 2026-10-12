@@ -350,8 +350,8 @@ function tomlHasTableServer(content, serverName) {
 }
 
 const MCP_SERVERS_KEY = '(?:mcp_servers|"mcp_servers"|\'mcp_servers\')';
-const LEGACY_ARRAY_HEADER = new RegExp(`^\\s*\\[\\[\\s*${MCP_SERVERS_KEY}\\s*\\]\\]`);
-const LEGACY_CHILD_HEADER = new RegExp(`^\\s*\\[{1,2}\\s*${MCP_SERVERS_KEY}\\s*\\.`);
+const LEGACY_ARRAY_HEADER = new RegExp(String.raw`^\s*\[\[\s*${MCP_SERVERS_KEY}\s*\]\]`);
+const LEGACY_CHILD_HEADER = new RegExp(String.raw`^\s*\[{1,2}\s*${MCP_SERVERS_KEY}\s*\.`);
 const ANY_TABLE_HEADER = /^\s*\[[^\]]+\]/;
 const LEGACY_NAME_LINE = /^\s*name\s*=\s*["']([^"']+)["']/;
 
