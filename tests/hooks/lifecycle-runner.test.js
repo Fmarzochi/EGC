@@ -23,6 +23,10 @@ const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const REPO = path.join(__dirname, '..', '..');
 const HOOKS_DIR = path.join(REPO, 'scripts', 'hooks');
+
+const NO_ROOT_ENV = Object.fromEntries(
+  ['EGC_PLUGIN_ROOT', 'ECC_PLUGIN_ROOT', 'CLAUDE_PLUGIN_ROOT', 'CODEBUDDY_PLUGIN_ROOT', 'GEMINI_PLUGIN_ROOT', 'EGC_DIR'].map(name => [name, ''])
+);
 const TABLE = JSON.parse(fs.readFileSync(path.join(HOOKS_DIR, 'lifecycle-hooks.json'), 'utf8'));
 const RUNNER_MARK = 'scripts/hooks/lifecycle-runner.js';
 const KNOWN_ID = 'stop:cost-tracker';
@@ -229,13 +233,34 @@ for (const file of ['hooks/hooks.json', 'docs/hooks/memory-persistence/hooks.jso
           input: '{"session_id":"lifecycle-runner-test"}',
           encoding: 'utf8',
           timeout: CLI_TIMEOUT_MS,
-          env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH },
+          env: { ...process.env, ...NO_ROOT_ENV, HOME: home, USERPROFILE: home },
         });
         assert.strictEqual(result.status, 0, `${command.slice(-60)}: ${result.stderr}`);
         assert.strictEqual(result.stdout, '{"session_id":"lifecycle-runner-test"}', command.slice(-60));
       }
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const [label, table] of [['corrupt', '{not json'], ['missing', null]]) {
+  test(`passes stdin through with status 0 when the lifecycle table is ${label}`, () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-lifecycle-table-'));
+    try {
+      const copy = path.join(dir, 'lifecycle-runner.js');
+      fs.copyFileSync(path.join(HOOKS_DIR, 'lifecycle-runner.js'), copy);
+      if (table !== null) fs.writeFileSync(path.join(dir, 'lifecycle-hooks.json'), table);
+      const result = spawnSync(process.execPath, [copy, KNOWN_ID, TABLE[KNOWN_ID].target], {
+        input: '{"session_id":"lifecycle-runner-test"}',
+        encoding: 'utf8',
+        timeout: CLI_TIMEOUT_MS,
+      });
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.strictEqual(result.stdout, '{"session_id":"lifecycle-runner-test"}');
+      assert.match(result.stderr, /could not read lifecycle-hooks\.json/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 }

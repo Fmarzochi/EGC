@@ -11,13 +11,18 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const hooks = JSON.parse(fs.readFileSync(path.join(__dirname, 'lifecycle-hooks.json'), 'utf8'));
 const raw = fs.readFileSync(0, 'utf8');
+let hooks = {};
+try {
+  hooks = JSON.parse(fs.readFileSync(path.join(__dirname, 'lifecycle-hooks.json'), 'utf8'));
+} catch (err) {
+  process.stderr.write(`[hook error] could not read lifecycle-hooks.json: ${err.message}\n`);
+}
 const root = path.resolve(__dirname, '..', '..');
 const runner = path.join(root, 'scripts', 'hooks', 'run-with-flags.js');
 
 const hookId = Object.keys(hooks).find(id => id === process.argv[2]);
-const entry = hookId && hooks[hookId].target === process.argv[3] ? hooks[hookId] : null;
+const entry = hookId && hooks[hookId]?.target === process.argv[3] ? hooks[hookId] : null;
 
 if (!entry || !fs.existsSync(runner)) {
   if (!entry) process.stderr.write('[hook error] lifecycle-runner does not know this hook id and script\n');
