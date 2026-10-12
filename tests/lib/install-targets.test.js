@@ -218,6 +218,39 @@ function runTests() {
     }
   }));
 
+  tally(test('Cursor gets each command as a skill under .cursor/skills, and a bundled skill of the same name wins (#1837)', () => {
+    const { plannedFileContent } = require('../../scripts/lib/install/copy-transforms');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const projectRoot = '/workspace/app';
+    const cursorRoot = path.join(projectRoot, '.cursor');
+    const skillsRoot = path.join(cursorRoot, 'skills');
+    const plan = planInstallTargetScaffold({
+      target: 'cursor',
+      repoRoot,
+      homeDir: '/Users/example',
+      projectRoot,
+      modules: [
+        { id: 'commands-core', paths: ['commands'] },
+        { id: 'security', paths: ['skills/security/security-scan'] },
+      ],
+    });
+    const destinations = plan.operations.map(operation => operation.destinationPath);
+    const commandsRoot = path.join(cursorRoot, 'commands');
+    assert.ok(!destinations.some(destination => destination === commandsRoot || destination.startsWith(commandsRoot + path.sep)), 'nothing is planned under .cursor/commands, which Cursor no longer documents');
+    const commandOperations = plan.operations.filter(operation => normalizedRelativePath(operation.sourceRelativePath).startsWith('commands/'));
+    const expected = require('fs').readdirSync(path.join(repoRoot, 'commands'))
+      .filter(name => name.endsWith('.md') && name !== 'security-scan.md')
+      .map(name => path.join(skillsRoot, name.slice(0, -3), 'SKILL.md'));
+    assert.deepStrictEqual(commandOperations.map(operation => operation.destinationPath).sort(), expected.sort(), 'each command is a skill invoked as /<name>');
+    assert.ok(commandOperations.every(operation => operation.transform === 'cursor-command-skill'));
+    assert.ok(!destinations.includes(path.join(skillsRoot, 'security-scan', 'SKILL.md')), 'the bundled security-scan skill answers /security-scan');
+    assert.ok(destinations.includes(path.join(skillsRoot, 'security', 'security-scan')), 'and is planned where it always was');
+    const planCommand = commandOperations.find(operation => operation.destinationPath === path.join(skillsRoot, 'plan', 'SKILL.md'));
+    const text = plannedFileContent(path.join(repoRoot, planCommand.sourceRelativePath), planCommand.transform).toString('utf8');
+    assert.ok(text.startsWith('---\nname: plan\ndescription: '), text.slice(0, 80));
+    assert.ok(text.includes('\ndisable-model-invocation: true\n---\n'), 'a command runs only when the person invokes it');
+  }));
+
   tally(test('two selected command paths that would install as one skill are refused (#1706)', () => {
     const fs = require('fs');
     const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-command-collision-'));
@@ -225,7 +258,7 @@ function runTests() {
       fs.mkdirSync(path.join(repoRoot, 'commands', 'foo'), { recursive: true });
       fs.writeFileSync(path.join(repoRoot, 'commands', 'foo', 'bar.md'), '---\ndescription: a\n---\n');
       fs.writeFileSync(path.join(repoRoot, 'commands', 'foo-bar.md'), '---\ndescription: b\n---\n');
-      for (const target of ['egc', 'antigravity']) {
+      for (const target of ['egc', 'antigravity', 'cursor']) {
         assert.throws(() => planInstallTargetScaffold({
           target,
           repoRoot,
@@ -841,6 +874,27 @@ function runTests() {
         [path.join(projectRoot, '.devin'), path.join(projectRoot, '.windsurf')],
         'retirement may clean both directories'
       );
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  }));
+
+  tally(test('windsurf-project registers egc-guardian and egc-memory in .devin/mcp_config.local.json, the file Devin Local reads (#1678)', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-windsurf-mcp-'));
+    const repoRoot = path.join(__dirname, '..', '..');
+    try {
+      const plan = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot, projectRoot, modules: [] });
+      const mcp = plan.operations.find(operation => operation.destinationPath === path.join(projectRoot, '.devin', 'mcp_config.local.json'));
+      assert.ok(mcp, 'the plan registers the servers in .devin/mcp_config.local.json');
+      assert.strictEqual(mcp.kind, 'merge-json');
+      assert.strictEqual(mcp.strategy, 'merge-json');
+      assert.deepStrictEqual(mcp.mergePayload, {
+        mcpServers: {
+          'egc-guardian': { command: 'node', args: [path.join(repoRoot, 'mcp', 'servers', 'egc-guardian', 'build', 'index.js')], env: {} },
+          'egc-memory': { command: 'node', args: [path.join(repoRoot, 'mcp', 'servers', 'egc-memory', 'build', 'index.js')], env: {} },
+        },
+      });
+      assert.ok(!plan.operations.some(operation => path.basename(operation.destinationPath) === 'mcp_config.json'), 'the legacy Cascade user file is not written');
     } finally {
       fs.rmSync(projectRoot, { recursive: true, force: true });
     }
