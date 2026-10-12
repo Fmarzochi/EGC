@@ -10,6 +10,13 @@ const { resolveStateStorePath } = require('./lib/state-store/path');
 const { parseTargetArgs } = require('./lib/cli-target-args');
 const { consolidateCommand, shellQuote } = require('./lib/doctor-summary');
 const { findPlaintextStateFiles } = require('./lib/state-plaintext');
+const {
+  DEFAULT_PROBE_TIMEOUT_MS,
+  buildMcpReport,
+  describeRegistration,
+  describeServer,
+  registrationSeverity,
+} = require('./lib/doctor-mcp');
 
 // Printed as an absolute path: the hint is read from wherever the person ran
 // egc doctor (a project folder, a global npm install on Windows), and a
@@ -20,7 +27,10 @@ function showHelp(exitCode = 0) {
   console.log(`
 Usage: node scripts/doctor.js [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>] [--repo-root <path>] [--json]
 
-Diagnose drift and missing managed files for EGC install-state in the current context.
+Diagnose drift and missing managed files for EGC install-state in the current context,
+list every tool whose config carries the EGC MCP servers, and start each registered
+server to check that it answers tools/list (EGC_DOCTOR_PROBE_TIMEOUT_MS caps the wait
+per server, ${DEFAULT_PROBE_TIMEOUT_MS} ms by default).
 
 Without --repo-root, the reference repo is always wherever the running \`egc\`
 binary lives (the published npm package for a global install). If the install
@@ -50,6 +60,32 @@ function statusLabel(status) {
   }
 
   return status.toUpperCase();
+}
+
+function probeTimeoutMs(env) {
+  const raw = Number.parseInt(env.EGC_DOCTOR_PROBE_TIMEOUT_MS || '', 10);
+  return Number.isInteger(raw) && raw > 0 ? raw : DEFAULT_PROBE_TIMEOUT_MS;
+}
+
+function printMcpReport(mcp) {
+  console.log('\nMCP registrations:');
+  if (mcp.registrations.length === 0) {
+    console.log('  none found in this home: no supported tool carries egc-guardian and egc-memory yet (egc init registers them)');
+  }
+  for (const registration of mcp.registrations) {
+    const tag = statusLabel(registrationSeverity(registration));
+    console.log(`  - [${tag}] ${registration.name} (${registration.path}): ${describeRegistration(registration)}`);
+  }
+  if (mcp.servers.length > 0) {
+    console.log('MCP servers:');
+    for (const server of mcp.servers) {
+      const tag = server.status === 'ok' ? 'OK' : 'ERROR';
+      console.log(`  - [${tag}] ${server.name} at ${server.bin || '(no path)'}: ${describeServer(server)} (registered in ${server.registeredIn.join(', ')})`);
+    }
+  }
+  const registered = mcp.registrations.filter(registration => registration.status === 'registered').length;
+  const answering = mcp.servers.filter(server => server.status === 'ok').length;
+  console.log(`MCP summary: registrations=${mcp.registrations.length}, registered=${registered}, servers=${mcp.servers.length}, answering=${answering}, warnings=${mcp.warningCount}, errors=${mcp.errorCount}`);
 }
 
 function summaryLine(summary) {
@@ -227,7 +263,7 @@ function printStateStoreReport(stateDb) {
   }
 }
 
-function main() {
+async function main() {
   try {
     const options = parseArgs(process.argv);
     if (options.help) {
@@ -241,20 +277,24 @@ function main() {
       projectRoot: process.cwd(),
       targets: options.targets,
     });
-    // Warnings are informative: drift and version skew are worth reporting but
-    // do not mean the install is broken, and a warnings-only run is a healthy
-    // run. Exit 1 is reserved for real failures so scripts and CI can trust it.
-    const hasFailures = report.summary.errorCount > 0;
     const stateDb = checkStateDb(homeDir);
     const plaintextState = checkPlaintextState(homeDir);
+    const mcp = await buildMcpReport(homeDir, { timeoutMs: probeTimeoutMs(process.env) });
+    // Warnings are informative: drift and version skew are worth reporting but
+    // do not mean the install is broken, and a warnings-only run is a healthy
+    // run. Exit 1 is reserved for real failures so scripts and CI can trust
+    // it: an install issue, a tool that lost its MCP registration, a server
+    // that does not answer.
+    const hasFailures = report.summary.errorCount > 0 || mcp.errorCount > 0;
 
     if (options.json) {
-      const out = { ...report };
+      const out = { ...report, mcp };
       if (stateDb) out.stateDb = stateDb;
       if (plaintextState) out.plaintextStateFiles = plaintextState;
       console.log(JSON.stringify(out, null, 2));
     } else {
       printHuman(report);
+      printMcpReport(mcp);
       if (stateDb) printStateStoreReport(stateDb);
       if (plaintextState) printPlaintextStateReport(plaintextState);
     }
@@ -266,4 +306,7 @@ function main() {
   }
 }
 
-main();
+main().catch(error => {
+  console.error(`Error: ${error.message}`);
+  process.exit(1);
+});

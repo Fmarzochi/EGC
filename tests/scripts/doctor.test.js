@@ -100,6 +100,55 @@ function test(name, fn) {
   }
 }
 
+
+// Fake MCP servers for the probe: one that answers the handshake and
+// tools/list with two tools, one that stays alive without answering, one
+// that exits at once. Written next to the fake home so the registered paths
+// are real files.
+const OK_SERVER_SOURCE = [
+  "process.stdin.setEncoding('utf8');",
+  "let buffer = '';",
+  "process.stdin.on('data', chunk => {",
+  "  buffer += chunk;",
+  "  let index = buffer.indexOf('\\n');",
+  "  while (index >= 0) {",
+  "    const line = buffer.slice(0, index);",
+  "    buffer = buffer.slice(index + 1);",
+  "    index = buffer.indexOf('\\n');",
+  "    if (!line.trim()) continue;",
+  "    const message = JSON.parse(line);",
+  "    if (message.id === undefined) continue;",
+  "    const result = message.method === 'tools/list'",
+  "      ? { tools: [{ name: 'validate_command' }, { name: 'validate_write' }] }",
+  "      : { protocolVersion: '2024-11-05', capabilities: {}, serverInfo: { name: 'fake', version: '0' } };",
+  "    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\\n');",
+  "  }",
+  "});",
+].join('\n');
+const SILENT_SERVER_SOURCE = "process.stdin.resume();\nsetInterval(() => {}, 1000);\n";
+const CRASH_SERVER_SOURCE = "process.stderr.write('boot failed: no state dir');\nprocess.exit(3);\n";
+
+function writeFakeServers(homeDir) {
+  const dir = path.join(homeDir, 'fake-servers');
+  fs.mkdirSync(dir, { recursive: true });
+  const ok = path.join(dir, 'ok-server.js');
+  const silent = path.join(dir, 'silent-server.js');
+  const crash = path.join(dir, 'crash-server.js');
+  fs.writeFileSync(ok, OK_SERVER_SOURCE);
+  fs.writeFileSync(silent, SILENT_SERVER_SOURCE);
+  fs.writeFileSync(crash, CRASH_SERVER_SOURCE);
+  return { ok, silent, crash };
+}
+
+function writeJson(filePath, value) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + '\n');
+}
+
+function mcpServersConfig(guardianBin, memoryBin) {
+  return { mcpServers: { 'egc-guardian': { command: 'node', args: [guardianBin] }, 'egc-memory': { command: 'node', args: [memoryBin] } } };
+}
+
 function runTests() {
   console.log('\n=== Testing doctor.js ===\n');
 
@@ -968,6 +1017,162 @@ function runTests() {
       assert.ok(result.stdout.includes('    and 2 more'));
       const listed = result.stdout.split('\n').filter(line => /project-\d\.md \(last write /.test(line));
       assert.strictEqual(listed.length, 5, 'five paths shown, the rest summarised');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+
+  tally(test('lists every tool whose config carries the EGC servers and probes each registered server (#1713)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const servers = writeFakeServers(homeDir);
+      writeJson(path.join(homeDir, '.cursor', 'mcp.json'), mcpServersConfig(servers.ok, servers.ok));
+      fs.mkdirSync(path.join(homeDir, '.claude'), { recursive: true });
+      writeJson(path.join(homeDir, '.claude.json'), mcpServersConfig(servers.ok, servers.ok));
+
+      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '5000' } });
+      assert.strictEqual(result.code, 0, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes('MCP registrations:'));
+      assert.ok(result.stdout.includes('[OK] Cursor ('), result.stdout);
+      assert.ok(result.stdout.includes('[OK] Claude Code (user scope) ('), result.stdout);
+      assert.ok(result.stdout.includes('[OK] egc-guardian at ' + servers.ok + ': answers tools/list (2 tools) (registered in Claude Code (user scope), Cursor)'), result.stdout);
+      assert.ok(result.stdout.includes('[OK] egc-memory at ' + servers.ok + ': answers tools/list (2 tools)'), result.stdout);
+      assert.ok(result.stdout.includes('MCP summary: registrations=2, registered=2, servers=2, answering=2, warnings=0, errors=0'), result.stdout);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('a present tool without the EGC servers in its config, or without the config, is a warning that names egc init (#1713)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      writeJson(path.join(homeDir, '.kiro', 'settings', 'mcp.json'), { mcpServers: { other: { command: 'x' } } });
+      fs.mkdirSync(path.join(homeDir, '.codex'), { recursive: true });
+
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes('[WARNING] Kiro ('), result.stdout);
+      assert.ok(result.stdout.includes('egc-guardian and egc-memory not registered here (egc init registers them; if they were, the tool rewrote its config)'), result.stdout);
+      assert.ok(result.stdout.includes('[WARNING] Codex CLI ('), result.stdout);
+      assert.ok(result.stdout.includes('no config with the EGC servers yet (run egc init)'), result.stdout);
+      assert.ok(result.stdout.includes('MCP summary: registrations=2, registered=0, servers=0, answering=0, warnings=2, errors=0'), result.stdout);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('a server that exits, one that never answers and one whose path is gone are errors, each named (#1713)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const servers = writeFakeServers(homeDir);
+      const gone = path.join(homeDir, 'fake-servers', 'removed-by-update.js');
+      writeJson(path.join(homeDir, '.cursor', 'mcp.json'), mcpServersConfig(servers.crash, servers.silent));
+      writeJson(path.join(homeDir, '.augment', 'settings.json'), mcpServersConfig(gone, servers.ok));
+
+      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '1500' } });
+      assert.strictEqual(result.code, 1, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes('[ERROR] egc-guardian at ' + servers.crash + ': exited with code 3 before answering: boot failed: no state dir'), result.stdout);
+      assert.ok(result.stdout.includes('[ERROR] egc-memory at ' + servers.silent + ': no answer within 1500 ms'), result.stdout);
+      assert.ok(result.stdout.includes('[ERROR] egc-guardian at ' + gone + ': registered path does not exist (run egc init after an update)'), result.stdout);
+      assert.ok(result.stdout.includes('[OK] egc-memory at ' + servers.ok + ': answers tools/list (2 tools) (registered in Auggie)'), result.stdout);
+      assert.ok(result.stdout.includes('MCP summary: registrations=2, registered=2, servers=4, answering=1, warnings=0, errors=3'), result.stdout);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('a config that does not parse is reported as unreadable, and --json carries the whole mcp section (#1713)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const cursorConfig = path.join(homeDir, '.cursor', 'mcp.json');
+      fs.mkdirSync(path.dirname(cursorConfig), { recursive: true });
+      fs.writeFileSync(cursorConfig, '{ "mcpServers": ');
+
+      const result = run(['--json'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 1, result.stdout + result.stderr);
+      const parsed = JSON.parse(result.stdout);
+      assert.strictEqual(parsed.mcp.registrations.length, 1);
+      assert.strictEqual(parsed.mcp.registrations[0].name, 'Cursor');
+      assert.strictEqual(parsed.mcp.registrations[0].status, 'unreadable');
+      assert.ok(parsed.mcp.registrations[0].reason.includes('not valid JSON'), parsed.mcp.registrations[0].reason);
+      assert.deepStrictEqual(parsed.mcp.servers, []);
+      assert.strictEqual(parsed.mcp.errorCount, 1);
+      assert.strictEqual(parsed.mcp.warningCount, 0);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('a hook entry that left the config the tool reads is an error named by event and file, not drift (#1713)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const targetRoot = path.join(homeDir, '.claude');
+      const statePath = path.join(targetRoot, 'egc', 'install-state.json');
+      const settingsPath = path.join(targetRoot, 'settings.json');
+      const hookScriptPath = path.join(targetRoot, 'hooks', 'claude-session-start.js');
+      fs.mkdirSync(path.dirname(hookScriptPath), { recursive: true });
+      fs.copyFileSync(path.join(REPO_ROOT, 'scripts', 'hooks', 'claude-session-start.js'), hookScriptPath);
+      writeJson(settingsPath, { hooks: {} });
+
+      writeState(statePath, {
+        adapter: { id: 'claude-home', target: 'claude', kind: 'home' },
+        targetRoot,
+        installStatePath: statePath,
+        request: { profile: null, modules: [], legacyLanguages: [], legacyMode: true },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [
+          {
+            kind: 'copy-file',
+            moduleId: 'claude-session-state-hook',
+            sourceRelativePath: 'scripts/hooks/claude-session-start.js',
+            destinationPath: hookScriptPath,
+            strategy: 'preserve-relative-path',
+            ownership: 'managed',
+            scaffoldOnly: false,
+          },
+          {
+            kind: 'merge-claude-settings-hooks',
+            moduleId: 'claude-session-state-hook',
+            sourceRelativePath: 'scripts/hooks/claude-session-start.js',
+            destinationPath: settingsPath,
+            strategy: 'merge-claude-settings-hooks',
+            ownership: 'managed',
+            scaffoldOnly: false,
+            hookEvent: 'SessionStart',
+            hookScriptPath,
+          },
+        ],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+
+      const result = run(['--target', 'claude'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 1, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes('Status: ERROR'), result.stdout);
+      assert.ok(result.stdout.includes("[error] missing-hook-entries: 1 hook entry EGC installed is absent from the config the tool reads (run 'egc repair' to put it back)"), result.stdout);
+      assert.ok(!result.stdout.includes('drifted-managed-files'), 'a lost hook is not file drift');
+
+      const asJson = run(['--target', 'claude', '--json'], { cwd: projectRoot, homeDir });
+      const parsed = JSON.parse(asJson.stdout);
+      const issue = parsed.results[0].issues.find(entry => entry.code === 'missing-hook-entries');
+      assert.ok(issue, JSON.stringify(parsed.results[0].issues));
+      assert.deepStrictEqual(issue.paths, ['SessionStart in ' + settingsPath]);
+      assert.strictEqual(parsed.results[0].status, 'error');
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);

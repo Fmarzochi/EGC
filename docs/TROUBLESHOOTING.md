@@ -89,6 +89,25 @@ Run it as printed: without `--apply` it is a dry run that lists what it would en
 
 ---
 
+## `egc doctor` reports an MCP registration or a server that does not answer
+
+**Symptom:** the doctor report has an `MCP registrations` or `MCP servers` section with an `[ERROR]` line, and the run exits 1:
+
+```text
+MCP registrations:
+  - [OK] Cursor (~/.cursor/mcp.json): registered
+  - [ERROR] Codex CLI (~/.codex/config.toml): no config file with the EGC servers (run egc init)
+MCP servers:
+  - [ERROR] egc-memory at ~/.egc/runtime/.../egc-memory/build/index.js: registered path does not exist (run egc init after an update)
+  - [OK] egc-guardian at ...: answers tools/list (12 tools) (registered in Cursor)
+```
+
+**Cause:** the doctor lists every supported tool whose directory exists in your home and reads the config that tool loads its MCP servers from. A tool listed as `missing` or with `no config file` is installed but does not know `egc-guardian` and `egc-memory`; `config not readable` means the file does not parse (usually a hand edit). It then starts every server the registrations point at and asks for `tools/list`: `registered path does not exist` means the registration points at a build an update removed, `exited with code N` means the server crashed on start (the stderr tail follows), `no answer within N ms` means it started but never completed the handshake.
+
+**Fix:** `egc init` registers the two servers in every tool it detects and rewrites a registration that points at an old path. For a server that exits or does not answer, run the printed path with `node` by hand and read its stderr; a missing build in a dev checkout is `npm run build` in `mcp/servers/egc-guardian` and `mcp/servers/egc-memory`. A slow machine can raise the wait with `EGC_DOCTOR_PROBE_TIMEOUT_MS` (8000 by default).
+
+A hook that EGC wrote into a tool's settings and that is no longer there is reported in the same run as `[error] missing-hook-entries`, named by event and file; `egc repair` puts it back.
+
 ## OpenCode stops responding on every request after installing EGC
 
 Installs made with EGC 1.1.21 or earlier copied the whole `egc-universal` package into `~/.config/opencode/` (on Windows `%USERPROFILE%\.config\opencode\`). OpenCode imports every file under `tools/` and `plugins/` in that directory when it starts, the copied TypeScript sources fail to load, and every prompt dies before an answer comes back (#1396). The same copy left a `package.json` there, which makes OpenCode's own background dependency install fail, and replaced your `opencode.json` with EGC's.
