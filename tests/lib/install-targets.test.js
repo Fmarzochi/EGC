@@ -5650,6 +5650,61 @@ function runTests() {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   }));
+  tally(test('kilo-home: ids, root, state path, flat skills, OpenCode-shaped agents, native commands, library rules, AGENTS.md and the EGC plugin under ~/.config/kilo (#1496)', () => runWithoutConfigHomeVariables(() => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const adapter = getInstallTargetAdapter('kilo');
+    assert.strictEqual(adapter.id, 'kilo-home');
+    assert.strictEqual(adapter.target, 'kilo');
+    assert.strictEqual(adapter.kind, 'home');
+    const root = path.join(homeDir, '.config', 'kilo');
+    assert.strictEqual(adapter.resolveRoot({ homeDir }), root);
+    assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(root, 'egc', 'install-state.json'));
+    const plan = planInstallTargetScaffold({
+      target: 'kilo',
+      repoRoot,
+      homeDir,
+      modules: [
+        { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+        { id: 'rules-core', paths: ['rules/common/memory.md'] },
+        { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+        { id: 'commands-core', paths: ['commands/plan.md'] },
+        { id: 'opencode-package', paths: ['.opencode'] },
+      ],
+    });
+    const destinations = plan.operations.map(op => op.destinationPath);
+    assert.ok(destinations.includes(path.join(root, 'skills', 'continuous-learning', 'SKILL.md')), 'a skill lands flat under skills/');
+    const agent = plan.operations.find(op => op.destinationPath === path.join(root, 'agents', 'code-reviewer.md'));
+    assert.ok(agent, 'an agent lands under agents/, which Kilo loads');
+    assert.strictEqual(agent.transform, 'opencode-agent-frontmatter', 'in the OpenCode agent shape Kilo parses');
+    assert.ok(destinations.includes(path.join(root, 'commands', 'plan.md')), 'a command lands under commands/, which Kilo loads');
+    assert.ok(destinations.includes(path.join(root, 'egc', 'library', 'rules', 'common', 'memory.md')), 'a rule lands under the EGC library folder');
+    assert.ok(destinations.includes(path.join(root, 'AGENTS.md')), 'the root AGENTS.md lands where Kilo reads global instructions');
+    assert.ok(destinations.includes(path.join(root, 'plugins', 'opencode-egc-plugin.js')), 'the EGC plugin lands under plugins/');
+    for (const script of ['pre-bash-guardian-validate.js', 'pre-write-guardian-validate.js', 'pre-bash-crusher-rewrite.js', 'opencode-session-start.js']) {
+      assert.ok(destinations.includes(path.join(root, 'scripts', 'hooks', script)), `${script} ships next to the plugin`);
+    }
+    assert.ok(!destinations.some(destination => destination.includes(`${path.sep}.opencode`)), 'nothing of the OpenCode npm package lands in the Kilo config');
+    assert.deepStrictEqual(plan.managedRoots, [path.resolve(root)], 'kilo-home manages only its own root');
+  })));
+
+  tally(test('kilo-home follows XDG_CONFIG_HOME for its root, every destination and the warning when Kilo is absent (#1496)', () => runWithoutConfigHomeVariables(() => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = path.join(os.tmpdir(), 'egc-kilo-home-that-does-not-exist');
+    const adapter = getInstallTargetAdapter('kilo');
+    const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+    assert.ok(warning, 'a home without ~/.config/kilo gets the ide-not-detected warning');
+    assert.match(warning.message, /^Kilo Code CLI does not appear to be installed/);
+    assert.match(warning.message, /https:\/\/kilo\.ai\/docs\/code-with-ai\/platforms\/cli/);
+    const xdg = path.resolve('/custom/xdg-config');
+    process.env.XDG_CONFIG_HOME = xdg;
+    assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(xdg, 'kilo'));
+    const plan = planInstallTargetScaffold({ target: 'kilo', repoRoot, homeDir, modules: [{ id: 'rules-core', paths: ['rules/common/memory.md'] }] });
+    for (const operation of plan.operations) {
+      assert.ok(String(operation.destinationPath).startsWith(path.join(xdg, 'kilo') + path.sep), 'every destination sits under XDG_CONFIG_HOME/kilo, found ' + operation.destinationPath);
+    }
+  })));
+
   tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';
