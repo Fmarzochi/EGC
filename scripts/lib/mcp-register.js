@@ -30,6 +30,7 @@ const { replaceFileWith } = require('./install/preserving-write');
 const { resolveCrushConfigDir, resolveCrushConfigPath } = require('./install-targets/crush-home');
 const { resolveVibeHome } = require('./install-targets/vibe-home');
 const { resolveGrokHome } = require('./install-targets/grok-home');
+const { resolveKiloConfigDir } = require('./install-targets/kilo-home');
 
 let TOML = null;
 try {
@@ -466,7 +467,7 @@ function openCodeConfigDir(homeDir) {
 }
 
 function kiloConfigDir(homeDir) {
-  return path.join(process.env.XDG_CONFIG_HOME || path.join(homeDir, '.config'), 'kilo');
+  return resolveKiloConfigDir(homeDir);
 }
 
 // The file the servers go into: the documented name when it exists, the

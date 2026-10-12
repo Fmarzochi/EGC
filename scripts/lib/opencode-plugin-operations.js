@@ -25,6 +25,7 @@ const OPENCODE_SESSION_CONTEXT_MODULE_ID = 'opencode-session-context-hook';
 const SESSION_CONTEXT_LIB_SOURCES = [
   'scripts/lib/session-start-adapter.js',
   'scripts/lib/dashboard-token.js',
+  'scripts/lib/crusher/session-marker.js',
   'scripts/lib/session-context-loader.js',
   'scripts/lib/branch-state.js',
   'scripts/lib/global-state.js',

@@ -157,23 +157,32 @@ function runTests() {
     ]);
   })));
 
-  (tally(test('Kilo Code CLI: the gate opens on ~/.config/kilo, XDG_CONFIG_HOME moves it, and the servers go under mcp in kilo.json (#1496)', () => runWithoutConfigHomeVariables(() => {
+  (tally(test('Kilo Code CLI: the gate opens on the config directory or kilo on PATH, an absolute XDG_CONFIG_HOME moves it, a relative one is ignored, and the servers go under mcp in kilo.json (#1496)', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
     try {
-      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kilo Code CLI');
-      assert.ok(absent, 'Kilo Code CLI must be a registration target');
-      assert.strictEqual(typeof absent.gate(), 'boolean', 'the gate returns a boolean when Kilo is absent');
+      process.env.PATH = path.join(tmpHome, 'empty-bin');
+      const find = () => buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kilo Code CLI');
+      assert.ok(find(), 'Kilo Code CLI must be a registration target');
+      assert.strictEqual(find().gate(), false, 'no config directory and no kilo on PATH keep the gate closed');
       const kiloDir = path.join(tmpHome, '.config', 'kilo');
       fs.mkdirSync(kiloDir, { recursive: true });
-      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kilo Code CLI');
+      const target = find();
       assert.strictEqual(target.path, path.join(kiloDir, 'kilo.json'));
       assert.strictEqual(target.format, 'opencode-mcp', 'Kilo reads the OpenCode mcp shape');
       assert.strictEqual(target.allowedRoot, kiloDir);
       assert.strictEqual(target.gate(), true, 'the config directory alone opens the gate');
       const xdg = path.join(tmpHome, 'xdg');
       process.env.XDG_CONFIG_HOME = xdg;
-      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Kilo Code CLI').path, path.join(xdg, 'kilo', 'kilo.json'));
+      const moved = find();
+      assert.strictEqual(moved.path, path.join(xdg, 'kilo', 'kilo.json'));
+      assert.strictEqual(moved.gate(), false, 'the default directory no longer opens the gate once XDG_CONFIG_HOME points elsewhere');
+      fs.mkdirSync(path.join(xdg, 'kilo'), { recursive: true });
+      assert.strictEqual(moved.gate(), true, 'the directory XDG_CONFIG_HOME selects opens it');
+      process.env.XDG_CONFIG_HOME = path.join('relative', 'config');
+      assert.strictEqual(find().path, path.join(kiloDir, 'kilo.json'), 'a relative XDG_CONFIG_HOME is ignored, as the XDG spec asks');
     } finally {
+      process.env.PATH = savedPath;
       delete process.env.XDG_CONFIG_HOME;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }

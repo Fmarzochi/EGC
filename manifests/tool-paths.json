@@ -21,7 +21,7 @@
     },
     {
       "id": "XDG_CONFIG_HOME",
-      "description": "XDG_CONFIG_HOME set to an absolute directory, which moves the Crush config directory (a relative value is ignored and Crush stays in ~/.config/crush)",
+      "description": "XDG_CONFIG_HOME set to an absolute directory, which moves the Crush and Kilo Code CLI config directories (a relative value is ignored and they stay in ~/.config/crush and ~/.config/kilo)",
       "platform": "linux",
       "env": {
         "XDG_CONFIG_HOME": "$XDG_CONFIG_HOME"

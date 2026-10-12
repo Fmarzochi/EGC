@@ -19,7 +19,7 @@ const LIBRARY_ROOT_SEGMENTS = ['egc', 'library'];
 function resolveKiloConfigDir(input = {}) {
   const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
   const configured = process.env.XDG_CONFIG_HOME;
-  return path.join(configured ? path.resolve(configured) : path.join(home, '.config'), 'kilo');
+  return path.join(configured && path.isAbsolute(configured) ? configured : path.join(home, '.config'), 'kilo');
 }
 
 function planFlatSkill(adapter, moduleId, sourceRelativePath, normalizedPath, targetRoot) {

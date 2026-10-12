@@ -34,16 +34,16 @@ function run(homeDir, extraEnv = {}) {
   if (!('CRUSH_GLOBAL_CONFIG' in extraEnv)) {
     delete env.CRUSH_GLOBAL_CONFIG;
   }
-  return execFileSync('node', [SCRIPT_PATH], {
+  return execFileSync(process.execPath, [SCRIPT_PATH], {
     env,
     encoding: 'utf8',
   });
 }
 
-// A PATH holding node and, on Windows, the `where` the lookup runs, but no
-// tool CLI unless a fake one is put first.
+// A PATH holding, on Windows, the `where` the lookup runs, and no tool CLI
+// unless a fake one is put first; run() starts node through process.execPath.
 function isolatedPath(fakeBin) {
-  const dirs = [path.dirname(process.execPath)];
+  const dirs = [];
   if (process.platform === 'win32') dirs.push(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'));
   return [fakeBin, ...dirs].filter(Boolean).join(path.delimiter);
 }
@@ -1534,6 +1534,21 @@ async function runKiloCliTests() {
       assert.ok(!fs.existsSync(path.join(home, '.config', 'kilo')), 'nothing is created');
     } finally {
       cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the Kilo Code CLI AGENTS.md when kilo is on PATH before ~/.config/kilo exists (#1496)', () => {
+    const home = mktempHome();
+    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-fake-kilo-'));
+    try {
+      fs.writeFileSync(path.join(fakeBin, 'kilo'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(fakeBin, 'kilo.cmd'), '@exit /b 0\r\n');
+      const output = run(home, { XDG_CONFIG_HOME: '', PATH: isolatedPath(fakeBin) });
+      assert.ok(/Kilo Code CLI: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(home, '.config', 'kilo', 'AGENTS.md')), 'AGENTS.md is written on the first run');
+    } finally {
+      cleanup(home);
+      cleanup(fakeBin);
     }
   })) passed++; else failed++;
 

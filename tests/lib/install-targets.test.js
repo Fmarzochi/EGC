@@ -5701,7 +5701,7 @@ function runTests() {
     assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(xdg, 'kilo'));
     const plan = planInstallTargetScaffold({ target: 'kilo', repoRoot, homeDir, modules: [{ id: 'rules-core', paths: ['rules/common/memory.md'] }] });
     for (const operation of plan.operations) {
-      assert.ok(String(operation.destinationPath).startsWith(path.join(xdg, 'kilo')), 'every destination sits under XDG_CONFIG_HOME/kilo, found ' + operation.destinationPath);
+      assert.ok(String(operation.destinationPath).startsWith(path.join(xdg, 'kilo') + path.sep), 'every destination sits under XDG_CONFIG_HOME/kilo, found ' + operation.destinationPath);
     }
   })));
 
