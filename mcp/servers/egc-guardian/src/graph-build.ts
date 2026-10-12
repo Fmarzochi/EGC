@@ -247,12 +247,17 @@ function classifyEntry(
   return entry.isFile() && accept(entry.name) && !ignoredBy(ignore, chain, childRel, false) ? 'file' : 'skip';
 }
 
+function compareNames(a: string, b: string): number {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
+
 // A directory's entries in a stable order, or null when it cannot be read
 // (removed meanwhile, unreadable): the walk goes on with the rest.
 async function readEntries(root: string, rel: string): Promise<fs.Dirent[] | null> {
   try {
     const entries = await fs.promises.readdir(path.join(root, rel), { withFileTypes: true });
-    return entries.sort((x, y) => (x.name < y.name ? -1 : x.name > y.name ? 1 : 0));
+    return entries.sort((x, y) => compareNames(x.name, y.name));
   } catch {
     return null;
   }
