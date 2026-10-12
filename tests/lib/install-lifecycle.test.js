@@ -2150,7 +2150,7 @@ function runTests() {
     }
   }));
 
-  tally(test('doctor reports a removed Claude SessionStart hook as drift', () => {
+  tally(test('doctor reports a removed Claude SessionStart hook as a lost hook entry, an error', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
@@ -2177,12 +2177,13 @@ function runTests() {
         projectRoot,
         targets: ['claude'],
       });
-      assert.strictEqual(report.results[0].status, 'warning');
-      const driftIssue = report.results[0].issues.find(
-        issue => issue.code === 'drifted-managed-files'
+      assert.strictEqual(report.results[0].status, 'error');
+      const hookIssue = report.results[0].issues.find(
+        issue => issue.code === 'missing-hook-entries'
       );
-      assert.ok(driftIssue, 'Should flag the missing hook entry as drift');
-      assert.ok(driftIssue.paths.includes(installed.settingsPath));
+      assert.ok(hookIssue, 'Should flag the missing hook entry as a lost hook (#1713)');
+      assert.ok(hookIssue.paths.includes('SessionStart in ' + installed.settingsPath));
+      assert.ok(!report.results[0].issues.some(issue => issue.code === 'drifted-managed-files'), 'a lost hook is not file drift');
 
       fs.rmSync(installed.settingsPath);
       report = buildDoctorReport({
@@ -2376,7 +2377,7 @@ function runTests() {
   // healthy install (it checked for that same bogus group), and uninstall
   // left the real hooks.json entry behind pointing at a script the
   // copy-file uninstall step had already deleted.
-  tally(test('doctor reports a removed Devin Desktop Guardian hook as drift, not a false positive on a healthy install', () => {
+  tally(test('doctor reports a removed Devin Desktop Guardian hook as a lost hook entry, not a false positive on a healthy install', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
 
@@ -2391,10 +2392,10 @@ function runTests() {
       }, null, 2));
 
       report = buildDoctorReport({ homeDir, projectRoot, targets: ['windsurf'] });
-      assert.strictEqual(report.results[0].status, 'warning');
-      const driftIssue = report.results[0].issues.find(issue => issue.code === 'drifted-managed-files');
-      assert.ok(driftIssue, 'Should flag the missing pre_run_command entry as drift');
-      assert.ok(driftIssue.paths.includes(installed.hooksJsonPath));
+      assert.strictEqual(report.results[0].status, 'error');
+      const hookIssue = report.results[0].issues.find(issue => issue.code === 'missing-hook-entries');
+      assert.ok(hookIssue, 'Should flag the missing pre_run_command entry as a lost hook (#1713)');
+      assert.ok(hookIssue.paths.includes('pre_run_command in ' + installed.hooksJsonPath));
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
@@ -2471,7 +2472,7 @@ function runTests() {
       fs.writeFileSync(installed.hooksJsonPath, JSON.stringify(guardianOnly, null, 2));
 
       let report = buildDoctorReport({ homeDir, projectRoot, targets: ['windsurf'] });
-      assert.strictEqual(report.results[0].status, 'warning', 'the displaced GateGuard entry must surface as drift');
+      assert.strictEqual(report.results[0].status, 'error', 'the displaced GateGuard entry must surface as a lost hook');
 
       const result = repairInstalledStates({ homeDir, projectRoot, targets: ['windsurf'] });
       assert.strictEqual(result.results[0].status, 'repaired');
