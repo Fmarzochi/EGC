@@ -5816,7 +5816,7 @@ function runTests() {
       ]) {
         assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
       }
-      assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'commands'))), 'commands land as prompt templates, not under commands/');
+      assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'commands') + path.sep)), 'commands land as prompt templates, not under commands/');
       process.env.PI_CODING_AGENT_DIR = '~/pi-data';
       assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(homeDir, 'pi-data'), 'a leading tilde is the home directory');
       const custom = path.resolve('/custom/pi-agent');

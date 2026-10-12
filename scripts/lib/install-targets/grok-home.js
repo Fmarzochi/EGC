@@ -1,8 +1,8 @@
 'use strict';
 
-const os = require('node:os');
 const path = require('node:path');
 
+const { resolveHomeOverride } = require('../home-override');
 const {
   createFlatSkillPlanOperations,
   createInstallTargetAdapter,
@@ -17,15 +17,7 @@ const LIBRARY_FAMILIES = new Set(['agents', 'commands', 'rules']);
 const LIBRARY_ROOT_SEGMENTS = ['egc', 'library'];
 
 function resolveGrokHome(input = {}) {
-  const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
-  const configured = process.env.GROK_HOME;
-  if (configured) {
-    if (configured === '~' || configured.startsWith('~/')) {
-      return path.join(home, configured.slice(1));
-    }
-    return path.resolve(configured);
-  }
-  return path.join(home, '.grok');
+  return resolveHomeOverride(input, 'GROK_HOME', ['.grok']);
 }
 
 function relocateLibraryFolders(operations, targetRoot) {

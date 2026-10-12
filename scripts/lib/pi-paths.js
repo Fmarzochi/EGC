@@ -1,16 +1,9 @@
 'use strict';
 
-const os = require('node:os');
-const path = require('node:path');
+const { resolveHomeOverride } = require('./home-override');
 
 function resolvePiAgentDir(input = {}) {
-  const home = typeof input === 'string' ? input : (input?.homeDir || os.homedir());
-  const configured = process.env.PI_CODING_AGENT_DIR;
-  if (configured) {
-    if (configured === '~' || configured.startsWith('~/')) return path.join(home, configured.slice(1));
-    return path.resolve(configured);
-  }
-  return path.join(home, '.pi', 'agent');
+  return resolveHomeOverride(input, 'PI_CODING_AGENT_DIR', ['.pi', 'agent']);
 }
 
 module.exports = { resolvePiAgentDir };
