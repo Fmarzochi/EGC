@@ -12,7 +12,7 @@
 
 const { run: runCrusherRewrite } = require('./pre-bash-crusher-rewrite');
 const { toPreToolUseOutput } = require('./pretooluse-output');
-const { readHookStdin } = require('../lib/hook-stdin');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 function run(rawInput) {
   try {
@@ -23,7 +23,8 @@ function run(rawInput) {
 }
 
 function main() {
-  readHookStdin(({ raw }) => {
+  readHookStdin(({ raw, truncated }) => {
+    exitOnTruncatedInput(truncated, 0);
     process.stdout.write(run(raw));
     process.exit(0);
   });

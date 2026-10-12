@@ -13,7 +13,7 @@
 
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { readHookStdin } = require('../lib/hook-stdin');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 const WINDOWS_SHELL_UNSAFE_PATH_CHARS = /[&|<>^%!]/;
 
@@ -118,9 +118,11 @@ function handleMonitorResult(result, raw) {
   process.exit(result.status);
 }
 
-readHookStdin(({ raw }) => {
+readHookStdin(({ raw, truncated }) => {
+  const enabled = isEnabled(process.env.EGC_ENABLE_INSAITS || process.env.ECC_ENABLE_INSAITS);
+  exitOnTruncatedInput(truncated, enabled ? 2 : 0);
   // EGC_ENABLE_INSAITS is canonical; ECC_ENABLE_INSAITS is the legacy bridge.
-  if (!isEnabled(process.env.EGC_ENABLE_INSAITS || process.env.ECC_ENABLE_INSAITS)) {
+  if (!enabled) {
     process.stdout.write(raw);
     process.exit(0);
   }

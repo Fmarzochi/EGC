@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const { readHookStdin } = require('../lib/hook-stdin');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 function run(rawInput) {
   const passthrough = typeof rawInput === 'string' ? rawInput : JSON.stringify(rawInput);
@@ -34,7 +34,8 @@ function run(rawInput) {
 }
 
 if (require.main === module) {
-  readHookStdin(({ raw }) => {
+  readHookStdin(({ raw, truncated }) => {
+    exitOnTruncatedInput(truncated, 0);
     const result = run(raw);
     if (result.stderr) {
       process.stderr.write(`${result.stderr}\n`);

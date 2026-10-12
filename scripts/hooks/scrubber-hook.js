@@ -10,7 +10,7 @@
 
 const { clean } = require('../lib/scrubber/engine');
 const { looksBinary, hasTextExtension } = require('../lib/scrubber/binary-guard');
-const { readHookStdin } = require('../lib/hook-stdin');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
 
@@ -91,7 +91,8 @@ function run(rawInput) {
 }
 
 function main() {
-  readHookStdin(({ raw }) => {
+  readHookStdin(({ raw, truncated }) => {
+    exitOnTruncatedInput(truncated, 2);
     process.stdout.write(run(raw), () => process.exit(0));
   });
 }

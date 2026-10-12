@@ -7,6 +7,23 @@
 
 const MAX_HOOK_INPUT_BYTES = 1024 * 1024;
 const MAX_STDIN = MAX_HOOK_INPUT_BYTES;
+const TRUNCATED_INPUT_MESSAGE =
+  'Hook input was cut off (over 1 MiB or the stream failed); refusing to act on a partial payload.';
+
+function reportCallbackFailure(error) {
+  const detail = error && error.message ? error.message : String(error);
+  process.stderr.write(`[hook-stdin] hook callback failed: ${detail}\n`);
+  process.exitCode = 1;
+}
+
+// A hook that gates or rewrites a payload must not act on a prefix of it: a
+// blocker passes exitCode 2 to deny, a hook that only annotates passes 0 to
+// step aside without echoing the partial text.
+function exitOnTruncatedInput(truncated, exitCode) {
+  if (!truncated) return;
+  process.stderr.write(`${TRUNCATED_INPUT_MESSAGE}\n`);
+  process.exit(exitCode);
+}
 
 function readHookStdin(onRead, optionsOrStream = process.stdin) {
   let stream = process.stdin;
@@ -37,10 +54,10 @@ function readHookStdin(onRead, optionsOrStream = process.stdin) {
       try {
         const res = onRead({ raw: Buffer.concat(chunks).toString('utf8'), truncated });
         if (res && typeof res.catch === 'function') {
-          res.catch(() => {});
+          res.catch(reportCallbackFailure);
         }
-      } catch {
-        // fail-safe
+      } catch (error) {
+        reportCallbackFailure(error);
       }
     }
   };
@@ -74,6 +91,8 @@ const readHookInput = readHookStdin;
 module.exports = {
   MAX_HOOK_INPUT_BYTES,
   MAX_STDIN,
+  TRUNCATED_INPUT_MESSAGE,
+  exitOnTruncatedInput,
   readHookStdin,
   readHookStdinAsync,
   readHookInput,

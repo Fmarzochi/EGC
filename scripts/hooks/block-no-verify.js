@@ -15,7 +15,7 @@
 
 'use strict';
 
-const { readHookStdin } = require('../lib/hook-stdin');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 /**
  * Git commands that support the --no-verify flag.
@@ -508,7 +508,8 @@ module.exports = { run };
 
 // Stdin fallback for spawnSync execution: only when invoked directly, not via require()
 if (require.main === module) {
-  readHookStdin(({ raw }) => {
+  readHookStdin(({ raw, truncated }) => {
+    exitOnTruncatedInput(truncated, 2);
     const command = extractCommand(raw);
     const result = checkCommand(command);
 

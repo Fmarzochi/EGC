@@ -3,7 +3,7 @@
 
 const path = require('node:path');
 const { splitShellSegments } = require('../lib/shell-split');
-const { readHookStdin } = require('../lib/hook-stdin');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 const DEV_COMMAND_WORDS = new Set([
   'npm',
@@ -145,7 +145,8 @@ function getLeadingCommandWord(segment) { // NOSONAR: wrapper-aware scanner stat
   return null;
 }
 
-readHookStdin(({ raw }) => {
+readHookStdin(({ raw, truncated }) => {
+  exitOnTruncatedInput(truncated, 2);
   try {
     const input = JSON.parse(raw);
     const cmd = String(input.tool_input?.command || '');

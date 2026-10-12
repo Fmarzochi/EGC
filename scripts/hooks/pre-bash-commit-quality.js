@@ -18,7 +18,7 @@
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
-const { readHookStdin } = require('../lib/hook-stdin');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 /**
  * Detect staged files for commit
@@ -484,7 +484,8 @@ function run(rawInput) {
 
 // ── stdin entry point ────────────────────────────────────────────
 if (require.main === module) {
-  readHookStdin(({ raw: data }) => {
+  readHookStdin(({ raw: data, truncated }) => {
+    exitOnTruncatedInput(truncated, 2);
     const result = evaluate(data);
     process.stdout.write(result.output);
     process.exit(result.exitCode);

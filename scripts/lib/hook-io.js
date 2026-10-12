@@ -4,7 +4,7 @@
 // harness payload as JSON on stdin, exposes run(inputOrRaw) for in-process
 // execution via run-with-flags, and needs identical standalone behavior.
 
-const { MAX_STDIN, readHookStdin } = require('./hook-stdin');
+const { MAX_STDIN, exitOnTruncatedInput, readHookStdin } = require('./hook-stdin');
 
 function parseInput(inputOrRaw) {
   if (typeof inputOrRaw === 'string') {
@@ -18,7 +18,8 @@ function parseInput(inputOrRaw) {
 }
 
 function runStandalone(run, { echoInput = true, blockExitCode = 2 } = {}) {
-  readHookStdin(({ raw }) => {
+  readHookStdin(({ raw, truncated }) => {
+    exitOnTruncatedInput(truncated, 0);
     const result = run(raw) || {};
     if (result.stderr) process.stderr.write(result.stderr + '\n');
     if (result.exitCode === blockExitCode) process.exit(blockExitCode);

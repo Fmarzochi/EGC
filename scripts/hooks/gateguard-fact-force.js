@@ -28,7 +28,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { readHookStdin } = require('../lib/hook-stdin');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 
 // Session state: scoped per session to avoid cross-session races.
@@ -1056,7 +1056,8 @@ module.exports = { run };
 // This block only executes when the file is run as a standalone process, so
 // it does not change behavior for either of those existing callers.
 if (require.main === module) {
-  readHookStdin(({ raw }) => {
+  readHookStdin(({ raw, truncated }) => {
+    exitOnTruncatedInput(truncated, 2);
     const output = run(raw);
 
     if (typeof output === 'string' || Buffer.isBuffer(output)) {
