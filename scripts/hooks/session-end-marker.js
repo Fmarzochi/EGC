@@ -13,6 +13,7 @@ const {
   stopObserverForContext,
   resolveSessionId
 } = require('../lib/observer-sessions');
+const { readHookStdin } = require('../lib/hook-stdin');
 
 function log(message) {
   process.stderr.write(`[SessionEnd] ${message}\n`);
@@ -49,16 +50,7 @@ function run(output = '') {
 
 // Legacy CLI execution (when run directly)
 if (require.main === module) {
-  const MAX_STDIN = 1024 * 1024;
-  let raw = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - raw.length;
-      raw += chunk.substring(0, remaining);
-    }
-  });
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw }) => {
     process.stdout.write(run(raw));
   });
 }

@@ -10,19 +10,9 @@
  */
 
 const { readFile } = require('../lib/utils');
+const { readHookStdin } = require('../lib/hook-stdin');
 
-const MAX_STDIN = 1024 * 1024; // 1MB limit
-let data = '';
-process.stdin.setEncoding('utf8');
-
-process.stdin.on('data', chunk => {
-  if (data.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - data.length;
-    data += chunk.substring(0, remaining);
-  }
-});
-
-process.stdin.on('end', () => {
+readHookStdin(({ raw: data }) => {
   try {
     const input = JSON.parse(data);
     const filePath = input.tool_input?.file_path;

@@ -86,10 +86,18 @@ function createGateGuardOperations(adapter, targetRoot, homeDir) {
     resolveUtilsScriptDestination(targetRoot),
     { strategy: 'preserve-relative-path' }
   );
+  const hookStdinOperation = createRemappedOperation(
+    adapter,
+    GATEGUARD_HOOK_MODULE_ID,
+    'scripts/lib/hook-stdin.js',
+    path.join(targetRoot, 'scripts', 'lib', 'hook-stdin.js'),
+    { strategy: 'preserve-relative-path' }
+  );
 
   return [
     scriptOperation,
     utilsOperation,
+    hookStdinOperation,
     createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, 'Edit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, 'Write'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, 'MultiEdit'),
