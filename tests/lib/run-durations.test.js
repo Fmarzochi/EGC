@@ -12,6 +12,7 @@ const {
   formatDurationReport,
   parseDurationsFlag
 } = require('../fixtures/run-durations');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 let passed = 0;
 let failed = 0;
@@ -121,7 +122,7 @@ test('a run with --durations writes the report and times every file', () => {
     fs.writeFileSync(wrapper, source);
     const file = path.join(dir, 'durations.json');
 
-    const result = spawnSync('node', [wrapper, '--durations', file], { encoding: 'utf8', timeout: 20000 });
+    const result = spawnSync('node', [wrapper, '--durations', file], { encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
 
     assert.strictEqual(result.status, 0, result.stdout + result.stderr);
     assert.ok(result.stdout.includes('Per-file durations written to'), result.stdout);
