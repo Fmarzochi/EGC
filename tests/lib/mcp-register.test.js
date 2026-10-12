@@ -153,7 +153,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)',
     ]);
   })));
 
@@ -661,6 +661,42 @@ function runTests() {
       assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Pi').path, path.join(tmpHome, 'pi-data', 'mcp.json'));
     } finally {
       if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('Droid (Factory): the servers go under mcpServers in ~/.factory/mcp.json, gated on ~/.factory or droid on PATH (#1493)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const droidBin = path.join(tmpHome, 'droid-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(droidBin, { recursive: true });
+      fs.writeFileSync(path.join(droidBin, 'droid'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(droidBin, 'droid.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Droid (Factory)');
+      assert.ok(absent, 'Droid must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no ~/.factory and no droid on PATH keep the gate closed');
+      process.env.PATH = `${droidBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Droid (Factory)').gate(), true, 'a droid on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      const factoryDir = path.join(tmpHome, '.factory');
+      fs.mkdirSync(factoryDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Droid (Factory)');
+      assert.strictEqual(target.path, path.join(factoryDir, 'mcp.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the ~/.factory directory alone opens the gate');
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
       if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
       if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
       fs.rmSync(tmpHome, { recursive: true, force: true });
