@@ -68,6 +68,11 @@ function test(name, fn) {
   }
 }
 
+function restoreEnv(name, value) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -1507,6 +1512,9 @@ function runTests() {
   tally(test('a Devin Desktop project install merges the EGC servers into .devin/mcp_config.local.json beside the person\'s own, and an uninstall takes only the two entries out (#1678)', () => {
     const homeDir = createTempDir('install-lifecycle-home-');
     const projectRoot = createTempDir('install-lifecycle-project-');
+    const savedDisabled = { EGC: process.env.EGC_DISABLED_MCPS, ECC: process.env.ECC_DISABLED_MCPS };
+    delete process.env.EGC_DISABLED_MCPS;
+    delete process.env.ECC_DISABLED_MCPS;
 
     try {
       const mcpPath = path.join(projectRoot, '.devin', 'mcp_config.local.json');
@@ -1546,6 +1554,56 @@ function runTests() {
       const after = JSON.parse(fs.readFileSync(mcpPath, 'utf8'));
       assert.deepStrictEqual(Object.keys(after.mcpServers), ['github'], 'only the two EGC entries leave; the file stays for the person\'s server');
     } finally {
+      restoreEnv('EGC_DISABLED_MCPS', savedDisabled.EGC);
+      restoreEnv('ECC_DISABLED_MCPS', savedDisabled.ECC);
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('a Devin Desktop project install leaves out the MCP servers named in EGC_DISABLED_MCPS, and inspect and repair do not bring them back (#1678)', () => {
+    const homeDir = createTempDir('install-lifecycle-home-');
+    const projectRoot = createTempDir('install-lifecycle-project-');
+    const savedDisabled = { EGC: process.env.EGC_DISABLED_MCPS, ECC: process.env.ECC_DISABLED_MCPS };
+    delete process.env.ECC_DISABLED_MCPS;
+    process.env.EGC_DISABLED_MCPS = 'egc-memory';
+
+    try {
+      const mcpPath = path.join(projectRoot, '.devin', 'mcp_config.local.json');
+      const { planInstallTargetScaffold } = require('../../scripts/lib/install-targets/registry');
+      const { applyInstallPlan } = require('../../scripts/lib/install-executor');
+      const scaffold = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot: REPO_ROOT, homeDir, projectRoot, modules: [] });
+      const mcp = scaffold.operations.find(operation => operation.destinationPath === mcpPath);
+      assert.ok(mcp, 'the scaffold plans the MCP file when one server stays enabled');
+      assert.deepStrictEqual(Object.keys(mcp.mergePayload.mcpServers), ['egc-guardian'], 'the recorded payload already omits the disabled server');
+
+      const targetRoot = path.join(projectRoot, '.devin');
+      const installStatePath = scaffold.installStatePath;
+      const statePreview = createInstallState({
+        adapter: { id: 'windsurf-project', target: 'windsurf', kind: 'project' },
+        targetRoot,
+        installStatePath,
+        request: { profile: 'minimal', modules: [], legacyLanguages: [], legacyMode: false },
+        resolution: { selectedModules: [], skippedModules: [] },
+        operations: [mcp],
+        source: { repoVersion: CURRENT_PACKAGE_VERSION, repoCommit: 'abc123', manifestVersion: CURRENT_MANIFEST_VERSION },
+      });
+      applyInstallPlan({ operations: [mcp], installStatePath, targetRoot, statePreview });
+      assert.deepStrictEqual(Object.keys(JSON.parse(fs.readFileSync(mcpPath, 'utf8')).mcpServers), ['egc-guardian']);
+
+      fs.writeFileSync(mcpPath, JSON.stringify({ mcpServers: {} }, null, 2));
+      delete process.env.EGC_DISABLED_MCPS;
+      const repaired = repairInstalledStates({ homeDir, projectRoot, repoRoot: REPO_ROOT, targets: ['windsurf'] });
+      assert.ok(repaired, 'repair ran');
+      assert.deepStrictEqual(Object.keys(JSON.parse(fs.readFileSync(mcpPath, 'utf8')).mcpServers), ['egc-guardian'], 'repair replays the recorded payload, so the disabled server stays out');
+
+      process.env.EGC_DISABLED_MCPS = 'egc-guardian,egc-memory';
+      const noOperation = planInstallTargetScaffold({ target: 'windsurf-project', repoRoot: REPO_ROOT, homeDir, projectRoot, modules: [] })
+        .operations.find(operation => operation.destinationPath === mcpPath);
+      assert.strictEqual(noOperation, undefined, 'with every EGC server disabled nothing is planned for the file');
+    } finally {
+      restoreEnv('EGC_DISABLED_MCPS', savedDisabled.EGC);
+      restoreEnv('ECC_DISABLED_MCPS', savedDisabled.ECC);
       cleanup(homeDir);
       cleanup(projectRoot);
     }

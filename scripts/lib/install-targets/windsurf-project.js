@@ -8,7 +8,7 @@ const {
   createRemappedOperation,
   resolveBaseRoot,
 } = require('./helpers');
-const { assertSafeMcpConfig } = require('../mcp-config');
+const { assertSafeMcpConfig, filterMcpConfig, parseDisabledMcpServers } = require('../mcp-config');
 const {
   createWindsurfGateGuardOperations,
 } = require('../windsurf-gateguard-operations');
@@ -47,8 +47,8 @@ function resolveWorkspaceDir(projectRoot) {
 // servers of a project from .devin/mcp_config.local.json, the gitignored local
 // file (docs.devin.ai/cli/extensibility/mcp, read on 2026-10-11), so the
 // absolute paths of this machine's servers stay out of the committed config.
-// The user-level mcp_config.json the docs also describe belongs to Cascade,
-// the agent Devin Desktop removed on 2026-09-08, and is left alone.
+// The user-level ~/.config/devin/mcp_config.json lies outside this project
+// target and is left alone.
 function resolveDevinMcpConfigPath(projectRoot) {
   return path.join(projectRoot, DEVIN_WORKSPACE_DIR, DEVIN_MCP_CONFIG_FILE);
 }
@@ -62,10 +62,16 @@ function devinMcpServersPayload(repoRoot) {
   return { mcpServers: Object.fromEntries(servers) };
 }
 
-function createDevinMcpOperation(repoRoot, projectRoot) {
-  const mergePayload = devinMcpServersPayload(repoRoot);
-  assertSafeMcpConfig(mergePayload, 'the EGC MCP servers for Devin Local');
-  return createManagedOperation({
+// EGC_DISABLED_MCPS and ECC_DISABLED_MCPS are applied here, at planning time,
+// so the payload recorded in the install state already omits them: inspect
+// and repair replay that payload and must not bring a disabled server back.
+function createDevinMcpOperations(repoRoot, projectRoot) {
+  const payload = devinMcpServersPayload(repoRoot);
+  assertSafeMcpConfig(payload, 'the EGC MCP servers for Devin Local');
+  const disabled = parseDisabledMcpServers(process.env.EGC_DISABLED_MCPS || process.env.ECC_DISABLED_MCPS);
+  const mergePayload = filterMcpConfig(payload, disabled).config;
+  if (Object.keys(mergePayload.mcpServers).length === 0) return [];
+  return [createManagedOperation({
     kind: 'merge-json',
     moduleId: DEVIN_MCP_MODULE_ID,
     sourceRelativePath: '.mcp.json',
@@ -74,7 +80,7 @@ function createDevinMcpOperation(repoRoot, projectRoot) {
     ownership: 'managed',
     scaffoldOnly: false,
     mergePayload,
-  });
+  })];
 }
 
 module.exports = createInstallTargetAdapter({
@@ -125,7 +131,7 @@ module.exports = createInstallTargetAdapter({
         createRemappedOperation,
         resolveDevinProjectConfigPath(projectRoot)
       ),
-      createDevinMcpOperation(input.repoRoot, projectRoot),
+      ...createDevinMcpOperations(input.repoRoot, projectRoot),
     ];
   },
 });

@@ -1057,7 +1057,8 @@
       "surface": "mcp",
       "path": "<project>/.devin/mcp_config.local.json",
       "status": "documented",
-      "source": "https://docs.devin.ai/cli/extensibility/mcp"
+      "source": "https://docs.devin.ai/cli/extensibility/mcp/configuration",
+      "note": "Project-scope MCP file of Devin Local (Devin Desktop and the Devin CLI), gitignored; the docs, read on 2026-10-11, also list .devin/mcp_config.json and the user file ~/.config/devin/mcp_config.json, which EGC does not write."
     },
     {
       "adapter": "windsurf-project",
