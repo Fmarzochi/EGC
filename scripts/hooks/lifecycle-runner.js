@@ -10,12 +10,25 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
+const HOOK_ID = /^[a-z]+(?::[a-z-]+)+$/;
+const TARGET = /^scripts\/hooks\/[a-z-]+\.js$/;
+const PROFILES = /^(?:minimal|standard|strict)(?:,(?:minimal|standard|strict))*$/;
+const NUMBER = /^\d{1,7}$/;
+
 const [, , hookId, target, profiles, timeoutArg, fallbackArg] = process.argv;
 const raw = fs.readFileSync(0, 'utf8');
 const root = path.resolve(__dirname, '..', '..');
 const runner = path.join(root, 'scripts', 'hooks', 'run-with-flags.js');
 
-if (!fs.existsSync(runner)) {
+const valid =
+  HOOK_ID.test(hookId || '') &&
+  TARGET.test(target || '') &&
+  PROFILES.test(profiles || '') &&
+  NUMBER.test(timeoutArg || '') &&
+  NUMBER.test(fallbackArg || '');
+
+if (!valid || !fs.existsSync(runner)) {
+  if (!valid) process.stderr.write('[hook error] lifecycle-runner received arguments it does not accept\n');
   process.stdout.write(raw);
   process.exit(0);
 }

@@ -100,7 +100,7 @@ test('hands the hook id, target and profiles to run-with-flags and returns its o
 
 test('forwards the exit status of the child', () => {
   withRoot(ECHO_STUB, root => {
-    const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'hooks', 'lifecycle-runner.js'), 'id', 'target', 'standard', '30000', '0'], {
+    const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'hooks', 'lifecycle-runner.js'), 'stop:probe', 'scripts/hooks/probe.js', 'standard', '30000', '0'], {
       input: 'payload',
       encoding: 'utf8',
       env: { ...process.env, STUB_STATUS: '2' },
@@ -111,7 +111,7 @@ test('forwards the exit status of the child', () => {
 
 test('passes stdin through when the child writes nothing', () => {
   withRoot(SILENT_STUB, root => {
-    const result = runIn(root, ['id', 'target', 'standard', '30000', '0'], 'payload');
+    const result = runIn(root, ['stop:probe', 'scripts/hooks/probe.js', 'standard', '30000', '0'], 'payload');
     assert.strictEqual(result.stdout, 'payload');
     assert.strictEqual(result.status, 0);
   });
@@ -119,7 +119,7 @@ test('passes stdin through when the child writes nothing', () => {
 
 test('reports a child that outlives its timeout and exits with the fallback status', () => {
   withRoot(SLEEP_STUB, root => {
-    const result = runIn(root, ['id', 'target', 'standard', '300', '1'], 'payload');
+    const result = runIn(root, ['stop:probe', 'scripts/hooks/probe.js', 'standard', '300', '1'], 'payload');
     assert.strictEqual(result.stdout, 'payload');
     assert.match(result.stderr, /\[hook error\]/);
     assert.strictEqual(result.status, 1);
@@ -128,9 +128,26 @@ test('reports a child that outlives its timeout and exits with the fallback stat
 
 test('passes stdin through and exits 0 when the root has no run-with-flags.js', () => {
   withRoot(null, root => {
-    const result = runIn(root, ['id', 'target', 'standard', '30000', '1'], 'payload');
+    const result = runIn(root, ['stop:probe', 'scripts/hooks/probe.js', 'standard', '30000', '1'], 'payload');
     assert.strictEqual(result.stdout, 'payload');
     assert.strictEqual(result.status, 0);
+  });
+});
+
+test('refuses arguments outside the hook grammar, passes stdin through and never starts the child', () => {
+  withRoot(ECHO_STUB, root => {
+    const bad = [
+      ['stop:cost-tracker', '../../etc/passwd', 'standard', '30000', '0'],
+      ['stop:cost-tracker', 'scripts/hooks/cost-tracker.js', 'standard; id', '30000', '0'],
+      ['--inspect', 'scripts/hooks/cost-tracker.js', 'standard', '30000', '0'],
+      ['stop:cost-tracker', 'scripts/hooks/cost-tracker.js', 'standard', 'abc', '0'],
+    ];
+    for (const args of bad) {
+      const result = runIn(root, args, 'payload');
+      assert.strictEqual(result.stdout, 'payload', args.join(' '));
+      assert.match(result.stderr, /does not accept/, args.join(' '));
+      assert.strictEqual(result.status, 0, args.join(' '));
+    }
   });
 });
 
