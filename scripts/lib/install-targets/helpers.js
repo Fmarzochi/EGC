@@ -25,12 +25,13 @@ function normalizeRelativePath(relativePath) {
 }
 
 // Paths that carry a platform identity rather than library content. Every
-// target that takes agents-core receives agents/; only the ones listed here
-// also take the Codex and Antigravity .agents tree and the root AGENTS.md,
-// so a home root such as ~/.amp or ~/.claude never grows either.
+// target that takes agents-core receives agents/; the Codex and Antigravity
+// .agents tree and the root AGENTS.md each go only to the targets listed
+// under their own key, so a home root such as ~/.amp or ~/.claude never
+// grows either.
 const IDENTITY_SOURCE_PATH_OWNERS = Object.freeze({
   '.agents': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
-  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe', 'grok', 'kilo']),
+  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe', 'grok', 'kilo', 'mimo']),
 });
 
 function isForeignPlatformPath(sourceRelativePath, adapterTarget) {
@@ -212,6 +213,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   vibe:         { name: 'Mistral Vibe',      url: 'https://github.com/mistralai/mistral-vibe' },
   grok:         { name: 'Grok Build',        url: 'https://docs.x.ai/build/overview' },
   kilo:         { name: 'Kilo Code CLI',     url: 'https://kilo.ai/docs/code-with-ai/platforms/cli' },
+  mimo:         { name: 'MiMo Code',         url: 'https://github.com/XiaomiMiMo/MiMo-Code' },
 });
 
 // An adapter that picks its root by policy (config.resolveRoot) is detected

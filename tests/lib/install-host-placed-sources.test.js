@@ -25,7 +25,7 @@ const HOSTS = {
   'scripts/hooks/amp-guardian-crusher-plugin.ts': { target: 'amp', destination: /\/plugins\/egc-guardian-crusher\.ts$/ },
   'scripts/hooks/amp-mesh-notice-plugin.ts': { target: 'amp', destination: /\/plugins\/egc-mesh-notice\.ts$/ },
   'scripts/hooks/cline-pretooluse-shim.js': { target: 'cline', destination: /\/hooks\/PreToolUse$/ },
-  'scripts/hooks/opencode-egc-plugin.js': { target: ['opencode', 'kilo'], destination: /\/plugins\/opencode-egc-plugin\.js$/ },
+  'scripts/hooks/opencode-egc-plugin.js': { target: ['opencode', 'kilo', 'mimo'], destination: /\/plugins\/opencode-egc-plugin\.js$/ },
 };
 
 let passed = 0;
