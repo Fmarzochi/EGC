@@ -18,7 +18,7 @@ function hideEgcRootOnWindows(): void {
 }
 import { z } from 'zod';
 import { validateCommand, validateWrite, isProtectedPath, secretPathChecker, resolveWriteTarget } from './validator.js';
-import { redactPayload, writeAuditEntry } from './audit-log.js';
+import { redactPayload, redactText, writeAuditEntry } from './audit-log.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
 import { runCompressionPipeline, splitAlreadyCrushed } from './compression-pipeline.js';
 import { createRateLimiter } from './rate-limit.js';
@@ -462,7 +462,7 @@ async function handleRankFiles(toolArgs: unknown) {
   const result = await rankProjectFiles({
     projectPath: resolved.root,
     query: parsed.query,
-    history: parsed.history ? String(redactPayload({ text: parsed.history }).text) : '',
+    history: parsed.history ? redactText(parsed.history) : '',
     topN: parsed.top_n,
     useGit: parsed.use_git ?? true,
     graphHops: parsed.graph_hops
@@ -508,7 +508,7 @@ async function handleOrchestrateTask(toolArgs: unknown) {
     isIndexExcluded: secretPathChecker(),
     transformSnippet: text => {
       if (scanForInjection(text).length > 0) return null;
-      return String(redactPayload({ text }).text);
+      return redactText(text);
     },
     audit: (action, details) => auditLog(action, 'ALLOWED', details)
   });

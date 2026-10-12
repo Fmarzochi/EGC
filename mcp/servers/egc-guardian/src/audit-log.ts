@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { redactPayload } from './audit-redact.js';
 
-export { redactPayload, redactSecretsInText } from './audit-redact.js';
+export { redactPayload, redactSecretsInText, redactText } from './audit-redact.js';
 
 export const AUDIT_LOG_DIR = path.join(os.homedir(), '.egc');
 export const AUDIT_LOG_PATH = path.join(AUDIT_LOG_DIR, 'audit.log');

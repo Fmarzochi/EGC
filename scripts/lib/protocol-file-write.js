@@ -42,7 +42,7 @@ function resolveWriteTarget(filepath) {
   let current = path.resolve(filepath);
   for (let hop = 0; hop <= MAX_LINK_HOPS; hop++) {
     const stat = lstatOrNull(current);
-    if (!stat || !stat.isSymbolicLink()) return current;
+    if (!stat?.isSymbolicLink()) return current;
     const next = followLink(current);
     if (next.resolved) return next.path;
     current = next.path;
