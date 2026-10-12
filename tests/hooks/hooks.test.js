@@ -1944,7 +1944,7 @@ async function runTests() {
           (typeof hook.command === 'string' && hook.command.startsWith('node -e "')),
           'Lifecycle hook should use inline node resolver'
         );
-        assert.ok(commandText.includes('run-with-flags.js'), 'Lifecycle hook should resolve the runner script');
+        assert.ok(commandText.includes('run-with-flags.js') || commandText.includes('lifecycle-runner.js'), 'Lifecycle hook should resolve the runner script');
         assert.ok(commandText.includes('GEMINI_PLUGIN_ROOT'), 'Lifecycle hook should consult GEMINI_PLUGIN_ROOT');
         assert.ok(!commandText.includes('${GEMINI_PLUGIN_ROOT}'), 'Lifecycle hook should not depend on raw shell placeholder expansion');
         assert.ok(commandText.includes('plugins'), 'Lifecycle hook should probe known plugin roots');
@@ -1962,7 +1962,7 @@ async function runTests() {
             const commandText = Array.isArray(hook.command) ? hook.command.join(' ') : hook.command;
             const commandStart = Array.isArray(hook.command) ? `${hook.command[0]} ${hook.command[1] || ''}`.trim() : hook.command;
             if (hook.type === 'command' && commandText.includes('scripts/hooks/')) {
-              const usesInlineResolver = commandStart.startsWith('node -e') && commandText.includes('run-with-flags.js');
+              const usesInlineResolver = commandStart.startsWith('node -e') && (commandText.includes('run-with-flags.js') || commandText.includes('lifecycle-runner.js'));
               const usesPluginBootstrap = commandStart.startsWith('node -e') && commandText.includes('plugin-hook-bootstrap.js');
               assert.ok(!commandText.includes('${GEMINI_PLUGIN_ROOT}'), `Script paths should not depend on raw shell placeholder expansion: ${commandText.substring(0, 80)}...`);
               assert.ok(
