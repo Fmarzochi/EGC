@@ -325,18 +325,13 @@ function tomlHasActiveServer(content, serverName) {
   if (TOML) {
     try {
       const parsed = TOML.parse(content);
-      if (Array.isArray(parsed.mcp_servers)) {
-        return parsed.mcp_servers.some(server => server && server.name === serverName);
-      }
-      if (parsed.mcp_servers && typeof parsed.mcp_servers === 'object') {
-        return Boolean(parsed.mcp_servers[serverName]);
-      }
-      return false;
+      const servers = Array.isArray(parsed.mcp_servers) ? parsed.mcp_servers : [];
+      return servers.some(server => server && server.name === serverName);
     } catch {
       // Fall through to the substring check below.
     }
   }
-  return content.includes(`"${serverName}"`) || content.includes(`'${serverName}'`) || content.includes(`[mcp_servers.${serverName}]`);
+  return content.includes(`"${serverName}"`) || content.includes(`'${serverName}'`);
 }
 
 function tomlHasTableServer(content, serverName) {
@@ -354,8 +349,9 @@ function tomlHasTableServer(content, serverName) {
   return content.includes(`[mcp_servers.${serverName}]`);
 }
 
-const LEGACY_ARRAY_HEADER = /^\s*\[\[\s*mcp_servers\s*\]\]/;
-const LEGACY_CHILD_HEADER = /^\s*\[{1,2}\s*mcp_servers\s*\./;
+const MCP_SERVERS_KEY = '(?:mcp_servers|"mcp_servers"|\'mcp_servers\')';
+const LEGACY_ARRAY_HEADER = new RegExp(`^\\s*\\[\\[\\s*${MCP_SERVERS_KEY}\\s*\\]\\]`);
+const LEGACY_CHILD_HEADER = new RegExp(`^\\s*\\[{1,2}\\s*${MCP_SERVERS_KEY}\\s*\\.`);
 const ANY_TABLE_HEADER = /^\s*\[[^\]]+\]/;
 const LEGACY_NAME_LINE = /^\s*name\s*=\s*["']([^"']+)["']/;
 
@@ -366,6 +362,29 @@ function classifyLegacyHeader(line) {
   if (LEGACY_CHILD_HEADER.test(line)) return 'child';
   if (ANY_TABLE_HEADER.test(line)) return 'other';
   return null;
+}
+
+// Tracks whether a line ends inside a multi-line string, so a header or a
+// name = "..." written inside the string is never read as TOML structure.
+function advanceMultilineState(state, line) {
+  let current = state;
+  let rest = line;
+  while (rest.length > 0) {
+    if (current) {
+      const close = rest.indexOf(current);
+      if (close === -1) return current;
+      rest = rest.slice(close + 3);
+      current = null;
+      continue;
+    }
+    const basic = rest.indexOf('"""');
+    const literal = rest.indexOf("'''");
+    if (basic === -1 && literal === -1) return null;
+    const open = basic === -1 || (literal !== -1 && literal < basic) ? literal : basic;
+    current = rest.slice(open, open + 3);
+    rest = rest.slice(open + 3);
+  }
+  return current;
 }
 
 function legacyNameOf(line) {
@@ -380,7 +399,11 @@ function scanLegacyBlocks(lines) {
   const blocks = [];
   let current = null;
   let inChild = false;
+  let multiline = null;
   lines.forEach((line, index) => {
+    const insideString = multiline !== null;
+    multiline = advanceMultilineState(multiline, line);
+    if (insideString) return;
     const kind = classifyLegacyHeader(line);
     if (kind === 'array') {
       if (current) {
