@@ -356,11 +356,11 @@ function tomlHasTableServer(content, serverName) {
 
 const LEGACY_ARRAY_HEADER = /^\s*\[\[\s*mcp_servers\s*\]\]/;
 const LEGACY_CHILD_HEADER = /^\s*\[{1,2}\s*mcp_servers\s*\./;
-const ANY_TABLE_HEADER = /^\s*\[\[?[^\]]+\]\]?/;
+const ANY_TABLE_HEADER = /^\s*\[[^\]]+\]/;
+const LEGACY_NAME_LINE = /^\s*name\s*=\s*["']([^"']+)["']/;
 
-// A header classified for the legacy [[mcp_servers]] scanners. A dotted header
-// such as [mcp_servers.env] that follows an array entry is TOML for a child of
-// that entry, so it belongs to the entry's block and is not a new table.
+// A dotted header such as [mcp_servers.env] that follows an [[mcp_servers]]
+// entry is TOML for a child of that entry, so it stays in the entry's block.
 function classifyLegacyHeader(line) {
   if (LEGACY_ARRAY_HEADER.test(line)) return 'array';
   if (LEGACY_CHILD_HEADER.test(line)) return 'child';
@@ -369,83 +369,60 @@ function classifyLegacyHeader(line) {
 }
 
 function legacyNameOf(line) {
-  const withoutComment = line.replace(/#.*$/, '');
-  const nameMatch = withoutComment.match(/^\s*name\s*=\s*["']([^"']+)["']/);
-  return nameMatch ? nameMatch[1] : null;
+  const hash = line.indexOf('#');
+  const match = (hash === -1 ? line : line.slice(0, hash)).match(LEGACY_NAME_LINE);
+  return match ? match[1] : null;
+}
+
+// Every [[mcp_servers]] entry as { start, end, names }: the line range it
+// owns (children included) and the name = "..." values of its own keys.
+function scanLegacyBlocks(lines) {
+  const blocks = [];
+  let current = null;
+  let inChild = false;
+  lines.forEach((line, index) => {
+    const kind = classifyLegacyHeader(line);
+    if (kind === 'array') {
+      if (current) {
+        current.end = index;
+        blocks.push(current);
+      }
+      current = { start: index, end: lines.length, names: [] };
+      inChild = false;
+      return;
+    }
+    if (!current) return;
+    if (kind === 'other') {
+      current.end = index;
+      blocks.push(current);
+      current = null;
+      return;
+    }
+    if (kind === 'child') inChild = true;
+    const name = inChild ? null : legacyNameOf(line);
+    if (name) current.names.push(name);
+  });
+  if (current) blocks.push(current);
+  return blocks;
 }
 
 function removeLegacyTomlServer(content, serverName) {
   const lines = content.split('\n');
-  const result = [];
-  let inBlock = false;
-  let inChild = false;
-  let blockLines = [];
-  let blockHasServer = false;
-
-  const closeBlock = () => {
-    if (!blockHasServer) {
-      result.push(...blockLines);
-    }
-    inBlock = false;
-  };
-
-  for (const line of lines) {
-    const kind = classifyLegacyHeader(line);
-
-    if (kind === 'array') {
-      if (inBlock) closeBlock();
-      inBlock = true;
-      inChild = false;
-      blockLines = [line];
-      blockHasServer = false;
-    } else if (!inBlock) {
-      result.push(line);
-    } else if (kind === 'other') {
-      closeBlock();
-      result.push(line);
-    } else {
-      if (kind === 'child') inChild = true;
-      blockLines.push(line);
-      if (!inChild && legacyNameOf(line) === serverName) {
-        blockHasServer = true;
-      }
-    }
+  const doomed = new Set();
+  for (const block of scanLegacyBlocks(lines)) {
+    if (!block.names.includes(serverName)) continue;
+    for (let i = block.start; i < block.end; i++) doomed.add(i);
   }
-  if (inBlock) closeBlock();
-  return result.join('\n');
+  return lines.filter((_, index) => !doomed.has(index)).join('\n');
 }
 
 function findRemainingLegacyMcpServers(content) {
-  const names = [];
-  const lines = content.split('\n');
-  let inBlock = false;
-  let inChild = false;
-  let currentName = null;
+  return scanLegacyBlocks(content.split('\n')).map(block => block.names[block.names.length - 1] || 'unnamed');
+}
 
-  for (const line of lines) {
-    const kind = classifyLegacyHeader(line);
-
-    if (kind === 'array') {
-      if (inBlock && currentName) names.push(currentName);
-      inBlock = true;
-      inChild = false;
-      currentName = 'unnamed';
-    } else if (!inBlock) {
-      continue;
-    } else if (kind === 'other') {
-      if (currentName) names.push(currentName);
-      inBlock = false;
-      currentName = null;
-    } else {
-      if (kind === 'child') inChild = true;
-      const name = inChild ? null : legacyNameOf(line);
-      if (name) currentName = name;
-    }
-  }
-  if (inBlock && currentName) {
-    names.push(currentName);
-  }
-  return names;
+function appendTableServer(content, id, bin) {
+  const separator = content.endsWith('\n') || content.length === 0 ? '' : '\n';
+  return `${content}${separator}\n[mcp_servers.${id}]\ncommand = "node"\nargs = ["${tomlEscape(bin)}"]\n`;
 }
 
 /**
@@ -818,18 +795,13 @@ function registerTablePerServerToml(targetPath, bins) {
     );
   }
 
-  let appended = false;
-  if (!hasGuardian) {
-    content += (content.endsWith('\n') || content.length === 0 ? '' : '\n') +
-      `\n[mcp_servers.egc-guardian]\ncommand = "node"\nargs = ["${tomlEscape(guardianBin)}"]\n`;
-    appended = true;
+  const missing = [];
+  if (!hasGuardian) missing.push(['egc-guardian', guardianBin]);
+  if (!hasMemory) missing.push(['egc-memory', memoryBin]);
+  if (missing.length === 0) return false;
+  for (const [id, bin] of missing) {
+    content = appendTableServer(content, id, bin);
   }
-  if (!hasMemory) {
-    content += (content.endsWith('\n') || content.length === 0 ? '' : '\n') +
-      `\n[mcp_servers.egc-memory]\ncommand = "node"\nargs = ["${tomlEscape(memoryBin)}"]\n`;
-    appended = true;
-  }
-  if (!appended) return false;
   if (parsesAsToml(original) && !keepsEverythingElse(original, content)) {
     throw new TypeError(
       `existing file at ${targetPath} could not be updated without breaking it - left untouched: ` +
