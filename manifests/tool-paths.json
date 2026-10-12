@@ -828,9 +828,9 @@
       "adapter": "cline-project",
       "surface": "hooks",
       "path": "<project>/.clinerules/hooks/",
-      "status": "unverified",
-      "source": "https://docs.cline.bot/customization/hooks",
-      "note": "Cline's current docs move hooks to SDK plugins and no longer name .clinerules/hooks (read on 2026-10-10)."
+      "status": "documented",
+      "source": "https://github.com/cline/cline/blob/c3a40572765b76873c597247941118c1778d02c8/apps/vscode/src/core/storage/disk.ts",
+      "note": "The hooks page now points at SDK plugins, but the plugins page says plugins apply only to the Cline SDK, CLI and Kanban, not to the VS Code and JetBrains extensions (https://docs.cline.bot/customization/plugins, read on 2026-10-11). The extension source at that commit (main on 2026-10-11) still discovers hooks in each workspace root's .clinerules/hooks (disk.ts, hooksDir) and runs a file named after the hook: PreToolUse, executable, on Unix and PreToolUse.ps1 on Windows (apps/vscode/src/core/hooks/hook-factory.ts, findHookInHooksDir)."
     },
     {
       "adapter": "cline-project",
@@ -1051,6 +1051,14 @@
       "path": "<project>/.devin/config.local.json",
       "status": "documented",
       "source": "https://docs.devin.ai/cli/extensibility/hooks"
+    },
+    {
+      "adapter": "windsurf-project",
+      "surface": "mcp",
+      "path": "<project>/.devin/mcp_config.local.json",
+      "status": "documented",
+      "source": "https://docs.devin.ai/cli/extensibility/mcp/configuration",
+      "note": "Project-scope MCP file of Devin Local (Devin Desktop and the Devin CLI), gitignored; the docs, read on 2026-10-11, also list .devin/mcp_config.json and the user file ~/.config/devin/mcp_config.json, which EGC does not write."
     },
     {
       "adapter": "windsurf-project",
