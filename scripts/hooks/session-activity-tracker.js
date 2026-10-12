@@ -16,8 +16,7 @@ const {
   getEGCDir,
   stripAnsi,
 } = require('../lib/utils');
-
-const MAX_STDIN = 1024 * 1024;
+const { readHookStdin } = require('../lib/hook-stdin');
 const METRICS_FILE_NAME = 'tool-usage.jsonl';
 const FILE_PATH_KEYS = new Set([
   'file_path',
@@ -601,15 +600,7 @@ function run(rawInput) {
 }
 
 function main() {
-  let raw = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - raw.length;
-      raw += chunk.substring(0, remaining);
-    }
-  });
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw }) => {
     process.stdout.write(run(raw));
   });
 }

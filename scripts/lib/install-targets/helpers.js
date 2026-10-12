@@ -30,7 +30,7 @@ function normalizeRelativePath(relativePath) {
 // so a home root such as ~/.amp or ~/.claude never grows either.
 const IDENTITY_SOURCE_PATH_OWNERS = Object.freeze({
   '.agents': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
-  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe']),
+  'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe', 'grok', 'kilo']),
 });
 
 function isForeignPlatformPath(sourceRelativePath, adapterTarget) {
@@ -174,6 +174,20 @@ function createManagedOperation({
   };
 }
 
+// Hook modules share small lib files (hook-stdin.js) that each module lists
+// for itself; a target that installs several of them plans the same copy
+// twice, so keep the first copy of an identical source and destination.
+function dropRepeatedCopyOperations(operations) {
+  const seen = new Set();
+  return operations.filter(operation => {
+    if (operation.kind !== 'copy-path' || operation.hookEvent) return true;
+    const key = `${operation.sourceRelativePath}\0${operation.destinationPath}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 const IDE_INSTALL_URLS = Object.freeze({
   claude:       { name: 'Claude Code',        url: 'https://claude.ai/download' },
   cursor:       { name: 'Cursor',             url: 'https://cursor.sh' },
@@ -196,6 +210,8 @@ const IDE_INSTALL_URLS = Object.freeze({
   kimi:         { name: 'Kimi Code CLI',     url: 'https://github.com/MoonshotAI/kimi-code' },
   crush:        { name: 'Crush',             url: 'https://github.com/charmbracelet/crush' },
   vibe:         { name: 'Mistral Vibe',      url: 'https://github.com/mistralai/mistral-vibe' },
+  grok:         { name: 'Grok Build',        url: 'https://docs.x.ai/build/overview' },
+  kilo:         { name: 'Kilo Code CLI',     url: 'https://kilo.ai/docs/code-with-ai/platforms/cli' },
 });
 
 // An adapter that picks its root by policy (config.resolveRoot) is detected
@@ -911,14 +927,14 @@ function createInstallTargetAdapter(config) {
     },
     planOperations(input = {}) {
       if (typeof config.planOperations === 'function') {
-        return config.planOperations(input, adapter);
+        return dropRepeatedCopyOperations(config.planOperations(input, adapter));
       }
 
       // Same body createDefaultScaffoldOperations exposes for adapters that
       // define a custom planOperations of their own -- this default branch
       // used to keep an unreduced copy of the exact same logic (EGC-539
       // audit) instead of calling that already-extracted helper.
-      return createDefaultScaffoldOperations(input, adapter);
+      return dropRepeatedCopyOperations(createDefaultScaffoldOperations(input, adapter));
     },
     // Files a previous install wrote that this plan no longer covers and
     // that the target wants removed on the next apply. An adapter

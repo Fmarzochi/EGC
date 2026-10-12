@@ -29,6 +29,8 @@ const { isInsideReal, realizePath } = require('./path-safety');
 const { replaceFileWith } = require('./install/preserving-write');
 const { resolveCrushConfigDir, resolveCrushConfigPath } = require('./install-targets/crush-home');
 const { resolveVibeHome } = require('./install-targets/vibe-home');
+const { resolveGrokHome } = require('./install-targets/grok-home');
+const { resolveKiloConfigDir } = require('./install-targets/kilo-home');
 
 let TOML = null;
 try {
@@ -334,6 +336,120 @@ function tomlHasActiveServer(content, serverName) {
   return content.includes(`"${serverName}"`) || content.includes(`'${serverName}'`);
 }
 
+function tomlHasTableServer(content, serverName) {
+  if (TOML) {
+    try {
+      const parsed = TOML.parse(content);
+      if (parsed.mcp_servers && typeof parsed.mcp_servers === 'object' && !Array.isArray(parsed.mcp_servers)) {
+        return Boolean(parsed.mcp_servers[serverName]);
+      }
+      return false;
+    } catch {
+      // Fall through to substring check below.
+    }
+  }
+  return content.includes(`[mcp_servers.${serverName}]`);
+}
+
+const MCP_SERVERS_KEY = '(?:mcp_servers|"mcp_servers"|\'mcp_servers\')';
+const LEGACY_ARRAY_HEADER = new RegExp(String.raw`^\s*\[\[\s*${MCP_SERVERS_KEY}\s*\]\]`);
+const LEGACY_CHILD_HEADER = new RegExp(String.raw`^\s*\[{1,2}\s*${MCP_SERVERS_KEY}\s*\.`);
+const ANY_TABLE_HEADER = /^\s*\[[^\]]+\]/;
+const LEGACY_NAME_LINE = /^\s*name\s*=\s*["']([^"']+)["']/;
+
+// A dotted header such as [mcp_servers.env] that follows an [[mcp_servers]]
+// entry is TOML for a child of that entry, so it stays in the entry's block.
+function classifyLegacyHeader(line) {
+  if (LEGACY_ARRAY_HEADER.test(line)) return 'array';
+  if (LEGACY_CHILD_HEADER.test(line)) return 'child';
+  if (ANY_TABLE_HEADER.test(line)) return 'other';
+  return null;
+}
+
+// Tracks whether a line ends inside a multi-line string, so a header or a
+// name = "..." written inside the string is never read as TOML structure.
+function advanceMultilineState(state, line) {
+  let current = state;
+  let rest = line;
+  while (rest.length > 0) {
+    if (current) {
+      const close = rest.indexOf(current);
+      if (close === -1) return current;
+      rest = rest.slice(close + 3);
+      current = null;
+      continue;
+    }
+    const basic = rest.indexOf('"""');
+    const literal = rest.indexOf("'''");
+    if (basic === -1 && literal === -1) return null;
+    const open = basic === -1 || (literal !== -1 && literal < basic) ? literal : basic;
+    current = rest.slice(open, open + 3);
+    rest = rest.slice(open + 3);
+  }
+  return current;
+}
+
+function legacyNameOf(line) {
+  const hash = line.indexOf('#');
+  const match = (hash === -1 ? line : line.slice(0, hash)).match(LEGACY_NAME_LINE);
+  return match ? match[1] : null;
+}
+
+// Every [[mcp_servers]] entry as { start, end, names }: the line range it
+// owns (children included) and the name = "..." values of its own keys.
+function scanLegacyBlocks(lines) {
+  const blocks = [];
+  let current = null;
+  let inChild = false;
+  let multiline = null;
+  lines.forEach((line, index) => {
+    const insideString = multiline !== null;
+    multiline = advanceMultilineState(multiline, line);
+    if (insideString) return;
+    const kind = classifyLegacyHeader(line);
+    if (kind === 'array') {
+      if (current) {
+        current.end = index;
+        blocks.push(current);
+      }
+      current = { start: index, end: lines.length, names: [] };
+      inChild = false;
+      return;
+    }
+    if (!current) return;
+    if (kind === 'other') {
+      current.end = index;
+      blocks.push(current);
+      current = null;
+      return;
+    }
+    if (kind === 'child') inChild = true;
+    const name = inChild ? null : legacyNameOf(line);
+    if (name) current.names.push(name);
+  });
+  if (current) blocks.push(current);
+  return blocks;
+}
+
+function removeLegacyTomlServer(content, serverName) {
+  const lines = content.split('\n');
+  const doomed = new Set();
+  for (const block of scanLegacyBlocks(lines)) {
+    if (!block.names.includes(serverName)) continue;
+    for (let i = block.start; i < block.end; i++) doomed.add(i);
+  }
+  return lines.filter((_, index) => !doomed.has(index)).join('\n');
+}
+
+function findRemainingLegacyMcpServers(content) {
+  return scanLegacyBlocks(content.split('\n')).map(block => block.names[block.names.length - 1] || 'unnamed');
+}
+
+function appendTableServer(content, id, bin) {
+  const separator = content.endsWith('\n') || content.length === 0 ? '' : '\n';
+  return `${content}${separator}\n[mcp_servers.${id}]\ncommand = "node"\nargs = ["${tomlEscape(bin)}"]\n`;
+}
+
 /**
  * Tool configs that get egc-guardian / egc-memory registered into them,
  * relative to a given home directory. Each target is only written to if
@@ -348,6 +464,10 @@ function tomlHasActiveServer(content, serverName) {
 // config.json is the legacy name it still honours (#1405).
 function openCodeConfigDir(homeDir) {
   return path.join(process.env.XDG_CONFIG_HOME || path.join(homeDir, '.config'), 'opencode');
+}
+
+function kiloConfigDir(homeDir) {
+  return resolveKiloConfigDir(homeDir);
 }
 
 // The file the servers go into: the documented name when it exists, the
@@ -449,6 +569,7 @@ function buildMcpRegistrationTargets(homeDir) {
       path: path.join(homeDir, '.codex', 'config.toml'),
       gate: () => fs.existsSync(path.join(homeDir, '.codex', 'config.toml')) || commandExists('codex'),
       format: 'toml',
+      tomlTables: 'per-server',
     },
     {
       name: 'OpenCode',
@@ -510,6 +631,27 @@ function buildMcpRegistrationTargets(homeDir) {
       allowedRoot: resolveVibeHome(homeDir),
       format: 'toml',
       tomlServerKeys: { transport: 'stdio' },
+    },
+    {
+      name: 'Qwen Code',
+      path: path.join(homeDir, '.qwen', 'settings.json'),
+      gate: () => fs.existsSync(path.join(homeDir, '.qwen')) || commandExists('qwen'),
+      format: 'json',
+    },
+    {
+      name: 'Grok Build',
+      path: path.join(resolveGrokHome(homeDir), 'config.toml'),
+      gate: () => fs.existsSync(resolveGrokHome(homeDir)) || commandExists('grok'),
+      allowedRoot: resolveGrokHome(homeDir),
+      format: 'toml',
+      tomlTables: 'per-server',
+    },
+    {
+      name: 'Kilo Code CLI',
+      path: path.join(kiloConfigDir(homeDir), 'kilo.json'),
+      gate: () => fs.existsSync(kiloConfigDir(homeDir)) || commandExists('kilo'),
+      allowedRoot: kiloConfigDir(homeDir),
+      format: 'opencode-mcp',
     },
   ];
 }
@@ -663,7 +805,67 @@ function tomlServerLines(keys) {
  * lose any other content is refused and the file is left as it was. An
  * install may leave a tool unregistered, but it must never damage a config.
  */
+function registerTablePerServerToml(targetPath, bins) {
+  const { guardianBin, memoryBin } = bins;
+  const original = readFileIfExists(targetPath) ?? '';
+  let content = original;
+
+  const inlineArray = findInlineMcpServersArray(content);
+  if (inlineArray && !inlineArray.isEmpty) {
+    if (TOML
+      && tomlHasTableServer(content, 'egc-guardian')
+      && tomlHasTableServer(content, 'egc-memory')) {
+      return false;
+    }
+    throw new TypeError(
+      `existing file at ${targetPath} declares mcp_servers as an inline array - left untouched: ` +
+      'rewrite it as [mcp_servers.<id>] tables, or add egc-guardian and egc-memory to it by hand, then re-run'
+    );
+  }
+  if (inlineArray) {
+    const lines = content.split('\n');
+    lines.splice(inlineArray.start, inlineArray.end - inlineArray.start + 1);
+    content = lines.join('\n');
+  }
+
+  const hasGuardian = tomlHasTableServer(content, 'egc-guardian');
+  const hasMemory = tomlHasTableServer(content, 'egc-memory');
+  if (hasGuardian && hasMemory) {
+    return false;
+  }
+  content = removeLegacyTomlServer(content, 'egc-guardian');
+  content = removeLegacyTomlServer(content, 'egc-memory');
+
+  const remainingLegacy = findRemainingLegacyMcpServers(content);
+  if (remainingLegacy.length > 0) {
+    const foreign = remainingLegacy[0];
+    throw new TypeError(
+      `existing file at ${targetPath} contains legacy [[mcp_servers]] entry "${foreign}" - left untouched: ` +
+      `rewrite it as a [mcp_servers.${foreign}] table or add egc-guardian and egc-memory by hand, then re-run`
+    );
+  }
+
+  const missing = [];
+  if (!hasGuardian) missing.push(['egc-guardian', guardianBin]);
+  if (!hasMemory) missing.push(['egc-memory', memoryBin]);
+  if (missing.length === 0) return false;
+  for (const [id, bin] of missing) {
+    content = appendTableServer(content, id, bin);
+  }
+  if (parsesAsToml(original) && !keepsEverythingElse(original, content)) {
+    throw new TypeError(
+      `existing file at ${targetPath} could not be updated without breaking it - left untouched: ` +
+      'add egc-guardian and egc-memory as [mcp_servers.<id>] tables by hand, then re-run'
+    );
+  }
+  writeConfig(targetPath, content);
+  return true;
+}
+
 function registerToml(targetPath, bins, target = {}) {
+  if (target.tomlTables === 'per-server') {
+    return registerTablePerServerToml(targetPath, bins);
+  }
   const { guardianBin, memoryBin } = bins;
   const extraLines = tomlServerLines(target.tomlServerKeys);
   const original = readFileIfExists(targetPath) ?? '';
@@ -1040,6 +1242,7 @@ module.exports = {
   registerToml,
   registerZedContextServers,
   registerOpenCodeMcp,
+  kiloConfigDir,
   openCodeConfigDir,
   openCodeConfigPath,
   registerOpenCodeInstructions,

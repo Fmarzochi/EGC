@@ -38,7 +38,7 @@ const {
 const {
   MERGE_MARKDOWN_INDEX_KIND,
   nextSkillIndexContent,
-  removeSkillIndexEntry,
+  removeIndexOperationContent,
 } = require('./warp-agents-merge');
 const {
   GENERATE_CONTEXT_FILE_KIND,
@@ -622,16 +622,16 @@ function uninstallAiderConfigReadList(operation) {
 }
 
 function uninstallWarpAgentsIndexEntry(operation) {
-  // Strips only the EGC-added index entry from the marked block. AGENTS.md
-  // itself is never deleted, even if the block becomes empty -- it is an
-  // increasingly common cross-tool convention file the user's other tools
-  // may also rely on.
-  if (!operation.skillName || !fs.existsSync(operation.destinationPath)) {
+  // Strips only what EGC added: the index entry from the marked block, or
+  // the marked memory rule block. AGENTS.md itself is never deleted, even
+  // if the block becomes empty -- it is an increasingly common cross-tool
+  // convention file the user's other tools may also rely on.
+  if ((!operation.skillName && !operation.memoryRule) || !fs.existsSync(operation.destinationPath)) {
     return { removedPaths: [], cleanupTargets: [] };
   }
 
   const existingContent = fs.readFileSync(operation.destinationPath, 'utf8');
-  const nextContent = removeSkillIndexEntry(existingContent, operation.skillName);
+  const nextContent = removeIndexOperationContent(existingContent, operation);
   ensureParentDir(operation.destinationPath);
   replaceFileWith(operation.destinationPath, descriptor => fs.writeFileSync(descriptor, nextContent));
   return { removedPaths: [], cleanupTargets: [] };

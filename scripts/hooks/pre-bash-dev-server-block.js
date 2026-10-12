@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-const MAX_STDIN = 1024 * 1024;
 const path = require('node:path');
 const { splitShellSegments } = require('../lib/shell-split');
+const { exitOnTruncatedInput, readHookStdin } = require('../lib/hook-stdin');
 
 const DEV_COMMAND_WORDS = new Set([
   'npm',
@@ -145,16 +145,8 @@ function getLeadingCommandWord(segment) { // NOSONAR: wrapper-aware scanner stat
   return null;
 }
 
-let raw = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => {
-  if (raw.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - raw.length;
-    raw += chunk.substring(0, remaining);
-  }
-});
-
-process.stdin.on('end', () => {
+readHookStdin(({ raw, truncated }) => {
+  exitOnTruncatedInput(truncated, 2);
   try {
     const input = JSON.parse(raw);
     const cmd = String(input.tool_input?.command || '');

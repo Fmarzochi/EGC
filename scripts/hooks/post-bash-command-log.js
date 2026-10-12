@@ -5,9 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { getEGCDir } = require('../lib/utils');
-
-const MAX_STDIN = 1024 * 1024;
-let raw = '';
+const { readHookStdin } = require('../lib/hook-stdin');
 
 const MODE_CONFIG = {
   audit: {
@@ -622,16 +620,7 @@ function run(rawInput, mode = 'audit') {
 
 function main() {
   const mode = process.argv[2];
-
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (raw.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - raw.length;
-      raw += chunk.substring(0, remaining);
-    }
-  });
-
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw }) => {
     process.stdout.write(run(raw, mode));
   });
 }

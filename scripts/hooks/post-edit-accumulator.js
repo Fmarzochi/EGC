@@ -18,8 +18,7 @@ const crypto = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 const { appendLineNoFollow } = require('../lib/no-follow-accumulator');
-
-const MAX_STDIN = 1024 * 1024;
+const { readHookStdin } = require('../lib/hook-stdin');
 
 function getAccumFile() {
   const raw =
@@ -75,13 +74,8 @@ function run(rawInput) {
 }
 
 if (require.main === module) {
-  let data = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
-    if (data.length < MAX_STDIN) data += chunk.substring(0, MAX_STDIN - data.length);
-  });
-  process.stdin.on('end', () => {
-    process.stdout.write(run(data));
+  readHookStdin(({ raw }) => {
+    process.stdout.write(run(raw));
     process.exit(0);
   });
 }

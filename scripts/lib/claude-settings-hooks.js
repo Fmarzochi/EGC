@@ -52,6 +52,14 @@ const {
   resolveGuardianHookFilePath: resolveKiroV3GuardianHookFilePath,
 } = require('./kiro-v3-guardian-hooks');
 const {
+  GROK_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH,
+  OPERATION_DISPATCH_TAG: GROK_GUARDIAN_HOOK_FILE_TAG,
+  applyGrokGuardianHookToFile,
+  inspectGrokGuardianHookFile,
+  removeGrokGuardianHookFromFile,
+  resolveGrokGuardianHookFilePath,
+} = require('./grok-hooks');
+const {
   OPERATION_DISPATCH_TAG: AMAZONQ_OPERATION_DISPATCH_TAG,
   applyAmazonQGuardianHookToFile,
   inspectAmazonQGuardianHookFile,
@@ -751,6 +759,12 @@ function createGateGuardScriptCopyOperations(createRemappedOperation, targetRoot
       path.join(targetRoot, 'scripts', 'lib', 'utils.js'),
       { strategy: 'preserve-relative-path' }
     ),
+    createRemappedOperation(
+      GATEGUARD_HOOK_MODULE_ID,
+      'scripts/lib/hook-stdin.js',
+      path.join(targetRoot, 'scripts', 'lib', 'hook-stdin.js'),
+      { strategy: 'preserve-relative-path' }
+    ),
   ];
 }
 
@@ -763,6 +777,7 @@ const CRUSHER_HOOK_LIB_SOURCES = [
   'scripts/hooks/pre-bash-crusher-rewrite.js',
   'scripts/hooks/pretooluse-output.js',
   'scripts/lib/crusher/engine.js',
+  'scripts/lib/hook-stdin.js',
 ];
 
 // scrubber-hook.js's transitive scrubber-lib dependencies, copied next to it so
@@ -772,6 +787,7 @@ const SCRUBBER_HOOK_LIB_SOURCES = [
   'scripts/lib/scrubber/binary-guard.js',
   'scripts/lib/scrubber/unicode-marks.js',
   'scripts/lib/scrubber/dash-normalize.js',
+  'scripts/lib/hook-stdin.js',
 ];
 
 function resolveCrusherHookScriptDestination(targetRoot) {
@@ -914,6 +930,20 @@ function createKiroMeshHookFileOperation(targetRoot, hookScriptPath) {
   };
 }
 
+function createGrokGuardianHookFileOperation(targetRoot, hookScriptPath) {
+  return {
+    kind: HOOK_OPERATION_KIND,
+    moduleId: BASH_GUARDIAN_HOOK_MODULE_ID,
+    sourceRelativePath: GROK_GUARDIAN_ADAPTER_SOURCE_RELATIVE_PATH,
+    destinationPath: resolveGrokGuardianHookFilePath(targetRoot),
+    strategy: HOOK_OPERATION_KIND,
+    ownership: 'managed',
+    scaffoldOnly: false,
+    hookEvent: GROK_GUARDIAN_HOOK_FILE_TAG,
+    hookScriptPath,
+  };
+}
+
 function createKiroV3GuardianHookFileOperation(targetRoot, hookScriptPath) {
   return {
     kind: HOOK_OPERATION_KIND,
@@ -939,6 +969,7 @@ function createKiroV3GuardianHookFileOperation(targetRoot, hookScriptPath) {
 // anywhere except Claude Code's own bash-hook-dispatcher.js chain.
 const BASH_GUARDIAN_HOOK_LIB_SOURCES = [
   'scripts/lib/guardian-bin.js',
+  'scripts/lib/hook-stdin.js',
   'scripts/lib/shell-split.js',
   'scripts/lib/wrapper-options.js',
   'scripts/lib/shell-bindings.js',
@@ -1072,6 +1103,7 @@ const EGC_MEMORY_SAVE_HOOK_LIB_SOURCES = [
   'scripts/lib/state-crypto.js',
   'scripts/lib/state-integrity.js',
   'scripts/lib/utils.js',
+  'scripts/lib/hook-stdin.js',
 ];
 
 function resolveEgcMemorySaveHookScriptDestination(targetRoot) {
@@ -1255,6 +1287,11 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeKiroGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
     inspect: operation => inspectKiroGuardianHookFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
   },
+  [GROK_GUARDIAN_HOOK_FILE_TAG]: {
+    apply: operation => applyGrokGuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
+    remove: operation => removeGrokGuardianHookFromFile(operation.destinationPath),
+    inspect: operation => inspectGrokGuardianHookFile(operation.destinationPath, operation.hookScriptPath),
+  },
   [KIRO_V3_GUARDIAN_HOOK_FILE_TAG]: {
     apply: operation => applyKiroV3GuardianHookToFile(operation.destinationPath, operation.hookScriptPath),
     remove: operation => removeKiroV3GuardianHookFromFile(operation.destinationPath),
@@ -1407,6 +1444,7 @@ module.exports = {
   createMeshNoticeScriptCopyOperations,
   createMeshNoticeHookMergeOperationForDestination,
   createKiroMeshHookFileOperation,
+  createGrokGuardianHookFileOperation,
   createKiroV3GuardianHookFileOperation,
   resolveMeshNoticeHookScriptDestination,
   createBashGuardianScriptCopyOperations,

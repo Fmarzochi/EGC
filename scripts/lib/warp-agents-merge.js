@@ -7,6 +7,8 @@ const BLOCK_END = '<!-- egc-skills-index:end -->';
 const BLOCK_HEADING = '## EGC Skills';
 const BLOCK_INTRO = 'Skills installed by EGC for this project. Read the referenced file when a task matches its description.';
 const ENTRY_LINE_PATTERN = /^- \*\*(.+?)\*\*: (.*)$/;
+const MEMORY_RULE_START = '<!-- egc-memory-rule:start -->';
+const MEMORY_RULE_END = '<!-- egc-memory-rule:end -->';
 
 // Warp only discovers a single root-level AGENTS.md (or legacy WARP.md) as
 // project rules -- there is no per-skill file discovery like Kiro/Trae/
@@ -33,15 +35,7 @@ function parseEntryLine(line) {
 }
 
 function findBlockRange(lines) {
-  const startIndex = lines.indexOf(BLOCK_START);
-  if (startIndex === -1) {
-    return null;
-  }
-  const endIndex = lines.indexOf(BLOCK_END, startIndex + 1);
-  if (endIndex === -1) {
-    return null;
-  }
-  return { startIndex, endIndex };
+  return findMarkedRange(lines, BLOCK_START, BLOCK_END);
 }
 
 function extractEntries(lines, range) {
@@ -116,7 +110,71 @@ function removeSkillIndexEntry(existingContent, name) {
   return [...before, ...blockLines, ...after].join('\n');
 }
 
+function isMarkerLine(line, marker) {
+  return line === marker || line === `${marker}\r`;
+}
+
+function findMarkedRange(lines, start, end) {
+  const startIndex = lines.findIndex(line => isMarkerLine(line, start));
+  if (startIndex === -1) return null;
+  const endOffset = lines.slice(startIndex + 1).findIndex(line => isMarkerLine(line, end));
+  return endOffset === -1 ? null : { startIndex, endIndex: startIndex + 1 + endOffset };
+}
+
+function isBlankLine(line) {
+  return line === '' || line === '\r';
+}
+
+function upsertMemoryRuleBlock(existingContent, ruleContent) {
+  const original = existingContent || '';
+  const lines = original.length > 0 ? original.split('\n') : [];
+  const range = findMarkedRange(lines, MEMORY_RULE_START, MEMORY_RULE_END);
+  const ruleLines = String(ruleContent || '').replace(/\n+$/, '').split('\n'); // NOSONAR: superlinear risk accepted: input is the packaged rule file, never network-controlled
+  const blockLines = [MEMORY_RULE_START, ...ruleLines, MEMORY_RULE_END];
+
+  if (range) {
+    return [...lines.slice(0, range.startIndex), ...blockLines, ...lines.slice(range.endIndex + 1)].join('\n');
+  }
+
+  const trimmedOriginal = original.replace(/\n+$/, ''); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
+  const prefix = trimmedOriginal.length > 0 ? `${trimmedOriginal}\n\n` : '';
+  return `${prefix}${blockLines.join('\n')}\n`;
+}
+
+function removeMemoryRuleBlock(existingContent) {
+  if (!existingContent) {
+    return '';
+  }
+
+  const lines = existingContent.split('\n');
+  const range = findMarkedRange(lines, MEMORY_RULE_START, MEMORY_RULE_END);
+  if (!range) {
+    return existingContent;
+  }
+
+  const before = lines.slice(0, range.startIndex);
+  const after = lines.slice(range.endIndex + 1);
+  while (before.length > 0 && isBlankLine(before[before.length - 1])) before.pop();
+  while (after.length > 0 && isBlankLine(after[0])) after.shift();
+  const joined = (after.length > 0 ? [...before, '', ...after] : before).join('\n').replace(/\n+$/, ''); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
+  return joined.length > 0 ? `${joined}\n` : '';
+}
+
+function removeIndexOperationContent(existingContent, operation) {
+  return operation.memoryRule
+    ? removeMemoryRuleBlock(existingContent)
+    : removeSkillIndexEntry(existingContent, operation.skillName);
+}
+
+function nextMemoryRuleContent(existingContent, operation) {
+  if (!operation.removeEntry) return upsertMemoryRuleBlock(existingContent, operation.ruleContent);
+  return existingContent === null ? null : removeMemoryRuleBlock(existingContent);
+}
+
 function nextSkillIndexContent(existingContent, operation) {
+  if (operation.memoryRule) {
+    return nextMemoryRuleContent(existingContent, operation);
+  }
   if (operation.removeEntry) {
     return existingContent === null ? null : removeSkillIndexEntry(existingContent, operation.skillName);
   }
@@ -131,5 +189,8 @@ module.exports = {
   MERGE_MARKDOWN_INDEX_KIND,
   mergeSkillIndexEntry,
   nextSkillIndexContent,
+  removeIndexOperationContent,
+  removeMemoryRuleBlock,
   removeSkillIndexEntry,
+  upsertMemoryRuleBlock,
 };
