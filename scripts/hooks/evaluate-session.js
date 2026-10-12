@@ -19,21 +19,13 @@ const {
   ensureDir,
   readFile,
   countInFile,
-  log
+  log,
+  readHookStdin,
 } = require('../lib/utils');
 
-const MAX_STDIN = 1024 * 1024;
 let stdinData = '';
-process.stdin.setEncoding('utf8');
-
-process.stdin.on('data', chunk => {
-  if (stdinData.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - stdinData.length;
-    stdinData += chunk.substring(0, remaining);
-  }
-});
-
-process.stdin.on('end', () => {
+readHookStdin(({ raw }) => {
+  stdinData = raw;
   main().catch(err => {
     console.error('[ContinuousLearning] Error:', err.message);
     process.exit(0);

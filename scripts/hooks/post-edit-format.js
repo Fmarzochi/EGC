@@ -25,8 +25,7 @@ const path = require('node:path');
 const UNSAFE_PATH_CHARS = /[&|<>^%!\s()]/;
 
 const { findProjectRoot, detectFormatter, resolveFormatterBin } = require('../lib/resolve-formatter');
-
-const MAX_STDIN = 1024 * 1024; // 1MB limit
+const { readHookStdin } = require('../lib/hook-stdin');
 
 /**
  * Core logic: exported so run-with-flags.js can call directly
@@ -108,17 +107,7 @@ function run(rawInput) {
 
 // ── stdin entry point (backwards-compatible) ────────────────────
 if (require.main === module) {
-  let data = '';
-  process.stdin.setEncoding('utf8');
-
-  process.stdin.on('data', chunk => {
-    if (data.length < MAX_STDIN) {
-      const remaining = MAX_STDIN - data.length;
-      data += chunk.substring(0, remaining);
-    }
-  });
-
-  process.stdin.on('end', () => {
+  readHookStdin(({ raw: data }) => {
     data = run(data);
     process.stdout.write(data);
     process.exit(0);

@@ -2,19 +2,9 @@
 'use strict';
 
 const { runPostBash } = require('./bash-hook-dispatcher');
+const { readHookStdin } = require('../lib/hook-stdin');
 
-let raw = '';
-const MAX_STDIN = 1024 * 1024;
-
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => {
-  if (raw.length < MAX_STDIN) {
-    const remaining = MAX_STDIN - raw.length;
-    raw += chunk.substring(0, remaining);
-  }
-});
-
-process.stdin.on('end', async () => {
+readHookStdin(async ({ raw }) => {
   try {
     const result = await runPostBash(raw);
     if (result.stderr) {
