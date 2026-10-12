@@ -103,6 +103,36 @@ GOOGLE_GEMINI_38_FLASH = "google/gemini-3.8-flash"
 GOOGLE_GEMINI_25_FLASH = "google/gemini-2.5-flash"
 OPENAI_GPT_4O = "openai/gpt-4o"
 
+# Mistral ids checked on 2026-10-11 (docs.mistral.ai: models overview, changelog,
+# vibe/code/cli/configuration and studio/conversations/function-calling). The
+# "-latest" alias of each line is the id the vendor documents for the API.
+MISTRAL_MEDIUM_LATEST = "mistral-medium-latest"
+MISTRAL_LARGE_LATEST = "mistral-large-latest"
+MISTRAL_LARGE_4 = "mistral-large-4"
+MISTRAL_SMALL_LATEST = "mistral-small-latest"
+CODESTRAL_LATEST = "codestral-latest"
+MINISTRAL_14B_LATEST = "ministral-14b-latest"
+MINISTRAL_8B_LATEST = "ministral-8b-latest"
+MINISTRAL_3B_LATEST = "ministral-3b-latest"
+# Cohere ids checked on 2026-10-11 (docs.cohere.com/docs/models).
+COHERE_COMMAND_A_PLUS = "command-a-plus-05-2026"
+COHERE_COMMAND_A = "command-a-03-2025"
+COHERE_COMMAND_A_REASONING = "command-a-reasoning-08-2025"
+COHERE_COMMAND_A_VISION = "command-a-vision-07-2025"
+COHERE_COMMAND_A_TRANSLATE = "command-a-translate-08-2025"
+COHERE_COMMAND_R_PLUS = "command-r-plus-08-2024"
+COHERE_COMMAND_R = "command-r-08-2024"
+COHERE_COMMAND_R7B = "command-r7b-12-2024"
+# DeepSeek ids checked on 2026-10-11 (api-docs.deepseek.com: quick_start/pricing,
+# updates and guides/thinking_mode). Thinking is a request parameter on the
+# current API, not a model id.
+DEEPSEEK_FLASH = "deepseek-flash"
+DEEPSEEK_V4_PRO = "deepseek-v4-pro"
+DEEPSEEK_CHAT_RETIRED = "deepseek-chat"
+DEEPSEEK_REASONER_RETIRED = "deepseek-reasoner"
+DEEPSEEK_V4_FLASH_RETIRED = "deepseek-v4-flash"
+DEEPSEEK_V4_FLASH_VISION_RETIRED = "deepseek-v4-flash-vision-exp"
+
 
 class ModelResolver:
     """Centralized model resolution / routing layer for EGC."""
@@ -407,18 +437,104 @@ class ModelResolver:
             "supports_vision": True,
             "supports_tools": True,
         },
-        # --- Mistral AI ---
-        "mistral-large-latest": {
+        # --- Mistral AI (docs.mistral.ai, 2026-10-11): the "-latest" aliases the
+        # vendor documents; the dated ids they point to are in the PR that added them ---
+        MISTRAL_MEDIUM_LATEST: {
             "provider": "mistral",
             "capabilities": [
                 ModelCapability.REASONING,
                 ModelCapability.TOOL_CALLING,
                 ModelCapability.CODE,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.LONG_CONTEXT,
             ],
-            "fallback": None,
-            "context_window": 128000,
+            "fallback": MISTRAL_LARGE_LATEST,
+            "context_window": 262144,
+            "max_tokens": 32768,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        MISTRAL_LARGE_LATEST: {
+            "provider": "mistral",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.LONG_CONTEXT,
+            ],
+            "fallback": MISTRAL_SMALL_LATEST,
+            "context_window": 262144,
+            "max_tokens": 32768,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        # Public preview since 2026-10-06 (changelog); not a default until it is GA.
+        MISTRAL_LARGE_4: {
+            "provider": "mistral",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.LONG_CONTEXT,
+            ],
+            "fallback": MISTRAL_MEDIUM_LATEST,
+            "context_window": 1048576,
+            "max_tokens": 32768,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        MISTRAL_SMALL_LATEST: {
+            "provider": "mistral",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.CODE,
+                ModelCapability.MULTIMODAL,
+                ModelCapability.SPEED,
+                ModelCapability.COST_EFFICIENT,
+            ],
+            "fallback": MINISTRAL_14B_LATEST,
+            "context_window": 262144,
+            "max_tokens": 32768,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        CODESTRAL_LATEST: {
+            "provider": "mistral",
+            "capabilities": [ModelCapability.CODE, ModelCapability.TOOL_CALLING, ModelCapability.SPEED],
+            "fallback": MISTRAL_SMALL_LATEST,
+            "context_window": 256000,
+            "max_tokens": 4096,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        MINISTRAL_14B_LATEST: {
+            "provider": "mistral",
+            "capabilities": [ModelCapability.TOOL_CALLING, ModelCapability.MULTIMODAL, ModelCapability.COST_EFFICIENT],
+            "fallback": MINISTRAL_8B_LATEST,
+            "context_window": 131072,
             "max_tokens": 8192,
-            "supports_vision": False,   # Large is text-only; Pixtral is the vision model
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        MINISTRAL_8B_LATEST: {
+            "provider": "mistral",
+            "capabilities": [ModelCapability.TOOL_CALLING, ModelCapability.MULTIMODAL, ModelCapability.SPEED, ModelCapability.COST_EFFICIENT],
+            "fallback": MINISTRAL_3B_LATEST,
+            "context_window": 131072,
+            "max_tokens": 8192,
+            "supports_vision": True,
+            "supports_tools": True,
+        },
+        MINISTRAL_3B_LATEST: {
+            "provider": "mistral",
+            "capabilities": [ModelCapability.TOOL_CALLING, ModelCapability.MULTIMODAL, ModelCapability.SPEED, ModelCapability.LOW_LATENCY, ModelCapability.COST_EFFICIENT],
+            "fallback": None,
+            "context_window": 131072,
+            "max_tokens": 8192,
+            "supports_vision": True,
             "supports_tools": True,
         },
         # --- Groq (production models, console.groq.com/docs/models, 2026-10-11) ---
@@ -478,46 +594,122 @@ class ModelResolver:
             "supports_vision": False,
             "supports_tools": True,
         },
-        # --- Cohere ---
-        "command-a-plus-05-2026": {
+        # --- Cohere (docs.cohere.com/docs/models, 2026-10-11) ---
+        COHERE_COMMAND_A_PLUS: {
             "provider": "cohere",
             "capabilities": [
                 ModelCapability.REASONING,
                 ModelCapability.TOOL_CALLING,
                 ModelCapability.MULTIMODAL,
                 ModelCapability.LONG_CONTEXT,
+                ModelCapability.CODE,
             ],
-            "fallback": None,
+            "fallback": COHERE_COMMAND_A,
             "context_window": 128000,
             "max_tokens": 65536,
             "supports_vision": True,
             "supports_tools": True,
         },
-        # --- DeepSeek native (api.deepseek.com) ---
-        "deepseek-chat": {
+        COHERE_COMMAND_A: {
+            "provider": "cohere",
+            "capabilities": [
+                ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
+                ModelCapability.LONG_CONTEXT,
+                ModelCapability.CODE,
+            ],
+            "fallback": COHERE_COMMAND_R_PLUS,
+            "context_window": 256000,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        COHERE_COMMAND_A_REASONING: {
+            "provider": "cohere",
+            "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING, ModelCapability.LONG_CONTEXT],
+            "fallback": COHERE_COMMAND_A,
+            "context_window": 256000,
+            "max_tokens": 32768,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        COHERE_COMMAND_A_VISION: {
+            "provider": "cohere",
+            "capabilities": [ModelCapability.MULTIMODAL],
+            "fallback": COHERE_COMMAND_A_PLUS,
+            "context_window": 128000,
+            "max_tokens": 8192,
+            "supports_vision": True,
+            "supports_tools": False,
+        },
+        COHERE_COMMAND_A_TRANSLATE: {
+            "provider": "cohere",
+            "capabilities": [ModelCapability.COST_EFFICIENT],
+            "fallback": COHERE_COMMAND_A,
+            "context_window": 8192,
+            "max_tokens": 8192,
+            "supports_vision": False,
+            "supports_tools": False,
+        },
+        # Previous generation, still served.
+        COHERE_COMMAND_R_PLUS: {
+            "provider": "cohere",
+            "capabilities": [ModelCapability.REASONING, ModelCapability.TOOL_CALLING],
+            "fallback": COHERE_COMMAND_R,
+            "context_window": 128000,
+            "max_tokens": 4096,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        COHERE_COMMAND_R: {
+            "provider": "cohere",
+            "capabilities": [ModelCapability.TOOL_CALLING, ModelCapability.SPEED],
+            "fallback": COHERE_COMMAND_R7B,
+            "context_window": 128000,
+            "max_tokens": 4096,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        COHERE_COMMAND_R7B: {
+            "provider": "cohere",
+            "capabilities": [ModelCapability.SPEED, ModelCapability.LOW_LATENCY, ModelCapability.COST_EFFICIENT, ModelCapability.TOOL_CALLING],
+            "fallback": None,
+            "context_window": 128000,
+            "max_tokens": 4096,
+            "supports_vision": False,
+            "supports_tools": True,
+        },
+        # --- DeepSeek native (api-docs.deepseek.com, 2026-10-11): 1M context and
+        # 384K output on both; the retired ids live in _ALIASES ---
+        DEEPSEEK_FLASH: {
             "provider": "deepseek",
             "capabilities": [
                 ModelCapability.REASONING,
                 ModelCapability.TOOL_CALLING,
                 ModelCapability.CODE,
+                ModelCapability.LONG_CONTEXT,
+                ModelCapability.SPEED,
+                ModelCapability.COST_EFFICIENT,
             ],
             "fallback": None,
-            "context_window": 64000,
-            "max_tokens": 8192,
+            "context_window": 1000000,
+            "max_tokens": 393216,
             "supports_vision": False,
             "supports_tools": True,
         },
-        "deepseek-reasoner": {
+        DEEPSEEK_V4_PRO: {
             "provider": "deepseek",
             "capabilities": [
                 ModelCapability.REASONING,
+                ModelCapability.TOOL_CALLING,
                 ModelCapability.CODE,
+                ModelCapability.LONG_CONTEXT,
             ],
-            "fallback": "deepseek-chat",
-            "context_window": 64000,
-            "max_tokens": 8192,
+            "fallback": DEEPSEEK_FLASH,
+            "context_window": 1000000,
+            "max_tokens": 393216,
             "supports_vision": False,
-            "supports_tools": False,   # R1 does not support tool calls
+            "supports_tools": True,
         },
         # --- DeepSeek via OpenRouter ---
         "deepseek/deepseek-r1": {
@@ -822,11 +1014,24 @@ class ModelResolver:
         "ollama": _QWEN3,
         "openai": _GPT61_SOL,
         "openrouter": _OPENROUTER_AUTO,
-        "mistral": "mistral-large-latest",
+        "mistral": MISTRAL_MEDIUM_LATEST,
         "groq": _OPENAI_GPT_OSS_120B,
-        "cohere": "command-a-plus-05-2026",
-        # Ids the vendors shut down, each pointing at the replacement its vendor
-        # names, so an old config keeps working (deprecations pages, 2026-10-11).
+        "cohere": COHERE_COMMAND_A_PLUS,
+        # Ids the vendors retired, each pointing at the replacement the vendor
+        # names, so an old config keeps working (deprecation pages, 2026-10-11).
+        "mistral-large-2411": MISTRAL_MEDIUM_LATEST,
+        "mistral-medium-2508": MISTRAL_MEDIUM_LATEST,
+        "mistral-small-2506": MISTRAL_SMALL_LATEST,
+        "command-r-plus": COHERE_COMMAND_R_PLUS,
+        "command-r-plus-04-2024": COHERE_COMMAND_R_PLUS,
+        "command-r": COHERE_COMMAND_R,
+        "command-r-03-2024": COHERE_COMMAND_R,
+        "command-light": COHERE_COMMAND_R7B,
+        "command": COHERE_COMMAND_R7B,
+        DEEPSEEK_CHAT_RETIRED: DEEPSEEK_FLASH,
+        DEEPSEEK_REASONER_RETIRED: DEEPSEEK_FLASH,
+        DEEPSEEK_V4_FLASH_RETIRED: DEEPSEEK_FLASH,
+        DEEPSEEK_V4_FLASH_VISION_RETIRED: DEEPSEEK_FLASH,
         GEMINI_20_FLASH_RETIRED: _GEMINI_36_FLASH,
         _GEMINI_20_FLASH_LITE: _GEMINI_31_FLASH_LITE,
         GEMINI_15_PRO_RETIRED: _GEMINI_38_FLASH,
@@ -844,10 +1049,10 @@ class ModelResolver:
         "ollama": _QWEN3,
         "openai": _GPT61_SOL,
         "openrouter": _OPENROUTER_AUTO,
-        "mistral": "mistral-large-latest",
-        "deepseek": "deepseek-chat",
+        "mistral": MISTRAL_MEDIUM_LATEST,
+        "deepseek": DEEPSEEK_FLASH,
         "groq": _OPENAI_GPT_OSS_120B,
-        "cohere": "command-a-plus-05-2026",
+        "cohere": COHERE_COMMAND_A_PLUS,
     }
 
     _DEFAULT_PROVIDER = "gemini"
@@ -1145,9 +1350,15 @@ class ModelResolver:
             GPT6_LUNA: "GPT-6 Luna - fast & affordable",
             "gpt-4o": "GPT-4o - previous generation",
             "gpt-4o-mini": "GPT-4o-mini - previous generation, affordable",
-            "mistral-large-latest": "Mistral Large - top-tier reasoning and multilingual capabilities",
+            MISTRAL_MEDIUM_LATEST: "Mistral Medium 3.5 - frontier multimodal, agents and code (default)",
+            MISTRAL_LARGE_LATEST: "Mistral Large 3 - open-weight multimodal, 256k context",
+            MISTRAL_LARGE_4: "Mistral Large 4 - public preview, 1M context",
+            MISTRAL_SMALL_LATEST: "Mistral Small 4 - fast, reasoning and vision in one model",
+            CODESTRAL_LATEST: "Codestral - code generation and completion",
+            MINISTRAL_14B_LATEST: "Ministral 3 14B - balanced edge model, vision",
+            MINISTRAL_8B_LATEST: "Ministral 3 8B - lightweight edge model, vision",
+            MINISTRAL_3B_LATEST: "Ministral 3 3B - smallest edge model, vision",
             OPENAI_GPT_OSS_120B: "GPT-OSS 120B via Groq - fast inference, tool calling",
-            "command-a-plus-05-2026": "Command A+ (Cohere) - agentic tool use, vision, multilingual",
             QWEN3: "Qwen3 - local default, tools and thinking",
             GPT_OSS: "GPT-OSS - local reasoning, 20b default (120b tag available)",
             LLAMA33: "Llama 3.3 70B - local, tools",
@@ -1158,6 +1369,16 @@ class ModelResolver:
             GROQ_GPT_OSS_20B: "GPT-OSS 20B via Groq - fast & affordable",
             GROQ_LLAMA33_70B: "Llama 3.3 70B via Groq - versatile",
             GROQ_LLAMA31_8B: "Llama 3.1 8B via Groq - instant",
+            COHERE_COMMAND_A_PLUS: "Command A+ (Cohere) - agentic tool use, vision, multilingual",
+            COHERE_COMMAND_A: "Command A (Cohere) - agents and tool use, 256k context",
+            COHERE_COMMAND_A_REASONING: "Command A Reasoning (Cohere) - reasoning with tool use",
+            COHERE_COMMAND_A_VISION: "Command A Vision (Cohere) - image understanding",
+            COHERE_COMMAND_A_TRANSLATE: "Command A Translate (Cohere) - translation",
+            COHERE_COMMAND_R_PLUS: "Command R+ 08-2024 (Cohere) - previous generation",
+            COHERE_COMMAND_R: "Command R 08-2024 (Cohere) - previous generation, fast",
+            COHERE_COMMAND_R7B: "Command R7B (Cohere) - smallest, lowest latency",
+            DEEPSEEK_FLASH: "DeepSeek V4.1 Flash - fast, tools, 1M context (default)",
+            DEEPSEEK_V4_PRO: "DeepSeek V4 Pro - strongest reasoning, 1M context",
             OPENROUTER_AUTO: "OpenRouter Auto - broker picks the best model",
             "google/gemini-2.5-pro": "Gemini 2.5 Pro via OpenRouter",
             GOOGLE_GEMINI_25_FLASH: "Gemini 2.5 Flash via OpenRouter",

@@ -47,7 +47,7 @@ class TestResolve:
             ("openai", "gpt-6.1-sol"),
             ("ollama", "qwen3"),
             ("openrouter", "openrouter/auto"),
-            ("mistral", "mistral-large-latest"),
+            ("mistral", "mistral-medium-latest"),
             ("groq", "openai/gpt-oss-120b"),
             ("cohere", "command-a-plus-05-2026"),
         ],
@@ -70,7 +70,7 @@ class TestResolve:
             "gpt-5",
             "o3-mini",
             "deepseek-v4",
-            "command-r-plus",
+            "command-r-plus-99-2099",
             "codestral-2601",
             "Vendor/New-Model",
             "projects/p/locations/us/publishers/google/models/gemini-9.9-test",
@@ -99,8 +99,8 @@ class TestDefaultModel:
             ("openai", "gpt-6.1-sol"),
             ("ollama", "qwen3"),
             ("openrouter", "openrouter/auto"),
-            ("mistral", "mistral-large-latest"),
-            ("deepseek", "deepseek-chat"),
+            ("mistral", "mistral-medium-latest"),
+            ("deepseek", "deepseek-flash"),
             ("groq", "openai/gpt-oss-120b"),
             ("cohere", "command-a-plus-05-2026"),
             ("CLAUDE", "claude-sonnet-5-5"),
@@ -388,6 +388,42 @@ class TestCatalogRefreshOctober2026:
     def test_openrouter_catalog_carries_the_current_flagships(self):
         router = set(ModelResolver.list_models("openrouter"))
         assert {"anthropic/claude-sonnet-5.5", "openai/gpt-6-astra", "google/gemini-3.8-flash", "qwen/qwen3.5-397b-a17b"} <= router
+
+
+@pytest.mark.unit
+class TestCatalogRefreshMistralCohereDeepSeek:
+    """#1695, #1696, #1697: Mistral, Cohere and DeepSeek ids checked against the vendors on 2026-10-11."""
+
+    def test_mistral_default_is_the_model_the_vendor_recommends(self):
+        assert ModelResolver.default_model("mistral") == "mistral-medium-latest"
+        assert ModelResolver.fallback_chain("mistral-large-4") == ["mistral-medium-latest", "mistral-large-latest", "mistral-small-latest", "ministral-14b-latest", "ministral-8b-latest", "ministral-3b-latest"]
+
+    def test_retired_mistral_ids_resolve_to_the_replacement_the_vendor_names(self):
+        assert ModelResolver.resolve("mistral-large-2411") == "mistral-medium-latest"
+        assert ModelResolver.resolve("mistral-medium-2508") == "mistral-medium-latest"
+        assert ModelResolver.resolve("mistral-small-2506") == "mistral-small-latest"
+        assert ModelResolver.resolve("codestral-2508") == "codestral-2508"
+
+    def test_cohere_catalog_carries_the_live_models_and_maps_the_deprecated_ids(self):
+        live = set(ModelResolver.list_models("cohere"))
+        assert {"command-a-plus-05-2026", "command-a-03-2025", "command-a-reasoning-08-2025", "command-r-plus-08-2024", "command-r-08-2024", "command-r7b-12-2024"} <= live
+        assert ModelResolver.resolve("command-r-plus") == "command-r-plus-08-2024"
+        assert ModelResolver.resolve("command-r") == "command-r-08-2024"
+        assert ModelResolver.resolve("command-light") == "command-r7b-12-2024"
+        assert ModelResolver.default_model("cohere") == "command-a-plus-05-2026"
+
+    def test_deepseek_default_and_retired_ids(self):
+        assert ModelResolver.default_model("deepseek") == "deepseek-flash"
+        assert ModelResolver.resolve("deepseek-chat") == "deepseek-flash"
+        assert ModelResolver.resolve("deepseek-reasoner") == "deepseek-flash"
+        assert ModelResolver.resolve("deepseek-v4-flash") == "deepseek-flash"
+        assert ModelResolver.get_fallback("deepseek-v4-pro") == "deepseek-flash"
+        assert ModelResolver.supports("deepseek-flash", ModelCapability.TOOL_CALLING)
+
+    @pytest.mark.parametrize("provider", ["mistral", "cohere", "deepseek"])
+    def test_every_registered_model_has_a_menu_label(self, provider):
+        for model_id, label in ModelResolver.menu_choices(provider):
+            assert label != model_id, model_id
 
 
 @pytest.mark.unit
