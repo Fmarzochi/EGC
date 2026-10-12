@@ -15,6 +15,7 @@ from llm.core.interface import (
 )
 from llm.core.interface import CLIENT_TIMEOUT
 from llm.core.redact import redact_secrets
+from llm.core.model_resolver import ModelResolver
 from llm.core.types import (
     LLMInput,
     LLMOutput,
@@ -79,33 +80,28 @@ class OllamaProvider(LLMProvider):
         self.base_url = base_url or os.environ.get(
             "OLLAMA_BASE_URL", "http://localhost:11434"
         )
-        self.default_model = default_model or os.environ.get("OLLAMA_MODEL", "llama3.2")
-        self._models = [
-            ModelInfo(
-                name="llama3.2",
-                provider=ProviderType.OLLAMA,
-                supports_tools=False,
-                supports_vision=False,
-                max_tokens=4096,
-                context_window=128000,
-            ),
-            ModelInfo(
-                name="mistral",
-                provider=ProviderType.OLLAMA,
-                supports_tools=False,
-                supports_vision=False,
-                max_tokens=4096,
-                context_window=8192,
-            ),
-            ModelInfo(
-                name="codellama",
-                provider=ProviderType.OLLAMA,
-                supports_tools=False,
-                supports_vision=False,
-                max_tokens=4096,
-                context_window=16384,
-            ),
-        ]
+        self.default_model = (
+            default_model
+            or os.environ.get("OLLAMA_MODEL")
+            or ModelResolver.default_model("ollama")
+        )
+        # The catalog lives in the central registry (library ids checked on
+        # 2026-10-11). A configured default the registry does not list, such as
+        # a tagged or custom id, is appended with the capabilities of its base
+        # name, so list_models() always carries the model that will be used.
+        self._models = list(ModelResolver.model_infos("ollama"))
+        if self.default_model not in {m.name for m in self._models}:
+            base = ModelResolver.get_model_info(self.default_model.split(":", 1)[0])
+            self._models.append(
+                ModelInfo(
+                    name=self.default_model,
+                    provider=ProviderType.OLLAMA,
+                    supports_tools=bool(base.get("supports_tools", True)),
+                    supports_vision=bool(base.get("supports_vision", False)),
+                    max_tokens=base.get("max_tokens"),
+                    context_window=base.get("context_window"),
+                )
+            )
 
     def generate(self, input: LLMInput) -> LLMOutput:
         if input.stream:
