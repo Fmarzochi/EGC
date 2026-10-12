@@ -825,6 +825,30 @@ function runTests() {
     );
   }));
 
+  tally(test('a copy planned twice for the same source and destination is kept once', () => {
+    const { createRemappedOperation } = require('../../scripts/lib/install-targets/helpers');
+    const adapter = createInstallTargetAdapter({
+      id: 'egc-repeated-copy-target',
+      target: 'egc-repeated-copy-target',
+      kind: 'home',
+      rootSegments: ['egc-repeated-copy-target'],
+      installStatePathSegments: ['egc', 'install-state.json'],
+      planOperations: (input, self) => [
+        createRemappedOperation(self, 'module-a', 'scripts/lib/hook-stdin.js', '/dest/hook-stdin.js'),
+        createRemappedOperation(self, 'module-b', 'scripts/lib/hook-stdin.js', '/dest/hook-stdin.js'),
+        createRemappedOperation(self, 'module-b', 'scripts/lib/utils.js', '/dest/utils.js'),
+        createRemappedOperation(self, 'module-b', 'scripts/lib/hook-stdin.js', '/other/hook-stdin.js'),
+      ],
+    });
+
+    const planned = adapter.planOperations({ repoRoot: '/repo', homeDir: '/home/u', modules: [] });
+
+    assert.deepStrictEqual(
+      planned.map(operation => [operation.moduleId, operation.destinationPath]),
+      [['module-a', '/dest/hook-stdin.js'], ['module-b', '/dest/utils.js'], ['module-b', '/other/hook-stdin.js']]
+    );
+  }));
+
   tally(test('the missing-IDE warning names Devin Desktop and links to it, not to Windsurf', () => {
     const adapter = getInstallTargetAdapter('windsurf-home');
     const homeDir = path.join(os.tmpdir(), 'egc-devin-desktop-home-that-does-not-exist');
