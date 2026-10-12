@@ -1566,6 +1566,20 @@ async function runMimoTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('ignores a relative XDG_CONFIG_HOME and writes the MiMo Code AGENTS.md under ~/.config/mimocode (#1498)', () => {
+    const home = mktempHome();
+    const relative = 'egc-relative-xdg-mimo';
+    try {
+      fs.mkdirSync(path.join(home, '.config', 'mimocode'), { recursive: true });
+      const output = run(home, { XDG_CONFIG_HOME: relative, MIMOCODE_HOME: '' });
+      assert.ok(/MiMo Code: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(home, '.config', 'mimocode', 'AGENTS.md')), 'the file lands under ~/.config/mimocode');
+      assert.ok(!fs.existsSync(path.resolve(relative)), 'nothing is written under the relative path');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   return [passed, failed];
 }
 

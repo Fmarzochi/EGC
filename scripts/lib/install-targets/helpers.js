@@ -25,9 +25,10 @@ function normalizeRelativePath(relativePath) {
 }
 
 // Paths that carry a platform identity rather than library content. Every
-// target that takes agents-core receives agents/; only the ones listed here
-// also take the Codex and Antigravity .agents tree and the root AGENTS.md,
-// so a home root such as ~/.amp or ~/.claude never grows either.
+// target that takes agents-core receives agents/; the Codex and Antigravity
+// .agents tree and the root AGENTS.md each go only to the targets listed
+// under their own key, so a home root such as ~/.amp or ~/.claude never
+// grows either.
 const IDENTITY_SOURCE_PATH_OWNERS = Object.freeze({
   '.agents': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed']),
   'AGENTS.md': Object.freeze(['egc', 'cursor', 'antigravity', 'codex', 'codebuddy', 'zed', 'vibe', 'grok', 'kilo', 'mimo']),

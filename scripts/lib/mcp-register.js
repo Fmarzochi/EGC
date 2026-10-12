@@ -1227,7 +1227,8 @@ function registerTarget(target, bins, roots, onRegister, onWarn, onUnchanged) {
 function registerMcpServers(homeDir, bins, callbacks = {}) {
   const { dryRun = false, onSkip, onRegister, onWarn, onUnchanged } = callbacks;
   const targets = buildMcpRegistrationTargets(homeDir);
-  const roots = [homeDir, process.env.XDG_CONFIG_HOME].filter(Boolean);
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME;
+  const roots = [homeDir, xdgConfigHome && path.isAbsolute(xdgConfigHome) ? xdgConfigHome : null].filter(Boolean);
 
   for (const target of targets) {
     if (!target.gate()) continue;

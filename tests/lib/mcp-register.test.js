@@ -583,12 +583,23 @@ function runTests() {
     const tmpHome = makeTempDir();
     const previous = process.env.MIMOCODE_HOME;
     const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
     delete process.env.MIMOCODE_HOME;
     try {
-      process.env.PATH = path.join(tmpHome, 'empty-bin');
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const mimoBin = path.join(tmpHome, 'mimo-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(mimoBin, { recursive: true });
+      fs.writeFileSync(path.join(mimoBin, 'mimo'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(mimoBin, 'mimo.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
       const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'MiMo Code');
       assert.ok(absent, 'MiMo Code must be a registration target');
       assert.strictEqual(absent.gate(), false, 'no config directory and no mimo on PATH keep the gate closed');
+      process.env.PATH = `${mimoBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'MiMo Code').gate(), true, 'a mimo on PATH opens the gate');
+      process.env.PATH = emptyBin;
       const configDir = path.join(tmpHome, '.config', 'mimocode');
       fs.mkdirSync(configDir, { recursive: true });
       const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'MiMo Code');
@@ -596,11 +607,20 @@ function runTests() {
       assert.strictEqual(target.format, 'opencode-mcp');
       assert.strictEqual(target.allowedRoot, configDir);
       assert.strictEqual(target.gate(), true, 'the config directory alone opens the gate');
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written.mcp['egc-guardian'], { type: 'local', command: ['node', bins.guardianBin] });
+      assert.deepStrictEqual(written.mcp['egc-memory'], { type: 'local', command: ['node', bins.memoryBin] });
+      process.env.XDG_CONFIG_HOME = path.join('relative', 'config');
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'MiMo Code').path, target.path, 'a relative XDG_CONFIG_HOME is ignored');
+      delete process.env.XDG_CONFIG_HOME;
       process.env.MIMOCODE_HOME = path.join(tmpHome, 'mimo-data');
       assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'MiMo Code').path, path.join(tmpHome, 'mimo-data', 'config', 'mimocode.json'));
     } finally {
       if (previous === undefined) delete process.env.MIMOCODE_HOME; else process.env.MIMOCODE_HOME = previous;
       if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      delete process.env.XDG_CONFIG_HOME;
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   }))));
