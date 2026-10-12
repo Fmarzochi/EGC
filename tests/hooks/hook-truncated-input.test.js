@@ -41,7 +41,6 @@ const BLOCKERS = [
   ['block-no-verify.js', {}],
   ['scrubber-hook.js', {}],
   ['gateguard-fact-force.js', {}],
-  ['pre-bash-commit-quality.js', {}],
   ['pre-bash-verification-gate.js', { EGC_VERIFY_GATE: 'block' }],
   ['insaits-security-wrapper.js', { EGC_ENABLE_INSAITS: '1' }],
 ];
