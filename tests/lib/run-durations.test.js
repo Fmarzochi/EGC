@@ -104,21 +104,42 @@ test('run-all rejects --durations without a path before running any test', () =>
   assert.ok(!(result.stdout || '').includes('Running'), 'no test file should have started');
 });
 
-test('the durations file written for a run has the documented shape', () => {
+test('a run with --durations writes the report and times every file', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-durations-'));
-  const file = path.join(dir, 'durations.json');
-  const summary = summarizeDurations([{ file: 'a.test.js', ms: 12 }]);
-  fs.writeFileSync(file, JSON.stringify({ summary, files: [{ file: 'a.test.js', ms: 12 }] }));
-  const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.deepStrictEqual(Object.keys(parsed).sort(), ['files', 'summary']);
-  assert.deepStrictEqual(Object.keys(parsed.summary).sort(), [
-    'estimatedWallMs',
-    'files',
-    'longest',
-    'totalMs',
-    'workers'
-  ]);
-  fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    const testsDir = path.join(dir, 'tests');
+    fs.mkdirSync(testsDir, { recursive: true });
+    for (const name of ['a.test.js', 'b.test.js']) {
+      fs.writeFileSync(path.join(testsDir, name), "console.log('Passed: 1\\nFailed: 0');\n");
+    }
+    const fixtures = path.join(__dirname, '..', 'fixtures');
+    let source = fs.readFileSync(path.join(__dirname, '..', 'run-all.js'), 'utf8');
+    source = source.replace('const testsDir = __dirname;', `const testsDir = ${JSON.stringify(testsDir)};`);
+    source = source.replace("require('./fixtures/suite-env')", `require(${JSON.stringify(path.join(fixtures, 'suite-env'))})`);
+    source = source.replace("require('./fixtures/run-durations')", `require(${JSON.stringify(path.join(fixtures, 'run-durations'))})`);
+    const wrapper = path.join(dir, 'run-all-wrapper.js');
+    fs.writeFileSync(wrapper, source);
+    const file = path.join(dir, 'durations.json');
+
+    const result = spawnSync('node', [wrapper, '--durations', file], { encoding: 'utf8', timeout: 20000 });
+
+    assert.strictEqual(result.status, 0, result.stdout + result.stderr);
+    assert.ok(result.stdout.includes('Per-file durations written to'), result.stdout);
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepStrictEqual(Object.keys(parsed).sort(), ['files', 'summary']);
+    assert.deepStrictEqual(parsed.files.map(entry => entry.file), ['a.test.js', 'b.test.js']);
+    assert.ok(parsed.files.every(entry => Number.isInteger(entry.ms) && entry.ms >= 0));
+    assert.strictEqual(parsed.summary.files, 2);
+    assert.deepStrictEqual(Object.keys(parsed.summary).sort(), [
+      'estimatedWallMs',
+      'files',
+      'longest',
+      'totalMs',
+      'workers'
+    ]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 console.log(`\nPassed: ${passed}`);
