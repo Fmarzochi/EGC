@@ -5705,6 +5705,73 @@ function runTests() {
     }
   })));
 
+  tally(test('mimo-home: the OpenCode fork layout under ~/.config/mimocode, MIMOCODE_HOME/config when set, and ~/.mimocode when only that exists (#1498)', () => runWithoutConfigHomeVariables(() => {
+    const fs = require('fs');
+    const repoRoot = path.join(__dirname, '..', '..');
+    const previous = process.env.MIMOCODE_HOME;
+    delete process.env.MIMOCODE_HOME;
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mimo-home-'));
+    try {
+      const adapter = getInstallTargetAdapter('mimo');
+      assert.strictEqual(adapter.id, 'mimo-home');
+      assert.strictEqual(adapter.target, 'mimo');
+      assert.strictEqual(adapter.kind, 'home');
+      const root = path.join(homeDir, '.config', 'mimocode');
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root, 'the XDG config directory by default');
+      assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(root, 'egc', 'install-state.json'));
+      const plan = planInstallTargetScaffold({
+        target: 'mimo',
+        repoRoot,
+        homeDir,
+        modules: [
+          { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+          { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+          { id: 'commands-core', paths: ['commands/plan.md'] },
+          { id: 'rules-core', paths: ['rules/common/memory.md'] },
+        ],
+      });
+      const destinations = plan.operations.map(op => op.destinationPath);
+      for (const expected of [
+        ['skills', 'continuous-learning', 'SKILL.md'],
+        ['agents', 'code-reviewer.md'],
+        ['commands', 'plan.md'],
+        ['egc', 'library', 'rules', 'common', 'memory.md'],
+        ['AGENTS.md'],
+        ['plugins', 'opencode-egc-plugin.js'],
+      ]) {
+        assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
+      }
+      const dotDir = path.join(homeDir, '.mimocode');
+      fs.mkdirSync(dotDir);
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), dotDir, '~/.mimocode is used when only it exists');
+      fs.mkdirSync(root, { recursive: true });
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root, 'the XDG directory wins once it exists');
+      const custom = path.join(homeDir, 'mimo-data');
+      process.env.MIMOCODE_HOME = custom;
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), path.join(custom, 'config'), 'MIMOCODE_HOME moves config under its config/ directory');
+      process.env.MIMOCODE_HOME = 'relative/path';
+      assert.strictEqual(adapter.resolveRoot({ homeDir }), root, 'a relative MIMOCODE_HOME, which MiMo itself refuses, is ignored');
+    } finally {
+      if (previous === undefined) delete process.env.MIMOCODE_HOME; else process.env.MIMOCODE_HOME = previous;
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  })));
+
+  tally(test('mimo-home warns when MiMo Code is absent, naming the tool and its repository (#1498)', () => runWithoutConfigHomeVariables(() => {
+    const previous = process.env.MIMOCODE_HOME;
+    delete process.env.MIMOCODE_HOME;
+    try {
+      const adapter = getInstallTargetAdapter('mimo');
+      const homeDir = path.join(os.tmpdir(), 'egc-mimo-home-that-does-not-exist');
+      const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+      assert.ok(warning, 'a home without the MiMo config directory gets the ide-not-detected warning');
+      assert.match(warning.message, /^MiMo Code does not appear to be installed/);
+      assert.match(warning.message, /https:\/\/github\.com\/XiaomiMiMo\/MiMo-Code/);
+    } finally {
+      if (previous === undefined) delete process.env.MIMOCODE_HOME; else process.env.MIMOCODE_HOME = previous;
+    }
+  })));
+
   tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

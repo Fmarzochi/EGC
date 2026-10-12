@@ -15,6 +15,7 @@ const { openCodeConfigDir, openCodeConfigPath, registerOpenCodeInstructions, ass
 const { commandExists } = require('./lib/utils');
 const { resolveVibeHome } = require('./lib/install-targets/vibe-home');
 const { resolveGrokHome } = require('./lib/install-targets/grok-home');
+const { resolveMimoConfigDir } = require('./lib/mimo-paths');
 const { writeProtocolFile } = require('./lib/protocol-file-write');
 
 // Bump when BLOCK's content changes in a way that already-configured installs
@@ -712,6 +713,17 @@ function injectTraeUserRule(filepath, label, content) {
     injectProtocol(path.join(kiloDir, 'AGENTS.md'), 'Kilo Code CLI');
   } catch (e) {
     console.log(`  [cognitive] Kilo Code CLI: unexpected error: ${e.message}`);
+  }
+})();
+
+// ── MiMo Code (<MiMo config dir>/AGENTS.md) ────────────────────────────────
+(function bootstrapMimo() {
+  try {
+    const mimoDir = resolveMimoConfigDir({ homeDir: HOME });
+    if (!fs.existsSync(mimoDir) && !commandExists('mimo')) return;
+    injectProtocol(path.join(mimoDir, 'AGENTS.md'), 'MiMo Code');
+  } catch (e) {
+    console.log(`  [cognitive] MiMo Code: unexpected error: ${e.message}`);
   }
 })();
 

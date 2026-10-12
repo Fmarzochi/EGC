@@ -153,7 +153,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code',
     ]);
   })));
 
@@ -578,6 +578,32 @@ function runTests() {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   })));
+
+  (tally(test('MiMo Code: the servers go under mcp in mimocode.json in the MiMo config directory, gated on it or mimo on PATH (#1498)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const previous = process.env.MIMOCODE_HOME;
+    const savedPath = process.env.PATH;
+    delete process.env.MIMOCODE_HOME;
+    try {
+      process.env.PATH = path.join(tmpHome, 'empty-bin');
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'MiMo Code');
+      assert.ok(absent, 'MiMo Code must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no config directory and no mimo on PATH keep the gate closed');
+      const configDir = path.join(tmpHome, '.config', 'mimocode');
+      fs.mkdirSync(configDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'MiMo Code');
+      assert.strictEqual(target.path, path.join(configDir, 'mimocode.json'));
+      assert.strictEqual(target.format, 'opencode-mcp');
+      assert.strictEqual(target.allowedRoot, configDir);
+      assert.strictEqual(target.gate(), true, 'the config directory alone opens the gate');
+      process.env.MIMOCODE_HOME = path.join(tmpHome, 'mimo-data');
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'MiMo Code').path, path.join(tmpHome, 'mimo-data', 'config', 'mimocode.json'));
+    } finally {
+      if (previous === undefined) delete process.env.MIMOCODE_HOME; else process.env.MIMOCODE_HOME = previous;
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
 
   (tally(test('Auggie: the gate opens on the ~/.augment directory, and the path is settings.json under it', () => {
     const tmpHome = makeTempDir();

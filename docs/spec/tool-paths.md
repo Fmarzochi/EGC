@@ -10,12 +10,13 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | --- | --- | --- | --- |
 | default | linux | none | all |
 | win32 | win32 | none | windsurf-home, zed-home |
-| XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME` set to an absolute directory, shown as `$XDG_CONFIG_HOME` in the paths | crush-home, kilo-home |
+| XDG_CONFIG_HOME | linux | `XDG_CONFIG_HOME` set to an absolute directory, shown as `$XDG_CONFIG_HOME` in the paths | crush-home, kilo-home, mimo-home |
 | CRUSH_GLOBAL_CONFIG | linux | `CRUSH_GLOBAL_CONFIG` set to an absolute directory, shown as `$CRUSH_GLOBAL_CONFIG` in the paths | crush-home |
 | KIMI_CODE_HOME | linux | `KIMI_CODE_HOME` set to an absolute directory, shown as `$KIMI_CODE_HOME` in the paths | kimi-home |
 | TRAE_ENV=cn | linux | `TRAE_ENV=cn` | trae-project |
 | VIBE_HOME | linux | `VIBE_HOME` set to an absolute directory, shown as `$VIBE_HOME` in the paths | vibe-home |
 | GROK_HOME | linux | `GROK_HOME` set to an absolute directory, shown as `$GROK_HOME` in the paths | grok-home |
+| MIMOCODE_HOME | linux | `MIMOCODE_HOME` set to an absolute directory, shown as `$MIMOCODE_HOME` in the paths | mimo-home |
 
 ## egc-home
 
@@ -452,6 +453,35 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | runtime | `$XDG_CONFIG_HOME/kilo/scripts/` | XDG_CONFIG_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `$XDG_CONFIG_HOME/kilo/skills/` | XDG_CONFIG_HOME | documented | <https://github.com/Kilo-Org/kilocode/blob/6c1596e4f8aa1f703b6452d0968ae3252431efab/packages/opencode/src/skill/index.ts> | Kilo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-11). |
 | state | `$XDG_CONFIG_HOME/kilo/egc/install-state.json` | XDG_CONFIG_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## mimo-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| agents | `~/.config/mimocode/agents/` | default | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/agent.ts> | MiMo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-12). |
+| context | `~/.config/mimocode/AGENTS.md` | default | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/session/instruction.ts> | MiMo reads AGENTS.md in its config directory as global instructions (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `~/.config/mimocode/commands/` | default | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/command.ts> | MiMo loads {command,commands}/**/*.md from its config directory (main on 2026-10-12). |
+| library | `~/.config/mimocode/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| plugins | `~/.config/mimocode/plugins/` | default | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/plugin.ts> | MiMo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-12); EGC ships opencode-egc-plugin.js there. |
+| runtime | `~/.config/mimocode/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `~/.config/mimocode/skills/` | default | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/skill/index.ts> | MiMo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-12). |
+| state | `~/.config/mimocode/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| agents | `$XDG_CONFIG_HOME/mimocode/agents/` | XDG_CONFIG_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/agent.ts> | MiMo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-12). |
+| context | `$XDG_CONFIG_HOME/mimocode/AGENTS.md` | XDG_CONFIG_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/session/instruction.ts> | MiMo reads AGENTS.md in its config directory as global instructions (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `$XDG_CONFIG_HOME/mimocode/commands/` | XDG_CONFIG_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/command.ts> | MiMo loads {command,commands}/**/*.md from its config directory (main on 2026-10-12). |
+| library | `$XDG_CONFIG_HOME/mimocode/egc/library/rules/` | XDG_CONFIG_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| plugins | `$XDG_CONFIG_HOME/mimocode/plugins/` | XDG_CONFIG_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/plugin.ts> | MiMo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-12); EGC ships opencode-egc-plugin.js there. |
+| runtime | `$XDG_CONFIG_HOME/mimocode/scripts/` | XDG_CONFIG_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `$XDG_CONFIG_HOME/mimocode/skills/` | XDG_CONFIG_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/skill/index.ts> | MiMo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-12). |
+| state | `$XDG_CONFIG_HOME/mimocode/egc/install-state.json` | XDG_CONFIG_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+| agents | `$MIMOCODE_HOME/config/agents/` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/agent.ts> | MiMo loads {agent,agents}/**/*.md from its config directory, in OpenCode's agent shape (main on 2026-10-12). |
+| context | `$MIMOCODE_HOME/config/AGENTS.md` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/session/instruction.ts> | MiMo reads AGENTS.md in its config directory as global instructions (main on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `$MIMOCODE_HOME/config/commands/` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/command.ts> | MiMo loads {command,commands}/**/*.md from its config directory (main on 2026-10-12). |
+| library | `$MIMOCODE_HOME/config/egc/library/rules/` | MIMOCODE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| plugins | `$MIMOCODE_HOME/config/plugins/` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/config/plugin.ts> | MiMo imports {plugin,plugins}/*.{ts,js} from its config directory, OpenCode's plugin API with tool.execute.before (main on 2026-10-12); EGC ships opencode-egc-plugin.js there. |
+| runtime | `$MIMOCODE_HOME/config/scripts/` | MIMOCODE_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| skills | `$MIMOCODE_HOME/config/skills/` | MIMOCODE_HOME | documented | <https://github.com/XiaomiMiMo/MiMo-Code/blob/f98dcd1cf7e70e7eb42f721fdf72bc4a6b87914f/packages/cli/src/skill/index.ts> | MiMo discovers {skill,skills}/**/SKILL.md in its config directory (main on 2026-10-12). |
+| state | `$MIMOCODE_HOME/config/egc/install-state.json` | MIMOCODE_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## vibe-project
 
