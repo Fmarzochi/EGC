@@ -11,7 +11,7 @@ const TRUNCATED_INPUT_MESSAGE =
   'Hook input was cut off (over 1 MiB or the stream failed); refusing to act on a partial payload.';
 
 function reportCallbackFailure(error) {
-  const detail = error && error.message ? error.message : String(error);
+  const detail = error?.message || String(error);
   process.stderr.write(`[hook-stdin] hook callback failed: ${detail}\n`);
   process.exitCode = 1;
 }
