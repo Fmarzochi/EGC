@@ -151,6 +151,7 @@ class OpenAIProvider(LLMProvider):
         DeepSeek's thinking switch in ``extra_body``) returns it here instead of
         rewriting ``generate``.
         """
+        del input
         return {}
 
     def generate(self, input: LLMInput) -> LLMOutput:
