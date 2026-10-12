@@ -80,7 +80,7 @@ function printMcpReport(mcp) {
     console.log('MCP servers:');
     for (const server of mcp.servers) {
       const tag = server.status === 'ok' ? 'OK' : 'ERROR';
-      console.log(`  - [${tag}] ${server.name} at ${server.bin || '(no path)'}: ${describeServer(server)} (registered in ${server.registeredIn.join(', ')})`);
+      console.log(`  - [${tag}] ${server.name} at ${server.bin || server.command || '(no path)'}: ${describeServer(server)} (registered in ${server.registeredIn.join(', ')})`);
     }
   }
   const registered = mcp.registrations.filter(registration => registration.status === 'registered').length;

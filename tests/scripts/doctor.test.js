@@ -1140,6 +1140,26 @@ function runTests() {
     }
   }));
 
+  tally(test('a registration whose first argument is not a script file is launched, not reported as a missing file (#1713)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const servers = writeFakeServers(homeDir);
+      const entry = { command: process.execPath, args: ['--no-warnings', servers.ok] };
+      const bare = { command: 'egc-doctor-test-no-such-command' };
+      writeJson(path.join(homeDir, '.cursor', 'mcp.json'), { mcpServers: { 'egc-guardian': entry, 'egc-memory': bare } });
+
+      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '3000' } });
+      assert.strictEqual(result.code, 1, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes('[OK] egc-guardian at ' + process.execPath + ': answers tools/list'), result.stdout);
+      assert.ok(result.stdout.includes('[ERROR] egc-memory at egc-doctor-test-no-such-command: exited with code none before answering'), result.stdout);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
   tally(test('Zed servers are read in the current flat form and in the legacy nested form (#1713)', () => {
     const homeDir = createTempDir('doctor-home-');
     const projectRoot = createTempDir('doctor-project-');

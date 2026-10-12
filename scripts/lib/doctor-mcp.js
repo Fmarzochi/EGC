@@ -22,6 +22,7 @@ const DEFAULT_PROBE_TIMEOUT_MS = 8000;
 const KILL_GRACE_MS = 500;
 const STDERR_TAIL_CHARS = 300;
 const MCP_PROTOCOL_VERSION = '2024-11-05';
+const SCRIPT_FILE_PATTERN = /\.(?:[cm]?js|ts)$/i;
 
 function entryOf(container, name) {
   return container && typeof container === 'object' && !Array.isArray(container) && Object.hasOwn(container, name)
@@ -30,8 +31,8 @@ function entryOf(container, name) {
 }
 
 // A launch is what the tool runs for one server: its command, arguments and
-// environment. `bin` is the script the arguments name first, the file the
-// probe checks before starting anything.
+// environment. `bin` is the script the first argument names, when it names
+// one: the file the probe checks before starting anything.
 function stringList(list) {
   return Array.isArray(list) ? list.filter(item => typeof item === 'string') : [];
 }
@@ -52,7 +53,7 @@ function launchOf(command, args, env) {
     command: typeof command === 'string' && command.length > 0 ? command : null,
     args: list,
     env: stringMap(env),
-    bin: list.length > 0 ? list[0] : null,
+    bin: list.length > 0 && SCRIPT_FILE_PATTERN.test(list[0]) ? list[0] : null,
   };
 }
 
@@ -188,7 +189,7 @@ function tailOf(text) {
 }
 
 /**
- * Starts one server binary with Node, runs the MCP handshake and asks for
+ * Starts one server (its script with Node, or the registered command), runs the MCP handshake and asks for
  * `tools/list`. Resolves to `{ status: 'ok', tools }` or to one of
  * `missing-file`, `exited` (with `code` and the stderr tail), `no-answer`
  * (nothing within `timeoutMs`) and `bad-answer` (an error reply). The child
@@ -196,7 +197,11 @@ function tailOf(text) {
  */
 function probeMcpServer(binPath, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
-  if (typeof binPath !== 'string' || binPath.length === 0 || !fs.existsSync(binPath)) {
+  const namesScript = binPath !== null && binPath !== undefined;
+  const launchable = namesScript
+    ? typeof binPath === 'string' && binPath.length > 0 && fs.existsSync(binPath)
+    : Boolean(options.command);
+  if (!launchable) {
     return Promise.resolve({ status: 'missing-file' });
   }
   return new Promise(resolve => {
@@ -308,7 +313,7 @@ function registeredServers(registrations) {
 function probeRegisteredServers(registrations, options = {}) {
   return registeredServers(registrations).reduce(
     (chain, pair) => chain.then(async results => {
-      const probe = pair.bin === null
+      const probe = pair.bin === null && !pair.launch?.command
         ? { status: 'missing-file' }
         : await probeMcpServer(pair.bin, {
           ...options,
@@ -316,7 +321,7 @@ function probeRegisteredServers(registrations, options = {}) {
           args: pair.launch.args,
           env: { ...options.env, ...pair.launch.env },
         });
-      return [...results, { name: pair.name, bin: pair.bin, registeredIn: pair.registeredIn, ...probe }];
+      return [...results, { name: pair.name, bin: pair.bin, command: pair.launch?.command ?? null, registeredIn: pair.registeredIn, ...probe }];
     }),
     Promise.resolve([])
   );
