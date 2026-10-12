@@ -739,6 +739,17 @@ function injectTraeUserRule(filepath, label, content) {
   }
 })();
 
+// ── Droid (Factory) (~/.factory/AGENTS.md) ──────────────────────────────────
+(function bootstrapDroid() {
+  try {
+    const factoryDir = path.join(HOME, '.factory');
+    if (!fs.existsSync(factoryDir) && !commandExists('droid')) return;
+    injectProtocol(path.join(factoryDir, 'AGENTS.md'), 'Droid (Factory)');
+  } catch (e) {
+    console.log(`  [cognitive] Droid (Factory): unexpected error: ${e.message}`);
+  }
+})();
+
 // ── Crush (<Crush config dir>/CRUSH.md) ───────────────────────────────────────
 (function bootstrapCrush() {
   try {

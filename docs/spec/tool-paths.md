@@ -1,6 +1,6 @@
 # Install paths per tool
 
-Generated from `manifests/tool-paths.json` by `node scripts/ci/generate-tool-paths-doc.js`; edit the table, not this file. `tests/ci/tool-paths-contract.test.js` plans every install target in every variant below and fails when a planned path is missing from the table or a row of the table matches no planned path. Sources checked on 2026-10-10.
+Generated from `manifests/tool-paths.json` by `node scripts/ci/generate-tool-paths-doc.js`; edit the table, not this file. `tests/ci/tool-paths-contract.test.js` plans every install target in every variant below and fails when a planned path is missing from the table or a row of the table matches no planned path. Sources checked on 2026-10-12.
 
 Status: **documented** paths are read by the tool per the linked source: its docs, or, where the docs are silent, its own source code at a pinned commit, with the note saying which; **egc** paths are files of EGC itself under the tool root (hook scripts, install state, library copies the tool does not load); **unverified** paths are planned today but not confirmed by the tool's current docs, with the reason in the note.
 
@@ -504,6 +504,19 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | runtime | `$PI_CODING_AGENT_DIR/scripts/` | PI_CODING_AGENT_DIR | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | skills | `$PI_CODING_AGENT_DIR/skills/` | PI_CODING_AGENT_DIR | documented | <https://github.com/earendil-works/pi/blob/4270522473e677ddba7b093caa0064a3df51d459/packages/coding-agent/docs/skills.md> | Pi discovers directories containing SKILL.md recursively in <agent-dir>/skills/ (main on 2026-10-12). |
 | state | `$PI_CODING_AGENT_DIR/egc/install-state.json` | PI_CODING_AGENT_DIR | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## droid-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| context | `~/.factory/AGENTS.md` | default | documented | <https://docs.factory.com/harness/agents-md> | Droid reads personal instructions from ~/.factory/AGENTS.md (read on 2026-10-12); the cognitive bootstrap keeps the memory protocol there. |
+| commands | `~/.factory/commands/` | default | documented | <https://docs.factory.com/harness/custom-slash-commands> | Droid registers the .md files in ~/.factory/commands as /<name> commands (read on 2026-10-12). |
+| library | `~/.factory/egc/library/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.factory/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| runtime | `~/.factory/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
+| hooks | `~/.factory/settings.json` | default | documented | <https://docs.factory.com/cli/configuration/hooks-guide> | Droid reads hooks under the hooks key of ~/.factory/settings.json, in the Claude Code shape, with Execute as the shell tool and Create/Edit as the file tools; exit code 2 or permissionDecision deny blocks, updatedInput rewrites (read on 2026-10-12). |
+| skills | `~/.factory/skills/` | default | documented | <https://docs.factory.com/harness/skills> | Droid reads personal skills from ~/.factory/skills/<name>/SKILL.md (read on 2026-10-12). |
+| state | `~/.factory/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## vibe-project
 
