@@ -5845,6 +5845,58 @@ function runTests() {
     }
   }));
 
+  tally(test('droid-home: skills, commands, library agents and rules, AGENTS.md and the Claude-shaped hooks in ~/.factory/settings.json (#1493)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const adapter = getInstallTargetAdapter('droid');
+    assert.strictEqual(adapter.id, 'droid-home');
+    assert.strictEqual(adapter.target, 'droid');
+    assert.strictEqual(adapter.kind, 'home');
+    const root = path.join(homeDir, '.factory');
+    assert.strictEqual(adapter.resolveRoot({ homeDir }), root);
+    assert.strictEqual(adapter.getInstallStatePath({ homeDir }), path.join(root, 'egc', 'install-state.json'));
+    const plan = planInstallTargetScaffold({
+      target: 'droid',
+      repoRoot,
+      homeDir,
+      modules: [
+        { id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] },
+        { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+        { id: 'commands-core', paths: ['commands/plan.md'] },
+        { id: 'rules-core', paths: ['rules/common/memory.md'] },
+      ],
+    });
+    const destinations = plan.operations.map(op => op.destinationPath);
+    for (const expected of [
+      ['skills', 'continuous-learning', 'SKILL.md'],
+      ['commands', 'plan.md'],
+      ['egc', 'library', 'agents', 'code-reviewer.md'],
+      ['egc', 'library', 'rules', 'common', 'memory.md'],
+      ['AGENTS.md'],
+      ['scripts', 'hooks', 'pre-bash-guardian-validate.js'],
+      ['scripts', 'hooks', 'pre-write-guardian-validate.js'],
+      ['scripts', 'hooks', 'crusher-hook.js'],
+    ]) {
+      assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
+    }
+    assert.ok(!destinations.some(destination => destination.startsWith(path.join(root, 'droids'))), 'no Markdown agent lands among the custom droids');
+    const hooks = plan.operations.filter(op => op.destinationPath === path.join(root, 'settings.json'));
+    assert.deepStrictEqual(hooks.map(op => [op.moduleId, op.hookEvent, op.hookMatcher]), [
+      ['egc-bash-guardian-hook', 'PreToolUse', 'Execute'],
+      ['claude-write-validator-hook', 'PreToolUse', 'Edit|Create|ApplyPatch'],
+      ['egc-crusher-hook', 'PreToolUse', 'Execute'],
+    ]);
+  }));
+
+  tally(test('droid-home warns when ~/.factory is absent, naming the tool and its docs (#1493)', () => {
+    const adapter = getInstallTargetAdapter('droid');
+    const homeDir = path.join(os.tmpdir(), 'egc-droid-home-that-does-not-exist');
+    const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+    assert.ok(warning, 'a home without ~/.factory gets the ide-not-detected warning');
+    assert.match(warning.message, /^Droid \(Factory\) does not appear to be installed/);
+    assert.match(warning.message, /https:\/\/docs\.factory\.com/);
+  }));
+
   tally(test('auggie-home installs skills flat, commands flat, and rules flattened, each under ~/.augment', () => {
     const repoRoot = path.join(__dirname, '..', '..');
     const homeDir = '/Users/example';

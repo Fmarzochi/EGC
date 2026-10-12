@@ -669,6 +669,12 @@ function buildMcpRegistrationTargets(homeDir) {
       allowedRoot: resolvePiAgentDir(homeDir),
       format: 'json',
     },
+    {
+      name: 'Droid (Factory)',
+      path: path.join(homeDir, '.factory', 'mcp.json'),
+      gate: () => fs.existsSync(path.join(homeDir, '.factory')) || commandExists('droid'),
+      format: 'json',
+    },
   ];
 }
 

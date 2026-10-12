@@ -1509,6 +1509,52 @@ async function runVibeTests() {
   return [passed, failed];
 }
 
+async function runDroidTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('writes the Droid AGENTS.md when ~/.factory exists (#1493)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.factory'), { recursive: true });
+      const output = run(home);
+      assert.ok(/Droid \(Factory\): memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const content = fs.readFileSync(path.join(home, '.factory', 'AGENTS.md'), 'utf8');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Droid when ~/.factory does not exist and droid is not on PATH (#1493)', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home, { PATH: isolatedPath(null) });
+      assert.ok(!/\[cognitive\] Droid \(Factory\):/.test(output), 'should not mention Droid at all');
+      assert.ok(!fs.existsSync(path.join(home, '.factory')), 'nothing is created');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the Droid AGENTS.md when droid is on PATH before ~/.factory exists (#1493)', () => {
+    const home = mktempHome();
+    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-fake-droid-'));
+    try {
+      fs.writeFileSync(path.join(fakeBin, 'droid'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(fakeBin, 'droid.cmd'), '@exit /b 0\r\n');
+      const output = run(home, { PATH: isolatedPath(fakeBin) });
+      assert.ok(/Droid \(Factory\): memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(home, '.factory', 'AGENTS.md')), 'AGENTS.md is written on the first run');
+    } finally {
+      cleanup(home);
+      cleanup(fakeBin);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 async function runPiTests() {
   let passed = 0;
   let failed = 0;
@@ -2101,6 +2147,12 @@ async function runRemainingHarnessTests() {
     const [piPassed, piFailed] = await runPiTests();
     passed += piPassed;
     failed += piFailed;
+  }
+
+  {
+    const [droidPassed, droidFailed] = await runDroidTests();
+    passed += droidPassed;
+    failed += droidFailed;
   }
 
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {

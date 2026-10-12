@@ -2448,6 +2448,66 @@
       "variant": "PI_CODING_AGENT_DIR"
     },
     {
+      "adapter": "droid-home",
+      "surface": "context",
+      "path": "~/.factory/AGENTS.md",
+      "status": "documented",
+      "source": "https://docs.factory.com/harness/agents-md",
+      "note": "Droid reads personal instructions from ~/.factory/AGENTS.md (read on 2026-10-12); the cognitive bootstrap keeps the memory protocol there."
+    },
+    {
+      "adapter": "droid-home",
+      "surface": "commands",
+      "path": "~/.factory/commands/",
+      "status": "documented",
+      "source": "https://docs.factory.com/harness/custom-slash-commands",
+      "note": "Droid registers the .md files in ~/.factory/commands as /<name> commands (read on 2026-10-12)."
+    },
+    {
+      "adapter": "droid-home",
+      "surface": "library",
+      "path": "~/.factory/egc/library/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "droid-home",
+      "surface": "library",
+      "path": "~/.factory/egc/library/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "droid-home",
+      "surface": "runtime",
+      "path": "~/.factory/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "droid-home",
+      "surface": "hooks",
+      "path": "~/.factory/settings.json",
+      "status": "documented",
+      "source": "https://docs.factory.com/cli/configuration/hooks-guide",
+      "note": "Droid reads hooks under the hooks key of ~/.factory/settings.json, in the Claude Code shape, with Execute as the shell tool and Create/Edit as the file tools; exit code 2 or permissionDecision deny blocks, updatedInput rewrites (read on 2026-10-12)."
+    },
+    {
+      "adapter": "droid-home",
+      "surface": "skills",
+      "path": "~/.factory/skills/",
+      "status": "documented",
+      "source": "https://docs.factory.com/harness/skills",
+      "note": "Droid reads personal skills from ~/.factory/skills/<name>/SKILL.md (read on 2026-10-12)."
+    },
+    {
+      "adapter": "droid-home",
+      "surface": "state",
+      "path": "~/.factory/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
       "adapter": "vibe-project",
       "surface": "library",
       "path": "<project>/.vibe/egc/library/agents/",
