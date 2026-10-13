@@ -123,7 +123,8 @@ function dedupe(chunks: Prepared[]): { kept: Prepared[]; removed: number } {
     keptSets.push(terms);
     kept.push(chunk);
   }
-  return { kept: kept.sort((x, y) => x.index - y.index), removed };
+  kept.sort((x, y) => x.index - y.index);
+  return { kept, removed };
 }
 
 function rank(chunks: Prepared[], objective: string, criteria: string[], scopePaths: string[]): Prepared[] {
@@ -139,7 +140,8 @@ function rank(chunks: Prepared[], objective: string, criteria: string[], scopePa
     chunk,
     score: index.score(i, weighted) + (chunk.source && scope.has(chunk.source) ? SCOPE_PATH_BOOST : 0),
   }));
-  return scored.sort((x, y) => y.score - x.score || x.chunk.index - y.chunk.index).map(entry => entry.chunk);
+  scored.sort((x, y) => y.score - x.score || x.chunk.index - y.chunk.index);
+  return scored.map(entry => entry.chunk);
 }
 
 function list(items: string[]): string {
