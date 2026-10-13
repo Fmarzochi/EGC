@@ -32,6 +32,8 @@ const HARNESS_VARIABLES = Object.freeze([
 // passes: Crush reads CRUSH_GLOBAL_CONFIG, then XDG_CONFIG_HOME, before the
 // home (scripts/lib/install-targets/crush-home.js), and Mistral Vibe reads
 // VIBE_HOME for its whole data root (scripts/lib/install-targets/vibe-home.js).
+// Kimi Code CLI reads KIMI_CODE_HOME, which the MCP registration follows as
+// well (scripts/lib/mcp-register-targets.js).
 // CI runners on Linux export XDG_CONFIG_HOME, so a test that installs into a
 // temporary home would otherwise write into the runner's real config
 // directory, and every later test would find the tool there.
@@ -40,6 +42,7 @@ const CONFIG_HOME_VARIABLES = Object.freeze([
   'CRUSH_GLOBAL_CONFIG',
   'VIBE_HOME',
   'GROK_HOME',
+  'KIMI_CODE_HOME',
   'MIMOCODE_HOME',
   'PI_CODING_AGENT_DIR',
   'XDG_CONFIG_HOME',
