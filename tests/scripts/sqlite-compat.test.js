@@ -14,6 +14,34 @@ function permissionBitsEnforced() {
   return !(typeof process.getuid === 'function' && process.getuid() === 0);
 }
 
+const COMPAT_PATH = require.resolve('../../scripts/lib/state-store/sqlite-compat');
+const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
+
+// Runs fn against a fresh copy of the engine chooser while the named
+// packages cannot be resolved, the way a checkout looks when its servers
+// were built without the root dependencies installed. The engines are
+// required lazily, so the interception has to outlive the awaited call.
+async function withoutPackages(names, fn) {
+  const Module = require('node:module');
+  const cached = require.cache[COMPAT_PATH];
+  const originalLoad = Module._load;
+  Module._load = function (request) {
+    if (names.includes(request)) {
+      const err = new Error(`Cannot find module '${request}'`);
+      err.code = 'MODULE_NOT_FOUND';
+      throw err;
+    }
+    return originalLoad.apply(this, arguments);
+  };
+  delete require.cache[COMPAT_PATH];
+  try {
+    await fn(require(COMPAT_PATH));
+  } finally {
+    Module._load = originalLoad;
+    require.cache[COMPAT_PATH] = cached;
+  }
+}
+
 async function test(name, fn) {
   try {
     await fn();
@@ -24,6 +52,70 @@ async function test(name, fn) {
     console.log(`    Error: ${error.message}`);
     return false;
   }
+}
+
+// The cases that make a package unresolvable. They run with the engine
+// choice left to the chooser, so the native attempt is the first step.
+async function runMissingPackageTests() {
+  delete process.env.EGC_SQLITE_ENGINE;
+  const results = [
+    await test('a missing sql.js names the directory to install in instead of a bare module error', async () => {
+      await withoutPackages(['sqlite3', 'sql.js'], async compat => {
+        await assert.rejects(
+          () => compat.openCompatDatabase(':memory:', 'test'),
+          err => err.message.includes(PACKAGE_ROOT) && /npm ci/.test(err.message) && /sqlite3 did not load/.test(err.message)
+        );
+      });
+    }),
+    await test('missing engines are reported before a pending write-ahead log', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+      const file = path.join(dir, 'state.db');
+      try {
+        fs.writeFileSync(file, '');
+        fs.writeFileSync(`${file}-wal`, Buffer.alloc(64, 1));
+        await withoutPackages(['sqlite3', 'sql.js'], async compat => {
+          await assert.rejects(() => compat.openCompatDatabase(file, 'test'), /npm ci/);
+        });
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }),
+    await test('a missing sql.js with the portable engine forced keeps the original error as the cause and adds no sqlite3 note', async () => {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      try {
+        await withoutPackages(['sql.js'], async compat => {
+          await assert.rejects(
+            () => compat.openCompatDatabase(':memory:', 'test'),
+            err => err.message.includes(PACKAGE_ROOT) && /npm ci/.test(err.message) && !/sqlite3 did not load/.test(err.message) && err.cause?.code === 'MODULE_NOT_FOUND'
+          );
+        });
+      } finally {
+        delete process.env.EGC_SQLITE_ENGINE;
+      }
+    }),
+    await test('the fallback is announced only once the portable engine has opened', async () => {
+      const captured = [];
+      const originalWrite = process.stderr.write;
+      process.stderr.write = chunk => { captured.push(String(chunk)); return true; };
+      try {
+        await withoutPackages(['sqlite3', 'sql.js'], async compat => {
+          await assert.rejects(() => compat.openCompatDatabase(':memory:', 'test'), /npm ci/);
+        });
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+      assert.deepStrictEqual(captured.filter(line => line.includes('using the portable sql.js engine')), []);
+    }),
+    await test('a missing sqlite3 package alone still falls back to the portable engine', async () => {
+      await withoutPackages(['sqlite3'], async compat => {
+        const db = await compat.openCompatDatabase(':memory:', 'test');
+        assert.strictEqual(compat.selectedEngine(), 'wasm');
+        await db.close();
+      });
+    }),
+  ];
+  const passed = results.filter(Boolean).length;
+  return { passed, failed: results.length - passed };
 }
 
 async function runTests() {
@@ -247,6 +339,10 @@ async function runTests() {
     assert.strictEqual(typeof db.configure === 'function', native, 'the sqlite package Database carries configure; the portable facade does not');
     await db.close();
   })) passed++; else failed++;
+
+  const missing = await runMissingPackageTests();
+  passed += missing.passed;
+  failed += missing.failed;
 
   if (previous === undefined) delete process.env.EGC_SQLITE_ENGINE; else process.env.EGC_SQLITE_ENGINE = previous;
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
