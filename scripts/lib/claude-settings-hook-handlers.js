@@ -89,6 +89,10 @@ const {
   removeCrushHookFromFile,
 } = require('./crush-settings-hooks');
 const {
+  KIMI_HOOK_OPERATION_HANDLERS,
+  KIMI_PRE_TOOL_EVENT,
+} = require('./kimi-hooks-toml');
+const {
   VIBE_HOOK_OPERATION_HANDLERS,
   VIBE_PRE_TOOL_EVENT,
 } = require('./vibe-hooks-toml');
@@ -261,6 +265,9 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
   // Mistral Vibe: [[hooks]] tables in hooks.toml, by hook name
   // (scripts/lib/vibe-hooks-toml.js).
   [VIBE_PRE_TOOL_EVENT]: VIBE_HOOK_OPERATION_HANDLERS,
+  // Kimi Code CLI: a [[hooks]] table in config.toml, by the adapter its
+  // command runs (scripts/lib/kimi-hooks-toml.js).
+  [KIMI_PRE_TOOL_EVENT]: KIMI_HOOK_OPERATION_HANDLERS,
 };
 
 const SESSION_START_HOOK_OPERATION_HANDLERS = {
@@ -288,5 +295,6 @@ module.exports = {
   applyManagedHookOperation,
   resolveHookOperationHandlers,
   CRUSH_PRE_TOOL_USE_EVENT,
+  KIMI_PRE_TOOL_EVENT,
   VIBE_PRE_TOOL_EVENT,
 };

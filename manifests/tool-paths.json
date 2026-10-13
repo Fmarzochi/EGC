@@ -1554,6 +1554,20 @@
     },
     {
       "adapter": "kimi-home",
+      "surface": "hooks",
+      "path": "~/.kimi-code/config.toml",
+      "status": "documented",
+      "source": "https://github.com/MoonshotAI/kimi-code"
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "runtime",
+      "path": "~/.kimi-code/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run."
+    },
+    {
+      "adapter": "kimi-home",
       "surface": "library",
       "path": "$KIMI_CODE_HOME/agents/",
       "status": "egc",
@@ -1582,6 +1596,22 @@
       "path": "$KIMI_CODE_HOME/skills/",
       "status": "documented",
       "source": "https://github.com/MoonshotAI/kimi-code",
+      "variant": "KIMI_CODE_HOME"
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "hooks",
+      "path": "$KIMI_CODE_HOME/config.toml",
+      "status": "documented",
+      "source": "https://github.com/MoonshotAI/kimi-code",
+      "variant": "KIMI_CODE_HOME"
+    },
+    {
+      "adapter": "kimi-home",
+      "surface": "runtime",
+      "path": "$KIMI_CODE_HOME/scripts/",
+      "status": "egc",
+      "note": "EGC runtime: the scripts the tool's hook or plugin entries run.",
       "variant": "KIMI_CODE_HOME"
     },
     {

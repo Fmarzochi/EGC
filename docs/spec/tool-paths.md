@@ -361,10 +361,14 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | library | `~/.kimi-code/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `~/.kimi-code/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | skills | `~/.kimi-code/skills/` | default | documented | <https://github.com/MoonshotAI/kimi-code> |  |
+| hooks | `~/.kimi-code/config.toml` | default | documented | <https://github.com/MoonshotAI/kimi-code> |  |
+| runtime | `~/.kimi-code/scripts/` | default | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | library | `$KIMI_CODE_HOME/agents/` | KIMI_CODE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `$KIMI_CODE_HOME/commands/` | KIMI_CODE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | library | `$KIMI_CODE_HOME/rules/` | KIMI_CODE_HOME | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
 | skills | `$KIMI_CODE_HOME/skills/` | KIMI_CODE_HOME | documented | <https://github.com/MoonshotAI/kimi-code> |  |
+| hooks | `$KIMI_CODE_HOME/config.toml` | KIMI_CODE_HOME | documented | <https://github.com/MoonshotAI/kimi-code> |  |
+| runtime | `$KIMI_CODE_HOME/scripts/` | KIMI_CODE_HOME | egc |  | EGC runtime: the scripts the tool's hook or plugin entries run. |
 | state | `~/.kimi-code/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 | state | `$KIMI_CODE_HOME/egc/install-state.json` | KIMI_CODE_HOME | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
