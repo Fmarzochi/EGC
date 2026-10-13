@@ -6095,7 +6095,7 @@ function runTests() {
       !plan.operations.some(op => op.destinationPath && /crusher|guardian/i.test(op.destinationPath)),
       'no Guardian or Crusher script is planned'
     );
-    assert.deepStrictEqual(plan.managedRoots, [path.join(homeDir, '.letta')], 'letta-home manages only its own root');
+    assert.deepStrictEqual(plan.managedRoots, [path.resolve(homeDir, '.letta')], 'letta-home manages only its own root');
   }));
 
   tally(test('letta-home warns when ~/.letta is absent, naming the tool and its docs (#1500)', () => {
