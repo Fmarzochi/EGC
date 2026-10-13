@@ -36,6 +36,14 @@ const UTILS_SIBLING_SOURCE_RELATIVE_PATHS = [
   'scripts/lib/utils-session.js',
   'scripts/lib/utils-file.js',
 ];
+// gateguard-fact-force.js is itself a thin re-export over these four
+// sibling modules (#1712), living in scripts/hooks alongside it.
+const GATEGUARD_SCRIPT_SIBLING_SOURCE_RELATIVE_PATHS = [
+  'scripts/hooks/gateguard-state.js',
+  'scripts/hooks/gateguard-bash-classify.js',
+  'scripts/hooks/gateguard-gate-rules.js',
+  'scripts/hooks/gateguard-retry-judge.js',
+];
 
 function resolveCopilotHome(input) {
   const home = typeof input === 'string' ? input : input?.homeDir;
@@ -102,6 +110,13 @@ function createGateGuardOperations(adapter, targetRoot, homeDir) {
     path.join(targetRoot, sourceRelativePath),
     { strategy: 'preserve-relative-path' }
   ));
+  const gateGuardScriptSiblingOperations = GATEGUARD_SCRIPT_SIBLING_SOURCE_RELATIVE_PATHS.map(sourceRelativePath => createRemappedOperation(
+    adapter,
+    GATEGUARD_HOOK_MODULE_ID,
+    sourceRelativePath,
+    path.join(targetRoot, sourceRelativePath),
+    { strategy: 'preserve-relative-path' }
+  ));
   const hookStdinOperation = createRemappedOperation(
     adapter,
     GATEGUARD_HOOK_MODULE_ID,
@@ -114,6 +129,7 @@ function createGateGuardOperations(adapter, targetRoot, homeDir) {
     scriptOperation,
     utilsOperation,
     ...utilsSiblingOperations,
+    ...gateGuardScriptSiblingOperations,
     hookStdinOperation,
     createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, 'Edit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, 'Write'),

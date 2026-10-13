@@ -9,6 +9,10 @@ const { spawnSync } = require('child_process');
 
 const runner = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'run-with-flags.js');
 const hookScript = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'gateguard-fact-force.js');
+// gateguard-state.js runs its stale-file prune as a module-load-time side
+// effect; busting only hookScript's cache entry leaves that submodule's
+// prior instance in place, so a reload never re-triggers the prune.
+const stateModule = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'gateguard-state.js');
 const externalStateDir = process.env.GATEGUARD_STATE_DIR;
 const tmpRoot = process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp';
 const baseStateDir = externalStateDir || tmpRoot;
@@ -150,6 +154,7 @@ function parseOutput(stdout) {
 
 function loadDirectHook(env = {}) {
   delete require.cache[require.resolve(hookScript)];
+  delete require.cache[require.resolve(stateModule)];
   Object.assign(process.env, {
     GATEGUARD_STATE_DIR: stateDir,
     EGC_SESSION_ID: TEST_SESSION_ID,

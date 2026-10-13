@@ -93,6 +93,26 @@ function createGateGuardScriptCopyOperationsIfMissing(adapter, targetRoot, modul
     }
   }
 
+  // gateguard-fact-force.js is itself a thin re-export over these four
+  // sibling modules (#1712), living in scripts/hooks alongside it rather
+  // than scripts/lib; each is checked and copied independently for the
+  // same reason the utils.js siblings above are.
+  for (const siblingPath of [
+    'scripts/hooks/gateguard-state.js',
+    'scripts/hooks/gateguard-bash-classify.js',
+    'scripts/hooks/gateguard-gate-rules.js',
+    'scripts/hooks/gateguard-retry-judge.js',
+  ]) {
+    if (!isPathCovered(modules, 'scripts/hooks', siblingPath)) {
+      operations.push(remap(
+        GATEGUARD_HOOK_MODULE_ID,
+        siblingPath,
+        path.join(targetRoot, siblingPath),
+        { strategy: 'preserve-relative-path' }
+      ));
+    }
+  }
+
   if (!isPathCovered(modules, 'scripts/lib', 'scripts/lib/hook-stdin.js')) {
     operations.push(remap(
       GATEGUARD_HOOK_MODULE_ID,
