@@ -26,7 +26,7 @@ function commandExists(cmd) {
       const result = spawnSync(`where ${cmd}`, { stdio: 'pipe', shell: true });
       if (result.status === 0) return true;
     } else {
-      const result = spawnSync('which', [cmd], { stdio: 'pipe' });
+      const result = spawnSync('which', [cmd], { stdio: 'pipe' }); // NOSONAR javascript:S4036 -- resolving `which` from PATH is the feature: this checks whether cmd is installed on the user's own machine; fixed argv, no shell
       if (result.status === 0) return true;
     }
   } catch {

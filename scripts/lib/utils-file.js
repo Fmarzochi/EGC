@@ -253,7 +253,7 @@ function countInFile(filePath, pattern) {
  */
 function stripAnsi(str) {
   if (typeof str !== 'string') return '';
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex -- NOSONAR: ANSI escape stripping needs the literal control bytes
   return str.replace(/\x1b(?:\[[0-9;?]*[A-Za-z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|\([A-Z]|[A-Z])/g, '');
 }
 
