@@ -384,4 +384,6 @@ module.exports = {
   resolveVibeCrusherAdapterDestination,
   resolveVibeGuardianAdapterDestination,
   resolveVibeHooksTomlPath,
+  tomlString,
+  tomlUnescape,
 };
