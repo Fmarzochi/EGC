@@ -50,7 +50,7 @@ function writeMiniSuite(root) {
   write('b.test.js', "console.log('Results: Passed: 1, Failed: 1');\nprocess.exit(1);\n");
   write('c.test.js', "console.log('Results: Passed: 2, Failed: 0');\n");
   write('d.test.js', [
-    "if (process.env.HOME.includes('egc-suite-job-')) {",
+    "if (String(process.env.HOME || '').includes('egc-suite-job-')) {",
     "  console.log('Results: Passed: 0, Failed: 1');",
     '  process.exit(1);',
     '}',
