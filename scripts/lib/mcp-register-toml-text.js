@@ -331,13 +331,6 @@ function tomlEscape(p) {
     ?? String.raw`\u${ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`);
 }
 
-// Whether the text is a TOML document a parser accepts. @iarna/toml is a
-// runtime dependency (D31 C29), but the require() above still guards it: if
-// it is ever unavailable (a corrupted install, for instance) there is
-// nothing to check with, so the answer is true and the guard below behaves
-// exactly as the code did before it existed, rather than refusing every
-// write it cannot verify.
-
 module.exports = {
   findInlineMcpServersArray,
   tomlHasActiveServer,
