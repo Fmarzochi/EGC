@@ -19,13 +19,13 @@ except ImportError:  # pragma: no cover - SDK optional
     OpenAI = None  # type: ignore[assignment]
 
 from llm.core.interface import CLIENT_TIMEOUT, AuthenticationError, LLMProvider
-from llm.core.model_resolver import (
+from llm.core.model_ids import (
     DEEPSEEK_CHAT_RETIRED,
     DEEPSEEK_REASONER_RETIRED,
     DEEPSEEK_V4_FLASH_RETIRED,
     DEEPSEEK_V4_FLASH_VISION_RETIRED,
-    ModelResolver,
 )
+from llm.core.model_resolver import ModelResolver
 from llm.core.types import ModelInfo, ProviderType
 from llm.providers.openai import OpenAIProvider
 
