@@ -28,13 +28,37 @@ const CASES = [
   ['search the memory history for past decisions', 'search.ts']
 ];
 
+// A cold build stops at its deadline and answers from what it has indexed so
+// far. A loaded runner does not get through the tree in one go, and the first
+// case then ran on a partial graph and missed its file. The cases are about
+// ranking, so the graph is built to the end first: each call resumes the
+// build, and a round that refreshes nothing has nothing left to index.
+const MAX_BUILD_ROUNDS = 10;
+
+async function buildWholeGraph(root, env) {
+  for (let round = 0; round < MAX_BUILD_ROUNDS; round += 1) {
+    let refreshed = -1;
+    const audit = (action, details) => {
+      if (action === 'GRAPH_BUILD') refreshed = details.refreshed;
+    };
+    const r = await buildRelevantContext('build the graph', root, 3000, { env, audit });
+    if (r.status === 'ok' || refreshed === 0) return true;
+  }
+  return false;
+}
+
 (async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-graph-selfbench-'));
   const env = { ...process.env, EGC_DIR: tmp };
+  const serversRoot = path.join(repoRoot, 'mcp', 'servers');
   let failed = 0;
   try {
+    if (!(await buildWholeGraph(serversRoot, env))) {
+      console.log(`  FAIL the graph was still being built after ${MAX_BUILD_ROUNDS} rounds`);
+      failed++;
+    }
     for (const [prompt, expected] of CASES) {
-      const r = await buildRelevantContext(prompt, path.join(repoRoot, 'mcp', 'servers'), 3000, { env });
+      const r = await buildRelevantContext(prompt, serversRoot, 3000, { env });
       const top = (r.files || []).slice(0, 5).map(f => path.basename(f.path));
       const ok = r.status !== 'unavailable' && top.includes(expected);
       console.log(`  ${ok ? 'PASS' : 'FAIL'} "${prompt}" -> ${expected} in [${top.join(', ')}]`);
