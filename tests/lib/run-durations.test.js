@@ -118,6 +118,8 @@ test('a run with --durations writes the report and times every file', () => {
     source = source.replace('const testsDir = __dirname;', `const testsDir = ${JSON.stringify(testsDir)};`);
     source = source.replace("require('./fixtures/suite-env')", `require(${JSON.stringify(path.join(fixtures, 'suite-env'))})`);
     source = source.replace("require('./fixtures/run-durations')", `require(${JSON.stringify(path.join(fixtures, 'run-durations'))})`);
+    source = source.replace("require('./fixtures/run-jobs')", `require(${JSON.stringify(path.join(fixtures, 'run-jobs'))})`);
+    source = source.replace("require('./fixtures/test-classifier')", `require(${JSON.stringify(path.join(fixtures, 'test-classifier'))})`);
     const wrapper = path.join(dir, 'run-all-wrapper.js');
     fs.writeFileSync(wrapper, source);
     const file = path.join(dir, 'durations.json');

@@ -2,11 +2,18 @@
 /**
  * Run all tests
  *
- * Usage: node tests/run-all.js [--durations <file>]
+ * Usage: node tests/run-all.js [--durations <file>] [--jobs N] [--report <file>]
  *
  * --durations writes how long each test file took to <file> as JSON and
- * prints the longest file and the wall time 8 workers could reach. Without
- * it the output and the exit code are exactly the same as always.
+ * prints the longest file and the wall time 8 workers could reach.
+ * --jobs N runs the files the classifier calls independent (see
+ * fixtures/test-classifier.js) N at a time, each with a private home and temp
+ * folder, then the serial ones alone. A file that fails in the pool is run
+ * again alone, and only that second run counts.
+ * --report writes the per-file counts to <file> as JSON, so a serial and a
+ * parallel run can be compared with fixtures/compare-reports.js.
+ * Without any of them the output and the exit code are exactly the same as
+ * always.
  */
 
 const { spawnSync } = require('child_process');
@@ -14,6 +21,16 @@ const path = require('path');
 const fs = require('fs');
 const { suiteEnv } = require('./fixtures/suite-env');
 const { summarizeDurations, formatDurationReport, parseDurationsFlag } = require('./fixtures/run-durations');
+const {
+  parseJobsFlag,
+  parseReportFlag,
+  orderLongestFirst,
+  runInPrivateEnv,
+  runNode,
+  didFail,
+  runPool
+} = require('./fixtures/run-jobs');
+const { classifyTestFiles, loadManifest } = require('./fixtures/test-classifier');
 
 const testsDir = __dirname;
 const repoRoot = path.resolve(testsDir, '..');
@@ -57,7 +74,10 @@ function discoverTestFiles() {
 
 const testFiles = discoverTestFiles();
 const durationsFile = parseDurationsFlag(process.argv.slice(2));
+const jobs = parseJobsFlag(process.argv.slice(2));
+const reportFile = parseReportFlag(process.argv.slice(2));
 const durations = [];
+const fileReports = [];
 
 const BOX_W = 58; // inner width between ║ delimiters
 const boxLine = s => `║${s.padEnd(BOX_W)}║`;
@@ -76,25 +96,9 @@ let totalPassed = 0;
 let totalFailed = 0;
 let totalTests;
 
-for (const testFile of testFiles) {
-  const testPath = path.join(testsDir, testFile);
-  const displayPath = testFile.split(path.sep).join('/');
-
-  if (!fs.existsSync(testPath)) {
-    console.log(`WARNING Skipping ${displayPath} (file not found)`);
-    continue;
-  }
-
-  console.log(`\n━━━ Running ${displayPath} ━━━`);
-
-  const startedAt = process.hrtime.bigint();
-  const result = spawnSync('node', [testPath], {
-    encoding: 'utf8',
-    env: TEST_ENV,
-    stdio: ['pipe', 'pipe', 'pipe']
-  });
-  durations.push({ file: displayPath, ms: Number((process.hrtime.bigint() - startedAt) / 1000000n) });
-
+function recordResult(displayPath, result) {
+  const passedBefore = totalPassed;
+  const failedBefore = totalFailed;
   const stdout = result.stdout || '';
   const stderr = result.stderr || '';
 
@@ -121,33 +125,123 @@ for (const testFile of testFiles) {
   if (result.error) {
     console.log(`✗ ${displayPath} failed to start: ${result.error.message}`);
     totalFailed += failedMatch ? 0 : 1;
-    continue;
-  }
-
-  if (result.status !== 0) {
+  } else if (result.status !== 0) {
     console.log(`✗ ${displayPath} exited with status ${result.status}`);
     if (!combined.trim()) {
       console.log(`  [!] Script crashed with no output. Counted as 1 unknown failure.`);
     }
     totalFailed += failedMatch ? 0 : 1;
   }
+
+  fileReports.push({
+    file: displayPath,
+    passed: totalPassed - passedBefore,
+    failed: totalFailed - failedBefore,
+    ok: !didFail(result)
+  });
 }
 
-totalTests = totalPassed + totalFailed;
+function runSerial() {
+  for (const testFile of testFiles) {
+    const testPath = path.join(testsDir, testFile);
+    const displayPath = testFile.split(path.sep).join('/');
 
-console.log('\n╔' + '═'.repeat(BOX_W) + '╗');
-console.log(boxLine('                     Final Results'));
-console.log('╠' + '═'.repeat(BOX_W) + '╣');
-console.log(boxLine(`  Total Tests: ${String(totalTests).padStart(4)}`));
-console.log(boxLine(`  Passed:      ${String(totalPassed).padStart(4)}  ✓`));
-console.log(boxLine(`  Failed:      ${String(totalFailed).padStart(4)}  ${totalFailed > 0 ? '✗' : ' '}`));
-console.log('╚' + '═'.repeat(BOX_W) + '╝');
+    if (!fs.existsSync(testPath)) {
+      console.log(`WARNING Skipping ${displayPath} (file not found)`);
+      continue;
+    }
 
-if (durationsFile) {
-  const summary = summarizeDurations(durations);
-  fs.writeFileSync(durationsFile, JSON.stringify({ summary, files: durations }, null, 2) + '\n');
-  console.log('\n' + formatDurationReport(summary));
-  console.log(`  Per-file durations written to ${durationsFile}`);
+    console.log(`\n━━━ Running ${displayPath} ━━━`);
+
+    const startedAt = process.hrtime.bigint();
+    const result = spawnSync('node', [testPath], {
+      encoding: 'utf8',
+      env: TEST_ENV,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    durations.push({ file: displayPath, ms: Number((process.hrtime.bigint() - startedAt) / 1000000n) });
+
+    recordResult(displayPath, result);
+  }
 }
 
-process.exit(totalFailed > 0 ? 1 : 0);
+async function runParallel(workers) {
+  const displayPaths = testFiles.map(testFile => testFile.split(path.sep).join('/'));
+  const pathOf = displayPath => path.join(testsDir, displayPath);
+  const classified = classifyTestFiles(displayPaths, displayPath => fs.readFileSync(pathOf(displayPath), 'utf8'), loadManifest());
+  const independent = classified.filter(entry => !entry.serial).map(entry => entry.file);
+  const serialGroup = classified.filter(entry => entry.serial).map(entry => entry.file);
+  const sizeOf = displayPath => fs.statSync(pathOf(displayPath)).size;
+
+  const finalResults = new Map();
+  const pooled = orderLongestFirst(independent, sizeOf);
+  const pooledResults = await runPool(pooled, workers, displayPath => runInPrivateEnv(pathOf(displayPath), TEST_ENV));
+  const rerun = [];
+  for (let index = 0; index < pooled.length; index++) {
+    const displayPath = pooled[index];
+    if (!didFail(pooledResults[index])) {
+      finalResults.set(displayPath, pooledResults[index]);
+      continue;
+    }
+    const alone = await runNode(pathOf(displayPath), TEST_ENV);
+    rerun.push({ file: displayPath, passedAlone: !didFail(alone) });
+    finalResults.set(displayPath, alone);
+  }
+  for (const displayPath of serialGroup) {
+    finalResults.set(displayPath, await runNode(pathOf(displayPath), TEST_ENV));
+  }
+
+  for (const displayPath of displayPaths) {
+    const result = finalResults.get(displayPath);
+    console.log(`\n━━━ Running ${displayPath} ━━━`);
+    durations.push({ file: displayPath, ms: result.ms });
+    recordResult(displayPath, result);
+  }
+
+  console.log(`\nParallel run: ${workers} workers, ${independent.length} files in the pool, ${serialGroup.length} serial`);
+  for (const entry of rerun) {
+    console.log(entry.passedAlone
+      ? `  ✓ ${entry.file} failed in the pool and passed alone (load, not the code)`
+      : `  ✗ ${entry.file} failed in the pool and failed alone too (a real failure)`);
+  }
+}
+
+async function main() {
+  if (jobs === null) runSerial();
+  else await runParallel(jobs);
+
+  totalTests = totalPassed + totalFailed;
+
+  console.log('\n╔' + '═'.repeat(BOX_W) + '╗');
+  console.log(boxLine('                     Final Results'));
+  console.log('╠' + '═'.repeat(BOX_W) + '╣');
+  console.log(boxLine(`  Total Tests: ${String(totalTests).padStart(4)}`));
+  console.log(boxLine(`  Passed:      ${String(totalPassed).padStart(4)}  ✓`));
+  console.log(boxLine(`  Failed:      ${String(totalFailed).padStart(4)}  ${totalFailed > 0 ? '✗' : ' '}`));
+  console.log('╚' + '═'.repeat(BOX_W) + '╝');
+
+  if (durationsFile) {
+    const summary = summarizeDurations(durations);
+    fs.writeFileSync(durationsFile, JSON.stringify({ summary, files: durations }, null, 2) + '\n');
+    console.log('\n' + formatDurationReport(summary));
+    console.log(`  Per-file durations written to ${durationsFile}`);
+  }
+
+  if (reportFile) {
+    const report = {
+      mode: jobs === null ? 'serial' : 'parallel',
+      jobs,
+      totals: { passed: totalPassed, failed: totalFailed },
+      files: fileReports
+    };
+    fs.writeFileSync(reportFile, JSON.stringify(report, null, 2) + '\n');
+    console.log(`  Per-file counts written to ${reportFile}`);
+  }
+
+  process.exit(totalFailed > 0 ? 1 : 0);
+}
+
+main().catch(error => {
+  console.error(error && error.stack ? error.stack : String(error));
+  process.exit(1);
+});
