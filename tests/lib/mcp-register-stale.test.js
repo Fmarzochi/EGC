@@ -17,6 +17,7 @@ const {
   registerCrushMcp,
 } = require('../../scripts/lib/mcp-register');
 const { isStaleScript } = require('../../scripts/lib/mcp-register-stale');
+const { tomlEscape } = require('../../scripts/lib/mcp-register-toml-text');
 
 function test(name, fn) {
   try {
@@ -163,16 +164,16 @@ function run() {
       '',
       '[mcp_servers.egc-guardian]',
       'command = "node"',
-      `args = ["${GONE_GUARDIAN}"]`,
+      `args = ["${tomlEscape(GONE_GUARDIAN)}"]`,
       '',
       '[mcp_servers.egc-memory]',
       'command = "node"',
-      `args = ["${bins.memoryBin}"]`,
+      `args = ["${tomlEscape(bins.memoryBin)}"]`,
       '',
     ].join('\n');
     fs.writeFileSync(file, text);
     assert.strictEqual(registerToml(file, bins, { tomlTables: 'per-server' }), true);
-    assert.strictEqual(read(file), text.replace(GONE_GUARDIAN, bins.guardianBin));
+    assert.strictEqual(read(file), text.replace(tomlEscape(GONE_GUARDIAN), () => tomlEscape(bins.guardianBin)));
     assert.strictEqual(registerToml(file, bins, { tomlTables: 'per-server' }), false);
   })));
 
@@ -183,17 +184,17 @@ function run() {
       '[[mcp_servers]]',
       'name = "egc-guardian"',
       'command = "node"',
-      `args = ["${bins.guardianBin}"]`,
+      `args = ["${tomlEscape(bins.guardianBin)}"]`,
       '',
       '[[mcp_servers]]',
       'name = "egc-memory"',
       'command = "node"',
-      `args = ["${GONE_MEMORY}"]`,
+      `args = ["${tomlEscape(GONE_MEMORY)}"]`,
       '',
     ].join('\n');
     fs.writeFileSync(file, text);
     assert.strictEqual(registerToml(file, bins), true);
-    assert.strictEqual(read(file), text.replace(GONE_MEMORY, bins.memoryBin));
+    assert.strictEqual(read(file), text.replace(tomlEscape(GONE_MEMORY), () => tomlEscape(bins.memoryBin)));
   })));
 
   tally(test('registerToml refreshes a stale path while appending the server that is missing', () => withTempDir(dir => {
@@ -202,14 +203,14 @@ function run() {
     fs.writeFileSync(file, [
       '[mcp_servers.egc-guardian]',
       'command = "node"',
-      `args = ["${GONE_GUARDIAN}"]`,
+      `args = ["${tomlEscape(GONE_GUARDIAN)}"]`,
       '',
     ].join('\n'));
     assert.strictEqual(registerToml(file, bins, { tomlTables: 'per-server' }), true);
     const written = read(file);
-    assert.ok(written.includes(bins.guardianBin), written);
-    assert.ok(written.includes(bins.memoryBin), written);
-    assert.ok(!written.includes(GONE_GUARDIAN), written);
+    assert.ok(written.includes(tomlEscape(bins.guardianBin)), written);
+    assert.ok(written.includes(tomlEscape(bins.memoryBin)), written);
+    assert.ok(!written.includes(tomlEscape(GONE_GUARDIAN)), written);
   })));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
