@@ -141,12 +141,7 @@ function lintInDefaultProject(root, relativePath) {
     env: process.env,
     maxBuffer: 64 * 1024 * 1024,
   });
-  if (result.status !== 0) return null;
-  try {
-    return JSON.parse(result.stdout);
-  } catch {
-    return null;
-  }
+  return result.status === 0 ? JSON.parse(result.stdout) : null;
 }
 
 async function defaultProjectMessages(ESLint, root, overrideConfig, relativePath) {
