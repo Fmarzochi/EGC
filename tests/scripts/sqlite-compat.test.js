@@ -113,6 +113,30 @@ async function runMissingPackageTests() {
         await db.close();
       });
     }),
+    await test('a reader falls back without the notice and has no file behind it', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+      const file = path.join(dir, 'state.db');
+      const captured = [];
+      const originalWrite = process.stderr.write;
+      process.stderr.write = chunk => { captured.push(String(chunk)); return true; };
+      try {
+        fs.writeFileSync(file, '');
+        const before = fs.statSync(file, { bigint: true });
+        await withoutPackages(['sqlite3'], async compat => {
+          const db = await compat.openCompatDatabase(file, 'test', { reader: true });
+          assert.strictEqual(compat.selectedEngine(), 'wasm');
+          await db.exec('CREATE TABLE probe (x)');
+          await db.close();
+        });
+        const after = fs.statSync(file, { bigint: true });
+        assert.strictEqual(after.ino, before.ino, 'the file must not be replaced');
+        assert.strictEqual(after.size, 0n, 'nothing must be written to the file');
+      } finally {
+        process.stderr.write = originalWrite;
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+      assert.deepStrictEqual(captured.filter(line => line.includes('using the portable sql.js engine')), []);
+    }),
   ];
   const passed = results.filter(Boolean).length;
   return { passed, failed: results.length - passed };

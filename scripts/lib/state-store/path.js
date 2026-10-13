@@ -29,4 +29,13 @@ function resolveStateStorePath(options = {}) {
   return canonicalStoreUnder(getHomeDir());
 }
 
-module.exports = { resolveStateStorePath };
+// The memory server keeps its own database, where lesson_save and
+// store_decision write (getMemoryDbDir in mcp/servers/egc-memory/src/index.ts).
+// It follows the home alone: EGC_DIR moves the CLI event store above, not
+// this one.
+function resolveMemoryStorePath(options = {}) {
+  const homeDir = options.homeDir ? path.resolve(options.homeDir) : require('../utils').getHomeDir();
+  return path.join(homeDir, '.egc', 'memory', 'state.db');
+}
+
+module.exports = { resolveStateStorePath, resolveMemoryStorePath };
