@@ -18,10 +18,14 @@
  *   - sessionEvents → session_events via egc-memory MCP stdio (slice 3, #1238)
  */
 
+const fs = require('node:fs');
+
 const { buildDoctorReport, repairInstalledStates } = require('../install-lifecycle');
 const { createInstallPlanFromRequest }  = require('../install/runtime');
 const { readAll, aggregateBreakdown }  = require('../crusher/metrics');
 const { createStateStore }             = require('../state-store/index');
+const { resolveMemoryStorePath }       = require('../state-store/path');
+const { openCompatDatabase }           = require('../state-store/sqlite-compat');
 const { normalizeParams } = require('./params');
 const { sessionEvents, sessionPeers, sessionSend } = require('./session-bus');
 const { _extractMcpLineResult } = require('./mcp-bridge');
@@ -161,18 +165,51 @@ function savingsLedger(params) {
 // Operation: state
 // ---------------------------------------------------------------------------
 
+const MEMORY_COUNTS = Object.freeze({
+  decisions: 'SELECT COUNT(*) AS total FROM decisions',
+  lessons: 'SELECT COUNT(*) AS total FROM lessons WHERE archived = 0',
+});
+
+async function readMemoryCounts(memoryDbPath) {
+  const db = await openCompatDatabase(memoryDbPath, 'egc-operations', { reader: true });
+  try {
+    const rows = await db.all("SELECT name FROM sqlite_master WHERE type = 'table'");
+    const tables = new Set(rows.map(row => row.name));
+    // A store that predates a migration has no such table yet: that is 0.
+    const count = async ([table, sql]) => [table, tables.has(table) ? Number((await db.get(sql)).total) : 0];
+    return Object.fromEntries(await Promise.all(Object.entries(MEMORY_COUNTS).map(count)));
+  } finally {
+    await db.close();
+  }
+}
+
+// Counts the memory server's decisions and active lessons without creating
+// or changing its store. A store that cannot be read (in use on a machine
+// with the portable engine only, damaged, not readable) keeps both numbers
+// at 0 and says why in memoryDbError, so the other numbers still reach the
+// caller.
+async function countMemoryStore(memoryDbPath) {
+  if (!fs.existsSync(memoryDbPath)) return { decisions: 0, lessons: 0 };
+  try {
+    return await readMemoryCounts(memoryDbPath);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return { decisions: 0, lessons: 0, failure: { memoryDbError: reason.split('\n')[0] } };
+  }
+}
+
 /**
- * Query the EGC state store and return a plain JSON snapshot of counts.
+ * Query the EGC stores and return a plain JSON snapshot of counts.
  *
- * Returns plain JSON-serializable data — not the live store object. The store
- * is opened, queried, and closed entirely within this function. If a caller
+ * Returns plain JSON-serializable data — not the live store object. The stores
+ * are opened, queried, and closed entirely within this function. If a caller
  * needs the live store resource directly (e.g. for writes), use
  * createStateStore() from scripts/lib/state-store/index.js instead.
  *
  * @param {object} [params]
- * @param {string} [params.dbPath]   - Explicit path to the SQLite database
- * @param {string} [params.homeDir]  - Resolve the default db path under this home
- * @returns {Promise<{ decisions: number, lessons: number, patterns: number, dbPath: string }>}
+ * @param {string} [params.dbPath]   - Explicit path to the CLI event store
+ * @param {string} [params.homeDir]  - Resolve both default store paths under this home
+ * @returns {Promise<{ decisions: number, lessons: number, patterns: number, dbPath: string, memoryDbPath: string, memoryDbError?: string }>}
  */
 async function state(params) {
   const p = normalizeParams(params);
@@ -182,17 +219,16 @@ async function state(params) {
       dbPath:  p.dbPath,
       homeDir: p.homeDir,
     });
-    // Use the dedicated count queries — unbounded and semantically correct:
-    //   countDecisions()  → SELECT COUNT(*) FROM decisions (global, all sessions)
-    //   countLessons()    → SELECT COUNT(*) FROM lessons WHERE archived = 0
-    //   countPatterns()   → SELECT COUNT(*) FROM patterns
-    // These mirror what the old dashboard's raw sqlite3 queries returned and
-    // avoid the list-API limits (confidence floor, row cap) that caused undercounts.
-    const decisions = store.countDecisions();
-    const lessons   = store.countLessons();
-    const patterns  = store.countPatterns();
+    // Each number is counted where it is written. Patterns live in the CLI
+    // event store, where the memory server's detect_patterns writes them.
+    // Decisions and lessons live in the memory server's own store, where
+    // store_decision and lesson_save write; the tables of the same name in
+    // the CLI event store have no production writer and always counted 0.
+    const patterns = store.countPatterns();
+    const memoryDbPath = resolveMemoryStorePath({ homeDir: p.homeDir });
+    const memory = await countMemoryStore(memoryDbPath);
     // Return plain JSON only — no store methods, no _database reference.
-    return { decisions, lessons, patterns, dbPath: store.dbPath };
+    return { decisions: memory.decisions, lessons: memory.lessons, patterns, dbPath: store.dbPath, memoryDbPath, ...memory.failure };
   } finally {
     try { store?.close(); } catch (_) { /* best-effort close: ignore errors */ } // NOSONAR
   }

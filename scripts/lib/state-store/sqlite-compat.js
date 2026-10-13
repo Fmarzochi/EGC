@@ -227,12 +227,15 @@ function assertNoPendingWal(filename) {
 // The engine is loaded before the write-ahead log is checked: with no engine
 // installed, the log advice (open the file with a working native sqlite3)
 // would point away from the real cause.
-async function openWasmDatabase(filename, nativeError) {
+async function openWasmDatabase(filename, nativeError, reader) {
   const SQL = await loadSqlJs(nativeError);
   assertNoPendingWal(filename);
   const data = filename !== ':memory:' && fs.existsSync(filename)
     ? new Uint8Array(fs.readFileSync(filename))
     : undefined;
+  // A reader gets the rows with no file behind them: close() then has
+  // nothing to write back, and there is nothing to flush at exit.
+  if (reader) return new WasmDatabase(new SQL.Database(data), ':memory:');
   const wasm = new WasmDatabase(new SQL.Database(data), filename);
   process.once('exit', () => { void wasm.close(); });
   return wasm;
@@ -244,14 +247,26 @@ function announceFallback(serverName, error) {
   process.stderr.write(`[${serverName}] native sqlite3 unavailable (${errorMessage(error)}); using the portable sql.js engine. Cross-process locking is reduced on this machine.\n`);
 }
 
-async function openCompatDatabase(filename, serverName) {
+// options.reader is for a process that reads a store it does not own, such
+// as the dashboard counting the memory server's rows. It never creates the
+// store or changes its rows: the native engine opens without the create
+// flag, so a missing file is an error instead of a new empty store, the
+// portable engine never writes the file back, and nothing is said on stderr.
+// The native reader still opens read-write, because a read-only connection
+// cannot fold a write-ahead log left by a dead owner and would recover it on
+// every open; with no other connection open, closing folds that log into the
+// file, as the owner's next start would. The mode is passed whole, so it
+// names the full mutex the driver otherwise adds by itself.
+async function openCompatDatabase(filename, serverName, options = {}) {
   const engine = process.env.EGC_SQLITE_ENGINE;
+  const reader = options.reader === true;
   let nativeError = null;
   if (engine !== 'wasm') {
     try {
       const sqlite3 = require('sqlite3');
       const { open } = require('sqlite');
-      const db = await open({ filename, driver: sqlite3.Database });
+      const mode = reader ? { mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_FULLMUTEX } : {};
+      const db = await open({ filename, driver: sqlite3.Database, ...mode });
       selected = 'native';
       return db;
     } catch (error) {
@@ -260,10 +275,10 @@ async function openCompatDatabase(filename, serverName) {
     }
   }
   selected = 'wasm';
-  const db = await openWasmDatabase(filename, nativeError);
+  const db = await openWasmDatabase(filename, nativeError, reader);
   // Said only once the portable engine is open: announcing it before a
   // failed open would tell the reader an engine is in use when none is.
-  if (nativeError) announceFallback(serverName, nativeError);
+  if (nativeError && !reader) announceFallback(serverName, nativeError);
   return db;
 }
 
