@@ -85,8 +85,7 @@ function unlinkLockIfOwned(lockPath, token) {
     // Lock file exists but belongs to a different token/owner
     return true;
   } catch (err) {
-    if (err?.code === 'ENOENT') return true;
-    return false;
+    return err?.code === 'ENOENT';
   }
 }
 
@@ -367,31 +366,46 @@ function normalizeParams(params) {
   return [nullForUndefined(only)];
 }
 
+function consumeQuotedLiteral(sql, start, len) {
+  const q = sql[start];
+  let res = q;
+  let i = start + 1;
+  while (i < len && sql[i] !== q) {
+    res += sql[i];
+    i += 1;
+  }
+  if (i < len) {
+    res += sql[i];
+    i += 1;
+  }
+  return { text: res, nextIndex: i };
+}
+
+function skipComment(sql, start) {
+  if (sql[start] === '-' && sql[start + 1] === '-') {
+    const nl = sql.indexOf('\n', start + 2);
+    return nl === -1 ? sql.length : nl + 1;
+  }
+  if (sql[start] === '/' && sql[start + 1] === '*') {
+    const end = sql.indexOf('*/', start + 2);
+    return end === -1 ? sql.length : end + 2;
+  }
+  return -1;
+}
+
 function stripSqlComments(sql) {
   let res = '';
   let i = 0;
   const len = sql.length;
   while (i < len) {
-    if (sql[i] === '-' && sql[i + 1] === '-') {
-      const nl = sql.indexOf('\n', i + 2);
-      if (nl === -1) break;
-      i = nl + 1;
-    } else if (sql[i] === '/' && sql[i + 1] === '*') {
-      const end = sql.indexOf('*/', i + 2);
-      if (end === -1) break;
-      i = end + 2;
+    const nextComment = skipComment(sql, i);
+    if (nextComment !== -1) {
+      if (nextComment >= len) break;
+      i = nextComment;
     } else if (sql[i] === '\'' || sql[i] === '"') {
-      const q = sql[i];
-      res += q;
-      i += 1;
-      while (i < len && sql[i] !== q) {
-        res += sql[i];
-        i += 1;
-      }
-      if (i < len) {
-        res += sql[i];
-        i += 1;
-      }
+      const quoted = consumeQuotedLiteral(sql, i, len);
+      res += quoted.text;
+      i = quoted.nextIndex;
     } else {
       res += sql[i];
       i += 1;
