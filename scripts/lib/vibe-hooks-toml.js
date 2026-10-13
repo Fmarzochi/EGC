@@ -38,6 +38,7 @@ const VIBE_CRUSHER_MATCHER = `re:^(${VIBE_SHELL_TOOLS})$`;
 const BASH_GUARDIAN_HOOK_MODULE_ID = 'egc-bash-guardian-hook';
 const CRUSHER_HOOK_MODULE_ID = 'egc-crusher-hook';
 const GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/vibe-guardian-adapter.js';
+const SHELL_EDIT_ADAPTER_SOURCE_RELATIVE_PATH = 'scripts/lib/shell-edit-guardian-adapter.js';
 const CRUSHER_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/vibe-crusher-adapter.js';
 const GUARDIAN_ADAPTER_BASENAME = path.basename(GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH);
 const CRUSHER_ADAPTER_BASENAME = path.basename(CRUSHER_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH);
@@ -339,6 +340,12 @@ function createVibeGuardianScriptCopyOperations(createRemappedOperation, targetR
     ...createBashGuardianScriptCopyOperations(createRemappedOperation, targetRoot),
     createWriteValidatorScriptCopyOperation(createRemappedOperation, targetRoot),
     createAdapterStdinJsonCopyOperation(createRemappedOperation, targetRoot),
+    createRemappedOperation(
+      BASH_GUARDIAN_HOOK_MODULE_ID,
+      SHELL_EDIT_ADAPTER_SOURCE_RELATIVE_PATH,
+      path.join(targetRoot, ...SHELL_EDIT_ADAPTER_SOURCE_RELATIVE_PATH.split('/')),
+      { strategy: 'preserve-relative-path' }
+    ),
     createRemappedOperation(
       BASH_GUARDIAN_HOOK_MODULE_ID,
       GUARDIAN_ADAPTER_SCRIPT_SOURCE_RELATIVE_PATH,
