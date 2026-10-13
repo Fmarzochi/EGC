@@ -25,6 +25,7 @@ const {
   registerOpenCodeMcp,
   registerZedContextServers,
 } = require('./mcp-register-json-writers');
+const { registerGooseYaml } = require('./mcp-register-yaml');
 const {
   buildMcpRegistrationTargets,
   kiloConfigDir,
@@ -40,6 +41,7 @@ const FORMAT_HANDLERS = {
   'opencode-mcp': registerOpenCodeMcp,
   'claude-cli': registerClaudeCli,
   'crush-mcp': registerCrushMcp,
+  'goose-yaml': registerGooseYaml,
 };
 
 function registerTarget(target, bins, roots, onRegister, onWarn, onUnchanged) {
@@ -99,6 +101,7 @@ module.exports = {
   registerOpenCodeInstructions,
   registerClaudeCli,
   registerCrushMcp,
+  registerGooseYaml,
   resolveCrushConfigDir,
   resolveCrushConfigPath,
   quoteForCmdShell,
