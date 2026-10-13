@@ -165,12 +165,7 @@ async function defaultProjectMessages(ESLint, root, overrideConfig, relativePath
 }
 
 function readBase(root, mergeBase, basePath) {
-  if (!basePath) return null;
-  try {
-    return git(['show', `${mergeBase}:${basePath}`], root);
-  } catch {
-    return null;
-  }
+  return basePath ? git(['show', `${mergeBase}:${basePath}`], root) : null;
 }
 
 async function headMessages(engine, root, relativePath) {
@@ -217,13 +212,9 @@ async function report(ESLint, sonar, root, options) {
   console.log(`preflight: ${files.length} changed file(s) against ${options.base} (${mergeBase.slice(0, 8)}), rules: ${mode}`);
 
   const engine = new ESLint({ cwd: root, overrideConfig: sonar });
-  const added = [];
-  const existing = [];
-  for (const entry of files) {
-    const findings = await checkFile(engine, root, mergeBase, entry);
-    added.push(...findings.added);
-    existing.push(...findings.existing);
-  }
+  const results = await Promise.all(files.map(entry => checkFile(engine, root, mergeBase, entry)));
+  const added = results.flatMap(findings => findings.added);
+  const existing = results.flatMap(findings => findings.existing);
 
   printSection('Findings this branch adds', added);
   printSection('Findings already at the merge base (informational)', existing);
@@ -255,4 +246,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { changedEntries, isLintable, parseArgs, splitFindings };
+module.exports = { changedEntries, isLintable, lintInDefaultProject, parseArgs, splitFindings };

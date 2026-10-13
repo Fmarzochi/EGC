@@ -7,7 +7,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'ci', 'preflight.js');
-const { changedEntries, isLintable, splitFindings } = require(SCRIPT);
+const { changedEntries, isLintable, lintInDefaultProject, parseArgs, splitFindings } = require(SCRIPT);
 
 const GIT_BIN = [
   '/usr/bin/git',
@@ -191,6 +191,39 @@ const results = [
     assert.match(output, /^src\/b\.ts:2 no-debugger /m, output);
     assert.doesNotMatch(output, /parse-error/, output);
     return undefined;
+  })),
+
+  test('a resolvable eslint-plugin-sonarjs adds its recommended rules, and the output names that mode', () => withSandbox(sandbox => {
+    const root = makeRepo(sandbox, 'repo', { 'eslint.config.js': "module.exports = [{ files: ['**/*.js'], rules: {} }];\n" });
+    write(root, {
+      'node_modules/eslint-plugin-sonarjs/package.json': '{ "name": "eslint-plugin-sonarjs", "main": "index.js" }\n',
+      'node_modules/eslint-plugin-sonarjs/index.js': "module.exports = { configs: { recommended: { rules: { 'no-debugger': 'error' } } } };\n",
+      'lib/a.js': "'use strict';\ndebugger;\n",
+    });
+    commit(sandbox, root, 'add a file');
+    const { status, output } = preflight(sandbox, root);
+    assert.strictEqual(status, 1, output);
+    assert.match(output, /rules: eslint\.config\.js \+ eslint-plugin-sonarjs recommended/, output);
+    assert.match(output, /^lib\/a\.js:2 no-debugger /m, output);
+  })),
+
+  test('without a merge base it exits 2 and says to fetch origin', () => withSandbox(sandbox => {
+    const root = makeRepo(sandbox, 'repo', { 'eslint.config.js': PLAIN_CONFIG });
+    git(sandbox, root, ['update-ref', '-d', 'refs/remotes/origin/main']);
+    const { status, output } = preflight(sandbox, root);
+    assert.strictEqual(status, 2, output);
+    assert.match(output, /preflight: no merge base with origin\/main; run git fetch origin first/, output);
+  })),
+
+  test('--base picks the ref to compare against, and an unknown argument is refused with the usage', () => {
+    assert.deepStrictEqual(parseArgs([]), { base: 'origin/main', defaultProject: null });
+    assert.strictEqual(parseArgs(['--base', 'origin/release']).base, 'origin/release');
+    assert.throws(() => parseArgs(['--nope']), /unknown argument --nope\. Usage: npm run preflight/);
+    assert.throws(() => parseArgs(['--base']), /unknown argument --base/);
+  }),
+
+  test('a default-project relint that cannot run gives the first result back instead of failing', () => withSandbox(sandbox => {
+    assert.strictEqual(lintInDefaultProject(sandbox.dir, 'src/b.ts'), null);
   })),
 
   test('findings match by rule and message counts, not by line', () => {
