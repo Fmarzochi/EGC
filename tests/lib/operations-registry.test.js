@@ -26,6 +26,50 @@ const {
   listOperations,
   REGISTRY,
 } = require('../../scripts/lib/operations/index');
+const { openCompatDatabase } = require('../../scripts/lib/state-store/sqlite-compat');
+
+// The two tables as the memory server creates them
+// (mcp/servers/egc-memory/src/index.ts, migrations 1 and 4).
+const MEMORY_STORE_DDL = `
+  CREATE TABLE IF NOT EXISTS decisions (id INTEGER PRIMARY KEY AUTOINCREMENT, context TEXT, decision TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);
+  CREATE TABLE IF NOT EXISTS lessons (id TEXT PRIMARY KEY, content TEXT NOT NULL, context TEXT NOT NULL, confidence REAL NOT NULL DEFAULT 0.7, last_reinforced TEXT, last_recalled TEXT, created_at TEXT NOT NULL, tags TEXT, archived INTEGER NOT NULL DEFAULT 0);
+`;
+
+async function withEngine(engine, fn) {
+  const previous = process.env.EGC_SQLITE_ENGINE;
+  if (engine) process.env.EGC_SQLITE_ENGINE = engine;
+  else delete process.env.EGC_SQLITE_ENGINE;
+  try {
+    return await fn();
+  } finally {
+    if (previous === undefined) delete process.env.EGC_SQLITE_ENGINE;
+    else process.env.EGC_SQLITE_ENGINE = previous;
+  }
+}
+
+// Builds <home>/.egc/memory/state.db with three decisions, two active
+// lessons and one archived lesson, and returns its path.
+async function seedMemoryStore(home) {
+  const dir = path.join(home, '.egc', 'memory');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'state.db');
+  await withEngine('wasm', async () => {
+    const db = await openCompatDatabase(file, 'test');
+    await db.exec(MEMORY_STORE_DDL);
+    for (const text of ['one', 'two', 'three']) {
+      await db.run('INSERT INTO decisions (context, decision) VALUES (?, ?)', ['test', text]);
+    }
+    for (const [id, archived] of [['a', 0], ['b', 0], ['c', 1]]) {
+      await db.run('INSERT INTO lessons (id, content, context, created_at, archived) VALUES (?, ?, ?, ?, ?)', [id, 'lesson', 'test', '2026-10-13T00:00:00.000Z', archived]);
+    }
+    await db.close();
+  });
+  return file;
+}
+
+function sandboxHome() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-state-home-'));
+}
 
 // ---------------------------------------------------------------------------
 // Async-aware test harness (CodeRabbit finding: run() must handle Promises)
@@ -294,9 +338,14 @@ async function main() {
 
   // ── state() — plain JSON contract (cubic-dev-ai P0 + P2) ─────────────────
 
+  // state() reads the memory store under the home it is given; without one
+  // these cases would read the store of whoever runs the suite.
+  const stateHome = sandboxHome();
+  process.on('exit', () => fs.rmSync(stateHome, { recursive: true, force: true }));
+
   await run('state() returns a Promise', () => {
     const tmpDb = path.join(os.tmpdir(), `egc-test-state-${Date.now()}.db`);
-    const result = state({ dbPath: tmpDb });
+    const result = state({ dbPath: tmpDb, homeDir: stateHome });
     assert.ok(result && typeof result.then === 'function',
       'state() must return a Promise');
     // Clean up: resolve it
@@ -308,7 +357,7 @@ async function main() {
   await run('state() result is plain JSON-serializable (not a live store)', async () => {
     const tmpDb = path.join(os.tmpdir(), `egc-test-state-${Date.now()}.db`);
     try {
-      const result = await state({ dbPath: tmpDb });
+      const result = await state({ dbPath: tmpDb, homeDir: stateHome });
       // Must NOT have live store methods
       assert.ok(!Object.hasOwn(result, 'close'),   'state() result must not have close()');
       assert.ok(!Object.hasOwn(result, 'flush'),   'state() result must not have flush()');
@@ -324,7 +373,7 @@ async function main() {
   await run('state() result has expected numeric keys', async () => {
     const tmpDb = path.join(os.tmpdir(), `egc-test-state-${Date.now()}.db`);
     try {
-      const result = await state({ dbPath: tmpDb });
+      const result = await state({ dbPath: tmpDb, homeDir: stateHome });
       assert.ok(typeof result.decisions === 'number', 'state().decisions must be a number');
       assert.ok(typeof result.lessons   === 'number', 'state().lessons must be a number');
       assert.ok(typeof result.patterns  === 'number', 'state().patterns must be a number');
@@ -337,11 +386,130 @@ async function main() {
   await run('state() does not write to console', async () => {
     const tmpDb = path.join(os.tmpdir(), `egc-test-state-${Date.now()}.db`);
     try {
-      const lines = await captureConsole(() => state({ dbPath: tmpDb }));
+      const lines = await captureConsole(() => state({ dbPath: tmpDb, homeDir: stateHome }));
       assert.strictEqual(lines.length, 0,
         `state() wrote to stdout/stderr: ${lines.join('')}`);
     } finally {
       try { fs.unlinkSync(tmpDb); } catch (_) { /* temp file may not exist: ignore */ }
+    }
+  });
+
+  // ── state() — lessons and decisions come from the memory store (#1683) ───
+
+  for (const engine of [undefined, 'wasm']) {
+    await run(`state() counts decisions and active lessons from the memory store (${engine || 'default'} engine)`, async () => {
+      const home = sandboxHome();
+      try {
+        const memoryDb = await seedMemoryStore(home);
+        const result = await withEngine(engine, () => state({ homeDir: home }));
+        assert.strictEqual(result.decisions, 3);
+        assert.strictEqual(result.lessons, 2);
+        assert.strictEqual(result.patterns, 0);
+        assert.strictEqual(result.memoryDbPath, memoryDb);
+        assert.ok(!Object.hasOwn(result, 'memoryDbError'), String(result.memoryDbError));
+      } finally {
+        fs.rmSync(home, { recursive: true, force: true });
+      }
+    });
+  }
+
+  await run('state() counts rows still in the write-ahead log of a store another connection holds open', async () => {
+    // The everyday case: the memory server is running and owns the store.
+    // Only the native engine can read it then; the portable engine refuses,
+    // which the last case of this block pins.
+    let native = true;
+    try { require('sqlite3'); } catch { native = false; }
+    if (!native) {
+      console.log('    - skipped: native sqlite3 does not load here');
+      return;
+    }
+    const home = sandboxHome();
+    const dir = path.join(home, '.egc', 'memory');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'state.db');
+    const owner = await withEngine(undefined, () => openCompatDatabase(file, 'test'));
+    try {
+      await owner.exec('PRAGMA journal_mode = WAL;');
+      await owner.exec(MEMORY_STORE_DDL);
+      await owner.run('INSERT INTO decisions (context, decision) VALUES (?, ?)', ['test', 'held in the log']);
+      assert.ok(fs.statSync(`${file}-wal`).size > 0, 'the row must still be in the write-ahead log');
+      const result = await withEngine(undefined, () => state({ homeDir: home }));
+      assert.strictEqual(result.decisions, 1);
+      assert.ok(!Object.hasOwn(result, 'memoryDbError'), String(result.memoryDbError));
+    } finally {
+      await owner.close();
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  await run('state() reports zero and creates nothing when the memory store does not exist', async () => {
+    const home = sandboxHome();
+    try {
+      const dir = path.join(home, '.egc', 'memory');
+      const result = await state({ homeDir: home });
+      assert.strictEqual(result.decisions, 0);
+      assert.strictEqual(result.lessons, 0);
+      assert.ok(!fs.existsSync(dir), 'a count must not create the memory folder');
+      // With the folder in place an engine opened with the create flag would
+      // leave an empty store behind.
+      fs.mkdirSync(dir, { recursive: true });
+      const again = await state({ homeDir: home });
+      assert.strictEqual(again.decisions, 0);
+      assert.ok(!Object.hasOwn(again, 'memoryDbError'), String(again.memoryDbError));
+      assert.deepStrictEqual(fs.readdirSync(dir), [], 'a count must not create the memory store');
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  await run('state() reports zero for a memory store that has no tables yet', async () => {
+    const home = sandboxHome();
+    try {
+      const dir = path.join(home, '.egc', 'memory');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'state.db'), '');
+      const result = await state({ homeDir: home });
+      assert.strictEqual(result.decisions, 0);
+      assert.strictEqual(result.lessons, 0);
+      assert.ok(!Object.hasOwn(result, 'memoryDbError'), String(result.memoryDbError));
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  for (const engine of [undefined, 'wasm']) {
+    await run(`state() does not write the memory store back (${engine || 'default'} engine)`, async () => {
+      const home = sandboxHome();
+      try {
+        const memoryDb = await seedMemoryStore(home);
+        // The portable engine saves by writing a new file over the store, and
+        // after a read that file has the same bytes: the identity of the file
+        // is what tells a write-back apart, not its content.
+        const before = fs.statSync(memoryDb, { bigint: true });
+        const bytes = fs.readFileSync(memoryDb);
+        await withEngine(engine, () => state({ homeDir: home }));
+        const after = fs.statSync(memoryDb, { bigint: true });
+        assert.strictEqual(after.ino, before.ino, 'a count must not replace the memory store');
+        assert.strictEqual(after.mtimeNs, before.mtimeNs, 'a count must not write to the memory store');
+        assert.ok(bytes.equals(fs.readFileSync(memoryDb)), 'a count must not change the memory store');
+      } finally {
+        fs.rmSync(home, { recursive: true, force: true });
+      }
+    });
+  }
+
+  await run('state() keeps patterns and names the reason when the memory store cannot be read', async () => {
+    const home = sandboxHome();
+    try {
+      const memoryDb = await seedMemoryStore(home);
+      fs.writeFileSync(`${memoryDb}-wal`, Buffer.alloc(64, 1));
+      const result = await withEngine('wasm', () => state({ homeDir: home }));
+      assert.strictEqual(result.decisions, 0);
+      assert.strictEqual(result.lessons, 0);
+      assert.strictEqual(typeof result.patterns, 'number');
+      assert.match(result.memoryDbError, /write-ahead data/);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
     }
   });
 

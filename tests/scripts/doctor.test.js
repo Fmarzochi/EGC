@@ -135,6 +135,13 @@ const OK_SERVER_SOURCE = [
 const SILENT_SERVER_SOURCE = "process.stdin.resume();\nsetInterval(() => {}, 1000);\n";
 const CRASH_SERVER_SOURCE = "process.stderr.write('boot failed: no state dir');\nprocess.exit(3);\n";
 
+// The probe budget for every case that needs a fake server to answer. It is
+// a hang detector, not a speed assertion: a loaded Windows runner took more
+// than 1500 ms to start the answering server, and the case that expects one
+// server to answer and one to stay silent failed there.
+const PROBE_TIMEOUT_MS = 8000;
+const PROBE_ENV = Object.freeze({ EGC_DOCTOR_PROBE_TIMEOUT_MS: String(PROBE_TIMEOUT_MS) });
+
 function writeFakeServers(homeDir) {
   const dir = path.join(homeDir, 'fake-servers');
   fs.mkdirSync(dir, { recursive: true });
@@ -1041,7 +1048,7 @@ function runTests() {
       fs.mkdirSync(path.join(homeDir, '.claude'), { recursive: true });
       writeJson(path.join(homeDir, '.claude.json'), mcpServersConfig(servers.ok, servers.ok));
 
-      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '5000' } });
+      const result = run([], { cwd: projectRoot, homeDir, env: PROBE_ENV });
       assert.strictEqual(result.code, 0, result.stdout + result.stderr);
       assert.ok(result.stdout.includes('MCP registrations:'));
       assert.ok(result.stdout.includes('[OK] Cursor ('), result.stdout);
@@ -1086,10 +1093,10 @@ function runTests() {
       writeJson(path.join(homeDir, '.cursor', 'mcp.json'), mcpServersConfig(servers.crash, servers.silent));
       writeJson(path.join(homeDir, '.augment', 'settings.json'), mcpServersConfig(gone, servers.ok));
 
-      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '1500' } });
+      const result = run([], { cwd: projectRoot, homeDir, env: PROBE_ENV });
       assert.strictEqual(result.code, 1, result.stdout + result.stderr);
       assert.ok(result.stdout.includes('[ERROR] egc-guardian at ' + servers.crash + ': exited with code 3 before answering: boot failed: no state dir'), result.stdout);
-      assert.ok(result.stdout.includes('[ERROR] egc-memory at ' + servers.silent + ': no answer within 1500 ms'), result.stdout);
+      assert.ok(result.stdout.includes('[ERROR] egc-memory at ' + servers.silent + ': no answer within ' + PROBE_TIMEOUT_MS + ' ms'), result.stdout);
       assert.ok(result.stdout.includes('[ERROR] egc-guardian at ' + gone + ': registered path does not exist (run egc init after an update)'), result.stdout);
       assert.ok(result.stdout.includes('[OK] egc-memory at ' + servers.ok + ': answers tools/list (2 tools) (registered in Auggie)'), result.stdout);
       assert.ok(result.stdout.includes('MCP summary: registrations=2, registered=2, servers=4, answering=1, warnings=0, errors=3'), result.stdout);
@@ -1110,7 +1117,7 @@ function runTests() {
       fs.writeFileSync(nullServer, "process.stdout.write('null\\n');\nprocess.stdin.resume();\nsetInterval(() => {}, 1000);\n");
       writeJson(path.join(homeDir, '.cursor', 'mcp.json'), mcpServersConfig(nullServer, nullServer));
 
-      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '3000' } });
+      const result = run([], { cwd: projectRoot, homeDir, env: PROBE_ENV });
       assert.strictEqual(result.code, 1, result.stdout + result.stderr);
       assert.ok(result.stdout.includes('answered with an error: not a JSON-RPC message: null'), result.stdout);
     } finally {
@@ -1131,7 +1138,7 @@ function runTests() {
       const entry = { command: process.execPath, args: [guarded, 'serve'], env: { EGC_FAKE_TOKEN: 'on' } };
       writeJson(path.join(homeDir, '.cursor', 'mcp.json'), { mcpServers: { 'egc-guardian': entry, 'egc-memory': entry } });
 
-      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '3000' } });
+      const result = run([], { cwd: projectRoot, homeDir, env: PROBE_ENV });
       assert.strictEqual(result.code, 0, result.stdout + result.stderr);
       assert.ok(result.stdout.includes('[OK] egc-guardian at ' + guarded + ': answers tools/list (2 tools)'), result.stdout);
     } finally {
@@ -1150,7 +1157,7 @@ function runTests() {
       const bare = { command: 'egc-doctor-test-no-such-command' };
       writeJson(path.join(homeDir, '.cursor', 'mcp.json'), { mcpServers: { 'egc-guardian': entry, 'egc-memory': bare } });
 
-      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '3000' } });
+      const result = run([], { cwd: projectRoot, homeDir, env: PROBE_ENV });
       assert.strictEqual(result.code, 1, result.stdout + result.stderr);
       assert.ok(result.stdout.includes('[OK] egc-guardian at ' + process.execPath + ': answers tools/list'), result.stdout);
       assert.ok(result.stdout.includes('[ERROR] egc-memory at egc-doctor-test-no-such-command: exited with code none before answering'), result.stdout);
@@ -1173,7 +1180,7 @@ function runTests() {
         },
       });
 
-      const result = run([], { cwd: projectRoot, homeDir, env: { EGC_DOCTOR_PROBE_TIMEOUT_MS: '3000' } });
+      const result = run([], { cwd: projectRoot, homeDir, env: PROBE_ENV });
       assert.strictEqual(result.code, 0, result.stdout + result.stderr);
       assert.ok(result.stdout.includes('[OK] egc-guardian at ' + servers.ok), result.stdout);
       assert.ok(result.stdout.includes('[OK] egc-memory at ' + servers.ok), result.stdout);

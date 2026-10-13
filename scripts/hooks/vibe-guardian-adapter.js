@@ -18,8 +18,7 @@
 
 'use strict';
 
-const { run: runBashGuardian } = require('./pre-bash-guardian-validate');
-const { run: runWriteGuardian } = require('./pre-write-guardian-validate');
+const { createShellEditGuardianAdapter } = require('../lib/shell-edit-guardian-adapter');
 const { runJsonEnvelopeGuardianAdapter } = require('../lib/adapter-stdin-json');
 
 const SHELL_TOOL_RE = /^(bash|git_bash|experimental_bash|experimental_git_bash)$/i;
@@ -27,39 +26,11 @@ const EDIT_TOOL_RE = /^edit$/i;
 const TRUNCATED_REASON = 'EGC Guardian BLOCKED this tool call: the event payload exceeded the size '
   + 'this validator can safely read, so it could not be parsed or validated.';
 
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-/**
- * The Guardian input a Vibe pre_tool event maps to, or null for a tool the
- * Guardian does not judge.
- * @param {Record<string, unknown>} event
- * @returns {{kind: 'bash'|'write', input: Record<string, unknown>}|null}
- */
-function buildGuardianInput(event) {
-  if (!isPlainObject(event) || typeof event.tool_name !== 'string') return null;
-  const toolName = event.tool_name.trim();
-  const toolInput = isPlainObject(event.tool_input) ? { ...event.tool_input } : {};
-  const cwd = typeof event.cwd === 'string' ? { cwd: event.cwd } : {};
-  if (SHELL_TOOL_RE.test(toolName)) {
-    if (typeof toolInput.command !== 'string') return null;
-    return { kind: 'bash', input: { tool_name: 'Bash', tool_input: toolInput, ...cwd } };
-  }
-  if (EDIT_TOOL_RE.test(toolName)) {
-    const target = toolInput.file_path || toolInput.path;
-    if (typeof target !== 'string') return null;
-    return {
-      kind: 'write',
-      input: { tool_name: 'Edit', tool_input: { ...toolInput, file_path: target, path: target }, ...cwd },
-    };
-  }
-  return null;
-}
-
-function runGuardian(target, options) {
-  return target.kind === 'bash' ? runBashGuardian(target.input, options) : runWriteGuardian(target.input, options);
-}
+const { buildGuardianInput, runGuardian } = createShellEditGuardianAdapter({
+  shellToolRe: SHELL_TOOL_RE,
+  writeToolRe: EDIT_TOOL_RE,
+  pathKeys: ['file_path', 'path'],
+});
 
 // Vibe's answer: silence allows, an object with decision "deny" and the
 // Guardian's reason denies. process.exitCode, never process.exit(), so the

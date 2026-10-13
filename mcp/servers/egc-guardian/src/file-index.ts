@@ -53,7 +53,7 @@ async function indexFile(
   const pathTokens = tokenize(rel);
   // A large, unreadable or binary file is indexed by its path alone.
   const raw = st.size > MAX_FILE_BYTES ? null : await readFileWithin(root, rel, MAX_FILE_BYTES);
-  const text = raw?.includes(String.fromCharCode(0)) ? null : raw;
+  const text = raw?.includes(String.fromCodePoint(0)) ? null : raw;
   if (text === null) return { doc: { path: rel, fields: { path: pathTokens, symbols: [], keywords: [], summary: [] } }, imports: [] };
 
   const summary = tokenize(summaryOf(text));
@@ -66,7 +66,10 @@ async function indexFile(
 }
 
 
-const compareText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+function compareText(a: string, b: string): number {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
 
 export async function buildFileIndex(
   projectRoot: string,

@@ -27,6 +27,35 @@ const HOOKS_DIR = path.join(REPO, 'scripts', 'hooks');
 const NO_ROOT_ENV = Object.fromEntries(
   ['EGC_PLUGIN_ROOT', 'ECC_PLUGIN_ROOT', 'CLAUDE_PLUGIN_ROOT', 'CODEBUDDY_PLUGIN_ROOT', 'GEMINI_PLUGIN_ROOT', 'EGC_DIR'].map(name => [name, ''])
 );
+
+// The inline resolver also looks for an installed egc in every PATH
+// directory, so on a machine that has EGC installed an empty home is not
+// enough: the root is found and the hook really runs. The no-root case gets
+// a PATH that holds node alone, in a folder of the temporary home.
+function nodeOnlyDir(home) {
+  const bin = path.join(home, 'bin');
+  fs.mkdirSync(bin);
+  if (process.platform === 'win32') {
+    // A copy, not a link: Windows refuses to remove a link to the node.exe
+    // that is running this test, and the temporary home could not be cleaned.
+    fs.copyFileSync(process.execPath, path.join(bin, 'node.exe'));
+  } else {
+    fs.symlinkSync(process.execPath, path.join(bin, 'node'));
+  }
+  return bin;
+}
+
+// Windows can hold the copied node.exe for a moment after the child exits.
+const HOME_CLEANUP_RETRY = Object.freeze({ maxRetries: 5, retryDelay: 200 });
+
+function envWithoutRoot(home) {
+  const env = { ...process.env, ...NO_ROOT_ENV, HOME: home, USERPROFILE: home };
+  for (const name of Object.keys(env)) {
+    if (name.toUpperCase() === 'PATH') delete env[name];
+  }
+  return { ...env, PATH: nodeOnlyDir(home) };
+}
+
 const TABLE = JSON.parse(fs.readFileSync(path.join(HOOKS_DIR, 'lifecycle-hooks.json'), 'utf8'));
 const RUNNER_MARK = 'scripts/hooks/lifecycle-runner.js';
 const KNOWN_ID = 'stop:cost-tracker';
@@ -231,19 +260,20 @@ for (const file of ['hooks/hooks.json', 'docs/hooks/memory-persistence/hooks.jso
   test(`${file} lifecycle commands pass stdin through when no EGC root can be found`, () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-lifecycle-home-'));
     try {
+      const env = envWithoutRoot(home);
       for (const { command } of entries) {
         const result = spawnSync(command, {
           shell: true,
           input: '{"session_id":"lifecycle-runner-test"}',
           encoding: 'utf8',
           timeout: CLI_TIMEOUT_MS,
-          env: { ...process.env, ...NO_ROOT_ENV, HOME: home, USERPROFILE: home },
+          env,
         });
         assert.strictEqual(result.status, 0, `${command.slice(-60)}: ${result.stderr}`);
         assert.strictEqual(result.stdout, '{"session_id":"lifecycle-runner-test"}', command.slice(-60));
       }
     } finally {
-      fs.rmSync(home, { recursive: true, force: true });
+      fs.rmSync(home, { recursive: true, force: true, ...HOME_CLEANUP_RETRY });
     }
   });
 }

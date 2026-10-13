@@ -12,6 +12,7 @@ documents; for architecture or governance see `../architecture/` and
 | `TROUBLESHOOTING.md` | Recovery procedures for common runtime/install issues |
 | `hook-bug-workarounds.md` | Documented workarounds for upstream hook behavior quirks |
 | `token-optimization.md` | Token-budget guidance and EGC-side MCP-disable mechanics |
+| `preflight.md` | `npm run preflight`: the lint findings a branch adds against `origin/main`, before you push |
 
 The `examples/` subfolder ships templates referenced from the guides
 (currently `product-capability-template.md`,

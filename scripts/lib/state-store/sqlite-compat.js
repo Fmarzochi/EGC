@@ -28,6 +28,7 @@ const SKIPPED_PRAGMA = /^PRAGMA[ \t]+(?:journal_mode|busy_timeout|synchronous)\b
 const REPORTING_PRAGMA = /^PRAGMA[ \t]+(?:user_version|schema_version|application_id|journal_mode|synchronous|foreign_keys|busy_timeout|page_size|page_count|freelist_count|integrity_check|quick_check|compile_options|database_list|table_list|collation_list|encoding)$/i;
 const READ_ONLY_STATEMENT = /^(?:SELECT\b|EXPLAIN\b)/i;
 const NATIVE_FAILURE_MESSAGE = /GLIBC|dlopen|bindings file|\.node'?:|invalid ELF header|not a valid Win32 application|Symbol not found/i;
+const PACKAGE_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 let sqlJsPromise = null;
 let fallbackAnnounced = false;
@@ -278,7 +279,10 @@ function errorMessage(error) {
   return String(error).split('\n')[0];
 }
 
-const PACKAGE_ROOT = path.resolve(__dirname, '..', '..', '..');
+// Both engines resolve from the package root, because the servers load this
+// file from there and not from their own folder. A checkout whose servers
+// were built without the root dependencies has neither engine, and a bare
+// "Cannot find module" does not say where to install.
 
 function missingEnginesError(nativeError, cause) {
   const native = nativeError ? ` sqlite3 did not load either: ${errorMessage(nativeError)}.` : '';
@@ -776,12 +780,19 @@ function assertNoPendingWal(filename) {
   assertNoPendingSidecars(filename);
 }
 
+// The engine is loaded before the write-ahead log is checked: with no engine
+// installed, the log advice (open the file with a working native sqlite3)
+// would point away from the real cause.
 async function openWasmDatabase(filename, nativeError, options = {}) {
   const SQL = await loadSqlJs(nativeError);
+  const reader = options.reader === true;
   assertNoPendingWal(filename);
   const data = filename !== ':memory:' && fs.existsSync(filename)
     ? new Uint8Array(fs.readFileSync(filename))
     : undefined;
+  // A reader gets the rows with no file behind them: close() then has
+  // nothing to write back, and there is nothing to flush at exit.
+  if (reader) return new WasmDatabase(new SQL.Database(data), ':memory:', SQL, options);
   const wasm = new WasmDatabase(new SQL.Database(data), filename, SQL, options);
   wasm._exitHandler = () => { void wasm.close(); };
   process.once('exit', wasm._exitHandler);
@@ -794,14 +805,26 @@ function announceFallback(serverName, error) {
   process.stderr.write(`[${serverName}] native sqlite3 unavailable (${errorMessage(error)}); using the portable sql.js engine. Cross-process locking is reduced on this machine.\n`);
 }
 
+// options.reader is for a process that reads a store it does not own, such
+// as the dashboard counting the memory server's rows. It never creates the
+// store or changes its rows: the native engine opens without the create
+// flag, so a missing file is an error instead of a new empty store, the
+// portable engine never writes the file back, and nothing is said on stderr.
+// The native reader still opens read-write, because a read-only connection
+// cannot fold a write-ahead log left by a dead owner and would recover it on
+// every open; with no other connection open, closing folds that log into the
+// file, as the owner's next start would. The mode is passed whole, so it
+// names the full mutex the driver otherwise adds by itself.
 async function openCompatDatabase(filename, serverName, options = {}) {
   const engine = process.env.EGC_SQLITE_ENGINE;
+  const reader = options.reader === true;
   let nativeError = null;
   if (engine !== 'wasm') {
     try {
       const sqlite3 = require('sqlite3');
       const { open } = require('sqlite');
-      const db = await open({ filename, driver: sqlite3.Database });
+      const mode = reader ? { mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_FULLMUTEX } : {};
+      const db = await open({ filename, driver: sqlite3.Database, ...mode });
       selected = 'native';
       return db;
     } catch (error) {
@@ -811,7 +834,9 @@ async function openCompatDatabase(filename, serverName, options = {}) {
   }
   selected = 'wasm';
   const db = await openWasmDatabase(filename, nativeError, options);
-  if (nativeError) announceFallback(serverName, nativeError);
+  // Said only once the portable engine is open: announcing it before a
+  // failed open would tell the reader an engine is in use when none is.
+  if (nativeError && !reader) announceFallback(serverName, nativeError);
   return db;
 }
 

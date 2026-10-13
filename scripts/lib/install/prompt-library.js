@@ -35,6 +35,7 @@ const HOME_TARGET_COMMANDS = Object.freeze({
   kilo: ['kilo'],
   mimo: ['mimo'],
   pi: ['pi'],
+  droid: ['droid'],
 });
 
 // Codex, Goose and OpenHands share the ~/.agents root, so that root says
@@ -76,6 +77,7 @@ const TARGET_LABELS = Object.freeze({
   kilo: 'Kilo Code CLI',
   mimo: 'MiMo Code',
   pi: 'Pi',
+  droid: 'Droid (Factory)',
   trae: 'Trae',
   codebuddy: 'CodeBuddy',
 });

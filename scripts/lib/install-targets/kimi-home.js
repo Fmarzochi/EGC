@@ -1,20 +1,19 @@
 const os = require('node:os');
 const path = require('node:path');
 
-const {
-  createFlatSkillPlanOperations,
-  createInstallTargetAdapter,
-} = require('./helpers');
+const { createInstallTargetAdapter } = require('./helpers');
+const { planKimiOperations } = require('../kimi-operations');
 
 // Kimi Code CLI (MoonshotAI/kimi-code) keeps everything under ~/.kimi-code/:
 // config.toml for runtime settings, mcp.json for MCP servers in the standard
 // {mcpServers: {}} JSON shape, and skills/<name>/ as the skill scan root.
 // Skills install flat (the source category is stripped); agents, commands and
-// rules land as library folders under the same root. The hook surface (a
-// [[hooks]] array in config.toml) is deferred: the TOML merge and the exact
-// matcher string for the Guardian and the Token Crusher still need machine
-// verification, so this adapter ships skills and MCP registration only, the
-// same way Warp defers its hooks.
+// rules land as library folders under the same root. The Guardian runs as a
+// PreToolUse entry of the [[hooks]] array in config.toml (matcher
+// ^(Bash|Shell|Write|WriteFile|Edit|StrReplaceFile)$), answering through
+// kimi-guardian-adapter.js with exit code 2 and the reason on stderr
+// (scripts/lib/kimi-hooks-toml.js). Kimi hooks can veto a call but not
+// rewrite it, so the Token Crusher has no hook here.
 //
 // KIMI_CODE_HOME moves the data root. It is read through resolveRoot, which
 // createInstallTargetAdapter calls from every method that needs the root
@@ -43,5 +42,5 @@ module.exports = createInstallTargetAdapter({
   },
   installStatePathSegments: ['egc', 'install-state.json'],
   nativeRootRelativePath: '.kimi-code',
-  planOperations: createFlatSkillPlanOperations,
+  planOperations: planKimiOperations,
 });

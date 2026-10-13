@@ -26,6 +26,7 @@ function suiteEnv(env) {
   const existing = copy.GIT_CONFIG_PARAMETERS;
   copy.GIT_CONFIG_PARAMETERS = existing ? `${existing} ${NO_AUTO_MAINTENANCE}` : NO_AUTO_MAINTENANCE;
   copy.EGC_GUARDIAN_TIMEOUT_MS = String(CLI_TIMEOUT_MS);
+  delete copy.EGC_TEST_JOBS;
   return copy;
 }
 

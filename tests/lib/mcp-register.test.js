@@ -70,8 +70,12 @@ function registerIsolated(homeDir, options) {
 // path is unavailable and the scan alone has to be right.
 function withoutTomlParser(fn) {
   const Module = require('node:module');
-  const registerPath = require.resolve('../../scripts/lib/mcp-register');
-  const cachedRegister = require.cache[registerPath];
+  const libDir = path.dirname(require.resolve('../../scripts/lib/mcp-register'));
+  const isRegisterModule = key => path.dirname(key) === libDir && path.basename(key).startsWith('mcp-register');
+  const cached = Object.keys(require.cache).filter(isRegisterModule).map(key => [key, require.cache[key]]);
+  const clear = () => {
+    for (const key of Object.keys(require.cache)) if (isRegisterModule(key)) delete require.cache[key];
+  };
   const originalLoad = Module._load;
   Module._load = function (request) {
     if (request === '@iarna/toml') {
@@ -81,14 +85,14 @@ function withoutTomlParser(fn) {
     }
     return originalLoad.apply(this, arguments);
   };
-  delete require.cache[registerPath];
+  clear();
   let parserless;
   try {
     parserless = require('../../scripts/lib/mcp-register');
   } finally {
     Module._load = originalLoad;
-    delete require.cache[registerPath];
-    if (cachedRegister) require.cache[registerPath] = cachedRegister;
+    clear();
+    for (const [key, value] of cached) require.cache[key] = value;
   }
   fn(parserless.registerToml);
 }
@@ -153,9 +157,62 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'OpenHands',
     ]);
   })));
+
+  (tally(test('OpenHands: the servers go under mcpServers in ~/.openhands/mcp.json, gated on ~/.openhands or openhands on PATH (#1678)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const openhandsBin = path.join(tmpHome, 'openhands-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(openhandsBin, { recursive: true });
+      fs.writeFileSync(path.join(openhandsBin, 'openhands'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(openhandsBin, 'openhands.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'OpenHands');
+      assert.ok(absent, 'OpenHands must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no ~/.openhands and no openhands on PATH keep the gate closed');
+      process.env.PATH = `${openhandsBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'OpenHands').gate(), true, 'an openhands on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      const openhandsDir = path.join(tmpHome, '.openhands');
+      fs.mkdirSync(openhandsDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'OpenHands');
+      assert.strictEqual(target.path, path.join(openhandsDir, 'mcp.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the ~/.openhands directory alone opens the gate');
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('OpenHands: registration keeps the person\'s pre-existing mcp.json servers in place', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    try {
+      const openhandsPath = path.join(tmpHome, '.openhands', 'mcp.json');
+      fs.mkdirSync(path.dirname(openhandsPath), { recursive: true });
+      const own = { mcpServers: { mine: { command: 'my-server' } } };
+      fs.writeFileSync(openhandsPath, JSON.stringify(own, null, 2));
+      assert.strictEqual(registerJson(openhandsPath, bins), true);
+      const written = JSON.parse(fs.readFileSync(openhandsPath, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers.mine, own.mcpServers.mine);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
 
   (tally(test('Kilo Code CLI: the gate opens on the config directory or kilo on PATH, an absolute XDG_CONFIG_HOME moves it, a relative one is ignored, and the servers go under mcp in kilo.json (#1496)', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
@@ -661,6 +718,42 @@ function runTests() {
       assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Pi').path, path.join(tmpHome, 'pi-data', 'mcp.json'));
     } finally {
       if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous;
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('Droid (Factory): the servers go under mcpServers in ~/.factory/mcp.json, gated on ~/.factory or droid on PATH (#1493)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const droidBin = path.join(tmpHome, 'droid-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(droidBin, { recursive: true });
+      fs.writeFileSync(path.join(droidBin, 'droid'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(droidBin, 'droid.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Droid (Factory)');
+      assert.ok(absent, 'Droid must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no ~/.factory and no droid on PATH keep the gate closed');
+      process.env.PATH = `${droidBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Droid (Factory)').gate(), true, 'a droid on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      const factoryDir = path.join(tmpHome, '.factory');
+      fs.mkdirSync(factoryDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Droid (Factory)');
+      assert.strictEqual(target.path, path.join(factoryDir, 'mcp.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the ~/.factory directory alone opens the gate');
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
       if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
       if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
       fs.rmSync(tmpHome, { recursive: true, force: true });

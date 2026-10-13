@@ -175,6 +175,10 @@ function isSecretValue(value: string): boolean {
  * Returns a shallow copy of `payload` with secret-looking values replaced by
  * the string "[REDACTED]". Nested objects and arrays are walked recursively.
  */
+export function redactText(value: string): string {
+  return isSecretValue(value) ? '[REDACTED]' : redactSecretsInText(value);
+}
+
 function redactArrayItem(item: unknown): unknown {
   if (Array.isArray(item)) {
     return item.map(redactArrayItem);
@@ -183,7 +187,7 @@ function redactArrayItem(item: unknown): unknown {
     return redactPayload(item as Record<string, unknown>);
   }
   if (typeof item === 'string') {
-    return isSecretValue(item) ? '[REDACTED]' : redactSecretsInText(item);
+    return redactText(item);
   }
   return item;
 }
@@ -197,7 +201,7 @@ export function redactPayload(
 
       out[k] = '[REDACTED]';
     } else if (typeof v === 'string') {
-      out[k] = isSecretValue(v) ? '[REDACTED]' : redactSecretsInText(v);
+      out[k] = redactText(v);
     } else if (Array.isArray(v)) {
       out[k] = v.map(redactArrayItem);
     } else if (v !== null && typeof v === 'object') {

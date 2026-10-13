@@ -50,14 +50,21 @@ test('drops the variables a tool session sets and keeps the rest', () => {
   assert.strictEqual(env.PATH, '/bin');
 });
 
+test('does not hand the EGC_TEST_JOBS opt-in down to a test file', () => {
+  const env = suiteEnv({ PATH: '/bin', EGC_TEST_JOBS: '4' });
+  assert.strictEqual(env.EGC_TEST_JOBS, undefined);
+  assert.strictEqual(env.PATH, '/bin');
+});
+
 test('drops the variables that move a config directory out of the home a test passes', () => {
-  const env = suiteEnv({ PATH: '/bin', XDG_CONFIG_HOME: '/home/runner/.config', CRUSH_GLOBAL_CONFIG: '/somewhere/crush', VIBE_HOME: '/somewhere/vibe', GROK_HOME: '/somewhere/grok', MIMOCODE_HOME: '/somewhere/mimo', PI_CODING_AGENT_DIR: '/somewhere/pi' });
+  const env = suiteEnv({ PATH: '/bin', XDG_CONFIG_HOME: '/home/runner/.config', CRUSH_GLOBAL_CONFIG: '/somewhere/crush', VIBE_HOME: '/somewhere/vibe', GROK_HOME: '/somewhere/grok', MIMOCODE_HOME: '/somewhere/mimo', PI_CODING_AGENT_DIR: '/somewhere/pi', KIMI_CODE_HOME: '/somewhere/kimi' });
   assert.strictEqual(env.XDG_CONFIG_HOME, undefined);
   assert.strictEqual(env.CRUSH_GLOBAL_CONFIG, undefined);
   assert.strictEqual(env.VIBE_HOME, undefined);
   assert.strictEqual(env.GROK_HOME, undefined);
   assert.strictEqual(env.MIMOCODE_HOME, undefined);
   assert.strictEqual(env.PI_CODING_AGENT_DIR, undefined);
+  assert.strictEqual(env.KIMI_CODE_HOME, undefined);
   assert.strictEqual(env.PATH, '/bin');
 });
 
