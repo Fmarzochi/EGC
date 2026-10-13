@@ -18,6 +18,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
 
 const {
   acquireFileLock,
@@ -730,9 +731,64 @@ async function runTests() {
     }
   });
 
+  const isWindows = process.platform === 'win32';
+
+  function spawnChildWithTimeout(childCode, expectedText = 'LOCKED', timeoutMs = 8000) {
+    const child = spawn(process.execPath, ['-e', childCode], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+    let timer = null;
+
+    child.stdout.on('data', chunk => { stdoutBuffer += chunk.toString(); });
+    child.stderr.on('data', chunk => { stderrBuffer += chunk.toString(); });
+
+    const readyPromise = new Promise((resolve, reject) => {
+      timer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch (_) { /* ignore kill error */ }
+        reject(new Error(`Timed out after ${timeoutMs}ms waiting for child to emit "${expectedText}". stderr: ${stderrBuffer}`));
+      }, timeoutMs);
+
+      const checkMatch = () => {
+        if (stdoutBuffer.includes(expectedText)) {
+          clearTimeout(timer);
+          resolve();
+        }
+      };
+
+      child.stdout.on('data', checkMatch);
+      child.on('error', err => {
+        clearTimeout(timer);
+        reject(err);
+      });
+      child.on('exit', (code, sig) => {
+        clearTimeout(timer);
+        if (!stdoutBuffer.includes(expectedText)) {
+          reject(new Error(`Child exited prematurely with code ${code}, signal ${sig} before emitting "${expectedText}". stderr: ${stderrBuffer}`));
+        }
+      });
+    });
+
+    const waitExit = (exitTimeoutMs = 8000) => new Promise((resolve, reject) => {
+      const exitTimer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch (_) { /* ignore kill error */ }
+        reject(new Error(`Child did not terminate within ${exitTimeoutMs}ms after signal`));
+      }, exitTimeoutMs);
+
+      child.on('exit', (code, sig) => {
+        clearTimeout(exitTimer);
+        resolve([code, sig]);
+      });
+    });
+
+    return { child, readyPromise, waitExit, getStdout: () => stdoutBuffer, getStderr: () => stderrBuffer };
+  }
+
   await test('signal handler cleans up held lock on SIGTERM and exits with signal code', async () => {
+    if (isWindows) {
+      console.log('    - skipped: POSIX signal semantics not supported on Windows');
+      return;
+    }
     const { dir, lockPath } = makeTempLockPath();
-    const { spawn } = require('node:child_process');
     try {
       const childCode = `
         const { acquireFileLock } = require(${JSON.stringify(path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat'))});
@@ -743,33 +799,30 @@ async function runTests() {
         }
         run();
       `;
-      const child = spawn('node', ['-e', childCode], { stdio: ['pipe', 'pipe', 'pipe'] });
-      await new Promise((resolve, reject) => {
-        child.stdout.on('data', chunk => {
-          if (chunk.toString().includes('LOCKED')) resolve();
-        });
-        child.on('error', reject);
-      });
+      const { child, readyPromise, waitExit } = spawnChildWithTimeout(childCode);
+      try {
+        await readyPromise;
+        assert.ok(fs.existsSync(lockPath), 'Lock file should exist while child is alive');
 
-      assert.ok(fs.existsSync(lockPath), 'Lock file should exist while child is alive');
+        child.kill('SIGTERM');
+        const [, signal] = await waitExit();
 
-      // Send SIGTERM to child
-      child.kill('SIGTERM');
-
-      const [, signal] = await new Promise(resolve => {
-        child.on('exit', (code, sig) => resolve([code, sig]));
-      });
-
-      assert.strictEqual(signal, 'SIGTERM', 'Child should terminate with SIGTERM');
-      assert.ok(!fs.existsSync(lockPath), 'SIGTERM handler must remove lock file held by terminating child');
+        assert.strictEqual(signal, 'SIGTERM', 'Child should terminate with SIGTERM');
+        assert.ok(!fs.existsSync(lockPath), 'SIGTERM handler must remove lock file held by terminating child');
+      } finally {
+        try { child.kill('SIGKILL'); } catch (_) { /* ignore */ }
+      }
     } finally {
       cleanupTemp(dir, lockPath);
     }
   });
 
   await test('signal handler cleans up held lock on SIGINT and exits with signal code', async () => {
+    if (isWindows) {
+      console.log('    - skipped: POSIX signal semantics not supported on Windows');
+      return;
+    }
     const { dir, lockPath } = makeTempLockPath();
-    const { spawn } = require('node:child_process');
     try {
       const childCode = `
         const { acquireFileLock } = require(${JSON.stringify(path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat'))});
@@ -780,32 +833,30 @@ async function runTests() {
         }
         run();
       `;
-      const child = spawn('node', ['-e', childCode], { stdio: ['pipe', 'pipe', 'pipe'] });
-      await new Promise((resolve, reject) => {
-        child.stdout.on('data', chunk => {
-          if (chunk.toString().includes('LOCKED')) resolve();
-        });
-        child.on('error', reject);
-      });
+      const { child, readyPromise, waitExit } = spawnChildWithTimeout(childCode);
+      try {
+        await readyPromise;
+        assert.ok(fs.existsSync(lockPath), 'Lock file should exist while child is alive');
 
-      assert.ok(fs.existsSync(lockPath), 'Lock file should exist while child is alive');
+        child.kill('SIGINT');
+        const [, signal] = await waitExit();
 
-      child.kill('SIGINT');
-
-      const [, signal] = await new Promise(resolve => {
-        child.on('exit', (code, sig) => resolve([code, sig]));
-      });
-
-      assert.strictEqual(signal, 'SIGINT', 'Child should terminate with SIGINT');
-      assert.ok(!fs.existsSync(lockPath), 'SIGINT handler must remove lock file held by terminating child');
+        assert.strictEqual(signal, 'SIGINT', 'Child should terminate with SIGINT');
+        assert.ok(!fs.existsSync(lockPath), 'SIGINT handler must remove lock file held by terminating child');
+      } finally {
+        try { child.kill('SIGKILL'); } catch (_) { /* ignore */ }
+      }
     } finally {
       cleanupTemp(dir, lockPath);
     }
   });
 
   await test('signal handler does not delete lock if reacquired by another process with different token', async () => {
+    if (isWindows) {
+      console.log('    - skipped: POSIX signal semantics not supported on Windows');
+      return;
+    }
     const { dir, lockPath } = makeTempLockPath();
-    const { spawn } = require('node:child_process');
     try {
       const childCode = `
         const { acquireFileLock } = require(${JSON.stringify(path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat'))});
@@ -815,7 +866,6 @@ async function runTests() {
           process.stdout.write('LOCKED\\n');
           setInterval(() => {}, 1000);
           process.stdin.on('data', () => {
-            // Replace disk lock content with a different token right before exit/signal simulation
             fs.writeFileSync(${JSON.stringify(lockPath)}, JSON.stringify({
               token: 'other-token-uuid-1234',
               pid: 999999,
@@ -827,39 +877,44 @@ async function runTests() {
         }
         run();
       `;
-      const child = spawn('node', ['-e', childCode], { stdio: ['pipe', 'pipe', 'pipe'] });
-      await new Promise((resolve, reject) => {
-        child.stdout.on('data', chunk => {
-          if (chunk.toString().includes('LOCKED')) resolve();
+      const { child, readyPromise, waitExit, getStdout } = spawnChildWithTimeout(childCode);
+      try {
+        await readyPromise;
+
+        const replacedPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Timed out waiting for REPLACED')), 5000);
+          const check = () => {
+            if (getStdout().includes('REPLACED')) {
+              clearTimeout(timeout);
+              resolve();
+            }
+          };
+          child.stdout.on('data', check);
         });
-        child.on('error', reject);
-      });
 
-      // Signal child to replace the lock with a foreign token
-      child.stdin.write('replace\n');
-      await new Promise((resolve, reject) => {
-        child.stdout.on('data', chunk => {
-          if (chunk.toString().includes('REPLACED')) resolve();
-        });
-        child.on('error', reject);
-      });
+        child.stdin.write('replace\n');
+        await replacedPromise;
 
-      // Now send SIGTERM
-      child.kill('SIGTERM');
-      await new Promise(resolve => child.on('exit', resolve));
+        child.kill('SIGTERM');
+        await waitExit();
 
-      // Lock file must NOT be deleted because token does not match child's held token
-      assert.ok(fs.existsSync(lockPath), 'Lock must NOT be unlinked if token does not match held token');
-      const content = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
-      assert.strictEqual(content.token, 'other-token-uuid-1234');
+        assert.ok(fs.existsSync(lockPath), 'Lock must NOT be unlinked if token does not match held token');
+        const content = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+        assert.strictEqual(content.token, 'other-token-uuid-1234');
+      } finally {
+        try { child.kill('SIGKILL'); } catch (_) { /* ignore */ }
+      }
     } finally {
       cleanupTemp(dir, lockPath);
     }
   });
 
   await test('signal handler preserves unrelated application signal listeners', async () => {
+    if (isWindows) {
+      console.log('    - skipped: POSIX signal semantics not supported on Windows');
+      return;
+    }
     const { dir, lockPath } = makeTempLockPath();
-    const { spawn } = require('node:child_process');
     try {
       const childCode = `
         let appHandlerFired = false;
@@ -877,29 +932,78 @@ async function runTests() {
         }
         run();
       `;
-      const child = spawn('node', ['-e', childCode], { stdio: ['pipe', 'pipe', 'pipe'] });
-      let output = '';
-      child.stdout.on('data', chunk => { output += chunk.toString(); });
+      const { child, readyPromise, waitExit, getStdout } = spawnChildWithTimeout(childCode);
+      try {
+        await readyPromise;
+        assert.ok(fs.existsSync(lockPath), 'Lock file should exist while child is alive');
 
-      await new Promise((resolve, reject) => {
-        child.stdout.on('data', chunk => {
-          if (chunk.toString().includes('LOCKED')) resolve();
+        child.kill('SIGTERM');
+        const [exitCode] = await waitExit();
+
+        assert.strictEqual(exitCode, 42, 'Application SIGTERM listener should execute and dictate exit status');
+        assert.ok(getStdout().includes('APP_HANDLER_FIRED'), 'Unrelated application listener output must be present');
+        assert.ok(!fs.existsSync(lockPath), 'Held lock must be cleaned up on process exit even when custom listener catches signal');
+      } finally {
+        try { child.kill('SIGKILL'); } catch (_) { /* ignore */ }
+      }
+    } finally {
+      cleanupTemp(dir, lockPath);
+    }
+  });
+
+  await test('competing writer cannot acquire lock while writer remains alive after SIGTERM', async () => {
+    if (isWindows) {
+      console.log('    - skipped: POSIX signal semantics not supported on Windows');
+      return;
+    }
+    const { dir, lockPath } = makeTempLockPath();
+    try {
+      // Writer ignores SIGTERM and remains active with its lock held
+      const childCode = `
+        process.on('SIGTERM', () => {
+          process.stdout.write('SIGTERM_CAUGHT_STAYING_ALIVE\\n');
         });
-        child.on('error', reject);
-      });
 
-      assert.ok(fs.existsSync(lockPath), 'Lock file should exist while child is alive');
+        const { acquireFileLock } = require(${JSON.stringify(path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat'))});
+        async function run() {
+          await acquireFileLock(${JSON.stringify(lockPath)});
+          process.stdout.write('LOCKED\\n');
+          setInterval(() => {}, 1000);
+        }
+        run();
+      `;
+      const { child, readyPromise, getStdout } = spawnChildWithTimeout(childCode);
+      try {
+        await readyPromise;
+        assert.ok(fs.existsSync(lockPath), 'Lock file must exist while child is holding it');
 
-      // Send SIGTERM: Both sqlite-compat cleanup and the application listener should run
-      child.kill('SIGTERM');
+        const caughtPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Timed out waiting for SIGTERM_CAUGHT')), 5000);
+          const check = () => {
+            if (getStdout().includes('SIGTERM_CAUGHT_STAYING_ALIVE')) {
+              clearTimeout(timeout);
+              resolve();
+            }
+          };
+          child.stdout.on('data', check);
+        });
 
-      const [exitCode] = await new Promise(resolve => {
-        child.on('exit', (code, sig) => resolve([code, sig]));
-      });
+        child.kill('SIGTERM');
+        await caughtPromise;
 
-      assert.strictEqual(exitCode, 42, 'Application SIGTERM listener should execute and dictate exit status');
-      assert.ok(output.includes('APP_HANDLER_FIRED'), 'Unrelated application listener output must be present');
-      assert.ok(!fs.existsSync(lockPath), 'Held lock must be cleaned up by sqlite-compat even when custom listener catches signal');
+        // The process stayed alive: lock must still exist and competing acquisition must timeout
+        assert.ok(fs.existsSync(lockPath), 'Lock file must NOT be released while process remains alive');
+
+        let competingThrew = false;
+        try {
+          await acquireFileLock(lockPath, { timeoutMs: 200, retryIntervalMs: 25 });
+        } catch (err) {
+          competingThrew = /Lock timeout/i.test(err.message);
+        }
+        assert.ok(competingThrew, 'Competing writer must be blocked while original writer stays alive');
+      } finally {
+        try { child.kill('SIGKILL'); } catch (_) { /* ignore */ }
+      }
     } finally {
       cleanupTemp(dir, lockPath);
     }

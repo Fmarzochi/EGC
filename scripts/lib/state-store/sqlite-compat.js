@@ -94,13 +94,21 @@ function registerSignalHandlersOnce() {
   if (signalHandlersRegistered) return;
   signalHandlersRegistered = true;
 
+  // Process exit is the definitive lifecycle hook where process-held locks must be cleaned up.
   process.once('exit', () => {
     cleanupHeldLocks();
   });
 
   const handleSignal = (signal) => {
-    cleanupHeldLocks();
+    // If another application listener is registered, it might keep the process alive
+    // or perform graceful shutdown. Releasing locks here while the process might continue
+    // writing would cause concurrency hazards. Instead, if no other listener prevents default
+    // termination, removing our listener and re-killing triggers standard process exit,
+    // which then invokes process 'exit' handler to safely clean up held locks.
     process.removeListener(signal, signalHandlers[signal]);
+    if (process.listenerCount(signal) === 0) {
+      cleanupHeldLocks();
+    }
     process.kill(process.pid, signal);
   };
 
@@ -188,12 +196,15 @@ function checkDeadProcessHolder(holder, lockPath) {
   const sameHost = holder.hostname === os.hostname();
   const isValidPid = Number.isInteger(holder.pid) && holder.pid > 0;
   const isDeadLocalPid = sameHost && isValidPid && !isProcessAlive(holder.pid);
-  if (isDeadLocalPid && fs.existsSync(lockPath)) {
-    throw new Error(
-      `[sqlite-compat] Lock file "${lockPath}" is held by dead process PID ${holder.pid} on host ${holder.hostname}. ` +
-      `Automatic stale-lock recovery is disabled to ensure strict mutual exclusion. ` +
-      `To recover manually, verify that process ${holder.pid} is not running, then remove the lock file: rm "${lockPath}"`
-    );
+  if (isDeadLocalPid) {
+    const currentHolder = readLockHolder(lockPath);
+    if (currentHolder && currentHolder.token === holder.token && currentHolder.pid === holder.pid) {
+      throw new Error(
+        `[sqlite-compat] Lock file "${lockPath}" is held by dead process PID ${holder.pid} on host ${holder.hostname}. ` +
+        `Automatic stale-lock recovery is disabled to ensure strict mutual exclusion. ` +
+        `To recover manually, verify that process ${holder.pid} is not running, then remove the lock file: rm "${lockPath}"`
+      );
+    }
   }
 }
 
@@ -321,9 +332,9 @@ function normalizeParams(params) {
 
 const SQL_COMMENT_LINE = /--.*$/gm;
 const SQL_COMMENT_BLOCK = /\/\*[\s\S]*?\*\//g;
-const BEGIN_STMT_REGEX = /^\s*BEGIN\b/i;
-const COMMIT_STMT_REGEX = /^\s*(COMMIT|END TRANSACTION|END)\b/i;
-const ROLLBACK_STMT_REGEX = /^\s*ROLLBACK\b/i;
+const BEGIN_STMT_REGEX = /^\s*BEGIN\b(?!\s+(?:AFTER|BEFORE|INSTEAD\s+OF)\b)/i;
+const COMMIT_STMT_REGEX = /^\s*(?:COMMIT(?:\s+TRANSACTION|\s+WORK)?|END\s+TRANSACTION|END(?!\s+(?:IF|FOR|WHILE|CASE|LOOP)\b))\s*$/i;
+const ROLLBACK_STMT_REGEX = /^\s*ROLLBACK(?:\s+TRANSACTION|\s+WORK)?(?!\s+TO\b)\s*$/i;
 
 function stripSqlComments(s) {
   return s.replace(SQL_COMMENT_LINE, '').replace(SQL_COMMENT_BLOCK, '').trim();
@@ -503,6 +514,9 @@ class WasmDatabase {
     try {
       this.db.exec(text);
       this.persistNow();
+    } catch (err) {
+      try { this.reloadFromDisk(); } catch (_) { /* ignore reload error */ }
+      throw err;
     } finally {
       this._exitTransaction();
     }

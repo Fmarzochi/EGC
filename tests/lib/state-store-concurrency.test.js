@@ -1249,28 +1249,26 @@ async function runTests() {
         };
 
         const { applySingleMigrationAsync } = require(MIGRATIONS_PATH);
-        if (applySingleMigrationAsync) {
-          let threw = false;
-          try {
-            await applySingleMigrationAsync(db, faultyMigration);
-          } catch (err) {
-            threw = true;
-          }
-          assert.ok(threw, 'Expected faulty migration to throw');
-
-          // Verify rollback occurred: test_fail_col must NOT exist and version 99 must NOT be in schema_migrations
-          const versions = await db.all('SELECT version FROM schema_migrations ORDER BY version ASC;');
-          assert.deepStrictEqual(
-            versions.map(r => r.version),
-            [1, 2, 3, 4, 5],
-            'Rolled back migration version 99 must NOT be recorded in schema_migrations'
-          );
-
-          // Verify column was not committed / rolled back
-          const sessionCols = await db.all("PRAGMA table_info('sessions');");
-          const colNames = sessionCols.map(c => c.name);
-          assert.ok(!colNames.includes('test_fail_col'), 'test_fail_col should not be present after rollback');
+        let threw = false;
+        try {
+          await applySingleMigrationAsync(db, faultyMigration);
+        } catch {
+          threw = true;
         }
+        assert.ok(threw, 'Expected faulty migration to throw');
+
+        // Verify rollback occurred: test_fail_col must NOT exist and version 99 must NOT be in schema_migrations
+        const versions = await db.all('SELECT version FROM schema_migrations ORDER BY version ASC;');
+        assert.deepStrictEqual(
+          versions.map(r => r.version),
+          [1, 2, 3, 4, 5],
+          'Rolled back migration version 99 must NOT be recorded in schema_migrations'
+        );
+
+        // Verify column was not committed / rolled back
+        const sessionCols = await db.all("PRAGMA table_info('sessions');");
+        const colNames = sessionCols.map(c => c.name);
+        assert.ok(!colNames.includes('test_fail_col'), 'test_fail_col should not be present after rollback');
 
         // Now run standard applyMigrationsAsync to complete migration to version 6
         await applyMigrationsAsync(db);
@@ -1279,6 +1277,118 @@ async function runTests() {
           finalVersions.map(r => r.version),
           [1, 2, 3, 4, 5, 6],
           'Final schema_migrations must contain exactly versions [1, 2, 3, 4, 5, 6]'
+        );
+      } finally {
+        await db.close();
+      }
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  // 15. Regression test: SAVEPOINT rollback and trigger END must not break transaction boundaries
+  await runCase('test_savepoint_and_trigger_transaction_boundaries', async () => {
+    const tempDir = createTempDir('egc-tx-bounds-');
+    const dbPath = path.join(tempDir, 'state_bounds.db');
+
+    try {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const db = await openCompatDatabase(dbPath, 'test-bounds');
+      try {
+        await db.run('CREATE TABLE t_items (id TEXT PRIMARY KEY, val TEXT);');
+        await db.run('CREATE TABLE t_audit (note TEXT);');
+
+        // Test 1: CREATE TRIGGER with END inside must not be treated as COMMIT
+        await db.exec(`
+          CREATE TRIGGER trg_items_insert AFTER INSERT ON t_items BEGIN
+            INSERT INTO t_audit VALUES ('inserted: ' || new.id);
+          END;
+        `);
+        assert.strictEqual(db._inTransaction, false, 'CREATE TRIGGER must not open or prematurely close a transaction');
+
+        // Test 2: Multi-statement transaction with SAVEPOINT and ROLLBACK TO SAVEPOINT
+        await db.exec('BEGIN;');
+        assert.strictEqual(db._inTransaction, true, 'Transaction must be active after BEGIN');
+
+        await db.exec("INSERT INTO t_items VALUES ('a', 'initial');");
+        await db.exec('SAVEPOINT sp1;');
+        await db.exec("INSERT INTO t_items VALUES ('b', 'sp_val');");
+        // ROLLBACK TO sp1 should rollback 'b' but must NOT terminate the outer transaction
+        await db.exec('ROLLBACK TO SAVEPOINT sp1;');
+        assert.strictEqual(db._inTransaction, true, 'Outer transaction must remain active after ROLLBACK TO SAVEPOINT');
+
+        await db.exec("INSERT INTO t_items VALUES ('c', 'after_sp');");
+        await db.exec('COMMIT;');
+        assert.strictEqual(db._inTransaction, false, 'Transaction must be closed after COMMIT');
+
+        // Verify committed content: 'a' and 'c' exist; 'b' was rolled back; audit trigger ran for 'a' and 'c'
+        const items = await db.all('SELECT id, val FROM t_items ORDER BY id ASC;');
+        assert.deepStrictEqual(items, [
+          { id: 'a', val: 'initial' },
+          { id: 'c', val: 'after_sp' },
+        ]);
+
+        const audits = await db.all('SELECT note FROM t_audit ORDER BY note ASC;');
+        assert.deepStrictEqual(audits, [
+          { note: 'inserted: a' },
+          { note: 'inserted: c' },
+        ]);
+      } finally {
+        await db.close();
+      }
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  // 16. Regression test: Injected persistence failure during COMMIT restores in-memory state from disk
+  await runCase('test_injected_persistence_failure_during_commit', async () => {
+    const tempDir = createTempDir('egc-tx-persist-fail-');
+    const dbPath = path.join(tempDir, 'state_persist_fail.db');
+
+    try {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const db = await openCompatDatabase(dbPath, 'test-persist-fail');
+      try {
+        await db.run('CREATE TABLE t_persist (id TEXT PRIMARY KEY, val TEXT);');
+        await db.run("INSERT INTO t_persist VALUES ('baseline', 'ok');");
+
+        // Verify baseline persisted
+        const baselineRows = await db.all('SELECT * FROM t_persist;');
+        assert.strictEqual(baselineRows.length, 1);
+        assert.strictEqual(baselineRows[0].id, 'baseline');
+
+        // Open transaction
+        await db.exec('BEGIN;');
+        await db.exec("INSERT INTO t_persist VALUES ('unpersisted', 'fail');");
+
+        // Inject persistence failure into persistNow
+        const originalPersistNow = db.persistNow.bind(db);
+        db.persistNow = () => {
+          throw new Error('Injected I/O error during transaction commit persistNow');
+        };
+
+        let threw = false;
+        try {
+          await db.exec('COMMIT;');
+        } catch (err) {
+          threw = /Injected I/i.test(err.message);
+        }
+        assert.ok(threw, 'Expected COMMIT to propagate persistNow failure');
+
+        // Restore persistNow
+        db.persistNow = originalPersistNow;
+
+        // Transaction must be exited, locks released
+        assert.strictEqual(db._inTransaction, false, 'Transaction must be exited after commit failure');
+        assert.ok(!fs.existsSync(db.getLockPath()), 'Lock must be released');
+
+        // Subsequent in-memory read must NOT expose the unpersisted data (it reloads from disk)
+        const rowsAfterFailure = await db.all('SELECT * FROM t_persist;');
+        assert.deepStrictEqual(
+          rowsAfterFailure,
+          [{ id: 'baseline', val: 'ok' }],
+          'In-memory state must be restored from disk, not exposing unpersisted commit data'
         );
       } finally {
         await db.close();
