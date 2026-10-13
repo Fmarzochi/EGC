@@ -16,7 +16,8 @@
  * helpers directly:
  *   - process.platform is faked with Object.defineProperty (configurable
  *     on Node) before a cache-cleared re-require, which is what isMacOS
- *     captures at require time in both desktop-notify.js and lib/utils.js.
+ *     captures at require time in desktop-notify.js, lib/utils.js and
+ *     lib/utils-platform.js (the module utils.js re-exports isMacOS from).
  *   - fs.readFileSync is monkeypatched to fake /proc/version content
  *     ONLY for that exact path (all other calls delegate to the real
  *     implementation, since Node's own module loader also calls
@@ -37,13 +38,15 @@ const cp = require('child_process');
 const fs = require('fs');
 
 const desktopNotifyPath = require.resolve(path.join('..', '..', 'scripts', 'hooks', 'desktop-notify.js'));
-// lib/utils.js also captures isMacOS/isWindows/isLinux as module-load-time
-// constants from process.platform. desktop-notify.js imports isMacOS from
-// there, so any test that fakes process.platform must evict THIS cache
-// entry too (both when entering and when leaving the fake), or a later
-// test would keep reusing the previous test's stale, already-evaluated
-// isMacOS value instead of re-deriving it from the real platform.
+// lib/utils.js re-exports isMacOS/isWindows/isLinux from lib/utils-platform.js,
+// which is where they are actually captured as module-load-time constants
+// from process.platform. desktop-notify.js imports isMacOS from lib/utils.js,
+// so any test that fakes process.platform must evict ALL THREE cache entries
+// (both when entering and when leaving the fake), or a later test would keep
+// reusing the previous test's stale, already-evaluated isMacOS value instead
+// of re-deriving it from the real platform.
 const utilsPath = require.resolve(path.join('..', '..', 'scripts', 'lib', 'utils.js'));
+const utilsPlatformPath = require.resolve(path.join('..', '..', 'scripts', 'lib', 'utils-platform.js'));
 
 function test(name, fn) {
   try {
@@ -60,6 +63,7 @@ function test(name, fn) {
 function resetModuleCaches() {
   delete require.cache[desktopNotifyPath];
   delete require.cache[utilsPath];
+  delete require.cache[utilsPlatformPath];
 }
 
 function withFakePlatform(platform, fn) {

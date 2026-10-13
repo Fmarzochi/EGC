@@ -74,9 +74,9 @@ test('the skill names every variable cost-tracker.js reads', () => {
 });
 
 test('the discovery loop covers every tool directory getEGCDir() can resolve to', () => {
-  const utils = read('scripts/lib/utils.js');
-  const body = utils.match(/function getKnownHarnessDirs\(home\) \{([\s\S]*?)\n\}/);
-  assert.ok(body, 'scripts/lib/utils.js must define getKnownHarnessDirs(home)');
+  const utilsPaths = read('scripts/lib/utils-paths.js');
+  const body = utilsPaths.match(/function getKnownHarnessDirs\(home\) \{([\s\S]*?)\n\}/);
+  assert.ok(body, 'scripts/lib/utils-paths.js must define getKnownHarnessDirs(home)');
   const dirs = [...body[1].matchAll(/path\.join\(home, ([^)]+)\)/g)]
     .map(match => `~/${[...match[1].matchAll(/'([^']+)'/g)].map(part => part[1]).join('/')}`);
   assert.ok(dirs.length > 5, `expected the known tool directories, got ${dirs.join(', ')}`);

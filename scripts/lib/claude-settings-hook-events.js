@@ -369,6 +369,15 @@ function createPreToolUseGateGuardHookMergeOperation(targetRoot, matcher) {
 // wrapper-options.js) are among the Bash guardian's, which every such target
 // also copies (BASH_GUARDIAN_HOOK_LIB_SOURCES).
 const GATEGUARD_LIB_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
+// utils.js is a thin re-export over these four sibling modules (#1712);
+// every one of them must travel with it or the installed copy throws
+// MODULE_NOT_FOUND the moment anything calls a function it re-exports.
+const GATEGUARD_LIB_SIBLING_SOURCE_RELATIVE_PATHS = [
+  'scripts/lib/utils-platform.js',
+  'scripts/lib/utils-paths.js',
+  'scripts/lib/utils-session.js',
+  'scripts/lib/utils-file.js',
+];
 
 /**
  * Builds copy operations that place gateguard-fact-force.js (and its one
@@ -396,6 +405,12 @@ function createGateGuardScriptCopyOperations(createRemappedOperation, targetRoot
       path.join(targetRoot, 'scripts', 'lib', 'utils.js'),
       { strategy: 'preserve-relative-path' }
     ),
+    ...GATEGUARD_LIB_SIBLING_SOURCE_RELATIVE_PATHS.map(sourceRelativePath => createRemappedOperation(
+      GATEGUARD_HOOK_MODULE_ID,
+      sourceRelativePath,
+      path.join(targetRoot, sourceRelativePath),
+      { strategy: 'preserve-relative-path' }
+    )),
     createRemappedOperation(
       GATEGUARD_HOOK_MODULE_ID,
       'scripts/lib/hook-stdin.js',
@@ -407,6 +422,7 @@ function createGateGuardScriptCopyOperations(createRemappedOperation, targetRoot
 
 module.exports = {
   GATEGUARD_LIB_SOURCE_RELATIVE_PATH,
+  GATEGUARD_LIB_SIBLING_SOURCE_RELATIVE_PATHS,
   addBashDispatcherHook,
   addGateGuardHook,
   addIntuitionHook,
