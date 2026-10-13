@@ -24,13 +24,20 @@ function flagValue(argv, name) {
   return arg.includes('=') ? arg.slice(arg.indexOf('=') + 1) : (argv[index + 1] ?? '');
 }
 
-function parseJobsFlag(argv) {
-  const value = flagValue(argv, '--jobs');
-  if (value === null) return null;
+function wholeJobs(value, source) {
   if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > MAX_JOBS) {
-    throw new Error(`--jobs needs a whole number from 1 to ${MAX_JOBS}, e.g. --jobs 4`);
+    throw new Error(`${source} needs a whole number from 1 to ${MAX_JOBS}, e.g. ${source === '--jobs' ? '--jobs 4' : 'EGC_TEST_JOBS=4'}`);
   }
   return Number(value);
+}
+
+// The flag wins; EGC_TEST_JOBS lets a CI lane or a shell profile opt in without
+// touching the command line, and an empty value means "not set".
+function parseJobsFlag(argv, env = {}) {
+  const value = flagValue(argv, '--jobs');
+  if (value !== null) return wholeJobs(value, '--jobs');
+  const fromEnv = env.EGC_TEST_JOBS;
+  return fromEnv ? wholeJobs(fromEnv, 'EGC_TEST_JOBS') : null;
 }
 
 function parseReportFlag(argv) {

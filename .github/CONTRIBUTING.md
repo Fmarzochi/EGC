@@ -147,6 +147,28 @@ Every pull request runs the following automated checks. Your PR must pass all of
 
 If this is your first contribution from a fork, GitHub requires a maintainer to approve the CI run by clicking **"Approve and run"** in the Actions tab. Your PR will show checks as "Waiting" until a maintainer approves. This is expected: do not close and reopen your PR. A maintainer will approve the run during review.
 
+### Running the tests faster (opt-in)
+
+`node tests/run-all.js` runs every test file one after the other, and that stays the default. Three options change how it runs; none changes what counts as a pass:
+
+| Option | What it does |
+|---|---|
+| `--jobs N` (or `EGC_TEST_JOBS=N` when the flag is absent) | Runs the files the classifier calls independent N at a time, longest first, each in a private home and temp folder; the serial ones follow alone. N is a whole number from 1 to 64. A file that fails in the pool is run again alone and only that second run counts, so the report names the files that failed under load and passed alone. |
+| `--durations <file>` | Writes each file's wall time to `<file>` as JSON and prints the longest file and the wall time 8 workers could reach. |
+| `--report <file>` | Writes the per-file pass and fail counts to `<file>` as JSON. |
+
+To check that a parallel run agrees with the serial one, write a report from each and compare them; the comparison exits 1 on any per-file or total difference:
+
+```bash
+node tests/run-all.js --report serial.json
+node tests/run-all.js --jobs 4 --report parallel.json
+node tests/fixtures/compare-reports.js serial.json parallel.json
+```
+
+`node tests/fixtures/test-classifier.js` lists which files stay serial and why. A static scan holds back a file that changes the working directory, listens on a fixed port or writes under a temp name that never changes. `tests/serial-manifest.json` decides over the scan: each entry is `{ "file", "mode", "reason" }`, where `file` is a path relative to `tests/` with forward slashes, `mode` is `serial` (pin a file the scan missed) or `parallel` (free a file the scan held back), and `reason` is one written line saying why. A file listed twice, a path that is not a test file, a missing `mode` or a missing `reason` stops the run with a clear error.
+
+CI runs serially unless the repository variable `EGC_TEST_JOBS` is set, which is how a maintainer turns the pool on for the CI lanes without a pull request.
+
 ---
 
 ## Orchestrators & Runtime Core

@@ -50,7 +50,7 @@ function writeMiniSuite(root) {
   write('b.test.js', "console.log('Results: Passed: 1, Failed: 1');\nprocess.exit(1);\n");
   write('c.test.js', "console.log('Results: Passed: 2, Failed: 0');\n");
   write('d.test.js', [
-    "if (process.env.HOME.includes('egc-suite-job-')) {",
+    "if (String(process.env.HOME || '').includes('egc-suite-job-')) {",
     "  console.log('Results: Passed: 0, Failed: 1');",
     '  process.exit(1);',
     '}',
@@ -80,6 +80,19 @@ function runSuite(runAll, args, tmp) {
   await test('parseJobsFlag rejects a missing, zero, fractional or oversized value', () => {
     for (const argv of [['--jobs'], ['--jobs', '0'], ['--jobs=2.5'], ['--jobs', 'many'], ['--jobs', String(MAX_JOBS + 1)]]) {
       assert.throws(() => parseJobsFlag(argv), /--jobs needs a whole number/, argv.join(' '));
+    }
+  });
+
+  await test('parseJobsFlag falls back to EGC_TEST_JOBS and lets the flag win', () => {
+    assert.strictEqual(parseJobsFlag([], { EGC_TEST_JOBS: '4' }), 4);
+    assert.strictEqual(parseJobsFlag(['--jobs', '2'], { EGC_TEST_JOBS: '4' }), 2);
+    assert.strictEqual(parseJobsFlag([], {}), null);
+  });
+
+  await test('parseJobsFlag treats an empty EGC_TEST_JOBS as unset and names a bad one', () => {
+    assert.strictEqual(parseJobsFlag([], { EGC_TEST_JOBS: '' }), null);
+    for (const value of ['0', '2.5', 'many', String(MAX_JOBS + 1)]) {
+      assert.throws(() => parseJobsFlag([], { EGC_TEST_JOBS: value }), /EGC_TEST_JOBS needs a whole number/, value);
     }
   });
 
