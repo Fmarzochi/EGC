@@ -70,8 +70,12 @@ function registerIsolated(homeDir, options) {
 // path is unavailable and the scan alone has to be right.
 function withoutTomlParser(fn) {
   const Module = require('node:module');
-  const registerPath = require.resolve('../../scripts/lib/mcp-register');
-  const cachedRegister = require.cache[registerPath];
+  const libDir = path.dirname(require.resolve('../../scripts/lib/mcp-register'));
+  const isRegisterModule = key => path.dirname(key) === libDir && path.basename(key).startsWith('mcp-register');
+  const cached = Object.keys(require.cache).filter(isRegisterModule).map(key => [key, require.cache[key]]);
+  const clear = () => {
+    for (const key of Object.keys(require.cache)) if (isRegisterModule(key)) delete require.cache[key];
+  };
   const originalLoad = Module._load;
   Module._load = function (request) {
     if (request === '@iarna/toml') {
@@ -81,14 +85,14 @@ function withoutTomlParser(fn) {
     }
     return originalLoad.apply(this, arguments);
   };
-  delete require.cache[registerPath];
+  clear();
   let parserless;
   try {
     parserless = require('../../scripts/lib/mcp-register');
   } finally {
     Module._load = originalLoad;
-    delete require.cache[registerPath];
-    if (cachedRegister) require.cache[registerPath] = cachedRegister;
+    clear();
+    for (const [key, value] of cached) require.cache[key] = value;
   }
   fn(parserless.registerToml);
 }
