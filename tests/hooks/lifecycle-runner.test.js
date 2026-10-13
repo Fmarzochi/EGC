@@ -36,17 +36,17 @@ function nodeOnlyDir(home) {
   const bin = path.join(home, 'bin');
   fs.mkdirSync(bin);
   if (process.platform === 'win32') {
-    const node = path.join(bin, 'node.exe');
-    try {
-      fs.linkSync(process.execPath, node);
-    } catch {
-      fs.copyFileSync(process.execPath, node);
-    }
+    // A copy, not a link: Windows refuses to remove a link to the node.exe
+    // that is running this test, and the temporary home could not be cleaned.
+    fs.copyFileSync(process.execPath, path.join(bin, 'node.exe'));
   } else {
     fs.symlinkSync(process.execPath, path.join(bin, 'node'));
   }
   return bin;
 }
+
+// Windows can hold the copied node.exe for a moment after the child exits.
+const HOME_CLEANUP_RETRY = Object.freeze({ maxRetries: 5, retryDelay: 200 });
 
 function envWithoutRoot(home) {
   const env = { ...process.env, ...NO_ROOT_ENV, HOME: home, USERPROFILE: home };
@@ -273,7 +273,7 @@ for (const file of ['hooks/hooks.json', 'docs/hooks/memory-persistence/hooks.jso
         assert.strictEqual(result.stdout, '{"session_id":"lifecycle-runner-test"}', command.slice(-60));
       }
     } finally {
-      fs.rmSync(home, { recursive: true, force: true });
+      fs.rmSync(home, { recursive: true, force: true, ...HOME_CLEANUP_RETRY });
     }
   });
 }
