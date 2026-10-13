@@ -75,6 +75,7 @@ git checkout -b feat/my-contribution
 # 5. Verify locally (all of these must pass before you open a PR)
 npm ci
 node tests/run-all.js              # full test suite (runs on Linux, macOS, Windows)
+npm run preflight                  # lint findings this branch adds (see docs/guides/preflight.md)
 npm audit --audit-level=high       # must show 0 high/critical vulnerabilities
 
 # 6. Submit PR — Signed-off-by is added automatically by the hook
