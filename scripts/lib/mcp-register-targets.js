@@ -38,6 +38,15 @@ function kiloConfigDir(homeDir) {
   return resolveKiloConfigDir(homeDir);
 }
 
+// See the Goose registration target below for the sourcing of this path.
+function resolveGooseConfigPath(homeDir) {
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
+    return path.join(appData, 'Block', 'goose', 'config', 'config.yaml');
+  }
+  return path.join(homeDir, '.config', 'goose', 'config.yaml');
+}
+
 // The file the servers go into: the documented name when it exists, the
 // legacy name when only that exists, the documented name when creating.
 // A jsonc file is never edited (comments would not survive a rewrite);
@@ -240,6 +249,21 @@ function buildMcpRegistrationTargets(homeDir) {
       path: path.join(homeDir, '.factory', 'mcp.json'),
       gate: () => fs.existsSync(path.join(homeDir, '.factory')) || commandExists('droid'),
       format: 'json',
+    },
+    {
+      // Goose (block/goose) keeps its config at ~/.config/goose/config.yaml
+      // on macOS/Linux; on Windows it is %APPDATA%\Block\goose\config\config.yaml
+      // instead of the XDG-style path most other targets use (confirmed
+      // against goose-docs.ai/docs/guides/config-files and
+      // mintlify.com/block/goose/api/core/config, both read on 2026-10-13;
+      // no GOOSE_CONFIG or XDG_CONFIG_HOME override is documented). MCP
+      // servers are extensions in a top-level YAML list, not a mcpServers
+      // object, so this uses the dedicated goose-yaml writer instead of the
+      // generic JSON one.
+      name: 'Goose',
+      path: resolveGooseConfigPath(homeDir),
+      gate: () => fs.existsSync(path.dirname(resolveGooseConfigPath(homeDir))) || commandExists('goose'),
+      format: 'goose-yaml',
     },
     {
       // OpenHands reads MCP servers from the standard mcpServers object of

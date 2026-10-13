@@ -46,6 +46,11 @@ const CONFIG_HOME_VARIABLES = Object.freeze([
   'MIMOCODE_HOME',
   'PI_CODING_AGENT_DIR',
   'XDG_CONFIG_HOME',
+  // Goose's config.yaml on Windows resolves under %APPDATA%\Block\goose
+  // (scripts/lib/mcp-register-targets.js); a CI runner exports a real
+  // APPDATA, which would otherwise make a test writing into a temporary
+  // home land in the runner's real profile directory instead.
+  'APPDATA',
 ]);
 
 function without(names, env) {
