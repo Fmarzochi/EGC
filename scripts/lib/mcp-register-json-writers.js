@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { isSymbolicLink, readFileIfExists, writeConfig } = require('./mcp-register-config-io');
+const { refreshEntryScript } = require('./mcp-register-stale');
 
 /**
  * Parses raw JSON configuration content as an object.
@@ -48,13 +49,18 @@ function registerJson(targetPath, bins) {
     throw new TypeError(`existing file at ${targetPath} has an invalid mcpServers object - left untouched`);
   }
   let changed = false;
-  if (!obj.mcpServers['egc-guardian']) {
-    obj.mcpServers['egc-guardian'] = { command: 'node', args: [guardianBin] };
-    changed = true;
-  }
-  if (!obj.mcpServers['egc-memory']) {
-    obj.mcpServers['egc-memory'] = { command: 'node', args: [memoryBin] };
-    changed = true;
+  for (const [name, bin] of [['egc-guardian', guardianBin], ['egc-memory', memoryBin]]) {
+    const current = obj.mcpServers[name];
+    if (!current) {
+      obj.mcpServers[name] = { command: 'node', args: [bin] };
+      changed = true;
+      continue;
+    }
+    const refreshed = refreshEntryScript(current, 'args', bin);
+    if (refreshed) {
+      obj.mcpServers[name] = refreshed;
+      changed = true;
+    }
   }
   if (!changed) return false;
   writeConfig(targetPath, JSON.stringify(obj, null, 2) + '\n');
@@ -104,7 +110,14 @@ function registerZedContextServers(targetPath, bins) {
   for (const [key, value] of Object.entries(incoming.context_servers)) {
     const existing = settings.context_servers[key];
     const isLegacyShape = existing && typeof existing.command === 'object' && existing.command !== null;
-    if (existing && !isLegacyShape) continue;
+    if (existing && !isLegacyShape) {
+      const refreshed = refreshEntryScript(existing, 'args', value.args[0]);
+      if (refreshed) {
+        settings.context_servers[key] = refreshed;
+        changed = true;
+      }
+      continue;
+    }
     settings.context_servers[key] = isLegacyShape ? migrateLegacyZedServer(value, existing) : value;
     changed = true;
   }
@@ -156,6 +169,12 @@ function registerOpenCodeMcp(targetPath, bins) {
     // is theirs to keep, whatever OpenCode makes of it.
     if (!Object.hasOwn(obj.mcp, name)) {
       obj.mcp[name] = entry;
+      changed = true;
+      continue;
+    }
+    const refreshed = refreshEntryScript(obj.mcp[name], 'command', entry.command[1]);
+    if (refreshed) {
+      obj.mcp[name] = refreshed;
       changed = true;
     }
   }
@@ -212,6 +231,12 @@ function registerCrushMcp(targetPath, bins) {
   for (const [name, entry] of Object.entries(incoming)) {
     if (!Object.hasOwn(obj.mcp, name)) {
       obj.mcp[name] = entry;
+      changed = true;
+      continue;
+    }
+    const refreshed = refreshEntryScript(obj.mcp[name], 'args', entry.args[0]);
+    if (refreshed) {
+      obj.mcp[name] = refreshed;
       changed = true;
     }
   }

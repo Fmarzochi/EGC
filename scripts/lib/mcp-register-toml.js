@@ -1,6 +1,7 @@
 'use strict';
 
 const { isDeepStrictEqual } = require('node:util');
+const { refreshTomlScripts } = require('./mcp-register-stale');
 const { readFileIfExists, writeConfig } = require('./mcp-register-config-io');
 const {
   appendTableServer,
@@ -82,6 +83,16 @@ function tomlServerLines(keys) {
  * lose any other content is refused and the file is left as it was. An
  * install may leave a tool unregistered, but it must never damage a config.
  */
+// Both servers are registered already: the only change left to make is
+// pointing a script path that no longer exists at the current one.
+function writeRefreshedScripts(targetPath, content, original, bins) {
+  const refreshed = refreshTomlScripts(content, bins);
+  if (refreshed === content) return false;
+  if (parsesAsToml(original) && !keepsEverythingElse(original, refreshed)) return false;
+  writeConfig(targetPath, refreshed);
+  return true;
+}
+
 function registerTablePerServerToml(targetPath, bins) {
   const { guardianBin, memoryBin } = bins;
   const original = readFileIfExists(targetPath) ?? '';
@@ -108,7 +119,7 @@ function registerTablePerServerToml(targetPath, bins) {
   const hasGuardian = tomlHasTableServer(content, 'egc-guardian');
   const hasMemory = tomlHasTableServer(content, 'egc-memory');
   if (hasGuardian && hasMemory) {
-    return false;
+    return writeRefreshedScripts(targetPath, content, original, bins);
   }
   content = removeLegacyTomlServer(content, 'egc-guardian');
   content = removeLegacyTomlServer(content, 'egc-memory');
@@ -129,6 +140,7 @@ function registerTablePerServerToml(targetPath, bins) {
   for (const [id, bin] of missing) {
     content = appendTableServer(content, id, bin);
   }
+  content = refreshTomlScripts(content, bins);
   if (parsesAsToml(original) && !keepsEverythingElse(original, content)) {
     throw new TypeError(
       `existing file at ${targetPath} could not be updated without breaking it - left untouched: ` +
@@ -183,7 +195,8 @@ function registerToml(targetPath, bins, target = {}) {
     content += `\n[[mcp_servers]]\nname = "egc-memory"\n${extraLines}command = "node"\nargs = ["${tomlEscape(memoryBin)}"]\n`;
     appended = true;
   }
-  if (!appended) return false;
+  if (!appended) return writeRefreshedScripts(targetPath, content, original, bins);
+  content = refreshTomlScripts(content, bins);
   if (parsesAsToml(original) && !keepsEverythingElse(original, content)) {
     throw new TypeError(
       `existing file at ${targetPath} could not be updated without breaking it - left untouched: ` +
