@@ -26,10 +26,19 @@ const TYPED_CONFIG = [
   '}];',
   '',
 ].join('\n');
+const PLUGIN_CONFIG = [
+  "const globals = require('globals');",
+  "module.exports = [{ files: ['**/*.js'], languageOptions: { globals: globals.node }, rules: { 'no-debugger': 'error' } }];",
+  '',
+].join('\n');
+const SKIPPED = Symbol('skipped');
 
 function test(name, fn) {
   try {
-    fn();
+    if (fn() === SKIPPED) {
+      console.log(`  SKIP ${name}`);
+      return SKIPPED;
+    }
     console.log(`  ✓ ${name}`);
     return true;
   } catch (error) {
@@ -94,15 +103,24 @@ function preflight(sandbox, cwd) {
 function withSandbox(fn) {
   const sandbox = makeSandbox();
   try {
-    fn(sandbox);
+    return fn(sandbox);
   } finally {
     fs.rmSync(sandbox.dir, { recursive: true, force: true });
   }
 }
 
 function linkNodeModules(root) {
-  const nodeModules = path.resolve(path.dirname(require.resolve('typescript-eslint/package.json')), '..');
+  const nodeModules = path.resolve(path.dirname(require.resolve('globals/package.json')), '..');
   fs.symlinkSync(nodeModules, path.join(root, 'node_modules'), 'junction');
+}
+
+function canResolve(request) {
+  try {
+    require.resolve(request);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 console.log('\n=== Testing scripts/ci/preflight.js ===\n');
@@ -144,23 +162,35 @@ const results = [
     assert.match(output, /^lib\/untracked\.js:2 no-unused-vars /m, output);
   })),
 
-  test('a worktree without node_modules lints with the main checkout ones, and a typed config reads a file the branch adds', () => withSandbox(sandbox => {
-    const main = makeRepo(sandbox, 'main', {
-      'eslint.config.js': TYPED_CONFIG,
-      'tsconfig.json': '{ "compilerOptions": { "strict": true, "noEmit": true }, "include": ["src/a.ts"] }\n',
-      'src/a.ts': 'export const a = 1;\n',
-    });
+  test('a worktree without node_modules lints with the plugins of the main checkout', () => withSandbox(sandbox => {
+    const main = makeRepo(sandbox, 'main', { 'eslint.config.js': PLUGIN_CONFIG });
     linkNodeModules(main);
     git(sandbox, main, ['checkout', '-q', 'main']);
     const worktree = path.join(sandbox.dir, 'worktree');
     git(sandbox, main, ['worktree', 'add', '-q', worktree, 'feature']);
-    write(worktree, { 'src/b.ts': 'export function b(): void {\n  debugger;\n}\n' });
-    commit(sandbox, worktree, 'add a typed file');
+    write(worktree, { 'lib/b.js': "'use strict';\ndebugger;\n" });
+    commit(sandbox, worktree, 'add a file in the worktree');
     assert.ok(!fs.existsSync(path.join(worktree, 'node_modules')), 'the worktree has no node_modules of its own');
     const { status, output } = preflight(sandbox, worktree);
     assert.strictEqual(status, 1, output);
+    assert.match(output, /^lib\/b\.js:2 no-debugger /m, output);
+  })),
+
+  test('a typed config with projectService reads a file the branch adds that no tsconfig includes', () => withSandbox(sandbox => {
+    if (!canResolve('typescript')) return SKIPPED;
+    const root = makeRepo(sandbox, 'repo', {
+      'eslint.config.js': TYPED_CONFIG,
+      'tsconfig.json': '{ "compilerOptions": { "strict": true, "noEmit": true }, "include": ["src/a.ts"] }\n',
+      'src/a.ts': 'export const a = 1;\n',
+    });
+    linkNodeModules(root);
+    write(root, { 'src/b.ts': 'export function b(): void {\n  debugger;\n}\n' });
+    commit(sandbox, root, 'add a typed file');
+    const { status, output } = preflight(sandbox, root);
+    assert.strictEqual(status, 1, output);
     assert.match(output, /^src\/b\.ts:2 no-debugger /m, output);
     assert.doesNotMatch(output, /parse-error/, output);
+    return undefined;
   })),
 
   test('findings match by rule and message counts, not by line', () => {
@@ -189,7 +219,8 @@ const results = [
   }),
 ];
 
-const passed = results.filter(Boolean).length;
-const failed = results.length - passed;
-console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
+const skipped = results.filter(result => result === SKIPPED).length;
+const passed = results.filter(result => result === true).length;
+const failed = results.length - passed - skipped;
+console.log(`\nResults: Passed: ${passed}, Failed: ${failed}, Skipped: ${skipped}`);
 process.exitCode = failed > 0 ? 1 : 0;
