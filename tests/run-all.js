@@ -6,7 +6,7 @@
  *
  * --durations writes how long each test file took to <file> as JSON and
  * prints the longest file and the wall time 8 workers could reach.
- * --jobs N runs the files the classifier calls independent (see
+ * --jobs N (or EGC_TEST_JOBS=N when the flag is absent) runs the files the classifier calls independent (see
  * fixtures/test-classifier.js) N at a time, each with a private home and temp
  * folder, then the serial ones alone. A file that fails in the pool is run
  * again alone, and only that second run counts.
@@ -74,7 +74,7 @@ function discoverTestFiles() {
 
 const testFiles = discoverTestFiles();
 const durationsFile = parseDurationsFlag(process.argv.slice(2));
-const jobs = parseJobsFlag(process.argv.slice(2));
+const jobs = parseJobsFlag(process.argv.slice(2), process.env);
 const reportFile = parseReportFlag(process.argv.slice(2));
 const durations = [];
 const fileReports = [];

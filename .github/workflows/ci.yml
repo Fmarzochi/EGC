@@ -194,6 +194,10 @@ jobs:
         run: node tests/run-all.js
         env:
           GEMINI_CODE_PACKAGE_MANAGER: ${{ matrix.pm }}
+          # Opt-in: a repository variable EGC_TEST_JOBS=N runs the independent test
+          # files N at a time (tests/run-all.js --jobs). Unset or empty keeps the
+          # serial run, byte for byte.
+          EGC_TEST_JOBS: ${{ vars.EGC_TEST_JOBS }}
 
       # Upload test artifacts on failure
       - name: Upload test artifacts

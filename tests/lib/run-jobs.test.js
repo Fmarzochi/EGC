@@ -83,6 +83,19 @@ function runSuite(runAll, args, tmp) {
     }
   });
 
+  await test('parseJobsFlag falls back to EGC_TEST_JOBS and lets the flag win', () => {
+    assert.strictEqual(parseJobsFlag([], { EGC_TEST_JOBS: '4' }), 4);
+    assert.strictEqual(parseJobsFlag(['--jobs', '2'], { EGC_TEST_JOBS: '4' }), 2);
+    assert.strictEqual(parseJobsFlag([], {}), null);
+  });
+
+  await test('parseJobsFlag treats an empty EGC_TEST_JOBS as unset and names a bad one', () => {
+    assert.strictEqual(parseJobsFlag([], { EGC_TEST_JOBS: '' }), null);
+    for (const value of ['0', '2.5', 'many', String(MAX_JOBS + 1)]) {
+      assert.throws(() => parseJobsFlag([], { EGC_TEST_JOBS: value }), /EGC_TEST_JOBS needs a whole number/, value);
+    }
+  });
+
   await test('parseReportFlag needs a path', () => {
     assert.strictEqual(parseReportFlag(['--report', 'r.json']), 'r.json');
     assert.strictEqual(parseReportFlag([]), null);
