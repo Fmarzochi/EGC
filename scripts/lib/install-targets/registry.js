@@ -36,6 +36,7 @@ const kiloHome = require('./kilo-home');
 const mimoHome = require('./mimo-home');
 const piHome = require('./pi-home');
 const droidHome = require('./droid-home');
+const lettaHome = require('./letta-home');
 
 // Retired adapters (their files left the tree on 2026-09-30; the ids stay
 // recognized below so every command explains the retirement): gemini-project
@@ -84,6 +85,7 @@ const ADAPTERS = Object.freeze([
   mimoHome,
   piHome,
   droidHome,
+  lettaHome,
 ]);
 
 function listInstallTargetAdapters() {

@@ -150,6 +150,7 @@ const IDE_INSTALL_URLS = Object.freeze({
   mimo:         { name: 'MiMo Code',         url: 'https://github.com/XiaomiMiMo/MiMo-Code' },
   pi:           { name: 'Pi',                url: 'https://pi.dev' },
   droid:        { name: 'Droid (Factory)',   url: 'https://docs.factory.com' },
+  letta:        { name: 'Letta Code',        url: 'https://docs.letta.com/letta-code' },
 });
 
 // An adapter that picks its root by policy (config.resolveRoot) is detected

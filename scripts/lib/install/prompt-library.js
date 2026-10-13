@@ -36,6 +36,7 @@ const HOME_TARGET_COMMANDS = Object.freeze({
   mimo: ['mimo'],
   pi: ['pi'],
   droid: ['droid'],
+  letta: ['letta'],
 });
 
 // Codex, Goose and OpenHands share the ~/.agents root, so that root says

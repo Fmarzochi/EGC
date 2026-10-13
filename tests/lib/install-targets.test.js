@@ -6005,6 +6005,112 @@ function runTests() {
     assert.ok(!ruleNames.some(name => name.includes('readme')), `no README.md should reach ~/.augment/rules, got ${JSON.stringify(ruleNames)}`);
     assert.ok(!ruleNames.some(name => name.startsWith('zh-')), `the Chinese mirror should not reach ~/.augment/rules, got ${JSON.stringify(ruleNames)}`);
   }));
+  tally(test('resolves letta adapter root to ~/.letta and its own install-state path', () => {
+    const adapter = getInstallTargetAdapter('letta');
+    const homeDir = '/Users/example';
+    const root = adapter.resolveRoot({ homeDir });
+    const statePath = adapter.getInstallStatePath({ homeDir });
+
+    assert.strictEqual(adapter.id, 'letta-home');
+    assert.strictEqual(adapter.target, 'letta');
+    assert.strictEqual(adapter.kind, 'home');
+    assert.strictEqual(root, path.join(homeDir, '.letta'));
+    assert.strictEqual(statePath, path.join(homeDir, '.letta', 'egc', 'install-state.json'));
+  }));
+
+  tally(test('letta adapter supports lookup by target and adapter id', () => {
+    const byTarget = getInstallTargetAdapter('letta');
+    const byId = getInstallTargetAdapter('letta-home');
+
+    assert.strictEqual(byTarget.id, 'letta-home');
+    assert.strictEqual(byId.id, 'letta-home');
+    assert.ok(byTarget.supports('letta'));
+    assert.ok(byTarget.supports('letta-home'));
+  }));
+
+  tally(test('letta adapters are included in the full adapter list', () => {
+    const adapters = listInstallTargetAdapters();
+    assert.ok(adapters.some(a => a.target === 'letta'), 'letta is registered in the adapter list');
+  }));
+
+  tally(test('letta-home: skills land flat under ~/.letta/skills, computer-scoped, the only thing Letta Code reads from EGC (#1500)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'letta',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] }],
+    });
+
+    const skillsDir = path.join(homeDir, '.letta', 'skills');
+    assert.ok(
+      plan.operations.some(op => op.destinationPath === path.join(skillsDir, 'continuous-learning', 'SKILL.md')),
+      'the skill lands flat under ~/.letta/skills, stripped of its category'
+    );
+  }));
+
+  tally(test('letta-home: agents, commands, rules and AGENTS.md ship as inert reference copies under egc/library, since Letta Code reads none of them (#1500)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+    const root = path.join(homeDir, '.letta');
+
+    const plan = planInstallTargetScaffold({
+      target: 'letta',
+      repoRoot,
+      homeDir,
+      modules: [
+        { id: 'agents-core', paths: ['agents/code-reviewer.md', 'AGENTS.md'] },
+        { id: 'commands-core', paths: ['commands/plan.md'] },
+        { id: 'rules-core', paths: ['rules/common/memory.md'] },
+      ],
+    });
+    const destinations = plan.operations.map(op => op.destinationPath);
+
+    for (const expected of [
+      ['egc', 'library', 'agents', 'code-reviewer.md'],
+      ['egc', 'library', 'AGENTS.md'],
+      ['egc', 'library', 'commands', 'plan.md'],
+      ['egc', 'library', 'rules', 'common', 'memory.md'],
+    ]) {
+      assert.ok(destinations.includes(path.join(root, ...expected)), `${expected.join('/')} is planned`);
+    }
+    assert.ok(!destinations.includes(path.join(root, 'AGENTS.md')), 'AGENTS.md never lands at the live root: Letta Code does not read it');
+  }));
+
+  tally(test('letta-home has no Guardian, Crusher or MCP registration: no documented hook surface or MCP config file for the Letta Code CLI (#1500)', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/home/example';
+
+    const plan = planInstallTargetScaffold({
+      target: 'letta',
+      repoRoot,
+      homeDir,
+      modules: [{ id: 'skills-core', paths: ['skills/ai/continuous-learning/SKILL.md'] }],
+    });
+
+    assert.ok(!plan.operations.some(op => op.kind === 'merge-claude-settings-hooks'), 'no hook merge operation is planned');
+    assert.ok(
+      !plan.operations.some(op => op.destinationPath && /crusher|guardian/i.test(op.destinationPath)),
+      'no Guardian or Crusher script is planned'
+    );
+    assert.deepStrictEqual(plan.managedRoots, [path.join(homeDir, '.letta')], 'letta-home manages only its own root');
+  }));
+
+  tally(test('letta-home warns when ~/.letta is absent, naming the tool and its docs (#1500)', () => {
+    const adapter = getInstallTargetAdapter('letta');
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-letta-home-'));
+    try {
+      const warning = adapter.validate({ homeDir, repoRoot: '/repo/egc' }).find(issue => issue.code === 'ide-not-detected');
+      assert.ok(warning, 'a home without ~/.letta gets the ide-not-detected warning');
+      assert.match(warning.message, /^Letta Code does not appear to be installed/);
+      assert.match(warning.message, /https:\/\/docs\.letta\.com\/letta-code/);
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  }));
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

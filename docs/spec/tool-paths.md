@@ -1,6 +1,6 @@
 # Install paths per tool
 
-Generated from `manifests/tool-paths.json` by `node scripts/ci/generate-tool-paths-doc.js`; edit the table, not this file. `tests/ci/tool-paths-contract.test.js` plans every install target in every variant below and fails when a planned path is missing from the table or a row of the table matches no planned path. Sources checked on 2026-10-12.
+Generated from `manifests/tool-paths.json` by `node scripts/ci/generate-tool-paths-doc.js`; edit the table, not this file. `tests/ci/tool-paths-contract.test.js` plans every install target in every variant below and fails when a planned path is missing from the table or a row of the table matches no planned path. Sources checked on 2026-10-13.
 
 Status: **documented** paths are read by the tool per the linked source: its docs, or, where the docs are silent, its own source code at a pinned commit, with the note saying which; **egc** paths are files of EGC itself under the tool root (hook scripts, install state, library copies the tool does not load); **unverified** paths are planned today but not confirmed by the tool's current docs, with the reason in the note.
 
@@ -521,6 +521,17 @@ Status: **documented** paths are read by the tool per the linked source: its doc
 | hooks | `~/.factory/settings.json` | default | documented | <https://docs.factory.com/cli/configuration/hooks-guide> | Droid reads hooks under the hooks key of ~/.factory/settings.json, in the Claude Code shape, with Execute as the shell tool and Create/Edit as the file tools; exit code 2 or permissionDecision deny blocks, updatedInput rewrites (read on 2026-10-12). |
 | skills | `~/.factory/skills/` | default | documented | <https://docs.factory.com/harness/skills> | Droid reads personal skills from ~/.factory/skills/<name>/SKILL.md (read on 2026-10-12). |
 | state | `~/.factory/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
+
+## letta-home
+
+| Surface | Path | Variant | Status | Source | Note |
+| --- | --- | --- | --- | --- | --- |
+| skills | `~/.letta/skills/` | default | documented | <https://docs.letta.com/letta-code/skills> | Letta Code reads skills from four scopes, this one computer-scoped and shared across all agents on the machine (read on 2026-10-13); the other three (agent-scoped MemFS, project-scoped .agents/skills/, bundled) are not written by this adapter. |
+| library | `~/.letta/egc/library/agents/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.letta/egc/library/commands/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.letta/egc/library/rules/` | default | egc |  | EGC library folder: a reference copy of the prompt library that the tool does not load on its own. |
+| library | `~/.letta/egc/library/AGENTS.md` | default | egc |  | EGC library folder: a reference copy of the agent catalog; no project-rules file is documented for the Letta Code CLI, so this never ships live. |
+| state | `~/.letta/egc/install-state.json` | default | egc |  | EGC runtime: the install state EGC writes to track the files it manages. |
 
 ## vibe-project
 
