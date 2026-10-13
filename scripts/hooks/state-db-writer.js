@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { resolveStateStorePath } = require(path.join(__dirname, '..', 'lib', 'state-store', 'path.js'));
-const { openCompatDatabase } = require(path.join(__dirname, '..', 'lib', 'state-store', 'sqlite-compat.js'));
+const { openCompatDatabase, selectedEngine } = require(path.join(__dirname, '..', 'lib', 'state-store', 'sqlite-compat.js'));
 const { applyMigrationsAsync } = require(path.join(__dirname, '..', 'lib', 'state-store', 'migrations.js'));
 const { assertValidEntity } = require(path.join(__dirname, '..', 'lib', 'state-store', 'schema.js'));
 
@@ -123,6 +123,26 @@ async function persistSessionEnd(db, payload) {
   ]);
 }
 
+async function initDatabase(dbPath) {
+  const db = await openCompatDatabase(dbPath, 'state-db-writer', { lockTimeoutMs: 4000 });
+  if (selectedEngine() === 'native') {
+    try {
+      await db.exec('PRAGMA busy_timeout = 4000;');
+      const modeRow = await db.get('PRAGMA journal_mode;');
+      const currentMode = modeRow ? Object.values(modeRow)[0] : null;
+      if (typeof currentMode === 'string' && currentMode.toLowerCase() !== 'wal') {
+        await db.exec('PRAGMA journal_mode = WAL;');
+      }
+      await db.exec('PRAGMA synchronous = NORMAL;');
+    } catch (pragmaErr) {
+      try { await db.close(); } catch (_) { /* ignore close error */ }
+      throw pragmaErr;
+    }
+  }
+  await applyMigrationsAsync(db);
+  return db;
+}
+
 async function main() {
   const payload = readPayloadFromStdin();
   if (!payload) return;
@@ -132,8 +152,7 @@ async function main() {
 
   let db;
   try {
-    db = await openCompatDatabase(dbPath, 'state-db-writer');
-    await applyMigrationsAsync(db);
+    db = await initDatabase(dbPath);
   } catch (e) {
     console.error(e);
     return;

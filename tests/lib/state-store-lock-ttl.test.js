@@ -1171,6 +1171,155 @@ async function runTests() {
     }
   });
 
+  await test('failed unlink on releaseFileLock preserves lock in heldLocks for process exit cleanup', async () => {
+    const { dir, lockPath } = makeTempLockPath();
+    try {
+      const token = await acquireFileLock(lockPath, { timeoutMs: 1000 });
+      assert.ok(token);
+
+      // Simulate unlinkSync throwing EPERM
+      const originalUnlinkSync = fs.unlinkSync;
+      let unlinkAttempted = false;
+      fs.unlinkSync = (pathArg) => {
+        if (pathArg === lockPath) {
+          unlinkAttempted = true;
+          const err = new Error('EPERM: operation not permitted, unlink');
+          err.code = 'EPERM';
+          throw err;
+        }
+        return originalUnlinkSync(pathArg);
+      };
+
+      try {
+        releaseFileLock(lockPath, token);
+      } finally {
+        fs.unlinkSync = originalUnlinkSync;
+      }
+
+      assert.ok(unlinkAttempted, 'unlinkSync must have been attempted');
+      assert.ok(fs.existsSync(lockPath), 'Lock file should still exist since unlink failed');
+
+      // Now cleanup via normal exit cleanup logic
+      releaseFileLock(lockPath, token);
+      assert.ok(!fs.existsSync(lockPath), 'Lock must be successfully removed once filesystem permits');
+    } finally {
+      cleanupTemp(dir, lockPath);
+    }
+  });
+
+  await test('withWriteLock executes synchronously without tick gap and persists immediately for sync callbacks', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-sync-writelock-'));
+    const dbFile = path.join(dir, 'test.db');
+    try {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const db = await openCompatDatabase(dbFile);
+      await db.run('CREATE TABLE t (v TEXT);');
+
+      let persistRanBeforeNextTick = false;
+      const originalPersistNow = db.persistNow.bind(db);
+      db.persistNow = () => {
+        persistRanBeforeNextTick = true;
+        originalPersistNow();
+      };
+
+      // Call withWriteLock with a purely synchronous callback
+      await db.withWriteLock(() => {
+        db.db.run('INSERT INTO t VALUES ("sync_val");');
+      });
+
+      assert.ok(persistRanBeforeNextTick, 'persistNow must have run immediately without tick gap');
+      const row = await db.get('SELECT v FROM t;');
+      assert.strictEqual(row.v, 'sync_val');
+      await db.close();
+    } finally {
+      delete process.env.EGC_SQLITE_ENGINE;
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+    }
+  });
+
+  await test('signal handlers are registered only once across repeated lock acquisitions', async () => {
+    if (isWindows) {
+      console.log('    - skipped: POSIX signal semantics not supported on Windows');
+      return;
+    }
+    const { dir, lockPath } = makeTempLockPath();
+    const lockPath2 = lockPath + '-2';
+    try {
+      const sqliteCompatPath = path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat.js');
+      const childCode = `
+        const { acquireFileLock, releaseFileLock } = require(${JSON.stringify(sqliteCompatPath)});
+        async function run() {
+          const sigtermBefore = process.listenerCount('SIGTERM');
+          const sigintBefore = process.listenerCount('SIGINT');
+          const token1 = await acquireFileLock(${JSON.stringify(lockPath)});
+          const token2 = await acquireFileLock(${JSON.stringify(lockPath2)});
+          const sigtermAfter = process.listenerCount('SIGTERM');
+          const sigintAfter = process.listenerCount('SIGINT');
+          process.stdout.write(JSON.stringify({
+            sigtermBefore, sigtermAfter, sigintBefore, sigintAfter
+          }));
+          releaseFileLock(${JSON.stringify(lockPath)}, token1);
+          releaseFileLock(${JSON.stringify(lockPath2)}, token2);
+        }
+        run();
+      `;
+      const cp = require('node:child_process');
+      const result = cp.execFileSync(process.execPath, ['-e', childCode], { encoding: 'utf8' });
+      const counts = JSON.parse(result);
+      assert.strictEqual(counts.sigtermAfter, counts.sigtermBefore + 1, 'SIGTERM handler must be added exactly once');
+      assert.strictEqual(counts.sigintAfter, counts.sigintBefore + 1, 'SIGINT handler must be added exactly once');
+    } finally {
+      cleanupTemp(dir, lockPath);
+      cleanupTemp(dir, lockPath2);
+    }
+  });
+
+  await test('real native/WASM overlap refusal with open native connection and WAL sidecar', async () => {
+    const sqlite3Available = (() => {
+      try { require('sqlite3'); return true; } catch (_) { return false; }
+    })();
+    if (!sqlite3Available) {
+      console.log('    - skipped: native sqlite3 not installed');
+      return;
+    }
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-overlap-refusal-'));
+    const dbPath = path.join(dir, 'overlap.db');
+    try {
+      // 1. Open with native SQLite, write in WAL mode, leave connection open
+      process.env.EGC_SQLITE_ENGINE = 'native';
+      const nativeDb = await openCompatDatabase(dbPath, 'native-owner');
+      await nativeDb.exec('PRAGMA journal_mode = WAL;');
+      await nativeDb.exec('CREATE TABLE t (x INT);');
+      await nativeDb.run('INSERT INTO t VALUES (42);');
+
+      // 2. Attempt to open with WASM: must be refused due to pending uncheckpointed WAL sidecar
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      let refused = false;
+      let errorMsg = '';
+      try {
+        await openCompatDatabase(dbPath, 'wasm-contender');
+      } catch (err) {
+        refused = true;
+        errorMsg = err.message;
+      }
+      assert.ok(refused, 'Opening WASM database while native connection has active WAL sidecar must be refused');
+      assert.ok(errorMsg.includes('write-ahead data'), `Error must mention write-ahead data: ${errorMsg}`);
+
+      // 3. Close native connection cleanly (checkpoints WAL)
+      await nativeDb.close();
+
+      // 4. Once native connection is cleanly closed and sidecar is checkpointed/empty, WASM can open safely
+      const wasmDb = await openCompatDatabase(dbPath, 'wasm-safe');
+      const row = await wasmDb.get('SELECT x FROM t;');
+      assert.strictEqual(row.x, 42, 'WASM engine must read persisted data after native engine closes');
+      await wasmDb.close();
+    } finally {
+      delete process.env.EGC_SQLITE_ENGINE;
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+    }
+  });
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exitCode = failed > 0 ? 1 : 0;
 }

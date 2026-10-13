@@ -72,15 +72,21 @@ const heldLocks = new Map();
 let signalHandlersRegistered = false;
 
 function unlinkLockIfOwned(lockPath, token) {
-  if (!token || typeof token !== 'string') return;
+  if (!token || typeof token !== 'string') return false;
   try {
-    if (!fs.existsSync(lockPath)) return;
+    if (!fs.existsSync(lockPath)) return true;
     const raw = fs.readFileSync(lockPath, 'utf8');
     const data = JSON.parse(raw);
     if (data?.token === token) {
       fs.unlinkSync(lockPath);
+      return true;
     }
-  } catch (_) { /* ignore release error */ }
+    // Lock file exists but belongs to a different token/owner
+    return true;
+  } catch (err) {
+    if (err?.code === 'ENOENT') return true;
+    return false;
+  }
 }
 
 function cleanupHeldLocks() {
@@ -191,8 +197,10 @@ function tryAcquireLockOnce(lockPath, token) {
 
 function releaseFileLock(lockPath, token) {
   if (!token || typeof token !== 'string') return;
-  heldLocks.delete(lockPath);
-  unlinkLockIfOwned(lockPath, token);
+  const unlinked = unlinkLockIfOwned(lockPath, token);
+  if (unlinked) {
+    heldLocks.delete(lockPath);
+  }
 }
 
 function checkDeadProcessHolder(holder, lockPath) {
@@ -231,16 +239,12 @@ function delayWithJitter(retryIntervalMs) {
   return new Promise(r => setTimeout(r, retryIntervalMs + jitter));
 }
 
-async function acquireFileLock(lockPath, { timeoutMs = 15000, retryIntervalMs = 25 } = {}) {
-  registerSignalHandlersOnce();
-  const token = crypto.randomUUID();
-  const deadline = Date.now() + timeoutMs;
+async function pollLockUntilAcquired(lockPath, token, deadline, retryIntervalMs) {
   let lastHolder = null;
-
   while (Date.now() < deadline) {
     if (tryAcquireLockOnce(lockPath, token)) {
       heldLocks.set(lockPath, token);
-      return token;
+      return { token, lastHolder: null };
     }
 
     const holder = readLockHolder(lockPath);
@@ -249,9 +253,21 @@ async function acquireFileLock(lockPath, { timeoutMs = 15000, retryIntervalMs = 
       checkDeadProcessHolder(holder, lockPath);
     }
 
-    await delayWithJitter(retryIntervalMs);
+    await delayWithJitter(retryIntervalMs); // NOSONAR: intentional async polling delay between lock retries
+  }
+  return { token: null, lastHolder };
+}
+
+async function acquireFileLock(lockPath, { timeoutMs = 15000, retryIntervalMs = 25 } = {}) {
+  registerSignalHandlersOnce();
+  const token = crypto.randomUUID();
+  const deadline = Date.now() + timeoutMs;
+  const result = await pollLockUntilAcquired(lockPath, token, deadline, retryIntervalMs);
+  if (result.token) {
+    return result.token;
   }
 
+  const lastHolder = result.lastHolder;
   const hostInfo = (lastHolder?.hostname && lastHolder.hostname !== os.hostname()) ? ` on host ${lastHolder.hostname}` : '';
   const holderInfo = lastHolder ? ` (held by PID ${lastHolder.pid}${hostInfo}, token ${lastHolder.token})` : '';
   throw new Error(`[sqlite-compat] Lock timeout after ${timeoutMs}ms acquiring ${lockPath}${holderInfo}`);
@@ -262,9 +278,22 @@ function errorMessage(error) {
   return String(error).split('\n')[0];
 }
 
-function loadSqlJs() {
+const PACKAGE_ROOT = path.resolve(__dirname, '..', '..', '..');
+
+function missingEnginesError(nativeError, cause) {
+  const native = nativeError ? ` sqlite3 did not load either: ${errorMessage(nativeError)}.` : '';
+  return new Error(`sql.js is not installed under ${PACKAGE_ROOT}, where EGC loads its SQLite engines from.${native} In a git checkout run "npm ci" in that directory; in an npm install, reinstall @egchq/egc.`, { cause });
+}
+
+function loadSqlJs(nativeError) {
   if (!sqlJsPromise) {
-    const initSqlJs = require('sql.js');
+    let initSqlJs;
+    try {
+      initSqlJs = require('sql.js');
+    } catch (error) {
+      if (error?.code !== 'MODULE_NOT_FOUND') throw error;
+      throw missingEnginesError(nativeError, error);
+    }
     sqlJsPromise = initSqlJs();
   }
   return sqlJsPromise;
@@ -334,20 +363,55 @@ function normalizeParams(params) {
   return [nullForUndefined(only)];
 }
 
-const SQL_COMMENT_LINE = /--.*$/gm;
-const SQL_COMMENT_BLOCK = /\/\*[\s\S]*?\*\//g;
-const BEGIN_STMT_REGEX = /^\s*BEGIN\b(?!\s+(?:AFTER|BEFORE|INSTEAD\s+OF)\b)/i;
-const COMMIT_STMT_REGEX = /^\s*(?:COMMIT(?:\s+(?:TRANSACTION|WORK))?|END(?:\s+TRANSACTION|(?!\s+(?:IF|FOR|WHILE|CASE|LOOP)\b)))\s*$/i;
-const ROLLBACK_STMT_REGEX = /^\s*ROLLBACK(?:\s+TRANSACTION|\s+WORK)?(?!\s+TO\b)\s*$/i;
+function stripSqlComments(sql) {
+  let res = '';
+  let i = 0;
+  const len = sql.length;
+  while (i < len) {
+    if (sql[i] === '-' && sql[i + 1] === '-') {
+      const nl = sql.indexOf('\n', i + 2);
+      if (nl === -1) break;
+      i = nl + 1;
+    } else if (sql[i] === '/' && sql[i + 1] === '*') {
+      const end = sql.indexOf('*/', i + 2);
+      if (end === -1) break;
+      i = end + 2;
+    } else if (sql[i] === '\'' || sql[i] === '"') {
+      const q = sql[i];
+      res += q;
+      i += 1;
+      while (i < len && sql[i] !== q) {
+        res += sql[i];
+        i += 1;
+      }
+      if (i < len) {
+        res += sql[i];
+        i += 1;
+      }
+    } else {
+      res += sql[i];
+      i += 1;
+    }
+  }
+  return res.replace(/\s+/g, ' ').trim();
+}
 
-function stripSqlComments(s) {
-  return s.replace(SQL_COMMENT_LINE, '').replace(SQL_COMMENT_BLOCK, '').trim();
+function isBeginStatement(clean) {
+  return /^BEGIN(?:\s+(?:DEFERRED|IMMEDIATE|EXCLUSIVE))?(?:\s+TRANSACTION)?$/i.test(clean);
+}
+
+function isCommitStatement(clean) {
+  return /^(?:COMMIT|END)(?:\s+(?:TRANSACTION|WORK))?$/i.test(clean);
+}
+
+function isRollbackStatement(clean) {
+  return /^ROLLBACK(?:\s+(?:TRANSACTION|WORK))?$/i.test(clean);
 }
 
 function parseTransactionBounds(pieces) {
-  const isBeginStmt = (s) => BEGIN_STMT_REGEX.test(stripSqlComments(s));
-  const isCommitStmt = (s) => COMMIT_STMT_REGEX.test(stripSqlComments(s));
-  const isRollbackStmt = (s) => ROLLBACK_STMT_REGEX.test(stripSqlComments(s));
+  const isBeginStmt = (s) => isBeginStatement(stripSqlComments(s));
+  const isCommitStmt = (s) => isCommitStatement(stripSqlComments(s));
+  const isRollbackStmt = (s) => isRollbackStatement(stripSqlComments(s));
 
   const firstStmt = pieces[0];
   const lastStmt = pieces[pieces.length - 1];
@@ -361,10 +425,12 @@ function parseTransactionBounds(pieces) {
 }
 
 class WasmDatabase {
-  constructor(db, filename, SQL) {
+  constructor(db, filename, SQL, options = {}) {
     this.db = db;
     this.filename = filename;
     this.SQL = SQL || null;
+    this.options = options;
+    this.lockTimeoutMs = options.lockTimeoutMs ?? 15000;
     this.persistTimer = null;
     this.closed = false;
     this._inTransaction = false;
@@ -416,9 +482,15 @@ class WasmDatabase {
     await mutex.acquire();
     let token = null;
     try {
-      token = await acquireFileLock(this.getLockPath());
+      token = await acquireFileLock(this.getLockPath(), { timeoutMs: this.lockTimeoutMs });
       this.reloadFromDisk();
-      const result = await fn();
+      const maybePromise = fn();
+      let result;
+      if (maybePromise && typeof maybePromise.then === 'function') {
+        result = await maybePromise;
+      } else {
+        result = maybePromise;
+      }
       this.persistNow();
       return result;
     } catch (err) {
@@ -497,7 +569,7 @@ class WasmDatabase {
       await mutex.acquire();
       let token = null;
       try {
-        token = await acquireFileLock(this.getLockPath());
+        token = await acquireFileLock(this.getLockPath(), { timeoutMs: this.lockTimeoutMs });
         this.reloadFromDisk();
         this.db.exec(text);
         this._txToken = token;
@@ -704,13 +776,13 @@ function assertNoPendingWal(filename) {
   assertNoPendingSidecars(filename);
 }
 
-async function openWasmDatabase(filename) {
+async function openWasmDatabase(filename, nativeError, options = {}) {
+  const SQL = await loadSqlJs(nativeError);
   assertNoPendingWal(filename);
-  const SQL = await loadSqlJs();
   const data = filename !== ':memory:' && fs.existsSync(filename)
     ? new Uint8Array(fs.readFileSync(filename))
     : undefined;
-  const wasm = new WasmDatabase(new SQL.Database(data), filename, SQL);
+  const wasm = new WasmDatabase(new SQL.Database(data), filename, SQL, options);
   wasm._exitHandler = () => { void wasm.close(); };
   process.once('exit', wasm._exitHandler);
   return wasm;
@@ -722,27 +794,25 @@ function announceFallback(serverName, error) {
   process.stderr.write(`[${serverName}] native sqlite3 unavailable (${errorMessage(error)}); using the portable sql.js engine. Cross-process locking is reduced on this machine.\n`);
 }
 
-async function openCompatDatabase(filename, serverName) {
+async function openCompatDatabase(filename, serverName, options = {}) {
   const engine = process.env.EGC_SQLITE_ENGINE;
+  let nativeError = null;
   if (engine !== 'wasm') {
     try {
       const sqlite3 = require('sqlite3');
       const { open } = require('sqlite');
       const db = await open({ filename, driver: sqlite3.Database });
-      if (filename !== ':memory:') {
-        await db.exec('PRAGMA busy_timeout = 5000;');
-        await db.exec('PRAGMA journal_mode = WAL;');
-        await db.exec('PRAGMA synchronous = NORMAL;');
-      }
       selected = 'native';
       return db;
     } catch (error) {
       if (engine === 'native' || !isNativeLoadFailure(error)) throw error;
-      announceFallback(serverName, error);
+      nativeError = error;
     }
   }
   selected = 'wasm';
-  return openWasmDatabase(filename);
+  const db = await openWasmDatabase(filename, nativeError, options);
+  if (nativeError) announceFallback(serverName, nativeError);
+  return db;
 }
 
 // The engine the last openCompatDatabase call settled on: 'native' or 'wasm'.

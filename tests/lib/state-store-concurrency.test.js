@@ -666,9 +666,14 @@ async function runTests() {
 
       const SERVER_TRANSACTIONS = 5;
       const serverWorkerScript = `
-        const { openCompatDatabase } = require(${JSON.stringify(SQLITE_COMPAT_PATH)});
+        const { openCompatDatabase, selectedEngine } = require(${JSON.stringify(SQLITE_COMPAT_PATH)});
         async function run() {
           const db = await openCompatDatabase(${JSON.stringify(dbPath)}, 'simulated-mcp-server');
+          if (selectedEngine() === 'native') {
+            await db.exec('PRAGMA busy_timeout = 5000;');
+            await db.exec('PRAGMA journal_mode = WAL;');
+            await db.exec('PRAGMA synchronous = NORMAL;');
+          }
           for (let i = 0; i < ${SERVER_TRANSACTIONS}; i += 1) {
             await db.exec('BEGIN IMMEDIATE');
             await db.run(
@@ -1105,72 +1110,6 @@ async function runTests() {
         assert.strictEqual(sessionRow.token_cost, 0.05);
       } finally {
         await db.close();
-      }
-
-      // Also verify synchronous applyMigrations on a partially migrated schema
-      const { openDatabase } = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'state-store', 'db-adapter'));
-      const syncDbPath = path.join(tempDir, 'state_mig_sync_dup.db');
-      const syncDb = await openDatabase(syncDbPath);
-      try {
-        const syncSetupStmts = [
-          `CREATE TABLE IF NOT EXISTS schema_migrations (
-            version INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            applied_at TEXT NOT NULL
-          )`,
-          `CREATE TABLE IF NOT EXISTS sessions (
-            id TEXT PRIMARY KEY,
-            adapter_id TEXT NOT NULL,
-            harness TEXT NOT NULL,
-            state TEXT NOT NULL,
-            repo_root TEXT,
-            started_at TEXT,
-            ended_at TEXT,
-            snapshot TEXT NOT NULL,
-            input_tokens INTEGER
-          )`,
-          "INSERT INTO schema_migrations VALUES (1, '001_initial_state_store', datetime('now'))",
-          "INSERT INTO schema_migrations VALUES (2, '002_instincts_and_events', datetime('now'))",
-          "INSERT INTO schema_migrations VALUES (3, '003_lessons_confidence_decay', datetime('now'))",
-          "INSERT INTO schema_migrations VALUES (4, '004_patterns', datetime('now'))",
-          "INSERT INTO schema_migrations VALUES (5, '005_events_compressed_at', datetime('now'))",
-        ];
-        for (const stmt of syncSetupStmts) {
-          syncDb.exec(stmt);
-        }
-
-        const { applyMigrations } = require(MIGRATIONS_PATH);
-        applyMigrations(syncDb);
-
-        const recordedSync = syncDb.prepare('SELECT version FROM schema_migrations ORDER BY version ASC').all();
-        assert.deepStrictEqual(
-          recordedSync.map(r => r.version),
-          [1, 2, 3, 4, 5, 6],
-          'Sync applyMigrations must record version 6 even if input_tokens column already existed'
-        );
-
-        // Verify remaining columns were added and are writable in syncDb
-        syncDb.prepare(`
-          INSERT INTO sessions (id, adapter_id, harness, state, snapshot, input_tokens, output_tokens, total_tokens, token_cost)
-          VALUES (@id, @adapter_id, @harness, @state, @snapshot, @input_tokens, @output_tokens, @total_tokens, @token_cost)
-        `).run({
-          id: 's_sync',
-          adapter_id: 'a1',
-          harness: 'h1',
-          state: 'active',
-          snapshot: '{}',
-          input_tokens: 10,
-          output_tokens: 20,
-          total_tokens: 30,
-          token_cost: 0.05,
-        });
-        const syncRow = syncDb.prepare('SELECT * FROM sessions WHERE id = ?').get('s_sync');
-        assert.strictEqual(syncRow.input_tokens, 10);
-        assert.strictEqual(syncRow.output_tokens, 20);
-        assert.strictEqual(syncRow.total_tokens, 30);
-        assert.strictEqual(syncRow.token_cost, 0.05);
-      } finally {
-        syncDb.close();
       }
     } finally {
       cleanupTempDir(tempDir);

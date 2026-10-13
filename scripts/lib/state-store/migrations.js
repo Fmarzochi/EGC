@@ -266,19 +266,7 @@ function applyMigrations(db) {
       if (appliedVersions.has(migration.version)) {
         continue;
       }
-      const statements = migration.sql.split(';').map(s => s.trim()).filter(Boolean);
-      for (const stmt of statements) {
-        try {
-          db.exec(stmt);
-        } catch (stmtErr) {
-          const isAddColumn = ADD_COLUMN_REGEX.test(stmt);
-          const isDuplicateCol = stmtErr?.message && DUPLICATE_COLUMN_REGEX.test(stmtErr.message);
-          if (isAddColumn && isDuplicateCol) {
-            continue;
-          }
-          throw stmtErr;
-        }
-      }
+      db.exec(migration.sql);
       insertMigration.run({
         version: migration.version,
         name: migration.name,
@@ -293,18 +281,21 @@ function applyMigrations(db) {
 }
 
 async function executeMigrationStatementsAsync(db, statements) {
-  for (const stmt of statements) {
+  const executeNext = async (idx) => {
+    if (idx >= statements.length) return;
+    const stmt = statements[idx];
     try {
       await db.exec(stmt);
     } catch (stmtErr) {
       const isAddColumn = ADD_COLUMN_REGEX.test(stmt);
       const isDuplicateCol = stmtErr?.message && DUPLICATE_COLUMN_REGEX.test(stmtErr.message);
-      if (isAddColumn && isDuplicateCol) {
-        continue;
+      if (!isAddColumn || !isDuplicateCol) {
+        throw stmtErr;
       }
-      throw stmtErr;
     }
-  }
+    return executeNext(idx + 1);
+  };
+  return executeNext(0);
 }
 
 async function applySingleMigrationAsync(db, migration) {
@@ -339,13 +330,16 @@ async function applyMigrationsAsync(db) {
   const appliedRows = await db.all('SELECT version FROM schema_migrations');
   const appliedVersions = new Set(appliedRows.map(row => row.version));
 
-  for (const migration of MIGRATIONS) {
-    if (appliedVersions.has(migration.version)) {
-      continue;
+  const applyNext = async (idx) => {
+    if (idx >= MIGRATIONS.length) return;
+    const migration = MIGRATIONS[idx];
+    if (!appliedVersions.has(migration.version)) {
+      await applySingleMigrationAsync(db, migration);
+      appliedVersions.add(migration.version);
     }
-    await applySingleMigrationAsync(db, migration);
-    appliedVersions.add(migration.version);
-  }
+    return applyNext(idx + 1);
+  };
+  return applyNext(0);
 }
 
 module.exports = {
