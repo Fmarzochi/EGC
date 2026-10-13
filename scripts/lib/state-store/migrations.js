@@ -272,7 +272,7 @@ function applyMigrations(db) {
           db.exec(stmt);
         } catch (stmtErr) {
           const isAddColumn = ADD_COLUMN_REGEX.test(stmt);
-          const isDuplicateCol = stmtErr && stmtErr.message && DUPLICATE_COLUMN_REGEX.test(stmtErr.message);
+          const isDuplicateCol = stmtErr?.message && DUPLICATE_COLUMN_REGEX.test(stmtErr.message);
           if (isAddColumn && isDuplicateCol) {
             continue;
           }
@@ -298,7 +298,7 @@ async function executeMigrationStatementsAsync(db, statements) {
       await db.exec(stmt);
     } catch (stmtErr) {
       const isAddColumn = ADD_COLUMN_REGEX.test(stmt);
-      const isDuplicateCol = stmtErr && stmtErr.message && DUPLICATE_COLUMN_REGEX.test(stmtErr.message);
+      const isDuplicateCol = stmtErr?.message && DUPLICATE_COLUMN_REGEX.test(stmtErr.message);
       if (isAddColumn && isDuplicateCol) {
         continue;
       }

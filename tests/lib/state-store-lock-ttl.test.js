@@ -1009,6 +1009,168 @@ async function runTests() {
     }
   });
 
+  await test('application listener receives exactly one invocation per SIGTERM and repeated signals remain safe', async () => {
+    if (isWindows) {
+      console.log('    - skipped: POSIX signal semantics not supported on Windows');
+      return;
+    }
+    const { dir, lockPath } = makeTempLockPath();
+    try {
+      const childCode = `
+        let invocationCount = 0;
+        process.on('SIGTERM', () => {
+          invocationCount++;
+          process.stdout.write('INVOCATION:' + invocationCount + '\\n');
+        });
+
+        const { acquireFileLock } = require(${JSON.stringify(path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat'))});
+        async function run() {
+          await acquireFileLock(${JSON.stringify(lockPath)});
+          process.stdout.write('LOCKED\\n');
+          setInterval(() => {}, 1000);
+        }
+        run();
+      `;
+      const { child, readyPromise, getStdout } = spawnChildWithTimeout(childCode);
+      try {
+        await readyPromise;
+
+        const waitForInvocation = (count) => new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Timed out waiting for INVOCATION:' + count)), 5000);
+          const check = () => {
+            if (getStdout().includes('INVOCATION:' + count)) {
+              clearTimeout(timeout);
+              resolve();
+            }
+          };
+          child.stdout.on('data', check);
+        });
+
+        // First SIGTERM
+        child.kill('SIGTERM');
+        await waitForInvocation(1);
+        await new Promise(r => setTimeout(r, 100));
+        assert.ok(!getStdout().includes('INVOCATION:2'), 'External listener must be invoked only once for the first SIGTERM');
+
+        // Repeated signal: Second SIGTERM
+        child.kill('SIGTERM');
+        await waitForInvocation(2);
+        await new Promise(r => setTimeout(r, 100));
+        assert.ok(!getStdout().includes('INVOCATION:3'), 'External listener must be invoked only once for the second SIGTERM');
+
+        // Process is still alive: lock must still be held and valid
+        assert.ok(fs.existsSync(lockPath), 'Lock must remain held across repeated handled signals');
+      } finally {
+        try { child.kill('SIGKILL'); } catch (_) { /* ignore */ }
+      }
+    } finally {
+      cleanupTemp(dir, lockPath);
+    }
+  });
+
+  await test('new locks acquired after a handled signal are still protected on exit', async () => {
+    if (isWindows) {
+      console.log('    - skipped: POSIX signal semantics not supported on Windows');
+      return;
+    }
+    const { dir, lockPath } = makeTempLockPath();
+    const lockPath2 = lockPath + '-second';
+    try {
+      const childCode = `
+        const fs = require('fs');
+        const { acquireFileLock, releaseFileLock } = require(${JSON.stringify(path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat'))});
+
+        let lock1Token = null;
+        let lock2Token = null;
+
+        process.on('SIGTERM', async () => {
+          process.stdout.write('SIGTERM_HANDLED\\n');
+          // Release first lock, acquire second lock
+          releaseFileLock(${JSON.stringify(lockPath)}, lock1Token);
+          lock2Token = await acquireFileLock(${JSON.stringify(lockPath2)});
+          process.stdout.write('ACQUIRED_SECOND\\n');
+          // Terminate gracefully
+          process.exit(0);
+        });
+
+        async function run() {
+          lock1Token = await acquireFileLock(${JSON.stringify(lockPath)});
+          process.stdout.write('LOCKED_FIRST\\n');
+          setInterval(() => {}, 1000);
+        }
+        run();
+      `;
+      const { child, readyPromise, waitExit, getStdout } = spawnChildWithTimeout(childCode, 'LOCKED_FIRST');
+      try {
+        await readyPromise;
+        assert.ok(fs.existsSync(lockPath), 'First lock must exist');
+
+        const secondAcquiredPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Timed out waiting for ACQUIRED_SECOND')), 5000);
+          const check = () => {
+            if (getStdout().includes('ACQUIRED_SECOND')) {
+              clearTimeout(timeout);
+              resolve();
+            }
+          };
+          child.stdout.on('data', check);
+        });
+
+        child.kill('SIGTERM');
+        await secondAcquiredPromise;
+        const [exitCode] = await waitExit();
+
+        assert.strictEqual(exitCode, 0, 'Child should exit 0');
+        assert.ok(!fs.existsSync(lockPath), 'First lock must be released');
+        assert.ok(!fs.existsSync(lockPath2), 'Second lock acquired after handled signal must be cleaned up on process exit');
+      } finally {
+        try { child.kill('SIGKILL'); } catch (_) { /* ignore */ }
+      }
+    } finally {
+      cleanupTemp(dir, lockPath);
+      cleanupTemp(dir, lockPath2);
+    }
+  });
+
+  await test('detects atomic file replacement that keeps identical mtime via inode tracking', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-atomic-mtime-'));
+    const dbFile = path.join(dir, 'test.db');
+    try {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const db1 = await openCompatDatabase(dbFile);
+      await db1.run('CREATE TABLE items (id TEXT PRIMARY KEY, val TEXT);');
+      await db1.run('INSERT INTO items VALUES ("k1", "v1");');
+
+      // Verify db1 reads baseline
+      const initialRow = await db1.get('SELECT val FROM items WHERE id = "k1";');
+      assert.strictEqual(initialRow.val, 'v1');
+
+      // Now create an updated database file externally and replace dbFile with identical mtime
+      const statBefore = fs.statSync(dbFile);
+      const db2 = await openCompatDatabase(path.join(dir, 'temp_replace.db'));
+      await db2.run('CREATE TABLE items (id TEXT PRIMARY KEY, val TEXT);');
+      await db2.run('INSERT INTO items VALUES ("k1", "v2_updated");');
+      await db2.close();
+
+      // Force temp_replace.db to have the exact same mtime as dbFile
+      fs.utimesSync(path.join(dir, 'temp_replace.db'), statBefore.atimeMs / 1000, statBefore.mtimeMs / 1000);
+      fs.renameSync(path.join(dir, 'temp_replace.db'), dbFile);
+
+      const statAfter = fs.statSync(dbFile);
+      assert.strictEqual(statBefore.mtimeMs, statAfter.mtimeMs, 'Precondition: mtimeMs must be identical');
+      assert.notStrictEqual(statBefore.ino, statAfter.ino, 'Precondition: inode must be different due to atomic replacement');
+
+      // Reading via db1.get() / all() must detect inode change and reload updated data
+      const updatedRow = await db1.get('SELECT val FROM items WHERE id = "k1";');
+      assert.strictEqual(updatedRow.val, 'v2_updated', 'Reader must detect replacement with same mtime via inode change and reload');
+
+      await db1.close();
+    } finally {
+      delete process.env.EGC_SQLITE_ENGINE;
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+    }
+  });
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exitCode = failed > 0 ? 1 : 0;
 }

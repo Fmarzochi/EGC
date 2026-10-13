@@ -77,7 +77,7 @@ function unlinkLockIfOwned(lockPath, token) {
     if (!fs.existsSync(lockPath)) return;
     const raw = fs.readFileSync(lockPath, 'utf8');
     const data = JSON.parse(raw);
-    if (data && data.token === token) {
+    if (data?.token === token) {
       fs.unlinkSync(lockPath);
     }
   } catch (_) { /* ignore release error */ }
@@ -100,15 +100,19 @@ function registerSignalHandlersOnce() {
   });
 
   const handleSignal = (signal) => {
-    // If another application listener is registered, it might keep the process alive
-    // or perform graceful shutdown. Releasing locks here while the process might continue
-    // writing would cause concurrency hazards. Instead, if no other listener prevents default
-    // termination, removing our listener and re-killing triggers standard process exit,
-    // which then invokes process 'exit' handler to safely clean up held locks.
-    process.removeListener(signal, signalHandlers[signal]);
-    if (process.listenerCount(signal) === 0) {
-      cleanupHeldLocks();
+    // If another application listener is registered, it controls the process lifecycle
+    // (e.g. graceful shutdown, drain, or ignoring the signal).
+    // Releasing locks here while the process might continue writing would cause concurrency hazards.
+    // Furthermore, we do NOT re-raise the signal if other listeners exist, because doing so would
+    // invoke those application listeners a second time. We leave our listener registered so that
+    // subsequent signals are handled safely.
+    // If no other listener exists, default signal termination should occur:
+    // clean up our owned locks, remove our listener, and re-raise the signal.
+    if (process.listenerCount(signal) > 1) {
+      return;
     }
+    cleanupHeldLocks();
+    process.removeListener(signal, signalHandlers[signal]);
     process.kill(process.pid, signal);
   };
 
@@ -162,7 +166,7 @@ function tryAcquireLockOnce(lockPath, token) {
     fs.mkdirSync(path.dirname(lockPath), { recursive: true });
     fd = fs.openSync(lockPath, 'wx');
   } catch (err) {
-    if (err && err.code === 'EEXIST') return false;
+    if (err?.code === 'EEXIST') return false;
     throw err;
   }
   try {
@@ -248,7 +252,7 @@ async function acquireFileLock(lockPath, { timeoutMs = 15000, retryIntervalMs = 
     await delayWithJitter(retryIntervalMs);
   }
 
-  const hostInfo = (lastHolder && lastHolder.hostname && lastHolder.hostname !== os.hostname()) ? ` on host ${lastHolder.hostname}` : '';
+  const hostInfo = (lastHolder?.hostname && lastHolder.hostname !== os.hostname()) ? ` on host ${lastHolder.hostname}` : '';
   const holderInfo = lastHolder ? ` (held by PID ${lastHolder.pid}${hostInfo}, token ${lastHolder.token})` : '';
   throw new Error(`[sqlite-compat] Lock timeout after ${timeoutMs}ms acquiring ${lockPath}${holderInfo}`);
 }
@@ -333,7 +337,7 @@ function normalizeParams(params) {
 const SQL_COMMENT_LINE = /--.*$/gm;
 const SQL_COMMENT_BLOCK = /\/\*[\s\S]*?\*\//g;
 const BEGIN_STMT_REGEX = /^\s*BEGIN\b(?!\s+(?:AFTER|BEFORE|INSTEAD\s+OF)\b)/i;
-const COMMIT_STMT_REGEX = /^\s*(?:COMMIT(?:\s+TRANSACTION|\s+WORK)?|END\s+TRANSACTION|END(?!\s+(?:IF|FOR|WHILE|CASE|LOOP)\b))\s*$/i;
+const COMMIT_STMT_REGEX = /^\s*(?:COMMIT(?:\s+(?:TRANSACTION|WORK))?|END(?:\s+TRANSACTION|(?!\s+(?:IF|FOR|WHILE|CASE|LOOP)\b)))\s*$/i;
 const ROLLBACK_STMT_REGEX = /^\s*ROLLBACK(?:\s+TRANSACTION|\s+WORK)?(?!\s+TO\b)\s*$/i;
 
 function stripSqlComments(s) {
@@ -366,6 +370,7 @@ class WasmDatabase {
     this._inTransaction = false;
     this._txToken = null;
     this._lastMtimeMs = 0;
+    this._lastIno = 0;
     this._updateMtime();
   }
 
@@ -377,7 +382,9 @@ class WasmDatabase {
     if (this.filename === ':memory:') return;
     try {
       if (fs.existsSync(this.filename)) {
-        this._lastMtimeMs = fs.statSync(this.filename).mtimeMs;
+        const stat = fs.statSync(this.filename);
+        this._lastMtimeMs = stat.mtimeMs;
+        this._lastIno = stat.ino;
       }
     } catch (_) { /* ignore stat error */ }
   }
@@ -461,8 +468,13 @@ class WasmDatabase {
   async all(sql, ...params) {
     if (this.filename !== ':memory:' && !this._inTransaction && fs.existsSync(this.filename)) {
       try {
-        const currentMtime = fs.statSync(this.filename).mtimeMs;
-        if (currentMtime !== this._lastMtimeMs) {
+        const currentStat = fs.statSync(this.filename);
+        const identityUnknown = !currentStat.ino || !this._lastIno;
+        if (
+          identityUnknown ||
+          currentStat.mtimeMs !== this._lastMtimeMs ||
+          currentStat.ino !== this._lastIno
+        ) {
           this.reloadFromDisk();
         }
       } catch (_) { /* ignore stat error */ }
