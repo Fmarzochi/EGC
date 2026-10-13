@@ -1,5 +1,8 @@
 'use strict';
 
+const ADD_COLUMN_REGEX = /^ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN/i;
+const DUPLICATE_COLUMN_REGEX = /duplicate column/i;
+
 const INITIAL_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
@@ -268,8 +271,8 @@ function applyMigrations(db) {
         try {
           db.exec(stmt);
         } catch (stmtErr) {
-          const isAddColumn = /^ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN/i.test(stmt);
-          const isDuplicateCol = stmtErr && stmtErr.message && /duplicate column/i.test(stmtErr.message);
+          const isAddColumn = ADD_COLUMN_REGEX.test(stmt);
+          const isDuplicateCol = stmtErr && stmtErr.message && DUPLICATE_COLUMN_REGEX.test(stmtErr.message);
           if (isAddColumn && isDuplicateCol) {
             continue;
           }
@@ -289,6 +292,41 @@ function applyMigrations(db) {
   return getAppliedMigrations(db);
 }
 
+async function executeMigrationStatementsAsync(db, statements) {
+  for (const stmt of statements) {
+    try {
+      await db.exec(stmt);
+    } catch (stmtErr) {
+      const isAddColumn = ADD_COLUMN_REGEX.test(stmt);
+      const isDuplicateCol = stmtErr && stmtErr.message && DUPLICATE_COLUMN_REGEX.test(stmtErr.message);
+      if (isAddColumn && isDuplicateCol) {
+        continue;
+      }
+      throw stmtErr;
+    }
+  }
+}
+
+async function applySingleMigrationAsync(db, migration) {
+  await db.exec('BEGIN IMMEDIATE');
+  try {
+    const checkRows = await db.all('SELECT version FROM schema_migrations WHERE version = ?', [migration.version]);
+    if (checkRows.length === 0) {
+      const statements = migration.sql.split(';').map(s => s.trim()).filter(Boolean);
+      await executeMigrationStatementsAsync(db, statements);
+      await db.run(
+        'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
+        [migration.version, migration.name, new Date().toISOString()]
+      );
+    }
+    await db.exec('COMMIT');
+    return true;
+  } catch (err) {
+    try { await db.exec('ROLLBACK'); } catch (_) { /* ignore rollback error */ }
+    throw err;
+  }
+}
+
 async function applyMigrationsAsync(db) {
   await db.exec(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -305,35 +343,8 @@ async function applyMigrationsAsync(db) {
     if (appliedVersions.has(migration.version)) {
       continue;
     }
-
-    await db.exec('BEGIN IMMEDIATE');
-    try {
-      const checkRows = await db.all('SELECT version FROM schema_migrations WHERE version = ?', [migration.version]);
-      if (checkRows.length === 0) {
-        const statements = migration.sql.split(';').map(s => s.trim()).filter(Boolean);
-        for (const stmt of statements) {
-          try {
-            await db.exec(stmt);
-          } catch (stmtErr) {
-            const isAddColumn = /^ALTER\s+TABLE\s+\S+\s+ADD\s+COLUMN/i.test(stmt);
-            const isDuplicateCol = stmtErr && stmtErr.message && /duplicate column/i.test(stmtErr.message);
-            if (isAddColumn && isDuplicateCol) {
-              continue;
-            }
-            throw stmtErr;
-          }
-        }
-        await db.run(
-          'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
-          [migration.version, migration.name, new Date().toISOString()]
-        );
-      }
-      await db.exec('COMMIT');
-      appliedVersions.add(migration.version);
-    } catch (err) {
-      try { await db.exec('ROLLBACK'); } catch (_) { /* ignore rollback error */ }
-      throw err;
-    }
+    await applySingleMigrationAsync(db, migration);
+    appliedVersions.add(migration.version);
   }
 }
 
@@ -341,5 +352,6 @@ module.exports = {
   MIGRATIONS,
   applyMigrations,
   applyMigrationsAsync,
+  applySingleMigrationAsync,
   getAppliedMigrations,
 };

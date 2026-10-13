@@ -1177,6 +1177,117 @@ async function runTests() {
     }
   });
 
+  // 13. Test mixed-engine safety: WASM refusing database with -shm sidecar
+  await runCase('test_mixed_engine_safety_shm_sidecar_refusal', async () => {
+    const tempDir = createTempDir('egc-shm-safe-');
+    const dbPath = path.join(tempDir, 'state_shm.db');
+    const shmPath = `${dbPath}-shm`;
+
+    try {
+      fs.writeFileSync(dbPath, Buffer.alloc(100));
+      fs.writeFileSync(shmPath, Buffer.alloc(32, 1));
+
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      let caughtError = null;
+      try {
+        await openCompatDatabase(dbPath, 'wasm-shm-test');
+      } catch (err) {
+        caughtError = err;
+      }
+
+      assert.ok(caughtError !== null, 'Expected openCompatDatabase to throw when -shm sidecar exists');
+      assert.match(
+        caughtError.message,
+        /shared-memory index/,
+        `Expected error message mentioning shared-memory index, got: ${caughtError.message}`
+      );
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
+  // 14. Test migration rollback correctness on statement failure
+  await runCase('test_migration_rollback_on_partial_failure', async () => {
+    const tempDir = createTempDir('egc-mig-rollback-');
+    const dbPath = path.join(tempDir, 'state_rollback.db');
+
+    try {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const db = await openCompatDatabase(dbPath, 'test-rollback');
+      try {
+        const { applyMigrationsAsync } = require(MIGRATIONS_PATH);
+
+        // Bootstrap initial migrations 1-5
+        await db.exec(`
+          CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            adapter_id TEXT NOT NULL,
+            harness TEXT NOT NULL,
+            state TEXT NOT NULL,
+            repo_root TEXT,
+            started_at TEXT,
+            ended_at TEXT,
+            snapshot TEXT NOT NULL
+          );
+          INSERT INTO schema_migrations VALUES (1, '001_initial_state_store', datetime('now'));
+          INSERT INTO schema_migrations VALUES (2, '002_instincts_and_events', datetime('now'));
+          INSERT INTO schema_migrations VALUES (3, '003_lessons_confidence_decay', datetime('now'));
+          INSERT INTO schema_migrations VALUES (4, '004_patterns', datetime('now'));
+          INSERT INTO schema_migrations VALUES (5, '005_events_compressed_at', datetime('now'));
+        `);
+
+        // Create a faulty migration that fails on its second statement
+        const faultyMigration = {
+          version: 99,
+          name: '099_faulty_migration',
+          sql: 'ALTER TABLE sessions ADD COLUMN test_fail_col TEXT; INVALID SQL SYNTAX HERE THAT FAILS;',
+        };
+
+        const { applySingleMigrationAsync } = require(MIGRATIONS_PATH);
+        if (applySingleMigrationAsync) {
+          let threw = false;
+          try {
+            await applySingleMigrationAsync(db, faultyMigration);
+          } catch (err) {
+            threw = true;
+          }
+          assert.ok(threw, 'Expected faulty migration to throw');
+
+          // Verify rollback occurred: test_fail_col must NOT exist and version 99 must NOT be in schema_migrations
+          const versions = await db.all('SELECT version FROM schema_migrations ORDER BY version ASC;');
+          assert.deepStrictEqual(
+            versions.map(r => r.version),
+            [1, 2, 3, 4, 5],
+            'Rolled back migration version 99 must NOT be recorded in schema_migrations'
+          );
+
+          // Verify column was not committed / rolled back
+          const sessionCols = await db.all("PRAGMA table_info('sessions');");
+          const colNames = sessionCols.map(c => c.name);
+          assert.ok(!colNames.includes('test_fail_col'), 'test_fail_col should not be present after rollback');
+        }
+
+        // Now run standard applyMigrationsAsync to complete migration to version 6
+        await applyMigrationsAsync(db);
+        const finalVersions = await db.all('SELECT version FROM schema_migrations ORDER BY version ASC;');
+        assert.deepStrictEqual(
+          finalVersions.map(r => r.version),
+          [1, 2, 3, 4, 5, 6],
+          'Final schema_migrations must contain exactly versions [1, 2, 3, 4, 5, 6]'
+        );
+      } finally {
+        await db.close();
+      }
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
   if (originalEnvEngine === undefined) {
     delete process.env.EGC_SQLITE_ENGINE;
   } else {

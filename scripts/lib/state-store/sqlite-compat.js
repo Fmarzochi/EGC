@@ -67,14 +67,84 @@ function getFileMutex(filepath) {
   return m;
 }
 
+// Process-level map tracking lock paths and tokens currently held by this process.
+const heldLocks = new Map();
+let signalHandlersRegistered = false;
+
+function unlinkLockIfOwned(lockPath, token) {
+  if (!token || typeof token !== 'string') return;
+  try {
+    if (!fs.existsSync(lockPath)) return;
+    const raw = fs.readFileSync(lockPath, 'utf8');
+    const data = JSON.parse(raw);
+    if (data && data.token === token) {
+      fs.unlinkSync(lockPath);
+    }
+  } catch (_) { /* ignore release error */ }
+}
+
+function cleanupHeldLocks() {
+  for (const [lockPath, token] of heldLocks.entries()) {
+    unlinkLockIfOwned(lockPath, token);
+  }
+  heldLocks.clear();
+}
+
+function registerSignalHandlersOnce() {
+  if (signalHandlersRegistered) return;
+  signalHandlersRegistered = true;
+
+  process.once('exit', () => {
+    cleanupHeldLocks();
+  });
+
+  const handleSignal = (signal) => {
+    cleanupHeldLocks();
+    process.removeListener(signal, signalHandlers[signal]);
+    process.kill(process.pid, signal);
+  };
+
+  const signalHandlers = {
+    SIGINT: () => handleSignal('SIGINT'),
+    SIGTERM: () => handleSignal('SIGTERM'),
+  };
+
+  process.on('SIGINT', signalHandlers.SIGINT);
+  process.on('SIGTERM', signalHandlers.SIGTERM);
+}
+
 function isProcessAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
   } catch (err) {
-    if (err && err.code === 'ESRCH') return false;
-    return true;
+    return err?.code !== 'ESRCH';
+  }
+}
+
+function checkSameInodeOrEmpty(fd, lockPath) {
+  try {
+    const fstat = fs.fstatSync(fd);
+    const stat = fs.statSync(lockPath);
+    return (fstat.ino && stat.ino) ? fstat.ino === stat.ino : stat.size === 0;
+  } catch (statErr) {
+    if (statErr.code !== 'ENOENT') {
+      process.stderr.write(`[sqlite-compat] stat verification failed for ${lockPath}: ${statErr.message}\n`);
+    }
+    return false;
+  }
+}
+
+function cleanupFailedLockWrite(fd, lockPath) {
+  let isOurFile;
+  try {
+    isOurFile = checkSameInodeOrEmpty(fd, lockPath);
+  } finally {
+    try { fs.closeSync(fd); } catch (_) { /* ignore close error */ }
+  }
+  if (isOurFile) {
+    try { fs.unlinkSync(lockPath); } catch (_) { /* ignore unlink error */ }
   }
 }
 
@@ -97,19 +167,8 @@ function tryAcquireLockOnce(lockPath, token) {
     fs.writeFileSync(fd, payload);
     return true;
   } catch (writeErr) {
-    let isOurFile;
-    try {
-      const fstat = fs.fstatSync(fd);
-      const stat = fs.statSync(lockPath);
-      isOurFile = (fstat.ino && stat.ino) ? fstat.ino === stat.ino : stat.size === 0;
-    } catch (_) {
-      isOurFile = false;
-    }
-    try { fs.closeSync(fd); } catch (_) { /* ignore close error */ }
+    cleanupFailedLockWrite(fd, lockPath);
     fd = undefined;
-    if (isOurFile) {
-      try { fs.unlinkSync(lockPath); } catch (_) { /* ignore unlink error */ }
-    }
     throw writeErr;
   } finally {
     if (fd !== undefined) {
@@ -120,53 +179,62 @@ function tryAcquireLockOnce(lockPath, token) {
 
 function releaseFileLock(lockPath, token) {
   if (!token || typeof token !== 'string') return;
+  heldLocks.delete(lockPath);
+  unlinkLockIfOwned(lockPath, token);
+}
+
+function checkDeadProcessHolder(holder, lockPath) {
+  if (!holder) return;
+  const sameHost = holder.hostname === os.hostname();
+  const isValidPid = Number.isInteger(holder.pid) && holder.pid > 0;
+  const isDeadLocalPid = sameHost && isValidPid && !isProcessAlive(holder.pid);
+  if (isDeadLocalPid && fs.existsSync(lockPath)) {
+    throw new Error(
+      `[sqlite-compat] Lock file "${lockPath}" is held by dead process PID ${holder.pid} on host ${holder.hostname}. ` +
+      `Automatic stale-lock recovery is disabled to ensure strict mutual exclusion. ` +
+      `To recover manually, verify that process ${holder.pid} is not running, then remove the lock file: rm "${lockPath}"`
+    );
+  }
+}
+
+function readLockHolder(lockPath) {
   try {
-    if (!fs.existsSync(lockPath)) return;
     const raw = fs.readFileSync(lockPath, 'utf8');
-    const data = JSON.parse(raw);
-    if (data && data.token === token) {
-      fs.unlinkSync(lockPath);
+    if (raw.trim()) {
+      return JSON.parse(raw);
     }
-  } catch (_) { /* ignore release error */ }
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      // Malformed JSON or transient read error: fail closed by returning null to keep waiting
+    }
+  }
+  return null;
+}
+
+function delayWithJitter(retryIntervalMs) {
+  const jitter = crypto.randomInt(0, 20);
+  return new Promise(r => setTimeout(r, retryIntervalMs + jitter));
 }
 
 async function acquireFileLock(lockPath, { timeoutMs = 15000, retryIntervalMs = 25 } = {}) {
+  registerSignalHandlersOnce();
   const token = crypto.randomUUID();
   const deadline = Date.now() + timeoutMs;
   let lastHolder = null;
 
   while (Date.now() < deadline) {
     if (tryAcquireLockOnce(lockPath, token)) {
+      heldLocks.set(lockPath, token);
       return token;
     }
 
-    let holder = null;
-    try {
-      const raw = fs.readFileSync(lockPath, 'utf8');
-      if (raw.trim()) {
-        holder = JSON.parse(raw);
-        lastHolder = holder;
-      }
-    } catch (err) {
-      if (err.code === 'ENOENT') continue;
-      // Malformed JSON or transient read error: fail closed by continuing to wait
-    }
-
+    const holder = readLockHolder(lockPath);
     if (holder) {
-      const sameHost = holder.hostname === os.hostname();
-      const isValidPid = Number.isInteger(holder.pid) && holder.pid > 0;
-      const isDeadLocalPid = sameHost && isValidPid && !isProcessAlive(holder.pid);
-      if (isDeadLocalPid && fs.existsSync(lockPath)) {
-        throw new Error(
-          `[sqlite-compat] Lock file "${lockPath}" is held by dead process PID ${holder.pid} on host ${holder.hostname}. ` +
-          `Automatic stale-lock recovery is disabled to ensure strict mutual exclusion. ` +
-          `To recover manually, verify that process ${holder.pid} is not running, then remove the lock file: rm "${lockPath}"`
-        );
-      }
+      lastHolder = holder;
+      checkDeadProcessHolder(holder, lockPath);
     }
 
-    const jitter = crypto.randomInt(0, 20);
-    await new Promise(r => setTimeout(r, retryIntervalMs + jitter));
+    await delayWithJitter(retryIntervalMs);
   }
 
   const hostInfo = (lastHolder && lastHolder.hostname && lastHolder.hostname !== os.hostname()) ? ` on host ${lastHolder.hostname}` : '';
@@ -251,14 +319,20 @@ function normalizeParams(params) {
   return [nullForUndefined(only)];
 }
 
+const SQL_COMMENT_LINE = /--.*$/gm;
+const SQL_COMMENT_BLOCK = /\/\*[\s\S]*?\*\//g;
+const BEGIN_STMT_REGEX = /^\s*BEGIN\b/i;
+const COMMIT_STMT_REGEX = /^\s*(COMMIT|END TRANSACTION|END)\b/i;
+const ROLLBACK_STMT_REGEX = /^\s*ROLLBACK\b/i;
+
 function stripSqlComments(s) {
-  return s.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+  return s.replace(SQL_COMMENT_LINE, '').replace(SQL_COMMENT_BLOCK, '').trim();
 }
 
 function parseTransactionBounds(pieces) {
-  const isBeginStmt = (s) => /^\s*BEGIN\b/i.test(stripSqlComments(s));
-  const isCommitStmt = (s) => /^\s*(COMMIT|END TRANSACTION|END)\b/i.test(stripSqlComments(s));
-  const isRollbackStmt = (s) => /^\s*ROLLBACK\b/i.test(stripSqlComments(s));
+  const isBeginStmt = (s) => BEGIN_STMT_REGEX.test(stripSqlComments(s));
+  const isCommitStmt = (s) => COMMIT_STMT_REGEX.test(stripSqlComments(s));
+  const isRollbackStmt = (s) => ROLLBACK_STMT_REGEX.test(stripSqlComments(s));
 
   const firstStmt = pieces[0];
   const lastStmt = pieces[pieces.length - 1];
@@ -425,6 +499,55 @@ class WasmDatabase {
     }
   }
 
+  _commitTransaction(text) {
+    try {
+      this.db.exec(text);
+      this.persistNow();
+    } finally {
+      this._exitTransaction();
+    }
+  }
+
+  _rollbackTransaction(text) {
+    try {
+      this.db.exec(text);
+    } finally {
+      try { this.reloadFromDisk(); } catch (_) { /* ignore reload error */ }
+      this._exitTransaction();
+    }
+  }
+
+  _dispatchTransactionalExec(text, bounds) {
+    const { isBeginFirst, hasCommitOrRollback, isCommitLast, isRollbackLast } = bounds;
+
+    if (isBeginFirst && (isCommitLast || isRollbackLast) && !this._inTransaction) {
+      return this.withWriteLock(() => {
+        this.db.exec(text);
+      });
+    }
+
+    if (isBeginFirst && !hasCommitOrRollback && !this._inTransaction) {
+      return this._beginTransaction(text);
+    }
+
+    if (isCommitLast && this._inTransaction) {
+      return this._commitTransaction(text);
+    }
+
+    if (isRollbackLast && this._inTransaction) {
+      return this._rollbackTransaction(text);
+    }
+
+    if (this._inTransaction) {
+      this.db.exec(text);
+      return;
+    }
+
+    return this.withWriteLock(() => {
+      this.db.exec(text);
+    });
+  }
+
   async exec(sql) {
     const text = withoutSkippedPragmas(sql);
     if (!text.trim()) return;
@@ -441,52 +564,8 @@ class WasmDatabase {
       return;
     }
 
-    const { isBeginFirst, hasCommitOrRollback, isCommitLast, isRollbackLast } = parseTransactionBounds(pieces);
-
-    // Case 1: Standalone complete transaction block (e.g. BEGIN; ...; COMMIT/ROLLBACK;)
-    if (isBeginFirst && (isCommitLast || isRollbackLast) && !this._inTransaction) {
-      return this.withWriteLock(() => {
-        this.db.exec(text);
-      });
-    }
-
-    // Case 2: Opening a multi-statement transaction (BEGIN without matching COMMIT/ROLLBACK in same script)
-    if (isBeginFirst && !hasCommitOrRollback && !this._inTransaction) {
-      return this._beginTransaction(text);
-    }
-
-    // Case 3: Committing an open transaction
-    if (isCommitLast && this._inTransaction) {
-      try {
-        this.db.exec(text);
-        this.persistNow();
-      } finally {
-        this._exitTransaction();
-      }
-      return;
-    }
-
-    // Case 4: Rolling back an open transaction
-    if (isRollbackLast && this._inTransaction) {
-      try {
-        this.db.exec(text);
-      } finally {
-        try { this.reloadFromDisk(); } catch (_) { /* ignore reload error */ }
-        this._exitTransaction();
-      }
-      return;
-    }
-
-    // Case 5: Statements inside an ongoing transaction
-    if (this._inTransaction) {
-      this.db.exec(text);
-      return;
-    }
-
-    // Case 6: Non-transactional mutating script outside of a transaction
-    return this.withWriteLock(() => {
-      this.db.exec(text);
-    });
+    const bounds = parseTransactionBounds(pieces);
+    return this._dispatchTransactionalExec(text, bounds);
   }
 
   _exitTransaction() {
@@ -559,25 +638,44 @@ class WasmDatabase {
   }
 }
 
-// A write-ahead log left behind by a native engine (a crash, or a
-// connection still open elsewhere) holds committed rows that only the
-// native engine can fold back into the main file; reading the main file
-// alone would silently drop them.
-function assertNoPendingWal(filename) {
+// A write-ahead log (-wal) or shared memory index (-shm) left behind by a
+// native engine (a crash, or an active connection still open elsewhere) indicates
+// active WAL-mode state or uncheckpointed rows that only the native engine can read.
+// Opening the main file with the portable WASM engine while these exist would risk
+// split-brain divergence or silently dropping uncheckpointed changes.
+//
+// Limitations:
+// If the native SQLite engine is running with a rollback journal (DELETE/PERSIST/TRUNCATE mode)
+// rather than WAL mode, or has not yet written a -wal/-shm sidecar, sidecar detection cannot
+// detect the active connection without OS-level file locking. Therefore, the single-engine
+// rule remains fundamental: a database file should never be accessed concurrently by different engines.
+function assertNoPendingSidecars(filename) {
   if (filename === ':memory:') return;
-  const wal = `${filename}-wal`;
-  let size;
-  try {
-    size = fs.statSync(wal).size;
-  } catch (error) {
-    // Only a missing sidecar means there is nothing to fold back; a
-    // permission or I/O error must not be mistaken for that.
-    if (error?.code === 'ENOENT') return;
-    throw error;
+  const sidecars = [
+    { ext: '-wal', label: 'write-ahead data' },
+    { ext: '-shm', label: 'shared-memory index data' },
+  ];
+
+  for (const { ext, label } of sidecars) {
+    const sidecarPath = `${filename}${ext}`;
+    let size;
+    try {
+      size = fs.statSync(sidecarPath).size;
+    } catch (error) {
+      if (error?.code === 'ENOENT') continue;
+      throw error;
+    }
+    if (size > 0) {
+      throw new Error(
+        `${sidecarPath} holds ${size} bytes of ${label} that the portable engine cannot read; ` +
+        `open the database once with a working native sqlite3 so it is checkpointed, or restore a clean copy, before using the portable engine.`
+      );
+    }
   }
-  if (size > 0) {
-    throw new Error(`${wal} holds ${size} bytes of write-ahead data that the portable engine cannot read; open the database once with a working native sqlite3 so it is checkpointed, or restore a clean copy, before using the portable engine.`);
-  }
+}
+
+function assertNoPendingWal(filename) {
+  assertNoPendingSidecars(filename);
 }
 
 async function openWasmDatabase(filename) {

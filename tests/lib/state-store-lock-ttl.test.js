@@ -730,6 +730,181 @@ async function runTests() {
     }
   });
 
+  await test('signal handler cleans up held lock on SIGTERM and exits with signal code', async () => {
+    const { dir, lockPath } = makeTempLockPath();
+    const { spawn } = require('node:child_process');
+    try {
+      const childCode = `
+        const { acquireFileLock } = require(${JSON.stringify(path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat'))});
+        async function run() {
+          await acquireFileLock(${JSON.stringify(lockPath)});
+          process.stdout.write('LOCKED\\n');
+          setInterval(() => {}, 1000);
+        }
+        run();
+      `;
+      const child = spawn('node', ['-e', childCode], { stdio: ['pipe', 'pipe', 'pipe'] });
+      await new Promise((resolve, reject) => {
+        child.stdout.on('data', chunk => {
+          if (chunk.toString().includes('LOCKED')) resolve();
+        });
+        child.on('error', reject);
+      });
+
+      assert.ok(fs.existsSync(lockPath), 'Lock file should exist while child is alive');
+
+      // Send SIGTERM to child
+      child.kill('SIGTERM');
+
+      const [, signal] = await new Promise(resolve => {
+        child.on('exit', (code, sig) => resolve([code, sig]));
+      });
+
+      assert.strictEqual(signal, 'SIGTERM', 'Child should terminate with SIGTERM');
+      assert.ok(!fs.existsSync(lockPath), 'SIGTERM handler must remove lock file held by terminating child');
+    } finally {
+      cleanupTemp(dir, lockPath);
+    }
+  });
+
+  await test('signal handler cleans up held lock on SIGINT and exits with signal code', async () => {
+    const { dir, lockPath } = makeTempLockPath();
+    const { spawn } = require('node:child_process');
+    try {
+      const childCode = `
+        const { acquireFileLock } = require(${JSON.stringify(path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat'))});
+        async function run() {
+          await acquireFileLock(${JSON.stringify(lockPath)});
+          process.stdout.write('LOCKED\\n');
+          setInterval(() => {}, 1000);
+        }
+        run();
+      `;
+      const child = spawn('node', ['-e', childCode], { stdio: ['pipe', 'pipe', 'pipe'] });
+      await new Promise((resolve, reject) => {
+        child.stdout.on('data', chunk => {
+          if (chunk.toString().includes('LOCKED')) resolve();
+        });
+        child.on('error', reject);
+      });
+
+      assert.ok(fs.existsSync(lockPath), 'Lock file should exist while child is alive');
+
+      child.kill('SIGINT');
+
+      const [, signal] = await new Promise(resolve => {
+        child.on('exit', (code, sig) => resolve([code, sig]));
+      });
+
+      assert.strictEqual(signal, 'SIGINT', 'Child should terminate with SIGINT');
+      assert.ok(!fs.existsSync(lockPath), 'SIGINT handler must remove lock file held by terminating child');
+    } finally {
+      cleanupTemp(dir, lockPath);
+    }
+  });
+
+  await test('signal handler does not delete lock if reacquired by another process with different token', async () => {
+    const { dir, lockPath } = makeTempLockPath();
+    const { spawn } = require('node:child_process');
+    try {
+      const childCode = `
+        const { acquireFileLock } = require(${JSON.stringify(path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat'))});
+        const fs = require('fs');
+        async function run() {
+          await acquireFileLock(${JSON.stringify(lockPath)});
+          process.stdout.write('LOCKED\\n');
+          setInterval(() => {}, 1000);
+          process.stdin.on('data', () => {
+            // Replace disk lock content with a different token right before exit/signal simulation
+            fs.writeFileSync(${JSON.stringify(lockPath)}, JSON.stringify({
+              token: 'other-token-uuid-1234',
+              pid: 999999,
+              acquiredAt: Date.now(),
+              hostname: 'other-host'
+            }));
+            process.stdout.write('REPLACED\\n');
+          });
+        }
+        run();
+      `;
+      const child = spawn('node', ['-e', childCode], { stdio: ['pipe', 'pipe', 'pipe'] });
+      await new Promise((resolve, reject) => {
+        child.stdout.on('data', chunk => {
+          if (chunk.toString().includes('LOCKED')) resolve();
+        });
+        child.on('error', reject);
+      });
+
+      // Signal child to replace the lock with a foreign token
+      child.stdin.write('replace\n');
+      await new Promise((resolve, reject) => {
+        child.stdout.on('data', chunk => {
+          if (chunk.toString().includes('REPLACED')) resolve();
+        });
+        child.on('error', reject);
+      });
+
+      // Now send SIGTERM
+      child.kill('SIGTERM');
+      await new Promise(resolve => child.on('exit', resolve));
+
+      // Lock file must NOT be deleted because token does not match child's held token
+      assert.ok(fs.existsSync(lockPath), 'Lock must NOT be unlinked if token does not match held token');
+      const content = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+      assert.strictEqual(content.token, 'other-token-uuid-1234');
+    } finally {
+      cleanupTemp(dir, lockPath);
+    }
+  });
+
+  await test('signal handler preserves unrelated application signal listeners', async () => {
+    const { dir, lockPath } = makeTempLockPath();
+    const { spawn } = require('node:child_process');
+    try {
+      const childCode = `
+        let appHandlerFired = false;
+        process.on('SIGTERM', () => {
+          appHandlerFired = true;
+          process.stdout.write('APP_HANDLER_FIRED\\n');
+          process.exit(42);
+        });
+
+        const { acquireFileLock } = require(${JSON.stringify(path.resolve(__dirname, '../../scripts/lib/state-store/sqlite-compat'))});
+        async function run() {
+          await acquireFileLock(${JSON.stringify(lockPath)});
+          process.stdout.write('LOCKED\\n');
+          setInterval(() => {}, 1000);
+        }
+        run();
+      `;
+      const child = spawn('node', ['-e', childCode], { stdio: ['pipe', 'pipe', 'pipe'] });
+      let output = '';
+      child.stdout.on('data', chunk => { output += chunk.toString(); });
+
+      await new Promise((resolve, reject) => {
+        child.stdout.on('data', chunk => {
+          if (chunk.toString().includes('LOCKED')) resolve();
+        });
+        child.on('error', reject);
+      });
+
+      assert.ok(fs.existsSync(lockPath), 'Lock file should exist while child is alive');
+
+      // Send SIGTERM: Both sqlite-compat cleanup and the application listener should run
+      child.kill('SIGTERM');
+
+      const [exitCode] = await new Promise(resolve => {
+        child.on('exit', (code, sig) => resolve([code, sig]));
+      });
+
+      assert.strictEqual(exitCode, 42, 'Application SIGTERM listener should execute and dictate exit status');
+      assert.ok(output.includes('APP_HANDLER_FIRED'), 'Unrelated application listener output must be present');
+      assert.ok(!fs.existsSync(lockPath), 'Held lock must be cleaned up by sqlite-compat even when custom listener catches signal');
+    } finally {
+      cleanupTemp(dir, lockPath);
+    }
+  });
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exitCode = failed > 0 ? 1 : 0;
 }
