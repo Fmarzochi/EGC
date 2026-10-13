@@ -26,6 +26,7 @@ import { autoLearn } from './learn-writer.js';
 import { compressViaHeadroom } from './headroom-client.js';
 import { buildRelevantContext, resolveRoot } from './graph-context.js';
 import { rankProjectFiles } from './file-rank.js';
+import { prepareHandoff, MIN_CONTEXT_BUDGET_TOKENS, MAX_CONTEXT_BUDGET_TOKENS, MIN_OUTPUT_BUDGET_TOKENS, MAX_OUTPUT_BUDGET_TOKENS } from './handoff.js';
 
 interface RoutingResult {
   agents: string[];
@@ -182,6 +183,23 @@ const RankFilesSchema = z.object({
   explain: z.boolean().optional()
 });
 
+const HandoffChunkSchema = z.object({
+  text: z.string(),
+  source: z.string().max(1024).optional(),
+  critical: z.boolean().optional()
+});
+
+const PrepareHandoffSchema = z.object({
+  objective: z.string().min(1),
+  chunks: z.array(HandoffChunkSchema).optional(),
+  scope_paths: z.array(z.string()).optional(),
+  constraints: z.array(z.string()).optional(),
+  completion_criteria: z.array(z.string()).optional(),
+  parent_summary: z.string().optional(),
+  context_budget_tokens: z.number().int().min(MIN_CONTEXT_BUDGET_TOKENS).max(MAX_CONTEXT_BUDGET_TOKENS).optional(),
+  output_budget_tokens: z.number().int().min(MIN_OUTPUT_BUDGET_TOKENS).max(MAX_OUTPUT_BUDGET_TOKENS).optional()
+});
+
 const OrchestrateTaskSchema = z.object({
   prompt: z.string(),
   filepaths: z.array(z.string()).optional().default([]),
@@ -259,6 +277,36 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
             explain: { type: "boolean", description: "Include the explain table lines in the result." }
           },
           required: ["query"]
+        }
+      },
+      {
+        name: "prepare_handoff",
+        description: "Builds a bounded context packet for handing a task off to a subagent: ranks excerpts by relevance to the objective, drops exact and near-duplicate chunks, keeps chunks marked critical in full, and fits the rest inside context_budget_tokens, truncating rather than silently dropping when the budget runs out. Returns the packet text, metrics (estimated, not tokenizer-exact), and the sources left out so they can be read on demand. Opt-in: orchestrate_task and reduce_context are unaffected.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            objective: { type: "string", description: "What the subagent must accomplish, in one or two sentences." },
+            chunks: {
+              type: "array",
+              description: "Candidate context excerpts to consider for inclusion.",
+              items: {
+                type: "object",
+                properties: {
+                  text: { type: "string" },
+                  source: { type: "string", description: "File path or label this excerpt came from." },
+                  critical: { type: "boolean", description: "Always include this chunk in full, even over budget." }
+                },
+                required: ["text"]
+              }
+            },
+            scope_paths: { type: "array", items: { type: "string" }, description: "Paths the subagent's work is scoped to." },
+            constraints: { type: "array", items: { type: "string" }, description: "Decisions or constraints the subagent must preserve." },
+            completion_criteria: { type: "array", items: { type: "string" }, description: "What 'done' looks like for this handoff." },
+            parent_summary: { type: "string", description: "Short summary of what the parent has already done; truncated first if the budget is tight." },
+            context_budget_tokens: { type: "number", description: `Target size for the packet's context section in estimated tokens (${MIN_CONTEXT_BUDGET_TOKENS}-${MAX_CONTEXT_BUDGET_TOKENS}, default 2000).` },
+            output_budget_tokens: { type: "number", description: `Target reply length to ask the subagent for, in estimated tokens (${MIN_OUTPUT_BUDGET_TOKENS}-${MAX_OUTPUT_BUDGET_TOKENS}). A prompt-level target, not an enforced limit.` }
+          },
+          required: ["objective"]
         }
       },
       {
@@ -532,6 +580,24 @@ async function handleOrchestrateTask(toolArgs: unknown) {
   };
 }
 
+function handlePrepareHandoff(toolArgs: unknown) {
+  const parsed = PrepareHandoffSchema.parse(toolArgs);
+  const chunks = (parsed.chunks ?? []).map(chunk => ({ ...chunk, text: redactText(chunk.text) }));
+  const result = prepareHandoff({ ...parsed, chunks });
+  auditLog('PREPARE_HANDOFF', 'ALLOWED', {
+    chunks_received: result.metrics.chunks_received,
+    chunks_included: result.metrics.chunks_included,
+    chunks_excluded: result.metrics.chunks_excluded,
+    context_budget_tokens: result.metrics.context_budget_tokens,
+  });
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({ packet: result.packet, metrics: result.metrics, omitted_sources: result.omitted_sources, warnings: result.warnings }, null, 2)
+    }]
+  };
+}
+
 async function handleAutoLearn(toolArgs: Record<string, unknown> | undefined) {
   const projectPath = toolArgs?.project_path as string;
   const targetFile  = toolArgs?.target_file as string | undefined;
@@ -612,6 +678,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "reduce_context": return await handleReduceContext(request.params.arguments);
       case "orchestrate_task": return await handleOrchestrateTask(request.params.arguments);
       case "rank_files": return await handleRankFiles(request.params.arguments);
+      case "prepare_handoff": return handlePrepareHandoff(request.params.arguments);
       case "auto_learn": return await handleAutoLearn(request.params.arguments);
 
       default:

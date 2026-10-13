@@ -14,6 +14,10 @@ The Guardian MCP server exposes `reduce_context`, which loads the files a task n
 
 Tradeoff: compaction summarizes the transcript; the project memory below is what keeps decisions from being lost when it happens.
 
+Handing work off to a subagent has the same cost as loading files: the whole conversation, or a pile of raw tool output, can end up copied into the handoff prompt. `prepare_handoff` builds a bounded packet instead: pass an `objective`, candidate `chunks` (each with an optional `source` and a `critical` flag), and any `scope_paths`, `constraints` or `completion_criteria`, and it ranks the chunks against the objective with the same BM25 index `rank_files` uses, removes exact and near-duplicate chunks, keeps `critical` chunks in full, and fits what remains inside `context_budget_tokens` (200 to 32000, default 2000), truncating the chunk that no longer fits rather than dropping it outright. The result lists the sources it left out, so the subagent can read one on demand instead of carrying it unread, and closes with a response-format contract an optional `output_budget_tokens` sizes as a target, not an enforced limit. All token counts in the result are estimates from character count.
+
+Tradeoff: ranking and truncation lose information the subagent might have needed; the omitted-sources list and the truncation warnings in the result exist so that loss is visible, not silent.
+
 ## 3. Memory: read state instead of re-explaining
 
 The memory server persists decisions, failures, preferences and next steps per project and branch. `get_state` at session start restores them in one call; `update_state` at the end writes what changed. The lifecycle hooks in [docs/hooks/memory-persistence](hooks/memory-persistence/) load that state on `SessionStart` and save it on `PreCompact`, `Stop` and `SessionEnd`, so a compaction or an abrupt exit never costs a re-explanation.
