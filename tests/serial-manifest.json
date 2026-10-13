@@ -1,0 +1,15 @@
+{
+  "files": [
+    { "file": "hooks/hooks.test.js", "mode": "serial", "reason": "writes the shared egc-tool-count-default counter file under the temp root" },
+    { "file": "hooks/prompt-router.test.js", "mode": "serial", "reason": "creates and empties the shared egc-router marker directory under the temp root" },
+    { "file": "stress/normalize-limit.test.js", "mode": "serial", "reason": "stress test whose result depends on machine load" },
+    { "file": "stress/readonly-filesystem.stress.test.js", "mode": "serial", "reason": "stress test whose result depends on machine load" },
+    { "file": "lib/test-classifier.test.js", "mode": "parallel", "reason": "the hazard patterns appear only inside string fixtures; the test uses no shared state" },
+    { "file": "lib/state-overview.test.js", "mode": "parallel", "reason": "the fixed temp name is a path that must not exist; the test never creates it" },
+    { "file": "lib/skill-tree-walker.test.js", "mode": "parallel", "reason": "the fixed temp name is a path that must not exist; the test never creates it" },
+    { "file": "lib/agent-compress.test.js", "mode": "parallel", "reason": "the fixed temp name is a path that must not exist; the test never creates it" },
+    { "file": "hooks/session-end-commits.test.js", "mode": "parallel", "reason": "the fixed temp name is a transcript path that must not exist; the test never creates it" },
+    { "file": "lib/branch-state.test.js", "mode": "parallel", "reason": "the fixed temp names are strings handed to a pure path function; nothing is written" },
+    { "file": "scripts/egc-memory-branch-state.test.js", "mode": "parallel", "reason": "the fixed temp names are strings handed to a pure path function; nothing is written" }
+  ]
+}
