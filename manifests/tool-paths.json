@@ -1,7 +1,7 @@
 {
   "version": 1,
   "description": "Every path an install target plans, with the tool surface it serves and the source that says the tool reads it. tests/ci/tool-paths-contract.test.js plans every adapter in every variant and fails when a planned path is outside this table or a row matches nothing; docs/spec/tool-paths.md is generated from it.",
-  "checkedOn": "2026-10-12",
+  "checkedOn": "2026-10-13",
   "variants": [
     {
       "id": "default",
@@ -2534,6 +2534,49 @@
       "adapter": "droid-home",
       "surface": "state",
       "path": "~/.factory/egc/install-state.json",
+      "status": "egc",
+      "note": "EGC runtime: the install state EGC writes to track the files it manages."
+    },
+    {
+      "adapter": "letta-home",
+      "surface": "skills",
+      "path": "~/.letta/skills/",
+      "status": "documented",
+      "source": "https://docs.letta.com/letta-code/skills",
+      "note": "Letta Code reads skills from four scopes, this one computer-scoped and shared across all agents on the machine (read on 2026-10-13); the other three (agent-scoped MemFS, project-scoped .agents/skills/, bundled) are not written by this adapter."
+    },
+    {
+      "adapter": "letta-home",
+      "surface": "library",
+      "path": "~/.letta/egc/library/agents/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "letta-home",
+      "surface": "library",
+      "path": "~/.letta/egc/library/commands/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "letta-home",
+      "surface": "library",
+      "path": "~/.letta/egc/library/rules/",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the prompt library that the tool does not load on its own."
+    },
+    {
+      "adapter": "letta-home",
+      "surface": "library",
+      "path": "~/.letta/egc/library/AGENTS.md",
+      "status": "egc",
+      "note": "EGC library folder: a reference copy of the agent catalog; no project-rules file is documented for the Letta Code CLI, so this never ships live."
+    },
+    {
+      "adapter": "letta-home",
+      "surface": "state",
+      "path": "~/.letta/egc/install-state.json",
       "status": "egc",
       "note": "EGC runtime: the install state EGC writes to track the files it manages."
     },
