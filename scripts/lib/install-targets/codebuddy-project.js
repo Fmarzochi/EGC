@@ -74,6 +74,25 @@ function createGateGuardScriptCopyOperationsIfMissing(adapter, targetRoot, modul
     ));
   }
 
+  // utils.js is a thin re-export over these four sibling modules (#1712);
+  // each is checked and copied independently, same as utils.js above,
+  // since a module selection could cover scripts/lib partially.
+  for (const siblingPath of [
+    'scripts/lib/utils-platform.js',
+    'scripts/lib/utils-paths.js',
+    'scripts/lib/utils-session.js',
+    'scripts/lib/utils-file.js',
+  ]) {
+    if (!isPathCovered(modules, 'scripts/lib', siblingPath)) {
+      operations.push(remap(
+        GATEGUARD_HOOK_MODULE_ID,
+        siblingPath,
+        path.join(targetRoot, siblingPath),
+        { strategy: 'preserve-relative-path' }
+      ));
+    }
+  }
+
   if (!isPathCovered(modules, 'scripts/lib', 'scripts/lib/hook-stdin.js')) {
     operations.push(remap(
       GATEGUARD_HOOK_MODULE_ID,

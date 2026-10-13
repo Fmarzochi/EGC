@@ -44,6 +44,10 @@ const EGC_MEMORY_SAVE_HOOK_LIB_SOURCES = [
   'scripts/lib/state-crypto.js',
   'scripts/lib/state-integrity.js',
   'scripts/lib/utils.js',
+  'scripts/lib/utils-platform.js',
+  'scripts/lib/utils-paths.js',
+  'scripts/lib/utils-session.js',
+  'scripts/lib/utils-file.js',
   'scripts/lib/hook-stdin.js',
 ];
 

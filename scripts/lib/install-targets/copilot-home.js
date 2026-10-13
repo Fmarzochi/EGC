@@ -27,6 +27,15 @@ const {
 } = require('../copilot-settings-hooks');
 
 const UTILS_SOURCE_RELATIVE_PATH = 'scripts/lib/utils.js';
+// utils.js is a thin re-export over these four sibling modules (#1712);
+// every one of them must travel with it or the installed copy throws
+// MODULE_NOT_FOUND the moment anything calls a function it re-exports.
+const UTILS_SIBLING_SOURCE_RELATIVE_PATHS = [
+  'scripts/lib/utils-platform.js',
+  'scripts/lib/utils-paths.js',
+  'scripts/lib/utils-session.js',
+  'scripts/lib/utils-file.js',
+];
 
 function resolveCopilotHome(input) {
   const home = typeof input === 'string' ? input : input?.homeDir;
@@ -86,6 +95,13 @@ function createGateGuardOperations(adapter, targetRoot, homeDir) {
     resolveUtilsScriptDestination(targetRoot),
     { strategy: 'preserve-relative-path' }
   );
+  const utilsSiblingOperations = UTILS_SIBLING_SOURCE_RELATIVE_PATHS.map(sourceRelativePath => createRemappedOperation(
+    adapter,
+    GATEGUARD_HOOK_MODULE_ID,
+    sourceRelativePath,
+    path.join(targetRoot, sourceRelativePath),
+    { strategy: 'preserve-relative-path' }
+  ));
   const hookStdinOperation = createRemappedOperation(
     adapter,
     GATEGUARD_HOOK_MODULE_ID,
@@ -97,6 +113,7 @@ function createGateGuardOperations(adapter, targetRoot, homeDir) {
   return [
     scriptOperation,
     utilsOperation,
+    ...utilsSiblingOperations,
     hookStdinOperation,
     createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, 'Edit'),
     createPreToolUseGateGuardHookMergeOperation(targetRoot, homeDir, 'Write'),

@@ -37,6 +37,10 @@ const SESSION_CONTEXT_LIB_SOURCES = [
   // native install never migrates.
   'scripts/lib/learning-store.js',
   'scripts/lib/utils.js',
+  'scripts/lib/utils-platform.js',
+  'scripts/lib/utils-paths.js',
+  'scripts/lib/utils-session.js',
+  'scripts/lib/utils-file.js',
   // propagate-state.js's commit-privacy guard shells out to this script as
   // the git clean-filter command -- must be present (this target preserves
   // the scripts/ prefix, so it lands one level up from propagate-state.js,
