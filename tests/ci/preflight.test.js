@@ -7,7 +7,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'ci', 'preflight.js');
-const { changedEntries, isLintable, lintInDefaultProject, parseArgs, splitFindings } = require(SCRIPT);
+const { changedEntries, childMessages, isLintable, lintInDefaultProject, parseArgs, splitFindings } = require(SCRIPT);
 
 const GIT_BIN = [
   '/usr/bin/git',
@@ -219,7 +219,15 @@ const results = [
     assert.deepStrictEqual(parseArgs([]), { base: 'origin/main', defaultProject: null });
     assert.strictEqual(parseArgs(['--base', 'origin/release']).base, 'origin/release');
     assert.throws(() => parseArgs(['--nope']), /unknown argument --nope\. Usage: npm run preflight/);
-    assert.throws(() => parseArgs(['--base']), /unknown argument --base/);
+    assert.throws(() => parseArgs(['--base']), /missing value for --base\. Usage: npm run preflight/);
+    assert.throws(() => parseArgs(['--base', '--default-project', 'a.ts']), /missing value for --base/);
+  }),
+
+  test('the default-project child result is read from its marked line, whatever else the run printed', () => {
+    const findings = [{ ruleId: 'no-debugger', message: 'Unexpected debugger statement.', line: 2, fatal: false }];
+    assert.deepStrictEqual(childMessages(`plugin loaded\n\nEGC_PREFLIGHT_RESULT:${JSON.stringify(findings)}\n`), findings);
+    assert.strictEqual(childMessages('plugin loaded\n'), null);
+    assert.strictEqual(childMessages('EGC_PREFLIGHT_RESULT:{not json\n'), null);
   }),
 
   test('a default-project relint that cannot run gives the first result back instead of failing', () => withSandbox(sandbox => {

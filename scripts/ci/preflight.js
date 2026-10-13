@@ -15,6 +15,7 @@ const GIT_BIN = [
 const LINTED_EXTENSIONS = new Set(['.js', '.cjs', '.mjs', '.ts']);
 const SKIPPED_SEGMENTS = new Set(['build', 'dist']);
 const RELAUNCH_MARKER = 'EGC_PREFLIGHT_MODULE_PATH';
+const RESULT_MARKER = 'EGC_PREFLIGHT_RESULT:';
 const USAGE = 'Usage: npm run preflight [-- --base <ref>]';
 
 function git(args, cwd) {
@@ -26,8 +27,11 @@ function parseArgs(argv) {
   const flags = { '--base': 'base', '--default-project': 'defaultProject' };
   for (let index = 0; index < argv.length; index++) {
     const key = flags[argv[index]];
-    if (!key || !argv[index + 1]) throw new Error(`unknown argument ${argv[index]}. ${USAGE}`);
-    options[key] = argv[++index];
+    if (!key) throw new Error(`unknown argument ${argv[index]}. ${USAGE}`);
+    const value = argv[index + 1];
+    if (!value || value.startsWith('-')) throw new Error(`missing value for ${argv[index]}. ${USAGE}`);
+    options[key] = value;
+    index++;
   }
   return options;
 }
@@ -141,7 +145,17 @@ function lintInDefaultProject(root, relativePath) {
     env: process.env,
     maxBuffer: 64 * 1024 * 1024,
   });
-  return result.status === 0 ? JSON.parse(result.stdout) : null;
+  return result.status === 0 ? childMessages(result.stdout) : null;
+}
+
+function childMessages(stdout) {
+  const line = String(stdout).split(/\r?\n/).reverse().find(entry => entry.startsWith(RESULT_MARKER));
+  if (!line) return null;
+  try {
+    return JSON.parse(line.slice(RESULT_MARKER.length));
+  } catch {
+    return null;
+  }
 }
 
 async function defaultProjectMessages(ESLint, root, overrideConfig, relativePath) {
@@ -225,7 +239,8 @@ async function run(options) {
 
   const { ESLint, sonar } = loadLinting(root, mainCheckout);
   if (options.defaultProject) {
-    process.stdout.write(JSON.stringify(await defaultProjectMessages(ESLint, root, sonar, options.defaultProject)));
+    const messages = await defaultProjectMessages(ESLint, root, sonar, options.defaultProject);
+    process.stdout.write(`\n${RESULT_MARKER}${JSON.stringify(messages)}\n`);
     return 0;
   }
   return report(ESLint, sonar, root, options);
@@ -241,4 +256,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { changedEntries, isLintable, lintInDefaultProject, parseArgs, splitFindings };
+module.exports = { changedEntries, childMessages, isLintable, lintInDefaultProject, parseArgs, splitFindings };
