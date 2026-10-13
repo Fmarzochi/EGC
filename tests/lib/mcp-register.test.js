@@ -17,6 +17,7 @@ const path = require('path');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 const { runWithoutConfigHomeVariables } = require('../fixtures/harness-variables');
 
+const yaml = require('js-yaml');
 const {
   buildMcpRegistrationTargets,
   registerJson,
@@ -27,6 +28,7 @@ const {
   registerClaudeCli,
   registerCrushMcp,
   resolveCrushConfigPath,
+  registerGooseYaml,
   registerMcpServers,
 } = require('../../scripts/lib/mcp-register');
 
@@ -157,9 +159,50 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'OpenHands',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose', 'OpenHands',
     ]);
   })));
+
+  (tally(test('Goose: the servers go under an extensions list in ~/.config/goose/config.yaml, gated on ~/.config/goose or goose on PATH (#1678)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const gooseBin = path.join(tmpHome, 'goose-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(gooseBin, { recursive: true });
+      fs.writeFileSync(path.join(gooseBin, 'goose'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(gooseBin, 'goose.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Goose');
+      assert.ok(absent, 'Goose must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no config directory and no goose on PATH keep the gate closed');
+      process.env.PATH = `${gooseBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Goose').gate(), true, 'a goose on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      const expectedPath = process.platform === 'win32'
+        ? path.join(tmpHome, 'AppData', 'Roaming', 'Block', 'goose', 'config', 'config.yaml')
+        : path.join(tmpHome, '.config', 'goose', 'config.yaml');
+      fs.mkdirSync(path.dirname(expectedPath), { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Goose');
+      assert.strictEqual(target.path, expectedPath);
+      assert.strictEqual(target.format, 'goose-yaml');
+      assert.strictEqual(target.gate(), true, 'the config directory alone opens the gate');
+      registerIsolated(tmpHome, {});
+      const written = yaml.load(fs.readFileSync(target.path, 'utf8'));
+      const guardian = written.extensions.find(ext => ext.name === 'egc-guardian');
+      const memory = written.extensions.find(ext => ext.name === 'egc-memory');
+      assert.deepStrictEqual(guardian.transport, { type: 'stdio', command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(memory.transport, { type: 'stdio', command: 'node', args: [bins.memoryBin] });
+      assert.strictEqual(guardian.enabled, true);
+    } finally {
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
 
   (tally(test('OpenHands: the servers go under mcpServers in ~/.openhands/mcp.json, gated on ~/.openhands or openhands on PATH (#1678)', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
@@ -197,6 +240,31 @@ function runTests() {
     }
   }))));
 
+  (tally(test('Goose: registration keeps the person\'s pre-existing provider config and extensions in config.yaml', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    try {
+      const goosePath = path.join(tmpHome, '.config', 'goose', 'config.yaml');
+      fs.mkdirSync(require('path').dirname(goosePath), { recursive: true });
+      const own = {
+        GOOSE_PROVIDER: 'anthropic',
+        extensions: [{ name: 'mine', enabled: true, transport: { type: 'stdio', command: 'my-server', args: [] } }],
+      };
+      fs.writeFileSync(goosePath, yaml.dump(own));
+      assert.strictEqual(registerGooseYaml(goosePath, bins), true);
+      const written = yaml.load(fs.readFileSync(goosePath, 'utf8'));
+      assert.strictEqual(written.GOOSE_PROVIDER, 'anthropic');
+      const mine = written.extensions.find(ext => ext.name === 'mine');
+      assert.deepStrictEqual(mine.transport, own.extensions[0].transport);
+      const guardian = written.extensions.find(ext => ext.name === 'egc-guardian');
+      const memory = written.extensions.find(ext => ext.name === 'egc-memory');
+      assert.deepStrictEqual(guardian.transport, { type: 'stdio', command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(memory.transport, { type: 'stdio', command: 'node', args: [bins.memoryBin] });
+      assert.strictEqual(registerGooseYaml(goosePath, bins), false, 'a second run is idempotent');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
   (tally(test('OpenHands: registration keeps the person\'s pre-existing mcp.json servers in place', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
     try {
@@ -213,6 +281,17 @@ function runTests() {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
   }))));
+
+  (tally(test('Goose: rejects a config.yaml whose extensions key is not a list', () => {
+    const tmpHome = makeTempDir();
+    try {
+      const goosePath = path.join(tmpHome, 'config.yaml');
+      fs.writeFileSync(goosePath, yaml.dump({ extensions: 'not-a-list' }));
+      assert.throws(() => registerGooseYaml(goosePath, bins), /invalid extensions list/);
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  })));
 
   (tally(test('Kilo Code CLI: the gate opens on the config directory or kilo on PATH, an absolute XDG_CONFIG_HOME moves it, a relative one is ignored, and the servers go under mcp in kilo.json (#1496)', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
