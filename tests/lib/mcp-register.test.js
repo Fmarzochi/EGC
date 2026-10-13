@@ -159,7 +159,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose', 'OpenHands',
     ]);
   })));
 
@@ -204,6 +204,42 @@ function runTests() {
     }
   }))));
 
+  (tally(test('OpenHands: the servers go under mcpServers in ~/.openhands/mcp.json, gated on ~/.openhands or openhands on PATH (#1678)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const openhandsBin = path.join(tmpHome, 'openhands-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(openhandsBin, { recursive: true });
+      fs.writeFileSync(path.join(openhandsBin, 'openhands'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(openhandsBin, 'openhands.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'OpenHands');
+      assert.ok(absent, 'OpenHands must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no ~/.openhands and no openhands on PATH keep the gate closed');
+      process.env.PATH = `${openhandsBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'OpenHands').gate(), true, 'an openhands on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      const openhandsDir = path.join(tmpHome, '.openhands');
+      fs.mkdirSync(openhandsDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'OpenHands');
+      assert.strictEqual(target.path, path.join(openhandsDir, 'mcp.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the ~/.openhands directory alone opens the gate');
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
   (tally(test('Goose: registration keeps the person\'s pre-existing provider config and extensions in config.yaml', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
     try {
@@ -224,6 +260,23 @@ function runTests() {
       assert.deepStrictEqual(guardian.transport, { type: 'stdio', command: 'node', args: [bins.guardianBin] });
       assert.deepStrictEqual(memory.transport, { type: 'stdio', command: 'node', args: [bins.memoryBin] });
       assert.strictEqual(registerGooseYaml(goosePath, bins), false, 'a second run is idempotent');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('OpenHands: registration keeps the person\'s pre-existing mcp.json servers in place', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    try {
+      const openhandsPath = path.join(tmpHome, '.openhands', 'mcp.json');
+      fs.mkdirSync(path.dirname(openhandsPath), { recursive: true });
+      const own = { mcpServers: { mine: { command: 'my-server' } } };
+      fs.writeFileSync(openhandsPath, JSON.stringify(own, null, 2));
+      assert.strictEqual(registerJson(openhandsPath, bins), true);
+      const written = JSON.parse(fs.readFileSync(openhandsPath, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers.mine, own.mcpServers.mine);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
     } finally {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }

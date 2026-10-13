@@ -265,6 +265,18 @@ function buildMcpRegistrationTargets(homeDir) {
       gate: () => fs.existsSync(path.dirname(resolveGooseConfigPath(homeDir))) || commandExists('goose'),
       format: 'goose-yaml',
     },
+    {
+      // OpenHands reads MCP servers from the standard mcpServers object of
+      // ~/.openhands/mcp.json, writable by hand or through `openhands mcp
+      // add` (docs.openhands.dev/openhands/usage/cli/mcp-servers, read on
+      // 2026-10-13). The legacy config.toml [mcp] section (sse_servers,
+      // shttp_servers, stdio_servers) belongs to OpenHands V0 and is not
+      // read by current releases.
+      name: 'OpenHands',
+      path: path.join(homeDir, '.openhands', 'mcp.json'),
+      gate: () => fs.existsSync(path.join(homeDir, '.openhands')) || commandExists('openhands'),
+      format: 'json',
+    },
   ];
 }
 
