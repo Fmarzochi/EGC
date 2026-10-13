@@ -185,14 +185,14 @@ function assertEveryFunctionIsReachable(scriptSource) {
 // a ConvertFrom-Json catch that warned and returned; that function went with
 // #1658, so the script must not parse anyone's JSON config any more, and the
 // guard it used to police lives in the Node writer every entry point shares
-// (parseJsonObject in scripts/lib/mcp-register.js, covered by
+// (parseJsonObject in scripts/lib/mcp-register-json-writers.js, covered by
 // tests/lib/mcp-register.test.js).
 function assertInvalidJsonIsLeftUntouched(scriptSource) {
   assert.ok(
     !scriptSource.includes('ConvertFrom-Json'),
     'install.ps1 must not parse an existing JSON config of its own; the shared CLI does that'
   );
-  const writerSource = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'lib', 'mcp-register.js'), 'utf8');
+  const writerSource = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'lib', 'mcp-register-json-writers.js'), 'utf8');
   assert.ok(
     writerSource.includes('is not valid JSON - left untouched'),
     'the shared writer must refuse an unparsable existing config and leave it untouched'

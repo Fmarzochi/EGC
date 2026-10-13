@@ -117,7 +117,7 @@ function fromMcpConfigs() {
 // config file with other tables/features registerToml() doesn't touch still
 // resolves fine.
 
-// Reverses tomlEscape() in scripts/lib/mcp-register.js: the single-letter
+// Reverses tomlEscape() in scripts/lib/mcp-register-toml-text.js: the single-letter
 // escapes and \uXXXX, the two forms that function writes. \UXXXXXXXX is read
 // too, since it is just as valid in a basic string and a hand-edited file
 // could contain it. An unrecognized escape, or one that names no Unicode
