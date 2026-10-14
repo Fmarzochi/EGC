@@ -302,7 +302,7 @@ def cmd_status(args) -> int:
         print(f"  Pending instincts: {len(pending)} awaiting review")
 
         if len(pending) >= 5:
-            print(f"\n  ⚠ {len(pending)} pending instincts awaiting review."
+            print(f"\n  \u26a0 {len(pending)} pending instincts awaiting review."
                   f" Unreviewed instincts auto-delete after {PENDING_TTL_DAYS} days.")
 
         expiry_threshold = PENDING_TTL_DAYS - PENDING_EXPIRY_WARNING_DAYS
@@ -332,7 +332,7 @@ def _print_instincts_by_domain(instincts: list[dict]) -> None:
 
         for inst in sorted(domain_instincts, key=lambda x: -x.get('confidence', 0.5)):
             conf = inst.get('confidence', 0.5)
-            conf_bar = '█' * int(conf * 10) + '░' * (10 - int(conf * 10))
+            conf_bar = '\u2588' * int(conf * 10) + '\u2591' * (10 - int(conf * 10))
             trigger = inst.get('trigger', 'unknown trigger')
             scope_tag = f"[{inst.get('scope', '?')}]"
 
