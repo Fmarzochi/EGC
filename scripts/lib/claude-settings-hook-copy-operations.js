@@ -364,6 +364,7 @@ function createAdapterStdinJsonCopyOperation(createRemappedOperation, targetRoot
 
 module.exports = {
   CRUSHER_HOOK_LIB_SOURCES,
+  BASH_GUARDIAN_HOOK_LIB_SOURCES,
   createGateGuardHookMergeOperationForDestination,
   createCrusherScriptCopyOperations,
   createPreToolUseCrusherHookMergeOperation,
