@@ -20,6 +20,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { BASH_GUARDIAN_HOOK_LIB_SOURCES } = require('../../scripts/lib/claude-settings-hook-copy-operations');
 
 const repoRoot = path.join(__dirname, '..', '..');
 const pluginSource = path.join(repoRoot, 'scripts', 'hooks', 'amp-guardian-crusher-plugin.ts');
@@ -64,14 +65,7 @@ function buildInstalledLayout() {
 
   for (const relativePath of [
     'scripts/hooks/pre-bash-guardian-validate.js',
-    'scripts/lib/guardian-bin.js',
-    'scripts/lib/hook-stdin.js',
-    'scripts/lib/shell-split.js',
-    'scripts/lib/wrapper-options.js',
-    'scripts/lib/shell-bindings.js',
-    'scripts/lib/shell-cwd.js',
-    'scripts/lib/handoff-commands.js',
-    'scripts/lib/stdin-programs.js',
+    ...BASH_GUARDIAN_HOOK_LIB_SOURCES,
     'scripts/hooks/pre-bash-crusher-rewrite.js',
     'scripts/lib/crusher/engine.js',
   ]) {
