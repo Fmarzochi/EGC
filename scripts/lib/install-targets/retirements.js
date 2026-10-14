@@ -219,7 +219,7 @@ function isRetirementCandidate(resolved, { managedRoots, seen, siblingOwned, cov
 // This only decides which destinations are candidates. The identity check
 // that decides whether one is actually safe to delete (a regular file,
 // reached through no link, byte-identical to the source EGC copied) happens
-// later in install/apply.js's isRetirableFile, the same test #1411
+// later in install/apply-retirement.js's isRetirableFile, the same test #1411
 // introduced for OpenCode. A source no longer in the repository (the file was
 // renamed, moved or removed) passes that check only when the bytes on disk
 // match a file the plan copies today; otherwise the candidate is listed
