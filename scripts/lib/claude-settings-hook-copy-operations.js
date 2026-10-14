@@ -251,6 +251,11 @@ const BASH_GUARDIAN_HOOK_LIB_SOURCES = [
   'scripts/lib/shell-cwd.js',
   'scripts/lib/handoff-commands.js',
   'scripts/lib/stdin-programs.js',
+  'scripts/hooks/pre-bash-guardian-shell-words.js',
+  'scripts/hooks/pre-bash-guardian-wrapper-walk.js',
+  'scripts/hooks/pre-bash-guardian-script-files.js',
+  'scripts/hooks/pre-bash-guardian-segmentation.js',
+  'scripts/hooks/pre-bash-guardian-script-walk.js',
 ];
 
 function resolveBashGuardianHookScriptDestination(targetRoot) {
