@@ -378,6 +378,16 @@ const GATEGUARD_LIB_SIBLING_SOURCE_RELATIVE_PATHS = [
   'scripts/lib/utils-session.js',
   'scripts/lib/utils-file.js',
 ];
+// gateguard-fact-force.js is itself a thin re-export over these four sibling
+// modules (#1712); every one of them must travel with it in scripts/hooks/
+// or the installed copy throws MODULE_NOT_FOUND the moment anything calls
+// through the handlers it re-delegates to.
+const GATEGUARD_SCRIPT_SIBLING_SOURCE_RELATIVE_PATHS = [
+  'scripts/hooks/gateguard-state.js',
+  'scripts/hooks/gateguard-bash-classify.js',
+  'scripts/hooks/gateguard-gate-rules.js',
+  'scripts/hooks/gateguard-retry-judge.js',
+];
 
 /**
  * Builds copy operations that place gateguard-fact-force.js (and its one
@@ -406,6 +416,12 @@ function createGateGuardScriptCopyOperations(createRemappedOperation, targetRoot
       { strategy: 'preserve-relative-path' }
     ),
     ...GATEGUARD_LIB_SIBLING_SOURCE_RELATIVE_PATHS.map(sourceRelativePath => createRemappedOperation(
+      GATEGUARD_HOOK_MODULE_ID,
+      sourceRelativePath,
+      path.join(targetRoot, sourceRelativePath),
+      { strategy: 'preserve-relative-path' }
+    )),
+    ...GATEGUARD_SCRIPT_SIBLING_SOURCE_RELATIVE_PATHS.map(sourceRelativePath => createRemappedOperation(
       GATEGUARD_HOOK_MODULE_ID,
       sourceRelativePath,
       path.join(targetRoot, sourceRelativePath),
