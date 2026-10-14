@@ -36,12 +36,6 @@ function findLegacyLinks(plan, { strict = false } = {}) {
   return migrate;
 }
 
-// Removes the collected legacy links, deepest path first so a link seen
-// through another is gone before the one it was seen through. Each link is
-// checked again right before the unlink: it must still be a link resolving
-// to the target recorded by the scan, otherwise the path changed under the
-// install and is refused, never removed. unlink never follows a link, so
-// only the link itself goes.
 const FORMER_LEGACY_LINK_DIRECTORIES = [['antigravity-cli', 'skills']];
 
 function hasLinkedComponent(fromRoot, targetPath) {
@@ -131,6 +125,12 @@ function recordWrittenContentHashes(plan, written) {
   }
 }
 
+// Removes the collected legacy links, deepest path first so a link seen
+// through another is gone before the one it was seen through. Each link is
+// checked again right before the unlink: it must still be a link resolving
+// to the target recorded by the scan, otherwise the path changed under the
+// install and is refused, never removed. unlink never follows a link, so
+// only the link itself goes.
 function removeLegacyLinks(links, targetRoot) {
   const root = targetRoot ? path.resolve(targetRoot) : null;
   const deepestFirst = [...links].sort((a, b) => segments(b.linkPath) - segments(a.linkPath));

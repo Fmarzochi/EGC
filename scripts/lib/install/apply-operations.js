@@ -114,10 +114,11 @@ function applyMcpCopyFileOperation(operation, disabledServers) {
   return landed;
 }
 
-// apply.js's own location is always the real installed package: unlike
-// guardian-bin.js, shell-split.js, and the hook scripts it copies
-// (createBashGuardianScriptCopyOperations in claude-settings-hooks.js), this
-// file is never itself copied out into an install target, so a __dirname-
+// The installer always runs this module from the real installed package,
+// next to apply.js in scripts/lib/install: unlike guardian-bin.js,
+// shell-split.js, and the hook scripts it copies
+// (createBashGuardianScriptCopyOperations in claude-settings-hooks.js), a
+// copy of it under a target is never what runs the install, so a __dirname-
 // relative walk-up is reliable for both a repo checkout and a real
 // `npm install -g` (mirrors guardian-bin.js's own fromPackageLayout()).
 function resolvePackageRoot() {

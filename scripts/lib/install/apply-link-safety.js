@@ -91,16 +91,6 @@ function segments(filePath) {
   return path.resolve(filePath).split(path.sep).length;
 }
 
-// A shape transition is a destination where the plan must convert an
-// existing file into a directory, or the reverse: the recorded source moved
-// from one shape to the other (rules/foo.md being a file, then becoming a
-// directory keeps its name but not its shape). A naive apply would falter on
-// EEXIST here after already writing part of the layout, so the transition is
-// resolved first: files are retired through the same identity check
-// retirement uses -- a file a previous install recorded and that is still
-// byte-identical to something this plan copies may go, everything else is
-// refused with a clear message.
-
 module.exports = {
   legacyLinkRoots,
   legacyLinkTarget,

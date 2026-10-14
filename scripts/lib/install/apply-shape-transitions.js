@@ -7,6 +7,16 @@ const { isSymbolicLink, segments } = require('./apply-link-safety');
 const { managedRootsOf, plannedContentHashes, sha256, legacyInstallStatePathsOf } = require('./apply-retirement');
 const { findLegacyLinks } = require('./apply-legacy-links');
 
+// A shape transition is a destination where the plan must convert an
+// existing file into a directory, or the reverse: the recorded source moved
+// from one shape to the other (rules/foo.md being a file, then becoming a
+// directory keeps its name but not its shape). A naive apply would falter on
+// EEXIST here after already writing part of the layout, so the transition is
+// resolved first: files are retired through the same identity check
+// retirement uses -- a file a previous install recorded and that is still
+// byte-identical to something this plan copies may go, everything else is
+// refused with a clear message.
+
 // Every copy-file destination a plan writes to or into: the planned files
 // themselves and the directories that contain them, up to each managed root.
 // Only these paths can change shape; a destination the plan stops touching
