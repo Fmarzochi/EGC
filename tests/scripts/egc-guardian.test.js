@@ -254,7 +254,11 @@ async function runTests() {
   run(`write ~/.gemini/settings.json`,           () => assertWriteAllowed(`${home}/.gemini/settings.json`));
   run(`write ~/.gemini/GEMINI.md`,               () => assertWriteAllowed(`${home}/.gemini/GEMINI.md`));
   run(`write ~/.gemini/antigravity/brain/x.md`,  () => assertWriteAllowed(`${home}/.gemini/antigravity/brain/x.md`));
-  run(`write ~/.config/opencode/opencode.json`,  () => assertWriteAllowed(`${home}/.config/opencode/opencode.json`));
+  // OpenCode's opencode.json carries the MCP registration guardian-bin.js
+  // trusts to find the CLI, so it is a trust anchor like Codex's config.toml;
+  // the protocol file next to it stays open.
+  run(`write ~/.config/opencode/opencode.json`,  () => assertWriteDenied(`${home}/.config/opencode/opencode.json`));
+  run(`write ~/.config/opencode/egc-memory.md`,  () => assertWriteAllowed(`${home}/.config/opencode/egc-memory.md`));
   run(`write ~/.config/zed/settings.json`,       () => assertWriteAllowed(`${home}/.config/zed/settings.json`));
   run(`write ~/.continue/config.yaml`,           () => assertWriteAllowed(`${home}/.continue/config.yaml`));
 

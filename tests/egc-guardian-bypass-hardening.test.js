@@ -361,6 +361,19 @@ run('.config/opencode/config.json write is blocked (guardian-bin.js now trusts t
   const v = validateWrite('.config/opencode/config.json');
   assert.strictEqual(v.allowed, false, 'expected .config/opencode/config.json write to be blocked');
 });
+// OpenCode reads config.json, opencode.json and opencode.jsonc from the same
+// directory and merges them; the EGC registration lives in opencode.json, so
+// a write to either sibling can repoint the egc-guardian entry just as well.
+for (const name of ['opencode.json', 'opencode.jsonc']) {
+  run(`.config/opencode/${name} write is blocked (the file the MCP registration really lives in)`, () => {
+    const v = validateWrite(`.config/opencode/${name}`);
+    assert.strictEqual(v.allowed, false, `expected .config/opencode/${name} write to be blocked`);
+  });
+}
+run('.config/opencode/egc-memory.md write stays allowed (the protocol file, functional, not a trust anchor)', () => {
+  const v = validateWrite('.config/opencode/egc-memory.md');
+  assert.strictEqual(v.allowed, true, `expected .config/opencode/egc-memory.md to stay allowed, got: ${v.reason}`);
+});
 
 console.log('\nCodex TOML + install-marker gap fixes (2026-07-27, EGC-465):');
 run('.codex/config.toml write is blocked (guardian-bin.js now trusts this file too)', () => {
