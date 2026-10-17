@@ -456,6 +456,33 @@ async function runTests() {
     }
   });
 
+  await run('a native connection waits for a file another connection holds instead of failing at once', async () => {
+    let native = true;
+    try { require('sqlite3'); } catch { native = false; }
+    if (!native) return;
+    process.env.EGC_SQLITE_ENGINE = 'native';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+    const file = path.join(dir, 'state.db');
+    const first = await openCompatDatabase(file, 'first');
+    const second = await openCompatDatabase(file, 'second');
+    try {
+      const timeout = await first.get('PRAGMA busy_timeout');
+      assert.strictEqual(Number(Object.values(timeout)[0]), 4000, 'every native connection opens with the shared busy timeout');
+      await first.exec('CREATE TABLE probe (x)');
+      await first.exec('BEGIN IMMEDIATE');
+      await first.run('INSERT INTO probe VALUES (1)');
+      const release = new Promise(resolve => setTimeout(resolve, 300)).then(() => first.exec('COMMIT'));
+      await second.run('INSERT INTO probe VALUES (2)');
+      await release;
+      const rows = await second.all('SELECT x FROM probe ORDER BY x');
+      assert.deepStrictEqual(rows.map(row => row.x), [1, 2], 'the second write lands once the first connection commits');
+    } finally {
+      await first.close();
+      await second.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   await run('the native engine is used by default when it loads', async () => {
     delete process.env.EGC_SQLITE_ENGINE;
     let native = true;

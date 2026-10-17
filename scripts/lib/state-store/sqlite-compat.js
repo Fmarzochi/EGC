@@ -175,6 +175,8 @@ function cleanupFailedLockWrite(fd, lockPath) {
 // write and the error surfaces at once.
 const WINDOWS_BUSY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 const WINDOWS_BUSY_RETRY_MS = 2000;
+// How long a native connection waits for a file another connection holds.
+const NATIVE_BUSY_TIMEOUT_MS = 4000;
 
 function isWindowsBusyError(err) {
   return process.platform === 'win32' && WINDOWS_BUSY_CODES.has(err?.code);
@@ -941,6 +943,11 @@ async function openCompatDatabase(filename, serverName, options = {}) {
       const { open } = require('sqlite');
       const mode = reader ? { mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_FULLMUTEX } : {};
       const db = await open({ filename, driver: sqlite3.Database, ...mode });
+      // The driver answers SQLITE_BUSY at once while another connection holds
+      // the file; ten processes starting together on Windows saw it. Every
+      // connection the chooser opens waits instead, and a caller that wants
+      // a longer wait sets its own pragma after this one.
+      await db.exec(`PRAGMA busy_timeout = ${NATIVE_BUSY_TIMEOUT_MS}`);
       selected = 'native';
       return db;
     } catch (error) {
