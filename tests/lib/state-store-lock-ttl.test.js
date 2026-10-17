@@ -444,6 +444,69 @@ async function runTests() {
     }
   });
 
+  await test('a rename over the database that Windows refuses while a reader holds it is repeated until it goes through', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-win-rename-'));
+    const dbFile = path.join(dir, 'state.db');
+    const originalRename = fs.renameSync;
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    let refusals = 0;
+    try {
+      process.env.EGC_SQLITE_ENGINE = 'wasm';
+      const db = await openCompatDatabase(dbFile);
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      fs.renameSync = (from, to) => {
+        if (to === dbFile && refusals < 2) {
+          refusals += 1;
+          const error = new Error('EPERM: operation not permitted, rename');
+          error.code = 'EPERM';
+          throw error;
+        }
+        return originalRename(from, to);
+      };
+      await db.run('CREATE TABLE items (val TEXT);');
+      assert.strictEqual(refusals, 2, 'the rename must be retried past the busy refusals');
+      await db.close();
+      fs.renameSync = originalRename;
+      Object.defineProperty(process, 'platform', platform);
+      const again = await openCompatDatabase(dbFile);
+      assert.strictEqual((await again.all("SELECT name FROM sqlite_master WHERE name = 'items'")).length, 1, 'the third rename must have landed the file');
+      await again.close();
+    } finally {
+      fs.renameSync = originalRename;
+      Object.defineProperty(process, 'platform', platform);
+      delete process.env.EGC_SQLITE_ENGINE;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  await test('an unlink of the lock that Windows refuses while a poller reads it is repeated, so the lock is not left behind', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-win-unlink-'));
+    const lockPath = path.join(dir, 'state.db.db-lock');
+    const originalUnlink = fs.unlinkSync;
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    let refusals = 0;
+    try {
+      const token = await acquireFileLock(lockPath, { timeoutMs: 2000, retryIntervalMs: 5 });
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      fs.unlinkSync = (file, ...rest) => {
+        if (file === lockPath && refusals < 1) {
+          refusals += 1;
+          const error = new Error('EBUSY: resource busy or locked, unlink');
+          error.code = 'EBUSY';
+          throw error;
+        }
+        return originalUnlink(file, ...rest);
+      };
+      releaseFileLock(lockPath, token);
+      assert.strictEqual(refusals, 1);
+      assert.ok(!fs.existsSync(lockPath), 'the lock file must be gone after the retried unlink');
+    } finally {
+      fs.unlinkSync = originalUnlink;
+      Object.defineProperty(process, 'platform', platform);
+      cleanupTemp(dir, lockPath);
+    }
+  });
+
   await test('the same EPERM on a POSIX system is a real permission error and surfaces at once', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-posix-eperm-'));
     const lockPath = path.join(dir, 'state.db.db-lock');

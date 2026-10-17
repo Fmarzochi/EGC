@@ -79,7 +79,7 @@ function unlinkLockIfOwned(lockPath, token) {
     const raw = fs.readFileSync(lockPath, 'utf8');
     const data = JSON.parse(raw);
     if (data?.token === token) {
-      fs.unlinkSync(lockPath);
+      retryWhileWindowsBusy(() => fs.unlinkSync(lockPath));
       return true;
     }
     // Lock file exists but belongs to a different token/owner
@@ -166,15 +166,39 @@ function cleanupFailedLockWrite(fd, lockPath) {
   }
 }
 
-// Windows reports a lock file that another process is still deleting as
-// EPERM or EACCES on the exclusive open, not EEXIST: the lock is still busy
-// and the attempt is repeated. Elsewhere those codes mean the directory
-// itself refuses the write, and the error surfaces at once.
-const WINDOWS_BUSY_OPEN_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+// Windows answers EPERM, EACCES or EBUSY for a file another process still
+// has open or is still deleting: an exclusive open on a lock file in that
+// state, a rename over the database while a reader holds it, the unlink of
+// the lock while a poller reads it. Those are moments, not refusals, so on
+// Windows alone the operation is repeated for a short while before the
+// error surfaces; elsewhere the same codes mean the directory refuses the
+// write and the error surfaces at once.
+const WINDOWS_BUSY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+const WINDOWS_BUSY_RETRY_MS = 2000;
+
+function isWindowsBusyError(err) {
+  return process.platform === 'win32' && WINDOWS_BUSY_CODES.has(err?.code);
+}
 
 function isLockBusyError(err) {
-  if (err?.code === 'EEXIST') return true;
-  return process.platform === 'win32' && WINDOWS_BUSY_OPEN_CODES.has(err?.code);
+  return err?.code === 'EEXIST' || isWindowsBusyError(err);
+}
+
+function retryWhileWindowsBusy(operation) {
+  const deadline = Date.now() + WINDOWS_BUSY_RETRY_MS;
+  for (;;) {
+    try {
+      return operation();
+    } catch (err) {
+      if (!isWindowsBusyError(err) || Date.now() >= deadline) throw err;
+      sleepSync(5 + crypto.randomInt(0, 10));
+    }
+  }
+}
+
+// A rename over an existing file, repeated while Windows reports the target busy.
+function renameOverSync(from, to) {
+  retryWhileWindowsBusy(() => fs.renameSync(from, to));
 }
 
 function tryAcquireLockOnce(lockPath, token) {
@@ -800,7 +824,7 @@ class WasmDatabase {
     const tmp = path.join(dir, `.${path.basename(this.filename)}.${process.pid}.${crypto.randomUUID()}.tmp`);
     try {
       fs.writeFileSync(tmp, Buffer.from(this.db.export()));
-      fs.renameSync(tmp, this.filename);
+      renameOverSync(tmp, this.filename);
       this._updateMtime();
     } finally {
       try {
@@ -915,4 +939,4 @@ function selectedEngine() {
   return selected;
 }
 
-module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase, acquireFileLock, acquireFileLockSync, releaseFileLock, isProcessAlive, assertNoPendingWal };
+module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase, acquireFileLock, acquireFileLockSync, releaseFileLock, isProcessAlive, assertNoPendingWal, renameOverSync };

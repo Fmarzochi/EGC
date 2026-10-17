@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { acquireFileLockSync, releaseFileLock, assertNoPendingWal, mutates } = require('./sqlite-compat');
+const { acquireFileLockSync, releaseFileLock, assertNoPendingWal, mutates, renameOverSync } = require('./sqlite-compat');
 
 // PERF-01: a burst of writes reaches the disk as one file write.
 const PERSIST_DEBOUNCE_MS = 50;
@@ -390,7 +390,7 @@ class SqlJsDatabase {
     const tmp = path.join(dir, `.${path.basename(this._path)}.${process.pid}.${crypto.randomUUID()}.tmp`);
     try {
       fs.writeFileSync(tmp, Buffer.from(data));
-      fs.renameSync(tmp, this._path);
+      renameOverSync(tmp, this._path);
     } finally {
       try {
         if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
