@@ -166,13 +166,24 @@ function cleanupFailedLockWrite(fd, lockPath) {
   }
 }
 
+// Windows reports a lock file that another process is still deleting as
+// EPERM or EACCES on the exclusive open, not EEXIST: the lock is still busy
+// and the attempt is repeated. Elsewhere those codes mean the directory
+// itself refuses the write, and the error surfaces at once.
+const WINDOWS_BUSY_OPEN_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+function isLockBusyError(err) {
+  if (err?.code === 'EEXIST') return true;
+  return process.platform === 'win32' && WINDOWS_BUSY_OPEN_CODES.has(err?.code);
+}
+
 function tryAcquireLockOnce(lockPath, token) {
   let fd;
   try {
     fs.mkdirSync(path.dirname(lockPath), { recursive: true });
     fd = fs.openSync(lockPath, 'wx');
   } catch (err) {
-    if (err?.code === 'EEXIST') return false;
+    if (isLockBusyError(err)) return false;
     throw err;
   }
   try {

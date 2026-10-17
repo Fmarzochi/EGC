@@ -416,6 +416,60 @@ async function runTests() {
     }
   });
 
+  await test('a lock file another process is still deleting (EPERM on the exclusive open on Windows) counts as busy and the next attempt wins', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-win-pending-'));
+    const lockPath = path.join(dir, 'state.db.db-lock');
+    const originalOpenSync = fs.openSync;
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    let refusals = 0;
+    try {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      fs.openSync = (file, ...rest) => {
+        if (file === lockPath && refusals < 2) {
+          refusals += 1;
+          const error = new Error('EPERM: operation not permitted, open');
+          error.code = 'EPERM';
+          throw error;
+        }
+        return originalOpenSync(file, ...rest);
+      };
+      const token = await acquireFileLock(lockPath, { timeoutMs: 2000, retryIntervalMs: 5 });
+      assert.strictEqual(refusals, 2, 'the exclusive open must be retried past the delete-pending refusals');
+      assert.ok(fs.existsSync(lockPath), 'the third attempt must have taken the lock');
+      releaseFileLock(lockPath, token);
+    } finally {
+      fs.openSync = originalOpenSync;
+      Object.defineProperty(process, 'platform', platform);
+      cleanupTemp(dir, lockPath);
+    }
+  });
+
+  await test('the same EPERM on a POSIX system is a real permission error and surfaces at once', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-posix-eperm-'));
+    const lockPath = path.join(dir, 'state.db.db-lock');
+    const originalOpenSync = fs.openSync;
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    let refusals = 0;
+    try {
+      Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+      fs.openSync = (file, ...rest) => {
+        if (file === lockPath) {
+          refusals += 1;
+          const error = new Error('EPERM: operation not permitted, open');
+          error.code = 'EPERM';
+          throw error;
+        }
+        return originalOpenSync(file, ...rest);
+      };
+      await assert.rejects(() => acquireFileLock(lockPath, { timeoutMs: 2000, retryIntervalMs: 5 }), /EPERM/);
+      assert.strictEqual(refusals, 1, 'a permission error outside Windows is not retried');
+    } finally {
+      fs.openSync = originalOpenSync;
+      Object.defineProperty(process, 'platform', platform);
+      cleanupTemp(dir, lockPath);
+    }
+  });
+
   await test('no double mutex release on permission error during BEGIN', async () => {
     if (!permissionBitsEnforced()) {
       console.log('    - skipped: directory permission bits are not enforced here (root, or Windows)');
