@@ -316,6 +316,19 @@ function buildMcpRegistrationTargets(homeDir) {
         || commandExists('warp-terminal'),
       format: 'json',
     },
+    {
+      // Amp reads its user settings from ~/.config/amp/settings.json (or
+      // settings.jsonc), on Windows under %USERPROFILE%\.config\amp too, the
+      // same root amp-home.js uses for the plugins; MCP servers go under the
+      // amp.mcpServers key as {command, args, env} (ampcode.com/docs/cli/
+      // settings, read on 2026-10-17). A workspace .amp/settings.json
+      // overrides it and is the project's own. The gate opens on
+      // ~/.config/amp, ~/.amp or amp on PATH.
+      name: 'Amp',
+      path: path.join(homeDir, '.config', 'amp', 'settings.json'),
+      gate: () => fs.existsSync(path.join(homeDir, '.config', 'amp')) || fs.existsSync(path.join(homeDir, '.amp')) || commandExists('amp'),
+      format: 'amp-settings',
+    },
   ];
 }
 
