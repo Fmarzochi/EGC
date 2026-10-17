@@ -14,14 +14,16 @@ const HOOK_ID = 'egc-session-bridge';
 // The old 5s applied everywhere and was too tight for exactly that platform.
 const DEFAULT_TIMEOUT_MS = process.platform === 'win32' ? 20000 : 5000;
 const SAFE_PYTHON_BASENAMES = new Set(['python3', 'python3.exe', 'python', 'python.exe']);
+const { readHookStdinAsync } = require(path.join(__dirname, '..', 'lib', 'hook-stdin.js'));
 
-function readStdin() {
-  try {
-    if (process.stdin.isTTY) return '';
-    return fs.readFileSync(0, 'utf8');
-  } catch (_) { // NOSONAR: missing stdin means no payload to bridge
-    return '';
-  }
+// The payload through the shared stream reader: a synchronous read of fd 0
+// fails now and then on a Windows pipe (an early EOF or EAGAIN, the cause of
+// the lost event in #1959), where the stream reader waits for the whole
+// payload. A terminal, a cut-off stream or a failed one count as no payload.
+async function readStdin() {
+  if (process.stdin.isTTY) return '';
+  const { raw, truncated } = await readHookStdinAsync();
+  return truncated ? '' : raw;
 }
 
 function parsePayload(raw) {
@@ -75,10 +77,12 @@ function deriveEventName(payload) {
   return 'sessionstart';
 }
 
-function run() {
+// `raw` is the hook payload as the caller read it: the entry point below
+// reads it from stdin, and run-with-flags hands over the stdin it already
+// consumed, so the session id in the payload reaches the bridge either way.
+function run(raw = '') {
   if (disabled()) return { exitCode: 0 };
 
-  const raw = readStdin();
   const payload = parsePayload(raw);
   const event = deriveEventName(payload);
   const sessionId = payload.session_id || process.env.EGC_SESSION_ID || process.env.ECC_SESSION_ID
@@ -119,9 +123,15 @@ function run() {
 }
 
 if (require.main === module) {
-  const outcome = run();
-  if (outcome.stderr) process.stderr.write(outcome.stderr);
-  process.exit(Number.isInteger(outcome.exitCode) ? outcome.exitCode : 0);
+  readStdin().then(raw => {
+    const outcome = run(raw);
+    if (outcome.stderr) process.stderr.write(outcome.stderr);
+    process.exit(Number.isInteger(outcome.exitCode) ? outcome.exitCode : 0);
+  }).catch(error => {
+    // The hook exits 0 by design; the reason is said, never swallowed.
+    process.stderr.write(`[${HOOK_ID}] soft-fail: ${error?.message || error}\n`);
+    process.exit(0);
+  });
 }
 
 module.exports = { run };

@@ -139,6 +139,15 @@ run('a hostile session id cannot escape the cache directory', () => {
   assert.ok(!fs.existsSync(path.join(home, 'escape')), 'no traversal outside the cache dir');
 });
 
+run('a payload larger than a pipe buffer is read whole and still keys the cursor by its session', () => {
+  const home = makeHome();
+  touchWal(home, 1000000000000);
+  const result = runHook(home, { session_id: 'tab-big', filler: 'x'.repeat(200000) });
+  assert.strictEqual(result.status, 0);
+  assert.ok(JSON.parse(result.stdout).additionalContext.includes('[egc-mesh]'));
+  assert.ok(fs.existsSync(path.join(home, '.egc', 'mesh', 'notice-tab-big.json')), 'the cursor file carries the session id from the payload');
+});
+
 run('malformed stdin is treated as an anonymous session, never a crash', () => {
   const home = makeHome();
   touchWal(home, 1000000000000);
