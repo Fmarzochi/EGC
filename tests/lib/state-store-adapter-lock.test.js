@@ -127,8 +127,11 @@ async function runTests() {
   console.log('\n=== Testing the CLI state store under the shared write lock ===\n');
   let passed = 0;
   let failed = 0;
+  const run = async (name, fn) => {
+    if (await test(name, fn)) passed++; else failed++;
+  };
 
-  if (await test('ten CLI stores writing at once from separate processes lose no row', async () => {
+  await run('ten CLI stores writing at once from separate processes lose no row', async () => {
     const dir = createTempDir();
     const dbPath = path.join(dir, 'state.db');
     try {
@@ -142,9 +145,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(dir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('CLI stores and portable hook writers share the lock and lose no row', async () => {
+  await run('CLI stores and portable hook writers share the lock and lose no row', async () => {
     const dir = createTempDir();
     const egcDir = path.join(dir, 'egc');
     fs.mkdirSync(egcDir, { recursive: true });
@@ -175,9 +178,50 @@ async function runTests() {
     } finally {
       cleanupTempDir(dir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('an open store sees the row another process committed after it opened', async () => {
+  await run('a hook writer that starts while the store file is mid-rename waits for it instead of taking the store for absent', async () => {
+    const dir = createTempDir();
+    const egcDir = path.join(dir, 'egc');
+    fs.mkdirSync(egcDir, { recursive: true });
+    const dbPath = path.join(egcDir, 'state.db');
+    const held = path.join(egcDir, 'state.db.held');
+    const lockPath = `${dbPath}.db-lock`;
+    try {
+      await bootstrap(dbPath);
+      // Another writer holds the lock and has the file off its name for an
+      // instant, as a rename over it does on Windows.
+      fs.renameSync(dbPath, held);
+      fs.writeFileSync(lockPath, lockPayload(process.pid));
+      const writer = runChild([HOOK_WRITER_PATH], {
+        env: { EGC_DIR: dir, EGC_SQLITE_ENGINE: 'wasm' },
+        stdin: JSON.stringify({ session_id: 'late-start', event_type: 'tool_use', hook_event_name: 'test_hook', payload: {} }),
+      });
+      await new Promise(resolve => setTimeout(resolve, 150));
+      fs.renameSync(held, dbPath);
+      fs.unlinkSync(lockPath);
+      const result = await writer;
+      assertAllExited([result], 'hook writer');
+      assert.strictEqual(result.stderr.trim(), '', `the writer reported an error: ${result.stderr}`);
+      const store = await createStateStore({ dbPath });
+      try {
+        assert.strictEqual(store._database.prepare("SELECT COUNT(*) AS n FROM events WHERE session_id = 'late-start'").get().n, 1, 'the event must be on disk once the file is back');
+      } finally {
+        store.close();
+      }
+      fs.unlinkSync(dbPath);
+      const absent = await runChild([HOOK_WRITER_PATH], {
+        env: { EGC_DIR: dir, EGC_SQLITE_ENGINE: 'wasm' },
+        stdin: JSON.stringify({ session_id: 'no-store', event_type: 'tool_use', hook_event_name: 'test_hook', payload: {} }),
+      });
+      assertAllExited([absent], 'hook writer');
+      assert.ok(!fs.existsSync(dbPath), 'with no lock sidecar a missing store is still left alone');
+    } finally {
+      cleanupTempDir(dir);
+    }
+  });
+
+  await run('an open store sees the row another process committed after it opened', async () => {
     const dir = createTempDir();
     const dbPath = path.join(dir, 'state.db');
     try {
@@ -196,9 +240,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(dir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('a write fails closed while another process holds the lock, dead or alive', async () => {
+  await run('a write fails closed while another process holds the lock, dead or alive', async () => {
     const dir = createTempDir();
     const dbPath = path.join(dir, 'state.db');
     const lockPath = `${dbPath}.db-lock`;
@@ -220,9 +264,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(dir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('a process that exits without close() leaves its rows on disk and no lock behind', async () => {
+  await run('a process that exits without close() leaves its rows on disk and no lock behind', async () => {
     const dir = createTempDir();
     const dbPath = path.join(dir, 'state.db');
     try {
@@ -233,9 +277,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(dir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('a transaction that throws releases the lock and leaves the file as it was', async () => {
+  await run('a transaction that throws releases the lock and leaves the file as it was', async () => {
     const dir = createTempDir();
     const dbPath = path.join(dir, 'state.db');
     const lockPath = `${dbPath}.db-lock`;
@@ -258,9 +302,9 @@ async function runTests() {
     } finally {
       cleanupTempDir(dir);
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('two stores open on the same file in one process alternate writes without losing one', async () => {
+  await run('two stores open on the same file in one process alternate writes without losing one', async () => {
     const dir = createTempDir();
     const dbPath = path.join(dir, 'state.db');
     try {
@@ -280,7 +324,7 @@ async function runTests() {
     } finally {
       cleanupTempDir(dir);
     }
-  })) passed++; else failed++;
+  });
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   return failed;
