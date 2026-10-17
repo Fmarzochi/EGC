@@ -58,6 +58,12 @@ function runWriterInPieces(parts, pauseMs, overrides) {
   });
 }
 
+// A lane without a native sqlite3 build says so once on stderr and goes on
+// with the portable engine; that notice is not an error of the writer.
+function errorLines(stderr) {
+  return stderr.split('\n').filter(line => line.trim() && !line.includes('using the portable sql.js engine'));
+}
+
 async function countEvents(homeDir, sessionId) {
   const store = await createStateStore({ homeDir });
   try {
@@ -90,7 +96,7 @@ async function main() {
       const middle = Math.floor(payload.length / 2);
       const result = await runWriterInPieces([payload.slice(0, middle), payload.slice(middle)], 200, env);
       assert.strictEqual(result.status, 0, result.stderr);
-      assert.strictEqual(result.stderr.trim(), '', `the writer reported an error: ${result.stderr}`);
+      assert.deepStrictEqual(errorLines(result.stderr), [], `the writer reported an error: ${result.stderr}`);
       assert.strictEqual(await countEvents(homeDir, 'pieces-session'), 1, 'the event lands once the whole payload is in');
     });
   })) passed++; else failed++;
