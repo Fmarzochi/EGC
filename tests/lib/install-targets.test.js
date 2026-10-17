@@ -1629,6 +1629,32 @@ function runTests() {
     }
   }));
 
+  tally(test('codex adapter wires the write validator into ~/.codex/hooks.json on the apply_patch matcher (C10)', () => {
+    // apply_patch is how Codex edits files; its PreToolUse payload carries the
+    // patch as tool_input.command (codex-rs/core/src/tools/handlers/
+    // apply_patch.rs), which pre-write-guardian-validate.js reads file by file.
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const plan = planInstallTargetScaffold({ target: 'codex', repoRoot, homeDir, modules: [] });
+    const codexHome = path.join(homeDir, '.codex');
+    const writeScriptPath = path.join(codexHome, 'scripts', 'hooks', 'pre-write-guardian-validate.js');
+
+    const writeHookOps = plan.operations.filter(operation => (
+      operation.kind === 'merge-claude-settings-hooks'
+      && operation.hookEvent === 'PreToolUse'
+      && operation.hookScriptPath === writeScriptPath
+    ));
+    assert.strictEqual(writeHookOps.length, 1, 'the write validator is registered once');
+    assert.strictEqual(writeHookOps[0].hookMatcher, 'apply_patch');
+    assert.strictEqual(writeHookOps[0].destinationPath, path.join(codexHome, 'hooks.json'));
+
+    const copy = plan.operations.find(operation => (
+      normalizedRelativePath(operation.sourceRelativePath) === 'scripts/hooks/pre-write-guardian-validate.js'
+      && operation.destinationPath === writeScriptPath
+    ));
+    assert.ok(copy, 'Should scaffold pre-write-guardian-validate.js into ~/.codex/scripts/hooks');
+  }));
+
 
   // Devin Local, the agent in Devin Desktop since Cascade was removed on
   // 2026-09-08, reads lifecycle hooks in the Claude Code settings shape:

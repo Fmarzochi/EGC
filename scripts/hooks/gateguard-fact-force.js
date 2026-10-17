@@ -129,14 +129,15 @@ function handleMultiEdit(rawInput, toolName, toolInput) {
  * `*** Begin Patch` / `*** Update File: <path>` / `*** End Patch` format),
  * not a JSON object with a file_path field like Claude's Edit/Write. Parse
  * the patch header lines to recover the path(s) it touches so the same
- * fact-forcing gate can apply per file.
+ * fact-forcing gate can apply per file. A `*** Move to:` line names the file
+ * an update is renamed to, which is written as a new file.
  *
  * @param {string} patchText
  * @returns {string[]}
  */
 function extractApplyPatchFilePaths(patchText) {
   const text = String(patchText || '');
-  const pattern = /^\*\*\* (?:Update|Add|Delete) File: (.+)$/gm;
+  const pattern = /^\*\*\* (?:(?:Update|Add|Delete) File|Move to): (.+)$/gm;
   const paths = [];
   let match;
   while ((match = pattern.exec(text)) !== null) {
@@ -155,8 +156,16 @@ function extractApplyPatchFilePaths(patchText) {
  * @param {*} rawPatchInput
  * @returns {*}
  */
+// Codex sends the patch as tool_input.command (codex-rs/core/src/tools/
+// handlers/apply_patch.rs, pre_tool_use_payload); the Devin adapter hands it
+// over as a bare string.
+function applyPatchTextOf(rawPatchInput) {
+  if (typeof rawPatchInput === 'string') return rawPatchInput;
+  return typeof rawPatchInput?.command === 'string' ? rawPatchInput.command : '';
+}
+
 function handleApplyPatch(rawInput, rawPatchInput) {
-  const patchText = typeof rawPatchInput === 'string' ? rawPatchInput : '';
+  const patchText = applyPatchTextOf(rawPatchInput);
   const filePaths = extractApplyPatchFilePaths(patchText);
   if (filePaths.length === 0) {
     trace('governance:allowed:apply_patch_unparsed');
