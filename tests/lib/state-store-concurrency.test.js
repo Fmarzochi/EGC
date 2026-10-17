@@ -238,8 +238,10 @@ async function runTests() {
           `hook writer worker ${res.index} exited with non-zero code ${res.code}: ${res.stderr}`
         );
         // The writer is fire-and-forget: it logs a failure and still exits 0,
-        // so a lost event shows up here first, with its cause.
-        assert.strictEqual(res.stderr.trim(), '', `hook writer worker ${res.index} reported an error: ${res.stderr}`);
+        // so a lost event shows up here first, with its cause. The notice
+        // that the native engine did not load is not a failure.
+        const complaints = res.stderr.split('\n').filter(line => line.trim() && !line.includes('using the portable sql.js engine'));
+        assert.deepStrictEqual(complaints, [], `hook writer worker ${res.index} reported an error: ${res.stderr}`);
       }
 
       // Verify database integrity

@@ -123,16 +123,36 @@ async function persistSessionEnd(db, payload) {
   ]);
 }
 
+const WAL_SWITCH_ATTEMPTS = 20;
+const WAL_SWITCH_RETRY_MS = 50;
+
+// Switching the journal mode needs the file to itself, and the busy handler
+// does not always cover that step: several hook writers starting on a fresh
+// store at the same moment have seen SQLITE_BUSY here. The switch is tried
+// for a short while and then left to the next writer. WAL is a performance
+// setting, not a correctness one; every write below waits through
+// busy_timeout whatever the mode.
+async function enableWalBestEffort(db, attempt = 0) {
+  try {
+    const modeRow = await db.get('PRAGMA journal_mode;');
+    const currentMode = modeRow ? Object.values(modeRow)[0] : null;
+    if (typeof currentMode !== 'string' || currentMode.toLowerCase() !== 'wal') {
+      await db.exec('PRAGMA journal_mode = WAL;');
+    }
+  } catch (err) {
+    if (err?.code !== 'SQLITE_BUSY') throw err;
+    if (attempt + 1 >= WAL_SWITCH_ATTEMPTS) return;
+    await new Promise(resolve => setTimeout(resolve, WAL_SWITCH_RETRY_MS));
+    await enableWalBestEffort(db, attempt + 1);
+  }
+}
+
 async function initDatabase(dbPath) {
   const db = await openCompatDatabase(dbPath, 'state-db-writer', { lockTimeoutMs: 4000 });
   if (selectedEngine() === 'native') {
     try {
       await db.exec('PRAGMA busy_timeout = 4000;');
-      const modeRow = await db.get('PRAGMA journal_mode;');
-      const currentMode = modeRow ? Object.values(modeRow)[0] : null;
-      if (typeof currentMode === 'string' && currentMode.toLowerCase() !== 'wal') {
-        await db.exec('PRAGMA journal_mode = WAL;');
-      }
+      await enableWalBestEffort(db);
       await db.exec('PRAGMA synchronous = NORMAL;');
     } catch (pragmaErr) {
       try { await db.close(); } catch (_) { /* ignore close error */ }
