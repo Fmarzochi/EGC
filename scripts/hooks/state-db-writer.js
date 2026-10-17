@@ -163,12 +163,27 @@ async function initDatabase(dbPath) {
   return db;
 }
 
+const STORE_WAIT_ATTEMPTS = 20;
+const STORE_WAIT_MS = 25;
+
+// The portable engine persists by renaming a new file over the store, and
+// on Windows that rename is not atomic: for an instant the path has no
+// file. A writer starting at that instant must not take the store for
+// absent, so while the lock sidecar says another writer is mid-persist the
+// check is repeated for a short while before giving up.
+async function storeExists(dbPath, attempt = 0) {
+  if (fs.existsSync(dbPath)) return true;
+  if (!fs.existsSync(`${dbPath}.db-lock`) || attempt + 1 >= STORE_WAIT_ATTEMPTS) return false;
+  await new Promise(resolve => setTimeout(resolve, STORE_WAIT_MS));
+  return storeExists(dbPath, attempt + 1);
+}
+
 async function main() {
   const payload = readPayloadFromStdin();
   if (!payload) return;
 
   const dbPath = resolveStateStorePath();
-  if (!fs.existsSync(dbPath)) return;
+  if (!(await storeExists(dbPath))) return;
 
   let db;
   try {
