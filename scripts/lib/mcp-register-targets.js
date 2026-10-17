@@ -277,6 +277,18 @@ function buildMcpRegistrationTargets(homeDir) {
       gate: () => fs.existsSync(path.join(homeDir, '.openhands')) || commandExists('openhands'),
       format: 'json',
     },
+    {
+      // Junie (JetBrains) reads MCP servers from the standard mcpServers
+      // object of ~/.junie/mcp/mcp.json, the user-scope file the IDE plugin
+      // and the Junie CLI share; the project-scope .junie/mcp/mcp.json is
+      // the project's own and is left alone (junie.jetbrains.com/docs/
+      // junie-cli-mcp-configuration.html, read on 2026-10-17). The gate
+      // opens on ~/.junie or the junie binary on PATH.
+      name: 'Junie',
+      path: path.join(homeDir, '.junie', 'mcp', 'mcp.json'),
+      gate: () => fs.existsSync(path.join(homeDir, '.junie')) || commandExists('junie'),
+      format: 'json',
+    },
   ];
 }
 
