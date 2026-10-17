@@ -18,6 +18,17 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const index = require(path.join(ROOT, 'scripts', 'lib', 'skill-index.json'));
+const GUARDIAN_SRC = path.join(ROOT, 'mcp', 'servers', 'egc-guardian', 'src');
+const MAX_GENERATED_LINES = 800;
+const PART_FILE_RE = /^catalog-(?:skills|agents|rules)-\d+\.ts$/;
+
+function lineCount(file) {
+  return fs.readFileSync(file, 'utf8').split('\n').length;
+}
+
+function entryCount(file) {
+  return (fs.readFileSync(file, 'utf8').match(/"kind": "/g) || []).length;
+}
 
 function countSkillMd(dir) {
   let total = 0;
@@ -70,6 +81,18 @@ run('no description collapsed to a bare YAML block-scalar indicator', () => {
     0,
     `descriptions corrupted to a block-scalar indicator: ${corrupted.map(e => e.name).join(', ')}`
   );
+});
+
+run('the TypeScript catalog is parts under 800 lines, all imported by the aggregator, carrying every entry', () => {
+  const parts = fs.readdirSync(GUARDIAN_SRC).filter(name => PART_FILE_RE.test(name)).sort();
+  assert.ok(parts.length > 0, 'expected catalog-<kind>-<n>.ts part files next to catalog-index.ts');
+  const oversized = ['catalog-index.ts', ...parts].filter(name => lineCount(path.join(GUARDIAN_SRC, name)) > MAX_GENERATED_LINES);
+  assert.deepStrictEqual(oversized, [], `generated catalog files over ${MAX_GENERATED_LINES} lines: ${oversized.join(', ')}`);
+  const aggregator = fs.readFileSync(path.join(GUARDIAN_SRC, 'catalog-index.ts'), 'utf8');
+  const imported = [...aggregator.matchAll(/from '\.\/(catalog-[a-z]+-\d+)\.js'/g)].map(match => `${match[1]}.ts`).sort();
+  assert.deepStrictEqual(imported, parts, 'the aggregator must import exactly the part files present');
+  const carried = parts.reduce((sum, name) => sum + entryCount(path.join(GUARDIAN_SRC, name)), 0);
+  assert.strictEqual(carried, index.entries.length, 'the parts must carry every entry of the JSON twin');
 });
 
 run('every entry has a non-empty name and description', () => {
