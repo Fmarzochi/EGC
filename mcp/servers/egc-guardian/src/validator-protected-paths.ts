@@ -57,9 +57,12 @@ export const PROTECTED_FILE_PATTERNS: RegExp[] = [
   // audit (EGC-460/461, 2026-07-27) found guardian-bin.js now also trusts
   // this file, for the same reasoning as the shared entry above.
   /\.gemini[\\/]antigravity-cli[\\/]mcp_config\.json$/,
-  // OpenCode's real MCP server registration file (scripts/lib/
-  // mcp-register.js's "OpenCode" target); same reasoning and same audit.
-  /\.config[\\/]opencode[\\/]config\.json$/,
+  // OpenCode's MCP server registration files (scripts/lib/mcp-register.js's
+  // "OpenCode" target); same reasoning and same audit. OpenCode reads
+  // config.json, opencode.json and opencode.jsonc from this directory and
+  // merges them, and the EGC entry lives in opencode.json, so all three are
+  // trust anchors; the protocol file next to them (egc-memory.md) is not.
+  /\.config[\\/]opencode[\\/](?:config\.json|opencode\.jsonc?)$/,
   // Codex CLI: OAuth/API key auth file.
   /\.codex[\\/]auth\.json$/,
   // Codex CLI's real MCP server registration file (scripts/lib/
