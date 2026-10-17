@@ -8,6 +8,7 @@ const { resolveStateStorePath } = require(path.join(__dirname, '..', 'lib', 'sta
 const { openCompatDatabase, selectedEngine } = require(path.join(__dirname, '..', 'lib', 'state-store', 'sqlite-compat.js'));
 const { applyMigrationsAsync } = require(path.join(__dirname, '..', 'lib', 'state-store', 'migrations.js'));
 const { assertValidEntity } = require(path.join(__dirname, '..', 'lib', 'state-store', 'schema.js'));
+const { readHookStdinAsync } = require(path.join(__dirname, '..', 'lib', 'hook-stdin.js'));
 
 const INSERT_RUNTIME_EVENT_SQL = `
   INSERT INTO events (
@@ -53,20 +54,22 @@ const UPSERT_SESSION_SQL = `
     token_cost = excluded.token_cost
 `;
 
-function readPayloadFromStdin() {
-  let raw;
-  try {
-    raw = fs.readFileSync(0, 'utf8');
-  } catch (_) { // NOSONAR
-    // Intentional: writer is best-effort; absent stdin (e.g., direct invocation) is a no-op.
+// The payload comes through the shared stream reader: a synchronous read of
+// descriptor 0 is not reliable on a Windows pipe (it can fail with EAGAIN or
+// EOF before the parent's bytes are seen), and a read failure swallowed in
+// silence meant an event lost with exit code 0. Empty input stays a quiet
+// no-op (a direct invocation); a cut-off stream or a malformed payload is
+// said on stderr, so a lost event always leaves a trace.
+function payloadFromInput({ raw, truncated }) {
+  if (truncated) {
+    console.error('[state-db-writer] the hook input was cut off or the stream failed; the event is not recorded');
     return null;
   }
-
   if (!raw.trim()) return null;
-
   try {
     return JSON.parse(raw);
-  } catch (_) { // NOSONAR: malformed payload is ignored; writer is fire-and-forget
+  } catch (err) {
+    console.error(`[state-db-writer] the hook input is not JSON (${err.message}); the event is not recorded`);
     return null;
   }
 }
@@ -163,23 +166,31 @@ async function initDatabase(dbPath) {
   return db;
 }
 
-const STORE_WAIT_ATTEMPTS = 20;
 const STORE_WAIT_MS = 25;
+// While another writer holds the lock the wait matches the lock timeout
+// below; with no lock the path is only rechecked for an instant.
+const STORE_WAIT_LOCKED_ATTEMPTS = 160;
+const STORE_WAIT_UNLOCKED_ATTEMPTS = 4;
 
 // The portable engine persists by renaming a new file over the store, and
 // on Windows that rename is not atomic: for an instant the path has no
 // file. A writer starting at that instant must not take the store for
-// absent, so while the lock sidecar says another writer is mid-persist the
-// check is repeated for a short while before giving up.
+// absent. While the lock sidecar says another writer is mid-persist the
+// check is repeated for as long as that writer may hold the lock; with no
+// sidecar but the store directory in place (the instant between the rename
+// and the release) it is repeated a few times before giving up. A missing
+// directory is EGC not initialized: a quiet no-op at once.
 async function storeExists(dbPath, attempt = 0) {
   if (fs.existsSync(dbPath)) return true;
-  if (!fs.existsSync(`${dbPath}.db-lock`) || attempt + 1 >= STORE_WAIT_ATTEMPTS) return false;
+  if (!fs.existsSync(path.dirname(dbPath))) return false;
+  const limit = fs.existsSync(`${dbPath}.db-lock`) ? STORE_WAIT_LOCKED_ATTEMPTS : STORE_WAIT_UNLOCKED_ATTEMPTS;
+  if (attempt + 1 >= limit) return false;
   await new Promise(resolve => setTimeout(resolve, STORE_WAIT_MS));
   return storeExists(dbPath, attempt + 1);
 }
 
 async function main() {
-  const payload = readPayloadFromStdin();
+  const payload = payloadFromInput(await readHookStdinAsync());
   if (!payload) return;
 
   const dbPath = resolveStateStorePath();
