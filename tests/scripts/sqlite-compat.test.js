@@ -320,7 +320,7 @@ async function runTests() {
     }
   })) passed++; else failed++;
 
-  if (await test('a failed background persist is reported, not thrown', async () => {
+  if (await test('a write failure due to permissions is thrown to the caller', async () => {
     if (!permissionBitsEnforced()) {
       console.log('    - skipped: directory permission bits are not enforced here (root, or Windows)');
       return;
@@ -333,22 +333,83 @@ async function runTests() {
       await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
       await new Promise(r => setTimeout(r, 60));
       fs.chmodSync(dir, 0o555);
-      const captured = [];
-      const originalWrite = process.stderr.write;
-      process.stderr.write = (chunk, ...rest) => { captured.push(String(chunk)); return originalWrite.call(process.stderr, chunk, ...rest); };
-      try {
-        await db.run('INSERT INTO items DEFAULT VALUES');
-        await new Promise(r => setTimeout(r, 80));
-      } finally {
-        process.stderr.write = originalWrite;
-      }
-      assert.ok(captured.some(line => line.includes('[sqlite-compat] could not persist')), `expected the persist failure on stderr, got: ${captured.join('|').slice(0, 200)}`);
-      const rows = await db.all('SELECT COUNT(*) AS n FROM items');
-      assert.strictEqual(rows[0].n, 1, 'the in-memory database keeps working');
+      await assert.rejects(
+        () => db.run('INSERT INTO items DEFAULT VALUES'),
+        /EACCES/
+      );
       fs.chmodSync(dir, 0o755);
       await db.close();
     } finally {
       try { fs.chmodSync(dir, 0o755); } catch { /* already writable */ }
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await test('a persistence failure during persistNow is propagated and releases lock', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-persist-'));
+    const file = path.join(dir, 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test');
+      await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
+      const originalPersist = db.persistNow.bind(db);
+      db.persistNow = () => {
+        throw new Error('Disk full during persistNow simulation');
+      };
+      await assert.rejects(
+        () => db.run('INSERT INTO items DEFAULT VALUES'),
+        /Disk full during persistNow simulation/
+      );
+      db.persistNow = originalPersist;
+      assert.ok(!fs.existsSync(db.getLockPath()), 'Lock file must be released after persist failure');
+      // Subsequent write should succeed cleanly
+      await db.run('INSERT INTO items DEFAULT VALUES');
+      const rows = await db.all('SELECT COUNT(*) AS count FROM items');
+      assert.strictEqual(rows[0].count, 1);
+      await db.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (await test('failed first write before file exists resets in-memory database and does not persist later', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-first-write-'));
+    const file = path.join(dir, 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test-first');
+      assert.ok(!fs.existsSync(file), 'Database file must not exist before first write');
+
+      // Inject persistence failure on the very first write
+      const originalPersist = db.persistNow.bind(db);
+      db.persistNow = () => {
+        throw new Error('Disk full on first persist simulation');
+      };
+      await assert.rejects(
+        () => db.exec("CREATE TABLE bad_table (id TEXT); INSERT INTO bad_table VALUES ('corrupt');"),
+        /Disk full on first persist simulation/
+      );
+
+      // Restore persistNow
+      db.persistNow = originalPersist;
+      assert.ok(!fs.existsSync(file), 'Failed first write must not have created the database file');
+
+      // Now perform a clean, valid first write on the same handle
+      await db.exec("CREATE TABLE good_table (id TEXT); INSERT INTO good_table VALUES ('valid');");
+
+      // Verify on disk and in memory that only good_table exists and bad_table was discarded
+      const goodRows = await db.all('SELECT * FROM good_table;');
+      assert.strictEqual(goodRows.length, 1);
+      assert.strictEqual(goodRows[0].id, 'valid');
+
+      // bad_table must NOT exist
+      await assert.rejects(
+        () => db.all('SELECT * FROM bad_table;'),
+        /no such table: bad_table/
+      );
+
+      await db.close();
+    } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   })) passed++; else failed++;
