@@ -110,6 +110,11 @@ test('a refusal reaches the hook runner as a non-zero exit, not a passthrough', 
     const copy = path.join(root, 'scripts', 'hooks', 'egc-session-bridge.js');
     fs.mkdirSync(path.dirname(copy), { recursive: true });
     fs.copyFileSync(HOOK, copy);
+    // The hook reads its payload through the shared lib the installers copy
+    // next to it; a copy of the hook alone is not what an install produces.
+    const libCopy = path.join(root, 'scripts', 'lib', 'hook-stdin.js');
+    fs.mkdirSync(path.dirname(libCopy), { recursive: true });
+    fs.copyFileSync(path.join(REPO_ROOT, 'scripts', 'lib', 'hook-stdin.js'), libCopy);
     const runner = path.join(REPO_ROOT, 'scripts', 'hooks', 'run-with-flags.js');
     const r = spawnSync(process.execPath, [runner, 'sessionstart:egc-session-bridge', 'scripts/hooks/egc-session-bridge.js', 'standard,strict'], {
       cwd: root,
@@ -145,6 +150,32 @@ test('hook is a no-op when EGC_SESSION_BRIDGE=off', () => {
 if (!pythonAvailable()) {
   console.log('  - skipped python-dependent integration cases (python3 missing)');
 } else {
+  test('through run-with-flags, the session id in the payload reaches the bridge (run(raw) reads what it is handed)', () => {
+    const tmp = createTempDir('egc-bridge-runner-');
+    try {
+      const sid = 'sess-runner-' + Date.now();
+      const runner = path.join(REPO_ROOT, 'scripts', 'hooks', 'run-with-flags.js');
+      const env = Object.assign({}, process.env, { EGC_PLUGIN_ROOT: REPO_ROOT, PROJECT_ROOT: tmp, EGC_WORKSPACE_ROOT: tmp, EGC_HOOK_PROFILE: 'standard' });
+      delete env.HOOK_EVENT_NAME;
+      delete env.EGC_SESSION_ID;
+      delete env.ECC_SESSION_ID;
+      const r = spawnSync(process.execPath, [runner, 'sessionstart:egc-session-bridge', 'scripts/hooks/egc-session-bridge.js', 'standard,strict'], {
+        cwd: REPO_ROOT,
+        env,
+        input: JSON.stringify({ hook_event_name: 'SessionStart', session_id: sid }),
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        timeout: CLI_TIMEOUT_MS,
+      });
+      assert.strictEqual(r.status, 0, r.stderr);
+      const events = readJsonLines(path.join(tmp, '.sessions', 'execution_log.jsonl'));
+      const match = events.find(e => e.execution_id === sid && e.type === 'session.sessionstart');
+      assert.ok(match, `the runner consumed stdin and handed it to run(); expected session.sessionstart for ${sid}, got ${JSON.stringify(events.map(e => e.execution_id))}; stderr: ${r.stderr || '(empty)'}`);
+    } finally {
+      cleanup(tmp);
+    }
+  });
+
   test('SessionStart emits session.sessionstart trace event', () => {
     const tmp = createTempDir('egc-bridge-start-');
     try {

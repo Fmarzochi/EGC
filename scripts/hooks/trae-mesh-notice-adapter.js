@@ -14,12 +14,14 @@
 const fs = require('node:fs');
 const { run, readStdinPayload } = require('./mesh-events-inject');
 
-try {
-  const notice = run(readStdinPayload());
-  if (notice) {
-    fs.writeSync(1, notice);
+void (async () => {
+  try {
+    const notice = run(await readStdinPayload());
+    if (notice) {
+      fs.writeSync(1, notice);
+    }
+  } catch (_) { // NOSONAR: a wake-signal hook must never break the harness turn
+    // exit silently below
   }
-} catch (_) { // NOSONAR: a wake-signal hook must never break the harness turn
-  // exit silently below
-}
-process.exit(0);
+  process.exit(0);
+})();
