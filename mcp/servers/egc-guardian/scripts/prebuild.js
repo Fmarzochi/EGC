@@ -2,10 +2,11 @@
 'use strict';
 
 // The catalog index is generated from the skill files at the repository
-// root, which only exist in a git checkout. The published package ships the
-// generated src/catalog-index.ts instead, so a build run from anywhere but
-// the repo (a copied server directory, an installed runtime, a vendored
-// tree) must not fail on a path that climbs out of this package.
+// root, which only exist in a git checkout. A checkout carries the generated
+// src/catalog-index.ts and its catalog-<kind>-<n>.ts parts instead, so a
+// build run from anywhere but the repo (a copied server directory, an
+// installed runtime, a vendored tree) must not fail on a path that climbs
+// out of this package.
 //
 // This replaces `node ../../../scripts/build-skill-index.js` in the build
 // script, which broke the moment the server was built outside the monorepo.

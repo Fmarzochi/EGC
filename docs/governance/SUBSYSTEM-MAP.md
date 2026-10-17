@@ -67,7 +67,7 @@ data, and fails when a schema has no case there.
 | Path | Class | Notes |
 |---|---|---|
 | `internal/registry/runtime-map.json` | GENERATED | Written by `scripts/runtime/discovery.js` after an install from `scripts/install-apply.js`; `internal/` is gitignored |
-| `scripts/lib/skill-index.json`, `mcp/servers/egc-guardian/src/catalog-index.ts` | GENERATED | Built by `scripts/build-skill-index.js` |
+| `scripts/lib/skill-index.json`, `mcp/servers/egc-guardian/src/catalog-index.ts` and the catalog-skills, catalog-agents and catalog-rules part files next to it | GENERATED | Built by `scripts/build-skill-index.js`; each part holds at most 100 entries, the aggregator concatenates them in order |
 | `.opencode/dist/` | GENERATED | Built by `npm run build:opencode`; gitignored |
 | `node_modules/` | GENERATED | Standard npm |
 
