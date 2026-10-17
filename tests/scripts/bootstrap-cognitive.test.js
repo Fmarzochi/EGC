@@ -1555,6 +1555,71 @@ async function runDroidTests() {
   return [passed, failed];
 }
 
+// Junie reads global guidelines from ~/.junie/AGENTS.md, %USERPROFILE%\.junie
+// on Windows (junie.jetbrains.com/docs/guidelines-and-memory.html, read on
+// 2026-10-17), next to the ~/.junie/mcp/mcp.json the MCP registration
+// writes, behind the same gate.
+async function runJunieTests() {
+  let passed = 0;
+  let failed = 0;
+
+  if (await test('writes the Junie global guidelines when ~/.junie exists (T11)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.junie'), { recursive: true });
+      const output = run(home);
+      assert.ok(/Junie: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const content = fs.readFileSync(path.join(home, '.junie', 'AGENTS.md'), 'utf8');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'marker must be present');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('keeps what the person wrote in the Junie global guidelines (T11)', () => {
+    const home = mktempHome();
+    try {
+      const target = path.join(home, '.junie', 'AGENTS.md');
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, '# My rules\n\nAlways answer in English.\n');
+      run(home);
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(content.includes('Always answer in English.'), 'the person\'s own guideline stays');
+      assert.ok(/<!-- egc-memory-protocol(?::v\d+)? -->/.test(content), 'the protocol is added next to it');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips Junie when ~/.junie does not exist and junie is not on PATH (T11)', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home, { PATH: isolatedPath(null) });
+      assert.ok(!/\[cognitive\] Junie:/.test(output), 'should not mention Junie at all');
+      assert.ok(!fs.existsSync(path.join(home, '.junie')), 'nothing is created');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the Junie global guidelines when junie is on PATH before ~/.junie exists (T11)', () => {
+    const home = mktempHome();
+    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-fake-junie-'));
+    try {
+      fs.writeFileSync(path.join(fakeBin, 'junie'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(fakeBin, 'junie.cmd'), '@exit /b 0\r\n');
+      const output = run(home, { PATH: isolatedPath(fakeBin) });
+      assert.ok(/Junie: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(path.join(home, '.junie', 'AGENTS.md')), 'AGENTS.md is written on the first run');
+    } finally {
+      cleanup(home);
+      cleanup(fakeBin);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 async function runPiTests() {
   let passed = 0;
   let failed = 0;
@@ -2153,6 +2218,12 @@ async function runRemainingHarnessTests() {
     const [droidPassed, droidFailed] = await runDroidTests();
     passed += droidPassed;
     failed += droidFailed;
+  }
+
+  {
+    const [juniePassed, junieFailed] = await runJunieTests();
+    passed += juniePassed;
+    failed += junieFailed;
   }
 
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {

@@ -750,6 +750,21 @@ function injectTraeUserRule(filepath, label, content) {
   }
 })();
 
+// ── Junie (~/.junie/AGENTS.md) ───────────────────────────────────────────────
+// Junie's global guidelines (junie.jetbrains.com/docs/guidelines-and-memory.html,
+// read on 2026-10-17): %USERPROFILE%\.junie\AGENTS.md on Windows, included in
+// every task next to the project's own guidelines, which win on a conflict.
+// The same gate as the MCP registration in ~/.junie/mcp/mcp.json.
+(function bootstrapJunie() {
+  try {
+    const junieDir = path.join(HOME, '.junie');
+    if (!fs.existsSync(junieDir) && !commandExists('junie')) return;
+    injectProtocol(path.join(junieDir, 'AGENTS.md'), 'Junie');
+  } catch (e) {
+    console.log(`  [cognitive] Junie: unexpected error: ${e.message}`);
+  }
+})();
+
 // ── Crush (<Crush config dir>/CRUSH.md) ───────────────────────────────────────
 (function bootstrapCrush() {
   try {
