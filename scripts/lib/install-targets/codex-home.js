@@ -20,11 +20,14 @@ const {
   CRUSHER_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   BASH_GUARDIAN_HOOK_MODULE_ID,
   BASH_GUARDIAN_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+  WRITE_VALIDATOR_HOOK_MODULE_ID,
+  WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
   HOOK_OPERATION_KIND,
   PRE_TOOL_USE_EVENT,
   createGateGuardScriptCopyOperations,
   createCrusherScriptCopyOperations,
   createBashGuardianScriptCopyOperations,
+  createWriteValidatorScriptCopyOperation,
   createMeshNoticeScriptCopyOperations,
   createMeshNoticeHookMergeOperationForDestination,
   resolveMeshNoticeHookScriptDestination,
@@ -178,9 +181,8 @@ function createCodexCrusherOperations(adapter, codexHome) {
 // Guardian's actual allowlist/denylist. 2026-07-27 audit (EGC-460/462, cross-
 // referenced against the 2026-07-27 Guardian-perfection mandate) found Codex
 // wired only GateGuard + Token Crusher into hooks.json, never
-// pre-bash-guardian-validate.js. Wired on the 'Bash' matcher only, the same
-// scope every other install target uses (the Guardian validates shell
-// commands, not file edits; no install target wires a write-validator hook).
+// pre-bash-guardian-validate.js. Wired on the 'Bash' matcher; file edits get
+// the write validator below, on 'apply_patch'.
 //
 // pre-bash-guardian-validate.js is registered directly, with no translation
 // adapter (unlike Devin Desktop's windsurf-guardian-adapter.js): Codex's own docs
@@ -207,6 +209,32 @@ function createCodexGuardianOperations(adapter, codexHome) {
   );
 
   return [...copyOperations, mergeOperation];
+}
+
+// The Guardian's write validator for Codex: apply_patch is how Codex edits
+// files, and its hook payload carries the patch as tool_input.command, which
+// pre-write-guardian-validate.js reads file by file (protected paths, and the
+// lines a shell script gains). Same exit-code-2-plus-stderr contract as the
+// Bash guardian; guardian-bin.js and the Bash guardian it reuses for script
+// content are already copied by createCodexGuardianOperations.
+function createCodexWriteValidatorOperations(adapter, codexHome) {
+  const hookScriptPath = path.join(codexHome, 'scripts', 'hooks', 'pre-write-guardian-validate.js');
+  const copyOperation = createWriteValidatorScriptCopyOperation(
+    (moduleId, sourceRelativePath, destinationPath, options) => (
+      createRemappedOperation(adapter, moduleId, sourceRelativePath, destinationPath, options)
+    ),
+    codexHome
+  );
+
+  const mergeOperation = buildCodexPreToolUseMergeOperation(
+    codexHome,
+    WRITE_VALIDATOR_HOOK_MODULE_ID,
+    WRITE_VALIDATOR_HOOK_SCRIPT_SOURCE_RELATIVE_PATH,
+    hookScriptPath,
+    'apply_patch'
+  );
+
+  return [copyOperation, mergeOperation];
 }
 
 // Session-mesh wake-signal notice for Codex: the official hooks docs
@@ -250,6 +278,7 @@ module.exports = createInstallTargetAdapter({
       ...createCodexGateGuardOperations(adapter, codexHome),
       ...createCodexCrusherOperations(adapter, codexHome),
       ...createCodexGuardianOperations(adapter, codexHome),
+      ...createCodexWriteValidatorOperations(adapter, codexHome),
       ...createCodexMeshNoticeOperations(adapter, codexHome),
     ];
   },

@@ -142,6 +142,56 @@ function runCommittedScriptTests(wipe) {
   return { passed, failed };
 }
 
+// Codex edits files with apply_patch: one freeform patch per call, handed to
+// the hook as tool_input.command (codex-rs/core/src/tools/handlers/
+// apply_patch.rs, pre_tool_use_payload), with the files named by the patch's
+// own headers.
+function runApplyPatchTests(wipe) {
+  const patchOf = (...lines) => ['*** Begin Patch', ...lines, '*** End Patch', ''].join('\n');
+  const applyPatch = (patch, toolInput = { command: patch }) => runHook('', {}, toolInput, 'apply_patch');
+  const sshKey = path.join(os.homedir(), '.ssh', 'id_rsa');
+  const cases = [
+    ['blocks an apply_patch that adds a file on a protected path', () => {
+      const result = applyPatch(patchOf(`*** Add File: ${sshKey}`, '+ssh-ed25519 AAAA attacker'));
+      assert.strictEqual(result.code, 2, result.stderr);
+      assert.ok(result.stderr.includes('protected'), result.stderr);
+    }],
+    ['blocks an apply_patch that deletes a protected file', () => {
+      const result = applyPatch(patchOf(`*** Delete File: ${sshKey}`));
+      assert.strictEqual(result.code, 2, result.stderr);
+    }],
+    ['blocks an apply_patch whose Move to lands on a protected path', () => {
+      const result = applyPatch(patchOf('*** Update File: /tmp/egc-patch-notes.txt', `*** Move to: ${sshKey}`, '@@', '-old', '+new'));
+      assert.strictEqual(result.code, 2, result.stderr);
+    }],
+    ['blocks an apply_patch that adds a shell script running a denied command', () => {
+      const result = applyPatch(patchOf('*** Add File: /tmp/egc-patch-new.sh', '+#!/bin/sh', '+echo start', `+${wipe} /tmp/egc-victim`));
+      assert.strictEqual(result.code, 2, result.stderr);
+      assert.ok(result.stderr.includes('segment:'), result.stderr);
+    }],
+    ['blocks an apply_patch that inserts a denied command into an updated script', () => {
+      const result = applyPatch(patchOf('*** Update File: /tmp/egc-patch-deploy.sh', '@@', ' echo ok', `+${wipe} /tmp/egc-victim`));
+      assert.strictEqual(result.code, 2, result.stderr);
+    }],
+    ['reads the patch as a bare string too, the shape the Devin adapter hands over', () => {
+      const patch = patchOf(`*** Add File: ${sshKey}`, '+x');
+      const result = applyPatch(patch, patch);
+      assert.strictEqual(result.code, 2, result.stderr);
+    }],
+    ['allows an ordinary apply_patch', () => {
+      const result = applyPatch(patchOf('*** Add File: /tmp/egc-patch-readme.md', '+# notes', '*** Update File: /tmp/egc-patch-app.js', '@@', '-a', '+b'));
+      assert.strictEqual(result.code, 0, result.stderr);
+    }],
+    ['blocks an apply_patch whose files it cannot read, and says why', () => {
+      const result = applyPatch(`*** Begin Patch\n*** Add Fiel: ${sshKey}\n+x\n*** End Patch\n`);
+      assert.strictEqual(result.code, 2, result.stderr);
+      assert.match(result.stderr, /could not read which files this patch writes/);
+    }],
+  ];
+  const outcomes = cases.map(([name, fn]) => test(name, fn));
+  return { passed: outcomes.filter(Boolean).length, failed: outcomes.filter(ok => !ok).length };
+}
+
 function runTests() {
   console.log('\n=== Testing pre-write-guardian-validate ===\n');
 
@@ -259,6 +309,7 @@ function runTests() {
     assert.strictEqual(result.code, 2, result.stderr);
   })) passed++; else failed++;
 
+
   if (test('blocks a denied command hidden in a substitution or behind a shell keyword', () => {
     for (const content of [`#!/bin/sh\necho $(${wipe} /tmp/egc-victim)\n`, `#!/bin/sh\nif true; then ${wipe} /tmp/egc-victim; fi\n`, `#!/bin/sh\n(${wipe} /tmp/egc-victim)\n`]) {
       const result = runHook('/tmp/x.sh', {}, { file_path: '/tmp/x.sh', content });
@@ -317,6 +368,10 @@ function runTests() {
   const committed = runCommittedScriptTests(wipe);
   passed += committed.passed;
   failed += committed.failed;
+
+  const patches = runApplyPatchTests(wipe);
+  passed += patches.passed;
+  failed += patches.failed;
 
   if (test('passes through input without a file path', () => {
     const rawInput = JSON.stringify({ tool_name: 'Write', tool_input: {} });

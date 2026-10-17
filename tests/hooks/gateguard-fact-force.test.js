@@ -1565,6 +1565,48 @@ function runTests() {
     assert.ok(!fourth || !fourth.hookSpecificOutput, 'all three files checked, call should pass through');
   }));
 
+  // Codex hands the patch over as tool_input.command, not as a bare string
+  // (codex-rs/core/src/tools/handlers/apply_patch.rs, pre_tool_use_payload:
+  // `tool_input: json!({ "command": command })`); the bare string is the
+  // shape the Devin adapter builds.
+  clearState();
+  tally(test('denies the first apply_patch call in the payload Codex really sends (tool_input.command)', () => {
+    const patch = [
+      '*** Begin Patch',
+      '*** Update File: src/codex-real-payload.js',
+      '@@',
+      '-old',
+      '+new',
+      '*** End Patch',
+      ''
+    ].join('\n');
+    const input = { session_id: TEST_SESSION_ID, tool_name: 'apply_patch', tool_input: { command: patch } };
+    const output = parseOutput(runDirectHook(input).stdout);
+    assert.ok(output && output.hookSpecificOutput, 'the gate must fire on the Codex payload, not let it through unparsed');
+    assert.strictEqual(output.hookSpecificOutput.permissionDecision, 'deny');
+    assert.ok(output.hookSpecificOutput.permissionDecisionReason.includes('src/codex-real-payload.js'));
+  }));
+
+  clearState();
+  tally(test('gates the destination of a moved file too (*** Move to)', () => {
+    const patch = [
+      '*** Begin Patch',
+      '*** Update File: src/codex-move-source.js',
+      '*** Move to: src/codex-move-destination.js',
+      '@@',
+      '-old',
+      '+new',
+      '*** End Patch',
+      ''
+    ].join('\n');
+    const input = { session_id: TEST_SESSION_ID, tool_name: 'apply_patch', tool_input: { command: patch } };
+    const first = parseOutput(runDirectHook(input).stdout);
+    assert.ok(first.hookSpecificOutput.permissionDecisionReason.includes('src/codex-move-source.js'));
+    const second = parseOutput(runDirectHook(input).stdout);
+    assert.ok(second && second.hookSpecificOutput, 'the move destination is a new file and is gated on its own');
+    assert.ok(second.hookSpecificOutput.permissionDecisionReason.includes('src/codex-move-destination.js'));
+  }));
+
   clearState();
   tally(test('allows apply_patch input that cannot be parsed as a patch (fails open)', () => {
     const input = { session_id: TEST_SESSION_ID, tool_name: 'apply_patch', tool_input: 'not a real patch, no file markers' };

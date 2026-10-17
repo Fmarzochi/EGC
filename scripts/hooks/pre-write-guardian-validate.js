@@ -2,8 +2,9 @@
 /**
  * Guardian Write Enforcement Hook
  *
- * Validates every Write/Edit/MultiEdit with the egc-guardian validator
- * before the write executes: the target path (protected paths, credential
+ * Validates every Write/Edit/MultiEdit, and every Codex apply_patch, with
+ * the egc-guardian validator before the write executes: each target path
+ * (protected paths, credential
  * stores, key files, system directories) and, for shell scripts, the
  * content the file will hold afterwards, judged segment by segment with
  * the same validator and the same segmentation the Bash hook uses.
@@ -73,6 +74,56 @@ function writeTargetsOf(tool) {
   const targets = [targetOf(tool)];
   for (const edit of Array.isArray(tool?.edits) ? tool.edits : []) targets.push(targetOf(edit));
   return [...new Set(targets.filter(Boolean))];
+}
+
+// Codex writes files with apply_patch, one freeform patch per call, handed
+// to the hook as tool_input.command (codex-rs/core/src/tools/handlers/
+// apply_patch.rs, pre_tool_use_payload); the Devin adapter hands the same
+// patch over as a bare string. The patch's own headers name the files.
+const PATCH_HEADER_RE = /^\*\*\* (Add File|Update File|Delete File|Move to): (.+)$/;
+const UNREADABLE_PATCH = 'EGC Guardian BLOCKED this write: it could not read which files this patch writes, so the patch was not validated. Name each file with an *** Add File, *** Update File or *** Delete File header.';
+
+function applyPatchText(input) {
+  if (String(input?.tool_name || '').toLowerCase() !== 'apply_patch') return null;
+  const tool = input.tool_input;
+  if (typeof tool === 'string') return tool;
+  return typeof tool?.command === 'string' ? tool.command : '';
+}
+
+// Every file the patch writes, with the lines it adds: the whole content of
+// an added file, the lines inserted into an updated one (judged the way the
+// inserted text of an edit is when its anchor cannot be applied), none for a
+// deletion. A move writes its destination with the update's lines.
+function patchWrites(patchText) {
+  const writes = [];
+  let current = null;
+  for (const rawLine of patchText.split('\n')) {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+    const header = PATCH_HEADER_RE.exec(line);
+    if (header) {
+      current = { filePath: header[2].trim(), added: [] };
+      writes.push(current);
+      if (header[1] === 'Delete File') current = null;
+    } else if (current && line.startsWith('+')) {
+      current.added.push(line.slice(1));
+    }
+  }
+  return writes.filter(write => write.filePath).map(write => ({
+    filePath: write.filePath,
+    contentAt: () => (write.added.length > 0 ? `${write.added.join('\n')}\n` : null),
+  }));
+}
+
+// What the call writes: each target with a way to get the content it will
+// hold. null when it is a patch whose files cannot be read.
+function writesOf(input) {
+  const patch = applyPatchText(input);
+  if (patch === null) {
+    const tool = input?.tool_input;
+    return writeTargetsOf(tool).map(filePath => ({ filePath, contentAt: target => resultingContent(tool, filePath, target) }));
+  }
+  const writes = patchWrites(patch);
+  return writes.length === 0 && patch.trim() ? null : writes;
 }
 
 function editsFor(tool, filePath) {
@@ -211,10 +262,10 @@ function uncommittedSegments(segments, target) {
   });
 }
 
-function blockedScript(cli, input, filePath) {
+function blockedScript(cli, input, filePath, contentAt) {
   if (!bashGuardian) return null;
   const target = resolveTarget(input, filePath);
-  const content = resultingContent(input?.tool_input, filePath, target);
+  const content = contentAt(target);
   if (!content || !isShellScript(filePath, content)) return null;
   const { segments: written, error } = scriptSegments(content);
   if (error) return blocked(error);
@@ -235,9 +286,9 @@ function blockedScript(cli, input, filePath) {
   );
 }
 
-function firstBlocked(cli, input, targets) {
-  for (const filePath of targets) {
-    const result = blockedPath(cli, resolveTarget(input, filePath)) || blockedScript(cli, input, filePath);
+function firstBlocked(cli, input, writes) {
+  for (const { filePath, contentAt } of writes) {
+    const result = blockedPath(cli, resolveTarget(input, filePath)) || blockedScript(cli, input, filePath, contentAt);
     if (result) return result;
   }
   return null;
@@ -248,15 +299,16 @@ function firstBlocked(cli, input, targets) {
 function run(inputOrRaw, options = {}) {
   if (options.truncated) return { exitCode: 2, stderr: OVER_LIMIT };
   const input = parseInput(inputOrRaw);
-  const targets = writeTargetsOf(input?.tool_input);
-  if (targets.length === 0) return { exitCode: 0 };
+  const writes = writesOf(input);
+  if (writes?.length === 0) return { exitCode: 0 };
 
   const cli = resolveGuardianCli();
   if (!cli) {
     return { exitCode: 0 };
   }
+  if (writes === null) return { exitCode: 2, stderr: UNREADABLE_PATCH };
 
-  return withGitBudget(() => firstBlocked(cli, input, targets)) || { exitCode: 0 };
+  return withGitBudget(() => firstBlocked(cli, input, writes)) || { exitCode: 0 };
 }
 
 // The committed versions of the targets are read with one git budget for
