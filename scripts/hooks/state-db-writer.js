@@ -5,6 +5,53 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { resolveStateStorePath } = require(path.join(__dirname, '..', 'lib', 'state-store', 'path.js'));
+const { openCompatDatabase, selectedEngine } = require(path.join(__dirname, '..', 'lib', 'state-store', 'sqlite-compat.js'));
+const { applyMigrationsAsync } = require(path.join(__dirname, '..', 'lib', 'state-store', 'migrations.js'));
+const { assertValidEntity } = require(path.join(__dirname, '..', 'lib', 'state-store', 'schema.js'));
+
+const INSERT_RUNTIME_EVENT_SQL = `
+  INSERT INTO events (
+    id,
+    session_id,
+    event_type,
+    payload,
+    timestamp
+  ) VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    session_id = excluded.session_id,
+    event_type = excluded.event_type,
+    payload = excluded.payload,
+    timestamp = excluded.timestamp
+`;
+
+const UPSERT_SESSION_SQL = `
+  INSERT INTO sessions (
+    id,
+    adapter_id,
+    harness,
+    state,
+    repo_root,
+    started_at,
+    ended_at,
+    snapshot,
+    input_tokens,
+    output_tokens,
+    total_tokens,
+    token_cost
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    adapter_id = excluded.adapter_id,
+    harness = excluded.harness,
+    state = excluded.state,
+    repo_root = excluded.repo_root,
+    started_at = excluded.started_at,
+    ended_at = excluded.ended_at,
+    snapshot = excluded.snapshot,
+    input_tokens = excluded.input_tokens,
+    output_tokens = excluded.output_tokens,
+    total_tokens = excluded.total_tokens,
+    token_cost = excluded.token_cost
+`;
 
 function readPayloadFromStdin() {
   let raw;
@@ -24,7 +71,7 @@ function readPayloadFromStdin() {
   }
 }
 
-async function persistSessionEnd(store, payload) {
+async function persistSessionEnd(db, payload) {
   const sid = payload.session_id;
   if (!sid) return;
   const usage = payload.usage || {};
@@ -34,7 +81,7 @@ async function persistSessionEnd(store, payload) {
     ? inputTokens + outputTokens
     : null;
 
-  store.upsertSession({
+  const session = {
     id: sid,
     adapterId: payload.ide || payload.adapter_id || 'unknown',
     harness: payload.harness || 'unknown',
@@ -51,7 +98,49 @@ async function persistSessionEnd(store, payload) {
     outputTokens: Number.isFinite(outputTokens) ? outputTokens : null,
     totalTokens,
     tokenCost: null,
-  });
+  };
+
+  try {
+    assertValidEntity('session', session);
+  } catch (err) {
+    console.error(`[state-db-writer] Invalid session entity: ${err.message}`);
+    return;
+  }
+
+  await db.run(UPSERT_SESSION_SQL, [
+    session.id,
+    session.adapterId,
+    session.harness,
+    session.state,
+    session.repoRoot,
+    session.startedAt,
+    session.endedAt,
+    JSON.stringify(session.snapshot),
+    session.inputTokens,
+    session.outputTokens,
+    session.totalTokens,
+    session.tokenCost,
+  ]);
+}
+
+async function initDatabase(dbPath) {
+  const db = await openCompatDatabase(dbPath, 'state-db-writer', { lockTimeoutMs: 4000 });
+  if (selectedEngine() === 'native') {
+    try {
+      await db.exec('PRAGMA busy_timeout = 4000;');
+      const modeRow = await db.get('PRAGMA journal_mode;');
+      const currentMode = modeRow ? Object.values(modeRow)[0] : null;
+      if (typeof currentMode === 'string' && currentMode.toLowerCase() !== 'wal') {
+        await db.exec('PRAGMA journal_mode = WAL;');
+      }
+      await db.exec('PRAGMA synchronous = NORMAL;');
+    } catch (pragmaErr) {
+      try { await db.close(); } catch (_) { /* ignore close error */ }
+      throw pragmaErr;
+    }
+  }
+  await applyMigrationsAsync(db);
+  return db;
 }
 
 async function main() {
@@ -61,17 +150,9 @@ async function main() {
   const dbPath = resolveStateStorePath();
   if (!fs.existsSync(dbPath)) return;
 
-  let createStateStore;
+  let db;
   try {
-    ({ createStateStore } = require(path.join(__dirname, '..', 'lib', 'state-store', 'index.js')));
-  } catch (e) {
-    console.error(e);
-    return;
-  }
-
-  let store;
-  try {
-    store = await createStateStore({ dbPath });
+    db = await initDatabase(dbPath);
   } catch (e) {
     console.error(e);
     return;
@@ -80,22 +161,39 @@ async function main() {
   const eventType = payload.event_type || payload.type || payload.hook_event_name || 'observe';
 
   try {
-    await store.insertRuntimeEvent({
+    const event = {
       id: crypto.randomUUID(),
       sessionId: payload.session_id || process.env.EGC_SESSION_ID || process.env.ECC_SESSION_ID || null,
       eventType,
       payload,
       timestamp: new Date().toISOString(),
-    });
+    };
+
+    try {
+      assertValidEntity('runtimeEvent', event);
+    } catch (err) {
+      console.error(`[state-db-writer] Invalid runtimeEvent entity: ${err.message}`);
+      return;
+    }
+
+    await db.run(INSERT_RUNTIME_EVENT_SQL, [
+      event.id,
+      event.sessionId,
+      event.eventType,
+      JSON.stringify(event.payload),
+      event.timestamp,
+    ]);
 
     // On session_end events persist token data to the sessions table
     if (eventType === 'session_end' || (payload.event === 'session_end')) {
-      await persistSessionEnd(store, payload);
+      await persistSessionEnd(db, payload);
     }
   } catch (e) {
     console.error(e);
   } finally {
-    try { store.close(); } catch (e) {
+    try {
+      await db.close();
+    } catch (e) {
       console.error(e);
     }
   }
