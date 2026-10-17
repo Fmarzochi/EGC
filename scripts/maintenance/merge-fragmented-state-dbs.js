@@ -130,28 +130,42 @@ function refuseLinkedSource(srcPath) {
   return null;
 }
 
-async function mergeOneSource(canonicalDb, srcPath, apply, canonicalPath) {
-  const srcReport = { source: srcPath, tables: {} };
-
-  if (!fs.existsSync(srcPath)) {
-    srcReport.error = 'file not found';
-    return srcReport;
-  }
+// Why a source is not merged, or null. Decided before the canonical store is
+// opened: its first write replaces the file through a rename, after which a
+// hard link to it is a stale copy that no longer shares its inode.
+function sourceRefusal(srcPath, canonicalPath) {
+  if (!fs.existsSync(srcPath)) return 'file not found';
   if (canonicalPath !== ':memory:' && fs.existsSync(canonicalPath) && sameFile(srcPath, canonicalPath)) {
     // Merging the store into itself is a no-op, and archiving it afterwards
     // would take the live store away.
-    srcReport.error = 'source is the canonical store';
-    return srcReport;
+    return 'source is the canonical store';
   }
-  const linked = refuseLinkedSource(srcPath);
-  if (linked) {
-    srcReport.error = linked;
+  return refuseLinkedSource(srcPath);
+}
+
+// A source the engine refuses to open (a write-ahead log still holding rows
+// the portable engine cannot read) is reported on its own entry and stays
+// where it is; the other sources still merge.
+async function mergeOneSource(canonicalDb, srcPath, apply, refusal) {
+  const srcReport = { source: srcPath, tables: {} };
+  if (refusal) {
+    srcReport.error = refusal;
     return srcReport;
   }
 
-  const srcDb = await openDatabase(srcPath);
-  for (const { name, pk } of MERGE_TABLES) {
-    srcReport.tables[name] = mergeOneTable(canonicalDb, srcDb, name, pk, apply);
+  let srcDb;
+  try {
+    srcDb = await openDatabase(srcPath);
+  } catch (err) {
+    srcReport.error = String(err?.message ?? err);
+    return srcReport;
+  }
+  try {
+    for (const { name, pk } of MERGE_TABLES) {
+      srcReport.tables[name] = mergeOneTable(canonicalDb, srcDb, name, pk, apply);
+    }
+  } finally {
+    srcDb.close();
   }
 
   return srcReport;
@@ -238,6 +252,7 @@ function archiveSources(reports) {
 
 async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false, keepSources = false }) {
   const resolvedCanonicalPath = canonicalPath || resolveStateStorePath();
+  const refusals = sourcePaths.map(src => sourceRefusal(src, resolvedCanonicalPath));
   const backupPath = apply ? backupBeforeApply(resolvedCanonicalPath) : null;
 
   const canonicalDb = await openDatabase(resolvedCanonicalPath);
@@ -246,7 +261,7 @@ async function mergeStateDbs({ canonicalPath, sourcePaths, apply = false, keepSo
 
   const reports = [];
   const commit = canonicalDb.transaction(() => {});
-  for (const src of sourcePaths) reports.push(await mergeOneSource(canonicalDb, src, apply, resolvedCanonicalPath)); // NOSONAR: sequential by design, every source merges into the same canonicalDb handle, committed together below
+  for (const [index, src] of sourcePaths.entries()) reports.push(await mergeOneSource(canonicalDb, src, apply, refusals[index])); // NOSONAR: sequential by design, every source merges into the same canonicalDb handle, committed together below
   if (apply) commit(); // no-op body; forces a single persist after all inserts above
 
   if (apply) await canonicalDb.flush();

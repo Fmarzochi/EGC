@@ -273,8 +273,8 @@ async function runTests() {
         fs.mkdirSync(path.dirname(source), { recursive: true });
         await seedDb(source);
       }
-      const sidecar = `${sources[0]}-wal`;
-      fs.writeFileSync(sidecar, 'wal-bytes');
+      const sidecar = `${sources[0]}-journal`;
+      fs.writeFileSync(sidecar, 'journal-bytes');
       const originalBytes = sources.map(source => fs.readFileSync(source));
 
       const result = await mergeStateDbs({ canonicalPath, sourcePaths: sources, apply: true });
@@ -290,8 +290,8 @@ async function runTests() {
         assert.ok(!fs.existsSync(source), 'the original name must be gone so the doctor stops flagging it');
         assert.deepStrictEqual(fs.readFileSync(entry.archivedTo), originalBytes[index], 'archiving is a rename: the bytes must survive untouched');
       });
-      assert.ok(!fs.existsSync(sidecar), 'the write-ahead log must move with its store');
-      assert.ok(fs.existsSync(`${result.archived[0].archivedTo}-wal`), 'and keep its suffix next to the archived name');
+      assert.ok(!fs.existsSync(sidecar), 'the rollback journal must move with its store');
+      assert.ok(fs.existsSync(`${result.archived[0].archivedTo}-journal`), 'and keep its suffix next to the archived name');
     } finally {
       cleanup(dir);
     }
@@ -412,7 +412,10 @@ async function runTests() {
       // The script and this test share the same fs module object, so a
       // rename that throws here is exactly what a file held open by another
       // process produces on Windows, on every platform the suite runs on.
-      fs.renameSync = () => {
+      // Only the archive rename fails: the canonical store persists through
+      // a rename of its own, which must go on working.
+      fs.renameSync = (from, to) => {
+        if (!to.includes('.merged-')) return originalRename(from, to);
         const error = new Error('EBUSY: resource busy or locked');
         error.code = 'EBUSY';
         throw error;
@@ -493,11 +496,11 @@ async function runTests() {
       const sourcePath = path.join(dir, 'source.db');
       await seedDb(canonicalPath);
       await seedDb(sourcePath);
-      const sidecar = `${sourcePath}-wal`;
-      fs.writeFileSync(sidecar, 'wal-bytes');
+      const sidecar = `${sourcePath}-journal`;
+      fs.writeFileSync(sidecar, 'journal-bytes');
 
       fs.renameSync = (from, to) => {
-        if (from.endsWith('-wal')) {
+        if (from.endsWith('-journal')) {
           const error = new Error('EPERM: operation not permitted');
           error.code = 'EPERM';
           throw error;
@@ -613,10 +616,10 @@ async function runTests() {
       const sourcePath = path.join(dir, 'source.db');
       await seedDb(canonicalPath);
       await seedDb(sourcePath);
-      fs.writeFileSync(`${sourcePath}-wal`, 'wal-bytes');
+      fs.writeFileSync(`${sourcePath}-journal`, 'journal-bytes');
 
       fs.renameSync = (from, to) => {
-        if (from.endsWith('-wal') || to === sourcePath) throw new Error('EPERM: operation not permitted');
+        if (from.endsWith('-journal') || to === sourcePath) throw new Error('EPERM: operation not permitted');
         return originalRename(from, to);
       };
       const result = await mergeStateDbs({ canonicalPath, sourcePaths: [sourcePath], apply: true });
@@ -626,6 +629,29 @@ async function runTests() {
       assert.deepStrictEqual(result.archived, []);
     } finally {
       fs.renameSync = originalRename;
+      cleanup(dir);
+    }
+  }));
+
+  tally(await test('a source whose write-ahead log still holds data is reported on its entry, stays in place, and the others still merge', async () => {
+    const dir = createTempDir('egc-merge-pending-wal-');
+    try {
+      const canonicalPath = path.join(dir, 'canonical.db');
+      const pending = path.join(dir, 'pending.db');
+      const clean = path.join(dir, 'clean.db');
+      await seedDb(canonicalPath);
+      await seedDb(pending);
+      await seedDb(clean);
+      fs.writeFileSync(`${pending}-wal`, 'wal-bytes');
+
+      const result = await mergeStateDbs({ canonicalPath, sourcePaths: [pending, clean], apply: true });
+      assert.match(result.reports[0].error, /write-ahead data/, 'the refusal of the portable engine is the error on that source');
+      assert.strictEqual(result.reports[0].archivedTo, undefined);
+      assert.ok(fs.existsSync(pending) && fs.existsSync(`${pending}-wal`), 'the refused source and its log stay where they are');
+      assert.strictEqual(result.reports[1].error, undefined, 'the clean source still merges');
+      assert.strictEqual(result.archived.length, 1);
+      assert.strictEqual(result.archived[0].source, clean);
+    } finally {
       cleanup(dir);
     }
   }));
