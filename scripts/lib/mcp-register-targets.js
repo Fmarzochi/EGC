@@ -47,6 +47,21 @@ function resolveGooseConfigPath(homeDir) {
   return path.join(homeDir, '.config', 'goose', 'config.yaml');
 }
 
+// A tool whose MCP config is one JSON file under a directory of the home,
+// present when that directory exists or the tool's binary is on PATH. The
+// extra keys shape the entry for a writer that needs more than command and
+// args (see mcp-register-json-writers).
+function homeJsonTarget(homeDir, name, dir, file, binary, extra = {}) {
+  const root = path.join(homeDir, dir);
+  return {
+    name,
+    path: path.join(root, ...file),
+    gate: () => fs.existsSync(root) || commandExists(binary),
+    format: 'json',
+    ...extra,
+  };
+}
+
 // The file the servers go into: the documented name when it exists, the
 // legacy name when only that exists, the documented name when creating.
 // A jsonc file is never edited (comments would not survive a rewrite);
@@ -244,12 +259,7 @@ function buildMcpRegistrationTargets(homeDir) {
       allowedRoot: resolvePiAgentDir(homeDir),
       format: 'json',
     },
-    {
-      name: 'Droid (Factory)',
-      path: path.join(homeDir, '.factory', 'mcp.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.factory')) || commandExists('droid'),
-      format: 'json',
-    },
+    homeJsonTarget(homeDir, 'Droid (Factory)', '.factory', ['mcp.json'], 'droid'),
     {
       // Goose (block/goose) keeps its config at ~/.config/goose/config.yaml
       // on macOS/Linux; on Windows it is %APPDATA%\Block\goose\config\config.yaml
@@ -265,45 +275,31 @@ function buildMcpRegistrationTargets(homeDir) {
       gate: () => fs.existsSync(path.dirname(resolveGooseConfigPath(homeDir))) || commandExists('goose'),
       format: 'goose-yaml',
     },
-    {
-      // OpenHands reads MCP servers from the standard mcpServers object of
-      // ~/.openhands/mcp.json, writable by hand or through `openhands mcp
-      // add` (docs.openhands.dev/openhands/usage/cli/mcp-servers, read on
-      // 2026-10-13). The legacy config.toml [mcp] section (sse_servers,
-      // shttp_servers, stdio_servers) belongs to OpenHands V0 and is not
-      // read by current releases.
-      name: 'OpenHands',
-      path: path.join(homeDir, '.openhands', 'mcp.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.openhands')) || commandExists('openhands'),
-      format: 'json',
-    },
-    {
-      // Junie (JetBrains) reads MCP servers from the standard mcpServers
-      // object of ~/.junie/mcp/mcp.json, the user-scope file the IDE plugin
-      // and the Junie CLI share; the project-scope .junie/mcp/mcp.json is
-      // the project's own and is left alone (junie.jetbrains.com/docs/
-      // junie-cli-mcp-configuration.html, read on 2026-10-17). The gate
-      // opens on ~/.junie or the junie binary on PATH.
-      name: 'Junie',
-      path: path.join(homeDir, '.junie', 'mcp', 'mcp.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.junie')) || commandExists('junie'),
-      format: 'json',
-    },
-    {
-      // GitHub Copilot CLI reads MCP servers from the mcpServers object of
-      // ~/.copilot/mcp-config.json, in its own shape: a local server names
-      // its type, the command, the args and the tools it may call, "*" for
-      // all of them (docs.github.com/en/copilot/how-tos/copilot-cli/
-      // customize-copilot/add-mcp-servers, read on 2026-10-17). A project's
-      // .mcp.json or .github/mcp.json takes precedence and is the project's
-      // own; VS Code's Copilot keeps its mcp.json in the editor profile and
-      // is not written here. The gate opens on ~/.copilot or copilot on PATH.
-      name: 'GitHub Copilot CLI',
-      path: path.join(homeDir, '.copilot', 'mcp-config.json'),
-      gate: () => fs.existsSync(path.join(homeDir, '.copilot')) || commandExists('copilot'),
-      format: 'json',
+    // OpenHands reads MCP servers from the standard mcpServers object of
+    // ~/.openhands/mcp.json, writable by hand or through `openhands mcp
+    // add` (docs.openhands.dev/openhands/usage/cli/mcp-servers, read on
+    // 2026-10-13). The legacy config.toml [mcp] section (sse_servers,
+    // shttp_servers, stdio_servers) belongs to OpenHands V0 and is not
+    // read by current releases.
+    homeJsonTarget(homeDir, 'OpenHands', '.openhands', ['mcp.json'], 'openhands'),
+    // Junie (JetBrains) reads MCP servers from the standard mcpServers
+    // object of ~/.junie/mcp/mcp.json, the user-scope file the IDE plugin
+    // and the Junie CLI share; the project-scope .junie/mcp/mcp.json is
+    // the project's own and is left alone (junie.jetbrains.com/docs/
+    // junie-cli-mcp-configuration.html, read on 2026-10-17). The gate
+    // opens on ~/.junie or the junie binary on PATH.
+    homeJsonTarget(homeDir, 'Junie', '.junie', ['mcp', 'mcp.json'], 'junie'),
+    // GitHub Copilot CLI reads MCP servers from the mcpServers object of
+    // ~/.copilot/mcp-config.json, in its own shape: a local server names
+    // its type, the command, the args and the tools it may call, "*" for
+    // all of them (docs.github.com/en/copilot/how-tos/copilot-cli/
+    // customize-copilot/add-mcp-servers, read on 2026-10-17). A project's
+    // .mcp.json or .github/mcp.json takes precedence and is the project's
+    // own; VS Code's Copilot keeps its mcp.json in the editor profile and
+    // is not written here. The gate opens on ~/.copilot or copilot on PATH.
+    homeJsonTarget(homeDir, 'GitHub Copilot CLI', '.copilot', ['mcp-config.json'], 'copilot', {
       jsonServerKeys: { type: 'local', tools: ['*'] },
-    },
+    }),
   ];
 }
 
