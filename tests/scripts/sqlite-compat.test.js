@@ -11,6 +11,11 @@ const { permissionBitsEnforced, withDirMode } = require('../fixtures/dir-permiss
 
 const COMPAT_PATH = require.resolve('../../scripts/lib/state-store/sqlite-compat');
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
+// The chooser and its sibling modules (lock, sql, wasm): a fresh copy has to
+// drop all of them, or the portable engine already in the cache keeps the
+// sql.js it loaded and the missing-package case never reaches it.
+const COMPAT_MODULE_RE = /[\\/]state-store[\\/]sqlite-compat(?:-[a-z]+)?\.js$/;
+const compatModulePaths = () => Object.keys(require.cache).filter(key => COMPAT_MODULE_RE.test(key));
 
 // Runs fn against a fresh copy of the engine chooser while the named
 // packages cannot be resolved, the way a checkout looks when its servers
@@ -18,7 +23,7 @@ const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 // required lazily, so the interception has to outlive the awaited call.
 async function withoutPackages(names, fn) {
   const Module = require('node:module');
-  const cached = require.cache[COMPAT_PATH];
+  const cached = new Map(compatModulePaths().map(key => [key, require.cache[key]]));
   const originalLoad = Module._load;
   Module._load = function (request) {
     if (names.includes(request)) {
@@ -28,12 +33,13 @@ async function withoutPackages(names, fn) {
     }
     return originalLoad.apply(this, arguments);
   };
-  delete require.cache[COMPAT_PATH];
+  for (const key of cached.keys()) delete require.cache[key];
   try {
     await fn(require(COMPAT_PATH));
   } finally {
     Module._load = originalLoad;
-    require.cache[COMPAT_PATH] = cached;
+    for (const key of compatModulePaths()) delete require.cache[key];
+    for (const [key, value] of cached) require.cache[key] = value;
   }
 }
 
