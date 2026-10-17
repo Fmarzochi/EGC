@@ -254,9 +254,26 @@ function registerCrushMcp(targetPath, bins) {
   return changed;
 }
 
+// Amp reads its user settings from settings.json or settings.jsonc under
+// ~/.config/amp, with the MCP servers under the amp.mcpServers key
+// (ampcode.com/docs/cli/settings, read on 2026-10-17). A .jsonc file
+// carries comments a rewrite would drop, so when it is the only settings
+// file nothing is written and the message says what to add by hand.
+function registerAmpSettings(targetPath, bins, target = {}) {
+  const jsoncPath = targetPath.replace(/\.json$/, '.jsonc');
+  if (!fs.existsSync(targetPath) && fs.existsSync(jsoncPath)) {
+    throw new Error(
+      `${jsoncPath} is the only Amp settings file and a .jsonc file is never rewritten (its comments would not survive); `
+      + `add "egc-guardian" and "egc-memory" under "amp.mcpServers" by hand, as { "command": "node", "args": ["${bins.guardianBin}"] } and { "command": "node", "args": ["${bins.memoryBin}"] }`
+    );
+  }
+  return registerJson(targetPath, bins, { ...target, jsonRootKey: 'amp.mcpServers' });
+}
+
 module.exports = {
   parseJsonObject,
   registerJson,
+  registerAmpSettings,
   registerZedContextServers,
   registerOpenCodeMcp,
   registerCrushMcp,

@@ -20,6 +20,7 @@ const { registerToml } = require('./mcp-register-toml');
 const { quoteForCmdShell, registerClaudeCli } = require('./mcp-register-claude-cli');
 const {
   parseJsonObject,
+  registerAmpSettings,
   registerCrushMcp,
   registerJson,
   registerOpenCodeMcp,
@@ -42,6 +43,7 @@ const FORMAT_HANDLERS = {
   'claude-cli': registerClaudeCli,
   'crush-mcp': registerCrushMcp,
   'goose-yaml': registerGooseYaml,
+  'amp-settings': registerAmpSettings,
 };
 
 function registerTarget(target, bins, roots, onRegister, onWarn, onUnchanged) {
@@ -102,6 +104,7 @@ module.exports = {
   registerClaudeCli,
   registerCrushMcp,
   registerGooseYaml,
+  registerAmpSettings,
   resolveCrushConfigDir,
   resolveCrushConfigPath,
   quoteForCmdShell,
