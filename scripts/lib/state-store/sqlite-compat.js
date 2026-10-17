@@ -239,23 +239,25 @@ function delayWithJitter(retryIntervalMs) {
   return new Promise(r => setTimeout(r, retryIntervalMs + jitter));
 }
 
-async function pollLockUntilAcquired(lockPath, token, deadline, retryIntervalMs) {
-  let lastHolder = null;
-  while (Date.now() < deadline) {
-    if (tryAcquireLockOnce(lockPath, token)) {
-      heldLocks.set(lockPath, token);
-      return { token, lastHolder: null };
-    }
-
-    const holder = readLockHolder(lockPath);
-    if (holder) {
-      lastHolder = holder;
-      checkDeadProcessHolder(holder, lockPath);
-    }
-
-    await delayWithJitter(retryIntervalMs); // NOSONAR: intentional async polling delay between lock retries
+// One attempt per call, then a jittered pause and the next attempt, until
+// the lock is taken or the deadline passes; the last holder seen is carried
+// along for the timeout message.
+async function pollLockUntilAcquired(lockPath, token, deadline, retryIntervalMs, lastHolder = null) {
+  if (Date.now() >= deadline) return { token: null, lastHolder };
+  if (tryAcquireLockOnce(lockPath, token)) {
+    heldLocks.set(lockPath, token);
+    return { token, lastHolder: null };
   }
-  return { token: null, lastHolder };
+  const holder = readLockHolder(lockPath);
+  if (holder) checkDeadProcessHolder(holder, lockPath);
+  await delayWithJitter(retryIntervalMs);
+  return pollLockUntilAcquired(lockPath, token, deadline, retryIntervalMs, holder || lastHolder);
+}
+
+function lockTimeoutError(lockPath, timeoutMs, lastHolder) {
+  const hostInfo = (lastHolder?.hostname && lastHolder.hostname !== os.hostname()) ? ` on host ${lastHolder.hostname}` : '';
+  const holderInfo = lastHolder ? ` (held by PID ${lastHolder.pid}${hostInfo}, token ${lastHolder.token})` : '';
+  return new Error(`[sqlite-compat] Lock timeout after ${timeoutMs}ms acquiring ${lockPath}${holderInfo}`);
 }
 
 async function acquireFileLock(lockPath, { timeoutMs = 15000, retryIntervalMs = 25 } = {}) {
@@ -266,11 +268,34 @@ async function acquireFileLock(lockPath, { timeoutMs = 15000, retryIntervalMs = 
   if (result.token) {
     return result.token;
   }
+  throw lockTimeoutError(lockPath, timeoutMs, result.lastHolder);
+}
 
-  const lastHolder = result.lastHolder;
-  const hostInfo = (lastHolder?.hostname && lastHolder.hostname !== os.hostname()) ? ` on host ${lastHolder.hostname}` : '';
-  const holderInfo = lastHolder ? ` (held by PID ${lastHolder.pid}${hostInfo}, token ${lastHolder.token})` : '';
-  throw new Error(`[sqlite-compat] Lock timeout after ${timeoutMs}ms acquiring ${lockPath}${holderInfo}`);
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.max(1, ms));
+}
+
+// The synchronous twin of acquireFileLock, for the CLI adapter whose
+// callers are synchronous: the same lock file, the same owner token and the
+// same fail-closed check of a dead holder, with the wait done in place.
+function acquireFileLockSync(lockPath, { timeoutMs = 15000, retryIntervalMs = 25 } = {}) {
+  registerSignalHandlersOnce();
+  const token = crypto.randomUUID();
+  const deadline = Date.now() + timeoutMs;
+  let lastHolder = null;
+  while (Date.now() < deadline) {
+    if (tryAcquireLockOnce(lockPath, token)) {
+      heldLocks.set(lockPath, token);
+      return token;
+    }
+    const holder = readLockHolder(lockPath);
+    if (holder) {
+      lastHolder = holder;
+      checkDeadProcessHolder(holder, lockPath);
+    }
+    sleepSync(retryIntervalMs + crypto.randomInt(0, 20));
+  }
+  throw lockTimeoutError(lockPath, timeoutMs, lastHolder);
 }
 
 function errorMessage(error) {
@@ -308,11 +333,29 @@ function isNativeLoadFailure(error) {
   return NATIVE_FAILURE_MESSAGE.test(errorMessage(error));
 }
 
+const QUOTED_LITERAL = /'(?:[^']|'')*'|"(?:[^"]|"")*"/g;
+const CREATE_TRIGGER = /\bCREATE\s+(?:(?:TEMP|TEMPORARY)\s+)?TRIGGER\b/i;
+const BLOCK_KEYWORD = /\b(?:BEGIN|CASE|END)\b/gi;
+
+// A CREATE TRIGGER statement carries its own statements between BEGIN and
+// END, each ended by a semicolon. The piece is still open while that block
+// (and any CASE ... END inside it) has not been closed.
+function triggerBodyOpen(piece) {
+  const bare = piece.replace(QUOTED_LITERAL, ' ');
+  if (!CREATE_TRIGGER.test(bare)) return false;
+  let depth = 0;
+  for (const word of bare.match(BLOCK_KEYWORD) || []) {
+    depth += /^END$/i.test(word) ? -1 : 1;
+  }
+  return depth > 0;
+}
+
 // Splits SQL text into statements on the semicolons that sit outside
-// single- and double-quoted literals, so a literal such as
-// 'PRAGMA synchronous = NORMAL;' stays part of its SELECT. Joining the
-// pieces back with ';' reproduces the original text exactly, trigger
-// bodies included.
+// single- and double-quoted literals and outside a trigger body, so a
+// literal such as 'PRAGMA synchronous = NORMAL;' stays part of its SELECT
+// and a CREATE TRIGGER ... BEGIN ...; ...; END stays one statement instead
+// of ending in a bare END that reads as the end of a transaction. Joining
+// the pieces back with ';' reproduces the original text exactly.
 function splitStatements(sql) {
   const pieces = [];
   let start = 0;
@@ -324,7 +367,9 @@ function splitStatements(sql) {
     } else if (ch === "'" || ch === '"') {
       quote = ch;
     } else if (ch === ';') {
-      pieces.push(sql.slice(start, i));
+      const piece = sql.slice(start, i);
+      if (triggerBodyOpen(piece)) continue;
+      pieces.push(piece);
       start = i + 1;
     }
   }
@@ -859,4 +904,4 @@ function selectedEngine() {
   return selected;
 }
 
-module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase, acquireFileLock, releaseFileLock, isProcessAlive };
+module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase, acquireFileLock, acquireFileLockSync, releaseFileLock, isProcessAlive, assertNoPendingWal };

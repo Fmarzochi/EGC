@@ -351,14 +351,17 @@ async function runTests() {
     }
   });
 
+  // A case that needs the native sqlite3 engine is skipped, with the reason, where it did not load.
+  const runNativeCase = async (name, fn) => {
+    if (!NATIVE_SQLITE.available) {
+      testSkip(name, `Native sqlite3 engine is not available in this environment (${NATIVE_SQLITE.reason})`);
+      return;
+    }
+    await runCase(name, fn);
+  };
+
   // 3. Regression test: Concurrent native compat writers
-  if (!NATIVE_SQLITE.available) {
-    testSkip(
-      'test_concurrent_native_compat_writers',
-      `Native sqlite3 engine is not available in this environment (${NATIVE_SQLITE.reason})`
-    );
-  } else {
-    await runCase('test_concurrent_native_compat_writers', async () => {
+  await runNativeCase('test_concurrent_native_compat_writers', async () => {
       const tempDir = createTempDir('egc-conc-native-');
       const dbPath = path.join(tempDir, 'state_native.db');
 
@@ -437,17 +440,10 @@ async function runTests() {
       } finally {
         cleanupTempDir(tempDir);
       }
-    });
-  }
+  });
 
   // 4. Native WAL vs db-adapter (WASM) mixed-engine collision risk
-  if (!NATIVE_SQLITE.available) {
-    testSkip(
-      'test_mixed_engine_uncoordinated_writes_risk',
-      `Native sqlite3 engine is not available in this environment (${NATIVE_SQLITE.reason})`
-    );
-  } else {
-    await runCase('test_mixed_engine_uncoordinated_writes_risk', async () => {
+  await runNativeCase('test_mixed_engine_uncoordinated_writes_risk', async () => {
       const tempDir = createTempDir('egc-conc-mixed-');
       const dbPath = path.join(tempDir, 'state_mixed.db');
 
@@ -482,8 +478,7 @@ async function runTests() {
       } finally {
         cleanupTempDir(tempDir);
       }
-    });
-  }
+  });
 
   // 5. Test concurrent migrations startup (multi-process migration race)
   await runCase('test_concurrent_migrations_startup_wasm', async () => {
@@ -1107,7 +1102,7 @@ async function runTests() {
         assert.strictEqual(sessionRow.input_tokens, 10);
         assert.strictEqual(sessionRow.output_tokens, 20);
         assert.strictEqual(sessionRow.total_tokens, 30);
-        assert.strictEqual(sessionRow.token_cost, 0.05);
+        assert.ok(Math.abs(sessionRow.token_cost - 0.05) < 1e-9, `token_cost must round-trip, got ${sessionRow.token_cost}`);
       } finally {
         await db.close();
       }

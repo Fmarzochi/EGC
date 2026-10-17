@@ -7,12 +7,7 @@ const path = require('path');
 
 const { openCompatDatabase, isNativeLoadFailure, normalizeParams, mutates, splitStatements } = require('../../scripts/lib/state-store/sqlite-compat');
 
-// chmod-based cases need a filesystem that enforces directory permission
-// bits for the current user: not Windows, and not root.
-function permissionBitsEnforced() {
-  if (process.platform === 'win32') return false;
-  return !(typeof process.getuid === 'function' && process.getuid() === 0);
-}
+const { permissionBitsEnforced, withDirMode } = require('../fixtures/dir-permissions');
 
 const COMPAT_PATH = require.resolve('../../scripts/lib/state-store/sqlite-compat');
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
@@ -147,24 +142,27 @@ async function runTests() {
   let passed = 0;
   let failed = 0;
   const previous = process.env.EGC_SQLITE_ENGINE;
+  const run = async (name, fn) => {
+    if (await test(name, fn)) passed++; else failed++;
+  };
 
-  if (await test('classifies native load failures and nothing else', async () => {
+  await run('classifies native load failures and nothing else', async () => {
     assert.ok(isNativeLoadFailure(Object.assign(new Error('x'), { code: 'ERR_DLOPEN_FAILED' })));
     assert.ok(isNativeLoadFailure(new Error("/lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.38' not found (required by node_sqlite3.node)")));
     assert.ok(isNativeLoadFailure(new Error('Could not locate the bindings file. Tried:')));
     assert.ok(!isNativeLoadFailure(new Error('SQLITE_BUSY: database is locked')));
     assert.ok(!isNativeLoadFailure(null));
-  })) passed++; else failed++;
+  });
 
-  if (await test('normalizes the three parameter styles the sqlite package accepts', async () => {
+  await run('normalizes the three parameter styles the sqlite package accepts', async () => {
     assert.deepStrictEqual(normalizeParams([]), undefined);
     assert.deepStrictEqual(normalizeParams([['a', undefined]]), ['a', null]);
     assert.deepStrictEqual(normalizeParams(['a', 2]), ['a', 2]);
     assert.deepStrictEqual(normalizeParams([{ id: 1, $name: 'n', ':x': undefined }]), { $id: 1, $name: 'n', ':x': null });
     assert.deepStrictEqual(normalizeParams([7]), [7]);
-  })) passed++; else failed++;
+  });
 
-  if (await test('statements are split on semicolons outside quoted literals and classified conservatively', async () => {
+  await run('statements are split on semicolons outside quoted literals and classified conservatively', async () => {
     assert.deepStrictEqual(splitStatements("SELECT 'a;b'; SELECT \"c;d\""), ["SELECT 'a;b'", " SELECT \"c;d\""]);
     assert.strictEqual(mutates("SELECT 'PRAGMA user_version = 3'"), false);
     assert.strictEqual(mutates('PRAGMA user_version'), false);
@@ -174,18 +172,44 @@ async function runTests() {
     assert.strictEqual(mutates('ANALYZE'), true);
     assert.strictEqual(mutates('WITH s(x) AS (SELECT 1) INSERT INTO t SELECT x FROM s'), true);
     assert.strictEqual(mutates('SELECT 1; UPDATE t SET x = 1'), true);
-  })) passed++; else failed++;
+  });
 
-  if (await test('a pragma inside a string literal is executed as data, not stripped', async () => {
+  await run('a trigger body keeps its inner semicolons and its END does not close an open transaction', async () => {
+    const trigger = "CREATE TRIGGER items_audit AFTER INSERT ON items BEGIN INSERT INTO audit VALUES (new.id, 'a;b'); UPDATE items SET flag = CASE WHEN new.id > 1 THEN 1 ELSE 0 END WHERE id = new.id; END";
+    assert.deepStrictEqual(splitStatements(`${trigger}; SELECT 1`), [trigger, ' SELECT 1']);
+    assert.deepStrictEqual(splitStatements('BEGIN; INSERT INTO t VALUES (1); END'), ['BEGIN', ' INSERT INTO t VALUES (1)', ' END']);
+    process.env.EGC_SQLITE_ENGINE = 'wasm';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+    const file = path.join(dir, 'state.db');
+    try {
+      const db = await openCompatDatabase(file, 'test');
+      await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, flag INTEGER); CREATE TABLE audit (item_id INTEGER, note TEXT)');
+      await db.exec('BEGIN');
+      await db.exec(`${trigger};`);
+      assert.strictEqual(db._inTransaction, true, 'the END of the trigger must not end the transaction');
+      await db.exec('INSERT INTO items (id) VALUES (1); INSERT INTO items (id) VALUES (2)');
+      await db.exec('COMMIT');
+      assert.strictEqual(db._inTransaction, false);
+      await db.close();
+      const again = await openCompatDatabase(file, 'test');
+      assert.deepStrictEqual(await again.all('SELECT id, flag FROM items ORDER BY id'), [{ id: 1, flag: 0 }, { id: 2, flag: 1 }]);
+      assert.deepStrictEqual((await again.all('SELECT note FROM audit ORDER BY item_id')).map(r => r.note), ['a;b', 'a;b']);
+      await again.close();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  await run('a pragma inside a string literal is executed as data, not stripped', async () => {
     process.env.EGC_SQLITE_ENGINE = 'wasm';
     const db = await openCompatDatabase(':memory:', 'test');
     await db.exec("CREATE TABLE notes (body TEXT); INSERT INTO notes VALUES ('PRAGMA synchronous = NORMAL; keep me')");
     const row = await db.get('SELECT body FROM notes');
     assert.strictEqual(row.body, 'PRAGMA synchronous = NORMAL; keep me');
     await db.close();
-  })) passed++; else failed++;
+  });
 
-  if (await test('the portable engine answers run, get, all and exec and persists to the file', async () => {
+  await run('the portable engine answers run, get, all and exec and persists to the file', async () => {
     process.env.EGC_SQLITE_ENGINE = 'wasm';
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
     const file = path.join(dir, 'nested', 'state.db');
@@ -209,9 +233,9 @@ async function runTests() {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('exec keeps trigger bodies intact and stops at the first failing statement', async () => {
+  await run('exec keeps trigger bodies intact and stops at the first failing statement', async () => {
     process.env.EGC_SQLITE_ENGINE = 'wasm';
     const db = await openCompatDatabase(':memory:', 'test');
     await db.exec(`
@@ -235,9 +259,9 @@ async function runTests() {
     const tables = await db.all("SELECT name FROM sqlite_master WHERE name = 'never_created'");
     assert.strictEqual(tables.length, 0, 'statements after the failing one must not run');
     await db.close();
-  })) passed++; else failed++;
+  });
 
-  if (await test('writes that follow a pragma or start with a CTE are persisted', async () => {
+  await run('writes that follow a pragma or start with a CTE are persisted', async () => {
     process.env.EGC_SQLITE_ENGINE = 'wasm';
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
     const file = path.join(dir, 'state.db');
@@ -254,9 +278,9 @@ async function runTests() {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('ANALYZE and value-setting pragmas are persisted; SELECT and reporting pragmas are not treated as writes', async () => {
+  await run('ANALYZE and value-setting pragmas are persisted; SELECT and reporting pragmas are not treated as writes', async () => {
     process.env.EGC_SQLITE_ENGINE = 'wasm';
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
     const file = path.join(dir, 'state.db');
@@ -277,9 +301,9 @@ async function runTests() {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('a permission error on the write-ahead log is surfaced, not mistaken for an absent log', async () => {
+  await run('a permission error on the write-ahead log is surfaced, not mistaken for an absent log', async () => {
     if (!permissionBitsEnforced()) {
       console.log('    - skipped: directory permission bits are not enforced here (root, or Windows)');
       return;
@@ -294,15 +318,13 @@ async function runTests() {
       await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
       await db.close();
       fs.writeFileSync(`${file}-wal`, Buffer.alloc(8, 1));
-      fs.chmodSync(inner, 0o000);
-      await assert.rejects(() => openCompatDatabase(file, 'test'), err => err.code === 'EACCES');
+      await withDirMode(inner, 0o000, () => assert.rejects(() => openCompatDatabase(file, 'test'), err => err.code === 'EACCES'));
     } finally {
-      try { fs.chmodSync(inner, 0o755); } catch { /* already writable */ }
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('refuses a file whose write-ahead log still holds data the portable engine cannot read', async () => {
+  await run('refuses a file whose write-ahead log still holds data the portable engine cannot read', async () => {
     process.env.EGC_SQLITE_ENGINE = 'wasm';
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
     const file = path.join(dir, 'state.db');
@@ -318,9 +340,9 @@ async function runTests() {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('a write failure due to permissions is thrown to the caller', async () => {
+  await run('a write failure due to permissions is thrown to the caller', async () => {
     if (!permissionBitsEnforced()) {
       console.log('    - skipped: directory permission bits are not enforced here (root, or Windows)');
       return;
@@ -332,20 +354,17 @@ async function runTests() {
       const db = await openCompatDatabase(file, 'test');
       await db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY)');
       await new Promise(r => setTimeout(r, 60));
-      fs.chmodSync(dir, 0o555);
-      await assert.rejects(
+      await withDirMode(dir, 0o555, () => assert.rejects(
         () => db.run('INSERT INTO items DEFAULT VALUES'),
         /EACCES/
-      );
-      fs.chmodSync(dir, 0o755);
+      ));
       await db.close();
     } finally {
-      try { fs.chmodSync(dir, 0o755); } catch { /* already writable */ }
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('a persistence failure during persistNow is propagated and releases lock', async () => {
+  await run('a persistence failure during persistNow is propagated and releases lock', async () => {
     process.env.EGC_SQLITE_ENGINE = 'wasm';
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-persist-'));
     const file = path.join(dir, 'state.db');
@@ -370,9 +389,9 @@ async function runTests() {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('failed first write before file exists resets in-memory database and does not persist later', async () => {
+  await run('failed first write before file exists resets in-memory database and does not persist later', async () => {
     process.env.EGC_SQLITE_ENGINE = 'wasm';
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-first-write-'));
     const file = path.join(dir, 'state.db');
@@ -412,9 +431,9 @@ async function runTests() {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  });
 
-  if (await test('the native engine is used by default when it loads', async () => {
+  await run('the native engine is used by default when it loads', async () => {
     delete process.env.EGC_SQLITE_ENGINE;
     let native = true;
     try { require('sqlite3'); } catch { native = false; }
@@ -423,7 +442,7 @@ async function runTests() {
     assert.ok(row.v);
     assert.strictEqual(typeof db.configure === 'function', native, 'the sqlite package Database carries configure; the portable facade does not');
     await db.close();
-  })) passed++; else failed++;
+  });
 
   const missing = await runMissingPackageTests();
   passed += missing.passed;

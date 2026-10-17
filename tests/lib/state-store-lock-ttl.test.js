@@ -25,6 +25,7 @@ const {
   releaseFileLock,
   openCompatDatabase,
 } = require('../../scripts/lib/state-store/sqlite-compat');
+const { permissionBitsEnforced, withDirMode } = require('../fixtures/dir-permissions');
 
 let passed = 0;
 let failed = 0;
@@ -416,7 +417,7 @@ async function runTests() {
   });
 
   await test('no double mutex release on permission error during BEGIN', async () => {
-    if (process.platform === 'win32' || (typeof process.getuid === 'function' && process.getuid() === 0)) {
+    if (!permissionBitsEnforced()) {
       console.log('    - skipped: directory permission bits are not enforced here (root, or Windows)');
       return;
     }
@@ -427,17 +428,14 @@ async function runTests() {
       const db = await openCompatDatabase(dbFile);
       await db.run('CREATE TABLE items (val TEXT);');
 
-      // Make directory read-only so acquireFileLock immediately throws EACCES
-      fs.chmodSync(dir, 0o555);
-
-      await assert.rejects(
-        () => db.exec('BEGIN;'),
-        /EACCES/
-      );
-      assert.strictEqual(db._inTransaction, false, 'Transaction state must remain false');
-
-      // Restore write permission so cleanup can run
-      fs.chmodSync(dir, 0o755);
+      // A read-only directory makes acquireFileLock throw EACCES at once
+      await withDirMode(dir, 0o555, async () => {
+        await assert.rejects(
+          () => db.exec('BEGIN;'),
+          /EACCES/
+        );
+        assert.strictEqual(db._inTransaction, false, 'Transaction state must remain false');
+      });
 
       // Verify mutex was released exactly once and is not corrupted:
       // a subsequent write succeeds cleanly without hanging or mutex error
@@ -448,7 +446,6 @@ async function runTests() {
       await db.close();
     } finally {
       delete process.env.EGC_SQLITE_ENGINE;
-      try { fs.chmodSync(dir, 0o755); } catch (_) { /* ignore */ }
       try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
     }
   });
@@ -1145,15 +1142,23 @@ async function runTests() {
       const initialRow = await db1.get('SELECT val FROM items WHERE id = "k1";');
       assert.strictEqual(initialRow.val, 'v1');
 
-      // Now create an updated database file externally and replace dbFile with identical mtime
+      // Pin dbFile to a whole millisecond first: utimes takes seconds as a
+      // float and the kernel keeps nanoseconds, so a sub-millisecond mtime
+      // does not round-trip on every filesystem, and the reader must track
+      // the pinned value or it would reload on the mtime alone.
+      const pinnedSeconds = Math.floor(fs.statSync(dbFile).mtimeMs) / 1000;
+      fs.utimesSync(dbFile, pinnedSeconds, pinnedSeconds);
+      db1._updateMtime();
       const statBefore = fs.statSync(dbFile);
+
+      // Now create an updated database file externally and replace dbFile with identical mtime
       const db2 = await openCompatDatabase(path.join(dir, 'temp_replace.db'));
       await db2.run('CREATE TABLE items (id TEXT PRIMARY KEY, val TEXT);');
       await db2.run('INSERT INTO items VALUES ("k1", "v2_updated");');
       await db2.close();
 
       // Force temp_replace.db to have the exact same mtime as dbFile
-      fs.utimesSync(path.join(dir, 'temp_replace.db'), statBefore.atimeMs / 1000, statBefore.mtimeMs / 1000);
+      fs.utimesSync(path.join(dir, 'temp_replace.db'), pinnedSeconds, pinnedSeconds);
       fs.renameSync(path.join(dir, 'temp_replace.db'), dbFile);
 
       const statAfter = fs.statSync(dbFile);
@@ -1275,11 +1280,14 @@ async function runTests() {
   });
 
   await test('real native/WASM overlap refusal with open native connection and WAL sidecar', async () => {
-    const sqlite3Available = (() => {
-      try { require('sqlite3'); return true; } catch (_) { return false; }
-    })();
-    if (!sqlite3Available) {
-      console.log('    - skipped: native sqlite3 not installed');
+    let nativeLoadError = null;
+    try {
+      require('sqlite3');
+    } catch (error) {
+      nativeLoadError = error;
+    }
+    if (nativeLoadError) {
+      console.log(`    - skipped: native sqlite3 not installed (${nativeLoadError.message.split('\n')[0]})`);
       return;
     }
 
