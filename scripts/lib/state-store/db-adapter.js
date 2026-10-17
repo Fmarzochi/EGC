@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { acquireFileLockSync, releaseFileLock, assertNoPendingWal, mutates, renameOverSync } = require('./sqlite-compat');
+const { acquireFileLockSync, releaseFileLock, assertNoPendingWal, mutates, renameOverSync, readFileWithIdentity } = require('./sqlite-compat');
 
 // PERF-01: a burst of writes reaches the disk as one file write.
 const PERSIST_DEBOUNCE_MS = 50;
@@ -287,19 +287,23 @@ class SqlJsDatabase {
     releaseFileLock(this._lockPath(), token);
   }
 
-  // Loads the file as it is on disk in place of the copy in memory.
+  // Loads the file as it is on disk in place of the copy in memory. The
+  // identity recorded is that of the bytes read, from the same handle: a
+  // stat of the path afterwards could already be the file another process
+  // renamed over it, and the stale copy would then pass as current.
   _loadFromDisk() {
-    let data = null;
+    let read = { data: null, mtimeMs: 0, ino: 0 };
     if (this._isFileBacked()) {
       assertNoPendingWal(this._path);
-      if (fs.existsSync(this._path)) data = fs.readFileSync(this._path);
+      read = readFileWithIdentity(this._path);
     }
     if (this._db) {
       try { this._db.close(); } catch (_) { /* the copy being replaced is discarded either way */ } // NOSONAR
     }
-    this._db = new this._sqlJs.Database(data);
+    this._db = new this._sqlJs.Database(read.data);
     this._replayPragmas();
-    this._updateMtime();
+    this._lastMtimeMs = read.mtimeMs;
+    this._lastIno = read.ino;
   }
 
   _replayPragmas() {

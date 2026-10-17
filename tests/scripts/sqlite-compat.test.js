@@ -433,6 +433,29 @@ async function runTests() {
     }
   });
 
+  await run('the bytes read and the identity recorded come from one handle, so a file renamed over the path is a new identity', async () => {
+    const { readFileWithIdentity } = require('../../scripts/lib/state-store/sqlite-compat');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-'));
+    const file = path.join(dir, 'state.db');
+    try {
+      assert.deepStrictEqual(readFileWithIdentity(file), { data: null, mtimeMs: 0, ino: 0 }, 'a missing file has no bytes and no identity');
+      fs.writeFileSync(file, 'first');
+      const first = readFileWithIdentity(file);
+      const stat = fs.statSync(file);
+      assert.strictEqual(first.data.toString(), 'first');
+      assert.strictEqual(first.ino, stat.ino, 'the identity is the one a stat of the same file reports');
+      assert.strictEqual(first.mtimeMs, stat.mtimeMs);
+      const replacement = path.join(dir, 'state.db.next');
+      fs.writeFileSync(replacement, 'second');
+      fs.renameSync(replacement, file);
+      const second = readFileWithIdentity(file);
+      assert.strictEqual(second.data.toString(), 'second');
+      assert.ok(second.ino !== first.ino || second.mtimeMs !== first.mtimeMs, 'the file renamed over the path must carry a new identity');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   await run('the native engine is used by default when it loads', async () => {
     delete process.env.EGC_SQLITE_ENGINE;
     let native = true;
