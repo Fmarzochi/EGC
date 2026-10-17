@@ -18,6 +18,7 @@ const {
   registrationSeverity,
 } = require('./lib/doctor-mcp');
 const { buildTeamReport, printTeamReport } = require('./lib/doctor-team');
+const { buildHookReport } = require('./lib/doctor-hooks');
 
 // Printed as an absolute path: the hint is read from wherever the person ran
 // egc doctor (a project folder, a global npm install on Windows), and a
@@ -30,8 +31,10 @@ Usage: node scripts/doctor.js [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>
 
 Diagnose drift and missing managed files for EGC install-state in the current context,
 list every tool whose config carries the EGC MCP servers, and start each registered
-server to check that it answers tools/list (EGC_DOCTOR_PROBE_TIMEOUT_MS caps the wait
-per server, ${DEFAULT_PROBE_TIMEOUT_MS} ms by default).
+server to check that it answers tools/list. Every Guardian hook an install recorded
+is run with a call the Guardian always refuses, in its tool's own event shape, and a
+hook that does not refuse it is an error (EGC_DOCTOR_PROBE_TIMEOUT_MS caps the wait
+per server and per hook, ${DEFAULT_PROBE_TIMEOUT_MS} ms by default).
 
 Without --repo-root, the reference repo is always wherever the running \`egc\`
 binary lives (the published npm package for a global install). If the install
@@ -87,6 +90,18 @@ function printMcpReport(mcp) {
   const registered = mcp.registrations.filter(registration => registration.status === 'registered').length;
   const answering = mcp.servers.filter(server => server.status === 'ok').length;
   console.log(`MCP summary: registrations=${mcp.registrations.length}, registered=${registered}, servers=${mcp.servers.length}, answering=${answering}, warnings=${mcp.warningCount}, errors=${mcp.errorCount}`);
+}
+
+// Printed only when an install recorded a Guardian hook: a bare install has
+// none, and an empty section would read as a problem.
+function printHookReport(hooks) {
+  if (hooks.probes.length === 0) return;
+  console.log('\nGuardian hooks (each run with a call the Guardian always refuses):');
+  for (const probe of hooks.probes) {
+    const tag = probe.status === 'ok' ? 'OK' : 'ERROR';
+    console.log(`  - [${tag}] ${probe.target}: ${probe.script} ${probe.detail} (${probe.scriptPath})`);
+  }
+  console.log(`Hook summary: probed=${hooks.probes.length}, refusing=${hooks.refusing}, errors=${hooks.errorCount}`);
 }
 
 function summaryLine(summary) {
@@ -285,15 +300,16 @@ async function main() {
     // server. Its warnings join the doctor's total; it raises no error.
     const team = buildTeamReport(homeDir);
     const summary = { ...report.summary, warningCount: report.summary.warningCount + team.warningCount };
+    const hooks = buildHookReport(report.results, { homeDir, timeoutMs: probeTimeoutMs(process.env) });
     // Warnings are informative: drift and version skew are worth reporting but
     // do not mean the install is broken, and a warnings-only run is a healthy
     // run. Exit 1 is reserved for real failures so scripts and CI can trust
     // it: an install issue, a tool that lost its MCP registration, a server
-    // that does not answer.
-    const hasFailures = report.summary.errorCount > 0 || mcp.errorCount > 0;
+    // that does not answer, a Guardian hook that lets a refused call through.
+    const hasFailures = report.summary.errorCount > 0 || mcp.errorCount > 0 || hooks.errorCount > 0;
 
     if (options.json) {
-      const out = { ...report, summary, mcp, team };
+      const out = { ...report, summary, mcp, team, hooks };
       if (stateDb) out.stateDb = stateDb;
       if (plaintextState) out.plaintextStateFiles = plaintextState;
       console.log(JSON.stringify(out, null, 2));
@@ -301,6 +317,7 @@ async function main() {
       printHuman({ ...report, summary });
       printMcpReport(mcp);
       printTeamReport(team);
+      printHookReport(hooks);
       if (stateDb) printStateStoreReport(stateDb);
       if (plaintextState) printPlaintextStateReport(plaintextState);
     }

@@ -22,6 +22,50 @@ const {
 const { summarizeManagedOperationHealth } = require('./install-lifecycle-inspect');
 const { manifestContext, existingInstallStates } = require('./install-lifecycle-doctor');
 
+function manifestPlanFor(record, context, state) {
+  return createManifestInstallPlan({
+    sourceRoot: context.repoRoot,
+    target: record.adapter.target,
+    profileId: state.request.profile || null,
+    moduleIds: state.request.modules || [],
+    includeComponentIds: state.request.includeComponents || [],
+    excludeComponentIds: state.request.excludeComponents || [],
+    projectRoot: context.projectRoot,
+    homeDir: context.homeDir,
+  });
+}
+
+// A recorded plan replays what an older install wrote, and replaying brings
+// each recorded file up to the current package. A file the package added
+// since was never recorded: the Bash guardian split into five modules in
+// #1945, and a replay updated pre-bash-guardian-validate.js to the version
+// that requires them without copying them, so every Guardian hook crashed
+// and the tool let the command through. For every module the record already
+// installs by copy, the copies the current plan has for that module and the
+// record does not are added, so updated files arrive with what they need. A
+// module the record never copied is left as it is, and a plan that cannot be
+// built leaves the replay as it was.
+function withNewlyPlannedCopies(record, context, state, operations) {
+  if (state.request.legacyMode) return operations;
+  const copiedModules = new Set(operations
+    .filter(operation => operation.kind === 'copy-file' && operation.moduleId)
+    .map(operation => operation.moduleId));
+  if (copiedModules.size === 0) return operations;
+  let current;
+  try {
+    current = manifestPlanFor(record, context, state);
+  } catch {
+    return operations;
+  }
+  const recorded = new Set(operations.map(operation => fileKey(operation.destinationPath)));
+  const added = current.operations.filter(operation => (
+    operation.kind === 'copy-file'
+    && copiedModules.has(operation.moduleId)
+    && !recorded.has(fileKey(operation.destinationPath))
+  ));
+  return [...operations, ...added];
+}
+
 function createRepairPlanFromRecord(record, context) {
   const state = record.state;
   if (!state) {
@@ -29,7 +73,12 @@ function createRepairPlanFromRecord(record, context) {
   }
 
   if (state.request.legacyMode || shouldRepairFromRecordedOperations(state)) {
-    const operations = hydrateRecordedOperations(context.repoRoot, getManagedOperations(state));
+    const operations = withNewlyPlannedCopies(
+      record,
+      context,
+      state,
+      hydrateRecordedOperations(context.repoRoot, getManagedOperations(state))
+    );
     assertRecordedOperationsContained(record, context, operations);
     const statePreview = buildRecordedStatePreview(state, context, operations);
 
@@ -50,16 +99,7 @@ function createRepairPlanFromRecord(record, context) {
     };
   }
 
-  const desiredPlan = createManifestInstallPlan({
-    sourceRoot: context.repoRoot,
-    target: record.adapter.target,
-    profileId: state.request.profile || null,
-    moduleIds: state.request.modules || [],
-    includeComponentIds: state.request.includeComponents || [],
-    excludeComponentIds: state.request.excludeComponents || [],
-    projectRoot: context.projectRoot,
-    homeDir: context.homeDir,
-  });
+  const desiredPlan = manifestPlanFor(record, context, state);
 
   return {
     ...desiredPlan,
