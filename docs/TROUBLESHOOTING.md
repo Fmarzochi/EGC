@@ -66,6 +66,49 @@ If the lock does not clear, a reboot releases it. Nothing needs to be uninstalle
 
 ---
 
+## `running scripts is disabled on this system` in Windows PowerShell
+
+**Symptom:** on a desktop Windows, in Windows PowerShell 5.1, the first command of either install path stops before EGC runs:
+
+```
+npm : File C:\Program Files\nodejs\npm.ps1 cannot be loaded because running scripts is disabled on
+this system. For more information, see about_Execution_Policies at https:/go.microsoft.com/fwlink/?LinkID=135170.
+```
+
+```
+.\scripts\install.ps1 : File C:\Users\<you>\EGC\scripts\install.ps1 cannot be loaded because running scripts is disabled
+on this system.
+```
+
+After an install made another way, `egc` itself gives the same message for `...\npm\egc.ps1`.
+
+**Cause:** Windows PowerShell on a desktop Windows ships with the `Restricted` execution policy, which refuses every `.ps1` file. Node.js puts an `npm.ps1` next to `npm.cmd`, npm puts an `egc.ps1` next to `egc.cmd`, and PowerShell picks the `.ps1` first. PowerShell 7 defaults to `RemoteSigned` and cmd has no execution policy, so neither shows this.
+
+**Fix:** either of these, with no administrator rights.
+
+Call the `.cmd` twins, which the execution policy does not govern, and lift the policy for one run of the clone's installer:
+
+```powershell
+npm.cmd install -g @egchq/egc
+egc.cmd install
+```
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+Then keep calling `egc.cmd` in Windows PowerShell (`egc.cmd init`, `egc.cmd doctor`). Both were run end to end on a fresh Windows VM under `Restricted` for #1379, with `egc doctor` at `errors=0`.
+
+Or allow local scripts for your own account once, after which `npm`, `egc` and `install.ps1` run as written:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+`RemoteSigned` runs the scripts on your disk and still refuses unsigned ones downloaded from the internet; see Microsoft's [about_Execution_Policies](https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_execution_policies).
+
+---
+
 ## `egc doctor` says some state files are plain text
 
 **Symptom:** the doctor report ends with a `State files` section:

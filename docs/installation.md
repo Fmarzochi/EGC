@@ -188,7 +188,8 @@ cd EGC
 
 ### Windows notes
 
-- **Node.js**: install from [nodejs.org](https://nodejs.org). Confirmed working with Node.js v24 + PowerShell 5.1 and WSL2.
+- **Node.js**: install from [nodejs.org](https://nodejs.org). Confirmed working with Node.js v24 + PowerShell 5.1 and WSL2, and on 17 October 2026 on a fresh Windows Server 2025 VM with Node.js 22 under Windows PowerShell 5.1 and PowerShell 7.6, both install paths, with Claude Code, Codex and OpenCode picked up and `egc doctor` at `errors=0` (#1379).
+- **`running scripts is disabled on this system`**: Windows PowerShell 5.1 on a desktop Windows ships with the `Restricted` execution policy, which refuses `npm.ps1`, `egc.ps1` and `install.ps1` alike. Call `npm.cmd` and `egc.cmd` instead, run the clone's installer with `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1`, or allow local scripts for your account once with `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`. See [Troubleshooting](TROUBLESHOOTING.md#running-scripts-is-disabled-on-this-system-in-windows-powershell).
 - **Antigravity CLI on Windows**: if the `irm | iex` install script hangs silently, use the direct binary download instead:
   ```powershell
   Invoke-WebRequest -Uri https://antigravity.dev/install/agy.exe -OutFile agy.exe
