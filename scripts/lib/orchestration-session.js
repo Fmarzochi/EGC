@@ -250,6 +250,11 @@ function resolveSnapshotTarget(targetPath, cwd = process.cwd()) {
 
   if (fs.existsSync(absoluteTarget) && fs.statSync(absoluteTarget).isFile()) {
     const config = JSON.parse(fs.readFileSync(absoluteTarget, 'utf8'));
+    // The session name becomes a folder under the coordination root, so a
+    // plan file must name one plain folder: neither missing nor a path.
+    if (!isPlainSessionName(config.sessionName)) {
+      throw new Error(`plan file ${absoluteTarget} needs a sessionName that is a plain folder name, got ${JSON.stringify(config.sessionName ?? null)}`);
+    }
     const repoRoot = path.resolve(config.repoRoot || cwd);
     const coordinationRoot = path.resolve(
       config.coordinationRoot || path.join(repoRoot, '.orchestration')

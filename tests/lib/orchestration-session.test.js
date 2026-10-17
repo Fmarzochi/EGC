@@ -240,5 +240,30 @@ test('resolveSnapshotTarget handles plan files and direct session names', () => 
   }
 });
 
+// N5: a plan file without sessionName used to reach path.join(root,
+// undefined) and throw a TypeError; and a sessionName with a separator or ..
+// would have pointed the snapshot outside the coordination root. Both are
+// refused with the plan file named.
+test('resolveSnapshotTarget refuses a plan file whose sessionName is missing or not a plain folder name', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-orch-plan-name-'));
+  try {
+    for (const [label, plan] of [
+      ['missing', { repoRoot: tempRoot }],
+      ['not a string', { sessionName: 42, repoRoot: tempRoot }],
+      ['a traversal', { sessionName: '../outside', repoRoot: tempRoot }],
+    ]) {
+      const planPath = path.join(tempRoot, `plan-${label.replace(/\s+/g, '-')}.json`);
+      fs.writeFileSync(planPath, JSON.stringify(plan));
+      assert.throws(
+        () => resolveSnapshotTarget(planPath, tempRoot),
+        error => !(error instanceof TypeError) && /sessionName/.test(error.message) && error.message.includes(planPath),
+        `a sessionName that is ${label} is refused with a message that names the plan file`
+      );
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

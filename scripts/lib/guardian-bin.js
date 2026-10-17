@@ -10,6 +10,18 @@ const { spawnSync } = require('node:child_process');
 // package-relative layout (repo checkout and npm install share it), then the
 // egc-guardian entry in the MCP configs the user already registered.
 
+// Whether `candidate` is the home directory or inside it. Windows paths do
+// not tell case apart, so a config that spells the home `c:\users\ana`
+// where os.homedir() says `C:\Users\Ana` is still the home there; anywhere
+// else case is part of the name.
+function isUnderHome(candidate, home, platform = process.platform) {
+  const sep = platform === 'win32' ? '\\' : '/';
+  const fold = platform === 'win32' ? value => value.toLowerCase() : value => value;
+  const child = fold(candidate);
+  const root = fold(home);
+  return child === root || child.startsWith(root.endsWith(sep) ? root : root + sep);
+}
+
 function fromEnv() {
   const explicit = process.env.EGC_GUARDIAN_CLI;
   if (explicit?.trim() && fs.existsSync(explicit.trim())) return explicit.trim();
@@ -75,7 +87,8 @@ function fromMcpConfigs() {
   // blocks a tampered home config from pointing at a script planted in the
   // current project (or /tmp, or anywhere else reachable by whatever
   // repository is open) even if the config file itself were ever
-  // compromised by some other means.
+  // compromised by some other means. isUnderHome compares the way the
+  // platform's file system does.
   const home = path.resolve(os.homedir());
 
   for (const configPath of configPaths) {
@@ -97,7 +110,7 @@ function fromMcpConfigs() {
       );
       if (!indexJs) continue;
       const candidate = path.resolve(path.dirname(indexJs), 'guardian-cli.js');
-      if (candidate !== home && !candidate.startsWith(home + path.sep)) continue;
+      if (!isUnderHome(candidate, home)) continue;
       if (fs.existsSync(candidate)) return candidate;
     } catch (_) { /* ignore: unreadable or malformed config, safely fallback to trying the next one */ } // NOSONAR
   }
@@ -277,7 +290,7 @@ function fromCodexToml() {
   // script elsewhere).
   const home = path.resolve(os.homedir());
   const candidate = path.resolve(path.dirname(indexJs), 'guardian-cli.js');
-  if (candidate !== home && !candidate.startsWith(home + path.sep)) return null;
+  if (!isUnderHome(candidate, home)) return null;
   return fs.existsSync(candidate) ? candidate : null;
 }
 
@@ -446,4 +459,5 @@ module.exports = {
   fromMcpConfigs,
   fromCodexToml,
   fromEgcHomeMarker,
+  isUnderHome,
 };
