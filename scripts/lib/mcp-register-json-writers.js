@@ -38,27 +38,35 @@ function parseJsonObject(targetPath, rawContent, rootEntityName = 'config') {
  * that's not a no-op, it's a reason the config wasn't touched, and the two
  * need to stay distinguishable so a caller can warn on one and stay quiet
  * on the other.
+ *
+ * A target may name the object the servers live under (`jsonRootKey`,
+ * mcpServers by default) and the keys a tool wants on every server entry
+ * besides command and args (`jsonServerKeys`, such as Copilot CLI's type and
+ * tools); those keys go on the entries this function creates, and an entry
+ * the person already has keeps its own.
  */
-function registerJson(targetPath, bins) {
+function registerJson(targetPath, bins, target = {}) {
   const { guardianBin, memoryBin } = bins;
+  const rootKey = target.jsonRootKey || 'mcpServers';
+  const serverKeys = target.jsonServerKeys || {};
   const existingContent = readFileIfExists(targetPath);
   const obj = parseJsonObject(targetPath, existingContent, 'MCP config');
-  if (obj.mcpServers === null || obj.mcpServers === undefined) {
-    obj.mcpServers = {};
-  } else if (typeof obj.mcpServers !== 'object' || Array.isArray(obj.mcpServers)) {
-    throw new TypeError(`existing file at ${targetPath} has an invalid mcpServers object - left untouched`);
+  if (obj[rootKey] === null || obj[rootKey] === undefined) {
+    obj[rootKey] = {};
+  } else if (typeof obj[rootKey] !== 'object' || Array.isArray(obj[rootKey])) {
+    throw new TypeError(`existing file at ${targetPath} has an invalid ${rootKey} object - left untouched`);
   }
   let changed = false;
   for (const [name, bin] of [['egc-guardian', guardianBin], ['egc-memory', memoryBin]]) {
-    const current = obj.mcpServers[name];
+    const current = obj[rootKey][name];
     if (!current) {
-      obj.mcpServers[name] = { command: 'node', args: [bin] };
+      obj[rootKey][name] = { ...serverKeys, command: 'node', args: [bin] };
       changed = true;
       continue;
     }
     const refreshed = refreshEntryScript(current, 'args', bin);
     if (refreshed) {
-      obj.mcpServers[name] = refreshed;
+      obj[rootKey][name] = refreshed;
       changed = true;
     }
   }

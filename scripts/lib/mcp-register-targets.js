@@ -277,6 +277,21 @@ function buildMcpRegistrationTargets(homeDir) {
       gate: () => fs.existsSync(path.join(homeDir, '.openhands')) || commandExists('openhands'),
       format: 'json',
     },
+    {
+      // GitHub Copilot CLI reads MCP servers from the mcpServers object of
+      // ~/.copilot/mcp-config.json, in its own shape: a local server names
+      // its type, the command, the args and the tools it may call, "*" for
+      // all of them (docs.github.com/en/copilot/how-tos/copilot-cli/
+      // customize-copilot/add-mcp-servers, read on 2026-10-17). A project's
+      // .mcp.json or .github/mcp.json takes precedence and is the project's
+      // own; VS Code's Copilot keeps its mcp.json in the editor profile and
+      // is not written here. The gate opens on ~/.copilot or copilot on PATH.
+      name: 'GitHub Copilot CLI',
+      path: path.join(homeDir, '.copilot', 'mcp-config.json'),
+      gate: () => fs.existsSync(path.join(homeDir, '.copilot')) || commandExists('copilot'),
+      format: 'json',
+      jsonServerKeys: { type: 'local', tools: ['*'] },
+    },
   ];
 }
 
