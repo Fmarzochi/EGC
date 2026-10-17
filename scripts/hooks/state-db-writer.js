@@ -150,11 +150,23 @@ async function enableWalBestEffort(db, attempt = 0) {
   }
 }
 
+// How long a hook write waits for the store while another writer has it.
+// On Windows a persist (write, flush, rename) is several times slower, and
+// with a few sessions and the CLI writing at once the queue outlasted the
+// 4 s the other platforms need: the writer gave up and, since a hook exits
+// 0 by design, the event was lost without a word. Windows gets the lock's
+// own default budget.
+function hookLockTimeoutMs(platform = process.platform) {
+  return platform === 'win32' ? 15000 : 4000;
+}
+
+const HOOK_LOCK_TIMEOUT_MS = hookLockTimeoutMs();
+
 async function initDatabase(dbPath) {
-  const db = await openCompatDatabase(dbPath, 'state-db-writer', { lockTimeoutMs: 4000 });
+  const db = await openCompatDatabase(dbPath, 'state-db-writer', { lockTimeoutMs: HOOK_LOCK_TIMEOUT_MS });
   if (selectedEngine() === 'native') {
     try {
-      await db.exec('PRAGMA busy_timeout = 4000;');
+      await db.exec(`PRAGMA busy_timeout = ${HOOK_LOCK_TIMEOUT_MS};`);
       await enableWalBestEffort(db);
       await db.exec('PRAGMA synchronous = NORMAL;');
     } catch (pragmaErr) {
@@ -168,8 +180,8 @@ async function initDatabase(dbPath) {
 
 const STORE_WAIT_MS = 25;
 // While another writer holds the lock the wait matches the lock timeout
-// below; with no lock the path is only rechecked for an instant.
-const STORE_WAIT_LOCKED_ATTEMPTS = 160;
+// above; with no lock the path is only rechecked for an instant.
+const STORE_WAIT_LOCKED_ATTEMPTS = Math.ceil(HOOK_LOCK_TIMEOUT_MS / STORE_WAIT_MS);
 const STORE_WAIT_UNLOCKED_ATTEMPTS = 4;
 
 // The portable engine persists by renaming a new file over the store, and
@@ -245,4 +257,8 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e); }).finally(() => process.exit(0));
+module.exports = { hookLockTimeoutMs };
+
+if (require.main === module) {
+  main().catch((e) => { console.error(e); }).finally(() => process.exit(0));
+}
