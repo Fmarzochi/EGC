@@ -29,6 +29,7 @@ const {
   registerCrushMcp,
   resolveCrushConfigPath,
   registerGooseYaml,
+  registerAmpSettings,
   registerMcpServers,
 } = require('../../scripts/lib/mcp-register');
 
@@ -159,7 +160,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose', 'OpenHands', 'Junie', 'GitHub Copilot CLI', 'Warp',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose', 'OpenHands', 'Junie', 'GitHub Copilot CLI', 'Warp', 'Amp',
     ]);
   })));
 
@@ -448,6 +449,86 @@ function runTests() {
       assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
       assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
       assert.strictEqual(registerJson(warpPath, bins), false, 'a second run is idempotent');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('Amp: the servers go under amp.mcpServers in ~/.config/amp/settings.json, gated on ~/.config/amp, ~/.amp or amp on PATH (#1678)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const ampBin = path.join(tmpHome, 'amp-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(ampBin, { recursive: true });
+      fs.writeFileSync(path.join(ampBin, 'amp'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(ampBin, 'amp.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Amp');
+      assert.ok(absent, 'Amp must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no Amp directory and no amp on PATH keep the gate closed');
+      process.env.PATH = `${ampBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Amp').gate(), true, 'an amp on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      fs.mkdirSync(path.join(tmpHome, '.amp'), { recursive: true });
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Amp').gate(), true, 'the ~/.amp library root alone opens the gate');
+      const configDir = path.join(tmpHome, '.config', 'amp');
+      fs.mkdirSync(configDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Amp');
+      assert.strictEqual(target.path, path.join(configDir, 'settings.json'));
+      assert.strictEqual(target.format, 'amp-settings');
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written['amp.mcpServers']['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written['amp.mcpServers']['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+      assert.strictEqual(written.mcpServers, undefined, 'Amp reads amp.mcpServers, not a bare mcpServers object');
+    } finally {
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('Amp: registration keeps the person\'s other settings and servers in settings.json', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    try {
+      const settingsPath = path.join(tmpHome, '.config', 'amp', 'settings.json');
+      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+      const own = {
+        'amp.anthropic.thinking.enabled': true,
+        'amp.mcpServers': { playwright: { command: 'npx', args: ['@playwright/mcp@latest'], env: { HEADLESS: '1' } } },
+      };
+      fs.writeFileSync(settingsPath, JSON.stringify(own, null, 2));
+      assert.strictEqual(registerAmpSettings(settingsPath, bins), true);
+      const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      assert.strictEqual(written['amp.anthropic.thinking.enabled'], true);
+      assert.deepStrictEqual(written['amp.mcpServers'].playwright, own['amp.mcpServers'].playwright);
+      assert.deepStrictEqual(written['amp.mcpServers']['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written['amp.mcpServers']['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+      assert.strictEqual(registerAmpSettings(settingsPath, bins), false, 'a second run is idempotent');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('Amp: a settings.jsonc that is the only settings file is never rewritten, and the message names the two entries to add', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    try {
+      const configDir = path.join(tmpHome, '.config', 'amp');
+      fs.mkdirSync(configDir, { recursive: true });
+      const jsoncPath = path.join(configDir, 'settings.jsonc');
+      const jsonc = '{\n  // my settings\n  "amp.mcpServers": {}\n}\n';
+      fs.writeFileSync(jsoncPath, jsonc);
+      const settingsPath = path.join(configDir, 'settings.json');
+      assert.throws(() => registerAmpSettings(settingsPath, bins), /never rewritten.*egc-guardian.*egc-memory/s);
+      assert.ok(!fs.existsSync(settingsPath), 'no settings.json may appear next to the jsonc the person keeps');
+      assert.strictEqual(fs.readFileSync(jsoncPath, 'utf8'), jsonc, 'the jsonc stays byte for byte');
+      fs.writeFileSync(settingsPath, '{}\n');
+      assert.strictEqual(registerAmpSettings(settingsPath, bins), true, 'with a settings.json present the servers go there');
+      assert.strictEqual(fs.readFileSync(jsoncPath, 'utf8'), jsonc, 'the jsonc is still untouched');
     } finally {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
