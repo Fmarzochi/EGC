@@ -159,7 +159,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose', 'OpenHands',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose', 'OpenHands', 'Junie',
     ]);
   })));
 
@@ -277,6 +277,60 @@ function runTests() {
       assert.deepStrictEqual(written.mcpServers.mine, own.mcpServers.mine);
       assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
       assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('Junie: the servers go under mcpServers in ~/.junie/mcp/mcp.json, gated on ~/.junie or junie on PATH (#1678)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const junieBin = path.join(tmpHome, 'junie-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(junieBin, { recursive: true });
+      fs.writeFileSync(path.join(junieBin, 'junie'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(junieBin, 'junie.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Junie');
+      assert.ok(absent, 'Junie must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no ~/.junie and no junie on PATH keep the gate closed');
+      process.env.PATH = `${junieBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Junie').gate(), true, 'a junie on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      const junieDir = path.join(tmpHome, '.junie');
+      fs.mkdirSync(junieDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Junie');
+      assert.strictEqual(target.path, path.join(junieDir, 'mcp', 'mcp.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the ~/.junie directory alone opens the gate');
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('Junie: registration keeps the person\'s pre-existing mcp.json servers in place', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    try {
+      const juniePath = path.join(tmpHome, '.junie', 'mcp', 'mcp.json');
+      fs.mkdirSync(path.dirname(juniePath), { recursive: true });
+      const own = { mcpServers: { Context7: { command: 'npx', args: ['-y', '@upstash/context7-mcp'] } } };
+      fs.writeFileSync(juniePath, JSON.stringify(own, null, 2));
+      assert.strictEqual(registerJson(juniePath, bins), true);
+      const written = JSON.parse(fs.readFileSync(juniePath, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers.Context7, own.mcpServers.Context7);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+      assert.strictEqual(registerJson(juniePath, bins), false, 'a second run is idempotent');
     } finally {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
