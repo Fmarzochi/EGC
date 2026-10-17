@@ -187,7 +187,7 @@ function skipCaseClause(words, index) {
 
 // The index past a shell keyword or grouping opener, a case arm, a
 // coprocess, function header or egc executor in front of the command
-// actually run, as the validator peels them (validator.ts
+// actually run, as the validator peels them (validator-unwrap.ts
 // tryUnwrapShellKeyword); the same index when there is none.
 function skipCommandCarrier(words, index) {
   const head = words[index].value;

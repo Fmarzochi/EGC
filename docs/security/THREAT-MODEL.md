@@ -111,7 +111,7 @@ EGC is a local-first AI memory and orchestration runtime. It has no network serv
 
 | Path | Risk | Protection |
 |------|------|-----------|
-| `mcp/servers/egc-guardian/src/validator.ts` | High: gates all shell execution and file writes | Reviewed on every change; blocked by branch protection; the destructive-CLI test suite alone is 64 cases |
+| `mcp/servers/egc-guardian/src/validator.ts` and the validator modules next to it (validator-session.ts to validator-script-writes.ts) | High: gates all shell execution and file writes | Reviewed on every change; blocked by branch protection; the destructive-CLI test suite alone is 64 cases |
 | `mcp/servers/egc-guardian/src/index.ts` (bash hook dispatcher entry) | High: an error here used to fail open for every guard | Fails closed since v1.1.16 (#1019); regression-tested |
 | `install.sh` / `install.ps1` | Medium: modifies global AI tool configs across 19 harnesses | Verified in CI across Linux, macOS, Windows (full matrix: Node 20/22 x npm/yarn/bun) |
 | `scripts/hooks/session-end.js` | Medium: reads transcript, writes to disk | Bounded stdin (1MB cap); structured error handling |
