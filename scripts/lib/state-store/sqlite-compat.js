@@ -201,6 +201,28 @@ function renameOverSync(from, to) {
   retryWhileWindowsBusy(() => fs.renameSync(from, to));
 }
 
+// The bytes of the file and the identity of those very bytes, taken from
+// one handle. A stat of the path after the read can already describe the
+// file another process renamed over it in between; a copy loaded that way
+// would pass the change check as current and overwrite that process's rows
+// on its next persist (seen on Windows, where the window is wide enough).
+// A missing file has no bytes and no identity.
+function readFileWithIdentity(filename) {
+  let fd;
+  try {
+    fd = retryWhileWindowsBusy(() => fs.openSync(filename, 'r'));
+  } catch (err) {
+    if (err?.code === 'ENOENT') return { data: null, mtimeMs: 0, ino: 0 };
+    throw err;
+  }
+  try {
+    const stat = fs.fstatSync(fd);
+    return { data: fs.readFileSync(fd), mtimeMs: stat.mtimeMs, ino: stat.ino };
+  } finally {
+    try { fs.closeSync(fd); } catch (_) { /* ignore close error */ }
+  }
+}
+
 function tryAcquireLockOnce(lockPath, token) {
   let fd;
   try {
@@ -535,7 +557,15 @@ class WasmDatabase {
     this._txToken = null;
     this._lastMtimeMs = 0;
     this._lastIno = 0;
-    this._updateMtime();
+    // The identity of the bytes `db` was built from, when the caller read
+    // them through readFileWithIdentity; a stat of the path would otherwise
+    // be taken now, after the read, with the window described there.
+    if (options.identity) {
+      this._lastMtimeMs = options.identity.mtimeMs;
+      this._lastIno = options.identity.ino;
+    } else {
+      this._updateMtime();
+    }
   }
 
   getLockPath() {
@@ -555,21 +585,14 @@ class WasmDatabase {
 
   reloadFromDisk() {
     if (this.filename === ':memory:' || !this.SQL) return;
-    if (fs.existsSync(this.filename)) {
-      assertNoPendingWal(this.filename);
-      const data = new Uint8Array(fs.readFileSync(this.filename));
-      if (this.db) {
-        try { this.db.close(); } catch (_) { /* ignore close error */ }
-      }
-      this.db = new this.SQL.Database(data);
-      this._updateMtime();
-    } else {
-      if (this.db) {
-        try { this.db.close(); } catch (_) { /* ignore close error */ }
-      }
-      this.db = new this.SQL.Database();
-      this._updateMtime();
+    if (fs.existsSync(this.filename)) assertNoPendingWal(this.filename);
+    const read = readFileWithIdentity(this.filename);
+    if (this.db) {
+      try { this.db.close(); } catch (_) { /* ignore close error */ }
     }
+    this.db = read.data ? new this.SQL.Database(new Uint8Array(read.data)) : new this.SQL.Database();
+    this._lastMtimeMs = read.mtimeMs;
+    this._lastIno = read.ino;
   }
 
   async withWriteLock(fn) {
@@ -881,13 +904,12 @@ async function openWasmDatabase(filename, nativeError, options = {}) {
   const SQL = await loadSqlJs(nativeError);
   const reader = options.reader === true;
   assertNoPendingWal(filename);
-  const data = filename !== ':memory:' && fs.existsSync(filename)
-    ? new Uint8Array(fs.readFileSync(filename))
-    : undefined;
+  const read = filename === ':memory:' ? { data: null, mtimeMs: 0, ino: 0 } : readFileWithIdentity(filename);
+  const data = read.data ? new Uint8Array(read.data) : undefined;
   // A reader gets the rows with no file behind them: close() then has
   // nothing to write back, and there is nothing to flush at exit.
   if (reader) return new WasmDatabase(new SQL.Database(data), ':memory:', SQL, options);
-  const wasm = new WasmDatabase(new SQL.Database(data), filename, SQL, options);
+  const wasm = new WasmDatabase(new SQL.Database(data), filename, SQL, { ...options, identity: read });
   wasm._exitHandler = () => { void wasm.close(); };
   process.once('exit', wasm._exitHandler);
   return wasm;
@@ -939,4 +961,4 @@ function selectedEngine() {
   return selected;
 }
 
-module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase, acquireFileLock, acquireFileLockSync, releaseFileLock, isProcessAlive, assertNoPendingWal, renameOverSync };
+module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase, acquireFileLock, acquireFileLockSync, releaseFileLock, isProcessAlive, assertNoPendingWal, renameOverSync, readFileWithIdentity };
