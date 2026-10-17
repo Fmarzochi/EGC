@@ -159,7 +159,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose', 'OpenHands', 'Junie', 'GitHub Copilot CLI',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose', 'OpenHands', 'Junie', 'GitHub Copilot CLI', 'Warp',
     ]);
   })));
 
@@ -318,6 +318,44 @@ function runTests() {
     }
   }))));
 
+  (tally(test('Warp: the servers go under mcpServers in ~/.warp/.mcp.json, gated on ~/.warp, the Linux config directory or warp-terminal on PATH (#1678)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const warpBin = path.join(tmpHome, 'warp-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(warpBin, { recursive: true });
+      fs.writeFileSync(path.join(warpBin, 'warp-terminal'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(warpBin, 'warp-terminal.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Warp');
+      assert.ok(absent, 'Warp must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no Warp directory and no warp-terminal on PATH keep the gate closed');
+      process.env.PATH = `${warpBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Warp').gate(), true, 'a warp-terminal on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      fs.mkdirSync(path.join(tmpHome, '.config', 'warp-terminal'), { recursive: true });
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Warp').gate(), true, 'the Linux config directory alone opens the gate');
+      const warpDir = path.join(tmpHome, '.warp');
+      fs.mkdirSync(warpDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'Warp');
+      assert.strictEqual(target.path, path.join(warpDir, '.mcp.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the ~/.warp directory alone opens the gate');
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+    } finally {
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
   (tally(test('GitHub Copilot CLI: the servers go under mcpServers in ~/.copilot/mcp-config.json as local servers with every tool allowed, gated on ~/.copilot or copilot on PATH (#1678)', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
     const savedPath = process.env.PATH;
@@ -392,6 +430,24 @@ function runTests() {
       assert.deepStrictEqual(written.mcpServers['egc-guardian'], { type: 'local', tools: ['*'], command: 'node', args: [bins.guardianBin] });
       assert.deepStrictEqual(written.mcpServers['egc-memory'], { type: 'local', command: 'node', args: [bins.memoryBin], tools: ['browse'] }, 'the refreshed entry keeps the keys the person set');
       assert.strictEqual(registerJson(copilotPath, bins, target), false, 'a second run is idempotent');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('Warp: registration keeps the person\'s pre-existing servers, their working_directory included, in place', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    try {
+      const warpPath = path.join(tmpHome, '.warp', '.mcp.json');
+      fs.mkdirSync(path.dirname(warpPath), { recursive: true });
+      const own = { mcpServers: { filesystem: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/srv/files'], working_directory: '/srv' } } };
+      fs.writeFileSync(warpPath, JSON.stringify(own, null, 2));
+      assert.strictEqual(registerJson(warpPath, bins), true);
+      const written = JSON.parse(fs.readFileSync(warpPath, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers.filesystem, own.mcpServers.filesystem);
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
+      assert.strictEqual(registerJson(warpPath, bins), false, 'a second run is idempotent');
     } finally {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }

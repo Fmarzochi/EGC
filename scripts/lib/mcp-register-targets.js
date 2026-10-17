@@ -300,6 +300,22 @@ function buildMcpRegistrationTargets(homeDir) {
     homeJsonTarget(homeDir, 'GitHub Copilot CLI', '.copilot', ['mcp-config.json'], 'copilot', {
       jsonServerKeys: { type: 'local', tools: ['*'] },
     }),
+    {
+      // Warp reads MCP servers from the mcpServers object of ~/.warp/.mcp.json,
+      // its global file, and starts those servers itself; the files of other
+      // tools it also reads (Claude Code's ~/.claude.json, a project's
+      // .mcp.json, Codex's config.toml) only spawn once the person enables
+      // them, and the project-scope .warp/.mcp.json is the project's own
+      // (docs.warp.dev/agents/capabilities/mcp, read on 2026-10-17). The
+      // gate opens on ~/.warp, on the Linux config directory Warp creates on
+      // first launch, or on warp-terminal on PATH.
+      name: 'Warp',
+      path: path.join(homeDir, '.warp', '.mcp.json'),
+      gate: () => fs.existsSync(path.join(homeDir, '.warp'))
+        || fs.existsSync(path.join(homeDir, '.config', 'warp-terminal'))
+        || commandExists('warp-terminal'),
+      format: 'json',
+    },
   ];
 }
 
