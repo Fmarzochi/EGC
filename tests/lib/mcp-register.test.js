@@ -159,7 +159,7 @@ function runTests() {
     const targets = buildMcpRegistrationTargets('/home/person');
     assert.deepStrictEqual(targets.map(t => t.name), [
       'Antigravity', 'Antigravity CLI (pre-migration path)', 'Claude Code (user scope)', 'Cursor',
-      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose', 'OpenHands', 'Junie',
+      'Kiro', 'Codex CLI', 'OpenCode', 'Zed', 'Auggie', 'Kimi Code CLI', 'Crush', 'Mistral Vibe', 'Qwen Code', 'Grok Build', 'Kilo Code CLI', 'MiMo Code', 'Pi', 'Droid (Factory)', 'Goose', 'OpenHands', 'Junie', 'GitHub Copilot CLI',
     ]);
   })));
 
@@ -318,6 +318,42 @@ function runTests() {
     }
   }))));
 
+  (tally(test('GitHub Copilot CLI: the servers go under mcpServers in ~/.copilot/mcp-config.json as local servers with every tool allowed, gated on ~/.copilot or copilot on PATH (#1678)', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    const savedPath = process.env.PATH;
+    const savedPathExt = process.env.PATHEXT;
+    try {
+      const emptyBin = path.join(tmpHome, 'empty-bin');
+      const copilotBin = path.join(tmpHome, 'copilot-bin');
+      fs.mkdirSync(emptyBin, { recursive: true });
+      fs.mkdirSync(copilotBin, { recursive: true });
+      fs.writeFileSync(path.join(copilotBin, 'copilot'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(copilotBin, 'copilot.CMD'), '@echo off\r\n', { mode: 0o755 });
+      process.env.PATHEXT = '.CMD';
+      process.env.PATH = emptyBin;
+      const absent = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'GitHub Copilot CLI');
+      assert.ok(absent, 'GitHub Copilot CLI must be a registration target');
+      assert.strictEqual(absent.gate(), false, 'no ~/.copilot and no copilot on PATH keep the gate closed');
+      process.env.PATH = `${copilotBin}${path.delimiter}${emptyBin}`;
+      assert.strictEqual(buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'GitHub Copilot CLI').gate(), true, 'a copilot on PATH opens the gate');
+      process.env.PATH = emptyBin;
+      const copilotDir = path.join(tmpHome, '.copilot');
+      fs.mkdirSync(copilotDir, { recursive: true });
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'GitHub Copilot CLI');
+      assert.strictEqual(target.path, path.join(copilotDir, 'mcp-config.json'));
+      assert.strictEqual(target.format, 'json');
+      assert.strictEqual(target.gate(), true, 'the ~/.copilot directory alone opens the gate');
+      registerIsolated(tmpHome, {});
+      const written = JSON.parse(fs.readFileSync(target.path, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { type: 'local', tools: ['*'], command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { type: 'local', tools: ['*'], command: 'node', args: [bins.memoryBin] });
+    } finally {
+      if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath;
+      if (savedPathExt === undefined) delete process.env.PATHEXT; else process.env.PATHEXT = savedPathExt;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
   (tally(test('Junie: registration keeps the person\'s pre-existing mcp.json servers in place', () => runWithoutConfigHomeVariables(() => {
     const tmpHome = makeTempDir();
     try {
@@ -331,6 +367,31 @@ function runTests() {
       assert.deepStrictEqual(written.mcpServers['egc-guardian'], { command: 'node', args: [bins.guardianBin] });
       assert.deepStrictEqual(written.mcpServers['egc-memory'], { command: 'node', args: [bins.memoryBin] });
       assert.strictEqual(registerJson(juniePath, bins), false, 'a second run is idempotent');
+    } finally {
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  }))));
+
+  (tally(test('GitHub Copilot CLI: registration keeps the person\'s servers and their own keys, and a stale script path is refreshed without losing type or tools', () => runWithoutConfigHomeVariables(() => {
+    const tmpHome = makeTempDir();
+    try {
+      const copilotPath = path.join(tmpHome, '.copilot', 'mcp-config.json');
+      fs.mkdirSync(path.dirname(copilotPath), { recursive: true });
+      const stale = path.join(tmpHome, 'gone', 'egc-memory', 'build', 'index.js');
+      const own = {
+        mcpServers: {
+          playwright: { type: 'local', command: 'npx', args: ['@playwright/mcp@latest'], tools: ['*'] },
+          'egc-memory': { type: 'local', command: 'node', args: [stale], tools: ['browse'] },
+        },
+      };
+      fs.writeFileSync(copilotPath, JSON.stringify(own, null, 2));
+      const target = buildMcpRegistrationTargets(tmpHome).find(t => t.name === 'GitHub Copilot CLI');
+      assert.strictEqual(registerJson(copilotPath, bins, target), true);
+      const written = JSON.parse(fs.readFileSync(copilotPath, 'utf8'));
+      assert.deepStrictEqual(written.mcpServers.playwright, own.mcpServers.playwright, 'the person\'s server stays as written');
+      assert.deepStrictEqual(written.mcpServers['egc-guardian'], { type: 'local', tools: ['*'], command: 'node', args: [bins.guardianBin] });
+      assert.deepStrictEqual(written.mcpServers['egc-memory'], { type: 'local', command: 'node', args: [bins.memoryBin], tools: ['browse'] }, 'the refreshed entry keeps the keys the person set');
+      assert.strictEqual(registerJson(copilotPath, bins, target), false, 'a second run is idempotent');
     } finally {
       fs.rmSync(tmpHome, { recursive: true, force: true });
     }
