@@ -237,6 +237,9 @@ async function runTests() {
           0,
           `hook writer worker ${res.index} exited with non-zero code ${res.code}: ${res.stderr}`
         );
+        // The writer is fire-and-forget: it logs a failure and still exits 0,
+        // so a lost event shows up here first, with its cause.
+        assert.strictEqual(res.stderr.trim(), '', `hook writer worker ${res.index} reported an error: ${res.stderr}`);
       }
 
       // Verify database integrity
