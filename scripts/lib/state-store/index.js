@@ -10,7 +10,7 @@ const { resolveStateStorePath } = require('./path');
 async function createStateStore(options = {}) {
   const dbPath = resolveStateStorePath(options);
 
-  const db = await openDatabase(dbPath);
+  const db = await openDatabase(dbPath, { lockTimeoutMs: options.lockTimeoutMs });
   let queryApi, appliedMigrations;
   try {
     db.pragma('foreign_keys = ON');

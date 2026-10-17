@@ -1,14 +1,16 @@
 /**
  * STR-05: Read-only filesystem simulation.
- * Revoke write permission on the DB file after creation. Writes are
- * debounced (PERF-01), so upsertSession() itself no longer throws
- * synchronously — the failure is logged when the write is actually
- * flushed to disk. Assert store.flush() surfaces that failure.
+ * Revoke write permission on the directory of the DB file after creation.
+ * Every write takes the <db>.db-lock file in that directory first, so the
+ * permission error surfaces at the write itself, before anything reaches
+ * the database file, and the file keeps what it had. Skipped where directory
+ * permission bits are not enforced for the current user (Windows, root).
  */
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const { permissionBitsEnforced, withDirMode } = require('../fixtures/dir-permissions');
 
 let passed = 0;
 let failed = 0;
@@ -26,9 +28,15 @@ async function test(name, fn) {
 }
 
 (async () => {
-  await test('store.flush() throws Error when the DB file is read-only', async () => {
+  if (!permissionBitsEnforced()) {
+    console.log('  - store.flush() throws Error when the DB directory is read-only (skipped: permission bits are not enforced here)');
+    return;
+  }
+
+  await test('a write fails with the permission error when the DB directory is read-only, and the file keeps what it had', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-test-'));
-    const dbPath = path.join(tempDir, 'state.db');
+    const dbDir = path.join(tempDir, 'store');
+    const dbPath = path.join(dbDir, 'state.db');
 
     const { createStateStore } = require('../../scripts/lib/state-store/index.js');
 
@@ -49,30 +57,27 @@ async function test(name, fn) {
       // Initial upsert (and the migrations before it) already flushed the
       // file to disk synchronously, so it exists at this point.
       store.upsertSession(validSession);
+      await store.flush();
       assert.ok(fs.existsSync(dbPath), 'DB file must exist before the read-only simulation');
 
-      // Make the file read-only to simulate a read-only filesystem
-      fs.chmodSync(dbPath, 0o444);
-
-      const originalConsoleError = console.error;
-      let errorLogged = false;
-      console.error = (msg, ..._rest) => {
-        if (typeof msg === 'string' && msg.includes('Failed to persist state')) errorLogged = true;
-      };
-      try {
-        store.upsertSession({ ...validSession, snapshot: { foo: 'baz' } });
-        await assert.rejects(
-          () => store.flush(),
+      // A read-only directory simulates a read-only filesystem
+      await withDirMode(dbDir, 0o555, async () => {
+        assert.throws(
+          () => store.upsertSession({ ...validSession, snapshot: { foo: 'baz' } }),
           /EPERM|EACCES|EROFS/,
-          'Expected a filesystem permission error'
+          'Expected a filesystem permission error at the write'
         );
-        assert.ok(errorLogged, 'Expected console.error to be called for the filesystem error');
+        await store.flush();
+        assert.ok(!fs.existsSync(`${dbPath}.db-lock`), 'no lock may be left behind by the refused write');
+      });
+
+      const again = await createStateStore({ dbPath });
+      try {
+        assert.deepStrictEqual(again.getSessionById('session-1').snapshot, { foo: 'bar' }, 'the file must keep the row as it was before the refused write');
       } finally {
-        console.error = originalConsoleError;
+        again.close();
       }
     } finally {
-      // Restore permissions so we can close/clean up
-      try { fs.chmodSync(dbPath, 0o666); } catch (_e) { /* ignore */ }
       try { store.close(); } catch (_e) { /* ignore */ }
       try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_e) { /* ignore */ }
     }
