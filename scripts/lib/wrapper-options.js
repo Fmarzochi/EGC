@@ -3,9 +3,9 @@
 /**
  * How a wrapper (sudo, env, timeout, xargs, parallel, ...) reads its own
  * options, for the hooks that must find the command behind it: the same
- * tables and rules as the egc-guardian validator (validator.ts,
- * local-wrappers.ts and parallel-options.ts), which cannot be required from
- * here.
+ * tables and rules as the egc-guardian validator (validator-wrappers.ts,
+ * validator-unwrap.ts, local-wrappers.ts and parallel-options.ts), which
+ * cannot be required from here.
  * tests/lib/wrapper-options.test.js keeps the two in step.
  */
 
@@ -369,7 +369,7 @@ function runnerCommandStart(values) {
 }
 
 // Shell keywords and grouping openers that stand in front of the command
-// actually run (validator.ts SHELL_KEYWORDS): `then bash x.sh`, `( bash x.sh )`.
+// actually run (validator-unwrap.ts SHELL_KEYWORDS): `then bash x.sh`, `( bash x.sh )`.
 const SHELL_KEYWORDS = new Set(['if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', '(']);
 
 module.exports = { WRAPPER_SPECS, RUNNER_SPECS, PARALLEL_SPECS, SHELL_KEYWORDS, readWrapperOption, readParallelOption, readBwrapOption, runnerCommandStart, commandName };

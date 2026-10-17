@@ -89,9 +89,10 @@ test('the discovery loop covers every tool directory getEGCDir() can resolve to'
 
 test('skill commands reach the protected EGC home only where the Guardian allows it', () => {
   // The Guardian lets the agent read ~/.egc/metrics (buildReadSafePaths in
-  // validator.ts) through read-only commands such as test and cat, but
-  // refuses jq or a for loop that names a path there, and the rest of ~/.egc.
-  const validator = read('mcp/servers/egc-guardian/src/validator.ts');
+  // validator-protected-paths.ts) through read-only commands such as test and
+  // cat, but refuses jq or a for loop that names a path there, and the rest
+  // of ~/.egc.
+  const validator = read('mcp/servers/egc-guardian/src/validator-protected-paths.ts');
   assert.ok(
     /function buildReadSafePaths\(\)[\s\S]*?path\.join\(home, '\.egc', 'metrics'\)/.test(validator),
     'the Guardian no longer lists ~/.egc/metrics as readable: revisit the skill'

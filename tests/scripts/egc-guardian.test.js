@@ -205,7 +205,7 @@ async function runTests() {
   // ── validate_write: DENIED (granular per-tool credential files) ───────────
   // ~/.claude, ~/.cursor, ~/.gemini, ~/.config/* used to be denied wholesale.
   // Now only the specific file that actually holds a secret is denied, per
-  // official docs research (see validator.ts comment above PROTECTED_FILE_PATTERNS).
+  // official docs research (see the validator-protected-paths.ts comment above PROTECTED_FILE_PATTERNS).
 
   console.log('\n=== validate_write: DENIED (granular credential files) ===');
 

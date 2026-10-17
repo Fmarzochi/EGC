@@ -7,7 +7,7 @@
 // "Run hook command on events requiring prompts", is an open request): the
 // closest substitute for the Guardian was to seed that list with the base
 // commands the Guardian hard-blocks regardless of arguments (`DANGEROUS` in
-// mcp/servers/egc-guardian/src/validator.ts).
+// mcp/servers/egc-guardian/src/validator-allowlists.ts).
 //
 // The Roo Code adapter was retired on 2026-08-16 (project archived
 // upstream) and nothing plans this merge any more. What stays here is what
@@ -21,7 +21,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // Must stay in sync with the `DANGEROUS` export in
-// mcp/servers/egc-guardian/src/validator.ts -- the source of truth for
+// mcp/servers/egc-guardian/src/validator-allowlists.ts -- the source of truth for
 // which base commands Guardian hard-blocks unconditionally. Duplicated
 // here (not imported) because that file is TypeScript compiled into the
 // egc-guardian MCP server's own build, not reachable from these plain
