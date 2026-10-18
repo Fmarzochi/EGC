@@ -90,6 +90,18 @@ async function main() {
 
   console.log('\n=== state-db-writer hook ===\n');
 
+  // A Windows persist is several times slower, and a queue of writers there
+  // outlasted the 4 s budget: the hook gave up and the event was lost. The
+  // budget is per platform, the lock's own default on Windows.
+  const budget = await test('a hook write waits 15 s for the store on Windows and 4 s elsewhere', async () => {
+    const { hookLockTimeoutMs } = require(WRITER);
+    assert.strictEqual(hookLockTimeoutMs('win32'), 15000);
+    assert.strictEqual(hookLockTimeoutMs('linux'), 4000);
+    assert.strictEqual(hookLockTimeoutMs('darwin'), 4000);
+  });
+  passed += Number(budget);
+  failed += Number(!budget);
+
   if (await test('a payload that arrives in pieces, with pauses, is recorded whole', async () => {
     await withSeededHome(async (homeDir, env) => {
       const payload = JSON.stringify({ event_type: 'tool_use', session_id: 'pieces-session', tool: 'Edit' });
