@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { buildMcpRegistrationTargets, parseJsonObject } = require('./mcp-register');
+const { parseYamlObject } = require('./mcp-register-yaml');
 
 let TOML = null;
 try {
@@ -89,6 +90,32 @@ function serversFromCrush(obj) {
   return found;
 }
 
+// Amp keeps its servers under a single top-level key named "amp.mcpServers"
+// (a literal dotted key, not a nested object), each with the mcpServers shape.
+function serversFromAmp(obj) {
+  const found = {};
+  const servers = obj['amp.mcpServers'];
+  for (const name of EGC_SERVER_NAMES) {
+    const entry = entryOf(servers, name);
+    if (entry) found[name] = launchOf(entry.command, entry.args, entry.env);
+  }
+  return found;
+}
+
+// Goose lists its servers as items in a top-level `extensions` array, each one
+// a stdio transport that carries the command and args under `transport`.
+function serversFromGoose(obj) {
+  const found = {};
+  const extensions = Array.isArray(obj.extensions) ? obj.extensions : [];
+  for (const name of EGC_SERVER_NAMES) {
+    const entry = extensions.find(ext => ext && ext.name === name);
+    if (!entry) continue;
+    const transport = entry.transport && typeof entry.transport === 'object' ? entry.transport : {};
+    found[name] = launchOf(transport.command, transport.args, transport.env);
+  }
+  return found;
+}
+
 function serversFromZed(obj) {
   const found = {};
   for (const name of EGC_SERVER_NAMES) {
@@ -143,6 +170,12 @@ const READERS = {
   'zed-context-servers': (targetPath, text) => readJsonServers(targetPath, text, serversFromZed),
   'opencode-mcp': (targetPath, text) => readJsonServers(targetPath, text, serversFromOpenCode),
   'crush-mcp': (targetPath, text) => readJsonServers(targetPath, text, serversFromCrush),
+  // Amp reads its user settings as JSON from ~/.config/amp/settings.json, with
+  // the servers under the amp.mcpServers key the registrar writes.
+  'amp-settings': (targetPath, text) => readJsonServers(targetPath, text, serversFromAmp),
+  // Goose reads its config as YAML from config.yaml; the servers live in the
+  // extensions list the registrar maintains.
+  'goose-yaml': (targetPath, text) => serversFromGoose(parseYamlObject(targetPath, text)),
 };
 
 // The doctor judges presence by files, never by PATH: a tool is on this
@@ -378,6 +411,7 @@ async function buildMcpReport(homeDir, options = {}) {
 module.exports = {
   DEFAULT_PROBE_TIMEOUT_MS,
   EGC_SERVER_NAMES,
+  READERS,
   buildMcpReport,
   describeRegistration,
   describeServer,
