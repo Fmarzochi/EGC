@@ -143,7 +143,7 @@
     "fast-uri": "^3.1.8",
     "undici": "^6.27.0",
     "@hono/node-server": "^2.0.5",
-    "hono": "4.13.7",
+    "hono": "4.13.11",
     "proxy-addr": "^2.0.8",
     "katex": "^0.18.2",
     "smol-toml": "^1.9.0"
@@ -155,7 +155,7 @@
       "fast-uri": "^3.1.8",
       "undici": "^6.27.0",
       "@hono/node-server": "^2.0.5",
-      "hono": "4.13.7",
+      "hono": "4.13.11",
       "proxy-addr": "^2.0.8",
       "katex": "^0.18.2",
       "smol-toml": "^1.9.0"
