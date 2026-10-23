@@ -65,6 +65,9 @@
     "@types/node": "^20.0.0",
     "typescript": "^5.3.0"
   },
+  "overrides": {
+    "zod": "^4.6.6"
+  },
   "engines": {
     "node": ">=18.0.0"
   }
