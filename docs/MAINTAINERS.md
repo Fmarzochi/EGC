@@ -19,7 +19,7 @@
 
 ## Area Stewards
 
-Area stewards review and triage their area without elevated access; the areas, the people and the rules are in [governance/stewards.md](governance/stewards.md).
+Area stewards review and triage their area with the `triage` permission and nothing above it: labels, assignees and the state of issues and pull requests, no access to the code or the settings. The areas, the people, the rules and the automation that requests their review are in [governance/stewards.md](governance/stewards.md).
 
 ## Access to Sensitive Resources
 
