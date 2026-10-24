@@ -13,9 +13,15 @@ const distDir = path.join(opencodeDir, "dist")
 // optional peer is missing we skip cleanly (exit 0 with a SKIP marker) so
 // `npm install` and CI test matrices stay green; strict publishing pipelines
 // can force the build by setting EGC_OPENCODE_BUILD=required.
+//
+// The plugin's own dependencies (.opencode/package.json: @opencode-ai/plugin
+// and typescript ^5) are looked up first: the root tree carries TypeScript 6,
+// which does not compile the plugin, so the root is only a fallback.
+const resolvePaths = [opencodeDir, rootDir]
+
 function hasOpencodePeer() {
   try {
-    require.resolve("@opencode-ai/plugin", { paths: [rootDir] })
+    require.resolve("@opencode-ai/plugin", { paths: resolvePaths })
     return true
   } catch {
     return false
@@ -34,10 +40,10 @@ fs.rmSync(distDir, { recursive: true, force: true })
 let tscEntrypoint
 
 try {
-  tscEntrypoint = require.resolve("typescript/bin/tsc", { paths: [rootDir] })
+  tscEntrypoint = require.resolve("typescript/bin/tsc", { paths: resolvePaths })
 } catch {
   throw new Error(
-    "TypeScript compiler not found. Install root dev dependencies before publishing so .opencode/dist can be built."
+    "TypeScript compiler not found. Run npm ci --prefix .opencode --ignore-scripts before publishing so .opencode/dist can be built."
   )
 }
 

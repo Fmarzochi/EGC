@@ -15,6 +15,12 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+    # The OpenCode plugin build skips when @opencode-ai/plugin is not installed,
+    # and the published package then carries a .opencode/package.json whose main
+    # points at a dist that is not there (1.1.22 shipped that way). A release
+    # installs the plugin's dependencies and refuses to pack without the build.
+    env:
+      EGC_OPENCODE_BUILD: required
 
     steps:
       - name: Checkout
@@ -30,6 +36,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install the OpenCode plugin build dependencies
+        run: npm ci --prefix .opencode --ignore-scripts
 
       - name: Verify OpenCode package payload
         run: node tests/scripts/build-opencode.test.js

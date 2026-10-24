@@ -33,6 +33,10 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    # Same rule as release.yml: the OpenCode plugin build must run, so the
+    # published .opencode/package.json points at a dist that exists.
+    env:
+      EGC_OPENCODE_BUILD: required
 
     steps:
       - name: Checkout
@@ -49,6 +53,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install the OpenCode plugin build dependencies
+        run: npm ci --prefix .opencode --ignore-scripts
 
       - name: Verify OpenCode package payload
         run: node tests/scripts/build-opencode.test.js

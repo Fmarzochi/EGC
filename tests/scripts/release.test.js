@@ -45,20 +45,31 @@ function test(name, fn) {
   }
 }
 
+function assertForcedOpencodeBuild(name, source) {
+  const envIndex = source.indexOf('EGC_OPENCODE_BUILD: required');
+  const installIndex = source.indexOf('npm ci --prefix .opencode --ignore-scripts');
+  const verifyIndex = source.indexOf('node tests/scripts/build-opencode.test.js');
+  assert.ok(envIndex >= 0, `${name} should set EGC_OPENCODE_BUILD=required so the plugin build cannot skip`);
+  assert.ok(installIndex >= 0, `${name} should install the OpenCode plugin dependencies`);
+  assert.ok(verifyIndex >= 0, `${name} should verify the OpenCode payload`);
+  assert.ok(installIndex < verifyIndex, `${name} should install the plugin dependencies before verifying the payload`);
+}
+
 function runTests() {
   console.log('\n=== Testing release.sh ===\n');
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => { if (ok) passed++; else failed++; };
 
-  if (test('release script rejects untracked files when checking cleanliness', () => {
+  tally(test('release script rejects untracked files when checking cleanliness', () => {
     assert.ok(
       source.includes('git status --porcelain --untracked-files=all'),
       'release.sh should use git status --porcelain --untracked-files=all for cleanliness checks'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('release script reruns release metadata sync validation before commit/tag', () => {
+  tally(test('release script reruns release metadata sync validation before commit/tag', () => {
     const syncCheckIndex = source.lastIndexOf('node tests/plugin-manifest.test.js');
     const commitIndex = source.indexOf('git commit -m "chore: bump plugin version to $VERSION"');
 
@@ -68,9 +79,9 @@ function runTests() {
       syncCheckIndex < commitIndex,
       'plugin-manifest.test.js should run before the release commit is created'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('release script verifies npm pack payload after version updates and before commit/tag', () => {
+  tally(test('release script verifies npm pack payload after version updates and before commit/tag', () => {
     const updateIndex = source.indexOf('update_version "$ROOT_PACKAGE_JSON"');
     const packCheckIndex = source.indexOf('node tests/scripts/build-opencode.test.js');
     const commitIndex = source.indexOf('git commit -m "chore: bump plugin version to $VERSION"');
@@ -86,9 +97,9 @@ function runTests() {
       packCheckIndex < commitIndex,
       'build-opencode.test.js should run before the release commit is created'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('release script supports prerelease semver and release heading sync', () => {
+  tally(test('release script supports prerelease semver and release heading sync', () => {
     assert.ok(
       source.includes('2.0.0-rc.1'),
       'release.sh should document an accepted prerelease semver example'
@@ -101,9 +112,9 @@ function runTests() {
       source.includes('update_latest_release_heading "$ROOT_ZH_CN_README_FILE"'),
       'release.sh should update localized latest-release headings that plugin-manifest.test.js verifies'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('release workflows mark prerelease tags as GitHub prereleases', () => {
+  tally(test('release workflows mark prerelease tags as GitHub prereleases', () => {
     assert.ok(
       releaseWorkflowSource.includes('prerelease: ${{ contains(github.ref_name, \'-\') }}'),
       'release.yml should mark hyphenated tag pushes as GitHub prereleases'
@@ -120,9 +131,9 @@ function runTests() {
       reusableReleaseWorkflowSource.includes('make_latest: ${{ contains(inputs.tag, \'-\') && \'false\' || \'true\' }}'),
       'reusable-release.yml should avoid making hyphenated prereleases the latest GitHub release'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('reusable release checks out the requested tag before validating and publishing', () => {
+  tally(test('reusable release checks out the requested tag before validating and publishing', () => {
     const checkoutIndex = reusableReleaseWorkflowSource.indexOf('uses: actions/checkout@');
     const refIndex = reusableReleaseWorkflowSource.indexOf('ref: ${{ inputs.tag }}');
     const validateIndex = reusableReleaseWorkflowSource.indexOf('name: Validate version tag');
@@ -134,9 +145,14 @@ function runTests() {
       checkoutIndex < refIndex && refIndex < validateIndex,
       'reusable release should check out inputs.tag before tag validation and publish steps'
     );
-  })) passed++; else failed++;
+  }));
 
-  if (test('CI runs for release branches and version tags before release workflows execute', () => {
+  tally(test('release workflows force the OpenCode plugin build before verifying and packing the payload', () => {
+    assertForcedOpencodeBuild('release.yml', releaseWorkflowSource);
+    assertForcedOpencodeBuild('reusable-release.yml', reusableReleaseWorkflowSource);
+  }));
+
+  tally(test('CI runs for release branches and version tags before release workflows execute', () => {
     const pushBlockMatch = normalizedCiWorkflowSource.match(/on:\n\s+push:\n([\s\S]*?)\n\s+pull_request:/);
     const pushBlock = pushBlockMatch ? pushBlockMatch[1] : '';
 
@@ -151,7 +167,7 @@ function runTests() {
       /tags:\s*\[[^\]]*['"]v\*['"][^\]]*\]/,
       'ci.yml push tags should include v*'
     );
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
