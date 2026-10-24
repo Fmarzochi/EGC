@@ -71,6 +71,12 @@ function main() {
         encoding: "utf8",
       })
       assert.strictEqual(result.status, 0, result.stderr)
+      // The plugin package is ESM-only: a CommonJS resolve of its entry fails
+      // even when it is installed, which once made the build call it missing.
+      const peerInstalled = fs.existsSync(path.join(repoRoot, ".opencode", "node_modules", "@opencode-ai", "plugin", "package.json"))
+      if (peerInstalled) {
+        assert.ok(!/SKIP: build-opencode/.test(result.stderr || ""), "the build must not call the plugin missing when .opencode has it installed")
+      }
       if (/SKIP: build-opencode/.test(result.stderr || "") && !fs.existsSync(distEntry)) {
         buildDeclined = true
         throw skip("@opencode-ai/plugin not installed, so the build declined and left no dist")

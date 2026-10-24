@@ -3,6 +3,7 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
+- The OpenCode build sees the plugin package when it is installed: `@opencode-ai/plugin` is ESM-only with an `exports` map, so the CommonJS resolve the build used to detect it threw even when installed and `npm pack` skipped the plugin build unless forced; the check now looks for the package's `package.json` under `.opencode/node_modules` (#2025).
 - The switch to WAL is best effort wherever a native connection opens the store: `enableWalBestEffort` moves from the hook writer into `scripts/lib/state-store/sqlite-compat.js`, and the memory server (at start and in `detect_patterns`) and the concurrency test's simulated server use it, so a `SQLITE_BUSY` on the journal-mode switch no longer fails a start when several processes open the store at once (#2024, found by a red `main` lane after the v1.1.23 tag).
 
 ## v1.1.23: The Long Round (Released 2026-10-24)

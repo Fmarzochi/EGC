@@ -19,13 +19,13 @@ const distDir = path.join(opencodeDir, "dist")
 // which does not compile the plugin, so the root is only a fallback.
 const resolvePaths = [opencodeDir, rootDir]
 
+// The plugin package is ESM-only with an exports map, so resolving its entry
+// from CommonJS throws even when it is installed; the check looks for the
+// package itself where the compiler will find it.
+const PEER_PACKAGE_JSON = path.join("node_modules", "@opencode-ai", "plugin", "package.json")
+
 function hasOpencodePeer() {
-  try {
-    require.resolve("@opencode-ai/plugin", { paths: resolvePaths })
-    return true
-  } catch {
-    return false
-  }
+  return resolvePaths.some(dir => fs.existsSync(path.join(dir, PEER_PACKAGE_JSON)))
 }
 
 const requireBuild = process.env.EGC_OPENCODE_BUILD === "required"
