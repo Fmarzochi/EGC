@@ -14,29 +14,6 @@
         "**/*windows*",
         "**/*windows*/**"
       ]
-    },
-    {
-      "area": "Session Mesh",
-      "steward": "Tyr1onX",
-      "status": "invited",
-      "paths": [
-        "**/*session-bus*",
-        "**/*mesh*",
-        "mcp/servers/egc-memory/src/sync/**"
-      ]
-    },
-    {
-      "area": "Installer",
-      "steward": "kunaaaalcodes",
-      "status": "invited",
-      "paths": [
-        "scripts/install.js",
-        "scripts/install.sh",
-        "scripts/lib/install-*.js",
-        "scripts/lib/install-targets/**",
-        "tests/scripts/install-*.test.js",
-        "tests/lib/install-*.test.js"
-      ]
     }
   ]
 }
