@@ -4,6 +4,8 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+## [1.1.23] - 2026-10-24
+
 ### Fixed
 
 - **The release builds the OpenCode plugin with the plugin's own TypeScript, and refuses to pack without it** (#2022): the published 1.1.22 carries a `.opencode/package.json` whose `main` and `exports` point at `dist/`, and no `dist/`. `scripts/build-opencode.js` skipped on the release runner because `@opencode-ai/plugin` is not a root dependency, and the payload test accepted the skip; forced locally, the build failed anyway, because the script resolved `tsc` from the root tree (TypeScript 6.0.3 since the October updates) instead of the plugin's own `typescript` 5.9, and TypeScript 6 does not compile the plugin (#2002, #2010). The script now resolves `@opencode-ai/plugin` and `tsc` from `.opencode` first; `release.yml` and `reusable-release.yml` install the plugin's dependencies and set `EGC_OPENCODE_BUILD=required` for the whole job, so a skip fails the release instead of shipping a broken manifest. `tests/scripts/release.test.js` pins the workflow steps and `tests/scripts/build-opencode.test.js` the resolution order; with the build forced, all four payload cases pass.
