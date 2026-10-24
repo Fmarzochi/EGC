@@ -15,9 +15,9 @@ Sustained, merged contributions in an area, followed by an invitation from the m
 
 ## How the role is wired
 
-- **Review.** [`.github/stewards.json`](../../.github/stewards.json) is the machine-readable twin of the table below, with the paths of each area. When a pull request opens, [`steward-review.yml`](../../.github/workflows/steward-review.yml) requests the review of the accepted steward of every area the changed files touch, unless the steward is the author. `tests/ci/request-steward-review.test.js` fails when the file and the table disagree, so a change to one is a change to both.
-- **Triage.** A steward who accepts receives the repository's `triage` permission and nothing above it: labels, assignees and the state of issues and pull requests, no access to the code or the settings. GitHub also requires it to request the review.
-- **Labels.** Issues and pull requests of an area carry its labels: `platform: windows` and `tool: opencode` for Windows and OpenCode, `area: memory` for Session Mesh, `area: installer` for Installer.
+- **Review.** [`.github/stewards.json`](../../.github/stewards.json) is the machine-readable twin of the table below, with the paths of each area. When a pull request opens, [`steward-review.yml`](../../.github/workflows/steward-review.yml) asks the accepted steward of every area the changed files touch for a review, unless the steward is the author. GitHub accepts a formal review request for collaborators only, so a steward who holds no access is mentioned in one comment on the pull request instead; the notification is the same. `tests/ci/request-steward-review.test.js` fails when the file and the table disagree, so a change to one is a change to both.
+- **Access.** A steward holds no repository access. EGC is a personal repository, and GitHub offers the `triage` level on organization-owned repositories only; the one level a personal repository can grant is write access to the code, which the role does not carry. Labels, assignees and the state of issues and pull requests stay with the maintainer, who acts on the steward's call.
+- **Labels.** Issues and pull requests of an area carry its labels: `platform: windows` and `tool: opencode` for Windows and OpenCode.
 
 ## Areas and stewards
 
