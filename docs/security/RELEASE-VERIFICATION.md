@@ -30,7 +30,7 @@ Build provenance for the release tarball is attested via [GitHub Artifact Attest
 To verify it, set `VERSION` to the release you want to check:
 
 ```bash
-VERSION=1.1.22
+VERSION=1.1.23
 gh release download "v$VERSION" --repo Fmarzochi/EGC --pattern "egchq-egc-$VERSION.tgz"
 gh attestation verify "egchq-egc-$VERSION.tgz" --repo Fmarzochi/EGC
 ```
