@@ -58,6 +58,13 @@ function main() {
       )
       assert.ok(packageJson.files.includes(".opencode/"))
     }],
+    ["build script looks for the plugin toolchain in .opencode before the root", () => {
+      // The root tree carries TypeScript 6, which does not compile the plugin;
+      // .opencode declares its own typescript ^5 and @opencode-ai/plugin.
+      const source = fs.readFileSync(buildScript, "utf8")
+      assert.ok(source.includes("const resolvePaths = [opencodeDir, rootDir]"), "the build must resolve from .opencode first, then the root")
+      assert.ok(!source.includes("paths: [rootDir]"), "no lookup may start at the root alone")
+    }],
     ["build script generates .opencode/dist", () => {
       const result = spawnSync("node", [buildScript], {
         cwd: repoRoot,
