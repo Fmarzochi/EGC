@@ -16,12 +16,17 @@
  * The budget therefore no longer varies by platform: a timeout here is a
  * last-resort hang detector, not a performance assertion.
  *
+ * On 2026-10-23 a saturated Windows runner (every interpreter spawn took
+ * about 17s, the job 24 minutes) overran the old 90s on the first run of
+ * the InsAIts monitor suite while the other 7243 tests passed, so the
+ * budget doubled.
+ *
  * Kept in one place so the next adjustment is a single edit rather than a
  * hunt through every suite.
  */
 
 // For suites that install or uninstall a target end to end.
-const FULL_INSTALL_TIMEOUT_MS = 90000;
+const FULL_INSTALL_TIMEOUT_MS = 180000;
 
 // For suites that only spawn a CLI to read output (--help, --json probes).
 const CLI_TIMEOUT_MS = 30000;
