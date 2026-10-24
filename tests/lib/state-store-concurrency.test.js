@@ -12,6 +12,7 @@ const {
 } = require('../../scripts/lib/state-store');
 const {
   openCompatDatabase,
+  enableWalBestEffort,
 } = require('../../scripts/lib/state-store/sqlite-compat');
 
 const PROJECT_ID = 'egc-concurrency-suite';
@@ -455,7 +456,7 @@ async function runTests() {
       try {
         process.env.EGC_SQLITE_ENGINE = 'native';
         const nativeDb = await openCompatDatabase(dbPath, 'native-writer');
-        await nativeDb.exec('PRAGMA journal_mode = WAL;');
+        await enableWalBestEffort(nativeDb);
         await nativeDb.exec('CREATE TABLE test_shared (id TEXT PRIMARY KEY, val TEXT);');
         await nativeDb.run('INSERT INTO test_shared VALUES (?, ?)', ['n1', 'native-val-1']);
         await nativeDb.close();
@@ -666,12 +667,12 @@ async function runTests() {
 
       const SERVER_TRANSACTIONS = 5;
       const serverWorkerScript = `
-        const { openCompatDatabase, selectedEngine } = require(${JSON.stringify(SQLITE_COMPAT_PATH)});
+        const { openCompatDatabase, selectedEngine, enableWalBestEffort } = require(${JSON.stringify(SQLITE_COMPAT_PATH)});
         async function run() {
           const db = await openCompatDatabase(${JSON.stringify(dbPath)}, 'simulated-mcp-server');
           if (selectedEngine() === 'native') {
             await db.exec('PRAGMA busy_timeout = 5000;');
-            await db.exec('PRAGMA journal_mode = WAL;');
+            await enableWalBestEffort(db);
             await db.exec('PRAGMA synchronous = NORMAL;');
           }
           for (let i = 0; i < ${SERVER_TRANSACTIONS}; i += 1) {

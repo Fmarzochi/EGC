@@ -8,6 +8,7 @@ import type { Database } from 'sqlite';
 type CompatModule = {
   openCompatDatabase(filename: string, serverName: string): Promise<Database>;
   selectedEngine(): 'native' | 'wasm';
+  enableWalBestEffort(db: Database): Promise<void>;
 };
 
 const load = createRequire(__filename);
@@ -19,4 +20,10 @@ export function openCompatDatabase(filename: string, serverName: string): Promis
 
 export function selectedEngine(): 'native' | 'wasm' {
   return compat.selectedEngine();
+}
+
+// The switch to WAL retried through SQLITE_BUSY and then left to the next
+// opener; the chooser owns the policy so every opener shares it.
+export function enableWalBestEffort(db: Database): Promise<void> {
+  return compat.enableWalBestEffort(db);
 }

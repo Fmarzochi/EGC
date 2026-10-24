@@ -1,5 +1,5 @@
 import { Database } from 'sqlite';
-import { openCompatDatabase } from './sqlite-compat';
+import { openCompatDatabase, enableWalBestEffort } from './sqlite-compat';
 import path from 'node:path';
 import fs from 'node:fs';
 import { log, ensurePrivateDir, hideEgcRootOnWindows } from './memory-logging';
@@ -283,11 +283,12 @@ export async function getDb(): Promise<Database> {
       const dbPath = path.join(dbDir, 'state.db');
       dbInstance = await openCompatDatabase(dbPath, 'egc-memory');
 
-      // The wait goes in before anything that takes the store's lock:
-      // switching to WAL does, and another process starting at the same
-      // moment may hold it, so the switch waits for it like every later query.
+      // The wait goes in before anything that takes the store's lock. The
+      // switch to WAL needs the file to itself and the busy handler does not
+      // always cover it, so it is retried and, failing that, left to the next
+      // opener instead of failing the server's start.
       await dbInstance.exec('PRAGMA busy_timeout = 5000;');
-      await dbInstance.exec('PRAGMA journal_mode = WAL;');
+      await enableWalBestEffort(dbInstance);
       await dbInstance.exec('PRAGMA synchronous = NORMAL;');
       await dbInstance.exec('PRAGMA foreign_keys = ON;');
 

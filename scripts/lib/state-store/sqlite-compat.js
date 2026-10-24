@@ -78,4 +78,28 @@ function selectedEngine() {
   return selected;
 }
 
-module.exports = { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase, acquireFileLock, acquireFileLockSync, releaseFileLock, isProcessAlive, assertNoPendingWal, renameOverSync, readFileWithIdentity };
+// Switching the journal mode needs the file to itself, and the busy handler
+// does not always cover that step: processes opening the same store at the
+// same moment see SQLITE_BUSY there (the hook writers first, then the memory
+// server on a saturated runner). WAL is a performance setting, not a
+// correctness one: the switch is retried for a short while and then left to
+// the next opener; every query still waits through busy_timeout.
+const WAL_SWITCH_ATTEMPTS = 20;
+const WAL_SWITCH_RETRY_MS = 50;
+
+async function enableWalBestEffort(db, attempt = 0) {
+  try {
+    const modeRow = await db.get('PRAGMA journal_mode;');
+    const currentMode = modeRow ? Object.values(modeRow)[0] : null;
+    if (typeof currentMode !== 'string' || currentMode.toLowerCase() !== 'wal') {
+      await db.exec('PRAGMA journal_mode = WAL;');
+    }
+  } catch (err) {
+    if (err?.code !== 'SQLITE_BUSY') throw err;
+    if (attempt + 1 >= WAL_SWITCH_ATTEMPTS) return;
+    await new Promise(resolve => setTimeout(resolve, WAL_SWITCH_RETRY_MS));
+    await enableWalBestEffort(db, attempt + 1);
+  }
+}
+
+module.exports = { openCompatDatabase, selectedEngine, enableWalBestEffort, isNativeLoadFailure, normalizeParams, mutates, splitStatements, WasmDatabase, acquireFileLock, acquireFileLockSync, releaseFileLock, isProcessAlive, assertNoPendingWal, renameOverSync, readFileWithIdentity };

@@ -489,6 +489,25 @@ async function runTests() {
     }
   });
 
+  await run('the switch to WAL retries SQLITE_BUSY, gives up quietly after its attempts, rethrows anything else and leaves a WAL store alone', async () => {
+    const { enableWalBestEffort } = require('../../scripts/lib/state-store/sqlite-compat');
+    const busy = Object.assign(new Error('SQLITE_BUSY: database is locked'), { code: 'SQLITE_BUSY' });
+    let landed = 0;
+    const flaky = { async get() { return { journal_mode: 'delete' }; }, async exec() { landed += 1; if (landed < 3) throw busy; } };
+    await enableWalBestEffort(flaky);
+    assert.strictEqual(landed, 3, 'two busy answers are retried and the third switch lands');
+    let refused = 0;
+    const alwaysBusy = { async get() { return { journal_mode: 'delete' }; }, async exec() { refused += 1; throw busy; } };
+    await enableWalBestEffort(alwaysBusy);
+    assert.strictEqual(refused, 20, 'the switch is left to the next opener after twenty busy answers instead of failing the caller');
+    const broken = { async get() { return { journal_mode: 'delete' }; }, async exec() { throw Object.assign(new Error('disk I/O error'), { code: 'SQLITE_IOERR' }); } };
+    await assert.rejects(() => enableWalBestEffort(broken), /disk I\/O error/, 'an error other than busy still surfaces');
+    let touched = 0;
+    const already = { async get() { return { journal_mode: 'wal' }; }, async exec() { touched += 1; } };
+    await enableWalBestEffort(already);
+    assert.strictEqual(touched, 0, 'a store already in WAL is not switched again');
+  });
+
   await run('the native engine is used by default when it loads', async () => {
     delete process.env.EGC_SQLITE_ENGINE;
     let native = true;
