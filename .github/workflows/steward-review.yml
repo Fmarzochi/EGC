@@ -5,6 +5,9 @@ name: Steward Review
 # promise does not depend on a manual ping. pull_request_target gives the
 # token the right to request reviewers on a fork's pull request; the job
 # checks out the base branch only and never runs the pull request's code.
+# GitHub requests reviews from collaborators only, and a personal repository
+# has no triage level to make a steward one without write access, so a
+# steward the request cannot reach is mentioned in one comment instead.
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review]
@@ -45,17 +48,29 @@ jobs:
             --author "$AUTHOR" > /tmp/stewards.txt
           echo "Stewards to ask: $(tr '\n' ' ' < /tmp/stewards.txt)"
 
-      - name: Request the review
+      - name: Request the review, or mention the steward
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          mentions=""
           while IFS= read -r login; do
             [ -z "$login" ] && continue
-            if gh api -X POST "repos/$REPO/pulls/$PR/requested_reviewers" -f "reviewers[]=$login" > /dev/null; then
+            if gh api -X POST "repos/$REPO/pulls/$PR/requested_reviewers" -f "reviewers[]=$login" > /dev/null 2>&1; then
               echo "Requested a review from $login"
             else
-              echo "::warning::Could not request a review from $login; a requested reviewer must be a collaborator of the repository"
+              echo "Could not request a review from $login (not a collaborator); mentioning instead"
+              mentions="$mentions @$login"
             fi
           done < /tmp/stewards.txt
+          [ -z "$mentions" ] && exit 0
+          marker='<!-- steward-review -->'
+          if gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '.[].body' | grep -qF "$marker"; then
+            echo "The stewards were already mentioned on this pull request"
+            exit 0
+          fi
+          body="$marker
+          ${mentions# } this pull request touches an area you steward (docs/governance/stewards.md): a review from you is welcome. The repository mentions you because a formal review request needs a collaborator."
+          gh api -X POST "repos/$REPO/issues/$PR/comments" -f "body=$body" > /dev/null
+          echo "Mentioned${mentions}"

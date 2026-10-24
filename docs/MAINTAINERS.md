@@ -19,7 +19,7 @@
 
 ## Area Stewards
 
-Area stewards review and triage their area with the `triage` permission and nothing above it: labels, assignees and the state of issues and pull requests, no access to the code or the settings. The areas, the people, the rules and the automation that requests their review are in [governance/stewards.md](governance/stewards.md).
+Area stewards review and triage their area without repository access: GitHub offers the `triage` level on organization-owned repositories only, and EGC is a personal repository, so the repository mentions the steward on the pull requests of the area and the maintainer applies labels, assignees and state on the steward's call. The areas, the people, the rules and the automation are in [governance/stewards.md](governance/stewards.md).
 
 ## Access to Sensitive Resources
 

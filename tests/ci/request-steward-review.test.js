@@ -190,6 +190,8 @@ function run() {
     assert.ok(!checkout.with || (!('ref' in checkout.with) && !('repository' in checkout.with)), 'the checkout must stay on the base');
     assert.ok(text.includes('scripts/ci/request-steward-review.js'), 'the workflow does not run the script');
     assert.ok(text.includes('AUTHOR: ${{ github.event.pull_request.user.login }}'), 'the author must reach the shell through env');
+    assert.ok(text.includes('repos/$REPO/issues/$PR/comments'), 'a steward the request cannot reach must be mentioned in a comment');
+    assert.ok(text.includes('<!-- steward-review -->'), 'the mention comment needs its marker so it is posted once per pull request');
   }));
 
   console.log(`\nPassed: ${passed}`);
