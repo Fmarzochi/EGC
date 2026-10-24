@@ -51,13 +51,13 @@ updates:
     directory: "/tests"
     schedule:
       interval: "weekly"
+    # Security updates only. tests/requirements.txt is a pip-compile output
+    # with hashes and no requirements.in in the tree, so a version bump of one
+    # package cannot carry the transitive pins it needs (#2005 hit
+    # ResolutionImpossible on pydantic-core, #2006 lacked httpx2).
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
-    groups:
-      minor-and-patch:
-        update-types:
-          - "minor"
-          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
