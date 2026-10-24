@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { log } from './memory-logging';
 import { writeArbitrator, isSearchIndexReady } from './memory-db';
 import { resolveProjectPath } from './memory-project-path';
-import { openCompatDatabase, selectedEngine } from './sqlite-compat';
+import { openCompatDatabase, selectedEngine, enableWalBestEffort } from './sqlite-compat';
 import { searchDecisions } from './search.js';
 import { detectPatternsFromEvents, patternToStoreEntry } from './patterns.js';
 import { llmCompress, loadRawObservations, pairCompressedWithId, replaceObservation } from './compress.js';
@@ -205,8 +205,8 @@ export async function handleDetectPatterns(db: Database, toolArgs: unknown) {
 
     const ssDb = await openCompatDatabase(stateDbPath, 'egc-memory');
     try {
-      await ssDb.exec('PRAGMA journal_mode = WAL;');
       await ssDb.exec('PRAGMA busy_timeout = 5000;');
+      await enableWalBestEffort(ssDb);
       await ssDb.exec(`
         CREATE TABLE IF NOT EXISTS patterns (
     id TEXT PRIMARY KEY,
