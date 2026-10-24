@@ -1,0 +1,42 @@
+{
+  "about": "Machine-readable twin of the table in docs/governance/stewards.md. tests/ci/request-steward-review.test.js keeps the two in step, and .github/workflows/steward-review.yml asks the accepted steward of an area to review every pull request that touches one of its paths.",
+  "areas": [
+    {
+      "area": "Windows and OpenCode",
+      "steward": "Akisolu",
+      "status": "accepted",
+      "paths": [
+        "**/*.ps1",
+        "tests/scripts/install-ps1*",
+        ".opencode/**",
+        "**/*opencode*",
+        "**/*opencode*/**",
+        "**/*windows*",
+        "**/*windows*/**"
+      ]
+    },
+    {
+      "area": "Session Mesh",
+      "steward": "Tyr1onX",
+      "status": "invited",
+      "paths": [
+        "**/*session-bus*",
+        "**/*mesh*",
+        "mcp/servers/egc-memory/src/sync/**"
+      ]
+    },
+    {
+      "area": "Installer",
+      "steward": "kunaaaalcodes",
+      "status": "invited",
+      "paths": [
+        "scripts/install.js",
+        "scripts/install.sh",
+        "scripts/lib/install-*.js",
+        "scripts/lib/install-targets/**",
+        "tests/scripts/install-*.test.js",
+        "tests/lib/install-*.test.js"
+      ]
+    }
+  ]
+}

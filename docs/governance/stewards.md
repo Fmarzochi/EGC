@@ -13,6 +13,12 @@ EGC has one maintainer. Stewards are the people who own an area with him: the fi
 
 Sustained, merged contributions in an area, followed by an invitation from the maintainer and the person's acceptance. Invited candidates are listed here with an `invited` status and the date of the invitation; the status changes to `accepted` with the date once they accept. A steward can step down at any time by saying so.
 
+## How the role is wired
+
+- **Review.** [`.github/stewards.json`](../../.github/stewards.json) is the machine-readable twin of the table below, with the paths of each area. When a pull request opens, [`steward-review.yml`](../../.github/workflows/steward-review.yml) requests the review of the accepted steward of every area the changed files touch, unless the steward is the author. `tests/ci/request-steward-review.test.js` fails when the file and the table disagree, so a change to one is a change to both.
+- **Triage.** A steward who accepts receives the repository's `triage` permission and nothing above it: labels, assignees and the state of issues and pull requests, no access to the code or the settings. GitHub also requires it to request the review.
+- **Labels.** Issues and pull requests of an area carry its labels: `platform: windows` and `tool: opencode` for Windows and OpenCode, `area: memory` for Session Mesh, `area: installer` for Installer.
+
 ## Areas and stewards
 
 | Area | Scope | Steward | Status |

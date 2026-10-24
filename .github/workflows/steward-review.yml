@@ -1,0 +1,61 @@
+name: Steward Review
+
+# docs/governance/stewards.md promises the area steward the first review on
+# every pull request that touches the area; this workflow asks for it so the
+# promise does not depend on a manual ping. pull_request_target gives the
+# token the right to request reviewers on a fork's pull request; the job
+# checks out the base branch only and never runs the pull request's code.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  request-steward-review:
+    name: Ask the area steward for a review
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout the base branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+
+      - name: Find the stewards the changed files call for
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' > /tmp/changed-files.txt
+          gh api "repos/$REPO/pulls/$PR/requested_reviewers" --jq '.users[].login' > /tmp/requested.txt
+          node scripts/ci/request-steward-review.js \
+            --files /tmp/changed-files.txt \
+            --requested /tmp/requested.txt \
+            --author "$AUTHOR" > /tmp/stewards.txt
+          echo "Stewards to ask: $(tr '\n' ' ' < /tmp/stewards.txt)"
+
+      - name: Request the review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          while IFS= read -r login; do
+            [ -z "$login" ] && continue
+            if gh api -X POST "repos/$REPO/pulls/$PR/requested_reviewers" -f "reviewers[]=$login" > /dev/null; then
+              echo "Requested a review from $login"
+            else
+              echo "::warning::Could not request a review from $login; a requested reviewer must be a collaborator of the repository"
+            fi
+          done < /tmp/stewards.txt
