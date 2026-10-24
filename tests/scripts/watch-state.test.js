@@ -57,37 +57,38 @@ async function runTests() {
   console.log('\n=== Testing scripts/lib/watch-state.js ===\n');
   let passed = 0;
   let failed = 0;
+  const tally = (ok) => { ok ? passed++ : failed++; };
 
-  if (await test('extractEgcBlock returns block between markers', () => {
+  tally(await test('extractEgcBlock returns block between markers', () => {
     const content = `# Header\n\n${SAMPLE_MDC}`;
     const block = extractEgcBlock(content);
     assert.ok(block, 'block should be returned');
     assert.ok(block.includes('EGC Project Memory'), 'should include heading');
     assert.ok(block.includes('sql.js'), 'should include decision');
-  })) passed++; else failed++;
+  }));
 
-  if (await test('extractEgcBlock returns null when no markers', () => {
+  tally(await test('extractEgcBlock returns null when no markers', () => {
     const block = extractEgcBlock('# Just a plain file\n\nNo EGC markers here.');
     assert.strictEqual(block, null);
-  })) passed++; else failed++;
+  }));
 
-  if (await test('extractEgcBlock returns null when only start marker present', () => {
+  tally(await test('extractEgcBlock returns null when only start marker present', () => {
     const block = extractEgcBlock('<!-- egc:start -->\nSome content');
     assert.strictEqual(block, null);
-  })) passed++; else failed++;
+  }));
 
-  if (await test('parseBlockToStateContent produces parseable state content', () => {
+  tally(await test('parseBlockToStateContent produces parseable state content', () => {
     const state = parseBlockToStateContent(SAMPLE_BLOCK);
     assert.ok(state.includes('## Context'), 'should have Context section');
     assert.ok(state.includes('EGC v1.1.1'), 'should include context text');
-  })) passed++; else failed++;
+  }));
 
-  if (await test('parseBlockToStateContent handles empty block gracefully', () => {
+  tally(await test('parseBlockToStateContent handles empty block gracefully', () => {
     const state = parseBlockToStateContent('');
     assert.ok(typeof state === 'string', 'should return string');
-  })) passed++; else failed++;
+  }));
 
-  if (await test('StateWatcher.start returns 0 when no tool files exist', () => {
+  tally(await test('StateWatcher.start returns 0 when no tool files exist', () => {
     const dir = mktemp();
     try {
       const watcher = new StateWatcher(dir);
@@ -97,11 +98,7 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
-
-  // Branchless tally: runTests sits at the complexity ceiling and one more
-  // if/else would breach it.
-  const tally = (ok) => { ok ? passed++ : failed++; };
+  }));
 
   tally(await test('the windsurf resolver watches the one mirror EGC writes: .windsurf/ while it exists, .devin/ in a project on .devin/ alone', () => {
     const { TOOL_FILE_RESOLVERS } = require('../../scripts/lib/watch-state');
@@ -124,7 +121,7 @@ async function runTests() {
     }
   }));
 
-  if (await test('StateWatcher.start returns count of discovered tool files', () => {
+  tally(await test('StateWatcher.start returns count of discovered tool files', () => {
     const dir = mktemp();
     try {
       fs.mkdirSync(path.join(dir, '.cursor', 'rules'), { recursive: true });
@@ -141,9 +138,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('StateWatcher fires onSync and propagates when watched file changes', () => {
+  tally(await test('StateWatcher fires onSync and propagates when watched file changes', () => {
     return new Promise((resolve, reject) => {
       const dir = mktemp();
       let watcher;
@@ -189,9 +186,9 @@ async function runTests() {
         reject(err);
       }
     });
-  })) passed++; else failed++;
+  }));
 
-  if (await test('StateWatcher.stop closes all watchers cleanly', () => {
+  tally(await test('StateWatcher.stop closes all watchers cleanly', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'GEMINI.md'), SAMPLE_MDC);
@@ -201,9 +198,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('StateWatcher fires onSync after atomic rename (editor save)', () => {
+  tally(await test('StateWatcher fires onSync after atomic rename (editor save)', () => {
     return new Promise((resolve, reject) => {
       const dir = mktemp();
       let watcher;
@@ -249,9 +246,9 @@ async function runTests() {
         reject(err);
       }
     });
-  })) passed++; else failed++;
+  }));
 
-  if (await test('mergeBlockIntoStateFile replaces multi-line Context correctly', () => {
+  tally(await test('mergeBlockIntoStateFile replaces multi-line Context correctly', () => {
     const dir = mktemp();
     try {
       const stateFilePath = path.join(dir, 'state.md');
@@ -269,9 +266,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('mergeBlockIntoStateFile refuses to write through a symlink at stateFilePath (#1803)', () => {
+  tally(await test('mergeBlockIntoStateFile refuses to write through a symlink at stateFilePath (#1803)', () => {
     if (process.platform === 'win32') return; // symlink creation needs elevated privileges on Windows
     const dir = mktemp();
     try {
@@ -288,9 +285,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('mergeBlockIntoStateFile writes through a temp name short enough to stay under the filesystem component limit, even for a long target name (#1803 cubic P2)', () => {
+  tally(await test('mergeBlockIntoStateFile writes through a temp name short enough to stay under the filesystem component limit, even for a long target name (#1803 cubic P2)', () => {
     const dir = mktemp();
     try {
       // Most filesystems cap a single path component at 255 bytes. The old
@@ -312,9 +309,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('resolveStateFilePath never picks a symlinked candidate (#1803)', () => {
+  tally(await test('resolveStateFilePath never picks a symlinked candidate (#1803)', () => {
     if (process.platform === 'win32') return; // symlink creation needs elevated privileges on Windows
     const projectDir = mktemp();
     const homeDir = mktemp();
@@ -340,9 +337,9 @@ async function runTests() {
       cleanup(projectDir);
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('resolveStateFilePath refuses a candidate whose slug directory itself is a symlink, not just a symlinked file (#1803 cubic P1)', () => {
+  tally(await test('resolveStateFilePath refuses a candidate whose slug directory itself is a symlink, not just a symlinked file (#1803 cubic P1)', () => {
     if (process.platform === 'win32') return; // symlink creation needs elevated privileges on Windows
     const projectDir = mktemp();
     const homeDir = mktemp();
@@ -379,9 +376,9 @@ async function runTests() {
       cleanup(projectDir);
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('resolveStateFilePath prefers hashed branch state and falls back to legacy', () => {
+  tally(await test('resolveStateFilePath prefers hashed branch state and falls back to legacy', () => {
     const projectDir = mktemp();
     const homeDir = mktemp();
     const originalHomedir = os.homedir;
@@ -410,9 +407,9 @@ async function runTests() {
       cleanup(projectDir);
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('resolveStateFilePath isolates a detached HEAD by commit, never the flat or main.md files', () => {
+  tally(await test('resolveStateFilePath isolates a detached HEAD by commit, never the flat or main.md files', () => {
     const projectDir = mktemp();
     const homeDir = mktemp();
     const originalHomedir = os.homedir;
@@ -446,9 +443,9 @@ async function runTests() {
       cleanup(projectDir);
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('resolveStateFilePath without branch finds main.md', () => {
+  tally(await test('resolveStateFilePath without branch finds main.md', () => {
     const projectDir = mktemp();
     const homeDir = mktemp();
     const originalHomedir = os.homedir;
@@ -468,9 +465,9 @@ async function runTests() {
       cleanup(projectDir);
       cleanup(homeDir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('StateWatcher.start returns count of successful watchers only', () => {
+  tally(await test('StateWatcher.start returns count of successful watchers only', () => {
     const dir = mktemp();
     try {
       fs.writeFileSync(path.join(dir, 'GEMINI.md'), SAMPLE_MDC);
@@ -481,9 +478,9 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (await test('_handleChange skips empty egc block without propagating', () => {
+  tally(await test('_handleChange skips empty egc block without propagating', () => {
     return new Promise((resolve, reject) => {
       const dir = mktemp();
       let watcher;
@@ -518,22 +515,22 @@ async function runTests() {
         reject(err);
       }
     });
-  })) passed++; else failed++;
+  }));
 
-  if (await test('parseBlockToStateContent stamps updated when provided', () => {
+  tally(await test('parseBlockToStateContent stamps updated when provided', () => {
     const state = parseBlockToStateContent(SAMPLE_BLOCK, '2026-07-08T12:00:00.000Z');
     assert.ok(state.includes('updated: 2026-07-08T12:00:00.000Z'), 'updated line missing');
     assert.ok(state.includes('## Context'), 'sections still parsed');
-  })) passed++; else failed++;
+  }));
 
-  if (await test('parseBlockToStateContent ignores marker comments', () => {
+  tally(await test('parseBlockToStateContent ignores marker comments', () => {
     const stamped = `<!-- egc:state-updated:2026-07-01T00:00:00.000Z -->\n${SAMPLE_BLOCK}`;
     const state = parseBlockToStateContent(stamped);
     assert.ok(!state.includes('egc:state-updated'), 'marker must not leak into state');
     assert.ok(state.includes('EGC v1.1.1'), 'content still parsed');
-  })) passed++; else failed++;
+  }));
 
-  if (await test('mergeBlockIntoStateFile refuses encrypted state files', () => {
+  tally(await test('mergeBlockIntoStateFile refuses encrypted state files', () => {
     const dir = mktemp();
     try {
       const stateFile = path.join(dir, 'main.md');
@@ -547,7 +544,7 @@ async function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
