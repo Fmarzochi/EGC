@@ -134,7 +134,7 @@
     "@types/node": "^26.6.5",
     "eslint": "^10.13.0",
     "globals": "^17.6.0",
-    "markdownlint-cli": "^0.49.0",
+    "markdownlint-cli": "^0.50.0",
     "typescript-eslint": "^8.72.0"
   },
   "overrides": {
