@@ -23,13 +23,27 @@ const { spawnSync } = require('node:child_process');
 const REPO_ROOT = path.join(__dirname, '..', '..');
 const USAGE = 'Usage: node scripts/ci/dependency-audit.js [--report <file>] [--sha <commit>]';
 
-// Every manifest an advisory can turn red: the three npm lockfiles the
-// Security Scan job and the two servers carry, and the hashed Python
-// requirements the Python Tests job audits.
+// Every manifest an advisory can turn red: the seven npm lockfiles the
+// repository tracks and the hashed Python requirements the Python Tests job
+// audits. Every severity counts, as it does for a Dependabot alert; the one
+// exception is fuzz/, a development harness outside the published package
+// whose nyc, glob 7 and minimatch 3 chain has no patched line to move to, so
+// it is held to high and above.
+const npmAudit = (cwd, level) => ({
+  label: `npm audit: ${cwd === '.' ? '' : `${cwd}/`}package-lock.json`,
+  command: 'npm',
+  args: level ? ['audit', `--audit-level=${level}`] : ['audit'],
+  cwd,
+});
+
 const AUDITS = Object.freeze([
-  { label: 'npm audit: package-lock.json', command: 'npm', args: ['audit', '--audit-level=high'], cwd: '.' },
-  { label: 'npm audit: mcp/servers/egc-guardian/package-lock.json', command: 'npm', args: ['audit', '--audit-level=high'], cwd: 'mcp/servers/egc-guardian' },
-  { label: 'npm audit: mcp/servers/egc-memory/package-lock.json', command: 'npm', args: ['audit', '--audit-level=high'], cwd: 'mcp/servers/egc-memory' },
+  npmAudit('.'),
+  npmAudit('mcp/servers/egc-guardian'),
+  npmAudit('mcp/servers/egc-memory'),
+  npmAudit('.opencode'),
+  npmAudit('dashboard'),
+  npmAudit('docker'),
+  npmAudit('fuzz', 'high'),
   { label: 'pip-audit: tests/requirements.txt', command: 'pip-audit', args: ['-r', 'tests/requirements.txt'], cwd: '.' },
 ]);
 

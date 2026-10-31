@@ -9,11 +9,18 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const yaml = require('js-yaml');
 
 const ROOT = path.join(__dirname, '..', '..');
 const SCRIPT_PATH = path.join(ROOT, 'scripts', 'ci', 'dependency-audit.js');
 const WORKFLOW_PATH = path.join(ROOT, '.github', 'workflows', 'dependency-audit.yml');
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  '/opt/homebrew/bin/git',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
+].find(candidate => fs.existsSync(candidate)) || 'git';
 
 const { AUDITS, runAudits, renderReport, parseArgs, main } = require(SCRIPT_PATH);
 
@@ -55,14 +62,28 @@ const tally = ok => { if (ok) passed += 1; else failed += 1; };
 
 console.log('\n=== Testing scripts/ci/dependency-audit.js ===\n');
 
-tally(test('audits the three npm lockfiles and the Python requirements, each from its own directory', () => {
+tally(test('audits every tracked npm lockfile from its own directory, and the Python requirements', () => {
   const npm = AUDITS.filter(audit => audit.command === 'npm');
-  assert.deepStrictEqual(npm.map(audit => audit.cwd), ['.', 'mcp/servers/egc-guardian', 'mcp/servers/egc-memory']);
-  for (const audit of npm) assert.deepStrictEqual(audit.args, ['audit', '--audit-level=high']);
+  const lockfiles = ['.', 'mcp/servers/egc-guardian', 'mcp/servers/egc-memory', '.opencode', 'dashboard', 'docker', 'fuzz'];
+  assert.deepStrictEqual(npm.map(audit => audit.cwd).sort(), [...lockfiles].sort());
+  for (const cwd of lockfiles) assert.ok(fs.existsSync(path.join(ROOT, cwd, 'package-lock.json')), `${cwd}/package-lock.json must exist`);
+  for (const audit of npm) {
+    const expected = audit.cwd === 'fuzz' ? ['audit', '--audit-level=high'] : ['audit'];
+    assert.deepStrictEqual(audit.args, expected, `${audit.cwd}: every severity counts, except the fuzz harness held to high`);
+    assert.ok(audit.label.endsWith('package-lock.json'), audit.label);
+  }
   const pip = AUDITS.filter(audit => audit.command === 'pip-audit');
   assert.strictEqual(pip.length, 1);
   assert.deepStrictEqual(pip[0].args, ['-r', 'tests/requirements.txt']);
-  for (const audit of AUDITS) assert.ok(fs.existsSync(path.join(ROOT, audit.cwd)), `${audit.cwd} must exist`);
+}));
+
+tally(test('every lockfile git tracks is audited, so a new lockfile cannot slip past the audit', () => {
+  const listed = spawnSync(GIT_BIN, ['ls-files', '--', 'package-lock.json', '**/package-lock.json'], { cwd: ROOT, encoding: 'utf8' });
+  assert.strictEqual(listed.status, 0, listed.stderr);
+  const tracked = listed.stdout.split(/\r?\n/).filter(Boolean).map(file => path.posix.dirname(file)).sort();
+  assert.ok(tracked.length >= 7, `git lists ${tracked.length} lockfiles`);
+  const audited = AUDITS.filter(audit => audit.command === 'npm').map(audit => audit.cwd).sort();
+  assert.deepStrictEqual(audited, tracked);
 }));
 
 tally(test('a clean run is not red and runs every audit once', () => {
