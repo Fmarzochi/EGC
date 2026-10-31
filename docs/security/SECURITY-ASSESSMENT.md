@@ -25,7 +25,7 @@ This assessment covers the EGC runtime and its primary components:
 
 | Threat | Mitigation |
 |--------|-----------|
-| Malicious dependency supply chain | Pinned dependencies via package-lock.json; Dependabot alerts; `dependency-review.yml` blocks high-severity additions; `npm audit` in CI |
+| Malicious dependency supply chain | Pinned dependencies via package-lock.json; Dependabot alerts and security updates on every lockfile; `dependency-review.yml` blocks high-severity additions; `npm audit` in CI; a scheduled audit (`dependency-audit.yml`) repeats `npm audit` on every lockfile and `pip-audit` on the Python requirements every six hours on `main` and keeps one issue open while anything is red, since GitHub's own alert fan-out proved unreliable in October 2026 (#2038) |
 | Command injection via MCP inputs | `egc-guardian` validates all tool calls via `validate_command` before execution; `execSync` replaced with `spawnSync` plus argv tokenization, removing a shell-injection surface (v1.1.8, #690) |
 | Destructive CLI commands executed by the AI | `docker system prune`, `docker rm/rmi`, `docker run --privileged` or host mounts, `gh repo delete`, `gh api -X DELETE`, and `prisma migrate reset` / `--force-reset` / `db execute` return a hard DANGEROUS verdict instead of an advisory warning (v1.1.16, #1041). An absolute-path bypass (`/bin/rm`, `/usr/bin/mv`) was closed the same release (#1012). |
 | Validator itself failing silently | The bash hook dispatcher used to fail open on its own internal errors, silently disabling every guard (Guardian validate, GateGuard) for that command. It now fails closed instead (v1.1.16, #1019), the most critical finding of that release's security audit. |
