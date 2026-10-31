@@ -147,7 +147,8 @@
     "proxy-addr": "^2.0.8",
     "katex": "^0.18.2",
     "smol-toml": "^1.9.0",
-    "re2js": "^2.8.7"
+    "re2js": "^2.8.7",
+    "minimatch": "^11.0.1"
   },
   "pnpm": {
     "overrides": {
@@ -160,7 +161,8 @@
       "proxy-addr": "^2.0.8",
       "katex": "^0.18.2",
       "smol-toml": "^1.9.0",
-      "re2js": "^2.8.7"
+      "re2js": "^2.8.7",
+      "minimatch": "^11.0.1"
     }
   }
 }
