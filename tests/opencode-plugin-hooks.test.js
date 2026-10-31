@@ -12,12 +12,23 @@ const { pathToFileURL } = require("node:url")
 const { maybeSkipBaselineAbsent } = require("./lib/baseline-absent")
 
 const WIPE = ["rm", "-rf"].join(" ")
-const GUARDIAN_FILES = [
-  "scripts/hooks/pre-bash-guardian-validate.js",
-  "scripts/hooks/pre-write-guardian-validate.js",
-  "scripts/lib/guardian-bin.js",
-  "scripts/lib/shell-split.js",
-]
+const HOOK_SCRIPTS = ["pre-bash-guardian-validate.js", "pre-write-guardian-validate.js", "gateguard-fact-force.js"]
+
+// A worktree the plugin trusts carries the whole scripts tree: each hook
+// requires its sibling modules (segmentation, script walk, gate state and
+// rules) and scripts/lib, so a hand-picked list of files rots the moment a
+// hook gains a dependency, and the plugin, which lets a tool call through
+// when a hook fails to load, turns that rot into a silent pass. Copy the two
+// trees as they are and prove every hook loads from the copy.
+function stageWorktreeScripts(projectDir) {
+  const repoRoot = path.join(__dirname, "..")
+  for (const dir of ["hooks", "lib"]) {
+    fs.cpSync(path.join(repoRoot, "scripts", dir), path.join(projectDir, "scripts", dir), { recursive: true })
+  }
+  for (const fileName of HOOK_SCRIPTS) {
+    require(path.join(projectDir, "scripts", "hooks", fileName))
+  }
+}
 
 function runTest(name, fn) {
   return Promise.resolve()
@@ -53,12 +64,36 @@ async function loadPlugin() {
   return import(pluginUrl)
 }
 
+const PEER_PACKAGE_JSON = path.join("node_modules", "@opencode-ai", "plugin", "package.json")
+
+// OpenCode installs the dependencies of .opencode/package.json next to the
+// plugin, so a dist that imports @opencode-ai/plugin (the tools the plugin
+// registers do) resolves them from .opencode/node_modules. A dist copied into
+// another project needs the same node_modules beside it, or the import fails
+// there while the same dist works in the repository: link every node_modules
+// the build may have resolved the peer from, as scripts/build-opencode.js does.
+function linkPluginDependencies(projectDir) {
+  const repoRoot = path.join(__dirname, "..")
+  const candidates = [
+    [path.join(repoRoot, ".opencode"), path.join(projectDir, ".opencode")],
+    [repoRoot, projectDir],
+  ]
+  for (const [sourceDir, targetDir] of candidates) {
+    if (!fs.existsSync(path.join(sourceDir, PEER_PACKAGE_JSON))) continue
+    const target = path.join(targetDir, "node_modules")
+    if (fs.existsSync(target)) continue
+    fs.mkdirSync(targetDir, { recursive: true })
+    fs.symlinkSync(path.join(sourceDir, "node_modules"), target, "junction")
+  }
+}
+
 // The dist tree copied into the project, so the plugin file lives inside the
 // worktree it opens: only then may hook scripts come from that worktree.
 async function loadPluginInside(projectDir) {
   const source = path.join(__dirname, "..", ".opencode", "dist")
   const target = path.join(projectDir, ".opencode", "dist")
   fs.cpSync(source, target, { recursive: true })
+  linkPluginDependencies(projectDir)
   return import(pathToFileURL(path.join(target, "plugins", "egc-hooks.js")).href)
 }
 
@@ -107,6 +142,12 @@ async function withTempProject(files, fn) {
 
 async function main() {
   console.log("\n=== Testing OpenCode plugin hooks ===\n")
+
+  // The gate keeps its state per session under GATEGUARD_STATE_DIR; a run
+  // must neither read the machine's live state nor leave its own behind.
+  const gateStateDir = fs.mkdtempSync(path.join(os.tmpdir(), "egc-opencode-gate-"))
+  process.env.GATEGUARD_STATE_DIR = gateStateDir
+  process.on("exit", () => fs.rmSync(gateStateDir, { recursive: true, force: true }))
 
   let EGCHooksPlugin
   try {
@@ -163,10 +204,7 @@ async function main() {
       async () => withTempProject([], async (projectDir) => {
         // The plugin runs from inside this worktree, so its scripts are trusted.
         const { EGCHooksPlugin: InsidePlugin } = await loadPluginInside(projectDir)
-        for (const rel of GUARDIAN_FILES) {
-          fs.mkdirSync(path.dirname(path.join(projectDir, rel)), { recursive: true })
-          fs.copyFileSync(path.join(__dirname, "..", rel), path.join(projectDir, rel))
-        }
+        stageWorktreeScripts(projectDir)
         const previous = { cli: process.env.EGC_GUARDIAN_CLI, disabled: process.env.EGC_DISABLED_HOOKS }
         process.env.EGC_GUARDIAN_CLI = path.join(__dirname, "fixtures", "fake-guardian-cli.js")
         process.env.EGC_DISABLED_HOOKS = "pre:gateguard:fact-force"
@@ -235,16 +273,7 @@ async function main() {
       "tool.execute.before blocks the first edit on a file with the GateGuard fact-forcing gate",
       async () => withTempProject([], async (projectDir) => {
         const { EGCHooksPlugin: InsidePlugin } = await loadPluginInside(projectDir)
-        fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
-        fs.mkdirSync(path.join(projectDir, "scripts", "lib"), { recursive: true })
-        fs.copyFileSync(
-          path.join(__dirname, "..", "scripts", "hooks", "gateguard-fact-force.js"),
-          path.join(projectDir, "scripts", "hooks", "gateguard-fact-force.js")
-        )
-        fs.copyFileSync(
-          path.join(__dirname, "..", "scripts", "lib", "utils.js"),
-          path.join(projectDir, "scripts", "lib", "utils.js")
-        )
+        stageWorktreeScripts(projectDir)
         const targetFile = path.join(projectDir, "gated-file.ts")
         fs.writeFileSync(targetFile, "export const x = 1\n")
 
@@ -265,16 +294,7 @@ async function main() {
       "tool.execute.before ignores unmapped tools and args-less calls without throwing",
       async () => withTempProject([], async (projectDir) => {
         const { EGCHooksPlugin: InsidePlugin } = await loadPluginInside(projectDir)
-        fs.mkdirSync(path.join(projectDir, "scripts", "hooks"), { recursive: true })
-        fs.mkdirSync(path.join(projectDir, "scripts", "lib"), { recursive: true })
-        fs.copyFileSync(
-          path.join(__dirname, "..", "scripts", "hooks", "gateguard-fact-force.js"),
-          path.join(projectDir, "scripts", "hooks", "gateguard-fact-force.js")
-        )
-        fs.copyFileSync(
-          path.join(__dirname, "..", "scripts", "lib", "utils.js"),
-          path.join(projectDir, "scripts", "lib", "utils.js")
-        )
+        stageWorktreeScripts(projectDir)
 
         const client = createClient()
         const $ = createFailingShell()
