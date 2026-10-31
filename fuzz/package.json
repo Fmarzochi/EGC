@@ -7,15 +7,9 @@
     "build:target": "esbuild ../mcp/servers/egc-guardian/src/validator.ts --bundle --format=cjs --platform=node --outfile=validator.cjs"
   },
   "dependencies": {
-    "jsfuzz": "1.0.15"
+    "@jazzer.js/core": "4.0.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2"
-  },
-  "overrides": {
-    "cross-spawn": "^7.0.6",
-    "uuid": "^11.1.1",
-    "js-yaml": "^4.2.0",
-    "brace-expansion": "^5.0.12"
   }
 }
