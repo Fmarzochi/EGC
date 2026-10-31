@@ -1,0 +1,92 @@
+name: Dependency Audit
+
+# Dependabot alerts reach a repository through GitHub's advisory fan-out, which
+# GitHub throttled on 23 October 2026 after it saturated alert processing; the
+# advisories of 27 to 30 October (msgpack, @hono/node-server, re2js, pyasn1)
+# produced no alert here while main still carried the vulnerable versions, and
+# each surfaced as a red lane on the next pull request instead. This workflow
+# is the detector the repository owns: every six hours it audits every npm
+# lockfile git tracks and the Python requirements on main and keeps one issue
+# open while any of them is red.
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-audit
+  cancel-in-progress: false
+
+env:
+  NPM_CONFIG_AUDIT: "false"
+  NPM_CONFIG_FUND: "false"
+  ISSUE_TITLE: "Dependency audit is red on main"
+  REPORT: /tmp/dependency-audit.md
+
+jobs:
+  audit:
+    name: npm audit and pip-audit on main
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '20.x'
+
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install the pinned Python requirements (they carry pip-audit)
+        run: pip install --require-hashes -r tests/requirements.txt
+
+      - name: Audit every lockfile and the Python requirements
+        id: audit
+        continue-on-error: true
+        run: node scripts/ci/dependency-audit.js --report "$REPORT" --sha "$GITHUB_SHA"
+
+      - name: Open or update the issue while the audit is red
+        if: steps.audit.outputs.red == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          printf '\nRun: %s\n' "$RUN_URL" >> "$REPORT"
+          number=$(gh issue list --repo "$REPO" --state open --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$REPO" --body-file "$REPORT"
+            echo "Updated issue #$number"
+          else
+            gh issue create --repo "$REPO" --title "$ISSUE_TITLE" --label dependencies --label security --body-file "$REPORT"
+          fi
+
+      - name: Close the issue once the audit is clean again
+        if: steps.audit.outputs.red == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          number=$(gh issue list --repo "$REPO" --state open --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number // empty')
+          [ -z "$number" ] && exit 0
+          gh issue close "$number" --repo "$REPO" --comment "The dependency audit is clean again on $GITHUB_SHA."
+          echo "Closed issue #$number"
+
+      # red is '1' when an audit found something and empty when the script
+      # stopped before writing its verdict; both are failures of this run.
+      - name: Fail the run unless the audit reported clean
+        if: steps.audit.outputs.red != '0'
+        run: exit 1
