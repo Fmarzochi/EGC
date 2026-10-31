@@ -47,6 +47,45 @@ updates:
           - "minor"
           - "patch"
 
+  # The dashboard, the docker image pin and the fuzz harness carry their own
+  # lockfiles; scripts/ci/dependency-audit.js audits all three and so does
+  # Dependabot from here on.
+  - package-ecosystem: "npm"
+    directory: "/dashboard"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "npm"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "npm"
+    directory: "/fuzz"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
   - package-ecosystem: "pip"
     directory: "/tests"
     schedule:
