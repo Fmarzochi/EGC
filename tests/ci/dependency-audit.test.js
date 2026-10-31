@@ -68,8 +68,7 @@ tally(test('audits every tracked npm lockfile from its own directory, and the Py
   assert.deepStrictEqual(npm.map(audit => audit.cwd).sort(), [...lockfiles].sort());
   for (const cwd of lockfiles) assert.ok(fs.existsSync(path.join(ROOT, cwd, 'package-lock.json')), `${cwd}/package-lock.json must exist`);
   for (const audit of npm) {
-    const expected = audit.cwd === 'fuzz' ? ['audit', '--audit-level=high'] : ['audit'];
-    assert.deepStrictEqual(audit.args, expected, `${audit.cwd}: every severity counts, except the fuzz harness held to high`);
+    assert.deepStrictEqual(audit.args, ['audit'], `${audit.cwd}: every severity counts, as it does for a Dependabot alert`);
     assert.ok(audit.label.endsWith('package-lock.json'), audit.label);
   }
   const pip = AUDITS.filter(audit => audit.command === 'pip-audit');

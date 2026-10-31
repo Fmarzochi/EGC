@@ -25,18 +25,10 @@ const USAGE = 'Usage: node scripts/ci/dependency-audit.js [--report <file>] [--s
 
 // Every manifest an advisory can turn red: the seven npm lockfiles the
 // repository tracks and the hashed Python requirements the Python Tests job
-// audits. Every severity counts, as it does for a Dependabot alert; the one
-// exception is fuzz/, a development harness outside the published package
-// whose nyc, glob 7 and minimatch 3 chain has no patched line to move to, so
-// it is held to high and above.
-function npmAudit(cwd, level) {
+// audits. Every severity counts, as it does for a Dependabot alert.
+function npmAudit(cwd) {
   const prefix = cwd === '.' ? '' : `${cwd}/`;
-  return {
-    label: `npm audit: ${prefix}package-lock.json`,
-    command: 'npm',
-    args: level ? ['audit', `--audit-level=${level}`] : ['audit'],
-    cwd,
-  };
+  return { label: `npm audit: ${prefix}package-lock.json`, command: 'npm', args: ['audit'], cwd };
 }
 
 const AUDITS = Object.freeze([
@@ -46,7 +38,7 @@ const AUDITS = Object.freeze([
   npmAudit('.opencode'),
   npmAudit('dashboard'),
   npmAudit('docker'),
-  npmAudit('fuzz', 'high'),
+  npmAudit('fuzz'),
   { label: 'pip-audit: tests/requirements.txt', command: 'pip-audit', args: ['-r', 'tests/requirements.txt'], cwd: '.' },
 ]);
 

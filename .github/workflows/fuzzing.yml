@@ -38,11 +38,11 @@ jobs:
       - name: Run fuzzer (60-second time-box)
         run: |
           mkdir -p fuzz/artifacts fuzz/corpus
-          timeout 65 fuzz/node_modules/.bin/jsfuzz fuzz/fuzz-validator.js fuzz/corpus \
-            --exact-artifact-path fuzz/artifacts/crash \
+          timeout 90 fuzz/node_modules/.bin/jazzer fuzz/fuzz-validator.js fuzz/corpus --sync \
+            -- -max_total_time=60 -artifact_prefix=fuzz/artifacts/ \
             || FUZZ_EXIT=$?
-          if [ "${FUZZ_EXIT:-0}" -ne 0 ] && [ "${FUZZ_EXIT:-0}" -ne 124 ]; then
-            echo "Fuzzer found a crash or error (exit ${FUZZ_EXIT})"
+          if [ "${FUZZ_EXIT:-0}" -ne 0 ]; then
+            echo "Fuzzer found a crash, an error or a hang (exit ${FUZZ_EXIT})"
             exit "${FUZZ_EXIT}"
           fi
 
