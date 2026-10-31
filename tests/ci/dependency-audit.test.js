@@ -136,6 +136,15 @@ tally(test('a clean report says so in the heading and lists every audit as clean
   assert.ok(!report.includes('```'));
 }));
 
+tally(test('the report fences red output with more backticks than the output carries, so advisory text cannot close the block', () => {
+  const output = 'before\n```\n@everyone see #1\n```\nafter';
+  const verdict = { red: true, results: [{ label: 'npm audit: package-lock.json', ok: false, status: 1, output }] };
+  const report = renderReport(verdict, 'abc');
+  assert.ok(report.includes(`\n\`\`\`\`text\n${output}\n\`\`\`\`\n`), report);
+  const plain = renderReport({ red: true, results: [{ label: 'x', ok: false, status: 1, output: 'no fences here' }] }, 'abc');
+  assert.ok(plain.includes('\n```text\nno fences here\n```\n'), plain);
+}));
+
 tally(test('parseArgs reads --report and --sha and refuses anything else', () => {
   assert.deepStrictEqual(parseArgs([]), { report: null, sha: '' });
   assert.deepStrictEqual(parseArgs(['--report', 'reports/audit.md', '--sha', 'abc']), { report: 'reports/audit.md', sha: 'abc' });
@@ -187,6 +196,7 @@ tally(test('the workflow runs on a schedule and by hand, with read-only contents
   assert.match(workflow.on.schedule[0].cron, /^\d+ \*\/\d+ \* \* \*$/, 'the cron runs several times a day');
   assert.ok('workflow_dispatch' in workflow.on, 'workflow_dispatch so a run can be forced');
   assert.deepStrictEqual(workflow.permissions, { contents: 'read' });
+  assert.deepStrictEqual(workflow.concurrency, { group: 'dependency-audit', 'cancel-in-progress': false }, 'runs never overlap, so two runs cannot open two issues');
 }));
 
 tally(test('the audit job can write issues and nothing else, and has a timeout', () => {
@@ -210,17 +220,31 @@ tally(test('the job installs the hashed Python requirements (they carry pip-audi
   assert.strictEqual(audit['continue-on-error'], true, 'the issue step must still run when the audit is red');
 }));
 
-tally(test('a red audit opens or updates one issue, a clean one closes it, and the job ends red when the audit was red', () => {
+tally(test('a red audit opens or updates one issue, a clean one closes it, and the job ends red unless the audit reported clean', () => {
   const issueStep = steps.find(step => /gh issue (create|comment)/.test(step.run || ''));
   assert.ok(issueStep, 'a step that opens or comments on the issue');
   assert.match(issueStep.if, /steps\.audit\.outputs\.red == '1'/);
   assert.ok(/gh issue list/.test(issueStep.run), 'the step looks for the open issue before creating another');
+  assert.ok(/--jq '\.\[0\]\.number \/\/ empty'/.test(issueStep.run), 'an empty list yields an empty number, never the string null');
   const closeStep = steps.find(step => /gh issue close/.test(step.run || ''));
   assert.ok(closeStep, 'a step that closes the issue once the audit is clean');
   assert.match(closeStep.if, /steps\.audit\.outputs\.red == '0'/);
+  assert.ok(/--jq '\.\[0\]\.number \/\/ empty'/.test(closeStep.run), 'an empty list yields an empty number, never the string null');
   const fail = steps[steps.length - 1];
-  assert.match(fail.if, /steps\.audit\.outputs\.red == '1'/);
+  assert.match(fail.if, /steps\.audit\.outputs\.red != '0'/, 'a script that stopped before writing red fails the run too');
   assert.match(fail.run, /exit 1/);
+}));
+
+tally(test('the steps run in the only order that works: install, audit, issue, close, fail', () => {
+  const order = [
+    steps.findIndex(step => /pip install --require-hashes/.test(step.run || '')),
+    steps.findIndex(step => step.id === 'audit'),
+    steps.findIndex(step => /gh issue (create|comment)/.test(step.run || '')),
+    steps.findIndex(step => /gh issue close/.test(step.run || '')),
+    steps.length - 1,
+  ];
+  assert.ok(order.every(index => index >= 0), `every step is present: ${order.join(', ')}`);
+  assert.deepStrictEqual([...order].sort((a, b) => a - b), order, `steps are out of order: ${order.join(', ')}`);
 }));
 
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

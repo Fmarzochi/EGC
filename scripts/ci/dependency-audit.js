@@ -29,12 +29,15 @@ const USAGE = 'Usage: node scripts/ci/dependency-audit.js [--report <file>] [--s
 // exception is fuzz/, a development harness outside the published package
 // whose nyc, glob 7 and minimatch 3 chain has no patched line to move to, so
 // it is held to high and above.
-const npmAudit = (cwd, level) => ({
-  label: `npm audit: ${cwd === '.' ? '' : `${cwd}/`}package-lock.json`,
-  command: 'npm',
-  args: level ? ['audit', `--audit-level=${level}`] : ['audit'],
-  cwd,
-});
+function npmAudit(cwd, level) {
+  const prefix = cwd === '.' ? '' : `${cwd}/`;
+  return {
+    label: `npm audit: ${prefix}package-lock.json`,
+    command: 'npm',
+    args: level ? ['audit', `--audit-level=${level}`] : ['audit'],
+    cwd,
+  };
+}
 
 const AUDITS = Object.freeze([
   npmAudit('.'),
@@ -69,6 +72,14 @@ function runAudits(run = defaultRunner, audits = AUDITS) {
   return { red: results.some(result => !result.ok), results };
 }
 
+// The fence is one backtick longer than any run inside the output, so advisory
+// text from a registry cannot close the block and render as Markdown in the
+// issue body.
+function codeFence(text) {
+  const longest = Math.max(2, ...Array.from(text.matchAll(/`+/g), match => match[0].length));
+  return '`'.repeat(longest + 1);
+}
+
 function renderReport({ red, results }, sha) {
   const lines = [
     `## Dependency audit on ${sha || 'main'}: ${red ? 'RED' : 'clean'}`,
@@ -77,7 +88,9 @@ function renderReport({ red, results }, sha) {
   for (const result of results) {
     lines.push(`### ${result.ok ? 'clean' : 'RED'}: ${result.label}`);
     if (!result.ok) {
-      lines.push('', '```text', result.output || `exit status ${result.status}`, '```');
+      const body = result.output || `exit status ${result.status}`;
+      const fence = codeFence(body);
+      lines.push('', `${fence}text`, body, fence);
     }
     lines.push('');
   }
