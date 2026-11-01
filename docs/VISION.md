@@ -1,6 +1,6 @@
 # EGC Vision
 
-EGC is a local engine that gives every AI coding tool on a machine the same brain: one persistent memory, one live bus between open sessions, one safety layer in front of every command, and one filter that keeps noisy output away from the model. Twenty tools, one package, nothing leaving the machine.
+EGC is a local engine that gives every AI coding tool on a machine the same brain: one persistent memory, one live bus between open sessions, one safety layer in front of every command, and one filter that keeps noisy output away from the model. Twenty-nine tools, one package, nothing leaving the machine.
 
 This document is the direction. The release-by-release record lives in [ROADMAP.md](ROADMAP.md).
 
@@ -19,12 +19,12 @@ The prompt library (agents, skills, commands and rules) ships in the same packag
 2. **Local first, private by default.** Memory never leaves the machine and is never committed. No cloud is required for a local install.
 3. **One package.** `@egchq/egc` ships the engine and the library together, and that does not change. Splitting the package would double the maintenance surface and split the community; opt-in flags and profiles give the same choice without it.
 4. **Honest integrations.** Every supported tool has a documented install path, and its support level says what the maintainers guarantee: see [support levels](governance/support-levels.md).
-5. **Free engine.** The engine is Apache-2.0 and stays free. If EGC ever offers something paid, it will be a team layer on top of the engine (Team Brain below), never the memory on the machine.
+5. **Free engine.** The engine is Apache-2.0 and stays free, Team Brain for one person included. What EGC will charge for is a hosted team service on top of the engine (Team Brain below), never the memory on the machine, and never a check inside the open-source code: anything placed there can be removed, so the line between free and paid lives in the service.
 
 ## Where EGC is going
 
 - **Agent Memory Interchange.** A specification for how memory moves between agents and tools, so EGC's memory is readable and writable by anything that speaks the format; `egc export` is the first reference implementation (see [spec/](spec/README.md)).
-- **Team Brain.** Shared memory across a team: organization-level installs, role-based scoping, cross-project federation and a stable, versioned MCP API. It stays free like the rest of the engine, funded by sponsors, never by fees.
+- **Team Brain.** Shared memory across machines and people. For one person it is part of the free engine: two or more machines on their own network, synchronized through a git remote they own, with no server of ours. For a team inside a company it becomes a paid service on top of the same code: a relay in real time, key distribution and rotation, SSO and SCIM, an audit trail and a dashboard, with organization-level installs, role-based scoping, cross-project federation and a stable, versioned MCP API. How a company buys it without touching the source code is designed once the single-person flow works.
 - **Neural mesh.** Assistants that talk to each other in real time over the session bus, the next step beyond the durable event queue that already carries messages between sessions.
 - **Public savings.** The Token Crusher's ledger, `egc gain`, as a number people can compare and publish.
 - **One-command onboarding.** With the library opt-in, the three-stage install (bare install, project setup, optional library) folds into a single guided `egc install`.
@@ -35,15 +35,27 @@ EGC is maintained by one developer. The plan against a bus factor of one is peop
 
 ## Milestones
 
-### Next focus: neural mesh and Team Brain
+### Next release (1.1.24): Team Brain for one person
 
-The direction after the current 1.1.x line, once its scope is settled. No version or date is promised until it ships, and none of it is built yet. Multi-developer workflows and shared context:
+Decided on 2026-11-01. Targeted at the next release; no date is promised until it ships. It builds on the `egc team` commands and the `team_init`, `team_sync` and `team_status` tools that already synchronize memory over a git remote, and turns them into something one person can trust between their own machines:
 
-- Shared state between team members (multi-user installations beyond git-backend team memory)
+- A merge of the memory documents with tombstones and caps instead of last-write-wins; author and signature on every entry
+- An identity per machine and a team key wrapped per member, with rotation and revocation
+- Secrets refused on the way out; size and rate limits on the sync
+- `join`, `leave`, `members` and key rotation as MCP tools and `egc team` subcommands; pull and push through the hooks of the tools that have them; team health in `egc doctor`
+- Everything behind a flag until it is proven on two real machines
+- The neural mesh between machines rides on the same transport first; a real-time relay comes with the team service below
+
+### Later: Team Brain for companies, as a paid service
+
+About three releases after the single-person Team Brain, on top of the same code and never as a lock inside it:
+
+- A relay in real time between machines, key distribution and rotation for a team, SSO and SCIM, an audit trail and a dashboard
 - Organization-level installations and role-based context scoping
 - Cross-project memory federation
 - Stable MCP server API with versioned interfaces
 - `egc-guardian` and `egc-memory` promoted to GA with backward-compatibility guarantees
+- How a company buys it without touching the source code is designed once the single-person flow has shipped
 
 ### v1.3.0: Growth
 
