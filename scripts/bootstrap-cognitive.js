@@ -561,7 +561,11 @@ function retireLegacyMemoryCopy(legacyFile, label, tool) {
   console.log(`  [cognitive] ${label}: retired the old protocol copy ${tool} does not read (${shown})`);
 }
 
-function injectTraeUserRule(filepath, label, content) {
+// A standalone protocol file at a path the person may also use for a file of
+// their own (Trae's user rule, OpenHands' skill): written when absent,
+// upgraded when it carries the EGC block, and left untouched, with a line
+// saying so, when it holds content without the block.
+function injectProtocolUnlessOwned(filepath, label, content, noun = 'rule') {
   if (!fs.existsSync(filepath)) {
     injectStandaloneProtocol(filepath, label, content);
     return true;
@@ -569,7 +573,7 @@ function injectTraeUserRule(filepath, label, content) {
   const raw = fs.readFileSync(filepath, 'utf8');
   const blocks = [...raw.matchAll(new RegExp(MARKER_BLOCK_RE.source, 'g'))];
   if (blocks.length === 0) {
-    console.log(`  [cognitive] ${label}: ${filepath.replace(HOME, '~')} is a rule of your own, left untouched; the memory protocol was not installed`);
+    console.log(`  [cognitive] ${label}: ${filepath.replace(HOME, '~')} is a ${noun} of your own, left untouched; the memory protocol was not installed`);
     return false;
   }
   const installedVersion = Math.min(...blocks.map(block => resolveInstalledVersion(block, 0)));
@@ -597,7 +601,7 @@ function injectTraeUserRule(filepath, label, content) {
     try {
       const traeDir = path.join(HOME, dir);
       if (!fs.existsSync(traeDir)) continue;
-      installed = injectTraeUserRule(path.join(traeDir, 'user_rules', 'egc-memory.md'), label, markdownProtocolBody('EGC Session Memory'));
+      installed = injectProtocolUnlessOwned(path.join(traeDir, 'user_rules', 'egc-memory.md'), label, markdownProtocolBody('EGC Session Memory'));
     } catch (e) {
       console.log(`  [cognitive] ${label}: unexpected error: ${e.message}`);
     }
@@ -682,86 +686,54 @@ function injectTraeUserRule(filepath, label, content) {
   }
 })();
 
-// ── Mistral Vibe (<VIBE_HOME or ~/.vibe>/AGENTS.md) ─────────────────────
-(function bootstrapVibe() {
-  try {
-    const vibeDir = resolveVibeHome({ homeDir: HOME });
-    // The same gate as the MCP registration (mcp-register.js): the data root,
-    // or vibe on PATH, so the protocol lands on the same installs.
-    if (!fs.existsSync(vibeDir) && !commandExists('vibe')) return;
-    injectProtocol(path.join(vibeDir, 'AGENTS.md'), 'Mistral Vibe');
-  } catch (e) {
-    console.log(`  [cognitive] Mistral Vibe: unexpected error: ${e.message}`);
-  }
-})();
+// ── AGENTS.md under the tool's own root ──────────────────────────────────────
+// Tools whose global instructions file is AGENTS.md under their data or config
+// root, written behind the same gate as their MCP registration
+// (mcp-register.js): the root, or the command on PATH, so the protocol lands
+// on the same installs and a first install never has to run twice.
+const AGENTS_MD_TOOLS = [
+  { label: 'Mistral Vibe', command: 'vibe', dir: () => resolveVibeHome({ homeDir: HOME }) }, // <VIBE_HOME or ~/.vibe>
+  { label: 'Grok Build', command: 'grok', dir: () => resolveGrokHome({ homeDir: HOME }) }, // <GROK_HOME or ~/.grok>
+  { label: 'Kilo Code CLI', command: 'kilo', dir: () => kiloConfigDir(HOME) }, // <XDG_CONFIG_HOME or ~/.config>/kilo
+  { label: 'MiMo Code', command: 'mimo', dir: () => resolveMimoConfigDir({ homeDir: HOME }) },
+  { label: 'Pi', command: 'pi', dir: () => resolvePiAgentDir({ homeDir: HOME }) }, // <PI_CODING_AGENT_DIR or ~/.pi/agent>
+  { label: 'Droid (Factory)', command: 'droid', dir: () => path.join(HOME, '.factory') },
+  // Junie's global guidelines (junie.jetbrains.com/docs/guidelines-and-memory.html,
+  // read on 2026-10-17): %USERPROFILE%\.junie\AGENTS.md on Windows, included in
+  // every task next to the project's own guidelines, which win on a conflict.
+  { label: 'Junie', command: 'junie', dir: () => path.join(HOME, '.junie') },
+];
 
-// ── Grok Build (<GROK_HOME or ~/.grok>/AGENTS.md) ───────────────────────
-(function bootstrapGrok() {
+for (const tool of AGENTS_MD_TOOLS) {
   try {
-    const grokDir = resolveGrokHome({ homeDir: HOME });
-    if (!fs.existsSync(grokDir) && !commandExists('grok')) return;
-    injectProtocol(path.join(grokDir, 'AGENTS.md'), 'Grok Build');
+    const dir = tool.dir();
+    if (!fs.existsSync(dir) && !commandExists(tool.command)) continue;
+    injectProtocol(path.join(dir, 'AGENTS.md'), tool.label);
   } catch (e) {
-    console.log(`  [cognitive] Grok Build: unexpected error: ${e.message}`);
+    console.log(`  [cognitive] ${tool.label}: unexpected error: ${e.message}`);
   }
-})();
+}
 
-// ── Kilo Code CLI (<XDG_CONFIG_HOME or ~/.config>/kilo/AGENTS.md) ─────────
-(function bootstrapKilo() {
+// ── OpenHands (~/.openhands/skills/egc-memory.md) ───────────────────────────
+// OpenHands loads every Markdown file under ~/.openhands/skills/ for all of
+// the person's conversations, the CLI included (its AgentStore turns
+// load_user_skills on), and a file with no `triggers` in its front matter is
+// a repo skill: the whole content goes into the system prompt and stays there
+// (USER_SKILLS_DIRS and load_and_categorize in the SDK's skills/skill.py,
+// read on 2026-11-01 against openhands 1.16.0; docs.openhands.dev/overview/
+// skills). The SKILL.md directory format is only advertised by name and read
+// on demand, and ~/.agents/skills is the root OpenHands shares with Codex,
+// Goose, Zed, Crush and Amp, so the protocol goes to the directory only
+// OpenHands reads. A skill of the person's own at that path is left alone,
+// like Trae's user rule. The same gate as the MCP registration in
+// ~/.openhands/mcp.json.
+(function bootstrapOpenHands() {
   try {
-    const kiloDir = kiloConfigDir(HOME);
-    if (!fs.existsSync(kiloDir) && !commandExists('kilo')) return;
-    injectProtocol(path.join(kiloDir, 'AGENTS.md'), 'Kilo Code CLI');
+    const openhandsDir = path.join(HOME, '.openhands');
+    if (!fs.existsSync(openhandsDir) && !commandExists('openhands')) return;
+    injectProtocolUnlessOwned(path.join(openhandsDir, 'skills', 'egc-memory.md'), 'OpenHands', markdownProtocolBody('EGC Session Memory'), 'skill');
   } catch (e) {
-    console.log(`  [cognitive] Kilo Code CLI: unexpected error: ${e.message}`);
-  }
-})();
-
-// ── MiMo Code (<MiMo config dir>/AGENTS.md) ────────────────────────────────
-(function bootstrapMimo() {
-  try {
-    const mimoDir = resolveMimoConfigDir({ homeDir: HOME });
-    if (!fs.existsSync(mimoDir) && !commandExists('mimo')) return;
-    injectProtocol(path.join(mimoDir, 'AGENTS.md'), 'MiMo Code');
-  } catch (e) {
-    console.log(`  [cognitive] MiMo Code: unexpected error: ${e.message}`);
-  }
-})();
-
-// ── Pi (<PI_CODING_AGENT_DIR or ~/.pi/agent>/AGENTS.md) ─────────────────
-(function bootstrapPi() {
-  try {
-    const piDir = resolvePiAgentDir({ homeDir: HOME });
-    if (!fs.existsSync(piDir) && !commandExists('pi')) return;
-    injectProtocol(path.join(piDir, 'AGENTS.md'), 'Pi');
-  } catch (e) {
-    console.log(`  [cognitive] Pi: unexpected error: ${e.message}`);
-  }
-})();
-
-// ── Droid (Factory) (~/.factory/AGENTS.md) ──────────────────────────────────
-(function bootstrapDroid() {
-  try {
-    const factoryDir = path.join(HOME, '.factory');
-    if (!fs.existsSync(factoryDir) && !commandExists('droid')) return;
-    injectProtocol(path.join(factoryDir, 'AGENTS.md'), 'Droid (Factory)');
-  } catch (e) {
-    console.log(`  [cognitive] Droid (Factory): unexpected error: ${e.message}`);
-  }
-})();
-
-// ── Junie (~/.junie/AGENTS.md) ───────────────────────────────────────────────
-// Junie's global guidelines (junie.jetbrains.com/docs/guidelines-and-memory.html,
-// read on 2026-10-17): %USERPROFILE%\.junie\AGENTS.md on Windows, included in
-// every task next to the project's own guidelines, which win on a conflict.
-// The same gate as the MCP registration in ~/.junie/mcp/mcp.json.
-(function bootstrapJunie() {
-  try {
-    const junieDir = path.join(HOME, '.junie');
-    if (!fs.existsSync(junieDir) && !commandExists('junie')) return;
-    injectProtocol(path.join(junieDir, 'AGENTS.md'), 'Junie');
-  } catch (e) {
-    console.log(`  [cognitive] Junie: unexpected error: ${e.message}`);
+    console.log(`  [cognitive] OpenHands: unexpected error: ${e.message}`);
   }
 })();
 
