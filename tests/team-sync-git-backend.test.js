@@ -1,16 +1,33 @@
 /**
- * Tests for GitBackend and mirrorCopy atomic copy-then-swap (#1685).
- * Runs against the built memory server modules.
+ * Tests for GitBackend: what a push ships to the shared repository. The
+ * memory database under ~/.egc/memory never leaves the machine (an older
+ * version mirrored it into the sync checkout in the clear), and the guards
+ * before init() hold. Runs against the built memory server modules.
  */
 'use strict';
 
 const assert = require('assert');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
 const BUILD = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build');
+
+// Fixed git locations before a PATH lookup.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  '/opt/homebrew/bin/git',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
+].find(candidate => fs.existsSync(candidate)) || 'git';
+
+// GitBackend reads the home directory when it pushes, so the suite runs with
+// a home of its own: the real ~/.egc/memory is never read, touched or shipped.
+const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-gitbackend-home-'));
+process.env.HOME = HOME;
+process.env.USERPROFILE = HOME;
 
 function test(name, fn) {
   try {
@@ -36,68 +53,34 @@ function test(name, fn) {
   }
 }
 
-async function runRecoveryTests(GitBackend, tempBase) {
-  let passed = 0;
-  let failed = 0;
+function git(args, cwd) {
+  return execFileSync(GIT_BIN, args, { cwd, encoding: 'utf8', stdio: 'pipe' }).trim();
+}
 
-  // 7. a failed swap after the backup rename restores the original destination
-  if (await test('mirrorCopy restores the original destination when installing the new tree fails', () => {
-    const backend = new GitBackend(path.join(tempBase, 'repo-rollback'));
-    const src = path.join(tempBase, 'src-rollback');
-    const dest = path.join(tempBase, 'dest-rollback');
+// Every path committed on `branch` of a bare remote, or nothing when the
+// branch does not exist yet.
+function remoteTree(remote, branch) {
+  try {
+    return git(['ls-tree', '-r', '--name-only', branch], remote).split('\n').filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 
-    fs.mkdirSync(dest, { recursive: true });
-    fs.writeFileSync(path.join(dest, 'keep.txt'), 'original state');
-    fs.mkdirSync(src, { recursive: true });
-    fs.writeFileSync(path.join(src, 'incoming.txt'), 'incoming');
+// A backend initialized against a bare remote of its own, ready to push.
+async function pushingBackend(GitBackend, tempBase, name) {
+  const remote = path.join(tempBase, `${name}-remote.git`);
+  git(['init', '--bare', remote], tempBase);
+  git(['symbolic-ref', 'HEAD', 'refs/heads/main'], remote);
+  const repoDir = path.join(tempBase, `${name}-repo`);
+  const backend = new GitBackend(repoDir);
+  await backend.init({ backend: 'git', remote, branch: 'main' });
+  return { backend, repoDir, remote };
+}
 
-    const originalRename = fs.renameSync;
-    let calls = 0;
-    fs.renameSync = (from, to) => {
-      calls++;
-      if (calls === 2) throw new Error('Simulated rename failure');
-      return originalRename(from, to);
-    };
-    try {
-      assert.throws(() => backend.mirrorCopy(src, dest), /Simulated rename failure/);
-    } finally {
-      fs.renameSync = originalRename;
-    }
-
-    assert.strictEqual(fs.readFileSync(path.join(dest, 'keep.txt'), 'utf8'), 'original state');
-    const leaked = fs.readdirSync(tempBase).filter(f => f.startsWith('.tmp-sync-dest-rollback') || f.startsWith('.tmp-old-dest-rollback'));
-    assert.deepStrictEqual(leaked, [], 'no temporary directory may leak after the rollback');
-  })) passed++; else failed++;
-
-  // 8. a backup left by a crash is restored instead of swept, and sibling temporaries stay untouched
-  if (await test('mirrorCopy restores a surviving backup when the destination is missing', () => {
-    const backend = new GitBackend(path.join(tempBase, 'repo-crash'));
-    const src = path.join(tempBase, 'src-crash');
-    const dest = path.join(tempBase, 'dest-crash');
-    const backup = path.join(tempBase, '.tmp-old-dest-crash-1-aa');
-    const siblingBackup = path.join(tempBase, '.tmp-old-other-dest-1-bb');
-
-    fs.mkdirSync(backup, { recursive: true });
-    fs.writeFileSync(path.join(backup, 'state.txt'), 'only surviving copy');
-    fs.mkdirSync(siblingBackup, { recursive: true });
-    fs.writeFileSync(path.join(siblingBackup, 'state.txt'), 'belongs to another destination');
-    fs.mkdirSync(src, { recursive: true });
-
-    const originalCpSync = fs.cpSync;
-    fs.cpSync = () => {
-      throw new Error('Simulated disk failure during copy');
-    };
-    try {
-      assert.throws(() => backend.mirrorCopy(src, dest), /Simulated disk failure/);
-    } finally {
-      fs.cpSync = originalCpSync;
-    }
-
-    assert.strictEqual(fs.readFileSync(path.join(dest, 'state.txt'), 'utf8'), 'only surviving copy');
-    assert.ok(fs.existsSync(siblingBackup), 'a backup of another destination must not be swept');
-  })) passed++; else failed++;
-
-  return { passed, failed };
+function stageOneEnvelope(repoDir) {
+  fs.mkdirSync(path.join(repoDir, 'state', 'proj'), { recursive: true });
+  fs.writeFileSync(path.join(repoDir, 'state', 'proj', 'main.md'), '{"egcTeamEnvelope":2}\n');
 }
 
 async function runTests() {
@@ -117,97 +100,56 @@ async function runTests() {
   const tempBase = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-gitbackend-test-'));
 
   try {
-    // 1. mirrorCopy copies a fresh directory tree to a new destination
-    if (await test('mirrorCopy copies directory tree to a new destination', () => {
-      const repoDir = path.join(tempBase, 'repo-1');
-      const backend = new GitBackend(repoDir);
-      const src = path.join(tempBase, 'src-1');
-      const dest = path.join(tempBase, 'dest-1');
-
-      fs.mkdirSync(path.join(src, 'sub'), { recursive: true });
-      fs.writeFileSync(path.join(src, 'file1.txt'), 'hello 1');
-      fs.writeFileSync(path.join(src, 'sub', 'file2.txt'), 'hello 2');
-
-      backend.mirrorCopy(src, dest);
-
-      assert.ok(fs.existsSync(dest), 'destination must exist');
-      assert.strictEqual(fs.readFileSync(path.join(dest, 'file1.txt'), 'utf8'), 'hello 1');
-      assert.strictEqual(fs.readFileSync(path.join(dest, 'sub', 'file2.txt'), 'utf8'), 'hello 2');
+    if (await test('push never ships the memory database: ~/.egc/memory stays out of the shared repository', async () => {
+      const memoryDir = path.join(HOME, '.egc', 'memory');
+      fs.mkdirSync(memoryDir, { recursive: true });
+      fs.writeFileSync(path.join(memoryDir, 'state.db'), 'sqlite bytes that must stay on this machine');
+      const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'ships');
+      stageOneEnvelope(repoDir);
+      assert.strictEqual(await backend.push(), true, 'the staged state is pushed');
+      assert.ok(!fs.existsSync(path.join(repoDir, 'memory')), 'no memory/ tree is written into the sync checkout');
+      const tree = remoteTree(remote, 'main');
+      assert.deepStrictEqual(tree.filter(p => p.startsWith('memory/')), [], `nothing under memory/ reaches the remote, got: ${tree.join(', ')}`);
+      assert.ok(tree.includes('state/proj/main.md'), 'the state envelope does reach the remote');
+      assert.ok(fs.existsSync(path.join(memoryDir, 'state.db')), 'the local database is untouched');
+      await backend.destroy();
     })) passed++; else failed++;
 
-    // 2. mirrorCopy replaces an existing destination tree
-    if (await test('mirrorCopy updates an existing destination directory', () => {
-      const repoDir = path.join(tempBase, 'repo-2');
-      const backend = new GitBackend(repoDir);
-      const src = path.join(tempBase, 'src-2');
-      const dest = path.join(tempBase, 'dest-2');
-
-      fs.mkdirSync(dest, { recursive: true });
-      fs.writeFileSync(path.join(dest, 'old.txt'), 'old data');
-
-      fs.mkdirSync(src, { recursive: true });
-      fs.writeFileSync(path.join(src, 'new.txt'), 'new data');
-
-      backend.mirrorCopy(src, dest);
-
-      assert.strictEqual(fs.readFileSync(path.join(dest, 'new.txt'), 'utf8'), 'new data');
-      assert.ok(!fs.existsSync(path.join(dest, 'old.txt')), 'old file must be retired');
+    if (await test('push retires a memory/ tree an older version left in the sync checkout, and the commit removes it from the shared repository', async () => {
+      const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'retires');
+      // What a push before this change left behind: the database mirrored
+      // into the checkout in the clear and committed to the shared repository.
+      fs.mkdirSync(path.join(repoDir, 'memory'), { recursive: true });
+      fs.writeFileSync(path.join(repoDir, 'memory', 'state.db'), 'mirrored in the clear by an older version');
+      git(['add', '-A'], repoDir);
+      git(['-c', 'user.name=older', '-c', 'user.email=older@egc.local', 'commit', '-q', '-m', 'sync: team memory update from older'], repoDir);
+      git(['push', '-q', 'origin', 'main'], repoDir);
+      assert.ok(remoteTree(remote, 'main').includes('memory/state.db'), 'precondition: the old mirror is in the remote');
+      stageOneEnvelope(repoDir);
+      assert.strictEqual(await backend.push(), true, 'the push commits the retirement and the new state');
+      assert.ok(!fs.existsSync(path.join(repoDir, 'memory')), 'the old memory/ tree leaves the checkout');
+      const tree = remoteTree(remote, 'main');
+      assert.deepStrictEqual(tree.filter(p => p.startsWith('memory/')), [], `the commit removes memory/ from the remote, got: ${tree.join(', ')}`);
+      assert.ok(tree.includes('state/proj/main.md'));
+      await backend.destroy();
     })) passed++; else failed++;
 
-    // 3. mirrorCopy preserves existing destination content when copy fails (acceptance criteria #1685)
-    if (await test('mirrorCopy preserves existing destination content when copy fails', () => {
-      const repoDir = path.join(tempBase, 'repo-3');
-      const backend = new GitBackend(repoDir);
-      const src = path.join(tempBase, 'src-3');
-      const dest = path.join(tempBase, 'dest-3');
-
-      // Seed destination with existing content that must survive
-      fs.mkdirSync(path.join(dest, 'nested'), { recursive: true });
-      fs.writeFileSync(path.join(dest, 'critical.txt'), 'important state content');
-      fs.writeFileSync(path.join(dest, 'nested', 'state.json'), '{"survive": true}');
-
-      // Source directory
-      fs.mkdirSync(src, { recursive: true });
-      fs.writeFileSync(path.join(src, 'incoming.txt'), 'corrupted or partial');
-
-      // Intercept fs.cpSync to simulate copy failure
-      const originalCpSync = fs.cpSync;
-      let errorThrown = false;
-      fs.cpSync = () => {
-        throw new Error('Simulated disk failure during copy');
-      };
-
-      try {
-        backend.mirrorCopy(src, dest);
-      } catch (err) {
-        errorThrown = true;
-        assert.ok(err.message.includes('Simulated disk failure during copy'));
-      } finally {
-        fs.cpSync = originalCpSync;
+    if (await test('push sweeps the temporaries an interrupted old mirror left beside memory/, so none of them is committed', async () => {
+      const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'sweeps');
+      for (const name of ['.tmp-sync-memory-1-ab', '.tmp-old-memory-1-cd', 'memory']) {
+        fs.mkdirSync(path.join(repoDir, name), { recursive: true });
+        fs.writeFileSync(path.join(repoDir, name, 'state.db'), `left by an interrupted mirror in ${name}`);
       }
-
-      assert.strictEqual(errorThrown, true, 'mirrorCopy must rethrow the copy error');
-
-      // Destination must be completely intact with previous content
-      assert.ok(fs.existsSync(dest), 'destination directory must still exist');
-      assert.strictEqual(
-        fs.readFileSync(path.join(dest, 'critical.txt'), 'utf8'),
-        'important state content',
-        'critical file must survive unharmed'
-      );
-      assert.strictEqual(
-        fs.readFileSync(path.join(dest, 'nested', 'state.json'), 'utf8'),
-        '{"survive": true}',
-        'nested files must survive unharmed'
-      );
-
-      // Verify no temporary files leaked in parent directory
-      const parentFiles = fs.readdirSync(tempBase);
-      const leakedTemps = parentFiles.filter(f => f.startsWith('.tmp-sync-') || f.startsWith('.tmp-old-'));
-      assert.deepStrictEqual(leakedTemps, [], 'temporary directories must be cleaned up on failure');
+      stageOneEnvelope(repoDir);
+      assert.strictEqual(await backend.push(), true, 'the push still goes through');
+      const left = fs.readdirSync(repoDir).filter(entry => entry === 'memory' || entry.startsWith('.tmp-sync-memory-') || entry.startsWith('.tmp-old-memory-'));
+      assert.deepStrictEqual(left, [], 'the mirror and its temporaries leave the checkout');
+      const tree = remoteTree(remote, 'main');
+      assert.deepStrictEqual(tree.filter(p => p.startsWith('memory/') || p.startsWith('.tmp-')), [], `nothing of the mirror reaches the remote, got: ${tree.join(', ')}`);
+      assert.ok(tree.includes('state/proj/main.md'));
+      await backend.destroy();
     })) passed++; else failed++;
 
-    // 4. GitBackend status and uninitialized guards
     if (await test('GitBackend guards against operations before init', async () => {
       const repoDir = path.join(tempBase, 'repo-guards');
       const backend = new GitBackend(repoDir);
@@ -220,7 +162,6 @@ async function runTests() {
       await assert.rejects(async () => backend.status(), /GitBackend not initialized/);
     })) passed++; else failed++;
 
-    // 5. GitBackend constructor accepts custom repoDir and creates directory
     if (await test('GitBackend constructor initializes repository directory', () => {
       const customRepo = path.join(tempBase, 'custom-repo-dir');
       assert.ok(!fs.existsSync(customRepo), 'precondition: custom repo dir does not exist');
@@ -228,36 +169,9 @@ async function runTests() {
       assert.ok(fs.existsSync(customRepo), 'constructor must create the repo directory');
       assert.ok(backend instanceof GitBackend);
     })) passed++; else failed++;
-
-    // 6. mirrorCopy sweeps stale temporary siblings (.tmp-sync-* and .tmp-old-*) before copying
-    if (await test('mirrorCopy sweeps stale temporaries of its own destination before copying', () => {
-      const repoDir = path.join(tempBase, 'repo-sweep');
-      const backend = new GitBackend(repoDir);
-      const src = path.join(tempBase, 'src-sweep');
-      const dest = path.join(tempBase, 'dest-sweep');
-      const staleTemp1 = path.join(tempBase, '.tmp-sync-dest-sweep-1-x');
-      const staleTemp2 = path.join(tempBase, '.tmp-old-dest-sweep-1-x');
-
-      fs.mkdirSync(staleTemp1, { recursive: true });
-      fs.writeFileSync(path.join(staleTemp1, 'orphan.txt'), 'stale sync data');
-      fs.mkdirSync(staleTemp2, { recursive: true });
-      fs.writeFileSync(path.join(staleTemp2, 'orphan.txt'), 'stale old data');
-
-      fs.mkdirSync(src, { recursive: true });
-      fs.writeFileSync(path.join(src, 'data.txt'), 'live data');
-
-      backend.mirrorCopy(src, dest);
-
-      assert.strictEqual(fs.existsSync(staleTemp1), false, 'stale .tmp-sync leftover of this destination must be swept');
-      assert.strictEqual(fs.existsSync(staleTemp2), false, 'stale .tmp-old leftover of this destination must be swept');
-      assert.strictEqual(fs.readFileSync(path.join(dest, 'data.txt'), 'utf8'), 'live data');
-    })) passed++; else failed++;
-
-    const recovery = await runRecoveryTests(GitBackend, tempBase);
-    passed += recovery.passed;
-    failed += recovery.failed;
   } finally {
     fs.rmSync(tempBase, { recursive: true, force: true });
+    fs.rmSync(HOME, { recursive: true, force: true });
   }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

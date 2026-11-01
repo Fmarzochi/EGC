@@ -47,7 +47,7 @@ Usage:
 
 Commands:
   init     Configure a sync backend (e.g. git) and a remote URL
-  sync     Pull remote lessons, merge, and push local changes
+  sync     Pull the teammates' sealed state, merge it, and push local state sealed with the team key
   status   Show last sync time, conflict count, and health
 
 Options:
