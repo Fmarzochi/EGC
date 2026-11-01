@@ -247,7 +247,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "team_sync",
-    description: "Synchronize team memory: pull remote lessons from teammates and push local lessons. Uses last-write-wins timestamp comparison to resolve conflicts. Run this periodically during a session to stay in sync with the team, or at session boundaries.",
+    description: "Synchronize team memory: pull the teammates' state files, sealed with the team key, merge them into the local project memory, and push the local state sealed the same way; nothing else leaves the machine. Conflicts resolve by the newer updated timestamp. Run this periodically during a session to stay in sync with the team, or at session boundaries.",
     inputSchema: {
       type: "object",
       properties: {}
