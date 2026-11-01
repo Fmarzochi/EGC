@@ -121,8 +121,8 @@ function runTests() {
       assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
       assert.ok(!run.stderr.includes('No response from memory server'), run.stderr);
       assert.ok(run.stdout.includes('Sync complete:'), run.stdout);
-      assert.match(run.stdout, /Pulled: \d+ files/, 'the pulled count comes from the server result');
-      assert.match(run.stdout, /Pushed: \d+ commits/, 'the pushed count comes from the server result');
+      assert.ok(run.stdout.includes('Pulled: 0 files'), `an empty remote pulls nothing:\n${run.stdout}`);
+      assert.ok(run.stdout.includes('Pushed: 1 commits'), `the first sync pushes one commit:\n${run.stdout}`);
       const tree = remoteTree(REMOTE, 'main');
       assert.ok(tree.some(entry => entry.startsWith('state/')), `the sealed state reaches the remote, got: ${tree.join(', ') || 'nothing'}`);
       assert.deepStrictEqual(tree.filter(entry => entry.startsWith('memory/')), [], 'the memory database never ships');
