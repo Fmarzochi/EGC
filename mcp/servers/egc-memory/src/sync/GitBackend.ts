@@ -185,10 +185,15 @@ export class GitBackend extends SyncBackend {
     }
   }
 
-  // The checkout tree an earlier version filled with the raw memory database.
+  // The checkout entries an earlier version filled with the raw memory
+  // database: the mirrored tree, and the temporaries an interrupted mirror
+  // left beside it (it copied into a sibling, then swapped by renames).
   private static retireMirroredMemory(repoDir: string): void {
-    const mirrored = path.join(repoDir, 'memory');
-    if (!fs.existsSync(mirrored)) return;
-    fs.rmSync(mirrored, { recursive: true, force: true });
+    const leftovers = fs.readdirSync(repoDir).filter(entry => (
+      entry === 'memory' || entry.startsWith('.tmp-sync-memory-') || entry.startsWith('.tmp-old-memory-')
+    ));
+    for (const entry of leftovers) {
+      fs.rmSync(path.join(repoDir, entry), { recursive: true, force: true });
+    }
   }
 }

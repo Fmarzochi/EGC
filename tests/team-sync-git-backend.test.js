@@ -134,6 +134,22 @@ async function runTests() {
       await backend.destroy();
     })) passed++; else failed++;
 
+    if (await test('push sweeps the temporaries an interrupted old mirror left beside memory/, so none of them is committed', async () => {
+      const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'sweeps');
+      for (const name of ['.tmp-sync-memory-1-ab', '.tmp-old-memory-1-cd', 'memory']) {
+        fs.mkdirSync(path.join(repoDir, name), { recursive: true });
+        fs.writeFileSync(path.join(repoDir, name, 'state.db'), `left by an interrupted mirror in ${name}`);
+      }
+      stageOneEnvelope(repoDir);
+      assert.strictEqual(await backend.push(), true, 'the push still goes through');
+      const left = fs.readdirSync(repoDir).filter(entry => entry === 'memory' || entry.startsWith('.tmp-sync-memory-') || entry.startsWith('.tmp-old-memory-'));
+      assert.deepStrictEqual(left, [], 'the mirror and its temporaries leave the checkout');
+      const tree = remoteTree(remote, 'main');
+      assert.deepStrictEqual(tree.filter(p => p.startsWith('memory/') || p.startsWith('.tmp-')), [], `nothing of the mirror reaches the remote, got: ${tree.join(', ')}`);
+      assert.ok(tree.includes('state/proj/main.md'));
+      await backend.destroy();
+    })) passed++; else failed++;
+
     if (await test('GitBackend guards against operations before init', async () => {
       const repoDir = path.join(tempBase, 'repo-guards');
       const backend = new GitBackend(repoDir);
