@@ -1,6 +1,6 @@
 # EGC Vision
 
-EGC is a local engine that gives every AI coding tool on a machine the same brain: one persistent memory, one live bus between open sessions, one safety layer in front of every command, and one filter that keeps noisy output away from the model. Twenty-nine tools, one package, nothing leaving the machine.
+EGC is a local engine that gives every AI coding tool on a machine the same brain: one persistent memory, one live bus between open sessions, one safety layer in front of every command, and one filter that keeps noisy output away from the model. Twenty-nine tools, one package, nothing leaving the machine unless the person sets up a team remote of their own, and then only sealed.
 
 This document is the direction. The release-by-release record lives in [ROADMAP.md](ROADMAP.md).
 
@@ -16,7 +16,7 @@ The prompt library (agents, skills, commands and rules) ships in the same packag
 ## Principles
 
 1. **Engine first.** The engine is what EGC is; the library is content that rides on it. Positioning, defaults and documentation lead with the engine.
-2. **Local first, private by default.** Memory never leaves the machine and is never committed. No cloud is required for a local install.
+2. **Local first, private by default.** Memory stays on the machine and is never committed to a project repository. The one way it travels is the team sync the person opts into, to a remote they own, sealed with the team key before it leaves the machine. No cloud is required for a local install.
 3. **One package.** `@egchq/egc` ships the engine and the library together, and that does not change. Splitting the package would double the maintenance surface and split the community; opt-in flags and profiles give the same choice without it.
 4. **Honest integrations.** Every supported tool has a documented install path, and its support level says what the maintainers guarantee: see [support levels](governance/support-levels.md).
 5. **Free engine.** The engine is Apache-2.0 and stays free, Team Brain for one person included. What EGC will charge for is a hosted team service on top of the engine (Team Brain below), never the memory on the machine, and never a check inside the open-source code: anything placed there can be removed, so the line between free and paid lives in the service.
@@ -73,5 +73,5 @@ About three releases after the single-person Team Brain, on top of the same code
 ## Non-Goals
 
 - EGC does not aim to replace AI providers: it augments them
-- EGC does not store or transmit user code to any third party
+- EGC does not store or transmit user code or memory to any third party; the opt-in team sync sends only sealed memory to a remote the person chose
 - EGC does not require cloud connectivity for local installations
