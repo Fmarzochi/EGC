@@ -174,13 +174,12 @@ function callMcpTool(toolName, args) {
 
     child.stdout.setEncoding('utf-8');
     child.stdout.on('data', chunk => {
-      buffer += chunk;
-      let newline = buffer.indexOf('\n');
-      while (newline !== -1 && !settled) {
-        const message = parseJsonRpcLine(buffer.slice(0, newline));
-        buffer = buffer.slice(newline + 1);
+      const lines = (buffer + chunk).split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (settled) break;
+        const message = parseJsonRpcLine(line);
         if (message) onMessage(message);
-        newline = buffer.indexOf('\n');
       }
     });
     child.on('error', error => finish(error));
