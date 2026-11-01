@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 
 const os = require('node:os');
-const { spawnSync, execFileSync } = require('node:child_process');
+const { spawn, execFileSync } = require('node:child_process');
 
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
@@ -13,6 +13,7 @@ const PACKAGE_VERSION = require('../package.json').version;
 const MCP_PROTOCOL_VERSION = '2024-11-05';
 const MCP_INITIALIZE_ID = 1;
 const MCP_CALL_ID = 2;
+const MCP_CALL_TIMEOUT_MS = 60000;
 
 // Resolve absolute git path once at startup to avoid PATH-reliance.
 function resolveGitBin() {
@@ -86,54 +87,106 @@ function parseJsonOrRaw(text) {
 }
 
 /**
- * Parse one JSONL line of MCP output. Returns { value } when the line answers
- * the tool call with a text result, null when the line should be skipped (not
- * JSON, another message such as the initialize answer, or no text content),
- * and throws when the answer to the tool call carries an MCP error payload.
+ * Parse one line of the server's stdout as a JSON-RPC message. Anything that
+ * is not a JSON object (log noise, a bare value, an array) is skipped.
  */
-function extractMcpLineResult(line) {
+function parseJsonRpcLine(line) {
   let parsed;
   try {
     parsed = JSON.parse(line);
   } catch {
     return null;
   }
-  if (parsed.id !== MCP_CALL_ID) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return null;
   }
-  if (parsed.result?.content) {
-    for (const content of parsed.result.content) {
-      if (content.type === 'text') {
-        return { value: parseJsonOrRaw(content.text) };
-      }
-    }
-  }
-  if (parsed.error) {
-    throw new Error(parsed.error.message || 'MCP tool call failed');
-  }
-  return null;
-}
-
-function parseMcpResponse(stdout) {
-  const lines = stdout.split('\n').filter(Boolean);
-  for (const line of lines) {
-    const result = extractMcpLineResult(line);
-    if (result) {
-      return result.value;
-    }
-  }
-
-  throw new Error('No response from memory server');
+  return parsed;
 }
 
 /**
- * The memory server speaks MCP over stdio and answers a tool call only after
- * the initialize handshake, so the whole session goes down the pipe at once:
- * initialize, the initialized notification, then the call.
+ * The value of a tools/call answer: its first text content, parsed as JSON
+ * when it is JSON. Throws on an MCP error payload or an answer with no text.
  */
-function mcpSessionInput(toolName, args) {
-  const messages = [
-    {
+function toolCallValue(message) {
+  if (message.error) {
+    throw new Error(message.error.message || 'MCP tool call failed');
+  }
+  const text = Array.isArray(message.result?.content)
+    ? message.result.content.find(content => content.type === 'text')
+    : undefined;
+  if (!text) {
+    throw new Error('No response from memory server');
+  }
+  return parseJsonOrRaw(text.text);
+}
+
+/**
+ * One MCP session with the memory server over stdio: initialize, wait for its
+ * answer, then the initialized notification and the tool call, and wait for
+ * the answer that carries the call's id. The server exits when stdin closes.
+ */
+function callMcpTool(toolName, args) {
+  if (!fs.existsSync(MEMORY_SERVER_SCRIPT)) {
+    console.error(`Memory server not built. Run "npm run build" in mcp/servers/egc-memory/`);
+    process.exit(1);
+  }
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [MEMORY_SERVER_SCRIPT], { stdio: ['pipe', 'pipe', 'ignore'] });
+    let settled = false;
+    let initialized = false;
+    let buffer = '';
+
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.stdin.end();
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const timer = setTimeout(() => {
+      child.kill();
+      finish(new Error('No response from memory server'));
+    }, MCP_CALL_TIMEOUT_MS);
+    const send = message => child.stdin.write(JSON.stringify(message) + '\n');
+
+    const onMessage = message => {
+      if (!initialized && message.id === MCP_INITIALIZE_ID) {
+        if (message.error) {
+          finish(new Error(message.error.message || 'MCP initialize failed'));
+          return;
+        }
+        initialized = true;
+        send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+        send({ jsonrpc: '2.0', id: MCP_CALL_ID, method: 'tools/call', params: { name: toolName, arguments: args } });
+        child.stdin.end();
+        return;
+      }
+      if (message.id === MCP_CALL_ID) {
+        try {
+          finish(null, toolCallValue(message));
+        } catch (error) {
+          finish(error);
+        }
+      }
+    };
+
+    child.stdout.setEncoding('utf-8');
+    child.stdout.on('data', chunk => {
+      buffer += chunk;
+      let newline = buffer.indexOf('\n');
+      while (newline !== -1 && !settled) {
+        const message = parseJsonRpcLine(buffer.slice(0, newline));
+        buffer = buffer.slice(newline + 1);
+        if (message) onMessage(message);
+        newline = buffer.indexOf('\n');
+      }
+    });
+    child.on('error', error => finish(error));
+    child.on('close', () => finish(new Error('No response from memory server')));
+
+    send({
       jsonrpc: '2.0',
       id: MCP_INITIALIZE_ID,
       method: 'initialize',
@@ -142,33 +195,8 @@ function mcpSessionInput(toolName, args) {
         capabilities: {},
         clientInfo: { name: 'egc-team', version: PACKAGE_VERSION },
       },
-    },
-    { jsonrpc: '2.0', method: 'notifications/initialized' },
-    {
-      jsonrpc: '2.0',
-      id: MCP_CALL_ID,
-      method: 'tools/call',
-      params: { name: toolName, arguments: args },
-    },
-  ];
-  return messages.map(message => JSON.stringify(message)).join('\n') + '\n';
-}
-
-function callMcpTool(toolName, args) {
-  if (!fs.existsSync(MEMORY_SERVER_SCRIPT)) {
-    console.error(`Memory server not built. Run "npm run build" in mcp/servers/egc-memory/`);
-    process.exit(1);
-  }
-
-  const result = spawnSync(process.execPath, [MEMORY_SERVER_SCRIPT], {
-    input: mcpSessionInput(toolName, args),
-    encoding: 'utf-8',
-    maxBuffer: 10 * 1024 * 1024,
+    });
   });
-
-  if (result.error) throw result.error;
-
-  return parseMcpResponse(result.stdout);
 }
 
 function optionValue(args, name, fallback) {
@@ -176,7 +204,7 @@ function optionValue(args, name, fallback) {
   return index === -1 ? fallback : args[index + 1];
 }
 
-function handleInit(args) {
+async function handleInit(args) {
   const backend = optionValue(args, '--backend', 'git');
   const remote = optionValue(args, '--remote', null);
   const branch = optionValue(args, '--branch', 'main');
@@ -219,7 +247,7 @@ function handleInit(args) {
 
   // Now try to connect and set up via MCP tool.
   try {
-    const result = callMcpTool('team_init', { backend, remote, branch, team_key: teamKey });
+    const result = await callMcpTool('team_init', { backend, remote, branch, team_key: teamKey });
     if (result) {
       console.log('Sync backend configured successfully.');
     }
@@ -239,7 +267,7 @@ async function handleSync() {
   console.log('Syncing team memory...');
   let response;
   try {
-    response = callMcpTool('team_sync', {});
+    response = await callMcpTool('team_sync', {});
   } catch (err) {
     // State leaves this machine only sealed by the memory server; the old
     // direct git fallback pushed the state directory in the clear.
@@ -284,7 +312,7 @@ function printFallbackStatus(config) {
   }
 }
 
-function handleStatus() {
+async function handleStatus() {
   const config = getTeamConfig();
   if (!config) {
     console.error('Error: Team not initialized. Run "egc team init" first.');
@@ -293,7 +321,7 @@ function handleStatus() {
 
   try {
     // The tool answers { success, status }, where status carries the fields.
-    const status = callMcpTool('team_status', {})?.status ?? {};
+    const status = (await callMcpTool('team_status', {}))?.status ?? {};
     if (status.lastSyncTime) console.log(`Last sync: ${status.lastSyncTime}`);
     if (status.hasUncommittedChanges !== undefined) console.log(`Uncommitted changes: ${status.hasUncommittedChanges}`);
     if (status.conflictCount !== undefined && status.conflictCount > 0) console.log(`Conflicts: ${status.conflictCount}`);
@@ -316,7 +344,7 @@ async function main() {
 
   switch (firstArg) {
     case 'init':
-      handleInit(args);
+      await handleInit(args);
       break;
 
     case 'sync':
@@ -324,7 +352,7 @@ async function main() {
       break;
 
     case 'status':
-      handleStatus();
+      await handleStatus();
       break;
 
     default:
