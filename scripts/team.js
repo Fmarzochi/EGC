@@ -237,23 +237,34 @@ async function handleSync() {
   }
 
   console.log('Syncing team memory...');
+  let response;
   try {
-    const result = callMcpTool('team_sync', {});
-    console.log('Sync complete:');
-    if (result.pulledCount !== undefined) console.log(`  Pulled: ${result.pulledCount} files`);
-    if (result.pushedCount !== undefined) console.log(`  Pushed: ${result.pushedCount} commits`);
-    if (result.conflictCount !== undefined && result.conflictCount > 0) {
-      console.log(`  Conflicts: ${result.conflictCount} (resolve manually in ~/.egc/team-sync/)`);
-    }
-    if (result.errors && result.errors.length > 0) {
-      console.log(`  Errors: ${result.errors.join(', ')}`);
-    }
+    response = callMcpTool('team_sync', {});
   } catch (err) {
     // State leaves this machine only sealed by the memory server; the old
     // direct git fallback pushed the state directory in the clear.
     console.error(`Error: team sync needs the memory server (${err.message}). Run "egc doctor" and try again.`);
     process.exit(1);
   }
+
+  // The tool answers { success, result }, where result carries the counts and
+  // the errors of the run.
+  const result = response?.result ?? {};
+  const errors = Array.isArray(result.errors) ? result.errors : [];
+  const failed = response?.success === false || errors.length > 0;
+  console.log(failed ? 'Sync did not complete:' : 'Sync complete:');
+  if (result.pulledCount !== undefined) console.log(`  Pulled: ${result.pulledCount} files`);
+  if (result.pushedCount !== undefined) console.log(`  Pushed: ${result.pushedCount} commits`);
+  if (result.rejectedCount !== undefined && result.rejectedCount > 0) {
+    console.log(`  Rejected: ${result.rejectedCount} files (not verified team envelopes)`);
+  }
+  if (result.conflictCount !== undefined && result.conflictCount > 0) {
+    console.log(`  Conflicts: ${result.conflictCount} (resolve manually in ~/.egc/team-sync/)`);
+  }
+  for (const error of errors) {
+    console.error(`  Error: ${error}`);
+  }
+  if (failed) process.exit(1);
 }
 
 function printFallbackStatus(config) {
@@ -281,11 +292,12 @@ function handleStatus() {
   }
 
   try {
-    const result = callMcpTool('team_status', {});
-    if (result.lastSyncTime) console.log(`Last sync: ${result.lastSyncTime}`);
-    if (result.hasUncommittedChanges !== undefined) console.log(`Uncommitted changes: ${result.hasUncommittedChanges}`);
-    if (result.conflictCount !== undefined && result.conflictCount > 0) console.log(`Conflicts: ${result.conflictCount}`);
-    console.log(`Remote: ${result.remoteUrl || config.remote}`);
+    // The tool answers { success, status }, where status carries the fields.
+    const status = callMcpTool('team_status', {})?.status ?? {};
+    if (status.lastSyncTime) console.log(`Last sync: ${status.lastSyncTime}`);
+    if (status.hasUncommittedChanges !== undefined) console.log(`Uncommitted changes: ${status.hasUncommittedChanges}`);
+    if (status.conflictCount !== undefined && status.conflictCount > 0) console.log(`Conflicts: ${status.conflictCount}`);
+    console.log(`Remote: ${status.remoteUrl || config.remote}`);
   } catch {
     printFallbackStatus(config);
   }

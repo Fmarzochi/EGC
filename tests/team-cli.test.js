@@ -110,22 +110,34 @@ function runTests() {
       assert.match(config.teamKey, /^[0-9a-f]{64}$/);
     })) passed++; else failed++;
 
-    if (test('team sync completes through the memory server and ships only sealed state', () => {
+    if (test('team sync completes through the memory server, reports the counts and ships only sealed state', () => {
       writeProjectState();
       const run = teamCli(['sync']);
       assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
       assert.ok(!run.stderr.includes('No response from memory server'), run.stderr);
       assert.ok(run.stdout.includes('Sync complete:'), run.stdout);
+      assert.match(run.stdout, /Pulled: \d+ files/, 'the pulled count comes from the server result');
+      assert.match(run.stdout, /Pushed: \d+ commits/, 'the pushed count comes from the server result');
       const tree = remoteTree(REMOTE, 'main');
       assert.ok(tree.some(entry => entry.startsWith('state/')), `the sealed state reaches the remote, got: ${tree.join(', ') || 'nothing'}`);
       assert.deepStrictEqual(tree.filter(entry => entry.startsWith('memory/')), [], 'the memory database never ships');
     })) passed++; else failed++;
 
-    if (test('team status answers through the memory server with the remote', () => {
+    if (test('team status answers through the memory server with its fields', () => {
       const run = teamCli(['status']);
       assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
       assert.ok(!run.stderr.includes('No response from memory server'), run.stderr);
       assert.ok(run.stdout.includes(`Remote: ${REMOTE}`), run.stdout);
+      assert.match(run.stdout, /Uncommitted changes: (true|false)/, 'the status fields come from the server answer');
+    })) passed++; else failed++;
+
+    if (test('team sync fails loudly when the server reports errors', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      fs.writeFileSync(configPath, JSON.stringify({ ...config, teamKey: 'not-a-key' }, null, 2));
+      const run = teamCli(['sync']);
+      assert.notStrictEqual(run.status, 0, 'a sync the server could not do is not a success');
+      assert.ok(`${run.stdout}\n${run.stderr}`.includes('Team key missing or invalid'), `${run.stdout}\n${run.stderr}`);
     })) passed++; else failed++;
   } finally {
     fs.rmSync(HOME, { recursive: true, force: true });
