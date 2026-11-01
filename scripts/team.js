@@ -5,10 +5,15 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 
 const os = require('node:os');
-const { spawnSync, execFileSync } = require('node:child_process');
+const { spawn, execFileSync } = require('node:child_process');
 
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
+const PACKAGE_VERSION = require('../package.json').version;
+const MCP_PROTOCOL_VERSION = '2024-11-05';
+const MCP_INITIALIZE_ID = 1;
+const MCP_CALL_ID = 2;
+const MCP_CALL_TIMEOUT_MS = 60000;
 
 // Resolve absolute git path once at startup to avoid PATH-reliance.
 function resolveGitBin() {
@@ -82,73 +87,123 @@ function parseJsonOrRaw(text) {
 }
 
 /**
- * Parse one JSONL line of MCP output. Returns { value } when the line holds
- * a text result, null when the line should be skipped (not JSON, or no text
- * content), and throws when the line carries an MCP error payload.
+ * Parse one line of the server's stdout as a JSON-RPC message. Anything that
+ * is not a JSON object (log noise, a bare value, an array) is skipped.
  */
-function extractMcpLineResult(line) {
+function parseJsonRpcLine(line) {
   let parsed;
   try {
     parsed = JSON.parse(line);
   } catch {
     return null;
   }
-  if (parsed.result?.content) {
-    for (const content of parsed.result.content) {
-      if (content.type === 'text') {
-        return { value: parseJsonOrRaw(content.text) };
-      }
-    }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
   }
-  if (parsed.error) {
-    throw new Error(parsed.error.message || 'MCP tool call failed');
-  }
-  return null;
+  return parsed;
 }
 
-function parseMcpResponse(stdout) {
-  const lines = stdout.split('\n').filter(Boolean);
-  for (const line of lines) {
-    const result = extractMcpLineResult(line);
-    if (result) {
-      return result.value;
-    }
+/**
+ * The value of a tools/call answer: its first text content, parsed as JSON
+ * when it is JSON. Throws on a JSON-RPC error, on a tool result flagged
+ * isError, and on an answer with no text.
+ */
+function toolCallValue(message) {
+  if (message.error) {
+    throw new Error(message.error.message || 'MCP tool call failed');
   }
-
-  const stdoutTrimmed = stdout.trim();
-  if (stdoutTrimmed) {
-    return parseJsonOrRaw(stdoutTrimmed);
+  const content = Array.isArray(message.result?.content) ? message.result.content : [];
+  const text = content.find(item => item.type === 'text');
+  if (message.result?.isError) {
+    throw new Error(text ? text.text : 'MCP tool call failed');
   }
-
-  throw new Error('No response from memory server');
+  if (!text) {
+    throw new Error('No response from memory server');
+  }
+  return parseJsonOrRaw(text.text);
 }
 
+/**
+ * One MCP session with the memory server over stdio: initialize, wait for its
+ * answer, then the initialized notification and the tool call, and wait for
+ * the answer that carries the call's id. Stdin stays open until that answer
+ * arrives, the server exits when stdin closes, and the promise settles only
+ * once the server has exited, so no caller goes on while the server still
+ * holds the memory database.
+ */
 function callMcpTool(toolName, args) {
   if (!fs.existsSync(MEMORY_SERVER_SCRIPT)) {
     console.error(`Memory server not built. Run "npm run build" in mcp/servers/egc-memory/`);
     process.exit(1);
   }
 
-  const input = JSON.stringify({
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'tools/call',
-    params: {
-      name: toolName,
-      arguments: args,
-    },
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [MEMORY_SERVER_SCRIPT], { stdio: ['pipe', 'pipe', 'ignore'] });
+    let initialized = false;
+    let outcome = null;
+    let buffer = '';
+
+    const record = (error, value) => {
+      if (outcome) return;
+      outcome = { error, value };
+      child.stdin.end();
+    };
+    const timer = setTimeout(() => {
+      record(new Error('No response from memory server'));
+      child.kill();
+    }, MCP_CALL_TIMEOUT_MS);
+    const send = message => child.stdin.write(JSON.stringify(message) + '\n');
+
+    const onMessage = message => {
+      if (!initialized && message.id === MCP_INITIALIZE_ID) {
+        if (message.error) {
+          record(new Error(message.error.message || 'MCP initialize failed'));
+          return;
+        }
+        initialized = true;
+        send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+        send({ jsonrpc: '2.0', id: MCP_CALL_ID, method: 'tools/call', params: { name: toolName, arguments: args } });
+        return;
+      }
+      if (message.id === MCP_CALL_ID) {
+        try {
+          record(null, toolCallValue(message));
+        } catch (error) {
+          record(error);
+        }
+      }
+    };
+
+    child.stdin.on('error', error => record(error));
+    child.stdout.setEncoding('utf-8');
+    child.stdout.on('data', chunk => {
+      const lines = (buffer + chunk).split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (outcome) break;
+        const message = parseJsonRpcLine(line);
+        if (message) onMessage(message);
+      }
+    });
+    child.on('error', error => record(error));
+    child.on('close', () => {
+      clearTimeout(timer);
+      const { error, value } = outcome || { error: new Error('No response from memory server') };
+      if (error) reject(error);
+      else resolve(value);
+    });
+
+    send({
+      jsonrpc: '2.0',
+      id: MCP_INITIALIZE_ID,
+      method: 'initialize',
+      params: {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: { name: 'egc-team', version: PACKAGE_VERSION },
+      },
+    });
   });
-
-  const result = spawnSync(process.execPath, [MEMORY_SERVER_SCRIPT], {
-    input,
-    encoding: 'utf-8',
-    maxBuffer: 10 * 1024 * 1024,
-    env: { ...process.env, EGC_CLI_MODE: '1' },
-  });
-
-  if (result.error) throw result.error;
-
-  return parseMcpResponse(result.stdout);
 }
 
 function optionValue(args, name, fallback) {
@@ -156,7 +211,7 @@ function optionValue(args, name, fallback) {
   return index === -1 ? fallback : args[index + 1];
 }
 
-function handleInit(args) {
+async function handleInit(args) {
   const backend = optionValue(args, '--backend', 'git');
   const remote = optionValue(args, '--remote', null);
   const branch = optionValue(args, '--branch', 'main');
@@ -199,7 +254,7 @@ function handleInit(args) {
 
   // Now try to connect and set up via MCP tool.
   try {
-    const result = callMcpTool('team_init', { backend, remote, branch, team_key: teamKey });
+    const result = await callMcpTool('team_init', { backend, remote, branch, team_key: teamKey });
     if (result) {
       console.log('Sync backend configured successfully.');
     }
@@ -217,23 +272,34 @@ async function handleSync() {
   }
 
   console.log('Syncing team memory...');
+  let response;
   try {
-    const result = callMcpTool('team_sync', {});
-    console.log('Sync complete:');
-    if (result.pulledCount !== undefined) console.log(`  Pulled: ${result.pulledCount} files`);
-    if (result.pushedCount !== undefined) console.log(`  Pushed: ${result.pushedCount} commits`);
-    if (result.conflictCount !== undefined && result.conflictCount > 0) {
-      console.log(`  Conflicts: ${result.conflictCount} (resolve manually in ~/.egc/team-sync/)`);
-    }
-    if (result.errors && result.errors.length > 0) {
-      console.log(`  Errors: ${result.errors.join(', ')}`);
-    }
+    response = await callMcpTool('team_sync', {});
   } catch (err) {
     // State leaves this machine only sealed by the memory server; the old
     // direct git fallback pushed the state directory in the clear.
     console.error(`Error: team sync needs the memory server (${err.message}). Run "egc doctor" and try again.`);
     process.exit(1);
   }
+
+  // The tool answers { success, result }, where result carries the counts and
+  // the errors of the run; anything else is not a completed sync.
+  const result = response?.result ?? {};
+  const errors = Array.isArray(result.errors) ? result.errors : [];
+  const failed = response?.success !== true || errors.length > 0;
+  console.log(failed ? 'Sync did not complete:' : 'Sync complete:');
+  if (result.pulledCount !== undefined) console.log(`  Pulled: ${result.pulledCount} files`);
+  if (result.pushedCount !== undefined) console.log(`  Pushed: ${result.pushedCount} commits`);
+  if (result.rejectedCount !== undefined && result.rejectedCount > 0) {
+    console.log(`  Rejected: ${result.rejectedCount} files (not verified team envelopes)`);
+  }
+  if (result.conflictCount !== undefined && result.conflictCount > 0) {
+    console.log(`  Conflicts: ${result.conflictCount} (resolve manually in ~/.egc/team-sync/)`);
+  }
+  for (const error of errors) {
+    console.error(`  Error: ${error}`);
+  }
+  if (failed) process.exit(1);
 }
 
 function printFallbackStatus(config) {
@@ -253,7 +319,7 @@ function printFallbackStatus(config) {
   }
 }
 
-function handleStatus() {
+async function handleStatus() {
   const config = getTeamConfig();
   if (!config) {
     console.error('Error: Team not initialized. Run "egc team init" first.');
@@ -261,11 +327,12 @@ function handleStatus() {
   }
 
   try {
-    const result = callMcpTool('team_status', {});
-    if (result.lastSyncTime) console.log(`Last sync: ${result.lastSyncTime}`);
-    if (result.hasUncommittedChanges !== undefined) console.log(`Uncommitted changes: ${result.hasUncommittedChanges}`);
-    if (result.conflictCount !== undefined && result.conflictCount > 0) console.log(`Conflicts: ${result.conflictCount}`);
-    console.log(`Remote: ${result.remoteUrl || config.remote}`);
+    // The tool answers { success, status }, where status carries the fields.
+    const status = (await callMcpTool('team_status', {}))?.status ?? {};
+    if (status.lastSyncTime) console.log(`Last sync: ${status.lastSyncTime}`);
+    if (status.hasUncommittedChanges !== undefined) console.log(`Uncommitted changes: ${status.hasUncommittedChanges}`);
+    if (status.conflictCount !== undefined && status.conflictCount > 0) console.log(`Conflicts: ${status.conflictCount}`);
+    console.log(`Remote: ${status.remoteUrl || config.remote}`);
   } catch {
     printFallbackStatus(config);
   }
@@ -284,7 +351,7 @@ async function main() {
 
   switch (firstArg) {
     case 'init':
-      handleInit(args);
+      await handleInit(args);
       break;
 
     case 'sync':
@@ -292,7 +359,7 @@ async function main() {
       break;
 
     case 'status':
-      handleStatus();
+      await handleStatus();
       break;
 
     default:
