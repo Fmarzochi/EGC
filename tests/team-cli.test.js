@@ -15,6 +15,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const { removeDirWithRetries } = require('./fixtures/remove-dir');
+const { FULL_INSTALL_TIMEOUT_MS } = require('./fixtures/subprocess-timeouts');
+const { suiteEnv } = require('./fixtures/suite-env');
+
 const ROOT = path.join(__dirname, '..');
 const TEAM_CLI = path.join(ROOT, 'scripts', 'team.js');
 const MEMORY_SERVER = path.join(ROOT, 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
@@ -32,8 +36,11 @@ const GIT_BIN = [
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-team-cli-home-'));
 const REMOTE = path.join(HOME, 'team-remote');
 const PROJECT = path.join(HOME, 'project');
-// The repository's budget for one spawned process in a test.
-const CLI_TIMEOUT_MS = 30000;
+// Every child (git, the CLI, the server) runs with the suite environment and
+// the isolated home. One CLI call spawns the server, its migrations and a
+// chain of git commands, so it gets the larger of the repository's budgets.
+const TEST_ENV = { ...suiteEnv(process.env), HOME, USERPROFILE: HOME };
+const CLI_TIMEOUT_MS = FULL_INSTALL_TIMEOUT_MS;
 
 function test(name, fn) {
   try {
@@ -48,7 +55,7 @@ function test(name, fn) {
 }
 
 function git(args, cwd) {
-  return execFileSync(GIT_BIN, args, { cwd, encoding: 'utf8', stdio: 'pipe' }).trim();
+  return execFileSync(GIT_BIN, args, { cwd, encoding: 'utf8', env: TEST_ENV, stdio: 'pipe' }).trim();
 }
 
 function bareRemote(dir) {
@@ -68,7 +75,7 @@ function remoteTree(remote, branch) {
 function teamCli(args) {
   return spawnSync(process.execPath, [TEAM_CLI, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, HOME, USERPROFILE: HOME },
+    env: TEST_ENV,
     timeout: CLI_TIMEOUT_MS,
   });
 }
@@ -83,7 +90,7 @@ function writeProjectState() {
   const run = spawnSync(process.execPath, [MEMORY_SERVER], {
     input: messages.map(m => JSON.stringify(m)).join('\n') + '\n',
     encoding: 'utf8',
-    env: { ...process.env, HOME, USERPROFILE: HOME },
+    env: TEST_ENV,
     timeout: CLI_TIMEOUT_MS,
   });
   assert.ok(run.stdout.includes('Project memory updated'), `update_state did not go through:\n${run.stdout}\n${run.stderr}`);
@@ -93,7 +100,7 @@ function runTests() {
   console.log('\nteam CLI against the built memory server');
   if (!fs.existsSync(MEMORY_SERVER)) {
     console.error(`[SKIP] memory server build not found at ${MEMORY_SERVER}. Run 'npm run build' in mcp/servers/egc-memory first.`);
-    fs.rmSync(HOME, { recursive: true, force: true });
+    removeDirWithRetries(HOME);
     process.exit(0);
   }
   let passed = 0;
@@ -145,7 +152,7 @@ function runTests() {
       assert.ok(`${run.stdout}\n${run.stderr}`.includes('Team key missing or invalid'), `${run.stdout}\n${run.stderr}`);
     })) passed++; else failed++;
   } finally {
-    fs.rmSync(HOME, { recursive: true, force: true });
+    removeDirWithRetries(HOME);
   }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

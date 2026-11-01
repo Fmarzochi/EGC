@@ -105,15 +105,18 @@ function parseJsonRpcLine(line) {
 
 /**
  * The value of a tools/call answer: its first text content, parsed as JSON
- * when it is JSON. Throws on an MCP error payload or an answer with no text.
+ * when it is JSON. Throws on a JSON-RPC error, on a tool result flagged
+ * isError, and on an answer with no text.
  */
 function toolCallValue(message) {
   if (message.error) {
     throw new Error(message.error.message || 'MCP tool call failed');
   }
-  const text = Array.isArray(message.result?.content)
-    ? message.result.content.find(content => content.type === 'text')
-    : undefined;
+  const content = Array.isArray(message.result?.content) ? message.result.content : [];
+  const text = content.find(item => item.type === 'text');
+  if (message.result?.isError) {
+    throw new Error(text ? text.text : 'MCP tool call failed');
+  }
   if (!text) {
     throw new Error('No response from memory server');
   }
@@ -123,7 +126,10 @@ function toolCallValue(message) {
 /**
  * One MCP session with the memory server over stdio: initialize, wait for its
  * answer, then the initialized notification and the tool call, and wait for
- * the answer that carries the call's id. The server exits when stdin closes.
+ * the answer that carries the call's id. Stdin stays open until that answer
+ * arrives, the server exits when stdin closes, and the promise settles only
+ * once the server has exited, so no caller goes on while the server still
+ * holds the memory database.
  */
 function callMcpTool(toolName, args) {
   if (!fs.existsSync(MEMORY_SERVER_SCRIPT)) {
@@ -133,57 +139,59 @@ function callMcpTool(toolName, args) {
 
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [MEMORY_SERVER_SCRIPT], { stdio: ['pipe', 'pipe', 'ignore'] });
-    let settled = false;
     let initialized = false;
+    let outcome = null;
     let buffer = '';
 
-    const finish = (error, value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
+    const record = (error, value) => {
+      if (outcome) return;
+      outcome = { error, value };
       child.stdin.end();
-      if (error) reject(error);
-      else resolve(value);
     };
     const timer = setTimeout(() => {
+      record(new Error('No response from memory server'));
       child.kill();
-      finish(new Error('No response from memory server'));
     }, MCP_CALL_TIMEOUT_MS);
     const send = message => child.stdin.write(JSON.stringify(message) + '\n');
 
     const onMessage = message => {
       if (!initialized && message.id === MCP_INITIALIZE_ID) {
         if (message.error) {
-          finish(new Error(message.error.message || 'MCP initialize failed'));
+          record(new Error(message.error.message || 'MCP initialize failed'));
           return;
         }
         initialized = true;
         send({ jsonrpc: '2.0', method: 'notifications/initialized' });
         send({ jsonrpc: '2.0', id: MCP_CALL_ID, method: 'tools/call', params: { name: toolName, arguments: args } });
-        child.stdin.end();
         return;
       }
       if (message.id === MCP_CALL_ID) {
         try {
-          finish(null, toolCallValue(message));
+          record(null, toolCallValue(message));
         } catch (error) {
-          finish(error);
+          record(error);
         }
       }
     };
 
+    child.stdin.on('error', error => record(error));
     child.stdout.setEncoding('utf-8');
     child.stdout.on('data', chunk => {
       const lines = (buffer + chunk).split('\n');
       buffer = lines.pop();
       for (const line of lines) {
-        if (settled) break;
+        if (outcome) break;
         const message = parseJsonRpcLine(line);
         if (message) onMessage(message);
       }
     });
-    child.on('error', error => finish(error));
-    child.on('close', () => finish(new Error('No response from memory server')));
+    child.on('error', error => record(error));
+    child.on('close', () => {
+      clearTimeout(timer);
+      const { error, value } = outcome || { error: new Error('No response from memory server') };
+      if (error) reject(error);
+      else resolve(value);
+    });
 
     send({
       jsonrpc: '2.0',
@@ -275,10 +283,10 @@ async function handleSync() {
   }
 
   // The tool answers { success, result }, where result carries the counts and
-  // the errors of the run.
+  // the errors of the run; anything else is not a completed sync.
   const result = response?.result ?? {};
   const errors = Array.isArray(result.errors) ? result.errors : [];
-  const failed = response?.success === false || errors.length > 0;
+  const failed = response?.success !== true || errors.length > 0;
   console.log(failed ? 'Sync did not complete:' : 'Sync complete:');
   if (result.pulledCount !== undefined) console.log(`  Pulled: ${result.pulledCount} files`);
   if (result.pushedCount !== undefined) console.log(`  Pushed: ${result.pushedCount} commits`);
