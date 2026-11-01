@@ -1620,6 +1620,95 @@ async function runJunieTests() {
   return [passed, failed];
 }
 
+// OpenHands loads every Markdown file under ~/.openhands/skills/ for all of
+// the person's conversations, and a file with no `triggers` in its front
+// matter stays in the system prompt (USER_SKILLS_DIRS and load_and_categorize
+// in the SDK's skills/skill.py; the CLI's AgentStore sets
+// load_user_skills=True; read on 2026-11-01). Same gate as the MCP
+// registration in ~/.openhands/mcp.json.
+async function runOpenHandsTests() {
+  let passed = 0;
+  let failed = 0;
+  const skillsFile = home => path.join(home, '.openhands', 'skills', 'egc-memory.md');
+
+  if (await test('writes the OpenHands user skills file when ~/.openhands exists (T12)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.openhands'), { recursive: true });
+      const output = run(home);
+      assert.ok(/OpenHands: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      const content = fs.readFileSync(skillsFile(home), 'utf8');
+      assert.ok(content.startsWith(`<!-- egc-memory-protocol:${V} -->`), 'the file opens with the current marker');
+      assert.ok(content.includes('<!-- /egc-memory-protocol -->'), 'the file closes the block');
+      assert.ok(!/^---/.test(content) && !/\btriggers\s*:/.test(content), 'no front matter triggers: a skill without them is always in the prompt');
+      assert.ok(content.includes('get_state({})'), 'the protocol text is there');
+      assert.ok(!fs.existsSync(path.join(home, '.agents')), 'nothing is written to the ~/.agents root other tools share');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('leaves an up-to-date OpenHands skills file alone on the next run (T12)', () => {
+    const home = mktempHome();
+    try {
+      fs.mkdirSync(path.join(home, '.openhands'), { recursive: true });
+      run(home);
+      const before = fs.readFileSync(skillsFile(home), 'utf8');
+      const output = run(home);
+      assert.ok(new RegExp(`OpenHands: already configured \\(${V}\\)`).test(output), `should report already configured, got: ${output}`);
+      assert.strictEqual(fs.readFileSync(skillsFile(home), 'utf8'), before, 'the file is byte-identical');
+      assert.ok(!fs.existsSync(`${skillsFile(home)}.egc.bak`), 'no backup is written when nothing changes');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('upgrades an older OpenHands skills file in place and keeps a backup (T12)', () => {
+    const home = mktempHome();
+    try {
+      const target = skillsFile(home);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, '<!-- egc-memory-protocol:v1 -->\n# EGC Session Memory\n\nold text\n<!-- /egc-memory-protocol -->\n');
+      const output = run(home);
+      assert.ok(new RegExp(`OpenHands: memory protocol upgraded v1 -> ${V}`).test(output), `should report the upgrade, got: ${output}`);
+      const content = fs.readFileSync(target, 'utf8');
+      assert.ok(content.startsWith(`<!-- egc-memory-protocol:${V} -->`), 'the current marker replaces the old one');
+      assert.ok(!content.includes('old text'), 'the old body is gone');
+      assert.ok(fs.readFileSync(`${target}.egc.bak`, 'utf8').includes('old text'), 'the backup keeps the old body');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('skips OpenHands when ~/.openhands does not exist and openhands is not on PATH (T12)', () => {
+    const home = mktempHome();
+    try {
+      const output = run(home, { PATH: isolatedPath(null) });
+      assert.ok(!/\[cognitive\] OpenHands:/.test(output), 'should not mention OpenHands at all');
+      assert.ok(!fs.existsSync(path.join(home, '.openhands')), 'nothing is created');
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
+  if (await test('writes the OpenHands user skills file when openhands is on PATH before ~/.openhands exists (T12)', () => {
+    const home = mktempHome();
+    const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-fake-openhands-'));
+    try {
+      fs.writeFileSync(path.join(fakeBin, 'openhands'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(fakeBin, 'openhands.cmd'), '@exit /b 0\r\n');
+      const output = run(home, { PATH: isolatedPath(fakeBin) });
+      assert.ok(/OpenHands: memory protocol installed/.test(output), `should report install, got: ${output}`);
+      assert.ok(fs.existsSync(skillsFile(home)), 'the skills file is written on the first run');
+    } finally {
+      cleanup(home);
+      cleanup(fakeBin);
+    }
+  })) passed++; else failed++;
+
+  return [passed, failed];
+}
+
 async function runPiTests() {
   let passed = 0;
   let failed = 0;
@@ -2224,6 +2313,12 @@ async function runRemainingHarnessTests() {
     const [juniePassed, junieFailed] = await runJunieTests();
     passed += juniePassed;
     failed += junieFailed;
+  }
+
+  {
+    const [openHandsPassed, openHandsFailed] = await runOpenHandsTests();
+    passed += openHandsPassed;
+    failed += openHandsFailed;
   }
 
   if (await test('writes Zed AGENTS.md when ~/.config/zed exists', () => {
