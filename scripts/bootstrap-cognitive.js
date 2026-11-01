@@ -561,7 +561,11 @@ function retireLegacyMemoryCopy(legacyFile, label, tool) {
   console.log(`  [cognitive] ${label}: retired the old protocol copy ${tool} does not read (${shown})`);
 }
 
-function injectTraeUserRule(filepath, label, content) {
+// A standalone protocol file at a path the person may also use for a file of
+// their own (Trae's user rule, OpenHands' skill): written when absent,
+// upgraded when it carries the EGC block, and left untouched, with a line
+// saying so, when it holds content without the block.
+function injectProtocolUnlessOwned(filepath, label, content, noun = 'rule') {
   if (!fs.existsSync(filepath)) {
     injectStandaloneProtocol(filepath, label, content);
     return true;
@@ -569,7 +573,7 @@ function injectTraeUserRule(filepath, label, content) {
   const raw = fs.readFileSync(filepath, 'utf8');
   const blocks = [...raw.matchAll(new RegExp(MARKER_BLOCK_RE.source, 'g'))];
   if (blocks.length === 0) {
-    console.log(`  [cognitive] ${label}: ${filepath.replace(HOME, '~')} is a rule of your own, left untouched; the memory protocol was not installed`);
+    console.log(`  [cognitive] ${label}: ${filepath.replace(HOME, '~')} is a ${noun} of your own, left untouched; the memory protocol was not installed`);
     return false;
   }
   const installedVersion = Math.min(...blocks.map(block => resolveInstalledVersion(block, 0)));
@@ -597,7 +601,7 @@ function injectTraeUserRule(filepath, label, content) {
     try {
       const traeDir = path.join(HOME, dir);
       if (!fs.existsSync(traeDir)) continue;
-      installed = injectTraeUserRule(path.join(traeDir, 'user_rules', 'egc-memory.md'), label, markdownProtocolBody('EGC Session Memory'));
+      installed = injectProtocolUnlessOwned(path.join(traeDir, 'user_rules', 'egc-memory.md'), label, markdownProtocolBody('EGC Session Memory'));
     } catch (e) {
       console.log(`  [cognitive] ${label}: unexpected error: ${e.message}`);
     }
@@ -718,15 +722,16 @@ for (const tool of AGENTS_MD_TOOLS) {
 // (USER_SKILLS_DIRS and load_and_categorize in the SDK's skills/skill.py,
 // read on 2026-11-01 against openhands 1.16.0; docs.openhands.dev/overview/
 // skills). The SKILL.md directory format is only advertised by name and read
-// on demand, and ~/.agents/skills is shared with Codex, Goose, Zed, Crush and
-// Amp, so the protocol goes to the directory only OpenHands reads. The file
-// is entirely EGC-managed, like Trae's user rule. The same gate as the MCP
-// registration in ~/.openhands/mcp.json.
+// on demand, and ~/.agents/skills is the root OpenHands shares with Codex,
+// Goose, Zed, Crush and Amp, so the protocol goes to the directory only
+// OpenHands reads. A skill of the person's own at that path is left alone,
+// like Trae's user rule. The same gate as the MCP registration in
+// ~/.openhands/mcp.json.
 (function bootstrapOpenHands() {
   try {
     const openhandsDir = path.join(HOME, '.openhands');
     if (!fs.existsSync(openhandsDir) && !commandExists('openhands')) return;
-    injectStandaloneProtocol(path.join(openhandsDir, 'skills', 'egc-memory.md'), 'OpenHands', markdownProtocolBody('EGC Session Memory'));
+    injectProtocolUnlessOwned(path.join(openhandsDir, 'skills', 'egc-memory.md'), 'OpenHands', markdownProtocolBody('EGC Session Memory'), 'skill');
   } catch (e) {
     console.log(`  [cognitive] OpenHands: unexpected error: ${e.message}`);
   }

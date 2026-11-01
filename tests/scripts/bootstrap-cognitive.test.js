@@ -1648,6 +1648,22 @@ async function runOpenHandsTests() {
     }
   })) passed++; else failed++;
 
+  if (await test('leaves an egc-memory.md skill of the person\'s own, without the EGC marker, untouched (T12)', () => {
+    const home = mktempHome();
+    try {
+      const target = skillsFile(home);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      const own = '# My skill\n\nAlways answer in English.\n';
+      fs.writeFileSync(target, own);
+      const output = run(home);
+      assert.strictEqual(fs.readFileSync(target, 'utf8'), own, 'the person\'s skill is byte-identical');
+      assert.ok(!fs.existsSync(`${target}.egc.bak`), 'no backup is written for a file that is not touched');
+      assert.ok(output.includes(`OpenHands: ${path.join('~', '.openhands', 'skills', 'egc-memory.md')} is a skill of your own, left untouched; the memory protocol was not installed`), `the kept file is reported, got: ${output}`);
+    } finally {
+      cleanup(home);
+    }
+  })) passed++; else failed++;
+
   if (await test('leaves an up-to-date OpenHands skills file alone on the next run (T12)', () => {
     const home = mktempHome();
     try {
