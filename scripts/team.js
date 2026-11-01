@@ -9,6 +9,10 @@ const { spawnSync, execFileSync } = require('node:child_process');
 
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
+const PACKAGE_VERSION = require('../package.json').version;
+const MCP_PROTOCOL_VERSION = '2024-11-05';
+const MCP_INITIALIZE_ID = 1;
+const MCP_CALL_ID = 2;
 
 // Resolve absolute git path once at startup to avoid PATH-reliance.
 function resolveGitBin() {
@@ -82,15 +86,19 @@ function parseJsonOrRaw(text) {
 }
 
 /**
- * Parse one JSONL line of MCP output. Returns { value } when the line holds
- * a text result, null when the line should be skipped (not JSON, or no text
- * content), and throws when the line carries an MCP error payload.
+ * Parse one JSONL line of MCP output. Returns { value } when the line answers
+ * the tool call with a text result, null when the line should be skipped (not
+ * JSON, another message such as the initialize answer, or no text content),
+ * and throws when the answer to the tool call carries an MCP error payload.
  */
 function extractMcpLineResult(line) {
   let parsed;
   try {
     parsed = JSON.parse(line);
   } catch {
+    return null;
+  }
+  if (parsed.id !== MCP_CALL_ID) {
     return null;
   }
   if (parsed.result?.content) {
@@ -115,12 +123,35 @@ function parseMcpResponse(stdout) {
     }
   }
 
-  const stdoutTrimmed = stdout.trim();
-  if (stdoutTrimmed) {
-    return parseJsonOrRaw(stdoutTrimmed);
-  }
-
   throw new Error('No response from memory server');
+}
+
+/**
+ * The memory server speaks MCP over stdio and answers a tool call only after
+ * the initialize handshake, so the whole session goes down the pipe at once:
+ * initialize, the initialized notification, then the call.
+ */
+function mcpSessionInput(toolName, args) {
+  const messages = [
+    {
+      jsonrpc: '2.0',
+      id: MCP_INITIALIZE_ID,
+      method: 'initialize',
+      params: {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        capabilities: {},
+        clientInfo: { name: 'egc-team', version: PACKAGE_VERSION },
+      },
+    },
+    { jsonrpc: '2.0', method: 'notifications/initialized' },
+    {
+      jsonrpc: '2.0',
+      id: MCP_CALL_ID,
+      method: 'tools/call',
+      params: { name: toolName, arguments: args },
+    },
+  ];
+  return messages.map(message => JSON.stringify(message)).join('\n') + '\n';
 }
 
 function callMcpTool(toolName, args) {
@@ -129,21 +160,10 @@ function callMcpTool(toolName, args) {
     process.exit(1);
   }
 
-  const input = JSON.stringify({
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'tools/call',
-    params: {
-      name: toolName,
-      arguments: args,
-    },
-  });
-
   const result = spawnSync(process.execPath, [MEMORY_SERVER_SCRIPT], {
-    input,
+    input: mcpSessionInput(toolName, args),
     encoding: 'utf-8',
     maxBuffer: 10 * 1024 * 1024,
-    env: { ...process.env, EGC_CLI_MODE: '1' },
   });
 
   if (result.error) throw result.error;
