@@ -50,6 +50,18 @@ EGC is one brain with four faculties. Each one is on from the first install, in 
 
 Decisions, session context, working memory and learned lessons are captured as you work and are available in any other terminal, IDE or agent you open. You speak naturally, in any language: "save this session", "what did we decide about auth?", "remember this decision". EGC understands the intent and stores or recalls the context. There is no command to memorize.
 
+#### Team Brain: Your Memory on Every Machine
+
+To keep your project state in step across your own machines, point EGC at a private git remote you control. The state is sealed with a team key before it leaves the machine; no EGC server is involved and the memory database never travels.
+
+```bash
+egc team init --backend git --remote git@github.com:you/egc-memory.git
+egc team init --backend git --remote git@github.com:you/egc-memory.git --key <team key>   # on each other machine
+egc team sync
+```
+
+See the [Team Brain guide](docs/TEAM-BRAIN.md).
+
 ### Session Mesh: Your Open Sessions See Each Other
 
 Two Cursor tabs, a Claude Code terminal and an Antigravity session share one live bus. They announce what they are working on, claim the files they edit, hand work to each other and pick up events the moment they land, so parallel sessions cooperate instead of colliding.
