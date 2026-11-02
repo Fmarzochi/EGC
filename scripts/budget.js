@@ -11,7 +11,7 @@ const {
 
 function showHelp() {
   console.log(`
-EGC Budget Guardian — Set token/cost limits per session
+EGC Budget Guardian: Set token/cost limits per session
 
 Usage:
   egc budget set [--tokens <n>] [--cost <$>] [--warn-at <n>] [--action warn|block]
@@ -117,11 +117,11 @@ function handleStatus() {
 
   const check = checkBudget();
   if (check.block) {
-    console.log(`\n  Status:     BLOCKED — ${check.reason}`);
+    console.log(`\n  Status:     BLOCKED: ${check.reason}`);
   } else if (check.warn) {
-    console.log(`\n  Status:     WARNING — ${check.reason}`);
+    console.log(`\n  Status:     WARNING: ${check.reason}`);
   } else if (config.max_tokens || config.max_cost_usd) {
-    console.log(`\n  Status:     OK — within budget`);
+    console.log(`\n  Status:     OK: within budget`);
   }
 }
 

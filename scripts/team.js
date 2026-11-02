@@ -43,7 +43,7 @@ function safeGit(args, cwd) {
 
 function showHelp() {
   console.log(`
-EGC Team Memory — Sync state across teammates
+EGC Team Memory: Sync state across teammates
 
 Usage:
   egc team init --backend <backend> --remote <url> [--branch <branch>] [--key <hex>]
