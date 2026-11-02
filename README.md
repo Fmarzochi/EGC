@@ -52,7 +52,7 @@ Decisions, session context, working memory and learned lessons are captured as y
 
 #### Team Brain: Your Memory on Every Machine
 
-To keep your project state in step across your own machines, point EGC at a private git remote you control. The state is sealed with a team key before it leaves the machine; no EGC server is involved and the memory database never travels. A wrong team key makes a sync delete files from the remote, so read the [Team Brain guide](docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path) first.
+To keep your project state in step across your own machines, point EGC at a private git remote you control. The state is sealed with a team key before it leaves the machine; no EGC server is involved and the memory database no longer travels (a remote used with an earlier version may still hold it in its history, see [what travels](docs/TEAM-BRAIN.md#what-travels-and-what-stays)). A wrong team key makes a sync delete files from the remote, so read the [Team Brain guide](docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path) first.
 
 ```bash
 egc team init --backend git --remote https://github.com/you/egc-memory.git
