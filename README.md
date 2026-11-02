@@ -18,7 +18,7 @@
 
 EGC is a local-first runtime for AI coding tools. Install it once and Cursor, Claude Code, Codex, Copilot, Aider and the rest of the 29 AI coding tools it supports share one encrypted memory of your projects, one filter that keeps noisy output away from the model, and one live bus that lets your open sessions see each other. Most of them also get a safety layer in front of every command; a few, like Auggie, expose no hook surface for it yet, and [the integration tiers](docs/spec/integration-tiers.md) say exactly which. Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
 
-Nothing leaves your machine. Memory lives in `~/.egc`, encrypted with AES-256-GCM, kept per project and branch, and never committed to git.
+Nothing leaves your machine unless you turn on the Team Brain. Memory lives in `~/.egc`, encrypted with AES-256-GCM, kept per project and branch, and never committed to git.
 
 ---
 
@@ -52,15 +52,13 @@ Decisions, session context, working memory and learned lessons are captured as y
 
 #### Team Brain: Your Memory on Every Machine
 
-To keep your project state in step across your own machines, point EGC at a private git remote you control. The state is sealed with a team key before it leaves the machine; no EGC server is involved and the memory database never travels.
+To keep your project state in step across your own machines, point EGC at a private git remote you control. The state is sealed with a team key before it leaves the machine, no EGC server is involved and the memory database never travels. A wrong team key makes a sync delete files from the remote, so read the [Team Brain guide](docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path) first.
 
 ```bash
-egc team init --backend git --remote git@github.com:you/egc-memory.git
-egc team init --backend git --remote git@github.com:you/egc-memory.git --key <team key>   # on each other machine
+egc team init --backend git --remote https://github.com/you/egc-memory.git
+egc team init --backend git --remote https://github.com/you/egc-memory.git --key <team key>   # on each other machine
 egc team sync
 ```
-
-See the [Team Brain guide](docs/TEAM-BRAIN.md).
 
 ### Session Mesh: Your Open Sessions See Each Other
 

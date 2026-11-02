@@ -9,7 +9,7 @@ The full guide, with real command output and troubleshooting, is [docs/TEAM-BRAI
 | Command | What it does |
 |---|---|
 | `egc team init --backend git --remote <url> [--branch <name>]` | Configures this machine and makes a new team key, printed once. |
-| `egc team init --backend git --remote <url> --key <64 hex>` | Joins this machine to an existing team. |
+| `egc team init --backend git --remote <url> [--branch <name>] --key <64 hex>` | Joins this machine to an existing team. |
 | `egc team sync` | Pulls the sealed state, merges it, and pushes this machine's state. |
 | `egc team status` | Shows the last commit time, uncommitted changes and the remote. |
 

@@ -8,12 +8,14 @@ This page covers one person with two or more machines. Teams of several people a
 
 | Travels to the remote, sealed | Never leaves the machine |
 |---|---|
-| The project state documents under `~/.egc/state/<project>/<branch>.md`: context, decisions, things to avoid, preferences, next steps | The SQLite memory store under `~/.egc/memory/` (lessons, history, the session bus, working memory) |
+| The project state documents under `~/.egc/state/<project>/`, one file per branch: context, decisions, things to avoid, preferences, next steps. The file name is the branch name followed by `--` and a SHA-256 of the branch name. The integrity sidecars (`<file>.hmac`) next to them are staged too | The SQLite memory store under `~/.egc/memory/` (lessons, history, the session bus, working memory) |
 | | The machine's own encryption key, `~/.egc/encryption.key` |
 | | Logs under `~/.egc/logs/` |
 | | The team key, except inside `~/.egc/team.json` on each of your machines |
 
-Each state document is encrypted with the team key (AES-256-GCM) and signed with a key derived from it (HMAC-SHA256) before it is committed. The signature covers the file's path in the repository, so a file copied to another path, edited in the repository or written by someone without the team key is not accepted. The remote only ever sees these sealed files and their paths.
+Each state document is encrypted with the team key (AES-256-GCM) and signed with a key derived from it (HMAC-SHA256) before it is committed. The signature covers the file's path in the repository, so a file copied to another path, edited in the repository or written by someone without the team key is not accepted. The remote sees these sealed files and their paths. It also sees the commits, whose message and author carry your local username (`sync: team memory update from <user>`, author `<user>@egc.local`).
+
+An earlier version of `egc team sync` also copied `~/.egc/memory/` into the checkout in the clear. The current version no longer does, but a remote that received it keeps that copy in its history. If you used the Team Brain with an earlier version, rewrite the history of that remote or start with a new repository.
 
 The local copy of your state stays encrypted at rest with the machine's own key, as it is without the Team Brain. The two keys are unrelated: replacing one never touches the other.
 
@@ -51,7 +53,7 @@ Sync complete:
 
 ## Set up a second machine
 
-Copy the team key from the first machine by a channel you trust (a password manager, a message to yourself over an encrypted app). Then run the same `init` with `--key`:
+Copy the team key from the first machine by a channel you trust (a password manager, a message to yourself over an encrypted app). Then run the same `init` with `--key`. The command line is the only way to pass the key, so it is visible in the process list while the command runs and is saved in your shell history. Remove that line from the history afterwards, and do not run it on a shared machine.
 
 ```text
 $ egc team init --backend git --remote https://github.com/you/egc-memory.git --key <64 hexadecimal characters>
@@ -73,24 +75,24 @@ Sync complete:
   Pushed: 1 commits
 ```
 
-The state document of the first machine is now under `~/.egc/state/` on the second one, readable through `get_state` like any other. `Pulled` counts the files that changed in the last commit received.
+The state document of the first machine is now under `~/.egc/state/` on the second one, readable through `get_state` like any other. `Pulled` counts the files of the latest commit in the local checkout, so a sync that fetched nothing new can report the previous commit's files again.
 
-`--branch` must match on every machine, or they sync to different branches and never meet.
+Pass the same `--branch <name>` on every machine, or they sync to different branches and never meet. The branch and the remote are fixed when the checkout in `~/.egc/team-sync/` is first made: running `init` again with another `--branch` changes the config but leaves the checkout on the old branch. To move a machine to another branch or to a new repository, delete `~/.egc/team-sync/` first (your state in `~/.egc/state/` is not affected) and then run `init`.
 
 ## The team key
 
-- `egc team init` makes the key when you do not pass `--key`. It prints it once, and it is also stored in `~/.egc/team.json` on that machine (readable only by you). A later `egc team init` without `--key` makes a new key and a new team.
+- `egc team init` makes the key when you do not pass `--key`. It prints it once, and it is also stored in `~/.egc/team.json` on that machine. On Linux and macOS the file is created readable only by you (mode 0600); on Windows that mode is not enforced, so check the file's permissions. A later `egc team init` without `--key` makes a new key and a new team.
 - Every machine of the team holds the same key. There is no other copy: EGC does not store it anywhere else.
-- If you lose it on every machine, the sealed files on the remote can no longer be opened. You start a new team: run `egc team init` again (without `--key`) against an empty branch or repository and join your other machines to it with the new key. Your local state on each machine is not affected.
-- If the key leaks, anyone who can read the remote can read the shared state. Make a new team with a new key and an empty remote, and delete the old one.
+- If you lose it on every machine, the sealed files on the remote can no longer be opened. You start a new team: delete `~/.egc/team-sync/` on each machine, run `egc team init` again (without `--key`) against a new empty repository, and join your other machines to it with the new key. Your local state on each machine is not affected.
+- If the key leaks, anyone who can read the remote can read the shared state. Make a new team with a new key and a new empty repository (deleting `~/.egc/team-sync/` on each machine first), and delete the old repository.
 
 ## Reading the result of a sync
 
-`egc team sync` prints `Sync complete:` and exits 0, or `Sync did not complete:` and exits 1 when anything went wrong.
+`egc team sync` prints `Sync complete:` and exits 0, or `Sync did not complete:` and exits 1 when it reports an error. One failure is not reported as an error: when the remote cannot be read and there is nothing to push, the sync prints `Sync complete:` with `0 files` and `0 commits` and exits 0 (see the troubleshooting section).
 
 | Line | Meaning |
 |---|---|
-| `Pulled: N files` | N files changed in the last commit received from the remote. |
+| `Pulled: N files` | N files changed in the latest commit of the local checkout. After a no-op pull it repeats the previous commit's files. |
 | `Pushed: N commits` | This machine had something new to push and pushed it. `1` or `0`. |
 | `Rejected: N files (not verified team envelopes)` | N files from the remote did not open with your team key, or were not at the path they were sealed for. They were not merged, and were removed from the local checkout of the remote. |
 | `Conflicts: N` | The local checkout of the remote is in a merge conflict. Resolve it by hand in `~/.egc/team-sync/`. |
@@ -117,7 +119,7 @@ A sync never deletes a local state file. A file removed on the remote is not rem
 
 ### `Error: Team not initialized. Run "egc team init" first.`
 
-`~/.egc/team.json` does not exist on this machine. Run `egc team init`.
+`~/.egc/team.json` does not exist on this machine. Run `egc team init --backend git --remote <url>`, adding `--key <team key>` and `--branch <name>` when you join a team that exists.
 
 ### `Error: --key must be followed by 64 hexadecimal characters ...`
 
@@ -185,6 +187,7 @@ The command line talks to the memory server. Run `egc doctor`, and `npm run buil
 
 - **Project identity is not the repository.** The state of a project is stored under a name made from the last two segments of its absolute path (`.../Projects/app` becomes `Projects--app`). The same repository under different folder names on two machines gives two projects that never meet. Tracked in [#2063](https://github.com/Fmarzochi/EGC/issues/2063).
 - **The later document wins, per file.** There is no merge inside a document. Tracked in [#2055](https://github.com/Fmarzochi/EGC/issues/2055).
+- **The integrity sidecars travel with the state.** Each `.hmac` file is made with the integrity key of the machine that wrote it, so the receiving machine can report an integrity warning for a document it received. The sync stages every file under `~/.egc/state/`; it does not skip the sidecars.
 - **Deletions do not propagate.** A document removed on one machine stays on the others.
 - **No machine identity in the envelope.** The signature proves that the holder of the team key wrote the file, not which machine. Tracked in [#2056](https://github.com/Fmarzochi/EGC/issues/2056).
 - **Manual only.** Nothing syncs by itself; you run `egc team sync`. Automatic sync at the start and end of a session is tracked in [#2059](https://github.com/Fmarzochi/EGC/issues/2059).
