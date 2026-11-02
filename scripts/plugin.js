@@ -12,7 +12,7 @@ const {
 
 function showHelp() {
   console.log(`
-EGC Plugin Registry — Install, list, remove, or update EGC plugins
+EGC Plugin Registry: Install, list, remove, or update EGC plugins
 
 Usage:
   egc plugin install <name> [--source <path>]
