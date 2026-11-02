@@ -13,6 +13,8 @@ The full guide, with real command output and troubleshooting, is [docs/TEAM-BRAI
 | `egc team sync` | Pulls the sealed state, merges it, and pushes this machine's state. |
 | `egc team status` | Shows the last commit time, uncommitted changes and the remote. |
 
+The `--key` value is visible in the process list while the command runs and is saved in your shell history. The CLI has no other way to take the key, so remove that line from the history afterwards and do not run it on a shared machine.
+
 The same operations exist as the MCP tools `team_init`, `team_sync` and `team_status`.
 
 ## What travels and what stays

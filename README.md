@@ -18,7 +18,7 @@
 
 EGC is a local-first runtime for AI coding tools. Install it once and Cursor, Claude Code, Codex, Copilot, Aider and the rest of the 29 AI coding tools it supports share one encrypted memory of your projects, one filter that keeps noisy output away from the model, and one live bus that lets your open sessions see each other. Most of them also get a safety layer in front of every command; a few, like Auggie, expose no hook surface for it yet, and [the integration tiers](docs/spec/integration-tiers.md) say exactly which. Works natively with Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere, and Vertex AI, plus OpenRouter for Qwen3, Llama 4, and more.
 
-Nothing leaves your machine unless you turn on the Team Brain. Memory lives in `~/.egc`, encrypted with AES-256-GCM, kept per project and branch, and never committed to git.
+EGC keeps its memory on your machine: it lives in `~/.egc`, encrypted with AES-256-GCM and kept per project and branch, and it is never committed to your project's git repository. It leaves the machine only if you turn on the Team Brain, which syncs sealed project state to a private git remote of your own.
 
 ---
 
@@ -56,7 +56,7 @@ To keep your project state in step across your own machines, point EGC at a priv
 
 ```bash
 egc team init --backend git --remote https://github.com/you/egc-memory.git
-egc team init --backend git --remote https://github.com/you/egc-memory.git --key <team key>   # on each other machine
+egc team init --backend git --remote https://github.com/you/egc-memory.git --key <team key>   # on each other machine; the key stays in shell history, so clear that line
 egc team sync
 ```
 
