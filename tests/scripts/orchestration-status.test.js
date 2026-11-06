@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'orchestration-status.js');
 
@@ -15,15 +16,18 @@ function run(args = [], options = {}) {
     const stdout = execFileSync('node', [SCRIPT, ...args], {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 10000,
+      timeout: CLI_TIMEOUT_MS,
       cwd: options.cwd || process.cwd(),
     });
     return { code: 0, stdout, stderr: '' };
   } catch (error) {
+    // A script killed at the budget has no exit status; the signal says so
+    // instead of a mute status mismatch.
+    const killed = error.signal ? `killed by ${error.signal} after ${CLI_TIMEOUT_MS} ms` : '';
     return {
       code: error.status || 1,
       stdout: error.stdout || '',
-      stderr: error.stderr || '',
+      stderr: error.stderr || killed,
     };
   }
 }

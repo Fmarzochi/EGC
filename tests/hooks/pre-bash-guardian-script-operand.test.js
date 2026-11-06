@@ -15,6 +15,13 @@ const { spawnSync } = require('child_process');
 process.env.EGC_GUARDIAN_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
 const { run } = require('../../scripts/hooks/pre-bash-guardian-validate');
 const { removeDirWithRetries } = require('../fixtures/remove-dir');
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+
+// The isolated git config of the repository fixtures: no signing or hooks of
+// the developer, and no automatic maintenance, which Git 2.54+ runs in the
+// background after a commit and which keeps the repository busy while the
+// fixture is removed.
+const FIXTURE_GIT_CONFIG = '[maintenance]\n\tauto = false\n';
 
 function test(name, fn) {
   try {
@@ -357,12 +364,12 @@ function runTests() {
     record(test('a script committed in git and unchanged is held only to grave denials; changed, staged or untracked it is judged in full', () => {
       const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-script-operand-repo-'));
       const emptyConfig = path.join(repo, '..', `${path.basename(repo)}.gitconfig`);
-      fs.writeFileSync(emptyConfig, '');
+      fs.writeFileSync(emptyConfig, FIXTURE_GIT_CONFIG);
       // The developer's own git config (signing, hooks) must not reach these commits.
       const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
       Object.assign(gitEnv, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: emptyConfig });
       const git = (...args) => {
-        const result = spawnSync('git', args, { cwd: repo, env: gitEnv, encoding: 'utf8', timeout: 20000 });
+        const result = spawnSync('git', args, { cwd: repo, env: gitEnv, encoding: 'utf8', timeout: CLI_TIMEOUT_MS });
         assert.strictEqual(result.status, 0, `git ${args.join(' ')}: ${result.stderr}`);
       };
       const judged = (command, cwd = repo) => run({ tool_name: 'Bash', tool_input: { command }, cwd }).exitCode;
@@ -1051,10 +1058,10 @@ function runTests() {
       // judged in full, not only against the grave denials.
       const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-unreadable-commit-'));
       const emptyConfig = path.join(repo, '..', `${path.basename(repo)}.gitconfig`);
-      fs.writeFileSync(emptyConfig, '');
+      fs.writeFileSync(emptyConfig, FIXTURE_GIT_CONFIG);
       const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
       Object.assign(gitEnv, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: emptyConfig });
-      const git = (...args) => assert.strictEqual(spawnSync('git', args, { cwd: repo, env: gitEnv, encoding: 'utf8', timeout: 20000 }).status, 0, `git ${args.join(' ')}`);
+      const git = (...args) => assert.strictEqual(spawnSync('git', args, { cwd: repo, env: gitEnv, encoding: 'utf8', timeout: CLI_TIMEOUT_MS }).status, 0, `git ${args.join(' ')}`);
       const savedGitDir = process.env.GIT_DIR;
       try {
         delete process.env.GIT_DIR;
@@ -1092,7 +1099,7 @@ function runTests() {
       // because one git call took longer than the fixed two seconds it had.
       const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-slow-git-repo-'));
       const emptyConfig = path.join(repo, '..', `${path.basename(repo)}.gitconfig`);
-      fs.writeFileSync(emptyConfig, '');
+      fs.writeFileSync(emptyConfig, FIXTURE_GIT_CONFIG);
       const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
       Object.assign(gitEnv, { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: emptyConfig });
       // The git itself, found on the PATH once, so the shim below can hand
@@ -1101,7 +1108,7 @@ function runTests() {
         .flatMap(dir => (process.platform === 'win32' ? ['git.exe', 'git.cmd'] : ['git']).map(name => path.join(dir, name)))
         .find(candidate => fs.existsSync(candidate));
       assert.ok(realGit, 'git is on the PATH');
-      const git = (...args) => assert.strictEqual(spawnSync(realGit, args, { cwd: repo, env: gitEnv, encoding: 'utf8', timeout: 20000 }).status, 0, `git ${args.join(' ')}`);
+      const git = (...args) => assert.strictEqual(spawnSync(realGit, args, { cwd: repo, env: gitEnv, encoding: 'utf8', timeout: CLI_TIMEOUT_MS }).status, 0, `git ${args.join(' ')}`);
       const savedGitDir = process.env.GIT_DIR;
       const savedPath = process.env.PATH;
       try {
