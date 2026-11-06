@@ -128,7 +128,7 @@ export async function teamSync(): Promise<SyncResult> {
     if (keyNotProven(merge)) {
       result.errors.push(keyNotProvenMessage(merge.unopened.length));
     } else {
-      await pushSealedState(instance, teamKey, personalKey, result);
+      await pushSealedState(instance, teamKey, personalKey, merge.unopened, result);
     }
 
     // Step 4: Check for conflicts.
@@ -177,9 +177,9 @@ function keyNotProvenMessage(count: number): string {
   return `This team key opened none of the remote state (${files}), so nothing was pushed and the shared state was left as it was. If the key is wrong, run egc team init again with the key of the team; if the key is right, the files on the remote are damaged and have to be removed from the repository by hand.`;
 }
 
-async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalKey: Buffer, result: SyncResult): Promise<void> {
+async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalKey: Buffer, unopened: readonly string[], result: SyncResult): Promise<void> {
   try {
-    stageTeamState(LOCAL_STATE_DIR, SYNC_STATE_DIR, teamKey, personalKey);
+    stageTeamState(LOCAL_STATE_DIR, SYNC_STATE_DIR, teamKey, personalKey, new Set(unopened));
     if (await instance.push()) result.pushedCount = 1;
   } catch (err) {
     result.errors.push(`Push failed: ${String(err)}`);
@@ -360,7 +360,10 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
 
 // Local state leaves the machine only as sealed envelopes; a local file that
 // cannot be decrypted is left out rather than shipped opaque.
-export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer): number {
+// `keep` holds the relative paths the merge could not open: this machine
+// never writes its own state over an envelope it cannot read, so those
+// paths are left as they are and not staged.
+export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer, keep: ReadonlySet<string> = new Set()): number {
   const linkedLocal = linkedDirectoryTowards(localStateDir);
   if (linkedLocal) throw new Error(`the local state tree is a link at ${linkedLocal} and is not staged`);
   const linkedSync = linkedDirectoryTowards(syncStateDir);
@@ -377,6 +380,7 @@ export function stageTeamState(localStateDir: string, syncStateDir: string, team
       continue;
     }
     const relativePath = path.relative(localStateDir, localFile);
+    if (keep.has(relativePath)) continue;
     const target = path.join(syncStateDir, relativePath);
     if (isLink(target)) removeSyncFile(target);
     if (hasLinkedAncestor(target, syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${relativePath} and is not written`);

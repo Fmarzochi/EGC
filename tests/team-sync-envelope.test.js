@@ -188,6 +188,17 @@ async function runTests() {
       assert.ok(!fs.existsSync(path.join(stagedDir, 'proj', 'locked.md')), 'an undecryptable local file is not staged');
     })) passed++; else failed++;
 
+    if (test('staging leaves a path the merge could not open as it is, so this machine never writes over an envelope it cannot read', () => {
+      const keptDir = path.join(dir, 'kept');
+      fs.mkdirSync(path.join(keptDir, 'proj'), { recursive: true });
+      const foreign = envelope.sealEnvelope(doc('2026-09-05T12:00:00.000Z', 'another team'), otherKey, 'proj/newer.md');
+      fs.writeFileSync(path.join(keptDir, 'proj', 'newer.md'), foreign);
+      const count = teamSync.stageTeamState(localDir, keptDir, teamKey, personalKey, new Set([path.join('proj', 'newer.md')]));
+      assert.strictEqual(count, 3, 'the kept path is not staged, the other three are');
+      assert.strictEqual(fs.readFileSync(path.join(keptDir, 'proj', 'newer.md'), 'utf8'), foreign, 'the envelope this key cannot open is byte for byte what it was');
+      assert.ok(fs.existsSync(path.join(keptDir, 'proj', 'older.md')), 'the other paths are staged as usual');
+    })) passed++; else failed++;
+
     if (test('the team key is validated and generated as 64 hex characters', () => {
       assert.ok(/^[0-9a-f]{64}$/.test(envelope.generateTeamKey()));
       assert.strictEqual(envelope.parseTeamKey('not-a-key'), null);
