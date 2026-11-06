@@ -20,7 +20,7 @@
 
 EGC es un tiempo de ejecución local para herramientas de codificación IA. Instálalo una vez y Cursor, Claude Code, Codex, Copilot, Aider y el resto de las 29 herramientas de codificación de IA que soporta compartir una memoria cifrada de tus proyectos, un filtro que mantiene la salida ruidosa alejada del modelo, y un bus en vivo que permite ver las sesiones abiertas entre sí. La mayoría de ellos también tienen una capa de seguridad delante de cada comando; unos pocos, como Aggie, exponen ninguna superficie para él aún, y [los niveles de integración] (docs/spec/integration-tiers.md) dicen exactamente cuál. Funciona nativamente con Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere y Vertex AI, más OpenRouter para Qwen3, Lama 4, y más.
 
-Nada sale de su máquina. La memoria vive en `~/.egc`, cifrada con AES-256-GCM, mantenida por proyecto y sucursal, y nunca comprometida con git.
+EGC mantiene su memoria en su máquina: vive en `~/. gc`, cifrado con AES-256-GCM y mantenido por proyecto y sucursal, y nunca está comprometido con el repositorio git de su proyecto. Deja la máquina sólo si enciende el Team Brain, que sincroniza el estado del proyecto sellado con un git privado remoto propio.
 
 ---
 
@@ -51,6 +51,16 @@ EGC es un cerebro con cuatro facultades. Cada una está encendida desde la prime
 ### Memoria: Lo que un agente aprende cada agente conoce
 
 Decisiones, contexto de sesión, memoria de trabajo y lecciones aprendidas se capturan a medida que trabaja y están disponibles en cualquier otro terminal, IDE o agente que abra. Usted habla, naturalmente, en cualquier idioma: "guardar esta sesión", "¿qué decidimos sobre la autenticidad?", "recuerde esta decisión". EGC comprende la intención y almacena o recuerda el contexto. No hay ningún comando para memorizar.
+
+#### Papelera del equipo: Tu memoria en cada máquina
+
+Para mantener el estado de su proyecto en paso a través de sus propias máquinas, apunte EGC a un control remoto de git privado. El estado está sellado con una llave de equipo antes de que abandone la máquina; ningún servidor EGC está involucrado y la base de datos de memoria ya no viaja (un remoto usado con una versión anterior puede todavía tenerlo en su historial, ver [qué viajes](../../docs/TEAM-BRAIN.md#what-travels-and-what-stays)). Una clave de equipo equivocada hace una sincronización de archivos del remoto, así que lea la [Guía del Team](../../docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path) primero.
+
+```bash
+egc team init --backend git --remote https://github.com/you/egc-memory.git
+egc team init --backend git --remote https://github.com/you/egc-memory. it --key <team key>   # en una máquina del otro; la clave muestra en la lista de procesos y permanece en el historial del shell, así que limpia esa línea y evita la sincronización de equipos compartidos
+egc team
+```
 
 ### Session Mesh: Tus sesiones abiertas se ven entre sí
 
