@@ -21,9 +21,11 @@ function run(args = [], options = {}) {
     });
     return { code: 0, stdout, stderr: '' };
   } catch (error) {
-    // A script killed at the budget has no exit status; the signal says so
-    // instead of a mute status mismatch.
-    const killed = error.signal ? `killed by ${error.signal} after ${CLI_TIMEOUT_MS} ms` : '';
+    // A killed script has no exit status. Only a kill at the budget is a
+    // timeout; any other signal (a crash, an OOM kill) is named as a kill.
+    let killed = '';
+    if (error.code === 'ETIMEDOUT') killed = `killed by ${error.signal} after the ${CLI_TIMEOUT_MS} ms budget`;
+    else if (error.signal) killed = `killed by ${error.signal}`;
     return {
       code: error.status || 1,
       stdout: error.stdout || '',
