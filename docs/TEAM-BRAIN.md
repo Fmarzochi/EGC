@@ -8,7 +8,7 @@ This page covers one person with two or more machines. Teams of several people a
 
 | Travels to the remote, sealed | Never leaves the machine |
 |---|---|
-| The project state documents under `~/.egc/state/<project>/`, one file per branch: context, decisions, things to avoid, preferences, next steps. Current versions name the file after the branch followed by `--` and the SHA-256 of the branch name; versions before the hash named it after the branch alone (`main.md`), and a machine upgraded from one of them can hold both, which is why the examples below show `main.md`. The integrity sidecars (`<file>.hmac`) next to them are staged too | The SQLite memory store under `~/.egc/memory/` (lessons, history, the session bus, working memory) |
+| The project state documents under `~/.egc/state/<project>/`, one file per branch: context, decisions, things to avoid, preferences, next steps. Current versions name the file after the sanitized branch name (`/` becomes `-`, other unusual characters become `_`, and the readable part is cut at 120 characters) followed by `--` and the SHA-256 of the full branch name; versions before the hash named it after the branch alone (`main.md`), and a machine upgraded from one of them can hold both, which is why the examples below show `main.md`. The integrity sidecars (`<file>.hmac`) next to them are staged too | The SQLite memory store under `~/.egc/memory/` (lessons, history, the session bus, working memory) |
 | | The machine's own encryption key, `~/.egc/encryption.key` |
 | | Logs under `~/.egc/logs/` |
 | | The team key, except inside `~/.egc/team.json` on each of your machines |
