@@ -94,7 +94,7 @@ Pass the same `--branch <name>` on every machine, or they sync to different bran
 |---|---|
 | `Pulled: N files` | N files changed in the latest commit of the local checkout. After a no-op pull it repeats the previous commit's files. |
 | `Pushed: N commits` | This machine had something new to push and pushed it. `1` or `0`. |
-| `Rejected: N files (not verified team envelopes)` | N files from the remote did not open with your team key, or were not at the path they were sealed for. They were not merged, and were removed from the local checkout of the remote. |
+| `Rejected: N files (not verified team envelopes)` | N files from the remote did not open with your team key, or were not at the path they were sealed for. They were not merged and stay where they are in the local checkout of the remote. When none of the remote files opened, the sync also pushes nothing, because a key that opened nothing is not shown to be the team's key. |
 | `Conflicts: N` | The local checkout of the remote is in a merge conflict. Resolve it by hand in `~/.egc/team-sync/`. |
 | `Error: ...` | One line per problem. See the troubleshooting section. |
 
@@ -140,14 +140,15 @@ $ egc team sync
 Syncing team memory...
 Sync did not complete:
   Pulled: 1 files
-  Pushed: 1 commits
+  Pushed: 0 commits
   Rejected: 1 files (not verified team envelopes)
   Error: Rejected sync file (not a verified team envelope for its path): demo-project\main.md
+  Error: This team key opened none of the remote state (the one state file), so nothing was pushed and the shared state was left as it was. If the key is wrong, run egc team init again with the key of the team; if the key is right, the files on the remote are damaged and have to be removed from the repository by hand.
 ```
 
-The path in the last line uses the separator of your system. The file on the remote was sealed with a different key, so this machine was probably given the wrong one. The sync exits 1.
+The path in the first error line uses the separator of your system. The file on the remote was sealed with a different key, so this machine was probably given the wrong one. The sync exits 1, and because no remote file opened it pushes nothing: the file stays in the local checkout and on the shared branch, exactly as it was, and no envelope sealed with the wrong key reaches the other machines.
 
-Fix the key first (`egc team init ... --key <the right key>`), before you sync again. This case is worse than it looks, because the rejected file is removed from the local checkout and the sync then commits that removal: the file disappears from the shared branch for every machine. If it happens, run `egc team sync` on a machine that holds the right key. Its state is sealed again and pushed back. The deleted file stays in the git history of the remote if you need it.
+Fix the key (`egc team init ... --key <the right key>`) and sync again. When at least one remote file opens, the key is taken as the team's: the files that still do not open are reported and left in place, and the sync pushes this machine's state as usual.
 
 ### `Pulled: 0 files` and `Pushed: 0 commits` on a first sync that should have moved something
 
