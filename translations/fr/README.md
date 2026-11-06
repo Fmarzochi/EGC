@@ -20,7 +20,7 @@
 
 EGC est un premier runtime local pour les outils de codage IA. Installez-le une fois et Curseur, Claude Code, Codex, Copilot, Aider et le reste des 29 outils de codage IA qu'il supporte partager une mémoire chiffrée de vos projets, un filtre qui empêche les sorties bruyantes du modèle, et un bus qui permet à vos sessions ouvertes de se voir les unes les autres. La plupart d'entre eux obtiennent également une couche de sécurité devant chaque commande; quelques-uns, comme Auggie, n'exposent pas encore de surface de crochet et [les niveaux d'intégration](../../docs/spec/integration-tiers.md) disent exactement qui. Fonctionne nativement avec Claude, GPT-4o, Gemini, DeepSeek, Mistral, Groq, Cohere et Vertex AI, plus OpenRouter pour Qwen3, Llama 4, et plus.
 
-Rien ne quitte votre machine. La mémoire réside dans `~/.egc`, chiffrée avec AES-256-GCM, gardée par projet et branche, et jamais engagée à git.
+EGC garde sa mémoire sur votre machine: il vit dans `~/. gc`, chiffré avec AES-256-GCM et conservé par projet et branche, et il n'est jamais engagé dans le dépôt git de votre projet. Il ne laisse la machine que si vous allumez le Team Brain, qui synchronise l'état du projet avec une télécommande privée git.
 
 ---
 
@@ -51,6 +51,16 @@ L'EGC est un cerveau avec quatre facultés. Chacune d'entre elles se trouve à p
 ### Mémoire : Ce qu'un agent apprend, chaque agent sait
 
 Les décisions, le contexte de session, la mémoire de travail et les leçons apprises sont saisies au fur et à mesure que vous travaillez et sont disponibles dans tout autre terminal, IDE ou agent que vous ouvrez. Vous parlez naturellement, dans n'importe quelle langue: "sauver cette session", "qu'est-ce que nous avons décidé de l'identifier?", "se souvenir de cette décision". Le FEM comprend l'intention et stocke ou rappelle le contexte. Il n'y a aucune commande à mémoriser.
+
+#### Cerveau de l'équipe: Votre mémoire sur chaque machine
+
+Pour garder l'état de votre projet en phase avec vos propres machines, pointez EGC sur une télécommande git privée que vous contrôlez. L'état est scellé avec une clé d'équipe avant de quitter la machine ; aucun serveur EGC n'est impliqué et la base de données mémoire ne voyage plus (une télécommande utilisée avec une version antérieure peut toujours le conserver dans son histoire, voir [quels trajets](../../docs/TEAM-BRAIN.md#what-travels-and-what-stays)). Une mauvaise clé d'équipe fait une synchronisation des fichiers de la télécommande, donc lisez d'abord le [Guide de l'équipe Brain](../../docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path).
+
+```bash
+egc team init --backend git --remote https://github.com/you/egc-memory.git
+egc team init --backend git --remote https://github.com/you/egc-memory. it --key <team key>   # sur une autre machine ; la touche affiche dans la liste des processus et reste dans l'historique du shell, donc dégagez cette ligne et évitez la synchronisation des machines partagées
+équipe egc
+```
 
 ### Mesure de session : Vos sessions ouvertes Voir les autres
 
