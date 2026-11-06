@@ -259,6 +259,13 @@ async function handleInit(args) {
       console.log('Sync backend configured successfully.');
     }
   } catch (err) {
+    // A remote the server could not read is a failure of the init itself,
+    // not of the server being away: the URL or the access has to be fixed
+    // before anything can sync.
+    if (/cannot be read/.test(err.message)) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
+    }
     console.log(`Note: Memory server setup returned: ${err.message}`);
     console.log('The config file is saved. Run "egc team sync" to start syncing.');
   }

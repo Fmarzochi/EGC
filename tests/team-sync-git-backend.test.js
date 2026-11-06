@@ -97,10 +97,13 @@ async function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const run = async (name, fn) => {
+    if (await test(name, fn)) passed++; else failed++;
+  };
   const tempBase = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-gitbackend-test-'));
 
   try {
-    if (await test('push never ships the memory database: ~/.egc/memory stays out of the shared repository', async () => {
+    await run('push never ships the memory database: ~/.egc/memory stays out of the shared repository', async () => {
       const memoryDir = path.join(HOME, '.egc', 'memory');
       fs.mkdirSync(memoryDir, { recursive: true });
       fs.writeFileSync(path.join(memoryDir, 'state.db'), 'sqlite bytes that must stay on this machine');
@@ -113,9 +116,9 @@ async function runTests() {
       assert.ok(tree.includes('state/proj/main.md'), 'the state envelope does reach the remote');
       assert.ok(fs.existsSync(path.join(memoryDir, 'state.db')), 'the local database is untouched');
       await backend.destroy();
-    })) passed++; else failed++;
+    });
 
-    if (await test('push retires a memory/ tree an older version left in the sync checkout, and the commit removes it from the shared repository', async () => {
+    await run('push retires a memory/ tree an older version left in the sync checkout, and the commit removes it from the shared repository', async () => {
       const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'retires');
       // What a push before this change left behind: the database mirrored
       // into the checkout in the clear and committed to the shared repository.
@@ -132,9 +135,9 @@ async function runTests() {
       assert.deepStrictEqual(tree.filter(p => p.startsWith('memory/')), [], `the commit removes memory/ from the remote, got: ${tree.join(', ')}`);
       assert.ok(tree.includes('state/proj/main.md'));
       await backend.destroy();
-    })) passed++; else failed++;
+    });
 
-    if (await test('push sweeps the temporaries an interrupted old mirror left beside memory/, so none of them is committed', async () => {
+    await run('push sweeps the temporaries an interrupted old mirror left beside memory/, so none of them is committed', async () => {
       const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'sweeps');
       for (const name of ['.tmp-sync-memory-1-ab', '.tmp-old-memory-1-cd', 'memory']) {
         fs.mkdirSync(path.join(repoDir, name), { recursive: true });
@@ -148,9 +151,9 @@ async function runTests() {
       assert.deepStrictEqual(tree.filter(p => p.startsWith('memory/') || p.startsWith('.tmp-')), [], `nothing of the mirror reaches the remote, got: ${tree.join(', ')}`);
       assert.ok(tree.includes('state/proj/main.md'));
       await backend.destroy();
-    })) passed++; else failed++;
+    });
 
-    if (await test('GitBackend guards against operations before init', async () => {
+    await run('GitBackend guards against operations before init', async () => {
       const repoDir = path.join(tempBase, 'repo-guards');
       const backend = new GitBackend(repoDir);
 
@@ -160,15 +163,37 @@ async function runTests() {
 
       await backend.destroy();
       await assert.rejects(async () => backend.status(), /GitBackend not initialized/);
-    })) passed++; else failed++;
+    });
 
-    if (await test('GitBackend constructor initializes repository directory', () => {
+    await run('init refuses a remote it cannot read and names the reason, instead of swallowing the failed pull', async () => {
+      const backend = new GitBackend(path.join(tempBase, 'repo-unreachable'));
+      await assert.rejects(
+        () => backend.init({ backend: 'git', remote: path.join(tempBase, 'no-such-remote.git'), branch: 'main' }),
+        /cannot be read/,
+      );
+      await backend.destroy();
+    });
+
+    await run('init against an empty remote succeeds, and pull reports nothing to pull without an error', async () => {
+      const { backend } = await pushingBackend(GitBackend, tempBase, 'empty');
+      assert.deepStrictEqual(await backend.pull(), [], 'an empty remote branch is not a failure');
+      await backend.destroy();
+    });
+
+    await run('pull throws when the remote stops being readable, instead of returning an empty list', async () => {
+      const { backend, remote } = await pushingBackend(GitBackend, tempBase, 'vanishing');
+      fs.rmSync(remote, { recursive: true, force: true });
+      await assert.rejects(() => backend.pull(), /cannot be read/);
+      await backend.destroy();
+    });
+
+    await run('GitBackend constructor initializes repository directory', () => {
       const customRepo = path.join(tempBase, 'custom-repo-dir');
       assert.ok(!fs.existsSync(customRepo), 'precondition: custom repo dir does not exist');
       const backend = new GitBackend(customRepo);
       assert.ok(fs.existsSync(customRepo), 'constructor must create the repo directory');
       assert.ok(backend instanceof GitBackend);
-    })) passed++; else failed++;
+    });
   } finally {
     fs.rmSync(tempBase, { recursive: true, force: true });
     fs.rmSync(HOME, { recursive: true, force: true });

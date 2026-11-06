@@ -98,7 +98,7 @@ export async function teamSync(): Promise<SyncResult> {
     try {
       await instance.init(config);
     } catch (err) {
-      result.errors.push(`Sync backend init failed (offline?): ${String(err)}`);
+      result.errors.push(`Sync backend init failed: ${err instanceof Error ? err.message : String(err)}`);
       return result;
     }
 

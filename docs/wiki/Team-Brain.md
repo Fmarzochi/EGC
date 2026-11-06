@@ -35,4 +35,4 @@ The same operations exist as the MCP tools `team_init`, `team_sync` and `team_st
 - A project is matched across machines by the last two segments of its folder path, not by its repository ([#2063](https://github.com/Fmarzochi/EGC/issues/2063)).
 - When both machines changed the same document, the one with the later `updated:` time replaces the other as a whole ([#2055](https://github.com/Fmarzochi/EGC/issues/2055)).
 - A key that opens none of the state files already on the remote pushes nothing: the sync exits 1 and the shared state stays as it was (a first sync into an empty remote pushes as before). Fix the key with `egc team init ... --key <team key>` and sync again.
-- `Pulled: 0 files` and `Pushed: 0 commits` on a first sync can mean the remote was not reachable. Check it with `git ls-remote <url>`.
+- A remote that cannot be read stops `egc team init` and `egc team sync` with the reason git gave and exit 1. Check it with `git ls-remote <url>`.

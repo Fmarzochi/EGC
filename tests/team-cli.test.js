@@ -105,12 +105,15 @@ function runTests() {
   }
   let passed = 0;
   let failed = 0;
+  const run = (name, fn) => {
+    if (test(name, fn)) passed++; else failed++;
+  };
 
   try {
     bareRemote(REMOTE);
     fs.mkdirSync(PROJECT, { recursive: true });
 
-    if (test('team init configures the sync backend through the memory server', () => {
+    run('team init configures the sync backend through the memory server', () => {
       const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE]);
       assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
       assert.ok(run.stdout.includes('Team key'), 'a new team prints its key once');
@@ -120,9 +123,9 @@ function runTests() {
       assert.strictEqual(config.backend, 'git');
       assert.strictEqual(config.remote, REMOTE);
       assert.match(config.teamKey, /^[0-9a-f]{64}$/);
-    })) passed++; else failed++;
+    });
 
-    if (test('team sync completes through the memory server, reports the counts and ships only sealed state', () => {
+    run('team sync completes through the memory server, reports the counts and ships only sealed state', () => {
       writeProjectState();
       const run = teamCli(['sync']);
       assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
@@ -133,17 +136,38 @@ function runTests() {
       const tree = remoteTree(REMOTE, 'main');
       assert.ok(tree.some(entry => entry.startsWith('state/')), `the sealed state reaches the remote, got: ${tree.join(', ') || 'nothing'}`);
       assert.deepStrictEqual(tree.filter(entry => entry.startsWith('memory/')), [], 'the memory database never ships');
-    })) passed++; else failed++;
+    });
 
-    if (test('team status answers through the memory server with its fields', () => {
+    run('team status answers through the memory server with its fields', () => {
       const run = teamCli(['status']);
       assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
       assert.ok(!run.stderr.includes('No response from memory server'), run.stderr);
       assert.ok(run.stdout.includes(`Remote: ${REMOTE}`), run.stdout);
       assert.match(run.stdout, /Uncommitted changes: (true|false)/, 'the status fields come from the server answer');
-    })) passed++; else failed++;
+    });
 
-    if (test('team sync with a key that opens nothing on the remote pushes nothing, so the shared state survives a wrong key', () => {
+    run('team init against a remote that cannot be read exits 1 and names it', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      const run = teamCli(['init', '--backend', 'git', '--remote', path.join(HOME, 'no-such-remote')]);
+      assert.notStrictEqual(run.status, 0, `an init whose remote cannot be read is not a success:\n${run.stdout}\n${run.stderr}`);
+      assert.ok(`${run.stdout}\n${run.stderr}`.includes('cannot be read'), `${run.stdout}\n${run.stderr}`);
+      fs.writeFileSync(configPath, saved);
+    });
+
+    run('team sync against a remote that cannot be read exits 1 with the reason, never a quiet success', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      const config = JSON.parse(saved);
+      fs.writeFileSync(configPath, JSON.stringify({ ...config, remote: path.join(HOME, 'no-such-remote') }, null, 2));
+      const run = teamCli(['sync']);
+      assert.notStrictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+      assert.ok(!run.stdout.includes('Sync complete:'), `a sync that read nothing is not complete:\n${run.stdout}`);
+      assert.ok(`${run.stdout}\n${run.stderr}`.includes('cannot be read'), `${run.stdout}\n${run.stderr}`);
+      fs.writeFileSync(configPath, saved);
+    });
+
+    run('team sync with a key that opens nothing on the remote pushes nothing, so the shared state survives a wrong key', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       const before = remoteTree(REMOTE, 'main');
@@ -155,16 +179,16 @@ function runTests() {
       assert.deepStrictEqual(remoteTree(REMOTE, 'main'), before, 'the shared state is exactly what it was');
       assert.strictEqual(git(['rev-list', '--count', 'main'], REMOTE), commitsBefore, 'no commit reached the remote');
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    })) passed++; else failed++;
+    });
 
-    if (test('team sync fails loudly when the server reports errors', () => {
+    run('team sync fails loudly when the server reports errors', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       fs.writeFileSync(configPath, JSON.stringify({ ...config, teamKey: 'not-a-key' }, null, 2));
       const run = teamCli(['sync']);
       assert.notStrictEqual(run.status, 0, 'a sync the server could not do is not a success');
       assert.ok(`${run.stdout}\n${run.stderr}`.includes('Team key missing or invalid'), `${run.stdout}\n${run.stderr}`);
-    })) passed++; else failed++;
+    });
   } finally {
     removeDirWithRetries(HOME);
   }
