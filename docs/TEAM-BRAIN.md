@@ -8,7 +8,7 @@ This page covers one person with two or more machines. Teams of several people a
 
 | Travels to the remote, sealed | Never leaves the machine |
 |---|---|
-| The project state documents under `~/.egc/state/<project>/`, one file per branch: context, decisions, things to avoid, preferences, next steps. Current versions name the file after the sanitized branch name (`/` becomes `-`, other unusual characters become `_`, and the readable part is cut at 120 characters) followed by `--` and the SHA-256 of the full branch name; versions before the hash named it after the branch alone (`main.md`), and a machine upgraded from one of them can hold both, which is why the examples below show `main.md`. The integrity sidecars (`<file>.hmac`) next to them are staged too | The SQLite memory store under `~/.egc/memory/` (lessons, history, the session bus, working memory) |
+| The project state documents under `~/.egc/state/<project>/`, one file per branch: context, decisions, things to avoid, preferences, next steps. Current versions name the file after the sanitized branch name (`/` becomes `-`, other unusual characters become `_`, and the readable part is cut at 120 characters) followed by `--` and the SHA-256 of the full branch name; versions before the hash named it after the branch alone (`main.md`), and a machine upgraded from one of them can hold both, which is why the examples below show `main.md` | The SQLite memory store under `~/.egc/memory/` (lessons, history, the session bus, working memory), and the integrity sidecars (`<file>.hmac`) next to the state documents, made with this machine's own integrity key and written anew after a merge |
 | | The machine's own encryption key, `~/.egc/encryption.key` |
 | | Logs under `~/.egc/logs/` |
 | | The team key, except inside `~/.egc/team.json` on each of your machines |
@@ -185,7 +185,6 @@ The command line talks to the memory server. Run `egc doctor`, and `npm run buil
 
 - **Project identity is not the repository.** The state of a project is stored under a name made from the last two segments of its absolute path (`.../Projects/app` becomes `Projects--app`). The same repository under different folder names on two machines gives two projects that never meet. Tracked in [#2063](https://github.com/Fmarzochi/EGC/issues/2063).
 - **The later document wins, per file.** There is no merge inside a document. Tracked in [#2055](https://github.com/Fmarzochi/EGC/issues/2055).
-- **The integrity sidecars travel with the state.** Each `.hmac` file is made with the integrity key of the machine that wrote it, so the receiving machine can report an integrity warning for a document it received. The sync stages every file under `~/.egc/state/`; it does not skip the sidecars.
 - **Deletions do not propagate.** A document removed on one machine stays on the others.
 - **No machine identity in the envelope.** The signature proves that the holder of the team key wrote the file, not which machine. Tracked in [#2056](https://github.com/Fmarzochi/EGC/issues/2056).
 - **Manual only.** Nothing syncs by itself; you run `egc team sync`. Automatic sync at the start and end of a session is tracked in [#2059](https://github.com/Fmarzochi/EGC/issues/2059).

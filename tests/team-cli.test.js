@@ -136,6 +136,7 @@ function runTests() {
       const tree = remoteTree(REMOTE, 'main');
       assert.ok(tree.some(entry => entry.startsWith('state/')), `the sealed state reaches the remote, got: ${tree.join(', ') || 'nothing'}`);
       assert.deepStrictEqual(tree.filter(entry => entry.startsWith('memory/')), [], 'the memory database never ships');
+      assert.deepStrictEqual(tree.filter(entry => entry.endsWith('.hmac')), [], 'the integrity sidecars never ship');
     });
 
     run('team status answers through the memory server with its fields', () => {
