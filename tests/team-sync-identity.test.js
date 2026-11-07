@@ -64,10 +64,12 @@ async function runTests() {
   let branchState;
   let teamSync;
   let encryption;
+  let envelope;
   try {
     branchState = await import(pathToFileURL(path.join(BUILD, 'branch-state.js')).href);
     teamSync = await import(pathToFileURL(path.join(BUILD, 'sync', 'TeamSync.js')).href);
     encryption = await import(pathToFileURL(path.join(BUILD, 'encryption.js')).href);
+    envelope = await import(pathToFileURL(path.join(BUILD, 'sync', 'envelope.js')).href);
   } catch (error) {
     console.error(`[SKIP] Could not import the memory server build: ${error.message}. Run 'npm run build' in mcp/servers/egc-memory first.`);
     process.exit(0);
@@ -124,19 +126,106 @@ async function runTests() {
       assert.ok(content.includes('decided on machine B'), 'and so is the decision of the second one');
     });
 
-    run('a document an older version keyed by the path still travels and is still read on the machine that wrote it', () => {
-      const legacyRepo = makeCheckout(dir, path.join('linux', 'old', 'legacy'), 'https://example.com/Legacy/Repo.git');
-      const legacyName = path.join(branchState.projectSlug(legacyRepo), `${branchState.branchStateKey('main')}.md`);
+    run('a document an older version keyed by the path is shared under the key of its repository, so the other machine reads it for its own checkout', () => {
+      const legacyRepoA = makeCheckout(dir, path.join('linux', 'old', 'legacy'), 'https://example.com/Legacy/Repo.git');
+      const legacyRepoB = makeCheckout(dir, path.join('mac', 'elsewhere', 'legacy-clone'), 'git@example.com:Legacy/Repo.git');
+      const legacyName = path.join(branchState.projectSlug(legacyRepoA), `${branchState.branchStateKey('main')}.md`);
       const legacyFile = path.join(stateA, legacyName);
-      writeSealed(encryption, legacyFile, doc(legacyRepo, '2026-11-07T09:00:00.000Z', 'before the identity'), keyA);
-      assert.strictEqual(branchState.resolveStateRead(stateA, legacyRepo, 'main').filePath, legacyFile, 'read where it is, with no manual step');
-      assert.strictEqual(branchState.resolveStateWrite(stateA, legacyRepo, 'main').includes(branchState.projectSlug(legacyRepo)), false, 'the next write of that project goes under its remote key');
+      writeSealed(encryption, legacyFile, doc(legacyRepoA, '2026-11-07T09:00:00.000Z', 'before the identity'), keyA);
+      assert.strictEqual(branchState.resolveStateRead(stateA, legacyRepoA, 'main').filePath, legacyFile, 'read where it is, with no manual step');
+      const keyedFile = branchState.resolveStateWrite(stateA, legacyRepoA, 'main');
+      assert.ok(!keyedFile.includes(branchState.projectSlug(legacyRepoA)), 'the next write of that project goes under its remote key');
+      const keyedName = path.relative(stateA, keyedFile);
 
       teamSync.stageTeamState(stateA, syncDir, teamKey, keyA);
-      teamSync.mergeTeamStateFrom(syncDir, stateB, teamKey, keyB);
-      assert.ok(fs.existsSync(path.join(stateB, legacyName)), 'it lands under the same legacy name on the other machine');
+      assert.ok(fs.existsSync(path.join(syncDir, keyedName)), 'the legacy document is shared under the key of its repository');
+      assert.ok(!fs.existsSync(path.join(syncDir, legacyName)), 'and not under the name of a folder of this machine');
+      const toB = teamSync.mergeTeamStateFrom(syncDir, stateB, teamKey, keyB);
+      assert.ok(toB.merged >= 1, JSON.stringify(toB));
+      const readB = branchState.resolveStateRead(stateB, legacyRepoB, 'main');
+      assert.strictEqual(readB.source, 'branch', 'the other machine reads it for its own checkout of that repository');
+      assert.ok(encryption.readStateFile(readB.filePath, keyB).includes('before the identity'));
+
       teamSync.mergeTeamStateFrom(syncDir, stateA, teamKey, keyA);
-      assert.ok(encryption.readStateFile(legacyFile, keyA).includes('before the identity'), 'and the machine that wrote it still reads it after the sync comes back');
+      const readA = branchState.resolveStateRead(stateA, legacyRepoA, 'main');
+      assert.strictEqual(readA.filePath, keyedFile, 'the sync back gives the first machine the keyed copy, which it reads from then on');
+      assert.ok(encryption.readStateFile(keyedFile, keyA).includes('before the identity'));
+      assert.ok(encryption.readStateFile(legacyFile, keyA).includes('before the identity'), 'the legacy document is left as it was');
+
+      writeSealed(encryption, keyedFile, doc(legacyRepoA, '2026-11-07T12:00:00.000Z', 'after the identity'), keyA);
+      teamSync.stageTeamState(stateA, syncDir, teamKey, keyA);
+      const shared = fs.readFileSync(path.join(syncDir, keyedName), 'utf8');
+      const opened = envelope.openEnvelope(shared, teamKey, keyedName);
+      assert.ok(opened.includes('after the identity'), 'once a keyed document exists, the legacy one is not staged over it');
+    });
+
+    run('a keyed document that arrives from the other machine first merges with the legacy one instead of shadowing it unread', () => {
+      const remote = 'https://example.com/Second/Repo.git';
+      const secondA = makeCheckout(dir, path.join('linux', 'second', 'app'), remote);
+      const secondB = makeCheckout(dir, path.join('mac', 'second', 'clone'), remote);
+      const legacyFile = path.join(stateA, branchState.projectSlug(secondA), `${branchState.branchStateKey('main')}.md`);
+      writeSealed(encryption, legacyFile, doc(secondA, '2026-11-07T11:00:00.000Z', 'decided on A before the upgrade'), keyA);
+      const keyedB = branchState.resolveStateWrite(stateB, secondB, 'main');
+      writeSealed(encryption, keyedB, doc(secondB, '2026-11-07T10:00:00.000Z', 'decided on B after the upgrade'), keyB);
+      assert.ok(teamSync.stageTeamState(stateB, syncDir, teamKey, keyB) >= 1);
+
+      const toA = teamSync.mergeTeamStateFrom(syncDir, stateA, teamKey, keyA);
+      assert.ok(toA.merged >= 1, JSON.stringify(toA));
+      const keyedA = branchState.resolveStateWrite(stateA, secondA, 'main');
+      assert.ok(fs.existsSync(keyedA), 'the keyed document now exists on the first machine');
+      assert.ok(encryption.readStateFile(keyedA, keyA).includes('decided on A before the upgrade'), 'and it carries the newer legacy state, which was never read by the other machine');
+      assert.strictEqual(branchState.resolveStateRead(stateA, secondA, 'main').filePath, keyedA);
+
+      teamSync.stageTeamState(stateA, syncDir, teamKey, keyA);
+      const toB = teamSync.mergeTeamStateFrom(syncDir, stateB, teamKey, keyB);
+      assert.ok(toB.merged >= 1, JSON.stringify(toB));
+      assert.ok(encryption.readStateFile(keyedB, keyB).includes('decided on A before the upgrade'), 'the other machine reads it after the next sync');
+    });
+
+    run('a pre-hash main.md is not shared next to the hashed document of the same branch, and two legacy checkouts of one repository share the newer', () => {
+      const remote = 'https://example.com/Third/Repo.git';
+      const third = makeCheckout(dir, path.join('linux', 'third', 'app'), remote);
+      const key = branchState.projectKey(third);
+      writeSealed(encryption, path.join(stateA, key, `${branchState.branchStateKey('main')}.md`), doc(third, '2026-11-07T12:00:00.000Z', 'hashed and keyed'), keyA);
+      writeSealed(encryption, path.join(stateA, branchState.projectSlug(third), 'main.md'), doc(third, '2026-11-07T13:00:00.000Z', 'pre-hash main.md'), keyA);
+      teamSync.stageTeamState(stateA, syncDir, teamKey, keyA);
+      assert.ok(!fs.existsSync(path.join(syncDir, key, 'main.md')), 'the pre-hash file of a branch that has a hashed keyed document is not shared');
+
+      const remoteTwice = 'https://example.com/Fourth/Repo.git';
+      const cloneOne = makeCheckout(dir, path.join('linux', 'fourth', 'one'), remoteTwice);
+      const cloneTwo = makeCheckout(dir, path.join('linux', 'fourth', 'two'), remoteTwice);
+      const branchName = `${branchState.branchStateKey('main')}.md`;
+      writeSealed(encryption, path.join(stateA, branchState.projectSlug(cloneOne), branchName), doc(cloneOne, '2026-11-07T10:00:00.000Z', 'older clone'), keyA);
+      writeSealed(encryption, path.join(stateA, branchState.projectSlug(cloneTwo), branchName), doc(cloneTwo, '2026-11-07T11:00:00.000Z', 'newer clone'), keyA);
+      teamSync.stageTeamState(stateA, syncDir, teamKey, keyA);
+      const sharedName = path.join(branchState.projectKey(cloneOne), branchName);
+      const opened = envelope.openEnvelope(fs.readFileSync(path.join(syncDir, sharedName), 'utf8'), teamKey, sharedName);
+      assert.ok(opened.includes('newer clone'), 'the newer of the two legacy documents is the one shared');
+    });
+
+    run('a pre-hash branch file and a flat file of the versions before branches take the hashed name of their branch, so they meet the keyed document', () => {
+      const remote = 'https://example.com/Fifth/Repo.git';
+      const fifthA = makeCheckout(dir, path.join('linux', 'fifth', 'app'), remote);
+      const fifthB = makeCheckout(dir, path.join('mac', 'fifth', 'clone'), remote);
+      const hashedMain = `${branchState.branchStateKey('main')}.md`;
+      writeSealed(encryption, path.join(stateA, branchState.projectSlug(fifthA), 'main.md'), doc(fifthA, '2026-11-07T11:00:00.000Z', 'pre-hash on A'), keyA);
+      const keyedB = path.join(stateB, branchState.projectKey(fifthB), hashedMain);
+      writeSealed(encryption, keyedB, doc(fifthB, '2026-11-07T10:00:00.000Z', 'hashed on B'), keyB);
+      teamSync.stageTeamState(stateB, syncDir, teamKey, keyB);
+      teamSync.mergeTeamStateFrom(syncDir, stateA, teamKey, keyA);
+      const keyedA = path.join(stateA, branchState.projectKey(fifthA), hashedMain);
+      assert.ok(fs.existsSync(keyedA), 'the hashed document lands on A');
+      assert.ok(encryption.readStateFile(keyedA, keyA).includes('pre-hash on A'), 'merged with the newer pre-hash document, under the hashed name');
+      teamSync.stageTeamState(stateA, syncDir, teamKey, keyA);
+      assert.ok(!fs.existsSync(path.join(syncDir, branchState.projectKey(fifthA), 'main.md')), 'nothing is shared under the pre-hash name');
+
+      const sixth = makeCheckout(dir, path.join('linux', 'sixth', 'app'), 'https://example.com/Sixth/Repo.git');
+      const flatDoc = `# Project State\nproject: ${sixth}\nauthor: test\nupdated: 2026-11-07T09:00:00.000Z\n\n## Context\nflat, before branches\n`;
+      writeSealed(encryption, path.join(stateA, `${branchState.projectSlug(sixth)}.md`), flatDoc, keyA);
+      teamSync.stageTeamState(stateA, syncDir, teamKey, keyA);
+      const sharedFlat = path.join(branchState.projectKey(sixth), hashedMain);
+      assert.ok(fs.existsSync(path.join(syncDir, sharedFlat)), 'a flat document is shared as the document of the default branch');
+      assert.ok(!fs.existsSync(path.join(syncDir, `${branchState.projectKey(sixth)}.md`)), 'and not as a flat file under the key');
     });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

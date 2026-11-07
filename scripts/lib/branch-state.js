@@ -181,8 +181,9 @@ function resolveGitDir(projectPath) {
 // after the directory itself is confirmed not to be a link, never through
 // one; null otherwise.
 function readGitFile(gitDir, name) {
-  if (isUnsafeSymlink(gitDir)) return null;
-  return readFileNoFollow(path.resolve(gitDir, name));
+  const filePath = path.resolve(gitDir, name);
+  if (!trustedGitPath(filePath) || isUnsafeSymlink(gitDir)) return null;
+  return readFileNoFollow(filePath);
 }
 
 function readHeadLine(projectPath) {
@@ -205,51 +206,81 @@ function resolveCommonDir(gitDir) {
   return trustedGitPath(common) && !isUnsafeSymlink(common) ? common : null;
 }
 
-// The text of a quoted config value, read up to its closing quote with the
-// escapes resolved. A scan rather than a pattern: a hostile config line
-// must not make the parser backtrack.
-function unquoteConfigValue(value) {
+const CONFIG_ESCAPES = { n: '\n', t: '\t', b: '\b' };
+
+// The value of a config assignment as git reads it: quotes may open and
+// close anywhere and are dropped, a backslash escapes the next character
+// (\n, \t and \b as git does, anything else literally), and # or ; outside
+// quotes starts a comment. A scan rather than a pattern, so a hostile line
+// cannot make the parser backtrack.
+function configValue(raw) {
   let out = '';
-  for (let index = 1; index < value.length; index += 1) {
-    const char = value[index];
-    if (char === '"') break;
-    if (char === '\\' && index + 1 < value.length) {
+  let quoted = false;
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (char === '\\') {
       index += 1;
-      out += value[index];
+      if (index < raw.length) out += CONFIG_ESCAPES[raw[index]] ?? raw[index];
       continue;
     }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (!quoted && (char === '#' || char === ';')) break;
     out += char;
+  }
+  return out.trim();
+}
+
+// The index of the bracket that closes a section header, outside quotes
+// and escapes; -1 when the line has none.
+function closingBracket(line) {
+  let quoted = false;
+  for (let index = 1; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '\\') {
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === ']' && !quoted) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+// A subsection name between quotes: a backslash escapes the next character
+// and is dropped, as git reads it.
+function unescapeSubsection(text) {
+  let out = '';
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '\\' && index + 1 < text.length) index += 1;
+    out += text[index];
   }
   return out;
 }
 
-// A bare config value up to the comment that may follow it.
-function withoutConfigComment(value) {
-  let end = value.length;
-  for (const marker of ['#', ';']) {
-    const index = value.indexOf(marker);
-    if (index >= 0 && index < end) end = index;
-  }
-  return value.slice(0, end).trim();
-}
-
-// A config value as git reads it: a quoted value whole, a bare value up to
-// its comment.
-function configValue(raw) {
-  const value = raw.trim();
-  return value.startsWith('"') ? unquoteConfigValue(value) : withoutConfigComment(value);
-}
-
-// The section a config header line opens, [name] or [name "subsection"],
-// with the name lower-cased as git compares it; null for any other line.
+// The section a config header line opens: [name], [name "subsection"] or
+// the deprecated [name.subsection], whose subsection compares
+// case-insensitively; the name is lower-cased as git compares it. `rest` is
+// what follows the closing bracket on the same line, which git reads as an
+// assignment or a comment. Null for any other line.
 function configSection(line) {
-  if (!line.startsWith('[') || !line.endsWith(']')) return null;
-  const inner = line.slice(1, -1).trim();
-  const space = inner.search(/\s/);
-  if (space < 0) return { name: inner.toLowerCase(), subsection: null };
-  const rest = inner.slice(space).trim();
-  if (rest.length < 2 || !rest.startsWith('"') || !rest.endsWith('"')) return null;
-  return { name: inner.slice(0, space).toLowerCase(), subsection: unquoteConfigValue(rest) };
+  if (!line.startsWith('[')) return null;
+  const close = closingBracket(line);
+  if (close < 0) return null;
+  const inner = line.slice(1, close);
+  const rest = line.slice(close + 1).trim();
+  const quote = inner.indexOf('"');
+  if (quote >= 0) {
+    const lastQuote = inner.lastIndexOf('"');
+    if (lastQuote === quote) return null;
+    return { name: inner.slice(0, quote).trim().toLowerCase(), subsection: unescapeSubsection(inner.slice(quote + 1, lastQuote)), rest };
+  }
+  const dot = inner.indexOf('.');
+  if (dot >= 0) return { name: inner.slice(0, dot).trim().toLowerCase(), subsection: inner.slice(dot + 1).trim().toLowerCase(), rest };
+  return { name: inner.trim().toLowerCase(), subsection: null, rest };
 }
 
 // The value a config line gives to `key`, or null when the line sets
@@ -260,21 +291,62 @@ function configEntry(line, key) {
   return rest.startsWith('=') ? configValue(rest.slice(1)) : null;
 }
 
-// The first url of [remote "origin"] in the text of a git config. Section
-// names compare case-insensitively and the subsection as written, as git
-// does; include directives are not followed, so an origin declared only in
-// an included file is not seen, and the project then keeps its path slug.
-function originUrlFromConfig(config) {
-  let inOrigin = false;
-  for (const rawLine of config.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#') || line.startsWith(';')) continue;
-    const section = configSection(line);
-    if (section) {
-      inOrigin = section.name === 'remote' && section.subsection === 'origin';
+// Whether a comment starts on the line, outside quotes and escapes: git
+// reads a comment to the end of its line, a trailing backslash included.
+function hasComment(line) {
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '\\') {
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (!quoted && (char === '#' || char === ';')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The lines of a config as git reads them: a line that ends with an odd
+// number of backslashes continues on the next one, unless a comment started
+// on it.
+function configLines(config) {
+  const lines = [];
+  let pending = '';
+  for (const line of config.split(/\r?\n/)) {
+    let backslashes = 0;
+    while (backslashes < line.length && line[line.length - 1 - backslashes] === '\\') backslashes += 1;
+    if (backslashes % 2 === 1 && !hasComment(pending + line)) {
+      pending += line.slice(0, -1);
       continue;
     }
-    if (!inOrigin) continue;
+    lines.push(pending + line);
+    pending = '';
+  }
+  if (pending) lines.push(pending);
+  return lines;
+}
+
+function isConfigComment(line) {
+  return !line || line.startsWith('#') || line.startsWith(';');
+}
+
+// The first url of [remote "origin"] in the text of a git config, read as
+// git reads it; include directives are not followed, so an origin declared
+// only in an included file is not seen, and the project then keeps its
+// path slug.
+function originUrlFromConfig(config) {
+  let inOrigin = false;
+  for (const rawLine of configLines(config)) {
+    let line = rawLine.trim();
+    if (isConfigComment(line)) continue;
+    // Git reads any number of headers on one line, then an assignment.
+    for (let section = configSection(line); section; section = configSection(line)) {
+      inOrigin = section.name === 'remote' && section.subsection === 'origin';
+      line = section.rest;
+    }
+    if (isConfigComment(line) || !inOrigin) continue;
     const url = configEntry(line, 'url');
     if (url) return url;
   }
@@ -340,7 +412,9 @@ function resolveHeadState(projectPath) {
   return { branch: null, detachedCommit: DETACHED_COMMIT_PATTERN.test(head) ? head.toLowerCase() : null };
 }
 
-const DEFAULT_SSH_PORT = '22';
+// The port a scheme uses when the URL names none; a port equal to it is not
+// part of the identity, as the WHATWG URL parser already does for http.
+const DEFAULT_PORTS = { 'ssh:': '22', 'git+ssh:': '22', 'ssh+git:': '22', 'git:': '9418' };
 
 function trimTrailingSlashes(value) {
   let end = value.length;
@@ -359,10 +433,16 @@ function withoutRepositorySuffix(location) {
   return out.toLowerCase().endsWith('.git') ? trimTrailingSlashes(out.slice(0, -4)) : out;
 }
 
+// A drive letter is one letter whatever its case; the rest of a local path
+// is kept as written.
+function withUpperDrive(location) {
+  return /^[a-zA-Z]:\//.test(location) ? location[0].toUpperCase() + location.slice(1) : location;
+}
+
 // A path on this machine names a repository only here, so its identity is
 // local: file/ and the path, in the same shape on every platform.
 function localIdentity(location) {
-  const stripped = trimLeadingSlashes(withoutRepositorySuffix(location));
+  const stripped = withUpperDrive(trimLeadingSlashes(withoutRepositorySuffix(location)));
   return stripped ? `file/${stripped}` : null;
 }
 
@@ -380,14 +460,36 @@ function urlScheme(value) {
   return /^[a-zA-Z][a-zA-Z0-9+.-]*$/.test(scheme) ? scheme : null;
 }
 
-// The host and the path of the scp-like form git accepts (user@host:path):
-// the first colon splits them, and nothing before it may be a slash.
+// A bracketed host of the scp-like form: [host] is the host, [host:port] is
+// the host and port of the ssh URL (the default port dropped as there), and
+// an IPv6 address keeps its brackets, as the URL form does.
+function unbracketedHost(host) {
+  if (!host.startsWith('[') || !host.endsWith(']')) return host;
+  const inner = host.slice(1, -1);
+  const parts = inner.split(':');
+  if (parts.length === 1) return inner;
+  if (parts.length === 2) return parts[1] === DEFAULT_PORTS['ssh:'] ? parts[0] : inner;
+  return host;
+}
+
+// The host and the path of the scp-like form git accepts (user@host:path,
+// with an IPv6 address or a host and port between brackets): the first
+// colon after the host splits them, the host starts after the last @ before
+// it, and nothing before it may be a slash.
 function scpLikeParts(value) {
-  const colon = value.indexOf(':');
-  if (colon <= 0) return null;
+  const firstColon = value.indexOf(':');
+  if (firstColon <= 0) return null;
+  const at = value.lastIndexOf('@', firstColon);
+  const hostStart = at >= 0 ? at + 1 : 0;
+  let colon = firstColon;
+  if (value[hostStart] === '[') {
+    const close = value.indexOf(']', hostStart);
+    if (close < 0 || value[close + 1] !== ':') return null;
+    colon = close + 1;
+  }
   const authority = value.slice(0, colon);
   if (authority.includes('/') || authority.includes('\\')) return null;
-  const host = authority.slice(authority.lastIndexOf('@') + 1);
+  const host = unbracketedHost(authority.slice(hostStart));
   return host ? { host, path: value.slice(colon + 1) } : null;
 }
 
@@ -401,12 +503,15 @@ function decodedPath(pathname) {
 
 // The normalized form of a remote URL, the identity of a repository across
 // machines: the host in lower case (with its port only when it is not the
-// default of ssh), then the path without a leading slash, a trailing slash
-// or the .git suffix; the scheme and the credentials are dropped, owner and
-// name are kept as written. Every form git accepts for one repository
-// (https, ssh URL, scp-like) folds into one string; a local path folds into
-// a local identity. Null when the value names no repository.
-function normalizeRemoteUrl(url) {
+// default of the scheme), then the path without a leading slash, a trailing
+// slash or the .git suffix; the scheme and the credentials are dropped,
+// owner and name are kept as written. Every form git accepts for one
+// repository (https, ssh URL, scp-like) folds into one string; a local path
+// folds into a local identity, a relative one resolved against `baseDir`,
+// the checkout that names it, when one is given. The scp-like path without
+// a leading slash and the one with it fold together too, as the hosting
+// services treat them. Null when the value names no repository.
+function normalizeRemoteUrl(url, baseDir) {
   const trimmed = String(url || '').trim();
   if (!trimmed) return null;
   if (/^[a-zA-Z]:[\\/]/.test(trimmed)) return localIdentity(trimmed);
@@ -417,14 +522,17 @@ function normalizeRemoteUrl(url) {
     } catch {
       return null;
     }
-    if (parsed.protocol === 'file:') return localIdentity(decodedPath(parsed.pathname));
-    const isSsh = parsed.protocol.includes('ssh');
-    const port = parsed.port && !(isSsh && parsed.port === DEFAULT_SSH_PORT) ? `:${parsed.port}` : '';
+    if (parsed.protocol === 'file:') return localIdentity(`${parsed.hostname}${decodedPath(parsed.pathname)}`);
+    const defaultPort = DEFAULT_PORTS[parsed.protocol] ?? '';
+    const port = parsed.port && parsed.port !== defaultPort ? `:${parsed.port}` : '';
     return hostIdentity(parsed.hostname.toLowerCase() + port, decodedPath(parsed.pathname));
   }
   const scpLike = scpLikeParts(trimmed);
   if (scpLike) return hostIdentity(scpLike.host.toLowerCase(), scpLike.path);
-  return localIdentity(trimmed);
+  // A UNC path is absolute on every platform, whatever path.isAbsolute says
+  // of it on POSIX.
+  const isAbsoluteLocal = path.isAbsolute(trimmed) || trimmed.startsWith('\\\\') || trimmed.startsWith('//');
+  return localIdentity(baseDir && !isAbsoluteLocal ? path.resolve(baseDir, trimmed) : trimmed);
 }
 
 // The directory name of a project keyed by its remote: the name of the
@@ -442,7 +550,7 @@ function remoteKey(identity) {
 // checkout has one, so the same repository under different paths on two
 // machines is one project; the slug of the path otherwise, as before.
 function projectIdentity(projectPath) {
-  const remote = normalizeRemoteUrl(detectOriginRemote(projectPath) || '');
+  const remote = normalizeRemoteUrl(detectOriginRemote(projectPath) || '', projectPath);
   if (remote) return { key: remoteKey(remote), kind: 'remote', remote };
   return { key: projectSlug(projectPath), kind: 'path', remote: null };
 }
@@ -451,13 +559,13 @@ function projectKey(projectPath) {
   return projectIdentity(projectPath).key;
 }
 
-// The directories the documents of a project are read from: its key and,
-// for a project keyed by its remote, the slug of its path too, where the
-// versions before the identity wrote them. A machine upgraded from one of
-// them keeps reading them with no manual step; the keyed name is tried
-// first at every step, so a document written by this version shadows the
-// older one.
-function projectDirNames(projectPath) {
+// The directories the documents of a project are read from, in order: its
+// key and, for a project keyed by its remote, the slug of its path too,
+// where the versions before the identity wrote them. A machine upgraded
+// from one of them keeps reading them with no manual step; the keyed name
+// is tried first at every step, so a document written by this version
+// shadows the older one.
+function projectReadNames(projectPath) {
   const identity = projectIdentity(projectPath);
   return identity.kind === 'remote' ? [identity.key, projectSlug(projectPath)] : [identity.key];
 }
@@ -482,12 +590,14 @@ function detachedStateFile(stateDir, projectPath, commit) {
   return path.join(stateDir, projectKey(projectPath), `detached--${commit}.md`);
 }
 
+// The file the versions before the hashed branch name wrote: under the slug
+// of the path, the only key those versions had.
 function legacyBranchStateFile(stateDir, projectPath, branch) {
-  return path.join(stateDir, projectKey(projectPath), `${sanitizeBranchName(branch)}.md`);
+  return path.join(stateDir, projectSlug(projectPath), `${sanitizeBranchName(branch)}.md`);
 }
 
 function resolveStateRead(stateDir, projectPath, branch, detachedCommit) {
-  const names = projectDirNames(projectPath);
+  const names = projectReadNames(projectPath);
   if (branch) {
     const own = firstExisting(names.flatMap(name => [
       path.join(stateDir, name, `${branchStateKey(branch)}.md`),
@@ -546,6 +656,7 @@ module.exports = {
   detectOriginRemote,
   projectIdentity,
   projectKey,
+  projectReadNames,
   sanitizeBranchName,
   branchStateKey,
   detectBranch,

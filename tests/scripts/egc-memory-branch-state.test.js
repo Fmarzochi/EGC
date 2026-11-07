@@ -72,14 +72,20 @@ function run(name, fn) {
 // The identity of a project by its origin remote (#2063), checked against
 // the build and against the mirror the hooks use.
 function runIdentityTests(api) {
-  const { projectSlug, branchStateKey, normalizeRemoteUrl, originUrlFromConfig, detectOriginRemote, projectIdentity, projectKey, resolveStateRead, resolveStateWrite } = api;
+  const { projectSlug, branchStateKey, detectBranch, normalizeRemoteUrl, originUrlFromConfig, detectOriginRemote, projectIdentity, projectKey, resolveStateRead, resolveStateWrite } = api;
 
   run('normalizeRemoteUrl and projectKey agree with scripts/lib/branch-state.js, so the hooks and the server name a project the same way (#2063)', () => {
     const mirror = require('../../scripts/lib/branch-state');
-    const forms = [REMOTE_HTTPS, REMOTE_SSH, 'https://user:token@GitHub.com/Owner/Repo/', 'ssh://git@github.com:22/Owner/Repo.git', 'ssh://git@host.example:2222/srv/x.git', 'felipe@192.168.1.111:/srv/egc/memory.git', 'file:///srv/git/repo.git', '/srv/git/repo.git', 'C:\\repos\\x.git', '', 'https://'];
+    const forms = [REMOTE_HTTPS, REMOTE_SSH, 'https://user:token@GitHub.com/Owner/Repo/', 'ssh://git@github.com:22/Owner/Repo.git', 'ssh://git@host.example:2222/srv/x.git', 'felipe@192.168.1.111:/srv/egc/memory.git', 'file:///srv/git/repo.git', '/srv/git/repo.git', 'C:\\repos\\x.git', 'c:\\repos\\x.git', 'git@[2001:db8::1]:owner/repo.git', 'git@[example.com:2222]:owner/repo.git', 'git@[github.com:22]:org/repo.git', 'git@[github.com]:org/repo.git', 'user@corp.com@github.com:org/repo.git', 'git://example.com:9418/owner/repo.git', 'file://server/share/repo.git', '\\\\server\\share\\repo.git', '', 'https://'];
     for (const url of forms) {
       assert.strictEqual(normalizeRemoteUrl(url), mirror.normalizeRemoteUrl(url), `the two implementations agree on ${JSON.stringify(url)}`);
     }
+    assert.strictEqual(normalizeRemoteUrl('../bare.git', '/work/a/app'), mirror.normalizeRemoteUrl('../bare.git', '/work/a/app'), 'and on a relative path resolved against the checkout');
+    const configs = ['[remote "origin"] url = https://github.com/Owner/Repo.git\n', '[remote.origin]\n\turl = https://github.com/Owner/Repo.git\n', '[remote "origin"]\n\turl = \\\n\t\thttps://github.com/Owner/Repo.git\n', '[remote "origin"]\n\turl = "https://github.com/"Owner/Repo.git # c\n', '[remote "origin"]\n\tfetch = x\n[remote "upstream"] ; m\n\turl = https://github.com/other/fork.git\n', '[remote "origin"]\n\t# mirror in C:\\repos\\origin\\\n\turl = https://github.com/Owner/Repo.git\n', '[core] [remote "origin"]\n\turl = https://github.com/Owner/Repo.git\n'];
+    for (const config of configs) {
+      assert.strictEqual(originUrlFromConfig(config), mirror.originUrlFromConfig(config), `the two parsers agree on ${JSON.stringify(config)}`);
+    }
+    assert.strictEqual(originUrlFromConfig(configs[4]), null);
     assert.strictEqual(normalizeRemoteUrl('https://user:token@GitHub.com/Owner/Repo/'), 'github.com/Owner/Repo');
     assert.strictEqual(normalizeRemoteUrl(REMOTE_SSH), 'github.com/Owner/Repo');
     assert.strictEqual(normalizeRemoteUrl('https://'), null);
@@ -123,6 +129,27 @@ function runIdentityTests(api) {
     execSync(`git worktree add -q ${worktree} -b wt`, { cwd: here, stdio: ['ignore', 'pipe', 'pipe'] });
     assert.strictEqual(detectOriginRemote(worktree), REMOTE_HTTPS, 'a worktree reads the config of the common directory');
     assert.strictEqual(projectKey(worktree), projectKey(here));
+  });
+
+  run('a gitdir pointer or a commondir that leads to a symlinked directory is refused, as the hooks refuse it', () => {
+    if (process.platform === 'win32') return;
+    const victim = makeRemoteRepo('main', REMOTE_HTTPS);
+    const container = makeTmpDir('egc-memory-pointer-');
+    const link = path.join(container, 'link-to-victim-git');
+    fs.symlinkSync(path.join(victim, '.git'), link, 'dir');
+    const pointed = path.join(container, 'pointed');
+    fs.mkdirSync(pointed);
+    fs.writeFileSync(path.join(pointed, '.git'), `gitdir: ${link}\n`);
+    assert.strictEqual(detectOriginRemote(pointed), null, 'a pointer to a linked directory is not followed');
+    assert.strictEqual(detectBranch(pointed), null);
+    assert.strictEqual(require('../../scripts/lib/branch-state').detectOriginRemote(pointed), null, 'the hooks agree');
+
+    const worktree = path.join(container, 'wt');
+    execSync(`git worktree add -q ${worktree} -b linked`, { cwd: victim, stdio: ['ignore', 'pipe', 'pipe'] });
+    const worktreeGitDir = path.join(victim, '.git', 'worktrees', 'wt');
+    fs.writeFileSync(path.join(worktreeGitDir, 'commondir'), `${link}\n`);
+    assert.strictEqual(detectOriginRemote(worktree), null, 'a commondir that names a linked directory is not followed');
+    assert.strictEqual(require('../../scripts/lib/branch-state').detectOriginRemote(worktree), null, 'the hooks agree');
   });
 }
 

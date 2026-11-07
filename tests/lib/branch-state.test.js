@@ -98,6 +98,53 @@ function runIdentityTests(tally) {
     assert.strictEqual(normalizeRemoteUrl('https://'), null, 'a URL without a host names nothing');
   }));
 
+  tally(test('normalizeRemoteUrl folds the rarer forms too: bracketed hosts, git and file schemes, drive letters, relative paths', () => {
+    assert.strictEqual(normalizeRemoteUrl('git@[2001:db8::1]:owner/repo.git'), normalizeRemoteUrl('ssh://git@[2001:db8::1]/owner/repo.git'), 'an IPv6 host in the scp-like form is not split at its colons');
+    assert.strictEqual(normalizeRemoteUrl('git@[2001:db8::1]:owner/repo.git'), '[2001:db8::1]/owner/repo');
+    assert.strictEqual(normalizeRemoteUrl('git@[example.com:2222]:owner/repo.git'), 'example.com:2222/owner/repo', 'a bracketed host and port in the scp-like form is the ssh URL with that port');
+    assert.strictEqual(normalizeRemoteUrl('git://example.com:9418/owner/repo.git'), 'example.com/owner/repo', 'the default port of the git protocol is not part of the identity');
+    assert.strictEqual(normalizeRemoteUrl('file://server/share/repo.git'), 'file/server/share/repo', 'the host of a file URL is part of the identity');
+    assert.strictEqual(normalizeRemoteUrl('\\\\server\\share\\repo.git'), 'file/server/share/repo', 'and the UNC form of the same share agrees');
+    assert.strictEqual(normalizeRemoteUrl('c:\\repos\\x.git'), 'file/C:/repos/x', 'a drive letter is one letter whatever its case');
+    assert.strictEqual(normalizeRemoteUrl('file:///c:/repos/x.git'), 'file/C:/repos/x');
+    assert.strictEqual(normalizeRemoteUrl('../bare.git', '/work/a/app'), normalizeRemoteUrl(path.resolve('/work/a/app', '../bare.git')), 'a relative path is resolved against the checkout, so two repositories with the same relative remote are not one');
+    assert.notStrictEqual(normalizeRemoteUrl('../bare.git', '/work/a/app'), normalizeRemoteUrl('../bare.git', '/work/b/tool'));
+    assert.strictEqual(normalizeRemoteUrl('/srv/git/repo.git', '/work/a/app'), 'file/srv/git/repo', 'an absolute path ignores the checkout');
+    assert.strictEqual(normalizeRemoteUrl('\\\\server\\share\\repo.git', '/work/a/app'), 'file/server/share/repo', 'a UNC path is absolute on every platform');
+    assert.strictEqual(normalizeRemoteUrl('user@corp.com@github.com:org/repo.git'), 'github.com/org/repo', 'the host starts after the last @ before the colon');
+    assert.strictEqual(normalizeRemoteUrl('git@[github.com:22]:org/repo.git'), 'github.com/org/repo', 'the default ssh port between brackets is dropped as in the URL form');
+    assert.strictEqual(normalizeRemoteUrl('git@[github.com]:org/repo.git'), 'github.com/org/repo', 'brackets around a plain host are dropped');
+    const relativeRemote = makeGitRepo('main');
+    git(relativeRemote, 'remote add origin ../bare.git');
+    assert.strictEqual(projectIdentity(relativeRemote).remote, normalizeRemoteUrl(path.resolve(relativeRemote, '../bare.git')), 'the identity of a checkout resolves its relative remote against the checkout');
+  }));
+
+  tally(test('originUrlFromConfig reads what git reads: comments and assignments after a header, the dotted form, continuations, partial quotes and escapes', () => {
+    const { originUrlFromConfig } = require('../../scripts/lib/branch-state');
+    assert.strictEqual(originUrlFromConfig('[remote "origin"]\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n[remote "upstream"] # mirror\n\turl = https://github.com/other/fork.git\n'), null, 'a header followed by a comment still closes the section before it');
+    assert.strictEqual(originUrlFromConfig('[remote "origin"] url = https://github.com/Owner/Repo.git\n'), 'https://github.com/Owner/Repo.git', 'an assignment on the line of the header belongs to that section');
+    assert.strictEqual(originUrlFromConfig('[remote.origin]\n\turl = https://github.com/Owner/Repo.git\n'), 'https://github.com/Owner/Repo.git', 'the deprecated dotted form');
+    assert.strictEqual(originUrlFromConfig('[Remote.Origin]\n\turl = https://github.com/Owner/Repo.git\n'), 'https://github.com/Owner/Repo.git', 'whose subsection compares case-insensitively, as git does');
+    assert.strictEqual(originUrlFromConfig('[remote "origin"]\n\turl = \\\n\t\thttps://github.com/Owner/Repo.git\n'), 'https://github.com/Owner/Repo.git', 'a backslash at the end of a line continues the value');
+    assert.strictEqual(originUrlFromConfig('[remote "origin"]\n\turl = "https://github.com/"Owner/Repo.git\n'), 'https://github.com/Owner/Repo.git', 'quotes may open and close anywhere in a value');
+    assert.strictEqual(originUrlFromConfig('[remote "origin"]\n\turl = C:\\\\Users\\\\me\\\\repo.git\n'), 'C:\\Users\\me\\repo.git', 'an escaped backslash is one backslash');
+    assert.strictEqual(originUrlFromConfig('[remote "origin"]\r\n\turl = https://github.com/Owner/Repo.git\r\n'), 'https://github.com/Owner/Repo.git', 'CRLF');
+    assert.strictEqual(originUrlFromConfig('[remote "ori\\"gin"]\n\turl = https://github.com/Owner/Repo.git\n'), null, 'an escaped quote in the subsection is part of its name');
+    assert.strictEqual(originUrlFromConfig('[remote "origin"]\n\t# local mirror in C:\\repos\\origin\\\n\turl = https://github.com/Owner/Repo.git\n'), 'https://github.com/Owner/Repo.git', 'a backslash at the end of a comment continues nothing');
+    assert.strictEqual(originUrlFromConfig('[core] [remote "origin"]\n\turl = https://github.com/Owner/Repo.git\n'), 'https://github.com/Owner/Repo.git', 'the last of several headers on one line is the section that opens');
+    assert.strictEqual(originUrlFromConfig('[remote "origin"] [remote "upstream"]\n\turl = https://github.com/other/fork.git\n'), null);
+  }));
+
+  tally(test('legacyBranchStateFile points at the directory the versions before the identity wrote, and projectReadNames lists the key before it', () => {
+    const { projectReadNames } = require('../../scripts/lib/branch-state');
+    const stateDir = makeTmpDir('egc-branch-state-legacy2-');
+    const repo = makeRemoteRepo('feature/auth', REMOTE_HTTPS);
+    assert.strictEqual(legacyBranchStateFile(stateDir, repo, 'feature/auth'), path.join(stateDir, projectSlug(repo), 'feature-auth.md'));
+    assert.deepStrictEqual(projectReadNames(repo), [projectKey(repo), projectSlug(repo)]);
+    const plain = makeTmpDir('egc-branch-state-plain2-');
+    assert.deepStrictEqual(projectReadNames(plain), [projectSlug(plain)]);
+  }));
+
   tally(test('projectKey names a project by its origin remote and falls back to the path slug', () => {
     const viaHttps = makeRemoteRepo('main', REMOTE_HTTPS);
     const viaSsh = makeRemoteRepo('main', REMOTE_SSH);

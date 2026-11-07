@@ -7,11 +7,10 @@ const crypto = require('node:crypto');
 
 const { propagateStateContent } = require('./propagate-state');
 const {
-  projectSlug,
+  projectReadNames,
   resolveHeadState,
-  branchStateFile,
-  detachedStateFile,
-  legacyBranchStateFile,
+  branchStateKey,
+  sanitizeBranchName,
 } = require('./branch-state');
 const { isEncryptedBuffer } = require('./state-crypto');
 
@@ -182,34 +181,33 @@ function isTrustedStateCandidate(f, stateDir) {
   return existsAsPlainFile(f) && hasTrustedAncestry(f, stateDir);
 }
 
+// The documents of a project live under its key (the origin remote) and,
+// when an older version wrote them, under the slug of its path; the keyed
+// name is tried first at every step, as branch-state.resolveStateRead does.
 function resolveStateFilePath(projectPath) {
   const stateDir = path.join(os.homedir(), '.egc', 'state');
-  const slug = projectSlug(projectPath);
+  const names = projectReadNames(projectPath);
   const { branch, detachedCommit } = resolveHeadState(projectPath);
+  const firstTrusted = candidates => candidates.find(candidate => isTrustedStateCandidate(candidate, stateDir)) || null;
 
   if (branch) {
-    const branchFile = branchStateFile(stateDir, projectPath, branch);
-    if (isTrustedStateCandidate(branchFile, stateDir)) return branchFile;
-
-    const legacyBranchFile = legacyBranchStateFile(stateDir, projectPath, branch);
-    if (isTrustedStateCandidate(legacyBranchFile, stateDir)) return legacyBranchFile;
+    const own = firstTrusted(names.flatMap(name => [
+      path.join(stateDir, name, `${branchStateKey(branch)}.md`),
+      path.join(stateDir, name, `${sanitizeBranchName(branch)}.md`),
+    ]));
+    if (own) return own;
   } else if (detachedCommit) {
     // A detached HEAD never falls through to the shared flat file below:
     // every detached checkout of the project used to collide there. Each
     // commit gets its own file, checked here before the project-wide
     // defaults.
-    const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
-    if (isTrustedStateCandidate(detachedFile, stateDir)) return detachedFile;
-    return null;
+    return firstTrusted(names.map(name => path.join(stateDir, name, `detached--${detachedCommit}.md`)));
   }
 
-  const defaultFile = path.join(stateDir, slug, 'main.md');
-  if (isTrustedStateCandidate(defaultFile, stateDir)) return defaultFile;
+  const defaultFile = firstTrusted(names.map(name => path.join(stateDir, name, 'main.md')));
+  if (defaultFile) return defaultFile;
 
-  const flatFile = path.join(stateDir, `${slug}.md`);
-  if (isTrustedStateCandidate(flatFile, stateDir)) return flatFile;
-
-  return null;
+  return firstTrusted(names.map(name => path.join(stateDir, `${name}.md`)));
 }
 
 // Writes atomically via a temp-file-then-rename, matching saveState() in

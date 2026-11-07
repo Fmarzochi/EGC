@@ -8,6 +8,7 @@ import { GitBackend } from './GitBackend';
 import type { SyncConfig, SyncStatus, SyncResult } from './SyncBackend';
 import { isEncrypted, loadOrCreateEncKey, readPrivateKeyFile, readStateFile, writeStateFile } from '../encryption';
 import { loadOrCreateKey as loadOrCreateIntegrityKey, writeHmac } from '../integrity';
+import { branchStateKey, projectIdentity, projectSlug } from '../branch-state';
 import { generateTeamKey, openEnvelope, parseTeamKey, sealEnvelope } from './envelope';
 
 // The integrity sidecar next to a state document is a per-machine value,
@@ -291,7 +292,8 @@ function removeSyncFile(filePath: string): void {
 // before it can touch local state; anything else is reported and skipped.
 // Local files are read and written through the personal key, so the merge
 // compares plaintext timestamps and the result stays encrypted at rest.
-type MergeContext = { syncStateDir: string; localStateDir: string; teamKey: Buffer; personalKey: Buffer; integrityKey: Buffer | null; outcome: TeamMergeOutcome };
+type LegacyDocument = { file: string; content: string };
+type MergeContext = { syncStateDir: string; localStateDir: string; teamKey: Buffer; personalKey: Buffer; integrityKey: Buffer | null; outcome: TeamMergeOutcome; legacy: Map<string, LegacyDocument> };
 
 // The local document as it stands, or null when it must not be touched
 // (a link, or a file that does not open with the personal key).
@@ -347,7 +349,12 @@ function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
   const localFile = path.join(context.localStateDir, relativePath);
   const local = currentLocal(localFile, relativePath, context);
   if (local === null) return;
-  const merged = local.content ? mergeStateDocs(local.content, remoteContent) : remoteContent;
+  // A keyed document that arrives before this machine wrote one merges with
+  // the document an earlier version keyed by the path, which would otherwise
+  // be shadowed unread; the result lands under the key, the legacy file stays.
+  const legacy = local.content ? undefined : context.legacy.get(relativePath);
+  const localContent = legacy ? legacy.content : local.content;
+  const merged = localContent ? mergeStateDocs(localContent, remoteContent) : remoteContent;
   if (merged === local.content && !local.legacyPlaintext) {
     repairSidecar(localFile, local.content, context.integrityKey);
     return;
@@ -390,7 +397,7 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
   // A sidecar an earlier version pushed has no meaning on any other
   // machine: it is retired from the shared tree and never written locally.
   for (const sidecar of entries.files.filter(isSidecar)) removeSyncFile(sidecar);
-  const context: MergeContext = { syncStateDir, localStateDir, teamKey, personalKey, integrityKey, outcome };
+  const context: MergeContext = { syncStateDir, localStateDir, teamKey, personalKey, integrityKey, outcome, legacy: indexLegacyDocuments(localStateDir, personalKey) };
   for (const syncFile of entries.files.filter(file => !isSidecar(file))) mergeOneSyncFile(syncFile, context);
   // A team sync never removes local state files: a file absent from the sync
   // repo may be one this machine created and has not pushed yet, and deleting
@@ -399,11 +406,121 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
   return outcome;
 }
 
+type DocumentHeader = { project: string | null; branch: string | null };
+
+// The project and the branch a state document was written for, from its
+// header.
+function documentHeader(plaintext: string): DocumentHeader {
+  const header: DocumentHeader = { project: null, branch: null };
+  for (const line of plaintext.split(/\r?\n/, 16)) {
+    if (line.startsWith('## ')) break;
+    if (line.startsWith('project:')) header.project = line.slice('project:'.length).trim() || null;
+    if (line.startsWith('branch:')) header.branch = line.slice('branch:'.length).trim() || null;
+  }
+  return header;
+}
+
+const HASHED_DOCUMENT_NAME = /--[0-9a-f]{64}\.md$/;
+
+// The name a legacy document takes under the key. The versions before the
+// hashed branch name wrote `<branch>.md` (`main.md` included); it becomes
+// the hashed name of the branch the header records, or of the name itself,
+// the only name the current version reads and writes for a branch, so the
+// documents of both versions meet. A hashed or detached name is kept.
+function keyedDocumentName(fileName: string, branch: string | null): string {
+  if (HASHED_DOCUMENT_NAME.test(fileName) || fileName.startsWith('detached--')) return fileName;
+  const fromName = fileName.endsWith('.md') ? fileName.slice(0, -3) : fileName;
+  return `${branchStateKey(branch || fromName)}.md`;
+}
+
+// The keyed path a document of the versions before the remote identity
+// (under the slug of the project path, or the flat file of the project) is
+// shared under, when this machine still has the repository; null for any
+// other document. A flat document, which predates branches, becomes the
+// document of the branch its header records or of the default branch. The
+// header is trusted only as far as projectIdentity trusts a path: a
+// repository under the home or the temp directory, read through the same
+// checks as HEAD, and the key it yields is a sanitized name and a hash, so a
+// header can name no path outside the state directories. A holder of the
+// team key can still learn, by naming a path, the key of a repository this
+// machine has there; the signature per member of #2056 is what closes that.
+function legacySharedPath(relativePath: string, plaintext: string): string | null {
+  const { project, branch } = documentHeader(plaintext);
+  if (!project) return null;
+  const segments = relativePath.split(path.sep);
+  const slug = projectSlug(project);
+  const isLegacyDir = segments.length === 2 && segments[0] === slug;
+  const isLegacyFlat = segments.length === 1 && segments[0] === `${slug}.md`;
+  if (!isLegacyDir && !isLegacyFlat) return null;
+  const identity = projectIdentity(project);
+  if (identity.kind !== 'remote') return null;
+  const name = isLegacyDir ? keyedDocumentName(segments[1], branch) : `${branchStateKey(branch || 'main')}.md`;
+  return path.join(identity.key, name);
+}
+
+// The path a local document is shared under: its own, or the keyed one for
+// a document of the versions before the remote identity, so the other
+// machines read it for their own checkouts; null when the keyed document
+// that supersedes it exists locally, since that one carries the state.
+export function sharedRelativePath(localStateDir: string, relativePath: string, plaintext: string): string | null {
+  const shared = legacySharedPath(relativePath, plaintext);
+  if (shared === null) return relativePath;
+  return fs.existsSync(path.join(localStateDir, shared)) ? null : shared;
+}
+
+// The documents of the versions before the remote identity, by the path
+// they are shared under, so a keyed document arriving from another machine
+// merges with the local legacy one instead of shadowing it unread. Two
+// legacy documents of one repository (two checkouts) keep the newer.
+function indexLegacyDocuments(localStateDir: string, personalKey: Buffer): Map<string, LegacyDocument> {
+  const index = new Map<string, LegacyDocument>();
+  if (!fs.existsSync(localStateDir)) return index;
+  for (const file of walkEntries(localStateDir).files) {
+    if (isSidecar(file)) continue;
+    let content: string;
+    try {
+      content = readStateFile(file, personalKey);
+    } catch {
+      continue;
+    }
+    const shared = legacySharedPath(path.relative(localStateDir, file), content);
+    if (shared === null) continue;
+    const previous = index.get(shared);
+    if (!previous || mergeStateDocs(previous.content, content) === content) index.set(shared, { file, content });
+  }
+  return index;
+}
+
 // Local state leaves the machine only as sealed envelopes; a local file that
 // cannot be decrypted is left out rather than shipped opaque.
 // `keep` holds the relative paths the merge could not open: this machine
 // never writes its own state over an envelope it cannot read, so those
 // paths are left as they are and not staged.
+type StageContext = { localStateDir: string; syncStateDir: string; teamKey: Buffer; personalKey: Buffer; keep: ReadonlySet<string>; stagedByPath: Map<string, string> };
+
+// Seals one local document into the sync tree at the path it is shared
+// under. Two legacy documents of one repository (two checkouts of it on this
+// machine) share one path: the newer is the one that leaves.
+function stageOneDocument(localFile: string, context: StageContext): void {
+  let plaintext: string;
+  try {
+    plaintext = readStateFile(localFile, context.personalKey);
+  } catch {
+    return;
+  }
+  const sharedPath = sharedRelativePath(context.localStateDir, path.relative(context.localStateDir, localFile), plaintext);
+  if (sharedPath === null || context.keep.has(sharedPath)) return;
+  const already = context.stagedByPath.get(sharedPath);
+  const chosen = already === undefined ? plaintext : mergeStateDocs(already, plaintext);
+  if (chosen === already) return;
+  const target = path.join(context.syncStateDir, sharedPath);
+  if (isLink(target)) removeSyncFile(target);
+  if (hasLinkedAncestor(target, context.syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${sharedPath} and is not written`);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, sealEnvelope(chosen, context.teamKey, sharedPath), 'utf-8');
+  context.stagedByPath.set(sharedPath, chosen);
+}
+
 export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer, keep: ReadonlySet<string> = new Set()): number {
   const linkedLocal = linkedDirectoryTowards(localStateDir);
   if (linkedLocal) throw new Error(`the local state tree is a link at ${linkedLocal} and is not staged`);
@@ -411,27 +528,11 @@ export function stageTeamState(localStateDir: string, syncStateDir: string, team
   if (linkedSync) throw new Error(`the sync state tree is a link at ${linkedSync} and is not written`);
   if (!fs.existsSync(localStateDir)) return 0;
 
-
-  let staged = 0;
+  const context: StageContext = { localStateDir, syncStateDir, teamKey, personalKey, keep, stagedByPath: new Map() };
   for (const localFile of walkEntries(localStateDir).files) {
-    if (isSidecar(localFile)) continue;
-    let plaintext: string;
-    try {
-      plaintext = readStateFile(localFile, personalKey);
-    } catch {
-      continue;
-    }
-    const relativePath = path.relative(localStateDir, localFile);
-    if (keep.has(relativePath)) continue;
-    const target = path.join(syncStateDir, relativePath);
-    if (isLink(target)) removeSyncFile(target);
-    if (hasLinkedAncestor(target, syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${relativePath} and is not written`);
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-
-    fs.writeFileSync(target, sealEnvelope(plaintext, teamKey, relativePath), 'utf-8');
-    staged += 1;
+    if (!isSidecar(localFile)) stageOneDocument(localFile, context);
   }
-  return staged;
+  return context.stagedByPath.size;
 }
 
 
