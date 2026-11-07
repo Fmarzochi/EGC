@@ -9,6 +9,10 @@ const { execSync, spawnSync } = require('child_process');
 const {
   getStateDir,
   projectSlug,
+  normalizeRemoteUrl,
+  detectOriginRemote,
+  projectIdentity,
+  projectKey,
   sanitizeBranchName,
   branchStateKey,
   detectBranch,
@@ -64,12 +68,150 @@ function writeState(filePath, marker) {
   fs.writeFileSync(filePath, `# Project State\n\n## Context\n${marker}\n`, 'utf8');
 }
 
+// A repository with an origin remote, the shape the identity tests need:
+// the same remote under two different paths is the same project.
+function makeRemoteRepo(branch, remoteUrl) {
+  const repo = makeGitRepo(null);
+  git(repo, `checkout -q -B ${branch}`);
+  git(repo, `remote add origin ${remoteUrl}`);
+  return repo;
+}
+
+const REMOTE_HTTPS = 'https://github.com/Owner/Repo.git';
+const REMOTE_SSH = 'git@github.com:Owner/Repo.git';
+const REMOTE_IDENTITY = 'github.com/Owner/Repo';
+
+function runIdentityTests(tally) {
+  tally(test('normalizeRemoteUrl folds the forms of one repository into one identity', () => {
+    assert.strictEqual(normalizeRemoteUrl(REMOTE_HTTPS), REMOTE_IDENTITY);
+    assert.strictEqual(normalizeRemoteUrl('https://user:token@GitHub.com/Owner/Repo/'), REMOTE_IDENTITY, 'credentials, host case and a trailing slash are dropped');
+    assert.strictEqual(normalizeRemoteUrl(REMOTE_SSH), REMOTE_IDENTITY, 'the scp-like form of ssh');
+    assert.strictEqual(normalizeRemoteUrl('ssh://git@github.com:22/Owner/Repo.git'), REMOTE_IDENTITY, 'the default ssh port is not part of the identity');
+    assert.strictEqual(normalizeRemoteUrl('ssh://git@host.example:2222/srv/x.git'), 'host.example:2222/srv/x', 'another port is');
+    assert.strictEqual(normalizeRemoteUrl('felipe@192.168.1.111:/srv/egc/memory.git'), '192.168.1.111/srv/egc/memory', 'an absolute path on a host of the LAN');
+    assert.strictEqual(normalizeRemoteUrl('file:///srv/git/repo.git'), 'file/srv/git/repo');
+    assert.strictEqual(normalizeRemoteUrl('/srv/git/repo.git'), 'file/srv/git/repo', 'a local path is a local identity');
+    assert.strictEqual(normalizeRemoteUrl('C:\\repos\\x.git'), 'file/C:/repos/x', 'a Windows drive is not an ssh host');
+    assert.notStrictEqual(normalizeRemoteUrl('https://github.com/owner/repo'), REMOTE_IDENTITY, 'owner and name are kept as written');
+    assert.strictEqual(normalizeRemoteUrl(''), null);
+    assert.strictEqual(normalizeRemoteUrl('   '), null);
+    assert.strictEqual(normalizeRemoteUrl('https://'), null, 'a URL without a host names nothing');
+  }));
+
+  tally(test('projectKey names a project by its origin remote and falls back to the path slug', () => {
+    const viaHttps = makeRemoteRepo('main', REMOTE_HTTPS);
+    const viaSsh = makeRemoteRepo('main', REMOTE_SSH);
+    assert.notStrictEqual(viaHttps, viaSsh);
+    assert.strictEqual(projectKey(viaHttps), projectKey(viaSsh), 'two checkouts of one repository have one key');
+    assert.match(projectKey(viaHttps), /^Repo--[0-9a-f]{64}$/, 'a readable name bound to the hash of the identity');
+    assert.deepStrictEqual(projectIdentity(viaHttps), { key: projectKey(viaHttps), kind: 'remote', remote: REMOTE_IDENTITY });
+    assert.ok(!projectKey(viaHttps).includes('github'), 'the host is not in the key');
+    assert.ok(!projectKey(viaHttps).includes('Owner'), 'the owner is not in the key');
+    assert.ok(!projectKey(viaHttps).includes(path.basename(viaHttps)), 'the local path is not in the key');
+
+    const plain = makeTmpDir('egc-branch-state-plain-');
+    assert.strictEqual(projectKey(plain), projectSlug(plain), 'outside a repository the slug of the path is the key, as before');
+    assert.strictEqual(projectIdentity(plain).kind, 'path');
+    const noRemote = makeGitRepo('main');
+    assert.strictEqual(projectKey(noRemote), projectSlug(noRemote), 'a repository without origin keeps the slug of the path');
+    assert.deepStrictEqual(projectIdentity(noRemote), { key: projectSlug(noRemote), kind: 'path', remote: null });
+  }));
+
+  tally(test('detectOriginRemote reads the url of origin from the repository config, worktrees included', () => {
+    const repo = makeRemoteRepo('main', REMOTE_HTTPS);
+    assert.strictEqual(detectOriginRemote(repo), REMOTE_HTTPS);
+    const worktree = path.join(makeTmpDir('egc-branch-state-worktree-'), 'wt');
+    git(repo, `worktree add -q ${worktree} -b wt`);
+    assert.strictEqual(detectOriginRemote(worktree), REMOTE_HTTPS, 'a worktree reads the config of the common directory');
+    assert.strictEqual(projectKey(worktree), projectKey(repo), 'a worktree is the same project as its repository');
+    assert.strictEqual(detectOriginRemote(makeGitRepo('main')), null);
+    assert.strictEqual(detectOriginRemote(makeTmpDir('egc-branch-state-norepo-')), null);
+  }));
+
+  tally(test('resolveStateRead keeps reading the documents keyed by the path slug after the upgrade, and writes under the remote key', () => {
+    const stateDir = makeTmpDir('egc-branch-state-upgrade-');
+    const repo = makeRemoteRepo('feature/auth', REMOTE_HTTPS);
+    const slugDir = path.join(stateDir, projectSlug(repo));
+    const keyDir = path.join(stateDir, projectKey(repo));
+    assert.notStrictEqual(slugDir, keyDir);
+
+    const legacyOwn = path.join(slugDir, `${branchStateKey('feature/auth')}.md`);
+    writeState(legacyOwn, 'written by the version before the identity');
+    const fromLegacy = resolveStateRead(stateDir, repo, 'feature/auth');
+    assert.strictEqual(fromLegacy.filePath, legacyOwn, 'a machine with path-keyed documents keeps reading them');
+    assert.strictEqual(fromLegacy.source, 'branch');
+
+    const target = resolveStateWrite(stateDir, repo, 'feature/auth');
+    assert.strictEqual(target, path.join(keyDir, `${branchStateKey('feature/auth')}.md`), 'every write goes under the remote key');
+    assert.strictEqual(branchStateFile(stateDir, repo, 'feature/auth'), target);
+    writeState(target, 'written by this version');
+    assert.strictEqual(resolveStateRead(stateDir, repo, 'feature/auth').filePath, target, 'once written, the keyed document shadows the legacy one');
+
+    writeState(path.join(slugDir, 'main.md'), 'legacy default branch');
+    const legacyDefault = resolveStateRead(stateDir, repo, 'another');
+    assert.strictEqual(legacyDefault.filePath, path.join(slugDir, 'main.md'));
+    assert.strictEqual(legacyDefault.source, 'default-branch');
+    writeState(branchStateFile(stateDir, repo, 'main'), 'keyed default branch');
+    assert.strictEqual(resolveStateRead(stateDir, repo, 'another').filePath, branchStateFile(stateDir, repo, 'main'), 'the keyed default branch wins over the legacy one');
+
+    const commit = 'c'.repeat(40);
+    const legacyDetached = path.join(slugDir, `detached--${commit}.md`);
+    writeState(legacyDetached, 'legacy detached');
+    assert.strictEqual(resolveStateRead(stateDir, repo, null, commit).filePath, legacyDetached);
+    assert.strictEqual(resolveStateWrite(stateDir, repo, null, commit), path.join(keyDir, `detached--${commit}.md`));
+
+    const flatRepo = makeRemoteRepo('main', 'https://example.com/Flat/Only.git');
+    writeState(path.join(stateDir, `${projectSlug(flatRepo)}.md`), 'legacy flat');
+    const flat = resolveStateRead(stateDir, flatRepo, 'main');
+    assert.strictEqual(flat.source, 'flat');
+    assert.strictEqual(flat.filePath, path.join(stateDir, `${projectSlug(flatRepo)}.md`));
+    assert.strictEqual(flatStateFile(stateDir, flatRepo), path.join(stateDir, `${projectKey(flatRepo)}.md`));
+
+    const none = resolveStateRead(stateDir, makeRemoteRepo('main', 'https://example.com/No/State.git'), 'main');
+    assert.strictEqual(none.source, 'none');
+    assert.ok(none.filePath.startsWith(path.join(stateDir, 'State--')), 'a project with no state yet is created under its key');
+  }));
+
+  tally(test('two checkouts of one repository at different paths read and write one state file', () => {
+    const stateDir = makeTmpDir('egc-branch-state-shared-');
+    const here = makeRemoteRepo('main', REMOTE_HTTPS);
+    const there = makeRemoteRepo('main', REMOTE_SSH);
+    const written = resolveStateWrite(stateDir, here, 'main');
+    writeState(written, 'decided on the first machine');
+    const read = resolveStateRead(stateDir, there, 'main');
+    assert.strictEqual(read.source, 'branch');
+    assert.strictEqual(read.filePath, written);
+    assert.strictEqual(resolveStateWrite(stateDir, there, 'main'), written);
+  }));
+
+  tally(test('egc-memory-load hook injects the state keyed by the remote', () => {
+    const home = makeTmpDir('egc-branch-state-home7-');
+    const repo = makeRemoteRepo('feature/auth', REMOTE_HTTPS);
+    const stateFile = branchStateFile(getStateDir(home), repo, 'feature/auth');
+    assert.ok(path.basename(path.dirname(stateFile)).startsWith('Repo--'));
+    writeState(stateFile, 'REMOTE_KEY_MARKER_2063');
+
+    const result = spawnSync(process.execPath, [HOOK_PATH], {
+      input: '{}',
+      encoding: 'utf8',
+      env: Object.assign({}, process.env, { HOME: home, USERPROFILE: home, PWD: repo }),
+      cwd: repo,
+    });
+
+    assert.strictEqual(result.status, 0);
+    const output = JSON.parse(result.stdout);
+    assert.ok(output.promptForAssistant.includes('REMOTE_KEY_MARKER_2063'));
+  }));
+}
+
 function runTests() {
   console.log('\n=== Testing branch-state.js ===\n');
 
   let passed = 0;
   let failed = 0;
   const tally = ok => (ok ? passed++ : failed++);
+
+  runIdentityTests(tally);
 
   tally(test('projectSlug uses last two path segments', () => {
     assert.strictEqual(projectSlug('/home/user/Projects/my-app'), 'Projects--my-app');

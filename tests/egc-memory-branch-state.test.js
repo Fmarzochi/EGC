@@ -18,7 +18,9 @@ const path = require('node:path');
 
 const {
   branchStateFile,
+  branchStateKey,
   legacyBranchStateFile,
+  projectKey,
   projectSlug,
   resolveStateRead,
 } = require(path.join(__dirname, '..', 'scripts', 'lib', 'branch-state.js'));
@@ -90,6 +92,69 @@ run('reading the main branch itself resolves to its hashed file', () => {
   assert.strictEqual(resolved.source, 'branch');
 });
 
+// A project keyed by its origin remote (#2063): the keyed directory is tried
+// before the slug of the path at every step, so a document written by this
+// version shadows the one an older version wrote, and the older one is still
+// read when nothing newer exists.
+// The repository is laid out by hand (HEAD and config are all the reader
+// opens), so this file needs no git on the machine.
+const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-branch-identity-'));
+fs.mkdirSync(path.join(repo, '.git'));
+fs.writeFileSync(path.join(repo, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+fs.writeFileSync(path.join(repo, '.git', 'config'), '[core]\n\tbare = false\n[remote "origin"]\n\turl = https://github.com/Owner/Repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n');
+const keyedDir = path.join(stateDir, projectKey(repo));
+const legacyDir = path.join(stateDir, projectSlug(repo));
+fs.mkdirSync(keyedDir, { recursive: true });
+fs.mkdirSync(legacyDir, { recursive: true });
+const ownName = `${branchStateKey(featureBranch)}.md`;
+const mainName = `${branchStateKey('main')}.md`;
+
+run('own file under the remote key wins over the own file under the path slug', () => {
+  assert.notStrictEqual(keyedDir, legacyDir);
+  fs.writeFileSync(path.join(keyedDir, ownName), 'keyed-own');
+  fs.writeFileSync(path.join(legacyDir, ownName), 'legacy-own');
+  const resolved = resolveStateRead(stateDir, repo, featureBranch);
+  assert.strictEqual(resolved.filePath, path.join(keyedDir, ownName));
+  assert.strictEqual(resolved.source, 'branch');
+  fs.rmSync(path.join(keyedDir, ownName));
+});
+
+run('own file under the path slug wins over the default branch under the remote key', () => {
+  fs.writeFileSync(path.join(keyedDir, mainName), 'keyed-main');
+  const resolved = resolveStateRead(stateDir, repo, featureBranch);
+  assert.strictEqual(resolved.filePath, path.join(legacyDir, ownName));
+  assert.strictEqual(resolved.source, 'branch');
+  fs.rmSync(path.join(legacyDir, ownName));
+});
+
+run('default branch under the remote key wins over the default branch under the path slug', () => {
+  fs.writeFileSync(path.join(legacyDir, mainName), 'legacy-main');
+  fs.writeFileSync(path.join(legacyDir, 'main.md'), 'legacy-plain-main');
+  const resolved = resolveStateRead(stateDir, repo, featureBranch);
+  assert.strictEqual(resolved.filePath, path.join(keyedDir, mainName));
+  assert.strictEqual(resolved.source, 'default-branch');
+  fs.rmSync(path.join(keyedDir, mainName));
+});
+
+run('the default branch under the path slug is still read when the remote key holds nothing', () => {
+  const hashed = resolveStateRead(stateDir, repo, featureBranch);
+  assert.strictEqual(hashed.filePath, path.join(legacyDir, mainName));
+  assert.strictEqual(hashed.source, 'default-branch');
+  fs.rmSync(path.join(legacyDir, mainName));
+  const plain = resolveStateRead(stateDir, repo, featureBranch);
+  assert.strictEqual(plain.filePath, path.join(legacyDir, 'main.md'));
+  assert.strictEqual(plain.source, 'default-branch');
+});
+
+run('with nothing written yet, the project is created under the remote key', () => {
+  fs.rmSync(path.join(legacyDir, 'main.md'));
+  const none = resolveStateRead(stateDir, repo, featureBranch);
+  assert.strictEqual(none.source, 'none');
+  assert.strictEqual(none.filePath, path.join(keyedDir, ownName));
+  assert.strictEqual(branchStateFile(stateDir, repo, featureBranch), none.filePath);
+});
+
+fs.rmSync(repo, { recursive: true, force: true });
 fs.rmSync(stateDir, { recursive: true, force: true });
 
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

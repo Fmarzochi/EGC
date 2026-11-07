@@ -62,6 +62,8 @@ updated: 2026-01-15T12:00:00.000Z
 
 Consumers MUST ignore header keys they do not recognize; producers MAY add keys, but the four above are the interoperable core.
 
+`project` is a hint for a human reader, not the identity of the project: the same repository sits at different paths on different machines. The reference implementation keys the storage of a document, and the name it travels under between machines, by the repository itself: the URL of its `origin` remote, normalized (scheme and credentials dropped, host lowercased with its port only when it is not the default of ssh, trailing `/` and `.git` removed, owner and name as written), hashed with SHA-256 and prefixed by the repository name. A directory without a remote is keyed by a slug of its path. Consumers that match documents across machines MUST compare that identity, never `project`.
+
 ### 4.2 Sections
 
 Five H2 sections follow, in this order:
@@ -97,7 +99,7 @@ These rules make updates idempotent in spirit: repeated writes converge, recent 
 ## 6. Scopes and precedence
 
 1. **Branch scope**: memory tied to one branch of one project. Producers that are branch-aware SHOULD write branch-scoped documents.
-2. **Project scope**: memory shared by all branches of a project. Also the fallback when branch information is unavailable.
+2. **Project scope**: memory shared by all branches of a project, the project being the repository (its normalized `origin` remote, section 4.1) wherever it is checked out, or the directory when there is no remote. Also the fallback when branch information is unavailable.
 3. **Global scope**: user-wide preferences and lessons that travel across projects.
 
 When assembling context for an agent, consumers MUST apply precedence: branch over project, project over global. Global entries duplicated at a narrower scope are shadowed.

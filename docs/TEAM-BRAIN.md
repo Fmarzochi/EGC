@@ -8,7 +8,7 @@ This page covers one person with two or more machines. Teams of several people a
 
 | Travels to the remote, sealed | Never leaves the machine |
 |---|---|
-| The project state documents under `~/.egc/state/<project>/`, one file per branch: context, decisions, things to avoid, preferences, next steps. Current versions name the file after the sanitized branch name (`/` becomes `-`, other unusual characters become `_`, and the readable part is cut at 120 characters) followed by `--` and the SHA-256 of the full branch name; versions before the hash named it after the branch alone (`main.md`), and a machine upgraded from one of them can hold both, which is why the examples below show `main.md` | The SQLite memory store under `~/.egc/memory/` (lessons, history, the session bus, working memory), and the integrity sidecars (`<file>.hmac`) next to the state documents, made with this machine's own integrity key and written anew after a merge |
+| The project state documents under `~/.egc/state/<project>/`, one file per branch: context, decisions, things to avoid, preferences, next steps. `<project>` is the name of the repository followed by `--` and the SHA-256 of its normalized `origin` URL (`app--3f9a...`), the same on every machine that has that repository, whatever the folder it sits in; a directory without a remote is named after the last two segments of its path (`Projects--app`), and a machine upgraded from a version before the remote identity can still hold that path-named directory next to the keyed one, read until the project is written again. Current versions name the file after the sanitized branch name (`/` becomes `-`, other unusual characters become `_`, and the readable part is cut at 120 characters) followed by `--` and the SHA-256 of the full branch name; versions before the hash named it after the branch alone (`main.md`), and a machine upgraded from one of them can hold both, which is why the examples below show `main.md` | The SQLite memory store under `~/.egc/memory/` (lessons, history, the session bus, working memory), and the integrity sidecars (`<file>.hmac`) next to the state documents, made with this machine's own integrity key and written anew after a merge |
 | | The machine's own keys: `~/.egc/encryption.key`, which seals the local copy of the state, and `~/.egc/integrity.key`, which makes the sidecars |
 | | Logs under `~/.egc/logs/` |
 | | The team key, except inside `~/.egc/team.json` on each of your machines |
@@ -22,7 +22,7 @@ The local copy of your state stays encrypted at rest with the machine's own key,
 ## Before you start
 
 - Node and git on every machine, and `egc` installed with the memory server built (`egc doctor` checks this).
-- An empty git repository that you own, for example a private repository on your git host. Use a private one: the files are sealed, but their paths show your project names.
+- An empty git repository that you own, for example a private repository on your git host. Use a private one: the files are sealed, but their directory names show the names of your repositories (not the host, the owner or your folders) and their file names the names of your branches.
 - Credentials for that remote on every machine (an SSH key or a credential helper). `egc team sync` runs git without a terminal, so it cannot ask for a password.
 
 ## Set up the first machine
@@ -75,7 +75,7 @@ Sync complete:
   Pushed: 1 commits
 ```
 
-The state document of the first machine is now under `~/.egc/state/` on the second one, readable through `get_state` like any other. `Pulled` counts the files of the latest commit in the local checkout, so a sync that fetched nothing new can report the previous commit's files again.
+The state document of the first machine is now under `~/.egc/state/` on the second one, readable through `get_state` like any other. It is read for the same repository wherever this machine keeps its checkout: a project is matched by its `origin` remote, not by the folder path, so `/home/you/Projetos/app` on one machine and `/Users/you/Projects/app` on the other are one project. `Pulled` counts the files of the latest commit in the local checkout, so a sync that fetched nothing new can report the previous commit's files again.
 
 Pass the same `--branch <name>` on every machine, or they sync to different branches and never meet. The branch and the remote are fixed when the checkout in `~/.egc/team-sync/` is first made: running `init` again with another `--branch` or another `--remote` is refused, the configuration goes back to what it was (the previous one, or none when there was none), and the message says what to do. To move a machine to another branch or to a new repository, delete `~/.egc/team-sync/` first (your state in `~/.egc/state/` is not affected) and run `init` again, with the same `--key <team key>` when the machine joins a team that exists; without `--key`, `init` starts a new team with a new key.
 
@@ -193,7 +193,7 @@ The command line talks to the memory server. Run `egc doctor`, and `npm run buil
 
 ## Current limitations
 
-- **Project identity is not the repository.** The state of a project is stored under a name made from the last two segments of its absolute path (`.../Projects/app` becomes `Projects--app`). The same repository under different folder names on two machines gives two projects that never meet. Tracked in [#2063](https://github.com/Fmarzochi/EGC/issues/2063).
+- **Documents from before the remote identity keep their old name.** A directory named after the folder path (`Projects--app`), written by a version before #2063, is still read and still travels under that name; the next `update_state` of the project writes under the key of the repository, and the old directory is left as it is. A repository whose `origin` is declared only through an `include` of the git config, or that has no `origin`, is keyed by its path as before.
 - **The later document wins, per file.** There is no merge inside a document. Tracked in [#2055](https://github.com/Fmarzochi/EGC/issues/2055).
 - **Deletions do not propagate.** A document removed on one machine stays on the others.
 - **No machine identity in the envelope.** The signature proves that the holder of the team key wrote the file, not which machine. Tracked in [#2056](https://github.com/Fmarzochi/EGC/issues/2056).
