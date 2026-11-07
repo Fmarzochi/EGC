@@ -199,6 +199,35 @@ async function runTests() {
       await again.destroy();
     });
 
+    await run('init refuses an existing checkout that follows another branch, and leaves it as it was', async () => {
+      const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'rebranch');
+      await backend.destroy();
+      const again = new GitBackend(repoDir);
+      await assert.rejects(() => again.init({ backend: 'git', remote, branch: 'other' }), /on branch main, not .* on branch other/);
+      assert.strictEqual(git(['symbolic-ref', '--short', 'HEAD'], repoDir), 'main', 'the checkout stays on its branch');
+      await again.destroy();
+    });
+
+    await run('init refuses an existing checkout that follows another remote, and keeps its origin', async () => {
+      const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'reremote');
+      await backend.destroy();
+      const otherRemote = path.join(tempBase, 'reremote-other.git');
+      git(['init', '--bare', otherRemote], tempBase);
+      const again = new GitBackend(repoDir);
+      await assert.rejects(() => again.init({ backend: 'git', remote: otherRemote, branch: 'main' }), /follows .*reremote-remote\.git on branch main, not .*reremote-other\.git/);
+      assert.strictEqual(git(['remote', 'get-url', 'origin'], repoDir), remote, 'origin still points at the first remote');
+      await again.destroy();
+    });
+
+    await run('init on an existing checkout with the same remote and branch goes through', async () => {
+      const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'same');
+      await backend.destroy();
+      const again = new GitBackend(repoDir);
+      await again.init({ backend: 'git', remote, branch: 'main' });
+      assert.strictEqual(git(['symbolic-ref', '--short', 'HEAD'], repoDir), 'main');
+      await again.destroy();
+    });
+
     await run('GitBackend constructor initializes repository directory', () => {
       const customRepo = path.join(tempBase, 'custom-repo-dir');
       assert.ok(!fs.existsSync(customRepo), 'precondition: custom repo dir does not exist');

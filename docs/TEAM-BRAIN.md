@@ -77,7 +77,7 @@ Sync complete:
 
 The state document of the first machine is now under `~/.egc/state/` on the second one, readable through `get_state` like any other. `Pulled` counts the files of the latest commit in the local checkout, so a sync that fetched nothing new can report the previous commit's files again.
 
-Pass the same `--branch <name>` on every machine, or they sync to different branches and never meet. The branch and the remote are fixed when the checkout in `~/.egc/team-sync/` is first made: running `init` again with another `--branch` changes the config but leaves the checkout on the old branch. To move a machine to another branch or to a new repository, delete `~/.egc/team-sync/` first (your state in `~/.egc/state/` is not affected) and then run `init`.
+Pass the same `--branch <name>` on every machine, or they sync to different branches and never meet. The branch and the remote are fixed when the checkout in `~/.egc/team-sync/` is first made: running `init` again with another `--branch` or another `--remote` is refused, the previous configuration is kept, and the message says what to do. To move a machine to another branch or to a new repository, delete `~/.egc/team-sync/` first (your state in `~/.egc/state/` is not affected) and then run `init`.
 
 ## The team key
 
@@ -176,6 +176,16 @@ The remote could be read but refused the push: your credentials have no write ac
 ### `Local state file could not be decrypted and was left untouched`
 
 A file in `~/.egc/state/` does not open with this machine's own key, for example after the key in `~/.egc/encryption.key` was replaced. EGC leaves that file as it is and does not send it to the remote.
+
+### `The sync checkout at ~/.egc/team-sync follows <remote> on branch <branch>, not ...`
+
+```text
+$ egc team init --backend git --remote https://github.com/you/egc-memory.git --branch another --key <team key>
+Error: The sync checkout at ~/.egc/team-sync follows https://github.com/you/egc-memory.git on branch main, not https://github.com/you/egc-memory.git on branch another. Remove that directory (your state under ~/.egc/state is not in it) and run egc team init again.
+The previous configuration was kept.
+```
+
+This machine already has a checkout made for another remote or another branch, and `init` does not move it. `~/.egc/team.json` is left as it was, so the next sync still follows the old configuration; a configuration changed by hand stops `egc team sync` with the same sentence after `Sync backend init failed:`. To change the remote or the branch, delete `~/.egc/team-sync/` (it holds only the sealed copy of the shared repository; your state in `~/.egc/state/` is not in it) and run `init` again.
 
 ### `Memory server not built` or `team sync needs the memory server`
 

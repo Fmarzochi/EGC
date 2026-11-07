@@ -13,6 +13,12 @@ function gitReason(error: unknown): string {
   return line.replace(/^fatal:\s*/, '');
 }
 
+// The same remote spelled with either slash, with or without a trailing one.
+function sameRemoteUrl(a: string, b: string): boolean {
+  const normalize = (url: string) => url.replace(/\\/g, '/').replace(/\/$/, '');
+  return normalize(a) === normalize(b);
+}
+
 export class GitBackend extends SyncBackend {
   private readonly git: SimpleGit;
   private config: SyncConfig | null = null;
@@ -31,7 +37,9 @@ export class GitBackend extends SyncBackend {
     this.config = config;
 
     const isRepo = fs.existsSync(path.join(this.repoDir, '.git'));
-    if (!isRepo) {
+    if (isRepo) {
+      await this.assertCheckoutFollows(config);
+    } else {
       await this.git.init();
       // Rename default branch (master) to match config branch (e.g. main).
       await this.git.raw(['branch', '-M', config.branch]);
@@ -46,6 +54,32 @@ export class GitBackend extends SyncBackend {
     // instead of becoming a sync that reports nothing moved.
     if (await this.remoteHasBranch(config)) {
       await this.git.pull('origin', config.branch, ['--allow-unrelated-histories', '--no-rebase']);
+    }
+  }
+
+  // An existing checkout was made for one remote and one branch. A config
+  // that names another is refused, with what to do, instead of leaving the
+  // checkout behind the config: the next sync would pull and push the
+  // configured branch against a checkout on another one, or push the old
+  // history to the new repository.
+  private async assertCheckoutFollows(config: SyncConfig): Promise<void> {
+    const remotes = await this.git.getRemotes(true);
+    const origin = remotes.find(r => r.name === 'origin');
+    const followedRemote = origin ? origin.refs.fetch : null;
+    const followedBranch = await this.currentBranch();
+    const sameRemote = followedRemote === null || sameRemoteUrl(followedRemote, config.remote);
+    if (sameRemote && followedBranch === config.branch) return;
+    throw new Error(
+      `The sync checkout at ${this.repoDir} follows ${followedRemote ?? 'no remote'} on branch ${followedBranch}, not ${config.remote} on branch ${config.branch}. ` +
+      'Remove that directory (your state under ~/.egc/state is not in it) and run egc team init again.',
+    );
+  }
+
+  private async currentBranch(): Promise<string> {
+    try {
+      return (await this.git.raw(['symbolic-ref', '--short', 'HEAD'])).trim();
+    } catch {
+      return 'no branch (detached HEAD)';
     }
   }
 
