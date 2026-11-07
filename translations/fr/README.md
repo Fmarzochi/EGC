@@ -54,7 +54,7 @@ Les décisions, le contexte de session, la mémoire de travail et les leçons ap
 
 #### Cerveau de l'équipe: Votre mémoire sur chaque machine
 
-Pour garder l'état de votre projet en phase avec vos propres machines, pointez EGC sur une télécommande git privée que vous contrôlez. L'état est scellé avec une clé d'équipe avant de quitter la machine ; aucun serveur EGC n'est impliqué et la base de données mémoire ne voyage plus (une télécommande utilisée avec une version antérieure peut toujours le conserver dans son histoire, voir [quels trajets](../../docs/TEAM-BRAIN.md#what-travels-and-what-stays)). Une mauvaise clé d'équipe fait une synchronisation des fichiers de la télécommande, donc lisez d'abord le [Guide de l'équipe Brain](../../docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path).
+Pour garder l'état de votre projet en phase avec vos propres machines, pointez EGC sur une télécommande git privée que vous contrôlez. L'état est scellé avec une clé d'équipe avant de quitter la machine ; aucun serveur EGC n'est impliqué et la base de données mémoire ne voyage plus (une télécommande utilisée avec une version antérieure peut toujours le conserver dans son histoire, voir [quels trajets](../../docs/TEAM-BRAIN.md#what-travels-and-what-stays)). Une clé qui n'ouvre aucun des fichiers d'état déjà sur la télécommande ne fait rien, donc une mauvaise clé ne peut pas endommager l'état partagé, alors qu'une première synchronisation dans une télécommande vide se fait comme avant; le [Guide de l'équipe cérébrale](../../docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path) explique comment lire un résultat de synchronisation.
 
 ```bash
 egc team init --backend git --remote https://github.com/you/egc-memory.git
