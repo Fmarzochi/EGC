@@ -6,8 +6,17 @@ import fs from 'node:fs';
 import { SyncBackend } from './SyncBackend';
 import { GitBackend } from './GitBackend';
 import type { SyncConfig, SyncStatus, SyncResult } from './SyncBackend';
-import { isEncrypted, loadOrCreateEncKey, readStateFile, writeStateFile } from '../encryption';
+import { isEncrypted, loadOrCreateEncKey, readPrivateKeyFile, readStateFile, writeStateFile } from '../encryption';
+import { loadOrCreateKey as loadOrCreateIntegrityKey, writeHmac } from '../integrity';
 import { generateTeamKey, openEnvelope, parseTeamKey, sealEnvelope } from './envelope';
+
+// The integrity sidecar next to a state document is a per-machine value,
+// made with ~/.egc/integrity.key: it never travels, and a merged document
+// gets one written anew here, as update_state writes it.
+const SIDECAR_SUFFIX = '.hmac';
+function isSidecar(filePath: string): boolean {
+  return filePath.endsWith(SIDECAR_SUFFIX);
+}
 
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
 
@@ -115,7 +124,7 @@ export async function teamSync(): Promise<SyncResult> {
     }
 
     // Step 2: Merge into local state; only verified team envelopes count.
-    const merge = mergeTeamStateFrom(SYNC_STATE_DIR, LOCAL_STATE_DIR, teamKey, personalKey);
+    const merge = mergeTeamStateFrom(SYNC_STATE_DIR, LOCAL_STATE_DIR, teamKey, personalKey, loadOrCreateIntegrityKey());
     const refused = [...merge.rejected, ...merge.unopened];
     result.rejectedCount = refused.length;
     for (const rejected of refused) {
@@ -282,7 +291,7 @@ function removeSyncFile(filePath: string): void {
 // before it can touch local state; anything else is reported and skipped.
 // Local files are read and written through the personal key, so the merge
 // compares plaintext timestamps and the result stays encrypted at rest.
-type MergeContext = { syncStateDir: string; localStateDir: string; teamKey: Buffer; personalKey: Buffer; outcome: TeamMergeOutcome };
+type MergeContext = { syncStateDir: string; localStateDir: string; teamKey: Buffer; personalKey: Buffer; integrityKey: Buffer | null; outcome: TeamMergeOutcome };
 
 // The local document as it stands, or null when it must not be touched
 // (a link, or a file that does not open with the personal key).
@@ -303,6 +312,26 @@ function currentLocal(localFile: string, relativePath: string, context: MergeCon
   }
 }
 
+// A local document the merge leaves as it is may carry a sidecar older
+// versions left unusable: missing, or the encrypted bytes an earlier merge
+// wrote in its place. Such a sidecar is written anew with the key of this
+// machine. A well-formed sidecar that does not match is left alone, since
+// that mismatch is the tamper signal get_state reports.
+function repairSidecar(localFile: string, content: string, integrityKey: Buffer | null): void {
+  if (!integrityKey || !content) return;
+  // Read without following a link and without blocking on a FIFO, from a
+  // regular private file only: anything else at the path is not a sidecar,
+  // and the write below replaces it instead of reading or writing through it.
+  let existing: string | null;
+  try {
+    existing = readPrivateKeyFile(`${localFile}${SIDECAR_SUFFIX}`).trim();
+  } catch {
+    existing = null;
+  }
+  if (existing !== null && /^[0-9a-f]{64}$/.test(existing)) return;
+  writeHmac(localFile, content, integrityKey);
+}
+
 function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
   const relativePath = path.relative(context.syncStateDir, syncFile);
   const remoteContent = openEnvelope(fs.readFileSync(syncFile, 'utf-8'), context.teamKey, relativePath);
@@ -319,13 +348,17 @@ function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
   const local = currentLocal(localFile, relativePath, context);
   if (local === null) return;
   const merged = local.content ? mergeStateDocs(local.content, remoteContent) : remoteContent;
-  if (merged === local.content && !local.legacyPlaintext) return;
+  if (merged === local.content && !local.legacyPlaintext) {
+    repairSidecar(localFile, local.content, context.integrityKey);
+    return;
+  }
   fs.mkdirSync(path.dirname(localFile), { recursive: true });
   writeStateFile(localFile, merged, context.personalKey);
+  if (context.integrityKey) writeHmac(localFile, merged, context.integrityKey);
   context.outcome.merged += 1;
 }
 
-export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, teamKey: Buffer, personalKey: Buffer): TeamMergeOutcome {
+export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, teamKey: Buffer, personalKey: Buffer, integrityKey: Buffer | null = null): TeamMergeOutcome {
   const outcome: TeamMergeOutcome = { opened: 0, merged: 0, rejected: [], unopened: [], unreadable: [] };
   // The state tree of the repository must be a real directory: a link there
   // (dangling or not) would make the merge read, reject and remove whatever
@@ -354,8 +387,11 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
     outcome.rejected.push(path.relative(syncStateDir, link));
     removeSyncFile(link);
   }
-  const context: MergeContext = { syncStateDir, localStateDir, teamKey, personalKey, outcome };
-  for (const syncFile of entries.files) mergeOneSyncFile(syncFile, context);
+  // A sidecar an earlier version pushed has no meaning on any other
+  // machine: it is retired from the shared tree and never written locally.
+  for (const sidecar of entries.files.filter(isSidecar)) removeSyncFile(sidecar);
+  const context: MergeContext = { syncStateDir, localStateDir, teamKey, personalKey, integrityKey, outcome };
+  for (const syncFile of entries.files.filter(file => !isSidecar(file))) mergeOneSyncFile(syncFile, context);
   // A team sync never removes local state files: a file absent from the sync
   // repo may be one this machine created and has not pushed yet, and deleting
   // it would be silent, unrecoverable memory loss. Remote deletions therefore
@@ -378,6 +414,7 @@ export function stageTeamState(localStateDir: string, syncStateDir: string, team
 
   let staged = 0;
   for (const localFile of walkEntries(localStateDir).files) {
+    if (isSidecar(localFile)) continue;
     let plaintext: string;
     try {
       plaintext = readStateFile(localFile, personalKey);

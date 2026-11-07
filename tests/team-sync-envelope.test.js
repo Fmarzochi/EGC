@@ -31,16 +31,21 @@ async function runTests() {
   let envelope;
   let teamSync;
   let encryption;
+  let integrity;
   try {
     envelope = await import(pathToFileURL(path.join(BUILD, 'sync', 'envelope.js')).href);
     teamSync = await import(pathToFileURL(path.join(BUILD, 'sync', 'TeamSync.js')).href);
     encryption = await import(pathToFileURL(path.join(BUILD, 'encryption.js')).href);
+    integrity = await import(pathToFileURL(path.join(BUILD, 'integrity.js')).href);
   } catch (error) {
     console.error(`[SKIP] Could not import the memory server build: ${error.message}. Run 'npm run build' in mcp/servers/egc-memory first.`);
     process.exit(0);
   }
   let passed = 0;
   let failed = 0;
+  const run = (name, fn) => {
+    if (test(name, fn)) passed++; else failed++;
+  };
   const teamKey = crypto.randomBytes(32);
   const otherKey = crypto.randomBytes(32);
   const personalKey = crypto.randomBytes(32);
@@ -57,7 +62,7 @@ async function runTests() {
   const localDir = path.join(dir, 'local');
   const doc = (updated, body) => `# Project State\nupdated: ${updated}\n\n${body}\n`;
   try {
-    if (test('an envelope opens with the team key and with nothing else', () => {
+    run('an envelope opens with the team key and with nothing else', () => {
       const sealed = envelope.sealEnvelope('hello team', teamKey, 'proj/main.md');
       assert.strictEqual(envelope.openEnvelope(sealed, teamKey, 'proj/main.md'), 'hello team');
       assert.strictEqual(envelope.openEnvelope(sealed, teamKey, path.join('proj', 'main.md')), 'hello team', 'the platform separator is normalized');
@@ -73,9 +78,9 @@ async function runTests() {
       assert.strictEqual(envelope.openEnvelope(JSON.stringify({ ...parsed, mac: parsed.mac.replace(/^./, c => (c === 'a' ? 'b' : 'a')) }), teamKey, 'proj/main.md'), null);
       assert.strictEqual(envelope.openEnvelope('# Project State\nupdated: 2026-01-01\n', teamKey, 'proj/main.md'), null);
       assert.strictEqual(envelope.openEnvelope('{"egcTeamEnvelope":1}', teamKey, 'proj/main.md'), null);
-    })) passed++; else failed++;
+    });
 
-    if (test('the merge takes a newer verified envelope, keeps newer local state, and rejects everything else', () => {
+    run('the merge takes a newer verified envelope, keeps newer local state, and rejects everything else', () => {
       fs.mkdirSync(path.join(syncDir, 'proj'), { recursive: true });
       fs.mkdirSync(path.join(localDir, 'proj'), { recursive: true });
       fs.writeFileSync(path.join(syncDir, 'proj', 'newer.md'), envelope.sealEnvelope(doc('2026-09-04T12:00:00.000Z', 'remote wins'), teamKey, 'proj/newer.md'));
@@ -159,9 +164,9 @@ async function runTests() {
       assert.ok(!fs.existsSync(path.join(localDir, 'proj', 'plain.md')));
       assert.ok(!fs.existsSync(path.join(localDir, 'proj', 'foreign.md')));
       assert.ok(encryption.isEncrypted(fs.readFileSync(path.join(localDir, 'proj', 'fresh.md'))), 'local state stays encrypted at rest');
-    })) passed++; else failed++;
+    });
 
-    if (test('a key that opens nothing leaves the sync tree untouched, so a later push has nothing to remove', () => {
+    run('a key that opens nothing leaves the sync tree untouched, so a later push has nothing to remove', () => {
       const strangerSync = path.join(dir, 'stranger-sync');
       const strangerLocal = path.join(dir, 'stranger-local');
       fs.mkdirSync(path.join(strangerSync, 'proj'), { recursive: true });
@@ -173,9 +178,9 @@ async function runTests() {
       assert.deepStrictEqual(outcome.rejected, []);
       assert.ok(fs.existsSync(path.join(strangerSync, 'proj', 'main.md')), 'the file the stranger cannot open stays where it was');
       assert.ok(!fs.existsSync(path.join(strangerLocal, 'proj', 'main.md')), 'nothing reaches local state');
-    })) passed++; else failed++;
+    });
 
-    if (test('staging seals every local file with the team key and nothing leaves in the clear', () => {
+    run('staging seals every local file with the team key and nothing leaves in the clear', () => {
       const stagedDir = path.join(dir, 'staged');
       const count = teamSync.stageTeamState(localDir, stagedDir, teamKey, personalKey);
       assert.strictEqual(count, 4, 'newer, older, fresh and the rewritten legacy file; the unreadable one is left out');
@@ -186,9 +191,9 @@ async function runTests() {
         assert.strictEqual(envelope.openEnvelope(raw, otherKey, `proj/${name}`), null);
       }
       assert.ok(!fs.existsSync(path.join(stagedDir, 'proj', 'locked.md')), 'an undecryptable local file is not staged');
-    })) passed++; else failed++;
+    });
 
-    if (test('staging leaves a path the merge could not open as it is, so this machine never writes over an envelope it cannot read', () => {
+    run('staging leaves a path the merge could not open as it is, so this machine never writes over an envelope it cannot read', () => {
       const keptDir = path.join(dir, 'kept');
       fs.mkdirSync(path.join(keptDir, 'proj'), { recursive: true });
       const foreign = envelope.sealEnvelope(doc('2026-09-05T12:00:00.000Z', 'another team'), otherKey, 'proj/newer.md');
@@ -197,14 +202,73 @@ async function runTests() {
       assert.strictEqual(count, 3, 'the kept path is not staged, the other three are');
       assert.strictEqual(fs.readFileSync(path.join(keptDir, 'proj', 'newer.md'), 'utf8'), foreign, 'the envelope this key cannot open is byte for byte what it was');
       assert.ok(fs.existsSync(path.join(keptDir, 'proj', 'older.md')), 'the other paths are staged as usual');
-    })) passed++; else failed++;
+    });
 
-    if (test('the team key is validated and generated as 64 hex characters', () => {
+    run('the integrity sidecars never travel: a pushed one is retired, none is staged, and a merged document gets a sidecar of this machine', () => {
+      const sidecarSync = path.join(dir, 'sidecar-sync');
+      const sidecarLocal = path.join(dir, 'sidecar-local');
+      const integrityKey = crypto.randomBytes(32);
+      fs.mkdirSync(path.join(sidecarSync, 'proj'), { recursive: true });
+      fs.mkdirSync(path.join(sidecarLocal, 'proj'), { recursive: true });
+      const remoteDoc = doc('2026-09-06T12:00:00.000Z', 'from the other machine');
+      fs.writeFileSync(path.join(sidecarSync, 'proj', 'main.md'), envelope.sealEnvelope(remoteDoc, teamKey, 'proj/main.md'));
+      fs.writeFileSync(path.join(sidecarSync, 'proj', 'main.md.hmac'), envelope.sealEnvelope('a'.repeat(64), teamKey, 'proj/main.md.hmac'));
+      encryption.writeStateFile(path.join(sidecarLocal, 'proj', 'main.md'), doc('2026-09-01T12:00:00.000Z', 'older here'), personalKey);
+      fs.writeFileSync(path.join(sidecarLocal, 'proj', 'main.md.hmac'), 'f'.repeat(64));
+      const outcome = teamSync.mergeTeamStateFrom(sidecarSync, sidecarLocal, teamKey, personalKey, integrityKey);
+      assert.strictEqual(outcome.merged, 1);
+      assert.strictEqual(outcome.opened, 1, 'the sidecar is not an envelope to count');
+      assert.deepStrictEqual(outcome.unopened, [], 'a pushed sidecar is not reported as rejected');
+      assert.deepStrictEqual(outcome.rejected, []);
+      assert.ok(!fs.existsSync(path.join(sidecarSync, 'proj', 'main.md.hmac')), 'the sidecar an earlier version pushed is retired from the sync tree');
+      assert.ok(fs.existsSync(path.join(sidecarSync, 'proj', 'main.md')), 'the document stays');
+      assert.strictEqual(fs.readFileSync(path.join(sidecarLocal, 'proj', 'main.md.hmac'), 'utf8'), integrity.computeHmac(remoteDoc, integrityKey), 'the merged document carries a sidecar made with the key of this machine');
+      const stagedDir = path.join(dir, 'sidecar-staged');
+      assert.strictEqual(teamSync.stageTeamState(sidecarLocal, stagedDir, teamKey, personalKey), 1, 'only the document is staged');
+      assert.ok(!fs.existsSync(path.join(stagedDir, 'proj', 'main.md.hmac')), 'no sidecar leaves the machine');
+    });
+
+    run('a local document the merge keeps gets its sidecar repaired when older versions left it unusable, and a well-formed mismatch is left alone', () => {
+      const repairSync = path.join(dir, 'repair-sync');
+      const repairLocal = path.join(dir, 'repair-local');
+      const integrityKey = crypto.randomBytes(32);
+      fs.mkdirSync(path.join(repairSync, 'proj'), { recursive: true });
+      fs.mkdirSync(path.join(repairLocal, 'proj'), { recursive: true });
+      const olderRemote = doc('2026-09-02T12:00:00.000Z', 'older on the remote');
+      const localDocs = { 'garbage.md': doc('2026-09-09T12:00:00.000Z', 'kept, sidecar garbage'), 'missing.md': doc('2026-09-09T12:00:00.000Z', 'kept, sidecar missing'), 'tamper.md': doc('2026-09-09T12:00:00.000Z', 'kept, sidecar well formed') };
+      for (const name of Object.keys(localDocs)) {
+        fs.writeFileSync(path.join(repairSync, 'proj', name), envelope.sealEnvelope(olderRemote, teamKey, `proj/${name}`));
+        encryption.writeStateFile(path.join(repairLocal, 'proj', name), localDocs[name], personalKey);
+      }
+      fs.writeFileSync(path.join(repairLocal, 'proj', 'garbage.md.hmac'), 'EGC1:bytes an older merge wrote over the sidecar');
+      fs.writeFileSync(path.join(repairLocal, 'proj', 'tamper.md.hmac'), 'f'.repeat(64));
+      // A link planted at a sidecar path, pointing at a file that looks like
+      // a sidecar: it must be neither accepted nor written through. Only the
+      // refusal of symbolic links by the platform skips this part.
+      const victim = path.join(dir, 'victim.hmac');
+      fs.writeFileSync(victim, 'a'.repeat(64));
+      let planted = false;
+      try {
+        fs.symlinkSync(victim, path.join(repairLocal, 'proj', 'missing.md.hmac'));
+        planted = true;
+      } catch (error) {
+        if (!['EPERM', 'EACCES', 'ENOSYS'].includes(error.code)) throw error;
+      }
+      const outcome = teamSync.mergeTeamStateFrom(repairSync, repairLocal, teamKey, personalKey, integrityKey);
+      assert.strictEqual(outcome.merged, 0, 'the local documents are newer and stay');
+      assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'garbage.md.hmac'), 'utf8'), integrity.computeHmac(localDocs['garbage.md'], integrityKey), 'the garbage sidecar is written anew');
+      assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'tamper.md.hmac'), 'utf8'), 'f'.repeat(64), 'a well-formed sidecar that does not match is the tamper signal and stays');
+      assert.ok(!fs.lstatSync(path.join(repairLocal, 'proj', 'missing.md.hmac')).isSymbolicLink(), planted ? 'the planted link is replaced by a real sidecar' : 'the missing sidecar is a real file');
+      assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'missing.md.hmac'), 'utf8'), integrity.computeHmac(localDocs['missing.md'], integrityKey), 'the sidecar is written with the key of this machine');
+      assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'a'.repeat(64), 'the file behind a planted link is neither read as a sidecar nor written');
+    });
+
+    run('the team key is validated and generated as 64 hex characters', () => {
       assert.ok(/^[0-9a-f]{64}$/.test(envelope.generateTeamKey()));
       assert.strictEqual(envelope.parseTeamKey('not-a-key'), null);
       assert.strictEqual(envelope.parseTeamKey(undefined), null);
       assert.strictEqual(envelope.parseTeamKey(teamKey.toString('hex')).equals(teamKey), true);
-    })) passed++; else failed++;
+    });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
