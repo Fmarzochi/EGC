@@ -143,6 +143,20 @@ function runTests() {
       assert.match(run.stdout, /Uncommitted changes: (true|false)/, 'the status fields come from the server answer');
     })) passed++; else failed++;
 
+    if (test('team sync with a key that opens nothing on the remote pushes nothing, so the shared state survives a wrong key', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const before = remoteTree(REMOTE, 'main');
+      const commitsBefore = git(['rev-list', '--count', 'main'], REMOTE);
+      fs.writeFileSync(configPath, JSON.stringify({ ...config, teamKey: 'f'.repeat(64) }, null, 2));
+      const run = teamCli(['sync']);
+      assert.notStrictEqual(run.status, 0, `a sync whose key opened nothing is not a success:\n${run.stdout}\n${run.stderr}`);
+      assert.ok(`${run.stdout}\n${run.stderr}`.includes('nothing was pushed'), `${run.stdout}\n${run.stderr}`);
+      assert.deepStrictEqual(remoteTree(REMOTE, 'main'), before, 'the shared state is exactly what it was');
+      assert.strictEqual(git(['rev-list', '--count', 'main'], REMOTE), commitsBefore, 'no commit reached the remote');
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    })) passed++; else failed++;
+
     if (test('team sync fails loudly when the server reports errors', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));

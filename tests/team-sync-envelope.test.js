@@ -136,12 +136,18 @@ async function runTests() {
         assert.strictEqual(fs.readdirSync(path.join(dir, 'parent-target')).length, 0, 'nothing is written through the linked parent');
         outcome.rejected = outcome.rejected.filter(entry => !entry.startsWith(path.join('linked-parent', 'note.md')));
       }
-      const expectedRejected = ['proj/foreign.md', 'proj/moved.md', 'proj/plain.md'].concat(linked ? ['proj/link.md'] : []).map(p => p.split('/').join(path.sep)).sort();
-      assert.deepStrictEqual(outcome.rejected.sort(), expectedRejected);
+      const expectedUnopened = ['proj/foreign.md', 'proj/moved.md', 'proj/plain.md'].map(p => p.split('/').join(path.sep)).sort();
+      assert.deepStrictEqual(outcome.unopened.sort(), expectedUnopened, 'what does not open with the team key is reported apart from the links');
+      assert.deepStrictEqual(outcome.rejected.sort(), linked ? [path.join('proj', 'link.md')] : [], 'only a link is rejected outright');
       assert.deepStrictEqual(outcome.unreadable, [path.join('proj', 'locked.md')]);
       assert.strictEqual(outcome.merged, 3, 'newer, fresh and the legacy plaintext rewrite');
-      for (const name of ['foreign.md', 'moved.md', 'plain.md'].concat(linked ? ['link.md'] : [])) {
-        assert.ok(!fs.existsSync(path.join(syncDir, 'proj', name)), `${name} is removed from the sync tree`);
+      assert.strictEqual(outcome.opened, linkedParent ? 6 : 5, 'newer, older, fresh, legacy and locked opened with the team key, and the note behind the linked parent too');
+      for (const name of ['foreign.md', 'moved.md', 'plain.md']) {
+        assert.ok(fs.existsSync(path.join(syncDir, 'proj', name)), `${name} stays in the sync tree: a file this key cannot open is not this machine's to remove`);
+      }
+      if (linked) {
+        const link = path.join(syncDir, 'proj', 'link.md');
+        assert.ok(!fs.existsSync(link) && !isLinkPath(link), 'a link is removed from the sync tree');
       }
       assert.ok(fs.existsSync(path.join(syncDir, 'proj', 'locked.md')), 'a verified envelope stays in the sync tree');
       assert.ok(encryption.isEncrypted(fs.readFileSync(path.join(localDir, 'proj', 'legacy.md'))), 'legacy plaintext is rewritten encrypted');
@@ -155,6 +161,20 @@ async function runTests() {
       assert.ok(encryption.isEncrypted(fs.readFileSync(path.join(localDir, 'proj', 'fresh.md'))), 'local state stays encrypted at rest');
     })) passed++; else failed++;
 
+    if (test('a key that opens nothing leaves the sync tree untouched, so a later push has nothing to remove', () => {
+      const strangerSync = path.join(dir, 'stranger-sync');
+      const strangerLocal = path.join(dir, 'stranger-local');
+      fs.mkdirSync(path.join(strangerSync, 'proj'), { recursive: true });
+      fs.writeFileSync(path.join(strangerSync, 'proj', 'main.md'), envelope.sealEnvelope(doc('2026-09-04T12:00:00.000Z', 'the team'), teamKey, 'proj/main.md'));
+      const outcome = teamSync.mergeTeamStateFrom(strangerSync, strangerLocal, otherKey, personalKey);
+      assert.strictEqual(outcome.opened, 0, 'no envelope opened with the wrong key');
+      assert.strictEqual(outcome.merged, 0);
+      assert.deepStrictEqual(outcome.unopened, [path.join('proj', 'main.md')]);
+      assert.deepStrictEqual(outcome.rejected, []);
+      assert.ok(fs.existsSync(path.join(strangerSync, 'proj', 'main.md')), 'the file the stranger cannot open stays where it was');
+      assert.ok(!fs.existsSync(path.join(strangerLocal, 'proj', 'main.md')), 'nothing reaches local state');
+    })) passed++; else failed++;
+
     if (test('staging seals every local file with the team key and nothing leaves in the clear', () => {
       const stagedDir = path.join(dir, 'staged');
       const count = teamSync.stageTeamState(localDir, stagedDir, teamKey, personalKey);
@@ -166,6 +186,17 @@ async function runTests() {
         assert.strictEqual(envelope.openEnvelope(raw, otherKey, `proj/${name}`), null);
       }
       assert.ok(!fs.existsSync(path.join(stagedDir, 'proj', 'locked.md')), 'an undecryptable local file is not staged');
+    })) passed++; else failed++;
+
+    if (test('staging leaves a path the merge could not open as it is, so this machine never writes over an envelope it cannot read', () => {
+      const keptDir = path.join(dir, 'kept');
+      fs.mkdirSync(path.join(keptDir, 'proj'), { recursive: true });
+      const foreign = envelope.sealEnvelope(doc('2026-09-05T12:00:00.000Z', 'another team'), otherKey, 'proj/newer.md');
+      fs.writeFileSync(path.join(keptDir, 'proj', 'newer.md'), foreign);
+      const count = teamSync.stageTeamState(localDir, keptDir, teamKey, personalKey, new Set([path.join('proj', 'newer.md')]));
+      assert.strictEqual(count, 3, 'the kept path is not staged, the other three are');
+      assert.strictEqual(fs.readFileSync(path.join(keptDir, 'proj', 'newer.md'), 'utf8'), foreign, 'the envelope this key cannot open is byte for byte what it was');
+      assert.ok(fs.existsSync(path.join(keptDir, 'proj', 'older.md')), 'the other paths are staged as usual');
     })) passed++; else failed++;
 
     if (test('the team key is validated and generated as 64 hex characters', () => {

@@ -113,22 +113,22 @@ export async function teamSync(): Promise<SyncResult> {
 
     // Step 2: Merge into local state; only verified team envelopes count.
     const merge = mergeTeamStateFrom(SYNC_STATE_DIR, LOCAL_STATE_DIR, teamKey, personalKey);
-    result.rejectedCount = merge.rejected.length;
-    for (const rejected of merge.rejected) {
+    const refused = [...merge.rejected, ...merge.unopened];
+    result.rejectedCount = refused.length;
+    for (const rejected of refused) {
       result.errors.push(`Rejected sync file (not a verified team envelope for its path): ${rejected}`);
     }
     for (const unreadable of merge.unreadable) {
       result.errors.push(`Local state file could not be decrypted and was left untouched: ${unreadable}`);
     }
-    // Step 3: Stage local state as sealed envelopes and push.
-    try {
-      stageTeamState(LOCAL_STATE_DIR, SYNC_STATE_DIR, teamKey, personalKey);
-      const pushed = await instance.push();
-      if (pushed) {
-        result.pushedCount = 1;
-      }
-    } catch (err) {
-      result.errors.push(`Push failed: ${String(err)}`);
+    // Step 3: Stage local state as sealed envelopes and push. A key that
+    // opened none of the files on the remote is not shown to be the team's
+    // key, and a push with it would put envelopes the teammates cannot open
+    // over theirs, so nothing leaves until the key is right.
+    if (keyNotProven(merge)) {
+      result.errors.push(keyNotProvenMessage(merge.unopened.length));
+    } else {
+      await pushSealedState(instance, teamKey, personalKey, merge.unopened, result);
     }
 
     // Step 4: Check for conflicts.
@@ -168,9 +168,32 @@ export async function teamStatus(): Promise<SyncStatus> {
 const SYNC_STATE_DIR = path.join(os.homedir(), '.egc', 'team-sync', 'state');
 const LOCAL_STATE_DIR = path.join(os.homedir(), '.egc', 'state');
 
+function keyNotProven(merge: TeamMergeOutcome): boolean {
+  return merge.opened === 0 && merge.unopened.length > 0;
+}
+
+function keyNotProvenMessage(count: number): string {
+  const files = count === 1 ? 'the one state file' : `any of the ${count} state files`;
+  return `This team key opened none of the remote state (${files}), so nothing was pushed and the shared state was left as it was. If the key is wrong, run egc team init again with the key of the team; if the key is right, the files on the remote are damaged and have to be removed from the repository by hand.`;
+}
+
+async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalKey: Buffer, unopened: readonly string[], result: SyncResult): Promise<void> {
+  try {
+    stageTeamState(LOCAL_STATE_DIR, SYNC_STATE_DIR, teamKey, personalKey, new Set(unopened));
+    if (await instance.push()) result.pushedCount = 1;
+  } catch (err) {
+    result.errors.push(`Push failed: ${String(err)}`);
+  }
+}
+
 export interface TeamMergeOutcome {
+  // Envelopes that opened with the team key, written to local state or not.
+  opened: number;
   merged: number;
+  // Links and paths that go through a link: never state, removed from the checkout.
   rejected: string[];
+  // Files that did not open with the team key: left where they are.
+  unopened: string[];
   unreadable: string[];
 }
 
@@ -279,12 +302,14 @@ function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
   const relativePath = path.relative(context.syncStateDir, syncFile);
   const remoteContent = openEnvelope(fs.readFileSync(syncFile, 'utf-8'), context.teamKey, relativePath);
   if (remoteContent === null) {
-    // Refused for local state and removed from the working tree, so the
-    // next push does not carry it back into the shared repository.
-    context.outcome.rejected.push(relativePath);
-    removeSyncFile(syncFile);
+    // Refused for local state and left where it is: a file this key cannot
+    // open was sealed by a team this machine may not belong to, or is
+    // damaged, and neither is for this machine to remove from the shared
+    // repository.
+    context.outcome.unopened.push(relativePath);
     return;
   }
+  context.outcome.opened += 1;
   const localFile = path.join(context.localStateDir, relativePath);
   const local = currentLocal(localFile, relativePath, context);
   if (local === null) return;
@@ -296,7 +321,7 @@ function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
 }
 
 export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, teamKey: Buffer, personalKey: Buffer): TeamMergeOutcome {
-  const outcome: TeamMergeOutcome = { merged: 0, rejected: [], unreadable: [] };
+  const outcome: TeamMergeOutcome = { opened: 0, merged: 0, rejected: [], unopened: [], unreadable: [] };
   // The state tree of the repository must be a real directory: a link there
   // (dangling or not) would make the merge read, reject and remove whatever
   // it points at.
@@ -335,7 +360,10 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
 
 // Local state leaves the machine only as sealed envelopes; a local file that
 // cannot be decrypted is left out rather than shipped opaque.
-export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer): number {
+// `keep` holds the relative paths the merge could not open: this machine
+// never writes its own state over an envelope it cannot read, so those
+// paths are left as they are and not staged.
+export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer, keep: ReadonlySet<string> = new Set()): number {
   const linkedLocal = linkedDirectoryTowards(localStateDir);
   if (linkedLocal) throw new Error(`the local state tree is a link at ${linkedLocal} and is not staged`);
   const linkedSync = linkedDirectoryTowards(syncStateDir);
@@ -352,6 +380,7 @@ export function stageTeamState(localStateDir: string, syncStateDir: string, team
       continue;
     }
     const relativePath = path.relative(localStateDir, localFile);
+    if (keep.has(relativePath)) continue;
     const target = path.join(syncStateDir, relativePath);
     if (isLink(target)) removeSyncFile(target);
     if (hasLinkedAncestor(target, syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${relativePath} and is not written`);
