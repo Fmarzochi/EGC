@@ -219,6 +219,21 @@ async function runTests() {
       await again.destroy();
     });
 
+    await run('init refuses an existing checkout whose origin pushes elsewhere, and one with remotes but no origin', async () => {
+      const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'pushurl');
+      await backend.destroy();
+      const elsewhere = path.join(tempBase, 'pushurl-elsewhere.git');
+      git(['init', '--bare', elsewhere], tempBase);
+      git(['remote', 'set-url', '--push', 'origin', elsewhere], repoDir);
+      const again = new GitBackend(repoDir);
+      await assert.rejects(() => again.init({ backend: 'git', remote, branch: 'main' }), /and pushes to .*pushurl-elsewhere\.git on branch main/);
+      await again.destroy();
+      git(['remote', 'rename', 'origin', 'upstream'], repoDir);
+      const noOrigin = new GitBackend(repoDir);
+      await assert.rejects(() => noOrigin.init({ backend: 'git', remote, branch: 'main' }), /follows upstream with no origin on branch main/);
+      await noOrigin.destroy();
+    });
+
     await run('init on an existing checkout with the same remote and branch goes through', async () => {
       const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'same');
       await backend.destroy();

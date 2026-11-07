@@ -1,4 +1,5 @@
 import { simpleGit, SimpleGit } from 'simple-git';
+import type { RemoteWithRefs } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -13,10 +14,18 @@ function gitReason(error: unknown): string {
   return line.replace(/^fatal:\s*/, '');
 }
 
-// The same remote spelled with either slash, with or without a trailing one.
+// The same remote with or without a trailing slash; on Windows, where a
+// local path is spelled with either slash, with either slash too.
 function sameRemoteUrl(a: string, b: string): boolean {
-  const normalize = (url: string) => url.replace(/\\/g, '/').replace(/\/$/, '');
+  const normalize = (url: string) => (process.platform === 'win32' ? url.replace(/\\/g, '/') : url).replace(/\/$/, '');
   return normalize(a) === normalize(b);
+}
+
+// The remote an existing checkout follows, as the refusal names it.
+function describeFollowed(remotes: RemoteWithRefs[], origin: RemoteWithRefs | undefined): string {
+  if (!origin) return remotes.length === 0 ? 'no remote' : `${remotes.map(r => r.name).join(', ')} with no origin`;
+  if (sameRemoteUrl(origin.refs.fetch, origin.refs.push)) return origin.refs.fetch;
+  return `${origin.refs.fetch} and pushes to ${origin.refs.push}`;
 }
 
 export class GitBackend extends SyncBackend {
@@ -65,12 +74,15 @@ export class GitBackend extends SyncBackend {
   private async assertCheckoutFollows(config: SyncConfig): Promise<void> {
     const remotes = await this.git.getRemotes(true);
     const origin = remotes.find(r => r.name === 'origin');
-    const followedRemote = origin ? origin.refs.fetch : null;
     const followedBranch = await this.currentBranch();
-    const sameRemote = followedRemote === null || sameRemoteUrl(followedRemote, config.remote);
+    // A checkout with no remote at all adopts the configured one; a checkout
+    // with remotes but no origin, or whose origin fetches from or pushes to
+    // another place, is somebody else's and is refused.
+    const sameRemote = remotes.length === 0
+      || (origin !== undefined && sameRemoteUrl(origin.refs.fetch, config.remote) && sameRemoteUrl(origin.refs.push, config.remote));
     if (sameRemote && followedBranch === config.branch) return;
     throw new Error(
-      `The sync checkout at ${this.repoDir} follows ${followedRemote ?? 'no remote'} on branch ${followedBranch}, not ${config.remote} on branch ${config.branch}. ` +
+      `The sync checkout at ${this.repoDir} follows ${describeFollowed(remotes, origin)} on branch ${followedBranch}, not ${config.remote} on branch ${config.branch}. ` +
       'Remove that directory (your state under ~/.egc/state is not in it) and run egc team init again.',
     );
   }

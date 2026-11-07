@@ -150,20 +150,28 @@ function runTests() {
     run('team init against another remote on a machine that already has a checkout exits 1, says what to do and keeps the previous configuration', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const saved = fs.readFileSync(configPath, 'utf8');
-      const run = teamCli(['init', '--backend', 'git', '--remote', path.join(HOME, 'no-such-remote')]);
-      assert.strictEqual(run.status, 1, `an init the checkout does not follow exits 1:\n${run.stdout}\n${run.stderr}`);
-      assert.ok(`${run.stdout}\n${run.stderr}`.includes('Remove that directory'), `${run.stdout}\n${run.stderr}`);
-      assert.ok(!run.stdout.includes('Team initialized'), `a refused init reports no team:\n${run.stdout}`);
-      assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is put back');
+      try {
+        const run = teamCli(['init', '--backend', 'git', '--remote', path.join(HOME, 'no-such-remote')]);
+        assert.strictEqual(run.status, 1, `an init the checkout does not follow exits 1:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(`${run.stdout}\n${run.stderr}`.includes('Remove that directory'), `${run.stdout}\n${run.stderr}`);
+        assert.ok(!run.stdout.includes('Team initialized'), `a refused init reports no team:\n${run.stdout}`);
+        assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is put back');
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
     });
 
     run('team init with another branch on a machine that already has a checkout exits 1, says what to do and keeps the previous configuration', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const saved = fs.readFileSync(configPath, 'utf8');
-      const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--branch', 'elsewhere', '--key', JSON.parse(saved).teamKey]);
-      assert.strictEqual(run.status, 1, `an init the checkout does not follow exits 1:\n${run.stdout}\n${run.stderr}`);
-      assert.ok(`${run.stdout}\n${run.stderr}`.includes('Remove that directory'), `${run.stdout}\n${run.stderr}`);
-      assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is put back');
+      try {
+        const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--branch', 'elsewhere', '--key', JSON.parse(saved).teamKey]);
+        assert.strictEqual(run.status, 1, `an init the checkout does not follow exits 1:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(`${run.stdout}\n${run.stderr}`.includes('Remove that directory'), `${run.stdout}\n${run.stderr}`);
+        assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is put back');
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
     });
 
     run('team sync against a remote that cannot be read exits 1 with the reason, never a quiet success', () => {

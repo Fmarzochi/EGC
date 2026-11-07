@@ -243,12 +243,7 @@ async function handleInit(args) {
     // modes are not supported on this filesystem
   }
 
-  fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
-  try {
-    fs.chmodSync(TEAM_CONFIG_PATH, 0o600);
-  } catch {
-    // modes are not supported on this filesystem
-  }
+  publishTeamConfig(JSON.stringify(config, null, 2));
   const report = () => {
     console.log(`Team initialized:
   Backend: ${backend}
@@ -284,6 +279,20 @@ async function handleInit(args) {
   }
 }
 
+// Writes the team configuration whole to a private temporary next to it and
+// renames it into place, so an interrupted write never leaves a truncated
+// file that would look like a missing team.
+function publishTeamConfig(content) {
+  const temporary = `${TEAM_CONFIG_PATH}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(temporary, content, { encoding: 'utf-8', mode: 0o600 });
+  try {
+    fs.chmodSync(temporary, 0o600);
+  } catch {
+    // modes are not supported on this filesystem
+  }
+  fs.renameSync(temporary, TEAM_CONFIG_PATH);
+}
+
 // Puts back the team configuration a refused init found: the file as it
 // was, or none when there was none.
 function restoreTeamConfig(previous) {
@@ -291,7 +300,7 @@ function restoreTeamConfig(previous) {
     fs.rmSync(TEAM_CONFIG_PATH, { force: true });
     return;
   }
-  fs.writeFileSync(TEAM_CONFIG_PATH, previous, { mode: 0o600 });
+  publishTeamConfig(previous);
 }
 
 async function handleSync() {
