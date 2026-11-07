@@ -242,27 +242,25 @@ async function runTests() {
       }
       fs.writeFileSync(path.join(repairLocal, 'proj', 'garbage.md.hmac'), 'EGC1:bytes an older merge wrote over the sidecar');
       fs.writeFileSync(path.join(repairLocal, 'proj', 'tamper.md.hmac'), 'f'.repeat(64));
+      // A link planted at a sidecar path, pointing at a file that looks like
+      // a sidecar: it must be neither accepted nor written through. Only the
+      // refusal of symbolic links by the platform skips this part.
+      const victim = path.join(dir, 'victim.hmac');
+      fs.writeFileSync(victim, 'a'.repeat(64));
+      let planted = false;
+      try {
+        fs.symlinkSync(victim, path.join(repairLocal, 'proj', 'missing.md.hmac'));
+        planted = true;
+      } catch (error) {
+        if (!['EPERM', 'EACCES', 'ENOSYS'].includes(error.code)) throw error;
+      }
       const outcome = teamSync.mergeTeamStateFrom(repairSync, repairLocal, teamKey, personalKey, integrityKey);
       assert.strictEqual(outcome.merged, 0, 'the local documents are newer and stay');
       assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'garbage.md.hmac'), 'utf8'), integrity.computeHmac(localDocs['garbage.md'], integrityKey), 'the garbage sidecar is written anew');
-      assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'missing.md.hmac'), 'utf8'), integrity.computeHmac(localDocs['missing.md'], integrityKey), 'the missing sidecar is written');
       assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'tamper.md.hmac'), 'utf8'), 'f'.repeat(64), 'a well-formed sidecar that does not match is the tamper signal and stays');
-      const victim = path.join(dir, 'victim.txt');
-      fs.writeFileSync(victim, 'must not change');
-      let planted = false;
-      try {
-        fs.symlinkSync(victim, path.join(repairLocal, 'proj', 'missing.md.hmac.planted'));
-        fs.renameSync(path.join(repairLocal, 'proj', 'missing.md.hmac.planted'), path.join(repairLocal, 'proj', 'missing.md.hmac'));
-        planted = true;
-      } catch {
-        // symbolic links cannot be made here; the link case is skipped
-      }
-      if (planted) {
-        integrity.writeHmac(path.join(repairLocal, 'proj', 'missing.md'), localDocs['missing.md'], integrityKey);
-        assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'must not change', 'a link planted at the sidecar path is not followed');
-        assert.ok(!fs.lstatSync(path.join(repairLocal, 'proj', 'missing.md.hmac')).isSymbolicLink(), 'the link is replaced by a real sidecar');
-        assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'missing.md.hmac'), 'utf8'), integrity.computeHmac(localDocs['missing.md'], integrityKey));
-      }
+      assert.ok(!fs.lstatSync(path.join(repairLocal, 'proj', 'missing.md.hmac')).isSymbolicLink(), planted ? 'the planted link is replaced by a real sidecar' : 'the missing sidecar is a real file');
+      assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'missing.md.hmac'), 'utf8'), integrity.computeHmac(localDocs['missing.md'], integrityKey), 'the sidecar is written with the key of this machine');
+      assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'a'.repeat(64), 'the file behind a planted link is neither read as a sidecar nor written');
     });
 
     run('the team key is validated and generated as 64 hex characters', () => {

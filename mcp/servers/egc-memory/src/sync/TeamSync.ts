@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import { SyncBackend } from './SyncBackend';
 import { GitBackend } from './GitBackend';
 import type { SyncConfig, SyncStatus, SyncResult } from './SyncBackend';
-import { isEncrypted, loadOrCreateEncKey, readStateFile, writeStateFile } from '../encryption';
+import { isEncrypted, loadOrCreateEncKey, readPrivateKeyFile, readStateFile, writeStateFile } from '../encryption';
 import { loadOrCreateKey as loadOrCreateIntegrityKey, writeHmac } from '../integrity';
 import { generateTeamKey, openEnvelope, parseTeamKey, sealEnvelope } from './envelope';
 
@@ -319,9 +319,12 @@ function currentLocal(localFile: string, relativePath: string, context: MergeCon
 // that mismatch is the tamper signal get_state reports.
 function repairSidecar(localFile: string, content: string, integrityKey: Buffer | null): void {
   if (!integrityKey || !content) return;
+  // Read without following a link and without blocking on a FIFO, from a
+  // regular private file only: anything else at the path is not a sidecar,
+  // and the write below replaces it instead of reading or writing through it.
   let existing: string | null;
   try {
-    existing = fs.readFileSync(`${localFile}${SIDECAR_SUFFIX}`, 'utf-8').trim();
+    existing = readPrivateKeyFile(`${localFile}${SIDECAR_SUFFIX}`).trim();
   } catch {
     existing = null;
   }

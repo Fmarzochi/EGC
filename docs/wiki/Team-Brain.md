@@ -21,7 +21,7 @@ The same operations exist as the MCP tools `team_init`, `team_sync` and `team_st
 
 - Travels, sealed with the team key: the project state documents under `~/.egc/state/`.
 - Stays on the machine, in current versions: the SQLite memory store, the machine's own encryption and integrity keys, the integrity sidecars next to the state documents, the logs.
-- A remote used with EGC 1.1.23 or earlier may still hold the memory store (from the mirror those versions committed) and the integrity sidecars they pushed in its history. Rewrite that history or move the team to a new repository.
+- A remote used with EGC 1.1.23 or earlier may still hold, in its history, the memory store those versions committed in the clear and the integrity sidecars they pushed. Rewrite that history or move the team to a new repository.
 - The team key lives in `~/.egc/team.json` on each machine. Share it between your machines by a trusted channel. If every copy is lost, start a new team.
 
 ## Two machines in four steps
