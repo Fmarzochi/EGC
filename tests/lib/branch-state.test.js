@@ -116,7 +116,8 @@ function runIdentityTests(tally) {
     assert.strictEqual(normalizeRemoteUrl('git@[github.com]:org/repo.git'), 'github.com/org/repo', 'brackets around a plain host are dropped');
     const relativeRemote = makeGitRepo('main');
     git(relativeRemote, 'remote add origin ../bare.git');
-    assert.strictEqual(projectIdentity(relativeRemote).remote, normalizeRemoteUrl(path.resolve(relativeRemote, '../bare.git')), 'the identity of a checkout resolves its relative remote against the checkout');
+    const canonicalCheckout = fs.realpathSync.native(relativeRemote);
+    assert.strictEqual(projectIdentity(relativeRemote).remote, normalizeRemoteUrl(path.resolve(canonicalCheckout, '../bare.git')), 'the identity of a checkout resolves its relative remote against the canonical path of the checkout (the temp root is a link on macOS)');
     const subdirectory = path.join(relativeRemote, 'src', 'deep');
     fs.mkdirSync(subdirectory, { recursive: true });
     assert.strictEqual(projectIdentity(subdirectory).remote, projectIdentity(relativeRemote).remote, 'and against the root of the checkout when asked from a subdirectory of it');
