@@ -54,7 +54,7 @@ Decisioni, contesto della sessione, memoria di lavoro e lezioni apprese vengono 
 
 #### Team Brain: la tua memoria su ogni macchina
 
-Per mantenere il vostro stato di progetto in passo attraverso le proprie macchine, puntare EGC a un telecomando di git privato. Lo stato è sigillato con una chiave di squadra prima di lasciare la macchina; nessun server EGC è coinvolto e il database di memoria non viaggia più (un telecomando utilizzato con una versione precedente può ancora tenerlo nella sua storia, vedi [che viaggi](../../docs/TEAM-BRAIN.md#what-travels-and-what-stays)). Una chiave di squadra sbagliata rende prima una sincronizzazione eliminare i file dal remoto, quindi leggere la [Guida al cervello del team](../../docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path).
+Per mantenere il vostro stato di progetto in passo attraverso le proprie macchine, puntare EGC a un telecomando di git privato. Lo stato è sigillato con una chiave di squadra prima di lasciare la macchina; nessun server EGC è coinvolto e il database di memoria non viaggia più (un telecomando utilizzato con una versione precedente può ancora tenerlo nella sua storia, vedi [che viaggi](../../docs/TEAM-BRAIN.md#what-travels-and-what-stays)). Una chiave che apre nessuno dei file di stato già sul telecomando non spinge nulla, quindi una chiave sbagliata non può danneggiare lo stato condiviso, mentre una prima sincronizzazione in un telecomando vuoto come prima; il [Team Brain guide](../../docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path) dice come leggere un risultato di sincronizzazione.
 
 ```bash
 egc team init --backend git --remote https://github.com/you/egc-memory.git

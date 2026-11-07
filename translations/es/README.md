@@ -54,7 +54,7 @@ Decisiones, contexto de sesión, memoria de trabajo y lecciones aprendidas se ca
 
 #### Papelera del equipo: Tu memoria en cada máquina
 
-Para mantener el estado de su proyecto en paso a través de sus propias máquinas, apunte EGC a un control remoto de git privado. El estado está sellado con una llave de equipo antes de que abandone la máquina; ningún servidor EGC está involucrado y la base de datos de memoria ya no viaja (un remoto usado con una versión anterior puede todavía tenerlo en su historial, ver [qué viajes](../../docs/TEAM-BRAIN.md#what-travels-and-what-stays)). Una clave de equipo equivocada hace una sincronización de archivos del remoto, así que lea la [Guía del Team](../../docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path) primero.
+Para mantener el estado de su proyecto en paso a través de sus propias máquinas, apunte EGC a un control remoto de git privado. El estado está sellado con una llave de equipo antes de que abandone la máquina; ningún servidor EGC está involucrado y la base de datos de memoria ya no viaja (un remoto usado con una versión anterior puede todavía tenerlo en su historial, ver [qué viajes](../../docs/TEAM-BRAIN.md#what-travels-and-what-stays)). Una clave que no abre ninguno de los archivos de estado ya en el control remoto no emite nada, por lo que una clave incorrecta no puede dañar el estado compartido, mientras que una primera sincronización con un push remoto vacío como antes; la [Guía del Cerebro del Equipo](../../docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path) dice cómo leer un resultado sincronizado.
 
 ```bash
 egc team init --backend git --remote https://github.com/you/egc-memory.git

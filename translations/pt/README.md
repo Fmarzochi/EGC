@@ -54,7 +54,7 @@ Decisões, contexto da sessão, memória de trabalho e lições aprendidas são 
 
 #### Cérebro de Equipe: Sua Memória em Toda Máquina
 
-Para manter o estado do seu projeto passo em suas próprias máquinas, aponte o EGC em um controle remoto git privado. O estado está selado com uma chave de equipe antes de sair da máquina; nenhum servidor EGC está envolvido e o banco de dados de memória não viaja mais (um remoto usado com uma versão anterior pode mantê-lo em seu histórico veja [quais viagens](../../docs/TEAM-BRAIN.md#what-travels-and-what-stays)). Uma chave de equipe errada faz uma sincronização apagar arquivos do controle remoto, então leia o [guia do Time Brain](../../docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path) primeiro.
+Para manter o estado do seu projeto passo em suas próprias máquinas, aponte o EGC em um controle remoto git privado. O estado está selado com uma chave de equipe antes de sair da máquina; nenhum servidor EGC está envolvido e o banco de dados de memória não viaja mais (um remoto usado com uma versão anterior pode mantê-lo em seu histórico veja [quais viagens](../../docs/TEAM-BRAIN.md#what-travels-and-what-stays)). Uma chave que não abre nenhum dos arquivos de estado que já estão nos pushes remotos, não faz nada, Portanto, uma chave errada não pode danificar o estado compartilhado, enquanto uma primeira sincronização em pushes remotas vazias como anterior; o [guia do Time Brain](../../docs/TEAM-BRAIN.md#rejected-sync-file-not-a-verified-team-envelope-for-its-path) diz como ler um resultado de sincronização.
 
 ```bash
 equipe egc init --backend git --remote https://github.com/you/egc-memory.git
