@@ -109,13 +109,15 @@ function parseJsonRpcLine(line) {
  * isError, and on an answer with no text.
  */
 function toolCallValue(message) {
+  // An error the server answered with is marked apart from the server
+  // being away: the caller treats the first as a refusal of the request.
   if (message.error) {
-    throw new Error(message.error.message || 'MCP tool call failed');
+    throw Object.assign(new Error(message.error.message || 'MCP tool call failed'), { isToolError: true });
   }
   const content = Array.isArray(message.result?.content) ? message.result.content : [];
   const text = content.find(item => item.type === 'text');
   if (message.result?.isError) {
-    throw new Error(text ? text.text : 'MCP tool call failed');
+    throw Object.assign(new Error(text ? text.text : 'MCP tool call failed'), { isToolError: true });
   }
   if (!text) {
     throw new Error('No response from memory server');
@@ -230,6 +232,10 @@ async function handleInit(args) {
   }
 
   const config = { backend, remote, branch, teamKey };
+  // The configuration this command found, put back when the server refuses
+  // the init: a sync must not run with a remote or a branch the checkout
+  // does not follow.
+  const previous = fs.existsSync(TEAM_CONFIG_PATH) ? fs.readFileSync(TEAM_CONFIG_PATH) : null;
   fs.mkdirSync(path.dirname(TEAM_CONFIG_PATH), { recursive: true, mode: 0o700 });
   try {
     fs.chmodSync(path.dirname(TEAM_CONFIG_PATH), 0o700);
@@ -237,38 +243,64 @@ async function handleInit(args) {
     // modes are not supported on this filesystem
   }
 
-  fs.writeFileSync(TEAM_CONFIG_PATH, JSON.stringify(config, null, 2), { encoding: 'utf-8', mode: 0o600 });
-  try {
-    fs.chmodSync(TEAM_CONFIG_PATH, 0o600);
-  } catch {
-    // modes are not supported on this filesystem
-  }
-  console.log(`Team initialized:
+  publishTeamConfig(JSON.stringify(config, null, 2));
+  const report = () => {
+    console.log(`Team initialized:
   Backend: ${backend}
   Remote:  ${remote}
   Branch:  ${branch}
   Config:  ${TEAM_CONFIG_PATH}`);
-  if (provided === undefined) {
-    console.log(`Team key (share it out of band; teammates join with --key):\n  ${teamKey}`);
-  }
+    if (provided === undefined) {
+      console.log(`Team key (share it out of band; teammates join with --key):\n  ${teamKey}`);
+    }
+  };
 
   // Now try to connect and set up via MCP tool.
   try {
     const result = await callMcpTool('team_init', { backend, remote, branch, team_key: teamKey });
+    report();
     if (result) {
       console.log('Sync backend configured successfully.');
     }
   } catch (err) {
-    // A remote the server could not read is a failure of the init itself,
-    // not of the server being away: the URL or the access has to be fixed
-    // before anything can sync.
-    if (/cannot be read/.test(err.message)) {
+    // A refusal by the server (a remote it cannot read, a checkout that
+    // follows another remote or branch) is a failure of the init itself,
+    // not of the server being away: the configuration goes back to what it
+    // was, and the cause has to be fixed before anything can sync.
+    if (err.isToolError) {
+      restoreTeamConfig(previous);
       console.error(`Error: ${err.message}`);
+      console.error(previous === null ? 'No configuration was written.' : 'The previous configuration was kept.');
       process.exit(1);
     }
+    report();
     console.log(`Note: Memory server setup returned: ${err.message}`);
     console.log('The config file is saved. Run "egc team sync" to start syncing.');
   }
+}
+
+// Writes the team configuration whole to a private temporary next to it and
+// renames it into place, so an interrupted write never leaves a truncated
+// file that would look like a missing team.
+function publishTeamConfig(content) {
+  const temporary = `${TEAM_CONFIG_PATH}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(temporary, content, { encoding: 'utf-8', mode: 0o600 });
+  try {
+    fs.chmodSync(temporary, 0o600);
+  } catch {
+    // modes are not supported on this filesystem
+  }
+  fs.renameSync(temporary, TEAM_CONFIG_PATH);
+}
+
+// Puts back the team configuration a refused init found: the file as it
+// was, or none when there was none.
+function restoreTeamConfig(previous) {
+  if (previous === null) {
+    fs.rmSync(TEAM_CONFIG_PATH, { force: true });
+    return;
+  }
+  publishTeamConfig(previous);
 }
 
 async function handleSync() {

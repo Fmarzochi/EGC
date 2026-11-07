@@ -1,4 +1,5 @@
 import { simpleGit, SimpleGit } from 'simple-git';
+import type { RemoteWithRefs } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
@@ -11,6 +12,20 @@ function gitReason(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   const line = message.split('\n').map(part => part.trim()).find(part => part.length > 0) ?? 'unknown error';
   return line.replace(/^fatal:\s*/, '');
+}
+
+// The same remote with or without a trailing slash; on Windows, where a
+// local path is spelled with either slash, with either slash too.
+function sameRemoteUrl(a: string, b: string): boolean {
+  const normalize = (url: string) => (process.platform === 'win32' ? url.replace(/\\/g, '/') : url).replace(/\/$/, '');
+  return normalize(a) === normalize(b);
+}
+
+// The remote an existing checkout follows, as the refusal names it.
+function describeFollowed(remotes: RemoteWithRefs[], origin: RemoteWithRefs | undefined): string {
+  if (!origin) return remotes.length === 0 ? 'no remote' : `${remotes.map(r => r.name).join(', ')} with no origin`;
+  if (sameRemoteUrl(origin.refs.fetch, origin.refs.push)) return origin.refs.fetch;
+  return `${origin.refs.fetch} and pushes to ${origin.refs.push}`;
 }
 
 export class GitBackend extends SyncBackend {
@@ -31,7 +46,9 @@ export class GitBackend extends SyncBackend {
     this.config = config;
 
     const isRepo = fs.existsSync(path.join(this.repoDir, '.git'));
-    if (!isRepo) {
+    if (isRepo) {
+      await this.assertCheckoutFollows(config);
+    } else {
       await this.git.init();
       // Rename default branch (master) to match config branch (e.g. main).
       await this.git.raw(['branch', '-M', config.branch]);
@@ -46,6 +63,35 @@ export class GitBackend extends SyncBackend {
     // instead of becoming a sync that reports nothing moved.
     if (await this.remoteHasBranch(config)) {
       await this.git.pull('origin', config.branch, ['--allow-unrelated-histories', '--no-rebase']);
+    }
+  }
+
+  // An existing checkout was made for one remote and one branch. A config
+  // that names another is refused, with what to do, instead of leaving the
+  // checkout behind the config: the next sync would pull and push the
+  // configured branch against a checkout on another one, or push the old
+  // history to the new repository.
+  private async assertCheckoutFollows(config: SyncConfig): Promise<void> {
+    const remotes = await this.git.getRemotes(true);
+    const origin = remotes.find(r => r.name === 'origin');
+    const followedBranch = await this.currentBranch();
+    // A checkout with no remote at all adopts the configured one; a checkout
+    // with remotes but no origin, or whose origin fetches from or pushes to
+    // another place, is somebody else's and is refused.
+    const sameRemote = remotes.length === 0
+      || (origin !== undefined && sameRemoteUrl(origin.refs.fetch, config.remote) && sameRemoteUrl(origin.refs.push, config.remote));
+    if (sameRemote && followedBranch === config.branch) return;
+    throw new Error(
+      `The sync checkout at ${this.repoDir} follows ${describeFollowed(remotes, origin)} on branch ${followedBranch}, not ${config.remote} on branch ${config.branch}. ` +
+      'Remove that directory (your state under ~/.egc/state is not in it) and run egc team init again.',
+    );
+  }
+
+  private async currentBranch(): Promise<string> {
+    try {
+      return (await this.git.raw(['symbolic-ref', '--short', 'HEAD'])).trim();
+    } catch {
+      return 'no branch (detached HEAD)';
     }
   }
 

@@ -147,27 +147,56 @@ function runTests() {
       assert.match(run.stdout, /Uncommitted changes: (true|false)/, 'the status fields come from the server answer');
     });
 
-    run('team init against a remote that cannot be read exits 1 and names it', () => {
+    run('team init against another remote on a machine that already has a checkout exits 1, says what to do and keeps the previous configuration', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const saved = fs.readFileSync(configPath, 'utf8');
       try {
         const run = teamCli(['init', '--backend', 'git', '--remote', path.join(HOME, 'no-such-remote')]);
-        assert.strictEqual(run.status, 1, `an init whose remote cannot be read exits 1:\n${run.stdout}\n${run.stderr}`);
-        assert.ok(`${run.stdout}\n${run.stderr}`.includes('cannot be read'), `${run.stdout}\n${run.stderr}`);
+        assert.strictEqual(run.status, 1, `an init the checkout does not follow exits 1:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(`${run.stdout}\n${run.stderr}`.includes('Remove that directory'), `${run.stdout}\n${run.stderr}`);
+        assert.ok(!run.stdout.includes('Team initialized'), `a refused init reports no team:\n${run.stdout}`);
+        assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is put back');
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
+    });
+
+    run('team init with another branch on a machine that already has a checkout exits 1, says what to do and keeps the previous configuration', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      try {
+        const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--branch', 'elsewhere', '--key', JSON.parse(saved).teamKey]);
+        assert.strictEqual(run.status, 1, `an init the checkout does not follow exits 1:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(`${run.stdout}\n${run.stderr}`.includes('Remove that directory'), `${run.stdout}\n${run.stderr}`);
+        assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is put back');
       } finally {
         fs.writeFileSync(configPath, saved);
       }
     });
 
     run('team sync against a remote that cannot be read exits 1 with the reason, never a quiet success', () => {
-      const configPath = path.join(HOME, '.egc', 'team.json');
-      const saved = fs.readFileSync(configPath, 'utf8');
-      fs.writeFileSync(configPath, JSON.stringify({ ...JSON.parse(saved), remote: path.join(HOME, 'no-such-remote') }, null, 2));
+      // The remote is moved away, so the checkout still follows the
+      // configuration and the failure is the read of the remote itself.
+      const away = `${REMOTE}.away`;
+      fs.renameSync(REMOTE, away);
       try {
         const run = teamCli(['sync']);
         assert.strictEqual(run.status, 1, `a sync whose remote cannot be read exits 1:\n${run.stdout}\n${run.stderr}`);
         assert.ok(!run.stdout.includes('Sync complete:'), `a sync that read nothing is not complete:\n${run.stdout}`);
         assert.ok(`${run.stdout}\n${run.stderr}`.includes('cannot be read'), `${run.stdout}\n${run.stderr}`);
+      } finally {
+        fs.renameSync(away, REMOTE);
+      }
+    });
+
+    run('team sync with a configuration changed by hand to another remote stops with the checkout it follows', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      fs.writeFileSync(configPath, JSON.stringify({ ...JSON.parse(saved), remote: path.join(HOME, 'no-such-remote') }, null, 2));
+      try {
+        const run = teamCli(['sync']);
+        assert.strictEqual(run.status, 1, `a sync the checkout does not follow exits 1:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(`${run.stdout}\n${run.stderr}`.includes('Remove that directory'), `${run.stdout}\n${run.stderr}`);
       } finally {
         fs.writeFileSync(configPath, saved);
       }
