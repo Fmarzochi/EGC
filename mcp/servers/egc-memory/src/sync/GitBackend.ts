@@ -2,9 +2,16 @@ import { simpleGit, SimpleGit } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
-import { SyncBackend, SyncConfig, SyncStatus } from './SyncBackend';
+import { InitOptions, SyncBackend, SyncConfig, SyncStatus } from './SyncBackend';
 
 const SYNC_STATE_DIR = path.join(os.homedir(), '.egc', 'team-sync');
+
+// The first line git gave for a failure, without the "fatal:" prefix.
+function gitReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const line = message.split('\n').map(part => part.trim()).find(part => part.length > 0) ?? 'unknown error';
+  return line.replace(/^fatal:\s*/, '');
+}
 
 export class GitBackend extends SyncBackend {
   private readonly git: SimpleGit;
@@ -20,7 +27,7 @@ export class GitBackend extends SyncBackend {
     this.git = simpleGit(this.repoDir);
   }
 
-  async init(config: SyncConfig): Promise<void> {
+  async init(config: SyncConfig, options: InitOptions = {}): Promise<void> {
     this.config = config;
 
     const isRepo = fs.existsSync(path.join(this.repoDir, '.git'));
@@ -28,17 +35,31 @@ export class GitBackend extends SyncBackend {
       await this.git.init();
       // Rename default branch (master) to match config branch (e.g. main).
       await this.git.raw(['branch', '-M', config.branch]);
-      await this.ensureOriginRemote(config.remote);
-    } else {
-      await this.ensureOriginRemote(config.remote);
     }
+    await this.ensureOriginRemote(config.remote);
+    // A status reads the local checkout only, so it answers while the
+    // remote is down.
+    if (options.readRemote === false) return;
 
-    // Try to pull once to establish the branch tracking.
-    try {
+    // The remote is read once here, so a URL that cannot be reached (a typo,
+    // a host key not yet accepted, a missing credential) fails the init
+    // instead of becoming a sync that reports nothing moved.
+    if (await this.remoteHasBranch(config)) {
       await this.git.pull('origin', config.branch, ['--allow-unrelated-histories', '--no-rebase']);
-    } catch {
-      // First-time init: no upstream yet, that's fine.
     }
+  }
+
+  // Whether the configured branch exists on the remote. Throws, naming the
+  // remote and git's reason, when the remote cannot be read at all; a
+  // repository without the branch yet is simply false.
+  private async remoteHasBranch(config: SyncConfig): Promise<boolean> {
+    let heads: string;
+    try {
+      heads = await this.git.listRemote(['--heads', 'origin', config.branch]);
+    } catch (error) {
+      throw new Error(`The remote ${config.remote} cannot be read: ${gitReason(error)}`, { cause: error });
+    }
+    return heads.trim().length > 0;
   }
 
   async pull(): Promise<string[]> {
@@ -51,12 +72,10 @@ export class GitBackend extends SyncBackend {
       // Empty repo on first sync.
     }
 
-    try {
-      await this.git.pull('origin', this.config.branch, ['--allow-unrelated-histories', '--no-rebase']);
-    } catch {
-      // Pull failed, maybe no upstream yet.
-      return [];
-    }
+    // A remote that cannot be read is an error the caller reports; a remote
+    // without the branch yet has nothing to pull.
+    if (!(await this.remoteHasBranch(this.config))) return [];
+    await this.git.pull('origin', this.config.branch, ['--allow-unrelated-histories', '--no-rebase']);
 
     // Get list of changed files from the pull.
     const log = await this.git.log({ maxCount: 1 });

@@ -88,7 +88,7 @@ Pass the same `--branch <name>` on every machine, or they sync to different bran
 
 ## Reading the result of a sync
 
-`egc team sync` prints `Sync complete:` and exits 0, or `Sync did not complete:` and exits 1 when it reports an error. One failure is not reported as an error: when the remote cannot be read and there is nothing to push, the sync prints `Sync complete:` with `0 files` and `0 commits` and exits 0 (see the troubleshooting section).
+`egc team sync` prints `Sync complete:` and exits 0, or `Sync did not complete:` and exits 1 when it reports an error, including when it cannot read the remote. `egc team status` reads the local checkout only, so it answers while the remote is down.
 
 | Line | Meaning |
 |---|---|
@@ -150,17 +150,7 @@ The path in the first error line uses the separator of your system. The file on 
 
 Fix the key (`egc team init ... --key <the right key>`) and sync again. When at least one remote file opens, the key is taken as the team's: the files that still do not open are reported and left in place, this machine's state for those paths is not pushed over them, and the sync pushes the rest as usual. A file that stays unopened on every machine of the team is damaged or belongs to another key; remove it from the repository by hand. If a machine still holds that state locally, its next sync fills the path again; if no machine does, the contents of that file cannot be recovered by a sync. A first sync into an empty remote is not this case: nothing is on the remote to open, and the sync pushes this machine's state.
 
-### `Pulled: 0 files` and `Pushed: 0 commits` on a first sync that should have moved something
-
-The remote could not be reached for reading, and there was nothing to push. A failing pull is not reported as an error. Typical causes are a mistyped URL, a host key that is not known yet, or a missing credential. Check the remote with plain git, outside EGC:
-
-```bash
-git ls-remote <your remote>
-```
-
-If that fails, fix it first. For an SSH remote (`git@host:owner/name.git`), run it once in a terminal so the host key is accepted. In a clean home directory, without a known host key, the sync above did exactly this: it reported `Sync complete:` with `0 files` and `0 commits`, and `ssh` itself said `Host key verification failed.`
-
-### `Push failed: ... Repository not found`
+### `The remote <url> cannot be read: ...`
 
 ```text
 $ egc team sync
@@ -168,13 +158,20 @@ Syncing team memory...
 Sync did not complete:
   Pulled: 0 files
   Pushed: 0 commits
-  Error: Push failed: Error: Push failed after setting upstream: Error: Pushing to https://github.com/you/no-such-repo.git
-remote: Repository not found.
-fatal: repository 'https://github.com/you/no-such-repo.git/' not found
-
+  Error: Sync backend init failed: The remote https://github.com/you/no-such-repo.git cannot be read: repository 'https://github.com/you/no-such-repo.git/' not found
 ```
 
-The remote does not exist or your credentials cannot write to it. The sync exits 1. `egc team status` still answers, because it reads the local checkout only.
+The remote could not be reached for reading, so the sync stops before anything moves and exits 1; `egc team init` against such a remote stops the same way, with the reason on its last line. Typical causes are a mistyped URL, a host key that is not known yet (the reason then carries `Host key verification failed`), or a missing credential. Check the remote with plain git, outside EGC:
+
+```bash
+git ls-remote <your remote>
+```
+
+If that fails, fix it first. For an SSH remote (`git@host:owner/name.git`), run it once in a terminal so the host key is accepted. A repository that exists and can be read but has no branch yet is not this case: the first sync into it pulls nothing and pushes the first commit.
+
+### `Push failed: ...`
+
+The remote could be read but refused the push: your credentials have no write access to it, or the branch is protected. The reason git gave follows the prefix. The sync exits 1 after pulling and merging, so the local state is up to date and only this machine's state is missing on the remote. `egc team status` still answers, because it reads the local checkout only.
 
 ### `Local state file could not be decrypted and was left untouched`
 
