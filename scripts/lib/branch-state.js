@@ -162,23 +162,212 @@ function isUnsafeSymlink(p) {
 // adjacency is the narrowest TOCTOU window achievable without a native
 // binding, not a hermetic close of it. Closing it fully would require an
 // attacker-proof primitive this project does not depend on today.
+function resolveGitDir(projectPath) {
+  let gitDir = findGitDir(projectPath);
+  if (!gitDir || !trustedGitPath(gitDir) || isUnsafeSymlink(gitDir)) return null;
+  if (fs.statSync(gitDir).isFile()) { // NOSONAR: metadata read on gitDir, confirmed just above
+    // Worktrees and submodules store a pointer file instead of a directory
+    const rawPointer = readFileNoFollow(gitDir);
+    if (rawPointer === null) return null;
+    const pointer = rawPointer.trim();
+    if (!pointer.startsWith('gitdir:')) return null;
+    gitDir = path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim());
+    if (!trustedGitPath(gitDir) || isUnsafeSymlink(gitDir)) return null;
+  }
+  return gitDir;
+}
+
+// One small file of a git directory (HEAD, commondir, config), read right
+// after the directory itself is confirmed not to be a link, never through
+// one; null otherwise.
+function readGitFile(gitDir, name) {
+  const filePath = path.resolve(gitDir, name);
+  if (!trustedGitPath(filePath) || isUnsafeSymlink(gitDir)) return null;
+  return readFileNoFollow(filePath);
+}
+
 function readHeadLine(projectPath) {
   try {
-    let gitDir = findGitDir(projectPath);
-    if (!gitDir || !trustedGitPath(gitDir) || isUnsafeSymlink(gitDir)) return null;
-    if (fs.statSync(gitDir).isFile()) { // NOSONAR: metadata read on gitDir, confirmed just above
-      // Worktrees and submodules store a pointer file instead of a directory
-      const rawPointer = readFileNoFollow(gitDir);
-      if (rawPointer === null) return null;
-      const pointer = rawPointer.trim();
-      if (!pointer.startsWith('gitdir:')) return null;
-      gitDir = path.resolve(path.dirname(gitDir), pointer.slice('gitdir:'.length).trim());
-      if (!trustedGitPath(gitDir) || isUnsafeSymlink(gitDir)) return null;
-    }
-    if (isUnsafeSymlink(gitDir)) return null;
-    const head = readFileNoFollow(path.resolve(gitDir, 'HEAD'));
+    const gitDir = resolveGitDir(projectPath);
+    if (!gitDir) return null;
+    const head = readGitFile(gitDir, 'HEAD');
     return head === null ? null : head.trim();
   } catch (_) { // NOSONAR: unreadable .git/HEAD means no branch info available
+    return null;
+  }
+}
+
+// The directory that holds the config of the repository: the git directory
+// itself, or the common directory a worktree names in its commondir file.
+function resolveCommonDir(gitDir) {
+  const commondir = readGitFile(gitDir, 'commondir');
+  if (commondir === null) return gitDir;
+  const common = path.resolve(gitDir, commondir.trim());
+  return trustedGitPath(common) && !isUnsafeSymlink(common) ? common : null;
+}
+
+const CONFIG_ESCAPES = { n: '\n', t: '\t', b: '\b' };
+
+// The value of a config assignment as git reads it: quotes may open and
+// close anywhere and are dropped, a backslash escapes the next character
+// (\n, \t and \b as git does, anything else literally), and # or ; outside
+// quotes starts a comment. A scan rather than a pattern, so a hostile line
+// cannot make the parser backtrack.
+function configValue(raw) {
+  let out = '';
+  let quoted = false;
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (char === '\\') {
+      index += 1;
+      if (index < raw.length) out += CONFIG_ESCAPES[raw[index]] ?? raw[index];
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (!quoted && (char === '#' || char === ';')) break;
+    out += char;
+  }
+  return out.trim();
+}
+
+// The index of the bracket that closes a section header, outside quotes
+// and escapes; -1 when the line has none.
+function closingBracket(line) {
+  let quoted = false;
+  for (let index = 1; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '\\') {
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === ']' && !quoted) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+// A subsection name between quotes: a backslash escapes the next character
+// and is dropped, as git reads it.
+function unescapeSubsection(text) {
+  let out = '';
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '\\' && index + 1 < text.length) index += 1;
+    out += text[index];
+  }
+  return out;
+}
+
+// The section a config header line opens: [name], [name "subsection"] or
+// the deprecated [name.subsection], whose subsection compares
+// case-insensitively; the name is lower-cased as git compares it. `rest` is
+// what follows the closing bracket on the same line, which git reads as an
+// assignment or a comment. Null for any other line.
+function configSection(line) {
+  if (!line.startsWith('[')) return null;
+  const close = closingBracket(line);
+  if (close < 0) return null;
+  const inner = line.slice(1, close);
+  const rest = line.slice(close + 1).trim();
+  const quote = inner.indexOf('"');
+  if (quote >= 0) {
+    const lastQuote = inner.lastIndexOf('"');
+    if (lastQuote === quote) return null;
+    return { name: inner.slice(0, quote).trim().toLowerCase(), subsection: unescapeSubsection(inner.slice(quote + 1, lastQuote)), rest };
+  }
+  const dot = inner.indexOf('.');
+  if (dot >= 0) return { name: inner.slice(0, dot).trim().toLowerCase(), subsection: inner.slice(dot + 1).trim().toLowerCase(), rest };
+  return { name: inner.trim().toLowerCase(), subsection: null, rest };
+}
+
+// The value a config line gives to `key`, or null when the line sets
+// another key or is not an assignment.
+function configEntry(line, key) {
+  if (line.slice(0, key.length).toLowerCase() !== key) return null;
+  const rest = line.slice(key.length).trimStart();
+  return rest.startsWith('=') ? configValue(rest.slice(1)) : null;
+}
+
+// Whether a comment starts on the line, outside quotes and escapes: git
+// reads a comment to the end of its line, a trailing backslash included.
+function hasComment(line) {
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '\\') {
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (!quoted && (char === '#' || char === ';')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The lines of a config as git reads them: a line that ends with an odd
+// number of backslashes continues on the next one, unless a comment started
+// on it.
+function configLines(config) {
+  const lines = [];
+  let pending = '';
+  for (const line of config.split(/\r?\n/)) {
+    let backslashes = 0;
+    while (backslashes < line.length && line[line.length - 1 - backslashes] === '\\') backslashes += 1;
+    if (backslashes % 2 === 1 && !hasComment(pending + line)) {
+      pending += line.slice(0, -1);
+      continue;
+    }
+    lines.push(pending + line);
+    pending = '';
+  }
+  if (pending) lines.push(pending);
+  return lines;
+}
+
+function isConfigComment(line) {
+  return !line || line.startsWith('#') || line.startsWith(';');
+}
+
+// The first url of [remote "origin"] in the text of a git config, read as
+// git reads it; include directives are not followed, so an origin declared
+// only in an included file is not seen, and the project then keeps its
+// path slug.
+function originUrlFromConfig(config) {
+  let inOrigin = false;
+  for (const rawLine of configLines(config)) {
+    let line = rawLine.trim();
+    if (isConfigComment(line)) continue;
+    // Git reads any number of headers on one line, then an assignment.
+    for (let section = configSection(line); section; section = configSection(line)) {
+      inOrigin = section.name === 'remote' && section.subsection === 'origin';
+      line = section.rest;
+    }
+    if (isConfigComment(line) || !inOrigin) continue;
+    const url = configEntry(line, 'url');
+    if (url) return url;
+  }
+  return null;
+}
+
+// The url of the origin remote as the config of the repository states it,
+// or null outside a repository, without an origin or when the config cannot
+// be read. Read from the config file, like HEAD: no git on PATH is needed.
+function detectOriginRemote(projectPath) {
+  try {
+    const gitDir = resolveGitDir(projectPath);
+    if (!gitDir) return null;
+    const commonDir = resolveCommonDir(gitDir);
+    if (!commonDir) return null;
+    const config = readGitFile(commonDir, 'config');
+    return config === null ? null : originUrlFromConfig(config);
+  } catch {
+    // A repository that cannot be inspected (gone mid-read, a sealed
+    // directory, a link loop) has no remote identity: the project keeps
+    // the slug of its path, as it would without a repository.
     return null;
   }
 }
@@ -223,12 +412,187 @@ function resolveHeadState(projectPath) {
   return { branch: null, detachedCommit: DETACHED_COMMIT_PATTERN.test(head) ? head.toLowerCase() : null };
 }
 
+// The port a scheme uses when the URL names none; a port equal to it is not
+// part of the identity, as the WHATWG URL parser already does for http.
+const DEFAULT_PORTS = { 'ssh:': '22', 'git+ssh:': '22', 'ssh+git:': '22', 'git:': '9418' };
+
+function trimTrailingSlashes(value) {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end -= 1;
+  return value.slice(0, end);
+}
+
+function trimLeadingSlashes(value) {
+  let start = 0;
+  while (start < value.length && value[start] === '/') start += 1;
+  return value.slice(start);
+}
+
+function withoutRepositorySuffix(location) {
+  const out = trimTrailingSlashes(location.replaceAll('\\', '/'));
+  return out.toLowerCase().endsWith('.git') ? trimTrailingSlashes(out.slice(0, -4)) : out;
+}
+
+// A drive letter is one letter whatever its case; the rest of a local path
+// is kept as written.
+function withUpperDrive(location) {
+  return /^[a-zA-Z]:\//.test(location) ? location[0].toUpperCase() + location.slice(1) : location;
+}
+
+// A path on this machine names a repository only here, so its identity is
+// local: file/ and the path, in the same shape on every platform.
+function localIdentity(location) {
+  const stripped = withUpperDrive(trimLeadingSlashes(withoutRepositorySuffix(location)));
+  return stripped ? `file/${stripped}` : null;
+}
+
+function hostIdentity(host, rawPath) {
+  const repositoryPath = trimLeadingSlashes(withoutRepositorySuffix(rawPath));
+  return host && repositoryPath ? `${host}/${repositoryPath}` : null;
+}
+
+// The scheme of a URL when the value has one (scheme://...): a letter, then
+// letters, digits, plus, dot or hyphen, as RFC 3986 allows; null otherwise.
+function urlScheme(value) {
+  const end = value.indexOf('://');
+  if (end <= 0) return null;
+  const scheme = value.slice(0, end);
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*$/.test(scheme) ? scheme : null;
+}
+
+// A bracketed host of the scp-like form: [host] is the host, [host:port] is
+// the host and port of the ssh URL (the default port dropped as there), and
+// an IPv6 address keeps its brackets, as the URL form does.
+function unbracketedHost(host) {
+  if (!host.startsWith('[') || !host.endsWith(']')) return host;
+  const inner = host.slice(1, -1);
+  const parts = inner.split(':');
+  if (parts.length === 1) return inner;
+  if (parts.length === 2) return parts[1] === DEFAULT_PORTS['ssh:'] ? parts[0] : inner;
+  return host;
+}
+
+// The host and the path of the scp-like form git accepts (user@host:path,
+// with an IPv6 address or a host and port between brackets): the first
+// colon after the host splits them, the host starts after the last @ before
+// it, and nothing before it may be a slash.
+function scpLikeParts(value) {
+  const firstColon = value.indexOf(':');
+  if (firstColon <= 0) return null;
+  const at = value.lastIndexOf('@', firstColon);
+  const hostStart = at >= 0 ? at + 1 : 0;
+  let colon = firstColon;
+  if (value[hostStart] === '[') {
+    const close = value.indexOf(']', hostStart);
+    if (close < 0 || value[close + 1] !== ':') return null;
+    colon = close + 1;
+  }
+  const authority = value.slice(0, colon);
+  if (authority.includes('/') || authority.includes('\\')) return null;
+  const host = unbracketedHost(authority.slice(hostStart));
+  return host ? { host, path: value.slice(colon + 1) } : null;
+}
+
+function decodedPath(pathname) {
+  try {
+    return decodeURIComponent(pathname);
+  } catch {
+    return pathname;
+  }
+}
+
+// The normalized form of a remote URL, the identity of a repository across
+// machines: the host in lower case (with its port only when it is not the
+// default of the scheme), then the path without a leading slash, a trailing
+// slash or the .git suffix; the scheme and the credentials are dropped,
+// owner and name are kept as written. Every form git accepts for one
+// repository (https, ssh URL, scp-like) folds into one string; a local path
+// folds into a local identity, a relative one resolved against `baseDir`,
+// the checkout that names it, when one is given. The scp-like path without
+// a leading slash and the one with it fold together too, as the hosting
+// services treat them. Null when the value names no repository.
+function normalizeRemoteUrl(url, baseDir) {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return null;
+  if (/^[a-zA-Z]:[\\/]/.test(trimmed)) return localIdentity(trimmed);
+  if (urlScheme(trimmed)) {
+    let parsed;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      return null;
+    }
+    if (parsed.protocol === 'file:') return localIdentity(`${parsed.hostname}${decodedPath(parsed.pathname)}`);
+    const defaultPort = DEFAULT_PORTS[parsed.protocol] ?? '';
+    const port = parsed.port && parsed.port !== defaultPort ? `:${parsed.port}` : '';
+    return hostIdentity(parsed.hostname.toLowerCase() + port, decodedPath(parsed.pathname));
+  }
+  const scpLike = scpLikeParts(trimmed);
+  if (scpLike) return hostIdentity(scpLike.host.toLowerCase(), scpLike.path);
+  // A UNC path is absolute on every platform, whatever path.isAbsolute says
+  // of it on POSIX.
+  const isAbsoluteLocal = path.isAbsolute(trimmed) || trimmed.startsWith('\\\\') || trimmed.startsWith('//');
+  return localIdentity(baseDir && !isAbsoluteLocal ? path.resolve(baseDir, trimmed) : trimmed);
+}
+
+// The directory name of a project keyed by its remote: the name of the
+// repository, readable, bound to the SHA-256 of the whole identity, the same
+// shape as a branch file. Neither the host nor the owner nor any local path
+// is in it, so the shared repository of a team shows none of them.
+function remoteKey(identity) {
+  const name = identity.slice(identity.lastIndexOf('/') + 1) || 'repo';
+  const readable = name.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, BRANCH_FILE_PREFIX_LENGTH) || 'repo';
+  return `${readable}--${createHash('sha256').update(identity, 'utf8').digest('hex')}`;
+}
+
+// What names a project on every machine: its origin remote when the
+// checkout has one, so the same repository under different paths on two
+// machines is one project; the slug of the path otherwise, as before.
+// The root of the checkout, where git resolves a relative remote: the
+// directory that holds .git, in its canonical form, so a call from a
+// subdirectory of the checkout, or through a link to it, yields the same
+// identity; the path itself outside a repository.
+function repositoryRoot(projectPath) {
+  const gitDir = findGitDir(projectPath);
+  const root = gitDir ? path.dirname(gitDir) : projectPath;
+  try {
+    return fs.realpathSync.native(root);
+  } catch {
+    return root;
+  }
+}
+
+function projectIdentity(projectPath) {
+  const remote = normalizeRemoteUrl(detectOriginRemote(projectPath) || '', repositoryRoot(projectPath));
+  if (remote) return { key: remoteKey(remote), kind: 'remote', remote };
+  return { key: projectSlug(projectPath), kind: 'path', remote: null };
+}
+
+function projectKey(projectPath) {
+  return projectIdentity(projectPath).key;
+}
+
+// The directories the documents of a project are read from, in order: its
+// key and, for a project keyed by its remote, the slug of its path too,
+// where the versions before the identity wrote them. A machine upgraded
+// from one of them keeps reading them with no manual step; the keyed name
+// is tried first at every step, so a document written by this version
+// shadows the older one.
+function projectReadNames(projectPath) {
+  const identity = projectIdentity(projectPath);
+  return identity.kind === 'remote' ? [identity.key, projectSlug(projectPath)] : [identity.key];
+}
+
+function firstExisting(candidates) {
+  return candidates.find(candidate => fs.existsSync(candidate)) ?? null;
+}
+
 function flatStateFile(stateDir, projectPath) {
-  return path.join(stateDir, `${projectSlug(projectPath)}.md`);
+  return path.join(stateDir, `${projectKey(projectPath)}.md`);
 }
 
 function branchStateFile(stateDir, projectPath, branch) {
-  return path.join(stateDir, projectSlug(projectPath), `${branchStateKey(branch)}.md`);
+  return path.join(stateDir, projectKey(projectPath), `${branchStateKey(branch)}.md`);
 }
 
 // A detached HEAD gets its own file keyed by the exact commit, never the
@@ -236,34 +600,31 @@ function branchStateFile(stateDir, projectPath, branch) {
 // fixed-length token) and never the legacy flat file, which every detached
 // checkout of the project used to share.
 function detachedStateFile(stateDir, projectPath, commit) {
-  return path.join(stateDir, projectSlug(projectPath), `detached--${commit}.md`);
+  return path.join(stateDir, projectKey(projectPath), `detached--${commit}.md`);
 }
 
+// The file the versions before the hashed branch name wrote: under the slug
+// of the path, the only key those versions had.
 function legacyBranchStateFile(stateDir, projectPath, branch) {
   return path.join(stateDir, projectSlug(projectPath), `${sanitizeBranchName(branch)}.md`);
 }
 
 function resolveStateRead(stateDir, projectPath, branch, detachedCommit) {
+  const names = projectReadNames(projectPath);
   if (branch) {
-    const branchFile = branchStateFile(stateDir, projectPath, branch);
-    if (fs.existsSync(branchFile)) {
-      return { filePath: branchFile, source: 'branch', branch };
-    }
-    const legacyBranchFile = legacyBranchStateFile(stateDir, projectPath, branch);
-    if (fs.existsSync(legacyBranchFile)) {
-      return { filePath: legacyBranchFile, source: 'branch', branch };
-    }
+    const own = firstExisting(names.flatMap(name => [
+      path.join(stateDir, name, `${branchStateKey(branch)}.md`),
+      path.join(stateDir, name, `${sanitizeBranchName(branch)}.md`),
+    ]));
+    if (own) return { filePath: own, source: 'branch', branch };
     // Current versions write the default branch under its hashed key, so the
     // fallback must look there first; the plain main.md name is only left
     // behind by pre-hash versions and would otherwise shadow newer state.
-    const defaultHashedFile = branchStateFile(stateDir, projectPath, 'main');
-    if (fs.existsSync(defaultHashedFile)) {
-      return { filePath: defaultHashedFile, source: 'default-branch', branch };
-    }
-    const defaultFile = path.join(stateDir, projectSlug(projectPath), DEFAULT_BRANCH_FILE);
-    if (fs.existsSync(defaultFile)) {
-      return { filePath: defaultFile, source: 'default-branch', branch };
-    }
+    const fallback = firstExisting(names.flatMap(name => [
+      path.join(stateDir, name, `${branchStateKey('main')}.md`),
+      path.join(stateDir, name, DEFAULT_BRANCH_FILE),
+    ]));
+    if (fallback) return { filePath: fallback, source: 'default-branch', branch };
   }
 
   // A detached HEAD never falls through to the flat file: every detached
@@ -273,21 +634,21 @@ function resolveStateRead(stateDir, projectPath, branch, detachedCommit) {
   // never sees it and is reported as 'none', same as a branch with no state
   // yet.
   if (detachedCommit) {
-    const detachedFile = detachedStateFile(stateDir, projectPath, detachedCommit);
+    const candidates = names.map(name => path.join(stateDir, name, `detached--${detachedCommit}.md`));
+    const detached = firstExisting(candidates);
     return {
-      filePath: detachedFile,
-      source: fs.existsSync(detachedFile) ? 'detached' : 'none',
+      filePath: detached ?? candidates[0],
+      source: detached ? 'detached' : 'none',
       branch: null,
     };
   }
 
-  const flatFile = flatStateFile(stateDir, projectPath);
-  if (fs.existsSync(flatFile)) {
-    return { filePath: flatFile, source: 'flat', branch: branch || null };
-  }
+  const flats = names.map(name => path.join(stateDir, `${name}.md`));
+  const flat = firstExisting(flats);
+  if (flat) return { filePath: flat, source: 'flat', branch: branch || null };
 
   return {
-    filePath: branch ? branchStateFile(stateDir, projectPath, branch) : flatFile,
+    filePath: branch ? path.join(stateDir, names[0], `${branchStateKey(branch)}.md`) : flats[0],
     source: 'none',
     branch: branch || null,
   };
@@ -303,6 +664,12 @@ module.exports = {
   DEFAULT_BRANCH_FILE,
   getStateDir,
   projectSlug,
+  normalizeRemoteUrl,
+  originUrlFromConfig,
+  detectOriginRemote,
+  projectIdentity,
+  projectKey,
+  projectReadNames,
   sanitizeBranchName,
   branchStateKey,
   detectBranch,

@@ -445,6 +445,38 @@ async function runTests() {
     }
   }));
 
+  tally(await test('resolveStateFilePath reads the state of a repository under its remote key, and under the slug of its path when only an older version wrote it (#2063)', () => {
+    const projectDir = mktemp();
+    const homeDir = mktemp();
+    const originalHomedir = os.homedir;
+    const branchState = require('../../scripts/lib/branch-state');
+    try {
+      os.homedir = () => homeDir;
+      const gitDir = path.join(projectDir, '.git');
+      fs.mkdirSync(gitDir);
+      fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/main\n');
+      fs.writeFileSync(path.join(gitDir, 'config'), '[remote "origin"]\n\turl = https://github.com/Owner/Repo.git\n');
+      const stateDir = path.join(homeDir, '.egc', 'state');
+      const legacyFile = path.join(stateDir, branchState.projectSlug(projectDir), `${branchState.branchStateKey('main')}.md`);
+      fs.mkdirSync(path.dirname(legacyFile), { recursive: true });
+      fs.writeFileSync(legacyFile, '# Written by the version before the identity\n');
+      assert.strictEqual(resolveStateFilePath(projectDir), legacyFile, 'the legacy document is found under the slug of the path');
+
+      const keyedFile = branchState.branchStateFile(stateDir, projectDir, 'main');
+      assert.ok(path.basename(path.dirname(keyedFile)).startsWith('Repo--'));
+      fs.mkdirSync(path.dirname(keyedFile), { recursive: true });
+      fs.writeFileSync(keyedFile, '# Written under the remote key\n');
+      assert.strictEqual(resolveStateFilePath(projectDir), keyedFile, 'the keyed document wins once it exists');
+
+      fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/feature/other\n');
+      assert.strictEqual(resolveStateFilePath(projectDir), keyedFile, 'a branch with no document of its own falls back to the hashed default branch, as resolveStateRead does');
+    } finally {
+      os.homedir = originalHomedir;
+      cleanup(projectDir);
+      cleanup(homeDir);
+    }
+  }));
+
   tally(await test('resolveStateFilePath without branch finds main.md', () => {
     const projectDir = mktemp();
     const homeDir = mktemp();
