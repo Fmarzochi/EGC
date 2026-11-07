@@ -36,7 +36,8 @@ function main() {
     const { branch, detachedCommit } = resolveHeadState(projectPath);
     const resolved = resolveStateRead(getStateDir(), projectPath, branch, detachedCommit);
 
-    const content = resolved.source === 'none' ? '' : fs.readFileSync(resolved.filePath, 'utf8');
+    // The retired marks the team sync merge keeps in the header are not memory.
+    const content = resolved.source === 'none' ? '' : fs.readFileSync(resolved.filePath, 'utf8').replace(/^retired: [^\n]*\n/m, '');
     const appendix = globalState ? globalState.readGlobalAppendix(content, stateCrypto) : null;
 
     if (!content && !appendix) {

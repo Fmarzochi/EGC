@@ -10,6 +10,7 @@ import { isEncrypted, loadOrCreateEncKey, readPrivateKeyFile, readStateFile, wri
 import { loadOrCreateKey as loadOrCreateIntegrityKey, writeHmac } from '../integrity';
 import { branchStateKey, projectIdentity, projectSlug } from '../branch-state';
 import { generateTeamKey, openEnvelope, parseTeamKey, sealEnvelope } from './envelope';
+import { mergeStateDocuments } from './merge-sections';
 
 // The integrity sidecar next to a state document is a per-machine value,
 // made with ~/.egc/integrity.key: it never travels, and a merged document
@@ -354,8 +355,11 @@ function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
   // be shadowed unread; the result lands under the key, the legacy file stays.
   const legacy = local.content ? undefined : context.legacy.get(relativePath);
   const localContent = legacy ? legacy.content : local.content;
-  const merged = localContent ? mergeStateDocs(localContent, remoteContent) : remoteContent;
-  if (merged === local.content && !local.legacyPlaintext) {
+  const merged = localContent ? mergeStateDocuments(localContent, remoteContent) : remoteContent;
+  // When the remote changes nothing in the document, the local file is left
+  // as it is, whatever layout an earlier version gave it.
+  const unchanged = local.content !== '' && merged === mergeStateDocuments(local.content, local.content);
+  if (unchanged && !local.legacyPlaintext) {
     repairSidecar(localFile, local.content, context.integrityKey);
     return;
   }
@@ -487,7 +491,7 @@ function keyedDocumentExists(localStateDir: string, shared: string): boolean {
 // The documents of the versions before the remote identity, by the path
 // they are shared under, so a keyed document arriving from another machine
 // merges with the local legacy one instead of shadowing it unread. Two
-// legacy documents of one repository (two checkouts) keep the newer.
+// legacy documents of one repository (two checkouts) are merged into one.
 function indexLegacyDocuments(localStateDir: string, personalKey: Buffer): Map<string, LegacyDocument> {
   const index = new Map<string, LegacyDocument>();
   if (!fs.existsSync(localStateDir)) return index;
@@ -502,7 +506,7 @@ function indexLegacyDocuments(localStateDir: string, personalKey: Buffer): Map<s
     const shared = legacySharedPath(path.relative(localStateDir, file), content);
     if (shared === null) continue;
     const previous = index.get(shared);
-    if (!previous || mergeStateDocs(previous.content, content) === content) index.set(shared, { file, content });
+    index.set(shared, { file, content: previous ? mergeStateDocuments(previous.content, content) : content });
   }
   return index;
 }
@@ -516,7 +520,7 @@ type StageContext = { localStateDir: string; syncStateDir: string; teamKey: Buff
 
 // Seals one local document into the sync tree at the path it is shared
 // under. Two legacy documents of one repository (two checkouts of it on this
-// machine) share one path: the newer is the one that leaves.
+// machine) share one path: what leaves is their merge, section by section.
 function stageOneDocument(localFile: string, context: StageContext): void {
   let plaintext: string;
   try {
@@ -527,8 +531,8 @@ function stageOneDocument(localFile: string, context: StageContext): void {
   const sharedPath = sharedRelativePath(context.localStateDir, path.relative(context.localStateDir, localFile), plaintext);
   if (sharedPath === null || context.keep.has(sharedPath)) return;
   const already = context.stagedByPath.get(sharedPath);
-  const chosen = already === undefined ? plaintext : mergeStateDocs(already, plaintext);
-  if (chosen === already) return;
+  const chosen = already === undefined ? plaintext : mergeStateDocuments(already, plaintext);
+  if (already !== undefined && chosen === mergeStateDocuments(already, already)) return;
   const target = path.join(context.syncStateDir, sharedPath);
   if (isLink(target)) removeSyncFile(target);
   if (hasLinkedAncestor(target, context.syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${sharedPath} and is not written`);
@@ -549,23 +553,4 @@ export function stageTeamState(localStateDir: string, syncStateDir: string, team
     if (!isSidecar(localFile)) stageOneDocument(localFile, context);
   }
   return context.stagedByPath.size;
-}
-
-
-function mergeStateDocs(localContent: string, remoteContent: string): string {
-  const localUpdated = extractTimestamp(localContent);
-  const remoteUpdated = extractTimestamp(remoteContent);
-
-  if (remoteUpdated > localUpdated) {
-    return remoteContent;
-  }
-  return localContent;
-}
-
-function extractTimestamp(content: string): number {
-  const match = /^updated:\s*(.+)/m.exec(content);
-  if (match) {
-    return new Date(match[1].trim()).getTime();
-  }
-  return 0;
 }
