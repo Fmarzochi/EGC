@@ -120,6 +120,11 @@ function runIdentityTests(tally) {
     const subdirectory = path.join(relativeRemote, 'src', 'deep');
     fs.mkdirSync(subdirectory, { recursive: true });
     assert.strictEqual(projectIdentity(subdirectory).remote, projectIdentity(relativeRemote).remote, 'and against the root of the checkout when asked from a subdirectory of it');
+    if (process.platform !== 'win32') {
+      const alias = path.join(makeTmpDir('egc-branch-state-alias-'), 'alias');
+      fs.symlinkSync(relativeRemote, alias, 'dir');
+      assert.strictEqual(projectIdentity(alias).remote, projectIdentity(relativeRemote).remote, 'and against the canonical root when the checkout is reached through a link');
+    }
   }));
 
   tally(test('originUrlFromConfig reads what git reads: comments and assignments after a header, the dotted form, continuations, partial quotes and escapes', () => {
