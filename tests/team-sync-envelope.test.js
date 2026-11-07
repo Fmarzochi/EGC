@@ -228,6 +228,43 @@ async function runTests() {
       assert.ok(!fs.existsSync(path.join(stagedDir, 'proj', 'main.md.hmac')), 'no sidecar leaves the machine');
     });
 
+    run('a local document the merge keeps gets its sidecar repaired when older versions left it unusable, and a well-formed mismatch is left alone', () => {
+      const repairSync = path.join(dir, 'repair-sync');
+      const repairLocal = path.join(dir, 'repair-local');
+      const integrityKey = crypto.randomBytes(32);
+      fs.mkdirSync(path.join(repairSync, 'proj'), { recursive: true });
+      fs.mkdirSync(path.join(repairLocal, 'proj'), { recursive: true });
+      const olderRemote = doc('2026-09-02T12:00:00.000Z', 'older on the remote');
+      const localDocs = { 'garbage.md': doc('2026-09-09T12:00:00.000Z', 'kept, sidecar garbage'), 'missing.md': doc('2026-09-09T12:00:00.000Z', 'kept, sidecar missing'), 'tamper.md': doc('2026-09-09T12:00:00.000Z', 'kept, sidecar well formed') };
+      for (const name of Object.keys(localDocs)) {
+        fs.writeFileSync(path.join(repairSync, 'proj', name), envelope.sealEnvelope(olderRemote, teamKey, `proj/${name}`));
+        encryption.writeStateFile(path.join(repairLocal, 'proj', name), localDocs[name], personalKey);
+      }
+      fs.writeFileSync(path.join(repairLocal, 'proj', 'garbage.md.hmac'), 'EGC1:bytes an older merge wrote over the sidecar');
+      fs.writeFileSync(path.join(repairLocal, 'proj', 'tamper.md.hmac'), 'f'.repeat(64));
+      const outcome = teamSync.mergeTeamStateFrom(repairSync, repairLocal, teamKey, personalKey, integrityKey);
+      assert.strictEqual(outcome.merged, 0, 'the local documents are newer and stay');
+      assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'garbage.md.hmac'), 'utf8'), integrity.computeHmac(localDocs['garbage.md'], integrityKey), 'the garbage sidecar is written anew');
+      assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'missing.md.hmac'), 'utf8'), integrity.computeHmac(localDocs['missing.md'], integrityKey), 'the missing sidecar is written');
+      assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'tamper.md.hmac'), 'utf8'), 'f'.repeat(64), 'a well-formed sidecar that does not match is the tamper signal and stays');
+      const victim = path.join(dir, 'victim.txt');
+      fs.writeFileSync(victim, 'must not change');
+      let planted = false;
+      try {
+        fs.symlinkSync(victim, path.join(repairLocal, 'proj', 'missing.md.hmac.planted'));
+        fs.renameSync(path.join(repairLocal, 'proj', 'missing.md.hmac.planted'), path.join(repairLocal, 'proj', 'missing.md.hmac'));
+        planted = true;
+      } catch {
+        // symbolic links cannot be made here; the link case is skipped
+      }
+      if (planted) {
+        integrity.writeHmac(path.join(repairLocal, 'proj', 'missing.md'), localDocs['missing.md'], integrityKey);
+        assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'must not change', 'a link planted at the sidecar path is not followed');
+        assert.ok(!fs.lstatSync(path.join(repairLocal, 'proj', 'missing.md.hmac')).isSymbolicLink(), 'the link is replaced by a real sidecar');
+        assert.strictEqual(fs.readFileSync(path.join(repairLocal, 'proj', 'missing.md.hmac'), 'utf8'), integrity.computeHmac(localDocs['missing.md'], integrityKey));
+      }
+    });
+
     run('the team key is validated and generated as 64 hex characters', () => {
       assert.ok(/^[0-9a-f]{64}$/.test(envelope.generateTeamKey()));
       assert.strictEqual(envelope.parseTeamKey('not-a-key'), null);

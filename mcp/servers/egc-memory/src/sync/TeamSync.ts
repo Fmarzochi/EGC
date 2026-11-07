@@ -312,6 +312,23 @@ function currentLocal(localFile: string, relativePath: string, context: MergeCon
   }
 }
 
+// A local document the merge leaves as it is may carry a sidecar older
+// versions left unusable: missing, or the encrypted bytes an earlier merge
+// wrote in its place. Such a sidecar is written anew with the key of this
+// machine. A well-formed sidecar that does not match is left alone, since
+// that mismatch is the tamper signal get_state reports.
+function repairSidecar(localFile: string, content: string, integrityKey: Buffer | null): void {
+  if (!integrityKey || !content) return;
+  let existing: string | null;
+  try {
+    existing = fs.readFileSync(`${localFile}${SIDECAR_SUFFIX}`, 'utf-8').trim();
+  } catch {
+    existing = null;
+  }
+  if (existing !== null && /^[0-9a-f]{64}$/.test(existing)) return;
+  writeHmac(localFile, content, integrityKey);
+}
+
 function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
   const relativePath = path.relative(context.syncStateDir, syncFile);
   const remoteContent = openEnvelope(fs.readFileSync(syncFile, 'utf-8'), context.teamKey, relativePath);
@@ -328,7 +345,10 @@ function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
   const local = currentLocal(localFile, relativePath, context);
   if (local === null) return;
   const merged = local.content ? mergeStateDocs(local.content, remoteContent) : remoteContent;
-  if (merged === local.content && !local.legacyPlaintext) return;
+  if (merged === local.content && !local.legacyPlaintext) {
+    repairSidecar(localFile, local.content, context.integrityKey);
+    return;
+  }
   fs.mkdirSync(path.dirname(localFile), { recursive: true });
   writeStateFile(localFile, merged, context.personalKey);
   if (context.integrityKey) writeHmac(localFile, merged, context.integrityKey);

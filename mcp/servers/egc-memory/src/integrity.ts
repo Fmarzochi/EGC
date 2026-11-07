@@ -118,11 +118,17 @@ export function computeHmac(content: string, key: Buffer): string {
 export function writeHmac(stateFilePath: string, content: string, key: Buffer): void {
   const hmacPath = `${stateFilePath}.hmac`;
   const hmac = computeHmac(content, key);
+  // Written whole to a private temporary created exclusively, then renamed
+  // over the sidecar path: a rename replaces a link planted there instead
+  // of following it, so neither the bytes nor the mode land anywhere else.
+  const tmpPath = `${hmacPath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
   try {
-    fs.writeFileSync(hmacPath, hmac, { encoding: 'utf-8', mode: 0o600 });
-    fs.chmodSync(hmacPath, 0o600);
+    fs.writeFileSync(tmpPath, hmac, { encoding: 'utf-8', mode: 0o600, flag: 'wx' });
+    try { fs.chmodSync(tmpPath, 0o600); } catch { /* modes are not supported on this filesystem */ }
+    fs.renameSync(tmpPath, hmacPath);
   } catch {
     // best-effort: integrity sidecar failure must never block state writes
+    try { fs.unlinkSync(tmpPath); } catch { /* never written or already renamed */ }
   }
 }
 
