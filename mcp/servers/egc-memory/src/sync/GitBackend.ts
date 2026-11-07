@@ -2,7 +2,7 @@ import { simpleGit, SimpleGit } from 'simple-git';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
-import { SyncBackend, SyncConfig, SyncStatus } from './SyncBackend';
+import { InitOptions, SyncBackend, SyncConfig, SyncStatus } from './SyncBackend';
 
 const SYNC_STATE_DIR = path.join(os.homedir(), '.egc', 'team-sync');
 
@@ -27,7 +27,7 @@ export class GitBackend extends SyncBackend {
     this.git = simpleGit(this.repoDir);
   }
 
-  async init(config: SyncConfig): Promise<void> {
+  async init(config: SyncConfig, options: InitOptions = {}): Promise<void> {
     this.config = config;
 
     const isRepo = fs.existsSync(path.join(this.repoDir, '.git'));
@@ -37,6 +37,9 @@ export class GitBackend extends SyncBackend {
       await this.git.raw(['branch', '-M', config.branch]);
     }
     await this.ensureOriginRemote(config.remote);
+    // A status reads the local checkout only, so it answers while the
+    // remote is down.
+    if (options.readRemote === false) return;
 
     // The remote is read once here, so a URL that cannot be reached (a typo,
     // a host key not yet accepted, a missing credential) fails the init

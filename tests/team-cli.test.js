@@ -149,22 +149,39 @@ function runTests() {
     run('team init against a remote that cannot be read exits 1 and names it', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const saved = fs.readFileSync(configPath, 'utf8');
-      const run = teamCli(['init', '--backend', 'git', '--remote', path.join(HOME, 'no-such-remote')]);
-      assert.notStrictEqual(run.status, 0, `an init whose remote cannot be read is not a success:\n${run.stdout}\n${run.stderr}`);
-      assert.ok(`${run.stdout}\n${run.stderr}`.includes('cannot be read'), `${run.stdout}\n${run.stderr}`);
-      fs.writeFileSync(configPath, saved);
+      try {
+        const run = teamCli(['init', '--backend', 'git', '--remote', path.join(HOME, 'no-such-remote')]);
+        assert.strictEqual(run.status, 1, `an init whose remote cannot be read exits 1:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(`${run.stdout}\n${run.stderr}`.includes('cannot be read'), `${run.stdout}\n${run.stderr}`);
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
     });
 
     run('team sync against a remote that cannot be read exits 1 with the reason, never a quiet success', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const saved = fs.readFileSync(configPath, 'utf8');
-      const config = JSON.parse(saved);
-      fs.writeFileSync(configPath, JSON.stringify({ ...config, remote: path.join(HOME, 'no-such-remote') }, null, 2));
-      const run = teamCli(['sync']);
-      assert.notStrictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
-      assert.ok(!run.stdout.includes('Sync complete:'), `a sync that read nothing is not complete:\n${run.stdout}`);
-      assert.ok(`${run.stdout}\n${run.stderr}`.includes('cannot be read'), `${run.stdout}\n${run.stderr}`);
-      fs.writeFileSync(configPath, saved);
+      fs.writeFileSync(configPath, JSON.stringify({ ...JSON.parse(saved), remote: path.join(HOME, 'no-such-remote') }, null, 2));
+      try {
+        const run = teamCli(['sync']);
+        assert.strictEqual(run.status, 1, `a sync whose remote cannot be read exits 1:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(!run.stdout.includes('Sync complete:'), `a sync that read nothing is not complete:\n${run.stdout}`);
+        assert.ok(`${run.stdout}\n${run.stderr}`.includes('cannot be read'), `${run.stdout}\n${run.stderr}`);
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
+    });
+
+    run('team status answers from the local checkout while the remote cannot be read', () => {
+      const away = `${REMOTE}.away`;
+      fs.renameSync(REMOTE, away);
+      try {
+        const run = teamCli(['status']);
+        assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+        assert.ok(run.stdout.includes('Remote:'), `the status still reports the checkout:\n${run.stdout}`);
+      } finally {
+        fs.renameSync(away, REMOTE);
+      }
     });
 
     run('team sync with a key that opens nothing on the remote pushes nothing, so the shared state survives a wrong key', () => {

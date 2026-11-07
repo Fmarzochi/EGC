@@ -20,8 +20,15 @@ export interface SyncResult {
   errors: string[];
 }
 
+// readRemote false skips every read of the remote: the backend is set up
+// from the local checkout alone, which is enough for a status during an
+// outage of the remote.
+export interface InitOptions {
+  readRemote?: boolean;
+}
+
 export abstract class SyncBackend {
-  abstract init(config: SyncConfig): Promise<void>;
+  abstract init(config: SyncConfig, options?: InitOptions): Promise<void>;
   abstract pull(): Promise<string[]>;
   abstract push(): Promise<boolean>;
   abstract status(): Promise<SyncStatus>;

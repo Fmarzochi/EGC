@@ -108,7 +108,10 @@ export async function teamSync(): Promise<SyncResult> {
       result.pulledCount = changedFiles.length;
       result.conflictCount = 0; // Git handles merge tracking
     } catch (err) {
+      // Nothing is merged or pushed over a pull that failed: the sync is an
+      // offline no-op with the error reported.
       result.errors.push(`Pull failed: ${String(err)}`);
+      return result;
     }
 
     // Step 2: Merge into local state; only verified team envelopes count.
@@ -158,7 +161,9 @@ export async function teamStatus(): Promise<SyncStatus> {
 
   const instance = new BackendClass();
   try {
-    await instance.init(config);
+    // The status describes the local checkout, so it must answer while the
+    // remote is down: the remote is not read here.
+    await instance.init(config, { readRemote: false });
     return await instance.status();
   } finally {
     await instance.destroy();

@@ -169,7 +169,7 @@ async function runTests() {
       const backend = new GitBackend(path.join(tempBase, 'repo-unreachable'));
       await assert.rejects(
         () => backend.init({ backend: 'git', remote: path.join(tempBase, 'no-such-remote.git'), branch: 'main' }),
-        /cannot be read/,
+        /cannot be read: \S/,
       );
       await backend.destroy();
     });
@@ -183,8 +183,20 @@ async function runTests() {
     await run('pull throws when the remote stops being readable, instead of returning an empty list', async () => {
       const { backend, remote } = await pushingBackend(GitBackend, tempBase, 'vanishing');
       fs.rmSync(remote, { recursive: true, force: true });
-      await assert.rejects(() => backend.pull(), /cannot be read/);
+      await assert.rejects(() => backend.pull(), /cannot be read: \S/);
       await backend.destroy();
+    });
+
+    await run('status answers from the local checkout when the remote cannot be read, with a local-only init', async () => {
+      const { backend, repoDir, remote } = await pushingBackend(GitBackend, tempBase, 'offline');
+      await backend.destroy();
+      fs.rmSync(remote, { recursive: true, force: true });
+      const again = new GitBackend(repoDir);
+      await again.init({ backend: 'git', remote, branch: 'main' }, { readRemote: false });
+      const status = await again.status();
+      assert.strictEqual(status.remoteUrl, remote);
+      assert.strictEqual(status.conflictCount, 0);
+      await again.destroy();
     });
 
     await run('GitBackend constructor initializes repository directory', () => {

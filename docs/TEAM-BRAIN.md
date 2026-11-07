@@ -88,7 +88,7 @@ Pass the same `--branch <name>` on every machine, or they sync to different bran
 
 ## Reading the result of a sync
 
-`egc team sync` prints `Sync complete:` and exits 0, or `Sync did not complete:` and exits 1 when it reports an error, a remote it cannot read included.
+`egc team sync` prints `Sync complete:` and exits 0, or `Sync did not complete:` and exits 1 when it reports an error, including when it cannot read the remote. `egc team status` reads the local checkout only, so it answers while the remote is down.
 
 | Line | Meaning |
 |---|---|
