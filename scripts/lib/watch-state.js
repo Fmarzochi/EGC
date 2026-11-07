@@ -204,7 +204,12 @@ function resolveStateFilePath(projectPath) {
     return firstTrusted(names.map(name => path.join(stateDir, name, `detached--${detachedCommit}.md`)));
   }
 
-  const defaultFile = firstTrusted(names.map(name => path.join(stateDir, name, 'main.md')));
+  // The hashed default branch first, as resolveStateRead: the plain main.md
+  // is what the versions before the hash left behind.
+  const defaultFile = firstTrusted(names.flatMap(name => [
+    path.join(stateDir, name, `${branchStateKey('main')}.md`),
+    path.join(stateDir, name, 'main.md'),
+  ]));
   if (defaultFile) return defaultFile;
 
   return firstTrusted(names.map(name => path.join(stateDir, `${name}.md`)));

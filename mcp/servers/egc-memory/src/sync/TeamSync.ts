@@ -422,15 +422,18 @@ function documentHeader(plaintext: string): DocumentHeader {
 
 const HASHED_DOCUMENT_NAME = /--[0-9a-f]{64}\.md$/;
 
-// The name a legacy document takes under the key. The versions before the
-// hashed branch name wrote `<branch>.md` (`main.md` included); it becomes
-// the hashed name of the branch the header records, or of the name itself,
-// the only name the current version reads and writes for a branch, so the
-// documents of both versions meet. A hashed or detached name is kept.
+// The name a legacy document takes under the key: the hashed name of the
+// branch its header records, the only name the current version reads and
+// writes for a branch, so the documents of both versions meet. Without a
+// branch in the header, a name that is already hashed is kept and the
+// `<branch>.md` of the versions before the hash is hashed from its stem. A
+// detached document keeps its name, the commit.
 function keyedDocumentName(fileName: string, branch: string | null): string {
-  if (HASHED_DOCUMENT_NAME.test(fileName) || fileName.startsWith('detached--')) return fileName;
+  if (fileName.startsWith('detached--')) return fileName;
+  if (branch) return `${branchStateKey(branch)}.md`;
+  if (HASHED_DOCUMENT_NAME.test(fileName)) return fileName;
   const fromName = fileName.endsWith('.md') ? fileName.slice(0, -3) : fileName;
-  return `${branchStateKey(branch || fromName)}.md`;
+  return `${branchStateKey(fromName)}.md`;
 }
 
 // The keyed path a document of the versions before the remote identity
@@ -465,7 +468,20 @@ function legacySharedPath(relativePath: string, plaintext: string): string | nul
 export function sharedRelativePath(localStateDir: string, relativePath: string, plaintext: string): string | null {
   const shared = legacySharedPath(relativePath, plaintext);
   if (shared === null) return relativePath;
-  return fs.existsSync(path.join(localStateDir, shared)) ? null : shared;
+  return keyedDocumentExists(localStateDir, shared) ? null : shared;
+}
+
+// A keyed document counts as present only as a regular file reached through
+// real directories: a link planted at that path, or above it, is not state
+// and must not silence the legacy document.
+function keyedDocumentExists(localStateDir: string, shared: string): boolean {
+  const keyedFile = path.join(localStateDir, shared);
+  if (isLink(keyedFile) || hasLinkedAncestor(keyedFile, localStateDir)) return false;
+  try {
+    return fs.lstatSync(keyedFile).isFile();
+  } catch {
+    return false;
+  }
 }
 
 // The documents of the versions before the remote identity, by the path

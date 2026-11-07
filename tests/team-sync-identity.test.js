@@ -226,6 +226,18 @@ async function runTests() {
       const sharedFlat = path.join(branchState.projectKey(sixth), hashedMain);
       assert.ok(fs.existsSync(path.join(syncDir, sharedFlat)), 'a flat document is shared as the document of the default branch');
       assert.ok(!fs.existsSync(path.join(syncDir, `${branchState.projectKey(sixth)}.md`)), 'and not as a flat file under the key');
+
+      if (process.platform !== 'win32') {
+        const seventh = makeCheckout(dir, path.join('linux', 'seventh', 'app'), 'https://example.com/Seventh/Repo.git');
+        writeSealed(encryption, path.join(stateA, branchState.projectSlug(seventh), hashedMain), doc(seventh, '2026-11-07T08:00:00.000Z', 'legacy behind a planted link'), keyA);
+        const keyedDir = path.join(stateA, branchState.projectKey(seventh));
+        fs.mkdirSync(keyedDir, { recursive: true });
+        fs.symlinkSync(path.join(dir, 'elsewhere.md'), path.join(keyedDir, hashedMain));
+        teamSync.stageTeamState(stateA, syncDir, teamKey, keyA);
+        const sharedSeventh = path.join(branchState.projectKey(seventh), hashedMain);
+        assert.ok(fs.existsSync(path.join(syncDir, sharedSeventh)), 'a link planted at the keyed path does not pass for the keyed document, so the legacy one is still shared');
+        assert.ok(envelope.openEnvelope(fs.readFileSync(path.join(syncDir, sharedSeventh), 'utf8'), teamKey, sharedSeventh).includes('legacy behind a planted link'));
+      }
     });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

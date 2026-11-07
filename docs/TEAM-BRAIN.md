@@ -22,7 +22,7 @@ The local copy of your state stays encrypted at rest with the machine's own key,
 ## Before you start
 
 - Node and git on every machine, and `egc` installed with the memory server built (`egc doctor` checks this).
-- An empty git repository that you own, for example a private repository on your git host. Use a private one: the files are sealed, but their directory names show the names of your repositories (not the host, the owner or your folders) and their file names the names of your branches.
+- An empty git repository that you own, for example a private repository on your git host. Use a private one: the files are sealed, but their directory names show the names of your repositories (not the host, the owner or your folders), or the last two folder names of a directory without an `origin`, and their file names the names of your branches.
 - Credentials for that remote on every machine (an SSH key or a credential helper). `egc team sync` runs git without a terminal, so it cannot ask for a password.
 
 ## Set up the first machine
@@ -194,6 +194,8 @@ The command line talks to the memory server. Run `egc doctor`, and `npm run buil
 ## Current limitations
 
 - **Documents from before the remote identity keep their old name on the machine that wrote them.** A directory named after the folder path (`Projects--app`), written by a version before #2063, is still read there, and the sync shares its documents under the key of the repository as long as that machine still has the repository and no keyed document of the same branch exists yet, so your other machines read them for their own checkouts; the next `update_state` writes under the key, and the old directory is left as it is. A repository whose `origin` is declared only through an `include` of the git config, or that has no `origin`, is keyed by its path as before.
+- **Only a checkout under your home directory, or under the temp directory, is keyed by its remote.** The identity is read from `.git/config` through the same trust boundary as the branch, so a repository under `/opt` or `/workspace` keeps the slug of its path on every machine. An `origin` declared only through an `include` of the git config, or only in a per-worktree config, is not seen either.
+- **Every machine must run this version before the documents of the older one meet the others.** A document a machine on an earlier version shared under the slug of its path is read by the other machines only after that machine runs this version and syncs once, since only it can name the repository behind that path.
 - **Two repositories on one host of your own that differ only by a leading slash are one identity.** The scp-like forms `host:dir/repo.git` and `host:/dir/repo.git` fold together, as GitHub, GitLab and the other hosting services treat them; use the `ssh://` form for both when a host of your own holds two such repositories.
 - **The later document wins, per file.** There is no merge inside a document. Tracked in [#2055](https://github.com/Fmarzochi/EGC/issues/2055).
 - **Deletions do not propagate.** A document removed on one machine stays on the others.

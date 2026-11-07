@@ -33,7 +33,7 @@ The key words MUST, SHOULD, and MAY are to be interpreted as described in RFC 21
 
 A Memory Document is identified by:
 
-1. **project**: the absolute path of the project root on the machine that produced it (informative for consumers on other machines).
+1. **project**: the absolute path of the project root on the machine that produced it, informative for consumers on other machines; across machines a project is identified by its repository, as section 4.1 defines, or by its path when it has no repository remote.
 2. **branch** (optional): the version-control branch the memory belongs to. When present, the document carries branch-scoped memory; when absent, project-scoped.
 3. **global scope**: a document not tied to any project, holding user-wide preferences and lessons. Consumers MUST give project and branch entries precedence over global entries when both apply.
 
@@ -62,7 +62,7 @@ updated: 2026-01-15T12:00:00.000Z
 
 Consumers MUST ignore header keys they do not recognize; producers MAY add keys, but the four above are the interoperable core.
 
-`project` is a hint for a human reader, not the identity of the project: the same repository sits at different paths on different machines. The reference implementation keys the storage of a document, and the name it travels under between machines, by the repository itself: the URL of its `origin` remote, normalized (scheme and credentials dropped, host lowercased with its port only when it is not the default of ssh, trailing `/` and `.git` removed, owner and name as written), hashed with SHA-256 and prefixed by the repository name. A directory without a remote is keyed by a slug of its path. Consumers that match documents across machines MUST compare that identity, never `project`.
+`project` is a hint for a human reader, not the identity of the project: the same repository sits at different paths on different machines. The reference implementation keys the storage of a document, and the name it travels under between machines, by the repository itself: the URL of its `origin` remote, normalized (scheme and credentials dropped, host lowercased with its port only when it is not the default of its scheme, trailing `/` and `.git` removed, owner and name as written), hashed with SHA-256 and prefixed by the repository name. A directory without a remote, or a checkout outside the roots the implementation trusts for reading git metadata, is keyed by a slug of its path. Consumers that match documents across machines MUST compare that identity, never `project`.
 
 ### 4.2 Sections
 

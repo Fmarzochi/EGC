@@ -39,7 +39,7 @@ EGC is maintained by one developer. The plan against a bus factor of one is peop
 
 Decided on 2026-11-01. Targeted at the next release; no date is promised until it ships. It builds on the `egc team` commands and the `team_init`, `team_sync` and `team_status` tools that already synchronize memory over a git remote, and turns them into something one person can trust between their own machines:
 
-- The same repository is the same project on every machine: the state is keyed by the normalized `origin` remote, never by the folder path (#2063)
+- The same repository is the same project on every machine: the state is keyed by the normalized `origin` remote when the checkout has one, under the home or the temp directory, and by the folder path otherwise (#2063)
 - A merge of the memory documents with tombstones and caps instead of last-write-wins; author and signature on every entry
 - An identity per machine and a team key wrapped per member, with rotation and revocation
 - Secrets refused on the way out; size and rate limits on the sync

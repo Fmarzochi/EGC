@@ -117,6 +117,9 @@ function runIdentityTests(tally) {
     const relativeRemote = makeGitRepo('main');
     git(relativeRemote, 'remote add origin ../bare.git');
     assert.strictEqual(projectIdentity(relativeRemote).remote, normalizeRemoteUrl(path.resolve(relativeRemote, '../bare.git')), 'the identity of a checkout resolves its relative remote against the checkout');
+    const subdirectory = path.join(relativeRemote, 'src', 'deep');
+    fs.mkdirSync(subdirectory, { recursive: true });
+    assert.strictEqual(projectIdentity(subdirectory).remote, projectIdentity(relativeRemote).remote, 'and against the root of the checkout when asked from a subdirectory of it');
   }));
 
   tally(test('originUrlFromConfig reads what git reads: comments and assignments after a header, the dotted form, continuations, partial quotes and escapes', () => {
@@ -168,7 +171,7 @@ function runIdentityTests(tally) {
     const repo = makeRemoteRepo('main', REMOTE_HTTPS);
     assert.strictEqual(detectOriginRemote(repo), REMOTE_HTTPS);
     const worktree = path.join(makeTmpDir('egc-branch-state-worktree-'), 'wt');
-    git(repo, `worktree add -q ${worktree} -b wt`);
+    git(repo, `worktree add -q "${worktree}" -b wt`);
     assert.strictEqual(detectOriginRemote(worktree), REMOTE_HTTPS, 'a worktree reads the config of the common directory');
     assert.strictEqual(projectKey(worktree), projectKey(repo), 'a worktree is the same project as its repository');
     assert.strictEqual(detectOriginRemote(makeGitRepo('main')), null);
@@ -658,7 +661,7 @@ function runTests() {
     const home = makeTmpDir('egc-branch-state-home6-');
     const repo = makeGitRepo('feature/auth');
 
-    const result = spawnSync('node', [HOOK_PATH], {
+    const result = spawnSync(process.execPath, [HOOK_PATH], {
       input: '{"session":"abc"}',
       encoding: 'utf8',
       env: Object.assign({}, process.env, { HOME: home, USERPROFILE: home, PWD: repo }),

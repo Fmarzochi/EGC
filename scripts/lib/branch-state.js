@@ -540,8 +540,7 @@ function normalizeRemoteUrl(url, baseDir) {
 // shape as a branch file. Neither the host nor the owner nor any local path
 // is in it, so the shared repository of a team shows none of them.
 function remoteKey(identity) {
-  const segments = identity.split('/').filter(Boolean);
-  const name = segments[segments.length - 1] || 'repo';
+  const name = identity.split('/').filter(Boolean).at(-1) || 'repo';
   const readable = name.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, BRANCH_FILE_PREFIX_LENGTH) || 'repo';
   return `${readable}--${createHash('sha256').update(identity, 'utf8').digest('hex')}`;
 }
@@ -549,8 +548,16 @@ function remoteKey(identity) {
 // What names a project on every machine: its origin remote when the
 // checkout has one, so the same repository under different paths on two
 // machines is one project; the slug of the path otherwise, as before.
+// The root of the checkout, where git resolves a relative remote: the
+// directory that holds .git, so a call from a subdirectory of the checkout
+// yields the same identity; the path itself outside a repository.
+function repositoryRoot(projectPath) {
+  const gitDir = findGitDir(projectPath);
+  return gitDir ? path.dirname(gitDir) : projectPath;
+}
+
 function projectIdentity(projectPath) {
-  const remote = normalizeRemoteUrl(detectOriginRemote(projectPath) || '', projectPath);
+  const remote = normalizeRemoteUrl(detectOriginRemote(projectPath) || '', repositoryRoot(projectPath));
   if (remote) return { key: remoteKey(remote), kind: 'remote', remote };
   return { key: projectSlug(projectPath), kind: 'path', remote: null };
 }

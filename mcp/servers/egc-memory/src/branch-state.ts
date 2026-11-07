@@ -182,6 +182,10 @@ function resolveGitDir(projectPath: string): string | null {
 function readGitFile(gitDir: string, name: string): string | null {
   const filePath = path.resolve(gitDir, name);
   if (!trustedGitPath(filePath)) return null;
+  // Rechecked right before the open, with nothing in between: a link swapped
+  // in at gitDir after resolveGitDir looked would redirect the open, since
+  // O_NOFOLLOW only refuses a link at the final component.
+  if (fs.lstatSync(gitDir).isSymbolicLink()) return null;
   return readFileNoFollow(filePath);
 }
 
@@ -567,8 +571,7 @@ export function normalizeRemoteUrl(url: string, baseDir?: string): string | null
 // shape as a branch file. Neither the host nor the owner nor any local path
 // is in it, so the shared repository of a team shows none of them.
 function remoteKey(identity: string): string {
-  const segments = identity.split('/').filter(Boolean);
-  const name = segments[segments.length - 1] || 'repo';
+  const name = identity.split('/').filter(Boolean).at(-1) || 'repo';
   const readable = name.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, BRANCH_FILE_PREFIX_LENGTH) || 'repo';
   return `${readable}--${createHash('sha256').update(identity, 'utf8').digest('hex')}`;
 }
@@ -576,8 +579,16 @@ function remoteKey(identity: string): string {
 // What names a project on every machine: its origin remote when the
 // checkout has one, so the same repository under different paths on two
 // machines is one project; the slug of the path otherwise, as before.
+// The root of the checkout, where git resolves a relative remote: the
+// directory that holds .git, so a call from a subdirectory of the checkout
+// yields the same identity; the path itself outside a repository.
+function repositoryRoot(projectPath: string): string {
+  const gitDir = findGitDir(projectPath);
+  return gitDir ? path.dirname(gitDir) : projectPath;
+}
+
 export function projectIdentity(projectPath: string): ProjectIdentity {
-  const remote = normalizeRemoteUrl(detectOriginRemote(projectPath) || '', projectPath);
+  const remote = normalizeRemoteUrl(detectOriginRemote(projectPath) || '', repositoryRoot(projectPath));
   if (remote) return { key: remoteKey(remote), kind: 'remote', remote };
   return { key: projectSlug(projectPath), kind: 'path', remote: null };
 }

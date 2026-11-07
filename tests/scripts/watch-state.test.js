@@ -467,6 +467,9 @@ async function runTests() {
       fs.mkdirSync(path.dirname(keyedFile), { recursive: true });
       fs.writeFileSync(keyedFile, '# Written under the remote key\n');
       assert.strictEqual(resolveStateFilePath(projectDir), keyedFile, 'the keyed document wins once it exists');
+
+      fs.writeFileSync(path.join(gitDir, 'HEAD'), 'ref: refs/heads/feature/other\n');
+      assert.strictEqual(resolveStateFilePath(projectDir), keyedFile, 'a branch with no document of its own falls back to the hashed default branch, as resolveStateRead does');
     } finally {
       os.homedir = originalHomedir;
       cleanup(projectDir);

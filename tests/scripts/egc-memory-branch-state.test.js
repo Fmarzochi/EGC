@@ -126,7 +126,7 @@ function runIdentityTests(api) {
     assert.strictEqual(resolveStateWrite(stateDir, there, 'feature/auth'), target);
 
     const worktree = path.join(makeTmpDir('egc-memory-worktree-'), 'wt');
-    execSync(`git worktree add -q ${worktree} -b wt`, { cwd: here, stdio: ['ignore', 'pipe', 'pipe'] });
+    execSync(`git worktree add -q "${worktree}" -b wt`, { cwd: here, stdio: ['ignore', 'pipe', 'pipe'] });
     assert.strictEqual(detectOriginRemote(worktree), REMOTE_HTTPS, 'a worktree reads the config of the common directory');
     assert.strictEqual(projectKey(worktree), projectKey(here));
   });
@@ -145,7 +145,7 @@ function runIdentityTests(api) {
     assert.strictEqual(require('../../scripts/lib/branch-state').detectOriginRemote(pointed), null, 'the hooks agree');
 
     const worktree = path.join(container, 'wt');
-    execSync(`git worktree add -q ${worktree} -b linked`, { cwd: victim, stdio: ['ignore', 'pipe', 'pipe'] });
+    execSync(`git worktree add -q "${worktree}" -b linked`, { cwd: victim, stdio: ['ignore', 'pipe', 'pipe'] });
     const worktreeGitDir = path.join(victim, '.git', 'worktrees', 'wt');
     fs.writeFileSync(path.join(worktreeGitDir, 'commondir'), `${link}\n`);
     assert.strictEqual(detectOriginRemote(worktree), null, 'a commondir that names a linked directory is not followed');
