@@ -10,7 +10,7 @@ import { isEncrypted, loadOrCreateEncKey, readPrivateKeyFile, readStateFile, wri
 import { loadOrCreateKey as loadOrCreateIntegrityKey, writeHmac } from '../integrity';
 import { branchStateKey, projectIdentity, projectSlug } from '../branch-state';
 import { generateTeamKey, openEnvelope, parseTeamKey, sealEnvelope } from './envelope';
-import { mergeStateDocuments } from './merge-sections';
+import { canonicalForm, mergeStateDocuments } from './merge-sections';
 
 // The integrity sidecar next to a state document is a per-machine value,
 // made with ~/.egc/integrity.key: it never travels, and a merged document
@@ -358,7 +358,7 @@ function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
   const merged = localContent ? mergeStateDocuments(localContent, remoteContent) : remoteContent;
   // When the remote changes nothing in the document, the local file is left
   // as it is, whatever layout an earlier version gave it.
-  const unchanged = local.content !== '' && merged === mergeStateDocuments(local.content, local.content);
+  const unchanged = local.content !== '' && merged === canonicalForm(local.content);
   if (unchanged && !local.legacyPlaintext) {
     repairSidecar(localFile, local.content, context.integrityKey);
     return;
@@ -532,7 +532,7 @@ function stageOneDocument(localFile: string, context: StageContext): void {
   if (sharedPath === null || context.keep.has(sharedPath)) return;
   const already = context.stagedByPath.get(sharedPath);
   const chosen = already === undefined ? plaintext : mergeStateDocuments(already, plaintext);
-  if (already !== undefined && chosen === mergeStateDocuments(already, already)) return;
+  if (chosen === already) return;
   const target = path.join(context.syncStateDir, sharedPath);
   if (isLink(target)) removeSyncFile(target);
   if (hasLinkedAncestor(target, context.syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${sharedPath} and is not written`);

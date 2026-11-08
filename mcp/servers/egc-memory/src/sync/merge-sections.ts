@@ -5,6 +5,7 @@ import {
   CONTEXT_SECTION,
   NEXT_SECTION,
   RETIRED_KEY,
+  SECTION_ORDER,
   dedupeEntries,
   entryHash,
   formatRetired,
@@ -31,11 +32,24 @@ import type { RetiredMark, StateDocument, StateSections } from '../state-doc';
 
 type Side = { text: string; doc: StateDocument; time: number; marks: RetiredMark[] };
 
-const HAS_SECTION = /^## /m;
+const CORE_HEADINGS = SECTION_ORDER.map(heading => new RegExp(`^## ${heading}\\s*$`, 'm'));
 
 function side(content: string): Side {
   const doc = parseStateDocument(content);
   return { text: content, doc, time: updatedTime(doc), marks: parseRetired(headerValue(doc, RETIRED_KEY)) };
+}
+
+// A document is merged by section only when it has the five sections the
+// merge knows; anything else (a note, a partial file, a document of a version
+// before the sections) has nothing to merge by and is kept whole.
+export function hasCoreSections(content: string): boolean {
+  return CORE_HEADINGS.every(heading => heading.test(content));
+}
+
+// The text a document takes after a read and a write by this module: itself
+// when it is not merged by section, its serialized form otherwise.
+export function canonicalForm(content: string): string {
+  return hasCoreSections(content) ? serializeStateDocument(parseStateDocument(content)) : content;
 }
 
 function digest(text: string): string {
@@ -88,13 +102,17 @@ function mergeList(newer: Side, older: Side, heading: string, marks: readonly Re
   return weave(fromNewer, fromOlder);
 }
 
-export function mergeStateDocuments(a: string, b: string): string {
+// `now` is the moment of the merge: an entry the caps drop here is retired at
+// that moment, not at the time of a copy that may be weeks old, so the mark
+// outlives every stale copy by the whole window.
+export function mergeStateDocuments(a: string, b: string, now: Date = new Date()): string {
+  if (a === b) return a;
   const [newer, older] = ordered(a, b);
-  // A copy with no section at all has nothing to merge by, and nothing in it
-  // may be lost to the layout: the newer copy stands, whole, as before.
-  if (!HAS_SECTION.test(newer.text) || !HAS_SECTION.test(older.text)) return newer.text;
+  // A copy without the five sections has nothing to merge by, and nothing in
+  // it may be lost to the layout: the newer copy stands, whole, as before.
+  if (!hasCoreSections(newer.text) || !hasCoreSections(older.text)) return newer.text;
   const marks = [...newer.marks, ...older.marks];
-  const sections: StateSections = {};
+  const sections: StateSections = Object.create(null) as StateSections;
   const dropped: string[] = [];
   const present: string[] = [];
   for (const { heading, cap } of CAPPED_SECTIONS) {
@@ -106,8 +124,11 @@ export function mergeStateDocuments(a: string, b: string): string {
   const newerContext = newer.doc.sections[CONTEXT_SECTION] || [];
   sections[CONTEXT_SECTION] = [...(newerContext.length > 0 ? newerContext : older.doc.sections[CONTEXT_SECTION] || [])];
   sections[NEXT_SECTION] = [...(newer.doc.sections[NEXT_SECTION] || [])];
-  const at = headerValue(newer.doc, 'updated') || new Date(newer.time).toISOString();
-  const retired = settleRetired(marks, { retired: dropped, present, at });
+  // A section the merge does not know travels with the leading copy, as it is.
+  for (const heading of Object.keys(newer.doc.sections)) {
+    if (!SECTION_ORDER.includes(heading)) sections[heading] = [...newer.doc.sections[heading]];
+  }
+  const retired = settleRetired(marks, { retired: dropped, present, at: now.toISOString() });
   const header = withHeaderValue(newer.doc.header, RETIRED_KEY, retired.length > 0 ? formatRetired(retired) : null);
   return serializeStateDocument({ header, sections });
 }

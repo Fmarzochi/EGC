@@ -14,6 +14,16 @@ function tryRequire(modulePath) {
 const globalState = tryRequire('../lib/global-state');
 const stateCrypto = tryRequire('../lib/state-crypto');
 
+// The retired marks the team sync merge keeps in the header are bookkeeping,
+// not memory: the `retired:` line of the header (before the first section)
+// stays out of what is injected, wherever the file ends.
+function withoutRetiredLine(content) {
+  const lines = content.split('\n');
+  const firstSection = lines.findIndex(line => /^## /.test(line));
+  const headerEnd = firstSection === -1 ? lines.length : firstSection;
+  return lines.filter((line, index) => index >= headerEnd || !line.startsWith('retired:')).join('\n');
+}
+
 function main() {
   let raw = '';
   try {
@@ -36,8 +46,7 @@ function main() {
     const { branch, detachedCommit } = resolveHeadState(projectPath);
     const resolved = resolveStateRead(getStateDir(), projectPath, branch, detachedCommit);
 
-    // The retired marks the team sync merge keeps in the header are not memory.
-    const content = resolved.source === 'none' ? '' : fs.readFileSync(resolved.filePath, 'utf8').replace(/^retired: [^\n]*\n/m, '');
+    const content = resolved.source === 'none' ? '' : withoutRetiredLine(fs.readFileSync(resolved.filePath, 'utf8'));
     const appendix = globalState ? globalState.readGlobalAppendix(content, stateCrypto) : null;
 
     if (!content && !appendix) {

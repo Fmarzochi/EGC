@@ -95,22 +95,20 @@ function numbered(prefix, count) {
 
 async function runTests() {
   console.log('\n=== Testing team sync merge by section ===\n');
-  let stateDoc;
-  let mergeSections;
-  let teamSync;
-  let encryption;
-  let branchState;
-  try {
-    stateDoc = await import(pathToFileURL(path.join(BUILD, 'state-doc.js')).href);
-    mergeSections = await import(pathToFileURL(path.join(BUILD, 'sync', 'merge-sections.js')).href);
-    teamSync = await import(pathToFileURL(path.join(BUILD, 'sync', 'TeamSync.js')).href);
-    encryption = await import(pathToFileURL(path.join(BUILD, 'encryption.js')).href);
-    branchState = await import(pathToFileURL(path.join(BUILD, 'branch-state.js')).href);
-  } catch (error) {
-    console.error(`[SKIP] Could not import the memory server build: ${error.message}. Run 'npm run build' in mcp/servers/egc-memory first.`);
+  // The skip is for a checkout without the build; a build that exists and
+  // does not load is a failure of the suite, never a quiet pass.
+  if (!fs.existsSync(path.join(BUILD, 'state-doc.js')) || !fs.existsSync(path.join(BUILD, 'sync', 'merge-sections.js'))) {
+    console.error(`[SKIP] memory server build not found under ${BUILD}. Run 'npm run build' in mcp/servers/egc-memory first.`);
     process.exit(0);
   }
-  const merge = mergeSections.mergeStateDocuments;
+  const stateDoc = await import(pathToFileURL(path.join(BUILD, 'state-doc.js')).href);
+  const mergeSections = await import(pathToFileURL(path.join(BUILD, 'sync', 'merge-sections.js')).href);
+  const teamSync = await import(pathToFileURL(path.join(BUILD, 'sync', 'TeamSync.js')).href);
+  const encryption = await import(pathToFileURL(path.join(BUILD, 'encryption.js')).href);
+  const branchState = await import(pathToFileURL(path.join(BUILD, 'branch-state.js')).href);
+  // The moment of every merge in these tests, so the marks are predictable.
+  const NOW = new Date(T.thirteen);
+  const merge = (a, b, now = NOW) => mergeSections.mergeStateDocuments(a, b, now);
   const parse = stateDoc.parseStateDocument;
   const serialize = stateDoc.serializeStateDocument;
   const header = (doc, key) => stateDoc.headerValue(doc, key);
@@ -159,10 +157,27 @@ async function runTests() {
     assert.deepStrictEqual(merged.sections['Do Not Repeat'], eleven.slice(0, 10));
     const marks = marksOf(merged);
     assert.deepStrictEqual(marks.map(m => m.hash).sort(), [stateDoc.entryHash('decision 16'), stateDoc.entryHash('avoid 11')].sort());
-    assert.ok(marks.every(m => m.at === T.eleven), 'retired at the time of the merged document');
-    // The side that still carries the entry, at the same time, does not bring it back on top.
+    assert.ok(marks.every(m => m.at === T.thirteen), 'retired at the moment of the merge, not at the time of a copy');
+    // The side that still carries the entry does not bring it back on top.
     const again = parse(merge(merge(a, b), b));
     assert.deepStrictEqual(again.sections['Active Decisions'], sixteen.slice(0, 15));
+  });
+
+  run('a partial document, a heading named like a property, and a section the merge does not know are kept, never lost to the layout', () => {
+    const full = document({ updated: T.eleven, decisions: ['kept: yes'] });
+    const partial = `# Project State\nupdated: ${T.ten}\n\n## Notes\n- keep me\n`;
+    assert.strictEqual(merge(full, partial), full, 'a copy without the five sections leaves the newer copy whole');
+    const newerPartial = `# Project State\nupdated: ${T.twelve}\n\n## Notes\n- keep me\n`;
+    assert.strictEqual(merge(full, newerPartial), newerPartial, 'and whole when it is the newer one');
+    const withExtra = `${document({ updated: T.twelve, decisions: ['kept: yes'] })}## __proto__\n- polluted\n\n## Scratch\n- note\n`;
+    const parsed = parse(withExtra);
+    assert.deepStrictEqual(parsed.sections['__proto__'], ['polluted'], 'a heading named like a property is one more section');
+    assert.deepStrictEqual(parsed.sections['Scratch'], ['note']);
+    assert.ok(!Object.prototype.hasOwnProperty.call({}, 'polluted'), 'and pollutes nothing');
+    const merged = parse(merge(withExtra, full));
+    assert.deepStrictEqual(merged.sections['Scratch'], ['note'], 'a section the merge does not know travels with the leading copy');
+    assert.deepStrictEqual(merged.sections['__proto__'], ['polluted']);
+    assert.ok(serialize(merged).includes('## Scratch\n- note'));
   });
 
   run('an entry removed on one side does not return from the other while the removal is newer, and returns when the other side added it again later', () => {
@@ -220,9 +235,13 @@ async function runTests() {
     assert.deepStrictEqual(written.sections['Context'], ['The app.'], 'an update with no context keeps the paragraph');
     const again = parse(build({ updated: T.twelve, decisions: [{ what: 'decision 15' }] }, written));
     assert.ok(!marksOf(again).some(m => m.hash === stateDoc.entryHash('decision 15')), 'added again, the entry loses its mark');
-    const broken = parse(build({ updated: T.twelve, decisions: [{ what: 'one\nentry', why: 'two\n## Preferences\n- lines' }], preferences: ['a\r\nb'] }, written));
+    const broken = parse(build({ updated: T.twelve, decisions: [{ what: 'one\nentry', why: 'two\n## Preferences\n- lines' }], preferences: ['a\r\nb'], next: ['first\n## Context\nsecond'] }, written));
     assert.strictEqual(broken.sections['Active Decisions'][0], 'one entry: two ## Preferences - lines', 'a line break inside an entry becomes a space, never a second entry or a heading');
     assert.strictEqual(broken.sections['Preferences'][0], 'a b');
+    assert.deepStrictEqual(broken.sections['Next Session'], ['first ## Context second']);
+    const flood = parse(build({ updated: T.twelve, decisions: numbered('new', 16).map(what => ({ what })) }, empty));
+    assert.strictEqual(flood.sections['Active Decisions'].length, 15);
+    assert.deepStrictEqual(marksOf(flood), [{ hash: stateDoc.entryHash('new 16'), at: T.twelve }], 'an incoming entry the cap leaves out is retired too');
     assert.strictEqual(serialize(written).split('\n')[0], '# Project State');
     assert.ok(serialize(written).endsWith('## Next Session\n'), 'the document ends as the previous writer ended it');
     assert.ok(!serialize(parse(document({ updated: T.ten }))).includes('retired:'), 'no marks, no line');

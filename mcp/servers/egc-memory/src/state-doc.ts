@@ -42,8 +42,11 @@ export type StateUpdate = {
   next?: string[];
 };
 
+// The headings of a document name its sections, so the map has no prototype:
+// a heading such as `__proto__` is one more section, never a property of
+// every object.
 function emptySections(): StateSections {
-  const sections: StateSections = {};
+  const sections: StateSections = Object.create(null) as StateSections;
   for (const heading of SECTION_ORDER) sections[heading] = [];
   return sections;
 }
@@ -194,16 +197,17 @@ export function buildStateDocument(update: StateUpdate, existing: StateDocument)
   const left: string[] = [];
   const present: string[] = [];
   for (const { heading, cap } of CAPPED_SECTIONS) {
-    const before = dedupeEntries(existing.sections[heading] || []);
-    const merged = dedupeEntries([...incoming[heading], ...before]).slice(0, cap);
-    const kept = new Set(merged);
+    const union = dedupeEntries([...incoming[heading], ...(existing.sections[heading] || [])]);
+    const merged = union.slice(0, cap);
     sections[heading] = merged;
-    left.push(...before.filter(entry => !kept.has(entry)));
+    // Everything the cap left out is retired, an incoming entry included:
+    // a copy elsewhere may carry it, and it must not come back from there.
+    left.push(...union.slice(cap));
     present.push(...merged);
   }
   const context = update.context || contextOf(existing);
   sections[CONTEXT_SECTION] = context ? context.split('\n') : [];
-  sections[NEXT_SECTION] = (update.next || []).map(entry => entry.trim()).filter(Boolean);
+  sections[NEXT_SECTION] = (update.next || []).map(oneLine).filter(Boolean);
   const retired = settleRetired(parseRetired(headerValue(existing, RETIRED_KEY)), { retired: left, present, at: update.updated });
   const header: HeaderField[] = [{ key: 'project', value: update.projectPath }];
   if (update.branch) header.push({ key: 'branch', value: update.branch });
