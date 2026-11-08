@@ -102,14 +102,14 @@ These rules make updates idempotent in spirit: repeated writes converge, recent 
 
 When two producers hold copies of the same document written apart (two machines between two syncs), neither copy is an update of the other, and a merge of the two MUST keep what each added:
 
-1. The copy with the later `updated` leads; two copies of the same time are ordered by the SHA-256 of their text, so the result does not depend on which side merges.
+1. The copy with the later `updated` leads; two copies of the same time are ordered by their number of entries, the fuller first, and then by the SHA-256 of their text, so the result does not depend on which side merges and the result of a merge leads over the copies it came from.
 2. **Context**: the paragraph of the leading copy; when it is empty, the paragraph of the other.
 3. **Active Decisions, Do Not Repeat, Preferences**: the union of both copies, one entry per text. The leading copy keeps its order; an entry only the other copy has is placed right before the first entry that follows it in that copy and is in the leading copy too, or at the end when none follows. The caps of section 5 apply after the union, and each entry they push out is retired at the moment of the merge (header `retired`, section 4.1).
 4. An entry that a `retired` mark of either copy retired at or after the `updated` of the copy that carries it is left out; an entry present in the result loses its mark. Marks of both copies are carried over, bounded as section 4.1 says.
 5. **Next Session**: the list of the leading copy, whole.
 6. The header of the result is the header of the leading copy, with `retired` recomputed; a section the merge does not know travels with the leading copy as it is.
 
-Merging A with B and B with A at the same moment MUST give the same document. Merging a document with an identical copy MUST return it unchanged, and merging it with a copy it already contains MUST leave its content unchanged (the layout MAY become the canonical one). A copy without the five sections of section 4.2 has nothing to merge by: the leading copy then stands whole, so nothing in it is lost to its layout.
+Merging A with B and B with A at the same moment MUST give the same document. Merging a document with an identical copy MUST return it unchanged, and merging it with a copy it already contains MUST leave its content unchanged (the layout MAY become the canonical one; two copies of the same time that hold the same entries in another order MAY be reordered once, to the order of the copy the tie-break chose). A copy without the five sections of section 4.2 has nothing to merge by: the leading copy then stands whole, so nothing in it is lost to its layout.
 
 ## 6. Scopes and precedence
 

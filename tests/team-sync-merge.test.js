@@ -106,6 +106,7 @@ async function runTests() {
   const teamSync = await import(pathToFileURL(path.join(BUILD, 'sync', 'TeamSync.js')).href);
   const encryption = await import(pathToFileURL(path.join(BUILD, 'encryption.js')).href);
   const branchState = await import(pathToFileURL(path.join(BUILD, 'branch-state.js')).href);
+  const envelope = await import(pathToFileURL(path.join(BUILD, 'sync', 'envelope.js')).href);
   // The moment of every merge in these tests, so the marks are predictable.
   const NOW = new Date(T.thirteen);
   const merge = (a, b, now = NOW) => mergeSections.mergeStateDocuments(a, b, now);
@@ -191,6 +192,21 @@ async function runTests() {
     merged = parse(merge(a, readded));
     assert.deepStrictEqual(merged.sections['Active Decisions'], ['E: gone', 'keep: yes']);
     assert.strictEqual(header(merged, 'retired'), undefined, 'an entry that is back has no mark');
+  });
+
+  run('a mark that expired keeps nothing out in the merge where it expires, and the result of a merge of two copies of the same time leads over both afterwards', () => {
+    const expired = `${stateDoc.entryHash('back: again')}@${T.longAgo}`;
+    const a = document({ updated: T.eleven, retired: expired, decisions: ['keep: yes'] });
+    const stale = document({ updated: T.ten, decisions: ['back: again', 'keep: yes'] });
+    const merged = parse(merge(a, stale));
+    assert.deepStrictEqual(merged.sections['Active Decisions'], ['back: again', 'keep: yes'], 'the entry is back in the same merge');
+    assert.strictEqual(header(merged, 'retired'), undefined, 'the expired mark is gone');
+    const left = document({ updated: T.eleven, decisions: ['left: one', 'shared: both'] });
+    const right = document({ updated: T.eleven, context: 'Other.', decisions: ['right: one', 'shared: both'] });
+    const result = merge(left, right);
+    assert.strictEqual(merge(result, left), result, 'the fuller copy leads, so the result of a merge leads over the copies it came from');
+    assert.strictEqual(merge(result, right), result);
+    assert.strictEqual(merge(right, result), result);
   });
 
   run('retired marks expire after thirty days and are capped, so the list cannot grow without end', () => {
@@ -291,6 +307,22 @@ async function runTests() {
       assert.strictEqual(teamSync.mergeTeamStateFrom(syncDir, stateB, teamKey, keyB).merged, 1);
       assert.deepStrictEqual(read(fileB, keyB).sections, read(fileA, keyA).sections, 'both machines hold the same sections');
       assert.strictEqual(teamSync.mergeTeamStateFrom(syncDir, stateB, teamKey, keyB).merged, 0, 'a second merge of the same sync changes nothing');
+    });
+
+    run('a remote copy without the five sections leaves a newer local document untouched, whatever its layout, and the sync reports no merge', () => {
+      const syncDir = path.join(dir, 'partial', 'sync', 'state');
+      const stateDir = path.join(dir, 'partial', 'home', '.egc', 'state');
+      const teamKey = crypto.randomBytes(32);
+      const key = crypto.randomBytes(32);
+      const relative = path.join(`Repo--${'a'.repeat(64)}`, 'main.md');
+      const oldLayout = `# Project State\nproject: /x\nupdated: ${T.eleven}\n\n## Context\n\nold layout\n\n## Active Decisions\n- keep: yes\n\n## Do Not Repeat\n\n## Preferences\n\n## Next Session\n`;
+      fs.mkdirSync(path.dirname(path.join(stateDir, relative)), { recursive: true });
+      encryption.writeStateFile(path.join(stateDir, relative), oldLayout, key);
+      fs.mkdirSync(path.dirname(path.join(syncDir, relative)), { recursive: true });
+      fs.writeFileSync(path.join(syncDir, relative), envelope.sealEnvelope(`# Project State\nupdated: ${T.ten}\n\n## Notes\n- partial\n`, teamKey, relative));
+      const outcome = teamSync.mergeTeamStateFrom(syncDir, stateDir, teamKey, key);
+      assert.strictEqual(outcome.merged, 0, JSON.stringify(outcome));
+      assert.strictEqual(encryption.readStateFile(path.join(stateDir, relative), key), oldLayout, 'the local text is exactly as it was');
     });
 
     run('the walkthrough end to end: two homes, one bare remote, both members write a decision between syncs, both decisions survive on both machines', () => {

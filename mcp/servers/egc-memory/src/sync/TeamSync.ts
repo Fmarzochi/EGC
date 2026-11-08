@@ -358,7 +358,7 @@ function mergeOneSyncFile(syncFile: string, context: MergeContext): void {
   const merged = localContent ? mergeStateDocuments(localContent, remoteContent) : remoteContent;
   // When the remote changes nothing in the document, the local file is left
   // as it is, whatever layout an earlier version gave it.
-  const unchanged = local.content !== '' && merged === canonicalForm(local.content);
+  const unchanged = local.content !== '' && (merged === local.content || merged === canonicalForm(local.content));
   if (unchanged && !local.legacyPlaintext) {
     repairSidecar(localFile, local.content, context.integrityKey);
     return;

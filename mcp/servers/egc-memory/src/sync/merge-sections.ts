@@ -5,6 +5,7 @@ import {
   CONTEXT_SECTION,
   NEXT_SECTION,
   RETIRED_KEY,
+  RETIRED_TTL_MS,
   SECTION_ORDER,
   dedupeEntries,
   entryHash,
@@ -56,12 +57,21 @@ function digest(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-// The newer copy leads; two copies of the same time are ordered by the hash
-// of their text, so the arguments can come in either order.
+function entryCount(doc: StateDocument): number {
+  return CAPPED_SECTIONS.reduce((total, { heading }) => total + dedupeEntries(doc.sections[heading] || []).length, 0);
+}
+
+// The newer copy leads. Of two copies of the same time, the one with more
+// entries leads, so the result of a merge (never smaller than its inputs)
+// leads over the copies it came from; the hash of their text decides the
+// rest, so the arguments can come in either order.
 function ordered(a: string, b: string): [Side, Side] {
   const first = side(a);
   const second = side(b);
   if (first.time !== second.time) return first.time > second.time ? [first, second] : [second, first];
+  const firstCount = entryCount(first.doc);
+  const secondCount = entryCount(second.doc);
+  if (firstCount !== secondCount) return firstCount > secondCount ? [first, second] : [second, first];
   return digest(a) <= digest(b) ? [first, second] : [second, first];
 }
 
@@ -111,7 +121,10 @@ export function mergeStateDocuments(a: string, b: string, now: Date = new Date()
   // A copy without the five sections has nothing to merge by, and nothing in
   // it may be lost to the layout: the newer copy stands, whole, as before.
   if (!hasCoreSections(newer.text) || !hasCoreSections(older.text)) return newer.text;
-  const marks = [...newer.marks, ...older.marks];
+  // A mark older than the window has expired and keeps nothing out, in this
+  // merge as in the next.
+  const window = now.getTime() - RETIRED_TTL_MS;
+  const marks = [...newer.marks, ...older.marks].filter(mark => Date.parse(mark.at) >= window);
   const sections: StateSections = Object.create(null) as StateSections;
   const dropped: string[] = [];
   const present: string[] = [];
