@@ -223,7 +223,9 @@ export function buildStateDocument(update: StateUpdate, existing: StateDocument)
     'Preferences': (update.preferences || []).map(oneLine),
   };
   const marks = parseRetired(headerValue(existing, RETIRED_KEY));
-  const newest = newestMarks(marks);
+  // A retirement outside the window has expired and calls for no restoration.
+  const window = Date.parse(update.updated) - RETIRED_TTL_MS;
+  const newest = newestMarks(marks.filter(mark => Number.isNaN(window) || Date.parse(mark.at) >= window));
   const sections = emptySections();
   const left: string[] = [];
   const restored: string[] = [];
