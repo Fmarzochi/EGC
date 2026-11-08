@@ -17,6 +17,8 @@ import { propagateStateToTools } from './propagate';
 import { sweepExpired } from './working-memory';
 import { sanitizeStateFields, scrubPresentedLines, scrubStateFields } from './sanitize.js';
 import { runLessonDecaySweep } from './memory-lessons';
+import { buildStateDocument, parseStateDocument, serializeStateDocument, withoutRetiredLine } from './state-doc';
+import type { StateDocument } from './state-doc';
 
 function getIntegrityKey(): Buffer {
   return loadOrCreateKey();
@@ -50,76 +52,34 @@ async function withStateMergeLock<T>(stateFile: string, fn: () => T | Promise<T>
   }
 }
 
-const H2_RE = /^## (.+)/;
-function readStateDoc(filePath: string): Record<string, string[]|string> {
-  if (!fs.existsSync(filePath)) return {};
-  const content = readStateFile(filePath, getEncKey());
-  const result: Record<string, string[]|string> = {};
-  let currentSection = '';
-  for (const line of content.split('\n')) {
-    const h2 = H2_RE.exec(line);
-    if (h2) { currentSection = h2[1].trim(); result[currentSection] = result[currentSection] || []; continue; }
-    if (currentSection && line.trim() && !line.startsWith('#')) {
-      const arr = result[currentSection];
-      if (Array.isArray(arr)) arr.push(line.replace(/^- /, '').trim());
-      else result[currentSection] = line.trim();
-    }
-  }
-  return result;
+function readStateDoc(filePath: string): StateDocument {
+  if (!fs.existsSync(filePath)) return parseStateDocument('');
+  return parseStateDocument(readStateFile(filePath, getEncKey()));
 }
 
+// The document is built and laid out by state-doc, the module the team sync
+// merge reads and writes with, so a document written here and a document
+// merged there have the same shape.
 function writeStateDoc(filePath: string, projectPath: string, data: {
   context?: string;
   decisions?: {what: string; why?: string}[];
   avoid?: {what: string; why?: string}[];
   preferences?: string[];
   next?: string[];
-}, existing: Record<string, string[]|string>, branch: string | null = null) {
+}, existing: StateDocument, branch: string | null = null) {
   const author = process.env.USER || process.env.USERNAME || 'unknown';
-  const mergedDecisions = [
-    ...(data.decisions || []).map(d => `- ${d.what}${d.why ? ': ' + d.why : ''}`),
-    ...((existing['Active Decisions'] as string[]) || []).map(l => `- ${l}`)
-  ].slice(0, 15);
-
-  const mergedAvoid = [
-    ...(data.avoid || []).map(d => `- ${d.what}${d.why ? ': ' + d.why : ''}`),
-    ...((existing['Do Not Repeat'] as string[]) || []).map(l => `- ${l}`)
-  ].slice(0, 10);
-
-  const mergedPrefs = [
-    ...(data.preferences || []).map(p => `- ${p}`),
-    ...((existing['Preferences'] as string[]) || []).map(l => `- ${l}`)
-  ].slice(0, 15);
-
-  const nextItems = (data.next || []).map(n => `- ${n}`);
-
-  const context = data.context || (existing['Context'] as string) || '';
-
-  const lines = [
-    `# Project State`,
-    `project: ${projectPath}`,
-    ...(branch ? [`branch: ${branch}`] : []),
-    `author: ${author}`,
-    `updated: ${new Date().toISOString()}`,
-    ``,
-    `## Context`,
-    context,
-    ``,
-    `## Active Decisions`,
-    ...mergedDecisions,
-    ``,
-    `## Do Not Repeat`,
-    ...mergedAvoid,
-    ``,
-    `## Preferences`,
-    ...mergedPrefs,
-    ``,
-    `## Next Session`,
-    ...nextItems,
-    ``
-  ];
-
-  writeStateFile(filePath, lines.join('\n'), getEncKey());
+  const doc = buildStateDocument({
+    projectPath,
+    branch,
+    author,
+    updated: new Date().toISOString(),
+    context: data.context,
+    decisions: data.decisions,
+    avoid: data.avoid,
+    preferences: data.preferences,
+    next: data.next,
+  }, existing);
+  writeStateFile(filePath, serializeStateDocument(doc), getEncKey());
 }
 
 export const GetStateSchema = z.object({
@@ -217,15 +177,17 @@ export async function handleGetState(db: Database, toolArgs: unknown) {
   } else {
     log('INFO', 'Project state retrieved', { project: projPath, branch: branch || 'none', source: resolved.source, integrity: 'ok' });
   }
-  const appendix = readGlobalAppendix(content);
-  return { content: [{ type: "text", text: appendix ? `${content}\n${appendix}` : content }] };
+  // The retired marks of the merge stay in the file and out of what is read.
+  const presented = withoutRetiredLine(content);
+  const appendix = readGlobalAppendix(presented);
+  return { content: [{ type: "text", text: appendix ? `${presented}\n${appendix}` : presented }] };
 }
 
 function readGlobalAppendix(projectContent: string): string | null {
   try {
     const globalFile = getGlobalStateFile();
     if (!fs.existsSync(globalFile)) return null;
-    const globalDoc = readStateDoc(globalFile);
+    const globalDoc = readStateDoc(globalFile).sections;
     const presented: Record<string, string[]> = {};
     for (const { heading } of GLOBAL_APPENDIX_SECTIONS) {
       const lines = globalDoc[heading];
@@ -242,14 +204,14 @@ function readGlobalAppendix(projectContent: string): string | null {
   }
 }
 
-function readExistingStateOrRecover(filePath: string, force: boolean | undefined, label: 'global' | 'project'): Record<string, string[]|string> {
+function readExistingStateOrRecover(filePath: string, force: boolean | undefined, label: 'global' | 'project'): StateDocument {
   try {
     return readStateDoc(filePath);
   } catch (err) {
     if (force && fs.existsSync(filePath)) {
       const backupPath = quarantineUndecryptableStateFile(filePath);
       log('WARN', `update_state: force=true, undecryptable ${label} state backed up and replaced`, { file: filePath, backup: backupPath, error: String(err) });
-      return {};
+      return parseStateDocument('');
     }
     log('ERROR', `[EGC encryption] Cannot read existing ${label} state, aborting update to prevent data loss`, { file: filePath, error: String(err) });
     throw new McpError(ErrorCode.InternalError, `Failed to decrypt existing ${label === 'global' ? 'global ' : ''}state file. The encryption key may have changed. Path: ${filePath}. Retry with force: true to back up the unreadable file and start fresh -- only do this after confirming the failure is persistent, not a transient lock from another process writing at the same moment.`);
@@ -301,11 +263,11 @@ export async function handleUpdateState(db: Database, toolArgs: unknown) {
     const writtenContent = readStateFile(filePath, getEncKey());
     writeHmac(filePath, writtenContent, getIntegrityKey());
   });
-  const mergedForPropagation = readStateDoc(filePath);
+  const mergedForPropagation = readStateDoc(filePath).sections;
   const scrubbed = scrubStateFields({
-    context: ((mergedForPropagation['Context'] as string[] | undefined) ?? []).join('\n') || undefined,
-    decisions: ((mergedForPropagation['Active Decisions'] as string[]) || []).map(what => ({ what })),
-    next: (mergedForPropagation['Next Session'] as string[]) || undefined,
+    context: (mergedForPropagation['Context'] ?? []).join('\n') || undefined,
+    decisions: (mergedForPropagation['Active Decisions'] || []).map(what => ({ what })),
+    next: mergedForPropagation['Next Session'] || undefined,
   });
   if (scrubbed.reasons.length > 0) {
     log('WARN', 'update_state: suspicious stored entries withheld from propagation', { reasons: scrubbed.reasons });

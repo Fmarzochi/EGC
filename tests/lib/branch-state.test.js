@@ -30,6 +30,7 @@ const {
 const { collectMemoryState } = require('../../scripts/status');
 
 const HOOK_PATH = path.join(__dirname, '../../scripts/hooks/egc-memory-load.js');
+const stateCrypto = require('../../scripts/lib/state-crypto');
 
 function test(name, fn) {
   try {
@@ -257,6 +258,28 @@ function runIdentityTests(tally) {
     assert.strictEqual(result.status, 0);
     const output = JSON.parse(result.stdout);
     assert.ok(output.promptForAssistant.includes('REMOTE_KEY_MARKER_2063'));
+  }));
+
+  tally(test('egc-memory-load hook decrypts an encrypted state file, drops its retired line and never injects ciphertext (#2055)', () => {
+    const home = makeTmpDir('egc-branch-state-home8-');
+    const repo = makeRemoteRepo('feature/auth', REMOTE_HTTPS);
+    const stateFile = branchStateFile(getStateDir(home), repo, 'feature/auth');
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+    const plaintext = `# Project State\nupdated: 2026-11-07T10:00:00.000Z\nretired: ${'a'.repeat(12)}@2026-11-07T10:00:00.000Z\n\n## Context\nENCRYPTED_MARKER_2055\n`;
+    fs.writeFileSync(stateFile, stateCrypto.encryptStateBuffer(plaintext, path.join(home, '.egc', 'encryption.key')));
+
+    const result = spawnSync(process.execPath, [HOOK_PATH], {
+      input: '{}',
+      encoding: 'utf8',
+      env: Object.assign({}, process.env, { HOME: home, USERPROFILE: home, PWD: repo }),
+      cwd: repo,
+    });
+
+    assert.strictEqual(result.status, 0, result.stderr);
+    const output = JSON.parse(result.stdout);
+    assert.ok(output.promptForAssistant.includes('ENCRYPTED_MARKER_2055'), 'the decrypted state is injected');
+    assert.ok(!output.promptForAssistant.includes('EGC1:'), 'no ciphertext reaches the session');
+    assert.ok(!output.promptForAssistant.includes('retired:'), 'and no retired line');
   }));
 }
 

@@ -62,6 +62,8 @@ updated: 2026-01-15T12:00:00.000Z
 
 Consumers MUST ignore header keys they do not recognize; producers MAY add keys, but the four above are the interoperable core.
 
+- `retired` (OPTIONAL, written by the reference implementation): space-separated marks about entries that left the document. `<hash>@<time>` is a retirement: the entry left at `<time>`. `<hash>+<time>` is a restoration: a producer that held the retirement added the entry again at `<time>`. `<hash>` is the first 12 hexadecimal characters of the SHA-256 of the entry text (trimmed, without its `- `) and `<time>` the ISO 8601 moment of the write, or of the merge, that dropped or restored it. The list is bookkeeping for the merge of two copies (section 5.1), not memory: a consumer that presents a document to a reader SHOULD omit the line, and a producer that rewrites a document MUST carry the marks over, add a retirement for each entry it drops, add a restoration for an entry it writes while holding its retirement, keep one mark per entry (the newest; at the same time, the restoration), and keep the list bounded (the reference implementation expires a mark after thirty days and keeps at most forty, newest first).
+
 `project` is a hint for a human reader, not the identity of the project: the same repository sits at different paths on different machines. The reference implementation keys the storage of a document, and the name it travels under between machines, by the repository itself: the URL of its `origin` remote, normalized (scheme and credentials dropped, host lowercased with its port only when it is not the default of its scheme, trailing `/` and `.git` removed, owner and name as written), hashed with SHA-256 and prefixed by the repository name. A directory without a remote, or a checkout outside the roots the implementation trusts for reading git metadata, is keyed by a slug of its path. A consumer that holds the checkouts it serves, and so can derive that identity, MUST match documents across machines by it and never by `project`; a consumer that holds only the document has no identity to compare and MUST NOT take `project` for one.
 
 ### 4.2 Sections
@@ -95,6 +97,19 @@ AMI updates are merges, never blind overwrites. Given an existing document and a
 3. **Next Session**: replaced entirely by the incoming list. It describes the immediate future and is rewritten on every update; an empty incoming list empties the section.
 
 These rules make updates idempotent in spirit: repeated writes converge, recent knowledge wins, and stale tail entries retire naturally.
+
+### 5.1 Two copies of one document
+
+When two producers hold copies of the same document written apart (two machines between two syncs), neither copy is an update of the other, and a merge of the two MUST keep what each added:
+
+1. The copy with the later `updated` leads; two copies of the same time are ordered by their number of entries in Active Decisions, Do Not Repeat and Preferences together (one per text), the fuller first, and then by the SHA-256 of their text, so the result does not depend on which side merges and the result of a merge leads over the copies it came from.
+2. **Context**: the paragraph of the leading copy; when it is empty, the paragraph of the other.
+3. **Active Decisions, Do Not Repeat, Preferences**: the union of both copies, one entry per text. The leading copy keeps its order; an entry only the other copy has is placed right before the first entry that follows it in that copy and is in the leading copy too, or at the end when none follows. The caps of section 5 apply after the union, and each entry they push out is retired at the moment of the merge (header `retired`, section 4.1).
+4. An entry whose newest mark, across both copies, is a retirement is left out, whatever the `updated` of the copy that carries it; a restoration newer than the retirement lets it in. Marks of both copies are carried over, the newest per entry, bounded as section 4.1 says.
+5. **Next Session**: the list of the leading copy, whole.
+6. The header of the result is the header of the leading copy, with `retired` recomputed; a section the merge does not know travels with the leading copy as it is.
+
+Merging A with B and B with A at the same moment MUST give the same document. Merging a document with an identical copy MUST return it unchanged, and merging it with a copy it already contains MUST leave its content unchanged (the layout MAY become the canonical one; two copies of the same time that hold the same entries in another order MAY be reordered once, to the order of the copy the tie-break chose). A copy without the five sections of section 4.2 has nothing to merge by: the leading copy then stands whole, so nothing in it is lost to its layout.
 
 ## 6. Scopes and precedence
 

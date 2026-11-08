@@ -111,7 +111,17 @@ The time is that of the last commit in `~/.egc/team-sync/`, which is also set by
 
 ## How two copies are merged
 
-Each state document has an `updated:` line. When both machines have a copy of the same file, the one with the later `updated:` time replaces the other, as a whole file. Nothing is merged inside a document: if you changed the same project on two machines between syncs, the older document is overwritten by the newer one.
+When both machines have a copy of the same document, the sync merges them section by section, the way `update_state` merges an update into the existing document (the merge rules of the AMI specification, `docs/spec/agent-memory-interchange.md`, section 5):
+
+The copy with the later `updated:` time leads; two copies with the same time are ordered by the number of their entries (decisions, things to avoid and preferences together) and then by the SHA-256 of their text, so both machines reach the same result whichever one merges, and the result of a merge leads over the copies it came from.
+
+- **Context**: the paragraph of the leading copy; a copy with no context keeps the paragraph of the other.
+- **Active Decisions, Do Not Repeat, Preferences**: the union of both copies, one entry per text. The leading copy keeps its order, and an entry only the other copy has is placed where that copy kept it, among the entries both have, so what you added on the laptop in the morning and what you added on the desktop in the afternoon both survive the sync at night. The lists are capped afterwards (15, 10 and 15 entries): what the cap drops is the end of the merged list, the oldest of the entries both copies share, or an entry the older copy kept after all of them.
+- **Next Session**: the list of the leading copy, whole; it describes the immediate future and is rewritten on every update.
+
+An entry that left a document (pushed past a cap, or dropped when `update_state` rewrote the document) does not come back from a machine that still carries an older copy: the document keeps a short list of marks in its header (`retired:`, a hash of each entry and the time of the write or of the sync that dropped it), the merge keeps such an entry out of every copy that still carries it, whatever the time of that copy, and lets it back in when a machine that holds the retirement adds the entry again (that write records the return next to the retirement, and the return wins). A machine that never saw the removal and adds the same text again on its own sees it leave at its next sync; adding it once more, now with the removal in hand, brings it back everywhere. A mark is kept for up to thirty days, and the list holds at most forty marks, newest first, so the protection is bounded by both; `get_state` and the hooks never show the line. Merging the two copies in either order, at the same moment, gives the same document, merging a document with an identical copy returns it as it is, and merging it with a copy it already contains changes nothing in its content, so repeated syncs converge.
+
+A document from a version before the merge, or any file without the five sections, still follows the old rule: the copy with the later `updated:` time stands, whole, and nothing in it is lost to the layout.
 
 A sync never deletes a local state file. A file removed on the remote is not removed from your machine, and it comes back to the remote at your next sync.
 
@@ -197,8 +207,7 @@ The command line talks to the memory server. Run `egc doctor`, and `npm run buil
 - **Only a checkout under your home directory, or under the temp directory, is keyed by its remote.** The identity is read from `.git/config` through the same trust boundary as the branch, so a repository under `/opt` or `/workspace` keeps the slug of its path on every machine. An `origin` declared only through an `include` of the git config, or only in a per-worktree config, is not seen either.
 - **Every machine must run this version before the documents of the older one meet the others.** A document a machine on an earlier version shared under the slug of its path is read by the other machines only after that machine runs this version and syncs once, since only it can name the repository behind that path.
 - **Two repositories on one host of your own that differ only by a leading slash are one identity.** The scp-like forms `host:dir/repo.git` and `host:/dir/repo.git` fold together, as GitHub, GitLab and the other hosting services treat them; use the `ssh://` form for both when a host of your own holds two such repositories.
-- **The later document wins, per file.** There is no merge inside a document. Tracked in [#2055](https://github.com/Fmarzochi/EGC/issues/2055).
-- **Deletions do not propagate.** A document removed on one machine stays on the others.
+- **Deleting a whole document does not propagate.** A document removed on one machine stays on the others and comes back at the next sync. An entry removed inside a document stays out while its retired mark is kept, up to thirty days and forty marks at most, unless a machine adds it again.
 - **No machine identity in the envelope.** The signature proves that the holder of the team key wrote the file, not which machine. Tracked in [#2056](https://github.com/Fmarzochi/EGC/issues/2056).
 - **Manual only.** Nothing syncs by itself; you run `egc team sync`. Automatic sync at the start and end of a session is tracked in [#2059](https://github.com/Fmarzochi/EGC/issues/2059).
 - **No health line in `egc doctor`.** Tracked in [#2058](https://github.com/Fmarzochi/EGC/issues/2058).
