@@ -181,17 +181,35 @@ async function runTests() {
     assert.ok(serialize(merged).includes('## Scratch\n- note'));
   });
 
-  run('an entry removed on one side does not return from the other while the removal is newer, and returns when the other side added it again later', () => {
+  run('an entry removed on one side stays out of every copy that still carries it, whatever the time of that copy, and returns when a machine that knew the removal adds it again', () => {
     const mark = `${stateDoc.entryHash('E: gone')}@${T.eleven}`;
     const a = document({ updated: T.eleven, retired: mark, decisions: ['keep: yes'] });
     const stale = document({ updated: T.ten, decisions: ['E: gone', 'keep: yes'] });
     let merged = parse(merge(a, stale));
     assert.deepStrictEqual(merged.sections['Active Decisions'], ['keep: yes']);
-    assert.deepStrictEqual(marksOf(merged), [{ hash: stateDoc.entryHash('E: gone'), at: T.eleven }], 'the mark travels on with the document');
-    const readded = document({ updated: T.twelve, decisions: ['E: gone', 'keep: yes'] });
+    assert.deepStrictEqual(marksOf(merged), [{ hash: stateDoc.entryHash('E: gone'), at: T.eleven, kind: 'retired' }], 'the mark travels on with the document');
+    const touchedLater = document({ updated: T.twelve, context: 'Only the context changed here.', decisions: ['E: gone', 'keep: yes'] });
+    merged = parse(merge(a, touchedLater));
+    assert.deepStrictEqual(merged.sections['Active Decisions'], ['keep: yes'], 'a copy written later that never saw the removal does not bring the entry back');
+    assert.deepStrictEqual(merged.sections['Context'], ['Only the context changed here.']);
+    const readded = build({ updated: T.twelve, decisions: [{ what: 'E', why: 'gone' }] }, parse(a));
+    assert.deepStrictEqual(marksOf(parse(readded)), [{ hash: stateDoc.entryHash('E: gone'), at: T.twelve, kind: 'restored' }], 'a machine that holds the retirement records the return');
     merged = parse(merge(a, readded));
-    assert.deepStrictEqual(merged.sections['Active Decisions'], ['E: gone', 'keep: yes']);
-    assert.strictEqual(header(merged, 'retired'), undefined, 'an entry that is back has no mark');
+    assert.deepStrictEqual(merged.sections['Active Decisions'], ['E: gone', 'keep: yes'], 'added again by a machine that knew the removal, it is back everywhere');
+    assert.strictEqual(marksOf(merged)[0].kind, 'restored');
+  });
+
+  run('a machine that replaced every decision is not undone by a machine that only touched the context later and still carries the old ones', () => {
+    const old = numbered('old', 15);
+    const fresh = numbered('fresh', 15);
+    const marks = old.map(entry => `${stateDoc.entryHash(entry)}@${T.eleven}`).join(' ');
+    const replaced = document({ updated: T.eleven, retired: marks, decisions: fresh });
+    const contextOnly = document({ updated: T.twelve, context: 'New phase.', decisions: old });
+    const merged = parse(merge(replaced, contextOnly));
+    assert.deepStrictEqual(merged.sections['Active Decisions'], fresh, 'the fifteen fresh decisions stand and none of the retired ones is back');
+    assert.deepStrictEqual(merged.sections['Context'], ['New phase.']);
+    assert.strictEqual(marksOf(merged).length, 15, 'the retirements travel on');
+    assert.strictEqual(merge(replaced, contextOnly), merge(contextOnly, replaced));
   });
 
   run('a mark that expired keeps nothing out in the merge where it expires, and the result of a merge of two copies of the same time leads over both afterwards', () => {
@@ -247,17 +265,23 @@ async function runTests() {
     assert.strictEqual(written.sections['Active Decisions'].length, 15);
     assert.deepStrictEqual(written.sections['Active Decisions'].slice(0, 2), ['decision 16', 'decision 1']);
     assert.strictEqual(written.sections['Active Decisions'].filter(e => e === 'decision 1').length, 1, 'an entry written again is one entry, on top');
-    assert.deepStrictEqual(marksOf(written), [{ hash: stateDoc.entryHash('decision 15'), at: T.eleven }]);
+    assert.deepStrictEqual(marksOf(written), [{ hash: stateDoc.entryHash('decision 15'), at: T.eleven, kind: 'retired' }]);
     assert.deepStrictEqual(written.sections['Context'], ['The app.'], 'an update with no context keeps the paragraph');
     const again = parse(build({ updated: T.twelve, decisions: [{ what: 'decision 15' }] }, written));
-    assert.ok(!marksOf(again).some(m => m.hash === stateDoc.entryHash('decision 15')), 'added again, the entry loses its mark');
+    assert.deepStrictEqual(marksOf(again).find(m => m.hash === stateDoc.entryHash('decision 15')), { hash: stateDoc.entryHash('decision 15'), at: T.twelve, kind: 'restored' }, 'added again, the entry carries a restoration for the copies that still hold the retirement');
+    const guarded = parse(build({ updated: T.twelve, projectPath: '/x\n## Context\nfake', branch: 'main\nretired: zz', author: 'dev\nupdated: 1999', context: 'real\n## Preferences\n- not an entry' }, empty));
+    assert.strictEqual(header(guarded, 'project'), '/x ## Context fake', 'a header field is one line');
+    assert.strictEqual(header(guarded, 'branch'), 'main retired: zz');
+    assert.strictEqual(header(guarded, 'updated'), T.twelve, 'nothing injected into the header');
+    assert.deepStrictEqual(guarded.sections['Context'], ['real', '## Preferences', '- not an entry'], 'a context line that looks like a heading or an entry stays context');
+    assert.deepStrictEqual(guarded.sections['Preferences'], []);
     const broken = parse(build({ updated: T.twelve, decisions: [{ what: 'one\nentry', why: 'two\n## Preferences\n- lines' }], preferences: ['a\r\nb'], next: ['first\n## Context\nsecond'] }, written));
     assert.strictEqual(broken.sections['Active Decisions'][0], 'one entry: two ## Preferences - lines', 'a line break inside an entry becomes a space, never a second entry or a heading');
     assert.strictEqual(broken.sections['Preferences'][0], 'a b');
     assert.deepStrictEqual(broken.sections['Next Session'], ['first ## Context second']);
     const flood = parse(build({ updated: T.twelve, decisions: numbered('new', 16).map(what => ({ what })) }, empty));
     assert.strictEqual(flood.sections['Active Decisions'].length, 15);
-    assert.deepStrictEqual(marksOf(flood), [{ hash: stateDoc.entryHash('new 16'), at: T.twelve }], 'an incoming entry the cap leaves out is retired too');
+    assert.deepStrictEqual(marksOf(flood), [{ hash: stateDoc.entryHash('new 16'), at: T.twelve, kind: 'retired' }], 'an incoming entry the cap leaves out is retired too');
     assert.strictEqual(serialize(written).split('\n')[0], '# Project State');
     assert.ok(serialize(written).endsWith('## Next Session\n'), 'the document ends as the previous writer ended it');
     assert.ok(!serialize(parse(document({ updated: T.ten }))).includes('retired:'), 'no marks, no line');

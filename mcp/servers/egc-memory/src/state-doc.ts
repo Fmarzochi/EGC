@@ -23,12 +23,15 @@ export const RETIRED_CAP = 40;
 const ENTRY_HASH_LENGTH = 12;
 const H2 = /^## (.+)/;
 const HEADER_LINE = /^([A-Za-z][A-Za-z0-9_-]*):\s?(.*)$/;
-const RETIRED_MARK = /^([0-9a-f]{12})@(\S+)$/;
+// A mark is `<hash>@<time>` when the entry left (retired) and `<hash>+<time>`
+// when a machine that knew the retirement added the entry again (restored).
+const RETIRED_MARK = /^([0-9a-f]{12})([@+])(\S+)$/;
 
 export type HeaderField = { key: string; value: string };
 export type StateSections = Record<string, string[]>;
 export type StateDocument = { header: HeaderField[]; sections: StateSections };
-export type RetiredMark = { hash: string; at: string };
+export type MarkKind = 'retired' | 'restored';
+export type RetiredMark = { hash: string; at: string; kind: MarkKind };
 export type StateEntry = { what: string; why?: string };
 export type StateUpdate = {
   projectPath: string;
@@ -142,31 +145,50 @@ export function parseRetired(value: string | undefined): RetiredMark[] {
   const marks: RetiredMark[] = [];
   for (const token of value.split(/\s+/)) {
     const match = RETIRED_MARK.exec(token);
-    if (match && !Number.isNaN(Date.parse(match[2]))) marks.push({ hash: match[1], at: match[2] });
+    if (match && !Number.isNaN(Date.parse(match[3]))) marks.push({ hash: match[1], at: match[3], kind: match[2] === '@' ? 'retired' : 'restored' });
   }
   return marks;
 }
 
 export function formatRetired(marks: readonly RetiredMark[]): string {
-  return marks.map(mark => `${mark.hash}@${mark.at}`).join(' ');
+  return marks.map(mark => `${mark.hash}${mark.kind === 'retired' ? '@' : '+'}${mark.at}`).join(' ');
 }
 
-// The retired list after a write or a merge at `at`: an entry that left the
-// document gains a mark, an entry that is present loses its mark (it was
-// added again), marks older than the window expire, one mark per entry with
-// its newest time, newest first, capped.
-export function settleRetired(marks: readonly RetiredMark[], change: { retired: Iterable<string>; present: Iterable<string>; at: string }): RetiredMark[] {
+// Of two marks for one entry the newer stands; at the same time a
+// restoration stands over a retirement, since adding is the deliberate act.
+function newerMark(left: RetiredMark, right: RetiredMark): RetiredMark {
+  const leftTime = Date.parse(left.at);
+  const rightTime = Date.parse(right.at);
+  if (leftTime !== rightTime) return leftTime > rightTime ? left : right;
+  return left.kind === 'restored' ? left : right;
+}
+
+// The newest mark of each entry, by hash.
+export function newestMarks(marks: Iterable<RetiredMark>): Map<string, RetiredMark> {
   const byHash = new Map<string, RetiredMark>();
-  const consider = (mark: RetiredMark) => {
+  for (const mark of marks) {
     const known = byHash.get(mark.hash);
-    if (!known || Date.parse(mark.at) > Date.parse(known.at)) byHash.set(mark.hash, mark);
-  };
-  for (const mark of marks) consider(mark);
-  for (const entry of change.retired) consider({ hash: entryHash(entry), at: change.at });
-  for (const entry of change.present) byHash.delete(entryHash(entry));
+    byHash.set(mark.hash, known ? newerMark(known, mark) : mark);
+  }
+  return byHash;
+}
+
+// An entry stays out of a document while its newest mark is a retirement.
+export function isRetired(entry: string, newest: ReadonlyMap<string, RetiredMark>): boolean {
+  return newest.get(entryHash(entry))?.kind === 'retired';
+}
+
+// The marks after a write or a merge at `at`: an entry that left the
+// document gains a retirement, an entry added again gains a restoration,
+// marks older than the window expire, one mark per entry (the newest),
+// newest first, capped.
+export function settleRetired(marks: readonly RetiredMark[], change: { retired: Iterable<string>; restored: Iterable<string>; at: string }): RetiredMark[] {
+  const all = [...marks];
+  for (const entry of change.retired) all.push({ hash: entryHash(entry), at: change.at, kind: 'retired' });
+  for (const entry of change.restored) all.push({ hash: entryHash(entry), at: change.at, kind: 'restored' });
   const now = Date.parse(change.at);
   const floor = Number.isNaN(now) ? Number.NEGATIVE_INFINITY : now - RETIRED_TTL_MS;
-  return [...byHash.values()]
+  return [...newestMarks(all).values()]
     .filter(mark => Date.parse(mark.at) >= floor)
     .sort((left, right) => Date.parse(right.at) - Date.parse(left.at) || left.hash.localeCompare(right.hash))
     .slice(0, RETIRED_CAP);
@@ -182,20 +204,29 @@ function formatEntry(entry: StateEntry): string {
   return oneLine(entry.why ? `${entry.what}: ${entry.why}` : entry.what);
 }
 
+// A context line that would read back as a heading or as a list entry keeps
+// its text behind one leading space, which the parser trims away.
+function contextLine(line: string): string {
+  return line.startsWith('#') || line.startsWith('- ') ? ` ${line}` : line;
+}
+
 // The document after an update_state: the incoming entries go first, then
 // the existing ones, one copy of each text, capped per section (AMI, section
 // 5); the context is replaced when the update carries one; Next Session is
-// rewritten; what the cap pushed out is retired at the time of the write and
-// an entry written again loses its mark.
+// rewritten; what the cap pushed out is retired at the time of the write,
+// and an incoming entry the document holds a retirement for is restored,
+// so the copies that still hold the retirement let it back in.
 export function buildStateDocument(update: StateUpdate, existing: StateDocument): StateDocument {
   const incoming: Record<string, string[]> = {
     'Active Decisions': (update.decisions || []).map(formatEntry),
     'Do Not Repeat': (update.avoid || []).map(formatEntry),
     'Preferences': (update.preferences || []).map(oneLine),
   };
+  const marks = parseRetired(headerValue(existing, RETIRED_KEY));
+  const newest = newestMarks(marks);
   const sections = emptySections();
   const left: string[] = [];
-  const present: string[] = [];
+  const restored: string[] = [];
   for (const { heading, cap } of CAPPED_SECTIONS) {
     const union = dedupeEntries([...incoming[heading], ...(existing.sections[heading] || [])]);
     const merged = union.slice(0, cap);
@@ -203,15 +234,15 @@ export function buildStateDocument(update: StateUpdate, existing: StateDocument)
     // Everything the cap left out is retired, an incoming entry included:
     // a copy elsewhere may carry it, and it must not come back from there.
     left.push(...union.slice(cap));
-    present.push(...merged);
+    restored.push(...merged.filter(entry => isRetired(entry, newest)));
   }
   const context = update.context || contextOf(existing);
-  sections[CONTEXT_SECTION] = context ? context.split('\n') : [];
+  sections[CONTEXT_SECTION] = context ? context.split('\n').map(contextLine) : [];
   sections[NEXT_SECTION] = (update.next || []).map(oneLine).filter(Boolean);
-  const retired = settleRetired(parseRetired(headerValue(existing, RETIRED_KEY)), { retired: left, present, at: update.updated });
-  const header: HeaderField[] = [{ key: 'project', value: update.projectPath }];
-  if (update.branch) header.push({ key: 'branch', value: update.branch });
-  header.push({ key: 'author', value: update.author }, { key: 'updated', value: update.updated });
+  const retired = settleRetired(marks, { retired: left, restored, at: update.updated });
+  const header: HeaderField[] = [{ key: 'project', value: oneLine(update.projectPath) }];
+  if (update.branch) header.push({ key: 'branch', value: oneLine(update.branch) });
+  header.push({ key: 'author', value: oneLine(update.author) }, { key: 'updated', value: update.updated });
   if (retired.length > 0) header.push({ key: RETIRED_KEY, value: formatRetired(retired) });
   return { header, sections };
 }

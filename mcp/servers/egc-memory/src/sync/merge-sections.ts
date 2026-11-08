@@ -8,9 +8,10 @@ import {
   RETIRED_TTL_MS,
   SECTION_ORDER,
   dedupeEntries,
-  entryHash,
   formatRetired,
   headerValue,
+  isRetired,
+  newestMarks,
   parseRetired,
   parseStateDocument,
   serializeStateDocument,
@@ -75,14 +76,12 @@ function ordered(a: string, b: string): [Side, Side] {
   return digest(a) <= digest(b) ? [first, second] : [second, first];
 }
 
-// The entries of one copy that no mark retired at or after the time of that
-// copy: a mark newer than the copy means the entry left the document after
-// the copy was written, and the copy is stale about it.
-function living(entries: readonly string[], time: number, marks: readonly RetiredMark[]): string[] {
-  return entries.filter(entry => {
-    const hash = entryHash(entry);
-    return !marks.some(mark => mark.hash === hash && Date.parse(mark.at) >= time);
-  });
+// The entries of one copy whose newest mark, across both copies, is not a
+// retirement: a copy that still carries a retired entry is stale about it,
+// whatever its own time says, until a machine that knew the retirement adds
+// the entry again and records the restoration.
+function living(entries: readonly string[], newest: ReadonlyMap<string, RetiredMark>): string[] {
+  return entries.filter(entry => !isRetired(entry, newest));
 }
 
 // The newer list in its own order, with each entry only the older list has
@@ -106,9 +105,9 @@ function weave(newer: readonly string[], older: readonly string[]): string[] {
   return dedupeEntries([...woven, ...pending]);
 }
 
-function mergeList(newer: Side, older: Side, heading: string, marks: readonly RetiredMark[]): string[] {
-  const fromNewer = living(dedupeEntries(newer.doc.sections[heading] || []), newer.time, marks);
-  const fromOlder = living(dedupeEntries(older.doc.sections[heading] || []), older.time, marks);
+function mergeList(newer: Side, older: Side, heading: string, newest: ReadonlyMap<string, RetiredMark>): string[] {
+  const fromNewer = living(dedupeEntries(newer.doc.sections[heading] || []), newest);
+  const fromOlder = living(dedupeEntries(older.doc.sections[heading] || []), newest);
   return weave(fromNewer, fromOlder);
 }
 
@@ -125,14 +124,13 @@ export function mergeStateDocuments(a: string, b: string, now: Date = new Date()
   // merge as in the next.
   const window = now.getTime() - RETIRED_TTL_MS;
   const marks = [...newer.marks, ...older.marks].filter(mark => Date.parse(mark.at) >= window);
+  const newest = newestMarks(marks);
   const sections: StateSections = Object.create(null) as StateSections;
   const dropped: string[] = [];
-  const present: string[] = [];
   for (const { heading, cap } of CAPPED_SECTIONS) {
-    const union = mergeList(newer, older, heading, marks);
+    const union = mergeList(newer, older, heading, newest);
     sections[heading] = union.slice(0, cap);
     dropped.push(...union.slice(cap));
-    present.push(...sections[heading]);
   }
   const newerContext = newer.doc.sections[CONTEXT_SECTION] || [];
   sections[CONTEXT_SECTION] = [...(newerContext.length > 0 ? newerContext : older.doc.sections[CONTEXT_SECTION] || [])];
@@ -141,7 +139,7 @@ export function mergeStateDocuments(a: string, b: string, now: Date = new Date()
   for (const heading of Object.keys(newer.doc.sections)) {
     if (!SECTION_ORDER.includes(heading)) sections[heading] = [...newer.doc.sections[heading]];
   }
-  const retired = settleRetired(marks, { retired: dropped, present, at: now.toISOString() });
+  const retired = settleRetired(marks, { retired: dropped, restored: [], at: now.toISOString() });
   const header = withHeaderValue(newer.doc.header, RETIRED_KEY, retired.length > 0 ? formatRetired(retired) : null);
   return serializeStateDocument({ header, sections });
 }
