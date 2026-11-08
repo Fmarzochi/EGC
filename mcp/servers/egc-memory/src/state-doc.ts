@@ -234,7 +234,11 @@ export function buildStateDocument(update: StateUpdate, existing: StateDocument)
     // Everything the cap left out is retired, an incoming entry included:
     // a copy elsewhere may carry it, and it must not come back from there.
     left.push(...union.slice(cap));
-    restored.push(...merged.filter(entry => isRetired(entry, newest)));
+    // Only an entry this update brings is a return: an entry the document
+    // already held next to its own retirement is not restored by an update
+    // about something else.
+    const kept = new Set(merged);
+    restored.push(...dedupeEntries(incoming[heading]).filter(entry => kept.has(entry) && isRetired(entry, newest)));
   }
   const context = update.context || contextOf(existing);
   sections[CONTEXT_SECTION] = context ? context.split('\n').map(contextLine) : [];

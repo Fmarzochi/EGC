@@ -269,6 +269,9 @@ async function runTests() {
     assert.deepStrictEqual(written.sections['Context'], ['The app.'], 'an update with no context keeps the paragraph');
     const again = parse(build({ updated: T.twelve, decisions: [{ what: 'decision 15' }] }, written));
     assert.deepStrictEqual(marksOf(again).find(m => m.hash === stateDoc.entryHash('decision 15')), { hash: stateDoc.entryHash('decision 15'), at: T.twelve, kind: 'restored' }, 'added again, the entry carries a restoration for the copies that still hold the retirement');
+    const carrying = parse(document({ updated: T.ten, retired: `${stateDoc.entryHash('stale: yes')}@${T.eleven}`, decisions: ['stale: yes'] }));
+    const unrelated = parse(build({ updated: T.twelve, preferences: ['tabs'] }, carrying));
+    assert.deepStrictEqual(marksOf(unrelated), [{ hash: stateDoc.entryHash('stale: yes'), at: T.eleven, kind: 'retired' }], 'an update about something else restores nothing the document already held');
     const guarded = parse(build({ updated: T.twelve, projectPath: '/x\n## Context\nfake', branch: 'main\nretired: zz', author: 'dev\nupdated: 1999', context: 'real\n## Preferences\n- not an entry' }, empty));
     assert.strictEqual(header(guarded, 'project'), '/x ## Context fake', 'a header field is one line');
     assert.strictEqual(header(guarded, 'branch'), 'main retired: zz');

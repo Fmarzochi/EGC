@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const { getStateDir, resolveHeadState, resolveStateRead } = require('../lib/branch-state');
+const { getHomeDir } = require('../lib/utils');
 
 function tryRequire(modulePath) {
   try {
@@ -54,7 +55,9 @@ function main() {
   try {
     const projectPath = process.env.PWD || process.cwd();
     const { branch, detachedCommit } = resolveHeadState(projectPath);
-    const resolved = resolveStateRead(getStateDir(), projectPath, branch, detachedCommit);
+    // The state directory and the encryption key come from the same home
+    // (HOME, then USERPROFILE, then the OS), the home the server writes under.
+    const resolved = resolveStateRead(getStateDir(getHomeDir()), projectPath, branch, detachedCommit);
 
     const content = resolved.source === 'none' ? '' : withoutRetiredLine(readStateContent(resolved.filePath));
     const appendix = globalState ? globalState.readGlobalAppendix(content, stateCrypto) : null;

@@ -113,7 +113,7 @@ The time is that of the last commit in `~/.egc/team-sync/`, which is also set by
 
 When both machines have a copy of the same document, the sync merges them section by section, the way `update_state` merges an update into the existing document (the merge rules of the AMI specification, `docs/spec/agent-memory-interchange.md`, section 5):
 
-The copy with the later `updated:` time leads; two copies with the same time are ordered by the number of their entries and then by the SHA-256 of their text, so both machines reach the same result whichever one merges, and the result of a merge leads over the copies it came from.
+The copy with the later `updated:` time leads; two copies with the same time are ordered by the number of their entries (decisions, things to avoid and preferences together) and then by the SHA-256 of their text, so both machines reach the same result whichever one merges, and the result of a merge leads over the copies it came from.
 
 - **Context**: the paragraph of the leading copy; a copy with no context keeps the paragraph of the other.
 - **Active Decisions, Do Not Repeat, Preferences**: the union of both copies, one entry per text. The leading copy keeps its order, and an entry only the other copy has is placed where that copy kept it, among the entries both have, so what you added on the laptop in the morning and what you added on the desktop in the afternoon both survive the sync at night. The lists are capped afterwards (15, 10 and 15 entries): what the cap drops is the end of the merged list, the oldest of the entries both copies share, or an entry the older copy kept after all of them.

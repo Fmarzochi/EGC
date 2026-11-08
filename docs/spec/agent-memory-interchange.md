@@ -102,7 +102,7 @@ These rules make updates idempotent in spirit: repeated writes converge, recent 
 
 When two producers hold copies of the same document written apart (two machines between two syncs), neither copy is an update of the other, and a merge of the two MUST keep what each added:
 
-1. The copy with the later `updated` leads; two copies of the same time are ordered by their number of entries, the fuller first, and then by the SHA-256 of their text, so the result does not depend on which side merges and the result of a merge leads over the copies it came from.
+1. The copy with the later `updated` leads; two copies of the same time are ordered by their number of entries in Active Decisions, Do Not Repeat and Preferences together (one per text), the fuller first, and then by the SHA-256 of their text, so the result does not depend on which side merges and the result of a merge leads over the copies it came from.
 2. **Context**: the paragraph of the leading copy; when it is empty, the paragraph of the other.
 3. **Active Decisions, Do Not Repeat, Preferences**: the union of both copies, one entry per text. The leading copy keeps its order; an entry only the other copy has is placed right before the first entry that follows it in that copy and is in the leading copy too, or at the end when none follows. The caps of section 5 apply after the union, and each entry they push out is retired at the moment of the merge (header `retired`, section 4.1).
 4. An entry whose newest mark, across both copies, is a retirement is left out, whatever the `updated` of the copy that carries it; a restoration newer than the retirement lets it in. Marks of both copies are carried over, the newest per entry, bounded as section 4.1 says.
