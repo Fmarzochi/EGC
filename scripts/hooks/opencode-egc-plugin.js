@@ -220,8 +220,9 @@ function enforceToolCall(tool, args, directory) {
   }
 }
 
-// How many sessions the per-session caches remember in one OpenCode process;
-// the oldest entry leaves when a newer session arrives past the cap.
+// How many sessions the per-session caches remember in one OpenCode process,
+// settled or still in flight; the oldest entry leaves when a newer session
+// arrives past the cap.
 const MAX_CACHED_SESSIONS = 64;
 
 function remember(map, key, value) {
@@ -233,26 +234,32 @@ function remember(map, key, value) {
 
 // One value per session, computed once and shared by the requests that ask
 // for it while it is still being computed; a computation that fails is not
-// kept, so the next request asks again.
+// kept, so the next request asks again. A computation that finishes after
+// clear() is not kept either: the generation it started in is gone.
 function createSessionCache(compute) {
   const settled = new Map();
   const pending = new Map();
+  let generation = 0;
 
   const cache = sessionId => {
     if (settled.has(sessionId)) return Promise.resolve(settled.get(sessionId));
     if (!pending.has(sessionId)) {
+      const started = generation;
       const promise = Promise.resolve()
         .then(() => compute(sessionId))
         .then(value => {
-          remember(settled, sessionId, value);
+          if (started === generation) remember(settled, sessionId, value);
           return value;
         })
-        .finally(() => pending.delete(sessionId));
-      pending.set(sessionId, promise);
+        .finally(() => {
+          if (started === generation) pending.delete(sessionId);
+        });
+      remember(pending, sessionId, promise);
     }
     return pending.get(sessionId);
   };
   cache.clear = () => {
+    generation += 1;
     settled.clear();
     pending.clear();
   };
@@ -343,8 +350,12 @@ async function setup(context) {
     }
   });
 
+  // Every registration is disposed and both caches are cleared whatever one
+  // disposer does, a synchronous throw included.
   return async () => {
-    await Promise.allSettled(registrations.splice(0).map(registration => registration.dispose()));
+    await Promise.allSettled(
+      registrations.splice(0).map(registration => Promise.resolve().then(() => registration.dispose()))
+    );
     loadOnce.clear();
     directoryOf.clear();
   };

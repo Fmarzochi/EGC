@@ -455,18 +455,24 @@ async function runTests() {
       const registered = { tool: {}, session: {} };
       const disposed = [];
       const gets = [];
+      const held = [];
       const register = domain => async (name, callback) => {
         if (options.hookThrows === domain) throw new Error(`${domain}.hook refused`);
         registered[domain][name] = callback;
+        if (options.disposeThrows === domain) {
+          return { dispose: () => { throw new Error(`${domain}.${name} dispose refused`); } };
+        }
         return { dispose: async () => { disposed.push(`${domain}.${name}`); } };
       };
       // session.get answers the way OpenCode 2 does: the session's location
-      // when the test gave it one, a bare record otherwise.
+      // when the test gave it one, a bare record otherwise. With get 'held'
+      // it answers only when the test calls release().
       const session = { hook: register('session') };
       if (options.get !== 'missing') {
         session.get = async ({ sessionID }) => {
           gets.push(sessionID);
           if (options.get === 'throws') throw new Error('no such session');
+          if (options.get === 'held') await new Promise(resolve => held.push(resolve));
           const own = options.sessions?.[sessionID];
           return own ? { id: sessionID, location: { directory: own } } : { id: sessionID };
         };
@@ -475,6 +481,12 @@ async function runTests() {
         registered,
         disposed,
         gets,
+        // The host is asked in a microtask after the request starts, so the
+        // release waits one turn before answering every request held so far.
+        release: async () => {
+          await new Promise(resolve => setImmediate(resolve));
+          held.splice(0).forEach(resolve => resolve());
+        },
         ctx: {
           location: { directory },
           tool: { hook: register('tool') },
@@ -700,6 +712,60 @@ async function runTests() {
       await assert.doesNotReject(() => plugin.setup());
     });
 
+    addCase('OpenCode 2: a disposer that throws does not stop the other disposer or the cache cleanup', async () => {
+      const fake = fakeContext(tempDir, { disposeThrows: 'tool' });
+      const cleanup = await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+      await before({ tool: 'read', sessionID: 'ses_v2_dispose', input: { filePath: '/tmp/x' } });
+      assert.deepStrictEqual(fake.gets, ['ses_v2_dispose']);
+
+      await assert.doesNotReject(() => cleanup(), 'a synchronous throw of one disposer is contained');
+      assert.deepStrictEqual(fake.disposed, ['session.context'], 'the other registration is still disposed');
+
+      await before({ tool: 'read', sessionID: 'ses_v2_dispose', input: { filePath: '/tmp/x' } });
+      assert.deepStrictEqual(fake.gets, ['ses_v2_dispose', 'ses_v2_dispose'], 'the directory cache was cleared all the same');
+    });
+
+    addCase('OpenCode 2: a host answer that lands after the cleanup is not kept', async () => {
+      const fake = fakeContext(tempDir, { get: 'held' });
+      const cleanup = await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+
+      const late = before({ tool: 'read', sessionID: 'ses_v2_late', input: { filePath: '/tmp/x' } });
+      await cleanup();
+      await fake.release();
+      await late;
+
+      const again = before({ tool: 'read', sessionID: 'ses_v2_late', input: { filePath: '/tmp/x' } });
+      await fake.release();
+      await again;
+      assert.deepStrictEqual(fake.gets, ['ses_v2_late', 'ses_v2_late'], 'the request after the cleanup asks the host again');
+    });
+
+    addCase('OpenCode 2: the session cap bounds the requests still in flight too', async () => {
+      const fake = fakeContext(tempDir, { get: 'held' });
+      await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+
+      // One session past MAX_CACHED_SESSIONS of the plugin, none answered yet.
+      const inFlight = Array.from({ length: 65 }, (_, index) =>
+        before({ tool: 'read', sessionID: `ses_v2_many_${index}`, input: { filePath: '/tmp/x' } })
+      );
+      const oldest = before({ tool: 'read', sessionID: 'ses_v2_many_0', input: { filePath: '/tmp/x' } });
+      await fake.release();
+      assert.strictEqual(
+        fake.gets.filter(sessionID => sessionID === 'ses_v2_many_0').length,
+        2,
+        'the oldest in-flight session left the cache, so its next request asks the host again'
+      );
+      assert.strictEqual(
+        fake.gets.filter(sessionID => sessionID === 'ses_v2_many_64').length,
+        1,
+        'the newest in-flight session is still shared'
+      );
+      await Promise.all([...inFlight, oldest]);
+    });
+
     // The cases share the installed layout and the imported plugin, so they
     // run one after another, in the order they were added.
     results = await cases.reduce(
@@ -719,7 +785,19 @@ async function runTests() {
   process.exitCode = failed > 0 ? 1 : 0;
 }
 
-runTests().catch(error => {
-  console.error(error);
+// A case that leaves a promise pending ends the process with nothing left to
+// run and no summary printed, which Node exits from with code 0: that is a
+// failure, not a pass.
+let finished = false;
+process.on('exit', code => {
+  if (finished || code !== 0) return;
+  console.error('  ✗ the suite ended before its summary: a case left a promise pending');
   process.exitCode = 1;
 });
+
+runTests()
+  .then(() => { finished = true; })
+  .catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+  });
