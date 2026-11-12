@@ -1,9 +1,11 @@
 // EGC SessionStart + Guardian + Token Crusher plugin for OpenCode. OpenCode
-// loads this file in-process as an ES module (a CommonJS export object is
-// rejected with "Plugin export is not a function" since OpenCode 1.18), so the
-// file uses ESM syntax and exports the plugin function by name. Guardian and
-// Crusher run directly, while session restoration is delegated to a fail-open
-// Node adapter around the shared, host-neutral session-context-loader core.
+// loads this file in-process as an ES module, and two loaders read it:
+// OpenCode 2 requires a default export with an id and a setup function, and
+// OpenCode 1 (1.18.29 and newer) reads the server entrypoint of that same
+// default export while calling every other export as a function, so the
+// default export is the only export. Guardian and Crusher run directly, while
+// session restoration is delegated to a fail-open Node adapter around the
+// shared, host-neutral session-context-loader core.
 
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -196,7 +198,88 @@ function loadSessionContext(projectDirectory, sessionId) {
   });
 }
 
-const EgcGuardianCrusher = async ({ client, directory } = {}) => {
+const PLUGIN_ID = 'egc';
+
+// The Guardian's verdict on a tool call, then the Crusher's rewrite of a bash
+// command, applied to the host's own args object. A denial throws, which both
+// loaders turn into a rejected call.
+function enforceToolCall(tool, args, directory) {
+  const denial = guardianDenial(tool, args, directory);
+  if (denial) throw new Error(denial);
+  if (tool !== 'bash' || typeof args.command !== 'string') return;
+
+  const rewritten = JSON.parse(runCrusherRewrite({ tool_input: { command: args.command } }));
+  if (typeof rewritten?.tool_input?.command === 'string') {
+    args.command = rewritten.tool_input.command;
+  }
+}
+
+// The project memory of a session, loaded through the bridge once and kept
+// for the session's later requests; concurrent requests of one session share
+// the same load. A session without a directory or an id gets nothing.
+function createContextCache() {
+  const loaded = new Map();
+  const pending = new Map();
+
+  return (sessionId, projectDirectory) => {
+    if (typeof sessionId !== 'string' || !sessionId) return Promise.resolve('');
+    if (typeof projectDirectory !== 'string' || !projectDirectory) return Promise.resolve('');
+    if (loaded.has(sessionId)) return Promise.resolve(loaded.get(sessionId));
+    if (!pending.has(sessionId)) {
+      const load = loadSessionContext(projectDirectory, sessionId)
+        .then(context => {
+          loaded.set(sessionId, context);
+          return context;
+        })
+        .finally(() => pending.delete(sessionId));
+      pending.set(sessionId, load);
+    }
+    return pending.get(sessionId);
+  };
+}
+
+// OpenCode 2 entrypoint: the tool hook carries Guardian and Crusher, and the
+// context hook adds the project memory to the system instructions of every
+// request of a session. A host without one of the domains keeps the other.
+async function setup(context) {
+  const directory = context?.location?.directory ?? context?.directory;
+  const loadOnce = createContextCache();
+  const registrations = [];
+
+  const register = async (domain, name, callback) => {
+    const hook = context?.[domain]?.hook;
+    if (typeof hook !== 'function') return;
+    try {
+      const registration = await hook.call(context[domain], name, callback);
+      if (typeof registration?.dispose === 'function') registrations.push(registration);
+    } catch {
+      // A hook the host refuses leaves that feature off; the plugin still loads.
+    }
+  };
+
+  await register('tool', 'execute.before', async event => {
+    const args = event?.input;
+    if (!args || typeof args !== 'object') return;
+    enforceToolCall(event.tool, args, directory);
+  });
+
+  await register('session', 'context', async event => {
+    if (!event || !Array.isArray(event.system)) return;
+    try {
+      const text = await loadOnce(event.sessionID, directory);
+      if (text) event.system.push({ type: 'text', text });
+    } catch {
+      // Context restoration is best-effort and must never fail a request.
+    }
+  });
+
+  return async () => {
+    await Promise.all(registrations.splice(0).map(registration => registration.dispose()));
+  };
+}
+
+// OpenCode 1 entrypoint: the hooks object of the V1 plugin API.
+const server = async ({ client, directory } = {}) => {
   const injectedSessionIds = new Set();
   const pendingSessionIds = new Set();
 
@@ -239,7 +322,7 @@ const EgcGuardianCrusher = async ({ client, directory } = {}) => {
   };
 
   return {
-    // Current OpenCode dispatches bus events through this generic hook.
+    // OpenCode 1 dispatches bus events through this generic hook.
     event: async ({ event } = {}) => {
       if (event?.type !== 'session.created') return;
       await handleSessionCreated(event);
@@ -252,16 +335,9 @@ const EgcGuardianCrusher = async ({ client, directory } = {}) => {
     'tool.execute.before': async (input, output) => {
       const args = output?.args;
       if (!args || typeof args !== 'object') return;
-      const denial = guardianDenial(input?.tool, args, directory);
-      if (denial) throw new Error(denial);
-      if (input?.tool !== 'bash' || typeof args.command !== 'string') return;
-
-      const rewritten = JSON.parse(runCrusherRewrite({ tool_input: { command: args.command } }));
-      if (typeof rewritten?.tool_input?.command === 'string') {
-        output.args.command = rewritten.tool_input.command;
-      }
+      enforceToolCall(input?.tool, args, directory);
     },
   };
 };
 
-export { EgcGuardianCrusher };
+export default { id: PLUGIN_ID, setup, server };

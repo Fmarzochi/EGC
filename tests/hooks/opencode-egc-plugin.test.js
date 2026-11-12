@@ -136,6 +136,7 @@ async function runTests() {
     const pluginPath = path.join(root, 'plugins', 'opencode-egc-plugin.js');
     const bridgePath = path.join(root, 'scripts', 'hooks', 'opencode-session-start.js');
     let EgcGuardianCrusher;
+    let plugin;
     const cases = [];
     const addCase = (name, fn) => cases.push(() => test(name, fn));
 
@@ -145,8 +146,17 @@ async function runTests() {
       // OpenCode imports the plugin as an ES module; Node needs the package
       // type hint to do the same for a .js file, so the temp layout gets one.
       fs.writeFileSync(path.join(root, 'plugins', 'package.json'), '{ "type": "module" }\n');
-      ({ EgcGuardianCrusher } = await import(pathToFileURL(pluginPath).href));
-      assert.strictEqual(typeof EgcGuardianCrusher, 'function');
+      const mod = await import(pathToFileURL(pluginPath).href);
+      plugin = mod.default;
+      // One default export serves both loaders: OpenCode 2 reads id and setup,
+      // OpenCode 1.18.29+ reads the server entrypoint. V1 calls every export
+      // as a function, so nothing else may be exported.
+      assert.strictEqual(typeof plugin, 'object', 'the default export is the plugin definition');
+      assert.strictEqual(plugin.id, 'egc');
+      assert.strictEqual(typeof plugin.setup, 'function', 'OpenCode 2 loads the plugin through setup');
+      assert.strictEqual(typeof plugin.server, 'function', 'OpenCode 1 loads the plugin through server');
+      assert.deepStrictEqual(Object.keys(mod), ['default'], 'the default export is the only export');
+      EgcGuardianCrusher = plugin.server;
     });
 
     addCase('the installed session bridge migrates the legacy continuous-learning store', async () => {
@@ -437,6 +447,126 @@ async function runTests() {
         process.execPath = originalExecPath;
         restoreBridge();
       }
+    });
+
+    // A stand-in for the OpenCode 2 plugin context: setup registers callbacks
+    // through tool.hook and session.hook, and the test calls them directly.
+    function fakeContext(directory) {
+      const registered = { tool: {}, session: {} };
+      const disposed = [];
+      const register = domain => async (name, callback) => {
+        registered[domain][name] = callback;
+        return { dispose: async () => { disposed.push(`${domain}.${name}`); } };
+      };
+      return {
+        registered,
+        disposed,
+        ctx: {
+          location: { directory },
+          tool: { hook: register('tool') },
+          session: { hook: register('session') },
+        },
+      };
+    }
+
+    function contextEvent(sessionID) {
+      return { sessionID, system: [], messages: [], options: {}, agent: 'build', tools: {} };
+    }
+
+    addCase('OpenCode 2: setup registers the tool hook with Guardian and Crusher behavior', async () => {
+      const fake = fakeContext(tempDir);
+      const cleanup = await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+      assert.strictEqual(typeof before, 'function');
+      await assert.rejects(
+        () => before({ tool: 'bash', sessionID: 'ses_v2', input: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/
+      );
+      await assert.rejects(
+        () => before({ tool: 'write', sessionID: 'ses_v2', input: { filePath: path.join(tempDir, '.ssh', 'id_rsa'), content: 'x' } }),
+        /EGC Guardian BLOCKED/
+      );
+      const read = { tool: 'read', sessionID: 'ses_v2', input: { filePath: '/tmp/x' } };
+      await before(read);
+      assert.deepStrictEqual(read.input, { filePath: '/tmp/x' });
+      await before({ tool: 'bash', sessionID: 'ses_v2', input: {} });
+      await before({ tool: 'bash', sessionID: 'ses_v2' });
+      const safe = { tool: 'bash', sessionID: 'ses_v2', input: { command: 'git status' } };
+      await before(safe);
+      assert.strictEqual(safe.input.command, 'git status');
+      process.env.EGC_ASSUME_EGC_CLI = '1';
+      try {
+        const crushable = { tool: 'bash', sessionID: 'ses_v2', input: { command: 'npm test' } };
+        await before(crushable);
+        assert.strictEqual(crushable.input.command, 'egc run npm test');
+      } finally {
+        process.env.EGC_ASSUME_EGC_CLI = '0';
+      }
+      assert.strictEqual(typeof cleanup, 'function', 'setup returns the cleanup of its registrations');
+      await cleanup();
+      assert.deepStrictEqual(fake.disposed.sort(), ['session.context', 'tool.execute.before']);
+    });
+
+    addCase('OpenCode 2: the context hook carries the project memory on every request, loaded once per session', async () => {
+      const project = path.join(tempDir, 'workspaces', 'v2-context');
+      fs.mkdirSync(project, { recursive: true });
+      writeState(tempDir, project, 'opencode-v2-context-marker');
+      const counter = path.join(tempDir, 'v2-bridge-runs');
+      const stub = "#!/usr/bin/env node\nrequire('fs').appendFileSync(process.env.EGC_TEST_BRIDGE_COUNTER, 'x');\n"
+        + "process.stdout.write(JSON.stringify({host:'opencode',context:'opencode-v2-context-marker'}));\n";
+      const restore = replaceTemporarily(bridgePath, stub);
+      try {
+        await withEnvironment('EGC_TEST_BRIDGE_COUNTER', counter, async () => {
+          const fake = fakeContext(project);
+          await plugin.setup(fake.ctx);
+          const context = fake.registered.session.context;
+          assert.strictEqual(typeof context, 'function');
+          const first = contextEvent('ses_v2_a');
+          await context(first);
+          assert.strictEqual(first.system.length, 1);
+          assert.strictEqual(first.system[0].type, 'text');
+          assert.match(first.system[0].text, /opencode-v2-context-marker/);
+          const again = contextEvent('ses_v2_a');
+          await context(again);
+          assert.strictEqual(again.system.length, 1, 'the next request of the same session carries the memory too');
+          assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'x', 'the bridge ran once for the session');
+          const other = contextEvent('ses_v2_b');
+          await context(other);
+          assert.strictEqual(other.system.length, 1, 'another session loads its own copy');
+          assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'xx');
+        });
+      } finally { restore(); }
+    });
+
+    addCase('OpenCode 2: the context hook fails open on empty context, a bridge timeout and a malformed event', async () => {
+      const empty = path.join(tempDir, 'workspaces', 'v2-empty');
+      fs.mkdirSync(empty, { recursive: true });
+      let fake = fakeContext(empty);
+      await plugin.setup(fake.ctx);
+      const event = contextEvent('ses_v2_empty');
+      await fake.registered.session.context(event);
+      assert.strictEqual(event.system.length, 0);
+      await assert.doesNotReject(() => fake.registered.session.context({ sessionID: 'ses_v2_no_system' }));
+      await assert.doesNotReject(() => fake.registered.session.context(undefined));
+
+      const restore = replaceTemporarily(bridgePath, "#!/usr/bin/env node\nsetTimeout(() => {}, 10000);\n");
+      try {
+        await withEnvironment('EGC_SESSION_CONTEXT_TIMEOUT_MS', '150', async () => {
+          fake = fakeContext(tempDir);
+          await plugin.setup(fake.ctx);
+          const slow = contextEvent('ses_v2_timeout');
+          const started = Date.now();
+          await assert.doesNotReject(() => fake.registered.session.context(slow));
+          assert.ok(Date.now() - started < 2000, 'the timeout path returns promptly');
+          assert.strictEqual(slow.system.length, 0);
+        });
+      } finally { restore(); }
+    });
+
+    addCase('OpenCode 2: setup without the hook domains fails open', async () => {
+      await assert.doesNotReject(() => plugin.setup({ location: { directory: tempDir } }));
+      await assert.doesNotReject(() => plugin.setup({}));
+      await assert.doesNotReject(() => plugin.setup());
     });
 
     // The cases share the installed layout and the imported plugin, so they

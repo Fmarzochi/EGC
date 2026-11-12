@@ -115,6 +115,13 @@ Installs made with EGC 1.1.21 or earlier copied the whole `egc-universal` packag
 **Fix:** update EGC and run `egc install --target opencode --profile full` (or `egc auto-update`). The installer removes the package files it wrote earlier and reports each one as `retired file`; `egc install --target opencode --dry-run` lists them first under `Files to retire`. Your `opencode.json` is left as it is: if EGC overwrote it, restore your own model, permission and plugin settings by hand.
 
 **Without updating:** inside `~/.config/opencode/`, remove `tools/`, `dist/`, `plugins/egc-hooks.ts`, `plugins/index.ts`, `plugins/lib/`, `index.ts`, `package.json`, `package-lock.json`, `tsconfig.json`, `.npmignore`, `README.md` and `MIGRATION.md`; keep `plugins/opencode-egc-plugin.js`, `commands/`, `instructions/`, `prompts/`, `skills/`, `scripts/`, `hooks/` and `egc/`.
+
+## OpenCode 2 logs `failed to load plugin` for `opencode-egc-plugin.js`
+
+The OpenCode log (`~/.local/share/opencode/log/opencode.log`, on Windows `%USERPROFILE%\.local\share\opencode\log\opencode.log`) shows `PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function` for `plugins/opencode-egc-plugin.js`, on every start and every `opencode reload`. OpenCode 2 reads a plugin through a default export with an `id` and a `setup` function; the plugin EGC 1.1.23 installs only has the named export of the OpenCode 1 API, so OpenCode 2 refuses it before any of its code runs (#2093). The two MCP servers keep working, so the only visible effect is that line: the Guardian, the Token Crusher and the session memory restore are not active inside OpenCode.
+
+**Fix:** update EGC and run `egc auto-update` (or `egc install --target opencode --profile full`). The plugin now serves both APIs from the same file: OpenCode 2 loads it through `setup`, OpenCode 1.18.29 and newer through the `server` entrypoint. Start OpenCode again (or `opencode reload`) and the line is gone. Releases of OpenCode 1 older than 1.18.29 call every export as a function and do not load the new file; update OpenCode.
+
 ## `Refusing to write through a symbolic link` during `egc install` or `egc auto-update`
 
 The installer never writes through a link below a target root: a link at the destination, or a linked directory above it, stops the install before anything changes. Two cases look the same and are handled differently.
