@@ -238,11 +238,38 @@ function createContextCache() {
   };
 }
 
+// The directory a session works in, asked of the host once per session and
+// kept: a session may live in another checkout than the plugin instance, as
+// the V1 path reads it from the session event. The plugin's own location
+// serves when the host cannot say.
+function createDirectoryResolver(context) {
+  const fallback = context?.location?.directory ?? context?.directory;
+  const resolved = new Map();
+
+  return async sessionId => {
+    if (typeof sessionId !== 'string' || !sessionId) return fallback;
+    if (resolved.has(sessionId)) return resolved.get(sessionId);
+    let directory = fallback;
+    const get = context?.session?.get;
+    if (typeof get === 'function') {
+      try {
+        const info = await get.call(context.session, { sessionID: sessionId });
+        const own = info?.location?.directory ?? info?.directory;
+        if (typeof own === 'string' && own) directory = own;
+      } catch {
+        // The host could not say: the plugin's own location serves.
+      }
+    }
+    resolved.set(sessionId, directory);
+    return directory;
+  };
+}
+
 // OpenCode 2 entrypoint: the tool hook carries Guardian and Crusher, and the
 // context hook adds the project memory to the system instructions of every
 // request of a session. A host without one of the domains keeps the other.
 async function setup(context) {
-  const directory = context?.location?.directory ?? context?.directory;
+  const directoryOf = createDirectoryResolver(context);
   const loadOnce = createContextCache();
   const registrations = [];
 
@@ -260,13 +287,13 @@ async function setup(context) {
   await register('tool', 'execute.before', async event => {
     const args = event?.input;
     if (!args || typeof args !== 'object') return;
-    enforceToolCall(event.tool, args, directory);
+    enforceToolCall(event.tool, args, await directoryOf(event.sessionID));
   });
 
   await register('session', 'context', async event => {
     if (!event || !Array.isArray(event.system)) return;
     try {
-      const text = await loadOnce(event.sessionID, directory);
+      const text = await loadOnce(event.sessionID, await directoryOf(event.sessionID));
       if (text) event.system.push({ type: 'text', text });
     } catch {
       // Context restoration is best-effort and must never fail a request.

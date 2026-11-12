@@ -451,20 +451,33 @@ async function runTests() {
 
     // A stand-in for the OpenCode 2 plugin context: setup registers callbacks
     // through tool.hook and session.hook, and the test calls them directly.
-    function fakeContext(directory) {
+    function fakeContext(directory, options = {}) {
       const registered = { tool: {}, session: {} };
       const disposed = [];
+      const gets = [];
       const register = domain => async (name, callback) => {
         registered[domain][name] = callback;
         return { dispose: async () => { disposed.push(`${domain}.${name}`); } };
       };
+      // session.get answers the way OpenCode 2 does: the session's location
+      // when the test gave it one, a bare record otherwise.
+      const session = { hook: register('session') };
+      if (options.get !== 'missing') {
+        session.get = async ({ sessionID }) => {
+          gets.push(sessionID);
+          if (options.get === 'throws') throw new Error('no such session');
+          const own = options.sessions?.[sessionID];
+          return own ? { id: sessionID, location: { directory: own } } : { id: sessionID };
+        };
+      }
       return {
         registered,
         disposed,
+        gets,
         ctx: {
           location: { directory },
           tool: { hook: register('tool') },
-          session: { hook: register('session') },
+          session,
         },
       };
     }
@@ -536,6 +549,41 @@ async function runTests() {
           assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'xx');
         });
       } finally { restore(); }
+    });
+
+    addCase('OpenCode 2: each session gets the memory of its own checkout, asked of the host once', async () => {
+      const home = path.join(tempDir, 'workspaces', 'v2-home-checkout');
+      const other = path.join(tempDir, 'workspaces', 'v2-other-checkout');
+      fs.mkdirSync(home, { recursive: true });
+      fs.mkdirSync(other, { recursive: true });
+      writeState(tempDir, home, 'v2-home-checkout-marker');
+      writeState(tempDir, other, 'v2-other-checkout-marker');
+
+      const fake = fakeContext(home, { sessions: { ses_v2_other: other } });
+      await plugin.setup(fake.ctx);
+      const context = fake.registered.session.context;
+      const atHome = contextEvent('ses_v2_home');
+      await context(atHome);
+      assert.match(atHome.system[0].text, /v2-home-checkout-marker/);
+      const elsewhere = contextEvent('ses_v2_other');
+      await context(elsewhere);
+      assert.match(elsewhere.system[0].text, /v2-other-checkout-marker/);
+      assert.doesNotMatch(elsewhere.system[0].text, /v2-home-checkout-marker/);
+      await context(contextEvent('ses_v2_other'));
+      await fake.registered.tool['execute.before']({ tool: 'read', sessionID: 'ses_v2_other', input: { filePath: '/tmp/x' } });
+      assert.deepStrictEqual(fake.gets, ['ses_v2_home', 'ses_v2_other'], 'the host is asked once per session');
+
+      const throwing = fakeContext(home, { get: 'throws' });
+      await plugin.setup(throwing.ctx);
+      const fallback = contextEvent('ses_v2_fallback');
+      await throwing.registered.session.context(fallback);
+      assert.match(fallback.system[0].text, /v2-home-checkout-marker/, 'a host that cannot say leaves the location in charge');
+
+      const without = fakeContext(home, { get: 'missing' });
+      await plugin.setup(without.ctx);
+      const noGet = contextEvent('ses_v2_no_get');
+      await without.registered.session.context(noGet);
+      assert.match(noGet.system[0].text, /v2-home-checkout-marker/, 'a host without session.get leaves the location in charge');
     });
 
     addCase('OpenCode 2: the context hook fails open on empty context, a bridge timeout and a malformed event', async () => {
