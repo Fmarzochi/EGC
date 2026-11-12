@@ -189,6 +189,13 @@ jobs:
           npm --prefix mcp/servers/egc-guardian run build
           test -f mcp/servers/egc-guardian/build/validator.js
 
+      - name: Build the memory server
+        shell: bash
+        run: |
+          npm --prefix mcp/servers/egc-memory ci
+          npm --prefix mcp/servers/egc-memory run build
+          test -f mcp/servers/egc-memory/build/index.js
+
       # Run tests
       - name: Run tests
         run: node tests/run-all.js
