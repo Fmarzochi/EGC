@@ -12,6 +12,8 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+
 const script = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'mcp-health-check.js');
 
 function test(name, fn) {
@@ -74,9 +76,13 @@ function createCommandConfig(scriptPath) {
 }
 
 function buildHookEnv(env = {}) {
+  // A reconnect command here is a Node script the hook spawns; on a loaded
+  // runner the spawn alone can outlast the hook's 5 s default, so the suite
+  // gives it the shared subprocess budget (a case may still override it).
   const merged = {
     ...process.env,
-    ECC_HOOK_PROFILE: 'standard'
+    ECC_HOOK_PROFILE: 'standard',
+    EGC_MCP_RECONNECT_TIMEOUT_MS: String(CLI_TIMEOUT_MS)
   };
 
   for (const [key, value] of Object.entries(env)) {
@@ -96,7 +102,7 @@ function runHook(input, env = {}, options = {}) {
     encoding: 'utf8',
     cwd: options.cwd || process.cwd(),
     env: buildHookEnv(env),
-    timeout: 15000,
+    timeout: CLI_TIMEOUT_MS,
     stdio: ['pipe', 'pipe', 'pipe']
   });
 
@@ -113,7 +119,7 @@ function runRawHook(rawInput, env = {}, options = {}) {
     encoding: 'utf8',
     cwd: options.cwd || process.cwd(),
     env: buildHookEnv(env),
-    timeout: 15000,
+    timeout: CLI_TIMEOUT_MS,
     stdio: ['pipe', 'pipe', 'pipe']
   });
 
@@ -124,7 +130,10 @@ function runRawHook(rawInput, env = {}, options = {}) {
   };
 }
 
-function waitForFile(filePath, timeoutMs = 5000) {
+// The file and the HTTP server a helper child publishes arrive after a
+// process start, which a loaded runner can stretch past a few seconds: the
+// wait is the shared subprocess budget, a hang detector and not a stopwatch.
+function waitForFile(filePath, timeoutMs = CLI_TIMEOUT_MS) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (fs.existsSync(filePath)) {
@@ -136,7 +145,7 @@ function waitForFile(filePath, timeoutMs = 5000) {
   throw new Error(`Timed out waiting for ${filePath}`);
 }
 
-function waitForHttpReady(urlString, timeoutMs = 5000) {
+function waitForHttpReady(urlString, timeoutMs = CLI_TIMEOUT_MS) {
   const deadline = Date.now() + timeoutMs;
   const { protocol } = new URL(urlString);
   const client = protocol === 'https:' ? https : http;
