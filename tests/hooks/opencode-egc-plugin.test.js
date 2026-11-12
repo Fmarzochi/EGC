@@ -456,6 +456,7 @@ async function runTests() {
       const disposed = [];
       const gets = [];
       const register = domain => async (name, callback) => {
+        if (options.hookThrows === domain) throw new Error(`${domain}.hook refused`);
         registered[domain][name] = callback;
         return { dispose: async () => { disposed.push(`${domain}.${name}`); } };
       };
@@ -584,6 +585,88 @@ async function runTests() {
       const noGet = contextEvent('ses_v2_no_get');
       await without.registered.session.context(noGet);
       assert.match(noGet.system[0].text, /v2-home-checkout-marker/, 'a host without session.get leaves the location in charge');
+    });
+
+    addCase('OpenCode 2: concurrent requests share one load and one lookup per session', async () => {
+      const project = path.join(tempDir, 'workspaces', 'v2-concurrent');
+      fs.mkdirSync(project, { recursive: true });
+      const counter = path.join(tempDir, 'v2-concurrent-runs');
+      const stub = "#!/usr/bin/env node\nrequire('fs').appendFileSync(process.env.EGC_TEST_BRIDGE_COUNTER, 'x');\n"
+        + "process.stdout.write(JSON.stringify({host:'opencode',context:'v2-concurrent-marker'}));\n";
+      const restore = replaceTemporarily(bridgePath, stub);
+      try {
+        await withEnvironment('EGC_TEST_BRIDGE_COUNTER', counter, async () => {
+          const fake = fakeContext(project);
+          await plugin.setup(fake.ctx);
+          const context = fake.registered.session.context;
+          const before = fake.registered.tool['execute.before'];
+          const a = contextEvent('ses_v2_c1');
+          const b = contextEvent('ses_v2_c1');
+          const c = contextEvent('ses_v2_c2');
+          await Promise.all([
+            context(a),
+            context(b),
+            before({ tool: 'read', sessionID: 'ses_v2_c1', input: { filePath: '/tmp/x' } }),
+            context(c),
+          ]);
+          assert.match(a.system[0].text, /v2-concurrent-marker/);
+          assert.match(b.system[0].text, /v2-concurrent-marker/);
+          assert.match(c.system[0].text, /v2-concurrent-marker/);
+          assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'xx', 'one bridge run per session');
+          assert.deepStrictEqual(fake.gets.sort(), ['ses_v2_c1', 'ses_v2_c2'], 'one session.get per session, concurrent requests included');
+        });
+      } finally { restore(); }
+    });
+
+    addCase('OpenCode 2: the Guardian judges a tool call against the session directory, with or without a session id', async () => {
+      const other = path.join(tempDir, 'workspaces', 'v2-guardian-other');
+      fs.mkdirSync(other, { recursive: true });
+      const fake = fakeContext(tempDir, { sessions: { ses_v2_other: other } });
+      await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+      const relativeSecret = path.join('.ssh', 'id_rsa');
+      // A relative path is resolved against the session's own directory: the
+      // refusal names the home for the session at home and the other checkout
+      // for the session there, never the plugin location for both.
+      await assert.rejects(
+        () => before({ tool: 'write', sessionID: 'ses_v2_at_home', input: { filePath: relativeSecret, content: 'x' } }),
+        error => /EGC Guardian BLOCKED/.test(error.message) && error.message.includes(path.join(tempDir, '.ssh', 'id_rsa'))
+      );
+      await assert.rejects(
+        () => before({ tool: 'write', sessionID: 'ses_v2_other', input: { filePath: relativeSecret, content: 'x' } }),
+        error => /EGC Guardian BLOCKED/.test(error.message) && error.message.includes(path.join(other, '.ssh', 'id_rsa'))
+      );
+      await assert.rejects(
+        () => before({ tool: 'bash', input: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/,
+        'a call without a session id is still judged, against the plugin location'
+      );
+      const noSession = { system: [], messages: [], options: {} };
+      await fake.registered.session.context(noSession);
+      assert.strictEqual(noSession.system.length, 0, 'a request without a session id gets no memory and no error');
+    });
+
+    addCase('OpenCode 2: a hook the host refuses leaves the other one working', async () => {
+      const project = path.join(tempDir, 'workspaces', 'v2-partial');
+      fs.mkdirSync(project, { recursive: true });
+      writeState(tempDir, project, 'v2-partial-marker');
+
+      const noTool = fakeContext(project, { hookThrows: 'tool' });
+      const cleanupNoTool = await plugin.setup(noTool.ctx);
+      assert.strictEqual(noTool.registered.tool['execute.before'], undefined);
+      const event = contextEvent('ses_v2_partial');
+      await noTool.registered.session.context(event);
+      assert.match(event.system[0].text, /v2-partial-marker/);
+      await cleanupNoTool();
+      assert.deepStrictEqual(noTool.disposed, ['session.context']);
+
+      const noSession = fakeContext(project, { hookThrows: 'session' });
+      await plugin.setup(noSession.ctx);
+      assert.strictEqual(noSession.registered.session.context, undefined);
+      await assert.rejects(
+        () => noSession.registered.tool['execute.before']({ tool: 'bash', sessionID: 'ses_v2_partial', input: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/
+      );
     });
 
     addCase('OpenCode 2: the context hook fails open on empty context, a bridge timeout and a malformed event', async () => {
