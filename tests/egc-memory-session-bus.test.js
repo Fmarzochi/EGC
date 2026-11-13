@@ -111,7 +111,7 @@ async function main() {
     await bus.announce(db, { sessionId: 'alive', projectPath: '/p' });
     await db.run(
       'INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)',
-      path.join(path.resolve('/p'), 'src'), 'ghost', new Date().toISOString()
+      bus.claimKeyOf('/p', 'src'), 'ghost', new Date().toISOString()
     );
     assert.strictEqual((await bus.claimPath(db, { sessionId: 'alive', path: 'src/index.ts' })).ok, true);
     assert.deepStrictEqual((await bus.listLocks(db)).map(lock => lock.session_id), ['alive']);
@@ -121,9 +121,8 @@ async function main() {
     const db = await freshDb();
     await bus.announce(db, { sessionId: 'first', projectPath: '/p' });
     await bus.announce(db, { sessionId: 'second', projectPath: '/p' });
-    const root = path.resolve('/p');
-    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src'), 'first', '2026-09-28T00:00:00.000Z');
-    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src', 'a.ts'), 'second', '2026-09-28T00:00:00.000Z');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', bus.claimKeyOf('/p', 'src'), 'first', '2026-09-28T00:00:00.000Z');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', bus.claimKeyOf('/p', 'src/a.ts'), 'second', '2026-09-28T00:00:00.000Z');
     const second = await bus.claimPath(db, { sessionId: 'second', path: 'src/a.ts' }, Date.parse('2026-09-28T00:00:01.000Z'));
     assert.strictEqual(second.ok, false, 'the later claim of the pair yields');
     assert.strictEqual(second.holder, 'first');
@@ -134,9 +133,8 @@ async function main() {
     const db = await freshDb();
     await bus.announce(db, { sessionId: 'b', projectPath: '/p' });
     await bus.announce(db, { sessionId: 'a', projectPath: '/p' });
-    const root = path.resolve('/p');
-    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src'), 'b', '2026-09-28T00:00:00.000Z');
-    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src', 'a.ts'), 'a', '2026-09-28T00:00:05.000Z');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', bus.claimKeyOf('/p', 'src'), 'b', '2026-09-28T00:00:00.000Z');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', bus.claimKeyOf('/p', 'src/a.ts'), 'a', '2026-09-28T00:00:05.000Z');
     const earlier = await bus.claimPath(db, { sessionId: 'b', path: 'src' }, Date.parse('2026-09-28T00:00:06.000Z'));
     assert.strictEqual(earlier.ok, true, 'the earlier holder keeps its claim');
     const later = await bus.claimPath(db, { sessionId: 'a', path: 'src/a.ts' }, Date.parse('2026-09-28T00:00:07.000Z'));
@@ -148,13 +146,12 @@ async function main() {
     const db = await freshDb();
     await bus.announce(db, { sessionId: 'racer', projectPath: '/p' });
     await bus.announce(db, { sessionId: 'me', projectPath: '/p' });
-    const root = path.resolve('/p');
     let landed = false;
     const racing = {
       run: async (sql, ...params) => {
         if (!landed && /INSERT OR IGNORE INTO bus_locks/.test(sql)) {
           landed = true;
-          await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src'), 'racer', '2026-01-01T00:00:00.000Z');
+          await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', bus.claimKeyOf('/p', 'src'), 'racer', '2026-01-01T00:00:00.000Z');
         }
         return db.run(sql, ...params);
       },
@@ -172,9 +169,8 @@ async function main() {
     const db = await freshDb();
     await bus.announce(db, { sessionId: 'b', projectPath: '/p' });
     await bus.announce(db, { sessionId: 'a', projectPath: '/p' });
-    const root = path.resolve('/p');
-    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 60)', path.join(root, 'src'), 'b', '2026-09-28T00:00:00.000Z');
-    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', path.join(root, 'src', 'a.ts'), 'a', '2026-09-28T00:00:05.000Z');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 60)', bus.claimKeyOf('/p', 'src'), 'b', '2026-09-28T00:00:00.000Z');
+    await db.run('INSERT INTO bus_locks (path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, 900)', bus.claimKeyOf('/p', 'src/a.ts'), 'a', '2026-09-28T00:00:05.000Z');
     const renewed = await bus.claimPath(db, { sessionId: 'b', path: 'src', ttlSeconds: 600 }, Date.parse('2026-09-28T00:01:00.000Z'));
     assert.strictEqual(renewed.ok, true);
     const row = await db.get('SELECT acquired_at, ttl_seconds FROM bus_locks WHERE session_id = ?', 'b');
@@ -202,7 +198,7 @@ async function main() {
 
   await run('a key is kept in one case where the file system ignores case', async () => {
     assert.strictEqual(bus.claimKeyOf('/P/App', 'Src/A.ts', 'win32'), bus.claimKeyOf('/p/app', 'src/a.ts', 'win32'));
-    assert.strictEqual(bus.claimKeyOf('/P/App', 'Src', 'darwin'), path.resolve('/p/app/src'));
+    assert.strictEqual(bus.claimKeyOf('/P/App', 'Src', 'darwin'), path.resolve('/p/app/src').toLowerCase());
     assert.notStrictEqual(bus.claimKeyOf('/P/App', 'Src', 'linux'), bus.claimKeyOf('/p/app', 'src', 'linux'));
     assert.ok(bus.claimsOverlap(bus.claimKeyOf('/P', 'SRC', 'darwin'), bus.claimKeyOf('/p', 'src/x.ts', 'darwin')));
   });

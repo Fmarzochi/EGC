@@ -66,8 +66,13 @@ if (test('loadOrCreateKey: key file is created with mode 0600', () => {
     loadOrCreateKey();
     const keyPath = path.join(tmpDir, '.egc', 'integrity.key');
     assert.ok(fs.existsSync(keyPath), 'key file should exist');
-    const mode = fs.statSync(keyPath).mode & 0o777;
-    assert.strictEqual(mode, 0o600, `expected mode 0600, got ${mode.toString(8)}`);
+    // Windows has no POSIX permission bits: statSync reports 0666 there.
+    if (process.platform === 'win32') {
+      console.log('    skipped: POSIX mode bits are not reported on Windows');
+    } else {
+      const mode = fs.statSync(keyPath).mode & 0o777;
+      assert.strictEqual(mode, 0o600, `expected mode 0600, got ${mode.toString(8)}`);
+    }
   } finally {
     process.env.HOME = origHome;
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -213,8 +218,13 @@ if (test('writeHmac: sidecar file has mode 0600', () => {
     fs.writeFileSync(stateFile, content, 'utf-8');
     writeHmac(stateFile, content, key);
     const hmacPath = `${stateFile}.hmac`;
-    const mode = fs.statSync(hmacPath).mode & 0o777;
-    assert.strictEqual(mode, 0o600, `expected mode 0600, got ${mode.toString(8)}`);
+    // Windows has no POSIX permission bits: statSync reports 0666 there.
+    if (process.platform === 'win32') {
+      console.log('    skipped: POSIX mode bits are not reported on Windows');
+    } else {
+      const mode = fs.statSync(hmacPath).mode & 0o777;
+      assert.strictEqual(mode, 0o600, `expected mode 0600, got ${mode.toString(8)}`);
+    }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
