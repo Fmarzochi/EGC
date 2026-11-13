@@ -235,7 +235,9 @@ function remember(map, key, value) {
 // One value per session, computed once and shared by the requests that ask
 // for it while it is still being computed; a computation that fails is not
 // kept, so the next request asks again. A computation that finishes after
-// clear() is not kept either: the generation it started in is gone.
+// clear() is not kept either: the generation it started in is gone. One the
+// cap evicted while still in flight leaves the newer computation that took
+// its place alone.
 function createSessionCache(compute) {
   const settled = new Map();
   const pending = new Map();
@@ -252,7 +254,7 @@ function createSessionCache(compute) {
           return value;
         })
         .finally(() => {
-          if (started === generation) pending.delete(sessionId);
+          if (started === generation && pending.get(sessionId) === promise) pending.delete(sessionId);
         });
       remember(pending, sessionId, promise);
     }

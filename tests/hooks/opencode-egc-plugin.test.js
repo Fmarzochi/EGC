@@ -459,8 +459,12 @@ async function runTests() {
       const register = domain => async (name, callback) => {
         if (options.hookThrows === domain) throw new Error(`${domain}.hook refused`);
         registered[domain][name] = callback;
+        if (options.noDispose === domain) return undefined;
         if (options.disposeThrows === domain) {
           return { dispose: () => { throw new Error(`${domain}.${name} dispose refused`); } };
+        }
+        if (options.disposeRejects === domain) {
+          return { dispose: () => Promise.reject(new Error(`${domain}.${name} dispose failed`)) };
         }
         return { dispose: async () => { disposed.push(`${domain}.${name}`); } };
       };
@@ -482,10 +486,11 @@ async function runTests() {
         disposed,
         gets,
         // The host is asked in a microtask after the request starts, so the
-        // release waits one turn before answering every request held so far.
-        release: async () => {
+        // release waits one turn before answering the requests held so far,
+        // all of them or the oldest `count`.
+        release: async (count = Infinity) => {
           await new Promise(resolve => setImmediate(resolve));
-          held.splice(0).forEach(resolve => resolve());
+          held.splice(0, count).forEach(resolve => resolve());
         },
         ctx: {
           location: { directory },
@@ -710,20 +715,56 @@ async function runTests() {
       await assert.doesNotReject(() => plugin.setup({ location: { directory: tempDir } }));
       await assert.doesNotReject(() => plugin.setup({}));
       await assert.doesNotReject(() => plugin.setup());
+
+      // A host with the session domain only, no location and no session.get:
+      // the context hook has no directory to load from and says nothing.
+      const bare = fakeContext(undefined, { get: 'missing' });
+      delete bare.ctx.tool;
+      await plugin.setup(bare.ctx);
+      const event = contextEvent('ses_v2_no_dir');
+      await assert.doesNotReject(() => bare.registered.session.context(event));
+      assert.strictEqual(event.system.length, 0, 'a session without any directory gets no memory and no error');
     });
 
     addCase('OpenCode 2: a disposer that throws does not stop the other disposer or the cache cleanup', async () => {
-      const fake = fakeContext(tempDir, { disposeThrows: 'tool' });
+      const counter = path.join(tempDir, 'v2-dispose-bridge-runs');
+      const stub = "#!/usr/bin/env node\nrequire('fs').appendFileSync(process.env.EGC_TEST_BRIDGE_COUNTER, 'x');\n"
+        + "process.stdout.write(JSON.stringify({host:'opencode',context:'v2-dispose-marker'}));\n";
+      const restore = replaceTemporarily(bridgePath, stub);
+      try {
+        await withEnvironment('EGC_TEST_BRIDGE_COUNTER', counter, async () => {
+          const fake = fakeContext(tempDir, { disposeThrows: 'tool' });
+          const cleanup = await plugin.setup(fake.ctx);
+          const before = fake.registered.tool['execute.before'];
+          const context = fake.registered.session.context;
+          await before({ tool: 'read', sessionID: 'ses_v2_dispose', input: { filePath: '/tmp/x' } });
+          await context(contextEvent('ses_v2_dispose'));
+          assert.deepStrictEqual(fake.gets, ['ses_v2_dispose']);
+          assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'x');
+
+          await assert.doesNotReject(() => cleanup(), 'a synchronous throw of one disposer is contained');
+          assert.deepStrictEqual(fake.disposed, ['session.context'], 'the other registration is still disposed');
+
+          await before({ tool: 'read', sessionID: 'ses_v2_dispose', input: { filePath: '/tmp/x' } });
+          const after = contextEvent('ses_v2_dispose');
+          await context(after);
+          assert.deepStrictEqual(fake.gets, ['ses_v2_dispose', 'ses_v2_dispose'], 'the directory cache was cleared all the same');
+          assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'xx', 'the memory cache was cleared too: the bridge ran again');
+          assert.match(after.system[0].text, /v2-dispose-marker/);
+        });
+      } finally { restore(); }
+    });
+
+    addCase('OpenCode 2: a rejecting disposer and a registration without a dispose handle do not fail the cleanup', async () => {
+      const fake = fakeContext(tempDir, { disposeRejects: 'session', noDispose: 'tool' });
       const cleanup = await plugin.setup(fake.ctx);
-      const before = fake.registered.tool['execute.before'];
-      await before({ tool: 'read', sessionID: 'ses_v2_dispose', input: { filePath: '/tmp/x' } });
-      assert.deepStrictEqual(fake.gets, ['ses_v2_dispose']);
-
-      await assert.doesNotReject(() => cleanup(), 'a synchronous throw of one disposer is contained');
-      assert.deepStrictEqual(fake.disposed, ['session.context'], 'the other registration is still disposed');
-
-      await before({ tool: 'read', sessionID: 'ses_v2_dispose', input: { filePath: '/tmp/x' } });
-      assert.deepStrictEqual(fake.gets, ['ses_v2_dispose', 'ses_v2_dispose'], 'the directory cache was cleared all the same');
+      assert.strictEqual(typeof fake.registered.tool['execute.before'], 'function', 'the hook registered without a dispose handle still works');
+      await assert.rejects(
+        () => fake.registered.tool['execute.before']({ tool: 'bash', sessionID: 'ses_v2_nodispose', input: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/
+      );
+      await assert.doesNotReject(() => cleanup(), 'a rejected dispose is contained');
+      assert.deepStrictEqual(fake.disposed, []);
     });
 
     addCase('OpenCode 2: a host answer that lands after the cleanup is not kept', async () => {
@@ -752,18 +793,28 @@ async function runTests() {
         before({ tool: 'read', sessionID: `ses_v2_many_${index}`, input: { filePath: '/tmp/x' } })
       );
       const oldest = before({ tool: 'read', sessionID: 'ses_v2_many_0', input: { filePath: '/tmp/x' } });
+      const getsOf = sessionID => fake.gets.filter(entry => entry === sessionID).length;
+
+      // The evicted lookup of the first session lands first; the lookup that
+      // replaced it must stay shared by the requests that follow.
+      await fake.release(1);
+      assert.strictEqual(getsOf('ses_v2_many_0'), 2, 'the oldest in-flight session left the cache, so its next request asked the host again');
+      const shared = before({ tool: 'read', sessionID: 'ses_v2_many_0', input: { filePath: '/tmp/x' } });
+      await fake.release(0);
+      assert.strictEqual(getsOf('ses_v2_many_0'), 2, 'the evicted lookup did not drop the one that replaced it');
+      assert.strictEqual(getsOf('ses_v2_many_64'), 1, 'the newest in-flight session is still shared');
+
       await fake.release();
-      assert.strictEqual(
-        fake.gets.filter(sessionID => sessionID === 'ses_v2_many_0').length,
-        2,
-        'the oldest in-flight session left the cache, so its next request asks the host again'
-      );
-      assert.strictEqual(
-        fake.gets.filter(sessionID => sessionID === 'ses_v2_many_64').length,
-        1,
-        'the newest in-flight session is still shared'
-      );
-      await Promise.all([...inFlight, oldest]);
+      await Promise.all([...inFlight, oldest, shared]);
+
+      // Settled values are bounded by the same cap: the oldest settled session
+      // (the second one, since the first landed again at the end) is gone.
+      const evicted = before({ tool: 'read', sessionID: 'ses_v2_many_1', input: { filePath: '/tmp/x' } });
+      await fake.release();
+      await evicted;
+      assert.strictEqual(getsOf('ses_v2_many_1'), 2, 'the oldest settled session left the cache');
+      await before({ tool: 'read', sessionID: 'ses_v2_many_64', input: { filePath: '/tmp/x' } });
+      assert.strictEqual(getsOf('ses_v2_many_64'), 1, 'a settled session inside the cap is still served from it');
     });
 
     // The cases share the installed layout and the imported plugin, so they
