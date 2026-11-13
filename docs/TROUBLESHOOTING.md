@@ -122,6 +122,12 @@ The OpenCode log (`~/.local/share/opencode/log/opencode.log`, on Windows `%USERP
 
 **Fix:** update EGC and run `egc auto-update` (or `egc install --target opencode --profile full`). The plugin now serves both APIs from the same file: OpenCode 2 loads it through `setup`, OpenCode 1.18.29 and newer through the `server` entrypoint. Start OpenCode again (or `opencode reload`) and the line is gone. Releases of OpenCode 1 older than 1.18.29 call every export as a function and do not load the new file; update OpenCode.
 
+## `egc team sync` says the memory server did not answer
+
+The message reads `team sync needs the memory server (The memory server did not answer team_sync within 60 s; the server wrote: ...)`. The server started and took the call; something inside it never came back, and the lines after `the server wrote:` are the last thing it logged. The usual cause is `git`: the server reaches the remote with your own git and ssh, and a remote that asks a question (an unknown host key, a key with a passphrase, a credential for https) has nobody to answer inside the server. On Windows the ssh that Git for Windows bundles reads its keys and `known_hosts` from the home directory the server runs under, which is not always the one your terminal uses.
+
+Since v1.1.24 the server runs git with prompts off and ssh in batch mode, so such a remote fails at once with git's reason instead: `The remote <url> cannot be read: Host key verification failed` or `Permission denied (publickey)`. Either way the fix is the same: run `git ls-remote <remote>` once in a terminal, answer what it asks (accept the host key, or set up a key without a passphrase, an ssh agent or a credential helper), and run `egc team sync` again. A server that exits instead reads `The memory server exited with code <n> before answering team_sync; the server wrote: ...`, and the logged line names the cause (most often a store it could not open); `~/.egc/logs/` keeps the full log.
+
 ## `Refusing to write through a symbolic link` during `egc install` or `egc auto-update`
 
 The installer never writes through a link below a target root: a link at the destination, or a linked directory above it, stops the install before anything changes. Two cases look the same and are handled differently.

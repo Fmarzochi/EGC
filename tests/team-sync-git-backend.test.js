@@ -94,6 +94,7 @@ async function runTests() {
   }
   const mod = await import(pathToFileURL(buildFile).href);
   GitBackend = mod.GitBackend;
+  const { gitEnvironment } = await import(pathToFileURL(path.join(BUILD, 'sync', 'git-env.js')).href);
 
   let passed = 0;
   let failed = 0;
@@ -172,6 +173,53 @@ async function runTests() {
         /cannot be read: \S/,
       );
       await backend.destroy();
+    });
+
+    await run('the git the backend runs never waits for a terminal: prompts off, ssh in batch mode, the choices of the person kept', async () => {
+      const bare = { PATH: '/usr/bin' };
+      assert.deepStrictEqual(gitEnvironment(bare, null), { PATH: '/usr/bin', GIT_TERMINAL_PROMPT: '0', GIT_SSH_COMMAND: 'ssh -oBatchMode=yes' });
+      assert.strictEqual(gitEnvironment(bare, 'ssh -i ~/.ssh/team_key').GIT_SSH_COMMAND, 'ssh -i ~/.ssh/team_key -oBatchMode=yes', 'a configured core.sshCommand keeps its flags');
+      const own = gitEnvironment({ ...bare, GIT_TERMINAL_PROMPT: '1', GIT_SSH_COMMAND: 'my-ssh' }, 'ssh -i key');
+      assert.strictEqual(own.GIT_TERMINAL_PROMPT, '1', 'a prompt setting of the person is kept');
+      assert.strictEqual(own.GIT_SSH_COMMAND, 'my-ssh', 'an ssh command of the person is kept as it is');
+      const legacy = gitEnvironment({ ...bare, GIT_SSH: '/usr/bin/plink' }, null);
+      assert.strictEqual(legacy.GIT_SSH, '/usr/bin/plink');
+      assert.strictEqual(legacy.GIT_SSH_COMMAND, undefined, 'GIT_SSH is a choice of the person too');
+      // What simple-git guards never reaches git from the server, as before.
+      const guarded = gitEnvironment({ ...bare, HOME: '/home/me', EDITOR: 'vim', Pager: 'less', GIT_CONFIG_GLOBAL: '/x', GIT_ASKPASS: '/y' }, null);
+      assert.deepStrictEqual(Object.keys(guarded).sort(), ['GIT_SSH_COMMAND', 'GIT_TERMINAL_PROMPT', 'HOME', 'PATH']);
+      assert.deepStrictEqual(bare, { PATH: '/usr/bin' }, 'the environment given is not changed');
+    });
+
+    await run('init against an ssh remote runs ssh in batch mode and fails at once with the reason instead of waiting for a prompt', async () => {
+      // An ssh that records how git called it and answers the way a host
+      // whose key is unknown answers in batch mode.
+      const fakeBin = path.join(tempBase, 'fake-ssh-bin');
+      fs.mkdirSync(fakeBin, { recursive: true });
+      const log = path.join(tempBase, 'fake-ssh-argv.txt');
+      fs.writeFileSync(path.join(fakeBin, 'ssh'), '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$EGC_TEST_SSH_LOG"\necho "Host key verification failed." >&2\nexit 255\n', { mode: 0o755 });
+      fs.writeFileSync(path.join(fakeBin, 'ssh.cmd'), '@echo %* > "%EGC_TEST_SSH_LOG%"\r\n@echo Host key verification failed. 1>&2\r\n@exit /b 255\r\n');
+      const saved = { PATH: process.env.PATH, EGC_TEST_SSH_LOG: process.env.EGC_TEST_SSH_LOG, GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND, GIT_SSH: process.env.GIT_SSH };
+      process.env.PATH = `${fakeBin}${path.delimiter}${process.env.PATH}`;
+      process.env.EGC_TEST_SSH_LOG = log;
+      delete process.env.GIT_SSH_COMMAND;
+      delete process.env.GIT_SSH;
+      try {
+        const backend = new GitBackend(path.join(tempBase, 'repo-ssh'));
+        const started = Date.now();
+        await assert.rejects(
+          () => backend.init({ backend: 'git', remote: 'ssh://git@sync.example.invalid/team/egc-memory.git', branch: 'main' }),
+          /cannot be read: .*Host key verification failed/,
+        );
+        assert.ok(Date.now() - started < 20000, 'the failure is immediate, not a timeout');
+        const argv = fs.readFileSync(log, 'utf8');
+        assert.match(argv, /-oBatchMode=yes/, `ssh ran in batch mode, got: ${argv}`);
+        await backend.destroy();
+      } finally {
+        for (const [key, value] of Object.entries(saved)) {
+          if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+      }
     });
 
     await run('init against an empty remote succeeds, and pull reports nothing to pull without an error', async () => {

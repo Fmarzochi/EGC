@@ -11,8 +11,10 @@
 // Session bus operations (slice 3, #1238)
 //
 // The session bus lives in the egc-memory MCP server, not in scripts/lib.
-// The access pattern mirrors callMcpTool() in scripts/team.js: spawn the MCP
-// server over stdio for each call and call its tools as a subprocess.
+// The access pattern mirrors callMcpTool() in scripts/lib/team-mcp-client.js
+// (the session the team CLI holds): spawn the MCP server over stdio for each
+// call and call its tools as a subprocess, here with one write and a text
+// fallback for the dashboard.
 //
 // BUG-08 (documented per the issue's acceptance criteria): the MCP server
 // opens ~/.egc/memory/state.db while the CLI state store uses

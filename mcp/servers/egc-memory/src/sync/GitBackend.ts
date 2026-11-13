@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { InitOptions, SyncBackend, SyncConfig, SyncStatus } from './SyncBackend';
+import { GIT_ENVIRONMENT_KEYS, gitEnvironment } from './git-env';
 
 const SYNC_STATE_DIR = path.join(os.homedir(), '.egc', 'team-sync');
 
@@ -29,7 +30,7 @@ function describeFollowed(remotes: RemoteWithRefs[], origin: RemoteWithRefs | un
 }
 
 export class GitBackend extends SyncBackend {
-  private readonly git: SimpleGit;
+  private git: SimpleGit;
   private config: SyncConfig | null = null;
   private readonly repoDir: string;
 
@@ -39,11 +40,22 @@ export class GitBackend extends SyncBackend {
     if (!fs.existsSync(this.repoDir)) {
       fs.mkdirSync(this.repoDir, { recursive: true });
     }
-    this.git = simpleGit(this.repoDir);
+    // simple-git drops every GIT_* variable from the child environment unless
+    // it is named here, and treats an ssh command in that environment as a
+    // way to run arbitrary commands unless allowed: the three the server
+    // sets or forwards are named, and the ssh command is allowed because the
+    // server composes it itself, from its own flag and the person's
+    // core.sshCommand, never from a remote or from a tool argument.
+    this.git = simpleGit({
+      baseDir: this.repoDir,
+      allowEnvironment: [...GIT_ENVIRONMENT_KEYS],
+      unsafe: { allowUnsafeSshCommand: true },
+    });
   }
 
   async init(config: SyncConfig, options: InitOptions = {}): Promise<void> {
     this.config = config;
+    await this.useNonInteractiveGit();
 
     const isRepo = fs.existsSync(path.join(this.repoDir, '.git'));
     if (isRepo) {
@@ -85,6 +97,20 @@ export class GitBackend extends SyncBackend {
       `The sync checkout at ${this.repoDir} follows ${describeFollowed(remotes, origin)} on branch ${followedBranch}, not ${config.remote} on branch ${config.branch}. ` +
       'Remove that directory (your state under ~/.egc/state is not in it) and run egc team init again.',
     );
+  }
+
+  // Every git command from here on runs without a terminal to wait for: a
+  // remote that would ask a question fails at once with git's reason, which
+  // the sync reports, instead of holding the server until the caller's
+  // timeout. The person's own core.sshCommand, read here once, is kept.
+  private async useNonInteractiveGit(): Promise<void> {
+    let configuredSshCommand: string | null = null;
+    try {
+      configuredSshCommand = (await this.git.raw(['config', '--get', 'core.sshCommand'])).trim() || null;
+    } catch {
+      // not configured
+    }
+    this.git = this.git.env(gitEnvironment(process.env, configuredSshCommand));
   }
 
   private async currentBranch(): Promise<string> {
