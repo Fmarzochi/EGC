@@ -79,7 +79,7 @@ function toolCallValue(toolName, message) {
   const content = Array.isArray(message.result?.content) ? message.result.content : [];
   const text = content.find(item => item && typeof item === 'object' && item.type === 'text');
   if (message.result?.isError) {
-    throw Object.assign(new Error(text && text.text ? text.text : 'MCP tool call failed'), { isToolError: true });
+    throw Object.assign(new Error(text?.text || 'MCP tool call failed'), { isToolError: true });
   }
   if (!text || typeof text.text !== 'string') {
     throw new Error(`The memory server answered ${toolName} without a text result`);
