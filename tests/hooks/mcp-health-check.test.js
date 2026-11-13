@@ -16,6 +16,12 @@ const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 const script = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'mcp-health-check.js');
 
+// A hook run gets the shared subprocess budget. A reconnect command the hook
+// spawns gets half of it, so a reconnect that hangs is reported by the hook
+// itself, inside its own run, and not by the suite killing the hook first.
+const HOOK_TIMEOUT_MS = CLI_TIMEOUT_MS;
+const RECONNECT_TIMEOUT_MS = Math.floor(CLI_TIMEOUT_MS / 2);
+
 function test(name, fn) {
   try {
     fn();
@@ -78,11 +84,11 @@ function createCommandConfig(scriptPath) {
 function buildHookEnv(env = {}) {
   // A reconnect command here is a Node script the hook spawns; on a loaded
   // runner the spawn alone can outlast the hook's 5 s default, so the suite
-  // gives it the shared subprocess budget (a case may still override it).
+  // gives it a budget of its own (a case may still override it).
   const merged = {
     ...process.env,
     ECC_HOOK_PROFILE: 'standard',
-    EGC_MCP_RECONNECT_TIMEOUT_MS: String(CLI_TIMEOUT_MS)
+    EGC_MCP_RECONNECT_TIMEOUT_MS: String(RECONNECT_TIMEOUT_MS)
   };
 
   for (const [key, value] of Object.entries(env)) {
@@ -96,16 +102,10 @@ function buildHookEnv(env = {}) {
   return merged;
 }
 
-function runHook(input, env = {}, options = {}) {
-  const result = spawnSync('node', [script], {
-    input: JSON.stringify(input),
-    encoding: 'utf8',
-    cwd: options.cwd || process.cwd(),
-    env: buildHookEnv(env),
-    timeout: CLI_TIMEOUT_MS,
-    stdio: ['pipe', 'pipe', 'pipe']
-  });
-
+// A hook the suite could not start or had to kill is a failure of its own,
+// never an exit 0 with empty output.
+function hookOutcome(result) {
+  if (result.error) throw result.error;
   return {
     code: result.status || 0,
     stdout: result.stdout || '',
@@ -114,20 +114,18 @@ function runHook(input, env = {}, options = {}) {
 }
 
 function runRawHook(rawInput, env = {}, options = {}) {
-  const result = spawnSync('node', [script], {
+  return hookOutcome(spawnSync('node', [script], {
     input: rawInput,
     encoding: 'utf8',
     cwd: options.cwd || process.cwd(),
     env: buildHookEnv(env),
-    timeout: CLI_TIMEOUT_MS,
+    timeout: HOOK_TIMEOUT_MS,
     stdio: ['pipe', 'pipe', 'pipe']
-  });
+  }));
+}
 
-  return {
-    code: result.status || 0,
-    stdout: result.stdout || '',
-    stderr: result.stderr || ''
-  };
+function runHook(input, env = {}, options = {}) {
+  return runRawHook(JSON.stringify(input), env, options);
 }
 
 // The file and the HTTP server a helper child publishes arrive after a
