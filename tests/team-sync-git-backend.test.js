@@ -303,8 +303,10 @@ async function runTests() {
         delete process.env.GIT_SSH_VARIANT;
         const globalHome = path.join(tempBase, 'global-home');
         fs.mkdirSync(globalHome, { recursive: true });
-        // The quotes of a path survive the config parser only escaped.
-        fs.writeFileSync(path.join(globalHome, '.gitconfig'), `[core]\n\tsshCommand = ${sshCommand('-i global_key').replace(/"/g, '\\"')}\n`);
+        // A config value keeps its backslashes and quotes only escaped, the
+        // backslashes first so the escapes themselves survive.
+        const gitConfigValue = value => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        fs.writeFileSync(path.join(globalHome, '.gitconfig'), `[core]\n\tsshCommand = ${gitConfigValue(sshCommand('-i global_key'))}\n`);
         const enclosing = path.join(tempBase, 'enclosing-repo');
         fs.mkdirSync(enclosing, { recursive: true });
         git(['init', '-q'], enclosing);
