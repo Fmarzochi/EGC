@@ -191,13 +191,16 @@ jobs:
       # The memory suites skip when the compiled server is absent (build/ is
       # gitignored). sqlite3 ships prebuilt binaries for Node 20 and 22 on all
       # three runners, so this build compiles nothing from source. It runs on
-      # the lanes where those suites pass today: every lane except Windows
-      # (#2101: POSIX mode bits, lock-key casing and a shutdown path Windows
-      # never reaches) and except Yarn 4 (#2102: the server's typescript and
-      # sqlite3 do not resolve the way the tests expect there). Drop each term
-      # as its issue closes, so the build ends up on all 13 lanes.
+      # the five lanes where those suites pass today: ubuntu npm and ubuntu
+      # bun on both Node versions, and macOS Node 22 with npm. The macOS term
+      # names that lane instead of leaning on the pull request matrix, which
+      # keeps one macOS lane but runs all six on a push. Windows (#2101: POSIX
+      # mode bits, lock-key casing and a shutdown path Windows never reaches)
+      # and Yarn 4 (#2102: the server's typescript and sqlite3 do not resolve
+      # the way the tests expect there) stay out until their issues close,
+      # then this widens to every lane.
       - name: Build the memory server
-        if: runner.os != 'Windows' && matrix.pm != 'yarn'
+        if: (runner.os == 'Linux' && matrix.pm != 'yarn') || (runner.os == 'macOS' && matrix.pm == 'npm' && matrix.node == '22.x')
         shell: bash
         run: |
           npm --prefix mcp/servers/egc-memory ci
