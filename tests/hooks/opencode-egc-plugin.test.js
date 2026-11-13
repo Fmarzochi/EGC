@@ -136,6 +136,7 @@ async function runTests() {
     const pluginPath = path.join(root, 'plugins', 'opencode-egc-plugin.js');
     const bridgePath = path.join(root, 'scripts', 'hooks', 'opencode-session-start.js');
     let EgcGuardianCrusher;
+    let plugin;
     const cases = [];
     const addCase = (name, fn) => cases.push(() => test(name, fn));
 
@@ -145,8 +146,17 @@ async function runTests() {
       // OpenCode imports the plugin as an ES module; Node needs the package
       // type hint to do the same for a .js file, so the temp layout gets one.
       fs.writeFileSync(path.join(root, 'plugins', 'package.json'), '{ "type": "module" }\n');
-      ({ EgcGuardianCrusher } = await import(pathToFileURL(pluginPath).href));
-      assert.strictEqual(typeof EgcGuardianCrusher, 'function');
+      const mod = await import(pathToFileURL(pluginPath).href);
+      plugin = mod.default;
+      // One default export serves both loaders: OpenCode 2 reads id and setup,
+      // OpenCode 1.18.29+ reads the server entrypoint. V1 calls every export
+      // as a function, so nothing else may be exported.
+      assert.strictEqual(typeof plugin, 'object', 'the default export is the plugin definition');
+      assert.strictEqual(plugin.id, 'egc');
+      assert.strictEqual(typeof plugin.setup, 'function', 'OpenCode 2 loads the plugin through setup');
+      assert.strictEqual(typeof plugin.server, 'function', 'OpenCode 1 loads the plugin through server');
+      assert.deepStrictEqual(Object.keys(mod), ['default'], 'the default export is the only export');
+      EgcGuardianCrusher = plugin.server;
     });
 
     addCase('the installed session bridge migrates the legacy continuous-learning store', async () => {
@@ -439,6 +449,374 @@ async function runTests() {
       }
     });
 
+    // A stand-in for the OpenCode 2 plugin context: setup registers callbacks
+    // through tool.hook and session.hook, and the test calls them directly.
+    function fakeContext(directory, options = {}) {
+      const registered = { tool: {}, session: {} };
+      const disposed = [];
+      const gets = [];
+      const held = [];
+      const register = domain => async (name, callback) => {
+        if (options.hookThrows === domain) throw new Error(`${domain}.hook refused`);
+        registered[domain][name] = callback;
+        if (options.noDispose === domain) return undefined;
+        if (options.disposeThrows === domain) {
+          return { dispose: () => { throw new Error(`${domain}.${name} dispose refused`); } };
+        }
+        if (options.disposeRejects === domain) {
+          return { dispose: () => Promise.reject(new Error(`${domain}.${name} dispose failed`)) };
+        }
+        return { dispose: async () => { disposed.push(`${domain}.${name}`); } };
+      };
+      // session.get answers the way OpenCode 2 does: the session's location
+      // when the test gave it one, a bare record otherwise. With get 'held'
+      // it answers only when the test calls release().
+      const session = { hook: register('session') };
+      if (options.get !== 'missing') {
+        session.get = async ({ sessionID }) => {
+          gets.push(sessionID);
+          if (options.get === 'throws') throw new Error('no such session');
+          if (options.get === 'held') await new Promise(resolve => held.push(resolve));
+          const own = options.sessions?.[sessionID];
+          return own ? { id: sessionID, location: { directory: own } } : { id: sessionID };
+        };
+      }
+      return {
+        registered,
+        disposed,
+        gets,
+        // The host is asked in a microtask after the request starts, so the
+        // release waits one turn before answering the requests held so far,
+        // all of them or the oldest `count`.
+        release: async (count = Infinity) => {
+          await new Promise(resolve => setImmediate(resolve));
+          held.splice(0, count).forEach(resolve => resolve());
+        },
+        ctx: {
+          location: { directory },
+          tool: { hook: register('tool') },
+          session,
+        },
+      };
+    }
+
+    function contextEvent(sessionID) {
+      return { sessionID, system: [], messages: [], options: {}, agent: 'build', tools: {} };
+    }
+
+    addCase('OpenCode 2: setup registers the tool hook with Guardian and Crusher behavior', async () => {
+      const fake = fakeContext(tempDir);
+      const cleanup = await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+      assert.strictEqual(typeof before, 'function');
+      await assert.rejects(
+        () => before({ tool: 'bash', sessionID: 'ses_v2', input: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/
+      );
+      await assert.rejects(
+        () => before({ tool: 'write', sessionID: 'ses_v2', input: { filePath: path.join(tempDir, '.ssh', 'id_rsa'), content: 'x' } }),
+        /EGC Guardian BLOCKED/
+      );
+      const read = { tool: 'read', sessionID: 'ses_v2', input: { filePath: '/tmp/x' } };
+      await before(read);
+      assert.deepStrictEqual(read.input, { filePath: '/tmp/x' });
+      await before({ tool: 'bash', sessionID: 'ses_v2', input: {} });
+      await before({ tool: 'bash', sessionID: 'ses_v2' });
+      const safe = { tool: 'bash', sessionID: 'ses_v2', input: { command: 'git status' } };
+      await before(safe);
+      assert.strictEqual(safe.input.command, 'git status');
+      process.env.EGC_ASSUME_EGC_CLI = '1';
+      try {
+        const crushable = { tool: 'bash', sessionID: 'ses_v2', input: { command: 'npm test' } };
+        await before(crushable);
+        assert.strictEqual(crushable.input.command, 'egc run npm test');
+      } finally {
+        process.env.EGC_ASSUME_EGC_CLI = '0';
+      }
+      assert.strictEqual(typeof cleanup, 'function', 'setup returns the cleanup of its registrations');
+      await cleanup();
+      assert.deepStrictEqual(fake.disposed.sort(), ['session.context', 'tool.execute.before']);
+    });
+
+    addCase('OpenCode 2: the context hook carries the project memory on every request, loaded once per session', async () => {
+      const project = path.join(tempDir, 'workspaces', 'v2-context');
+      fs.mkdirSync(project, { recursive: true });
+      writeState(tempDir, project, 'opencode-v2-context-marker');
+      const counter = path.join(tempDir, 'v2-bridge-runs');
+      const stub = "#!/usr/bin/env node\nrequire('fs').appendFileSync(process.env.EGC_TEST_BRIDGE_COUNTER, 'x');\n"
+        + "process.stdout.write(JSON.stringify({host:'opencode',context:'opencode-v2-context-marker'}));\n";
+      const restore = replaceTemporarily(bridgePath, stub);
+      try {
+        await withEnvironment('EGC_TEST_BRIDGE_COUNTER', counter, async () => {
+          const fake = fakeContext(project);
+          await plugin.setup(fake.ctx);
+          const context = fake.registered.session.context;
+          assert.strictEqual(typeof context, 'function');
+          const first = contextEvent('ses_v2_a');
+          await context(first);
+          assert.strictEqual(first.system.length, 1);
+          assert.strictEqual(first.system[0].type, 'text');
+          assert.match(first.system[0].text, /opencode-v2-context-marker/);
+          const again = contextEvent('ses_v2_a');
+          await context(again);
+          assert.strictEqual(again.system.length, 1, 'the next request of the same session carries the memory too');
+          assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'x', 'the bridge ran once for the session');
+          const other = contextEvent('ses_v2_b');
+          await context(other);
+          assert.strictEqual(other.system.length, 1, 'another session loads its own copy');
+          assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'xx');
+        });
+      } finally { restore(); }
+    });
+
+    addCase('OpenCode 2: each session gets the memory of its own checkout, asked of the host once', async () => {
+      const home = path.join(tempDir, 'workspaces', 'v2-home-checkout');
+      const other = path.join(tempDir, 'workspaces', 'v2-other-checkout');
+      fs.mkdirSync(home, { recursive: true });
+      fs.mkdirSync(other, { recursive: true });
+      writeState(tempDir, home, 'v2-home-checkout-marker');
+      writeState(tempDir, other, 'v2-other-checkout-marker');
+
+      const fake = fakeContext(home, { sessions: { ses_v2_other: other } });
+      await plugin.setup(fake.ctx);
+      const context = fake.registered.session.context;
+      const atHome = contextEvent('ses_v2_home');
+      await context(atHome);
+      assert.match(atHome.system[0].text, /v2-home-checkout-marker/);
+      const elsewhere = contextEvent('ses_v2_other');
+      await context(elsewhere);
+      assert.match(elsewhere.system[0].text, /v2-other-checkout-marker/);
+      assert.doesNotMatch(elsewhere.system[0].text, /v2-home-checkout-marker/);
+      await context(contextEvent('ses_v2_other'));
+      await fake.registered.tool['execute.before']({ tool: 'read', sessionID: 'ses_v2_other', input: { filePath: '/tmp/x' } });
+      assert.deepStrictEqual(fake.gets, ['ses_v2_home', 'ses_v2_other'], 'the host is asked once per session');
+
+      const throwing = fakeContext(home, { get: 'throws' });
+      await plugin.setup(throwing.ctx);
+      const fallback = contextEvent('ses_v2_fallback');
+      await throwing.registered.session.context(fallback);
+      assert.match(fallback.system[0].text, /v2-home-checkout-marker/, 'a host that cannot say leaves the location in charge');
+
+      const without = fakeContext(home, { get: 'missing' });
+      await plugin.setup(without.ctx);
+      const noGet = contextEvent('ses_v2_no_get');
+      await without.registered.session.context(noGet);
+      assert.match(noGet.system[0].text, /v2-home-checkout-marker/, 'a host without session.get leaves the location in charge');
+    });
+
+    addCase('OpenCode 2: concurrent requests share one load and one lookup per session', async () => {
+      const project = path.join(tempDir, 'workspaces', 'v2-concurrent');
+      fs.mkdirSync(project, { recursive: true });
+      const counter = path.join(tempDir, 'v2-concurrent-runs');
+      const stub = "#!/usr/bin/env node\nrequire('fs').appendFileSync(process.env.EGC_TEST_BRIDGE_COUNTER, 'x');\n"
+        + "process.stdout.write(JSON.stringify({host:'opencode',context:'v2-concurrent-marker'}));\n";
+      const restore = replaceTemporarily(bridgePath, stub);
+      try {
+        await withEnvironment('EGC_TEST_BRIDGE_COUNTER', counter, async () => {
+          const fake = fakeContext(project);
+          await plugin.setup(fake.ctx);
+          const context = fake.registered.session.context;
+          const before = fake.registered.tool['execute.before'];
+          const a = contextEvent('ses_v2_c1');
+          const b = contextEvent('ses_v2_c1');
+          const c = contextEvent('ses_v2_c2');
+          await Promise.all([
+            context(a),
+            context(b),
+            before({ tool: 'read', sessionID: 'ses_v2_c1', input: { filePath: '/tmp/x' } }),
+            context(c),
+          ]);
+          assert.match(a.system[0].text, /v2-concurrent-marker/);
+          assert.match(b.system[0].text, /v2-concurrent-marker/);
+          assert.match(c.system[0].text, /v2-concurrent-marker/);
+          assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'xx', 'one bridge run per session');
+          assert.deepStrictEqual(fake.gets.sort(), ['ses_v2_c1', 'ses_v2_c2'], 'one session.get per session, concurrent requests included');
+        });
+      } finally { restore(); }
+    });
+
+    addCase('OpenCode 2: the Guardian judges a tool call against the session directory, with or without a session id', async () => {
+      const other = path.join(tempDir, 'workspaces', 'v2-guardian-other');
+      fs.mkdirSync(other, { recursive: true });
+      const fake = fakeContext(tempDir, { sessions: { ses_v2_other: other } });
+      await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+      const relativeSecret = path.join('.ssh', 'id_rsa');
+      // A relative path is resolved against the session's own directory: the
+      // refusal names the home for the session at home and the other checkout
+      // for the session there, never the plugin location for both.
+      await assert.rejects(
+        () => before({ tool: 'write', sessionID: 'ses_v2_at_home', input: { filePath: relativeSecret, content: 'x' } }),
+        error => /EGC Guardian BLOCKED/.test(error.message) && error.message.includes(path.join(tempDir, '.ssh', 'id_rsa'))
+      );
+      await assert.rejects(
+        () => before({ tool: 'write', sessionID: 'ses_v2_other', input: { filePath: relativeSecret, content: 'x' } }),
+        error => /EGC Guardian BLOCKED/.test(error.message) && error.message.includes(path.join(other, '.ssh', 'id_rsa'))
+      );
+      await assert.rejects(
+        () => before({ tool: 'bash', input: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/,
+        'a call without a session id is still judged, against the plugin location'
+      );
+      const noSession = { system: [], messages: [], options: {} };
+      await fake.registered.session.context(noSession);
+      assert.strictEqual(noSession.system.length, 0, 'a request without a session id gets no memory and no error');
+    });
+
+    addCase('OpenCode 2: a hook the host refuses leaves the other one working', async () => {
+      const project = path.join(tempDir, 'workspaces', 'v2-partial');
+      fs.mkdirSync(project, { recursive: true });
+      writeState(tempDir, project, 'v2-partial-marker');
+
+      const noTool = fakeContext(project, { hookThrows: 'tool' });
+      const cleanupNoTool = await plugin.setup(noTool.ctx);
+      assert.strictEqual(noTool.registered.tool['execute.before'], undefined);
+      const event = contextEvent('ses_v2_partial');
+      await noTool.registered.session.context(event);
+      assert.match(event.system[0].text, /v2-partial-marker/);
+      await cleanupNoTool();
+      assert.deepStrictEqual(noTool.disposed, ['session.context']);
+
+      const noSession = fakeContext(project, { hookThrows: 'session' });
+      await plugin.setup(noSession.ctx);
+      assert.strictEqual(noSession.registered.session.context, undefined);
+      await assert.rejects(
+        () => noSession.registered.tool['execute.before']({ tool: 'bash', sessionID: 'ses_v2_partial', input: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/
+      );
+    });
+
+    addCase('OpenCode 2: the context hook fails open on empty context, a bridge timeout and a malformed event', async () => {
+      const empty = path.join(tempDir, 'workspaces', 'v2-empty');
+      fs.mkdirSync(empty, { recursive: true });
+      let fake = fakeContext(empty);
+      await plugin.setup(fake.ctx);
+      const event = contextEvent('ses_v2_empty');
+      await fake.registered.session.context(event);
+      assert.strictEqual(event.system.length, 0);
+      await assert.doesNotReject(() => fake.registered.session.context({ sessionID: 'ses_v2_no_system' }));
+      await assert.doesNotReject(() => fake.registered.session.context(undefined));
+
+      const restore = replaceTemporarily(bridgePath, "#!/usr/bin/env node\nsetTimeout(() => {}, 10000);\n");
+      try {
+        await withEnvironment('EGC_SESSION_CONTEXT_TIMEOUT_MS', '150', async () => {
+          fake = fakeContext(tempDir);
+          await plugin.setup(fake.ctx);
+          const slow = contextEvent('ses_v2_timeout');
+          const started = Date.now();
+          await assert.doesNotReject(() => fake.registered.session.context(slow));
+          assert.ok(Date.now() - started < 2000, 'the timeout path returns promptly');
+          assert.strictEqual(slow.system.length, 0);
+        });
+      } finally { restore(); }
+    });
+
+    addCase('OpenCode 2: setup without the hook domains fails open', async () => {
+      await assert.doesNotReject(() => plugin.setup({ location: { directory: tempDir } }));
+      await assert.doesNotReject(() => plugin.setup({}));
+      await assert.doesNotReject(() => plugin.setup());
+
+      // A host with the session domain only, no location and no session.get:
+      // the context hook has no directory to load from and says nothing.
+      const bare = fakeContext(undefined, { get: 'missing' });
+      delete bare.ctx.tool;
+      await plugin.setup(bare.ctx);
+      const event = contextEvent('ses_v2_no_dir');
+      await assert.doesNotReject(() => bare.registered.session.context(event));
+      assert.strictEqual(event.system.length, 0, 'a session without any directory gets no memory and no error');
+    });
+
+    addCase('OpenCode 2: a disposer that throws does not stop the other disposer or the cache cleanup', async () => {
+      const counter = path.join(tempDir, 'v2-dispose-bridge-runs');
+      const stub = "#!/usr/bin/env node\nrequire('fs').appendFileSync(process.env.EGC_TEST_BRIDGE_COUNTER, 'x');\n"
+        + "process.stdout.write(JSON.stringify({host:'opencode',context:'v2-dispose-marker'}));\n";
+      const restore = replaceTemporarily(bridgePath, stub);
+      try {
+        await withEnvironment('EGC_TEST_BRIDGE_COUNTER', counter, async () => {
+          const fake = fakeContext(tempDir, { disposeThrows: 'tool' });
+          const cleanup = await plugin.setup(fake.ctx);
+          const before = fake.registered.tool['execute.before'];
+          const context = fake.registered.session.context;
+          await before({ tool: 'read', sessionID: 'ses_v2_dispose', input: { filePath: '/tmp/x' } });
+          await context(contextEvent('ses_v2_dispose'));
+          assert.deepStrictEqual(fake.gets, ['ses_v2_dispose']);
+          assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'x');
+
+          await assert.doesNotReject(() => cleanup(), 'a synchronous throw of one disposer is contained');
+          assert.deepStrictEqual(fake.disposed, ['session.context'], 'the other registration is still disposed');
+
+          await before({ tool: 'read', sessionID: 'ses_v2_dispose', input: { filePath: '/tmp/x' } });
+          const after = contextEvent('ses_v2_dispose');
+          await context(after);
+          assert.deepStrictEqual(fake.gets, ['ses_v2_dispose', 'ses_v2_dispose'], 'the directory cache was cleared all the same');
+          assert.strictEqual(fs.readFileSync(counter, 'utf8'), 'xx', 'the memory cache was cleared too: the bridge ran again');
+          assert.match(after.system[0].text, /v2-dispose-marker/);
+        });
+      } finally { restore(); }
+    });
+
+    addCase('OpenCode 2: a rejecting disposer and a registration without a dispose handle do not fail the cleanup', async () => {
+      const fake = fakeContext(tempDir, { disposeRejects: 'session', noDispose: 'tool' });
+      const cleanup = await plugin.setup(fake.ctx);
+      assert.strictEqual(typeof fake.registered.tool['execute.before'], 'function', 'the hook registered without a dispose handle still works');
+      await assert.rejects(
+        () => fake.registered.tool['execute.before']({ tool: 'bash', sessionID: 'ses_v2_nodispose', input: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/
+      );
+      await assert.doesNotReject(() => cleanup(), 'a rejected dispose is contained');
+      assert.deepStrictEqual(fake.disposed, []);
+    });
+
+    addCase('OpenCode 2: a host answer that lands after the cleanup is not kept', async () => {
+      const fake = fakeContext(tempDir, { get: 'held' });
+      const cleanup = await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+
+      const late = before({ tool: 'read', sessionID: 'ses_v2_late', input: { filePath: '/tmp/x' } });
+      await cleanup();
+      await fake.release();
+      await late;
+
+      const again = before({ tool: 'read', sessionID: 'ses_v2_late', input: { filePath: '/tmp/x' } });
+      await fake.release();
+      await again;
+      assert.deepStrictEqual(fake.gets, ['ses_v2_late', 'ses_v2_late'], 'the request after the cleanup asks the host again');
+    });
+
+    addCase('OpenCode 2: the session cap bounds the requests still in flight too', async () => {
+      const fake = fakeContext(tempDir, { get: 'held' });
+      await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+
+      // One session past MAX_CACHED_SESSIONS of the plugin, none answered yet.
+      const inFlight = Array.from({ length: 65 }, (_, index) =>
+        before({ tool: 'read', sessionID: `ses_v2_many_${index}`, input: { filePath: '/tmp/x' } })
+      );
+      const oldest = before({ tool: 'read', sessionID: 'ses_v2_many_0', input: { filePath: '/tmp/x' } });
+      const getsOf = sessionID => fake.gets.filter(entry => entry === sessionID).length;
+
+      // The evicted lookup of the first session lands first; the lookup that
+      // replaced it must stay shared by the requests that follow.
+      await fake.release(1);
+      assert.strictEqual(getsOf('ses_v2_many_0'), 2, 'the oldest in-flight session left the cache, so its next request asked the host again');
+      const shared = before({ tool: 'read', sessionID: 'ses_v2_many_0', input: { filePath: '/tmp/x' } });
+      await fake.release(0);
+      assert.strictEqual(getsOf('ses_v2_many_0'), 2, 'the evicted lookup did not drop the one that replaced it');
+      assert.strictEqual(getsOf('ses_v2_many_64'), 1, 'the newest in-flight session is still shared');
+
+      await fake.release();
+      await Promise.all([...inFlight, oldest, shared]);
+
+      // Settled values are bounded by the same cap: the oldest settled session
+      // (the second one, since the first landed again at the end) is gone.
+      const evicted = before({ tool: 'read', sessionID: 'ses_v2_many_1', input: { filePath: '/tmp/x' } });
+      await fake.release();
+      await evicted;
+      assert.strictEqual(getsOf('ses_v2_many_1'), 2, 'the oldest settled session left the cache');
+      await before({ tool: 'read', sessionID: 'ses_v2_many_64', input: { filePath: '/tmp/x' } });
+      assert.strictEqual(getsOf('ses_v2_many_64'), 1, 'a settled session inside the cap is still served from it');
+    });
+
     // The cases share the installed layout and the imported plugin, so they
     // run one after another, in the order they were added.
     results = await cases.reduce(
@@ -458,7 +836,19 @@ async function runTests() {
   process.exitCode = failed > 0 ? 1 : 0;
 }
 
-runTests().catch(error => {
-  console.error(error);
+// A case that leaves a promise pending ends the process with nothing left to
+// run and no summary printed, which Node exits from with code 0: that is a
+// failure, not a pass.
+let finished = false;
+process.on('exit', code => {
+  if (finished || code !== 0) return;
+  console.error('  ✗ the suite ended before its summary: a case left a promise pending');
   process.exitCode = 1;
 });
+
+runTests()
+  .then(() => { finished = true; })
+  .catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+  });
