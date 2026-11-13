@@ -37,7 +37,9 @@ jobs:
       # The guardian/memory suites skip when the compiled MCP servers are
       # absent (build/ is gitignored). Build them here so those defense tests
       # actually run under coverage instead of silently skipping to a false
-      # green. Ubuntu-only keeps the native sqlite3 build off the Windows matrix.
+      # green. This job stays Ubuntu-only for its coverage report; the test
+      # matrix builds the memory server as well, on the lanes where its suites
+      # pass (#2101, #2102).
       - name: Build MCP servers
         run: |
           npm --prefix mcp/servers/egc-guardian ci

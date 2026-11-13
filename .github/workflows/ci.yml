@@ -180,8 +180,7 @@ jobs:
 
       # The Guardian suites skip when the compiled validator is absent
       # (build/ is gitignored). Building it on every OS runs them where
-      # paths and shells differ, not on the Linux coverage job alone; the
-      # memory server keeps to that job for its native sqlite3 build.
+      # paths and shells differ instead of on the Linux coverage job alone.
       - name: Build the Guardian
         shell: bash
         run: |
@@ -189,7 +188,16 @@ jobs:
           npm --prefix mcp/servers/egc-guardian run build
           test -f mcp/servers/egc-guardian/build/validator.js
 
+      # The memory suites skip when the compiled server is absent (build/ is
+      # gitignored). sqlite3 ships prebuilt binaries for Node 20 and 22 on all
+      # three runners, so this build compiles nothing from source. It runs on
+      # the lanes where those suites pass today: every lane except Windows
+      # (#2101: POSIX mode bits, lock-key casing and a shutdown path Windows
+      # never reaches) and except Yarn 4 (#2102: the server's typescript and
+      # sqlite3 do not resolve the way the tests expect there). Drop each term
+      # as its issue closes, so the build ends up on all 13 lanes.
       - name: Build the memory server
+        if: runner.os != 'Windows' && matrix.pm != 'yarn'
         shell: bash
         run: |
           npm --prefix mcp/servers/egc-memory ci
