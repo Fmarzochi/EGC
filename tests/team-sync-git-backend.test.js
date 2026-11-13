@@ -242,21 +242,33 @@ async function runTests() {
         promise,
         new Promise((_, rejectWith) => setTimeout(() => rejectWith(new Error(`${what} did not come back within 20 s`)), 20000).unref()),
       ]);
+      // Under Git for Windows the sh that runs GIT_SSH_COMMAND puts its own
+      // /usr/bin ahead of PATH, so the ssh it finds by name is the real one:
+      // there the batch flag of the default command rests on the environment
+      // case above, and a command of the person reaches the recording ssh by
+      // its absolute path, with the forward slashes sh reads.
+      const onWindows = process.platform === 'win32';
+      const sshCommand = args => (onWindows ? `"${path.join(fakeBin, 'ssh').replace(/\\/g, '/')}" ${args}` : `ssh ${args}`);
+      let lines;
       try {
         const backend = new GitBackend(path.join(tempBase, 'repo-ssh'));
         await bounded(assert.rejects(
           () => backend.init({ backend: 'git', remote: 'ssh://git@sync.example.invalid/team/egc-memory.git', branch: 'main' }),
-          /cannot be read: .*Host key verification failed/,
+          onWindows ? /cannot be read: \S/ : /cannot be read: .*Host key verification failed/,
         ), 'init against the ssh remote');
-        let lines = argvLines();
-        assert.ok(lines.includes('-oBatchMode=yes'), `ssh ran in batch mode, got: ${lines.join(' ')}`);
-        assert.ok(lines.includes('GIT_TERMINAL_PROMPT=0'), `git ran with its prompts off, got: ${lines.join(' ')}`);
-        assert.ok(lines.includes('FAKE_SSH_ON_PATH'), 'the ssh on PATH is the one git ran');
+        if (onWindows) {
+          console.log('    (the ssh on PATH is out of reach under Git for Windows: the default command fails at once with the reason of the real ssh)');
+        } else {
+          lines = argvLines();
+          assert.ok(lines.includes('-oBatchMode=yes'), `ssh ran in batch mode, got: ${lines.join(' ')}`);
+          assert.ok(lines.includes('GIT_TERMINAL_PROMPT=0'), `git ran with its prompts off, got: ${lines.join(' ')}`);
+          assert.ok(lines.includes('FAKE_SSH_ON_PATH'), 'the ssh on PATH is the one git ran');
+        }
         await backend.destroy();
 
         // A core.sshCommand of the person, in the checkout the first init
         // made, is read on the next init and kept, with the flag added.
-        git(['config', 'core.sshCommand', 'ssh -i team_key'], path.join(tempBase, 'repo-ssh'));
+        git(['config', 'core.sshCommand', sshCommand('-i team_key')], path.join(tempBase, 'repo-ssh'));
         fs.rmSync(log, { force: true });
         const again = new GitBackend(path.join(tempBase, 'repo-ssh'));
         await bounded(assert.rejects(
@@ -291,7 +303,8 @@ async function runTests() {
         delete process.env.GIT_SSH_VARIANT;
         const globalHome = path.join(tempBase, 'global-home');
         fs.mkdirSync(globalHome, { recursive: true });
-        fs.writeFileSync(path.join(globalHome, '.gitconfig'), '[core]\n\tsshCommand = ssh -i global_key\n');
+        // The quotes of a path survive the config parser only escaped.
+        fs.writeFileSync(path.join(globalHome, '.gitconfig'), `[core]\n\tsshCommand = ${sshCommand('-i global_key').replace(/"/g, '\\"')}\n`);
         const enclosing = path.join(tempBase, 'enclosing-repo');
         fs.mkdirSync(enclosing, { recursive: true });
         git(['init', '-q'], enclosing);
