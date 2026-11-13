@@ -77,6 +77,13 @@ function runTests() {
       assert.match(result.stderr, /run "git ls-remote <remote>" once in a terminal/);
     });
 
+    test('sync against a server that never answers the handshake exits 1 naming the handshake, with no prompt hint', () => {
+      const result = run(configured(), ['sync'], 'hangs-handshake');
+      assert.strictEqual(result.status, 1, result.stderr);
+      assert.match(result.stderr, /team sync needs the memory server \(The memory server did not answer the handshake before team_sync within 0\.5 s; the server wrote: \[memory\] opening the store\)/);
+      assert.ok(!result.stderr.includes('git ls-remote'), 'a handshake that never came back is not a git prompt');
+    });
+
     test('sync against a server that exits before answering exits 1 with its exit code and its last line, and no prompt hint', () => {
       const result = run(configured(), ['sync'], 'exits');
       assert.strictEqual(result.status, 1, result.stderr);
@@ -112,8 +119,9 @@ function runTests() {
       assert.ok(fs.existsSync(path.join(dir, '.egc', 'team.json')), 'the configuration stays for the next sync');
     });
 
-    test('a budget that is not a positive number falls back to the default instead of a zero budget', () => {
-      for (const budget of ['0', '-5', 'abc', '']) {
+    test('a budget that is not a whole number of milliseconds a timer can hold falls back to the default instead of a zero budget', () => {
+      // 2147483648 is one past what a timer holds: Node would fire it at once.
+      for (const budget of ['0', '-5', 'abc', '', '500ms', '2147483648']) {
         const result = run(home(), ['init', '--backend', 'git', '--remote', 'x', '--key', TEAM_KEY], 'refuses', budget);
         assert.strictEqual(result.status, 1, `budget ${JSON.stringify(budget)}: ${result.stderr}`);
         assert.match(result.stderr, /Error: The remote x cannot be read: refused/, `budget ${JSON.stringify(budget)} let the refusal through`);
@@ -123,6 +131,13 @@ function runTests() {
 
     test('status against a server that exits falls back to the local checkout instead of failing', () => {
       const result = run(configured(), ['status'], 'exits');
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.match(result.stdout, /Remote:\s+ssh:\/\/git@sync\.example\.invalid\/team\.git/);
+      assert.match(result.stdout, /Repo:\s+not initialized/);
+    });
+
+    test('status against a server that never answers falls back to the local checkout once the budget runs out', () => {
+      const result = run(configured(), ['status'], 'hangs');
       assert.strictEqual(result.status, 0, result.stderr);
       assert.match(result.stdout, /Remote:\s+ssh:\/\/git@sync\.example\.invalid\/team\.git/);
       assert.match(result.stdout, /Repo:\s+not initialized/);

@@ -210,11 +210,23 @@ async function runTests() {
       fs.mkdirSync(fakeBin, { recursive: true });
       const log = path.join(tempBase, 'fake-ssh-argv.txt');
       // Each argument on a line of its own, then the prompt setting git
-      // handed down; the .cmd twin does the same where cmd.exe runs it.
+      // handed down. Where cmd.exe runs the twin, the arguments go to node
+      // as they came: cmd.exe itself splits them at an equals sign, in %1 as
+      // in a for over %*, and -oBatchMode=yes would come apart.
       const writeFakeSsh = (file, marker) => {
         fs.writeFileSync(file, `#!/bin/sh\n{ printf '%s\\n' "$@"; printf 'GIT_TERMINAL_PROMPT=%s\\n' "$GIT_TERMINAL_PROMPT"; echo '${marker}'; } > "$EGC_TEST_SSH_LOG"\necho "Host key verification failed." >&2\nexit 255\n`, { mode: 0o755 });
-        fs.writeFileSync(`${file}.cmd`, `@echo off\r\n(for %%a in (%*) do @echo %%~a\r\necho GIT_TERMINAL_PROMPT=%GIT_TERMINAL_PROMPT%\r\necho ${marker}) > "%EGC_TEST_SSH_LOG%"\r\necho Host key verification failed. 1>&2\r\nexit /b 255\r\n`);
+        fs.writeFileSync(`${file}.js`, [
+          "'use strict';",
+          "const fs = require('node:fs');",
+          `fs.writeFileSync(process.env.EGC_TEST_SSH_LOG, [...process.argv.slice(2), 'GIT_TERMINAL_PROMPT=' + (process.env.GIT_TERMINAL_PROMPT ?? ''), '${marker}', ''].join('\\n'));`,
+          "process.stderr.write('Host key verification failed.\\n', () => process.exit(255));",
+          '',
+        ].join('\n'));
+        fs.writeFileSync(`${file}.cmd`, `@"${process.execPath}" "${file}.js" %*\r\n`);
       };
+      // git runs GIT_SSH itself, without a shell: on Windows that has to be
+      // the .cmd twin by name.
+      const ownSsh = path.join(fakeBin, process.platform === 'win32' ? 'own-ssh.cmd' : 'own-ssh');
       writeFakeSsh(path.join(fakeBin, 'ssh'), 'FAKE_SSH_ON_PATH');
       writeFakeSsh(path.join(fakeBin, 'own-ssh'), 'OWN_SSH_FROM_GIT_SSH');
       const argvLines = () => fs.readFileSync(log, 'utf8').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
@@ -260,7 +272,7 @@ async function runTests() {
         // configured command leaves first, since git would prefer it.
         git(['config', '--unset', 'core.sshCommand'], path.join(tempBase, 'repo-ssh'));
         fs.rmSync(log, { force: true });
-        process.env.GIT_SSH = path.join(fakeBin, 'own-ssh');
+        process.env.GIT_SSH = ownSsh;
         process.env.GIT_SSH_VARIANT = 'ssh';
         const own = new GitBackend(path.join(tempBase, 'repo-ssh'));
         await bounded(assert.rejects(
@@ -272,6 +284,35 @@ async function runTests() {
         assert.ok(!lines.includes('-oBatchMode=yes'), 'no flag is added to an ssh the person chose');
         assert.ok(lines.includes('GIT_TERMINAL_PROMPT=0'), 'the prompt setting still applies');
         await own.destroy();
+
+        // Before the checkout exists, the setting read is the person's global
+        // one, never that of whatever repository happens to hold the directory.
+        delete process.env.GIT_SSH;
+        delete process.env.GIT_SSH_VARIANT;
+        const globalHome = path.join(tempBase, 'global-home');
+        fs.mkdirSync(globalHome, { recursive: true });
+        fs.writeFileSync(path.join(globalHome, '.gitconfig'), '[core]\n\tsshCommand = ssh -i global_key\n');
+        const enclosing = path.join(tempBase, 'enclosing-repo');
+        fs.mkdirSync(enclosing, { recursive: true });
+        git(['init', '-q'], enclosing);
+        git(['config', 'core.sshCommand', 'ssh -i enclosing_key'], enclosing);
+        const savedHome = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+        process.env.HOME = globalHome;
+        process.env.USERPROFILE = globalHome;
+        fs.rmSync(log, { force: true });
+        try {
+          const nested = new GitBackend(path.join(enclosing, 'nested', 'repo-ssh'));
+          await bounded(assert.rejects(
+            () => nested.init({ backend: 'git', remote: 'ssh://git@sync.example.invalid/team/egc-memory.git', branch: 'main' }),
+            /cannot be read: .*Host key verification failed/,
+          ), 'the first init inside another repository');
+          lines = argvLines();
+          assert.deepStrictEqual(lines.slice(0, 3), ['-i', 'global_key', '-oBatchMode=yes'], `the global setting applies before the checkout exists, not that of the enclosing repository, got: ${lines.join(' ')}`);
+          await nested.destroy();
+        } finally {
+          process.env.HOME = savedHome.HOME;
+          process.env.USERPROFILE = savedHome.USERPROFILE;
+        }
       } finally {
         for (const [key, value] of Object.entries(saved)) {
           if (value === undefined) delete process.env[key]; else process.env[key] = value;

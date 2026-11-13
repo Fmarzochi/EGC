@@ -12,7 +12,8 @@
  * A failure names its cause. A tool that refuses rejects with the refusal
  * and `isToolError`. A server that exits before answering rejects with its
  * exit code, and one that does not answer within the budget rejects with
- * `isTimeout`; both carry the last lines the server wrote to stderr, so a
+ * `isTimeout` (and `initialized` false when the handshake itself never came
+ * back); both carry the last lines the server wrote to stderr, so a
  * store it could not open or a git remote that stopped to ask a question is
  * in the message instead of a bare "no response".
  */
@@ -166,9 +167,12 @@ function callMcpTool(toolName, args, options = {}) {
       }
       const tail = stderrClause(stderr);
       if (timedOut) {
+        // The budget covers the handshake too: a server that never got to
+        // the call is said so, since the call is not what held it.
+        const stage = initialized ? `answer ${toolName}` : `answer the handshake before ${toolName}`;
         reject(Object.assign(
-          new Error(`The memory server did not answer ${toolName} within ${timeoutMs / 1000} s${tail}`),
-          { isTimeout: true },
+          new Error(`The memory server did not ${stage} within ${timeoutMs / 1000} s${tail}`),
+          { isTimeout: true, initialized },
         ));
         return;
       }
@@ -192,7 +196,9 @@ function callMcpTool(toolName, args, options = {}) {
     };
 
     timers.push(setTimeout(() => {
-      if (outcome) return;
+      // A child that already left is reported by its exit, not as a timeout,
+      // even while its pipes are still being released.
+      if (outcome || hasExited(child)) return;
       timedOut = true;
       child.stdin.end();
       const killTimer = stopChild(child);

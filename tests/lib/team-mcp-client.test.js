@@ -9,6 +9,7 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
@@ -121,17 +122,52 @@ async function runTests() {
     assert.ok(elapsed < 4000, `the session settled a moment after the exit, not when the grandchild left, took ${elapsed} ms`);
   });
 
+  await test('a server that exits inside the budget is reported by its exit, even when the budget runs out while a grandchild still holds the pipes', async () => {
+    // The exit settles the session a second later; a budget that ran out
+    // inside that second used to turn the exit into a timeout.
+    const stamp = path.join(os.tmpdir(), `egc-fake-exit-${process.pid}.txt`);
+    fs.rmSync(stamp, { force: true });
+    const timeoutMs = 900;
+    const started = Date.now();
+    const error = await call('team_sync', {}, 'orphan', { timeoutMs, env: { EGC_FAKE_EXIT_STAMP: stamp } }).then(() => null, failure => failure);
+    assert.ok(error, 'the call fails either way');
+    // A slow machine may reach the budget before the server leaves; the
+    // exit decides only when it is clearly on one side of the budget.
+    const exitedAt = fs.existsSync(stamp) ? Number(fs.readFileSync(stamp, 'utf8')) : null;
+    fs.rmSync(stamp, { force: true });
+    const deadline = started + timeoutMs;
+    if (exitedAt !== null && exitedAt < deadline - 200) {
+      assert.strictEqual(error.exitCode, 4, `an exit before the budget is what is reported, got: ${error.message}`);
+      assert.ok(!error.isTimeout, 'an exit inside the budget is not a timeout');
+    } else if (exitedAt === null || exitedAt > deadline + 200) {
+      assert.strictEqual(error.isTimeout, true, `a server still up at the budget is a timeout, got: ${error.message}`);
+    }
+  });
+
   await test('a server that never answers rejects at the budget with isTimeout and what it wrote', async () => {
     const started = Date.now();
     await assert.rejects(
       () => call('team_sync', {}, 'hangs', { timeoutMs: 400 }),
       error => {
         assert.strictEqual(error.isTimeout, true);
+        assert.strictEqual(error.initialized, true, 'the handshake had completed');
         assert.match(error.message, /^The memory server did not answer team_sync within 0\.4 s; the server wrote: \[memory\] git: Host key verification pending$/);
         return true;
       },
     );
     assert.ok(Date.now() - started < 10000, 'the hung server is stopped, not waited for');
+  });
+
+  await test('a server that never answers the handshake rejects at the budget as a timeout of the handshake, not of the call', async () => {
+    await assert.rejects(
+      () => call('team_sync', {}, 'hangs-handshake', { timeoutMs: 400 }),
+      error => {
+        assert.strictEqual(error.isTimeout, true);
+        assert.strictEqual(error.initialized, false, 'the handshake never completed');
+        assert.match(error.message, /^The memory server did not answer the handshake before team_sync within 0\.4 s; the server wrote: \[memory\] opening the store$/);
+        return true;
+      },
+    );
   });
 
   await test('a hung server that ignores the first signal is killed a moment later', async () => {

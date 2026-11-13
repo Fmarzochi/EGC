@@ -11,18 +11,30 @@ const { callMcpTool: callMemoryTool } = require('./lib/team-mcp-client');
 
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
+// The longest delay a Node timer takes; a larger one fires at once.
+const MAX_TIMER_MS = 2147483647;
 // How long one call to the memory server may take; a remote on a slow link
 // can be given more through EGC_TEAM_CALL_TIMEOUT_MS (milliseconds).
 const MCP_CALL_TIMEOUT_MS = callBudget(process.env.EGC_TEAM_CALL_TIMEOUT_MS, 60000);
 
+// A budget is a whole number of milliseconds, above zero and within what a
+// timer can hold; anything else is the default.
 function callBudget(raw, fallback) {
-  const parsed = Number.parseInt(raw ?? '', 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  if (typeof raw !== 'string' || !/^\d+$/.test(raw.trim())) return fallback;
+  const parsed = Number(raw.trim());
+  return parsed > 0 && parsed <= MAX_TIMER_MS ? parsed : fallback;
 }
-// What a server that never answered most often waited for: a git that
-// stopped to ask something no one could answer inside the server.
+// What a server that took the call and never answered most often waited
+// for: a git that stopped to ask something no one could answer inside the
+// server. A handshake that never came back is not git's doing.
 const GIT_PROMPT_HINT = 'A git remote that asks a question (an unknown host key, a key passphrase, a credential) cannot be answered inside the server: '
   + 'run "git ls-remote <remote>" once in a terminal and answer it there, or give git a key or a credential helper that needs no prompt.';
+
+// Prints the hint after a timeout of the call itself; a server that never
+// answered the handshake ran no git.
+function printPromptHint(err, print) {
+  if (err.isTimeout && err.initialized) print(GIT_PROMPT_HINT);
+}
 
 // Resolve absolute git path once at startup to avoid PATH-reliance.
 function resolveGitBin() {
@@ -167,7 +179,7 @@ async function handleInit(args) {
     }
     report();
     console.log(`Note: Memory server setup returned: ${err.message}`);
-    if (err.isTimeout) console.log(GIT_PROMPT_HINT);
+    printPromptHint(err, console.log);
     console.log('The config file is saved. Run "egc team sync" to start syncing.');
   }
 }
@@ -211,7 +223,7 @@ async function handleSync() {
     // State leaves this machine only sealed by the memory server; the old
     // direct git fallback pushed the state directory in the clear.
     console.error(`Error: team sync needs the memory server (${err.message}). Run "egc doctor" and try again.`);
-    if (err.isTimeout) console.error(GIT_PROMPT_HINT);
+    printPromptHint(err, console.error);
     process.exit(1);
   }
 

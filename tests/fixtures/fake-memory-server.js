@@ -21,15 +21,24 @@
  *   self-kill       stopped by its own SIGTERM before answering (not Windows)
  *   hangs           a line on stderr, then no answer
  *   hangs-deaf      like hangs, and the first signal is ignored
+ *   hangs-handshake a line on stderr, then no answer to initialize
+ *
+ * When EGC_FAKE_EXIT_STAMP names a file, the modes that exit on their own
+ * write the moment they leave to it, so a test can place the exit in time.
  */
 
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
 const readline = require('node:readline');
 
 const mode = process.env.EGC_FAKE_MODE || 'answers';
-const staysUp = mode === 'hangs' || mode === 'hangs-deaf' || mode === 'answers-linger';
+const staysUp = mode === 'hangs' || mode === 'hangs-deaf' || mode === 'hangs-handshake' || mode === 'answers-linger';
 const reply = message => process.stdout.write(JSON.stringify(message) + '\n');
 const result = (id, content, extra = {}) => reply({ jsonrpc: '2.0', id, result: { content, ...extra } });
+const leave = code => {
+  if (process.env.EGC_FAKE_EXIT_STAMP) fs.writeFileSync(process.env.EGC_FAKE_EXIT_STAMP, String(Date.now()));
+  process.exit(code);
+};
 
 if (mode === 'hangs-deaf') {
   process.on('SIGTERM', () => {});
@@ -44,6 +53,11 @@ rl.on('line', line => {
       reply({ jsonrpc: '2.0', id: request.id, error: { code: -32600, message: 'this server refuses the handshake' } });
       return;
     }
+    if (mode === 'hangs-handshake') {
+      process.stderr.write('[memory] opening the store\n');
+      setInterval(() => {}, 1000);
+      return;
+    }
     reply({ jsonrpc: '2.0', id: request.id, result: { protocolVersion: '2024-11-05', capabilities: {}, serverInfo: { name: 'fake', version: '0' } } });
     return;
   }
@@ -52,19 +66,19 @@ rl.on('line', line => {
   switch (mode) {
     case 'exits':
       // The exit waits for the write, so the client always reads the line.
-      process.stderr.write('[memory] store: cannot open /nowhere/state.db\n', () => process.exit(3));
+      process.stderr.write('[memory] store: cannot open /nowhere/state.db\n', () => leave(3));
       break;
     case 'chatty-exit': {
       // Thirty lines of two hundred characters: more than the client keeps,
       // so the tail it quotes is cut by lines, not by characters.
       const lines = Array.from({ length: 30 }, (_, index) => `[memory] line ${index + 1} ${'x'.repeat(180)}\n`).join('');
-      process.stderr.write(lines, () => process.exit(2));
+      process.stderr.write(lines, () => leave(2));
       break;
     }
     case 'orphan': {
       const grandchild = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 6000)'], { stdio: 'inherit', detached: true });
       grandchild.unref();
-      process.stderr.write('[memory] leaving a grandchild on the pipes\n', () => process.exit(4));
+      process.stderr.write('[memory] leaving a grandchild on the pipes\n', () => leave(4));
       break;
     }
     case 'self-kill':
