@@ -186,6 +186,9 @@ async function runTests() {
       assert.strictEqual(legacy.GIT_SSH, '/usr/bin/plink');
       assert.strictEqual(legacy.GIT_SSH_VARIANT, 'plink', 'the variant travels with GIT_SSH');
       assert.strictEqual(legacy.GIT_SSH_COMMAND, undefined, 'GIT_SSH is a choice of the person too');
+      // git runs a configured core.sshCommand even when GIT_SSH is set, so
+      // that is the command the flag goes on.
+      assert.strictEqual(gitEnvironment({ ...bare, GIT_SSH: '/usr/bin/plink' }, 'ssh -i team_key').GIT_SSH_COMMAND, 'ssh -i team_key -oBatchMode=yes');
       // What simple-git guards never reaches git from the server, as before.
       const guarded = gitEnvironment({ ...bare, HOME: '/home/me', EDITOR: 'vim', Pager: 'less', GIT_CONFIG_GLOBAL: '/x', GIT_ASKPASS: '/y', SSH_ASKPASS_REQUIRE: 'force' }, null);
       assert.deepStrictEqual(Object.keys(guarded).sort(), ['GIT_SSH_COMMAND', 'GIT_TERMINAL_PROMPT', 'HOME', 'PATH']);
@@ -196,6 +199,7 @@ async function runTests() {
       // PuTTY's plink refuses the OpenSSH spelling of the batch flag.
       assert.strictEqual(gitEnvironment(bare, '"C:\\Program Files\\PuTTY\\plink.exe" -i key.ppk').GIT_SSH_COMMAND, '"C:\\Program Files\\PuTTY\\plink.exe" -i key.ppk -batch');
       assert.strictEqual(gitEnvironment(bare, 'tortoiseplink.exe').GIT_SSH_COMMAND, 'tortoiseplink.exe -batch');
+      assert.strictEqual(gitEnvironment(bare, "'/opt/putty/plink' -l me").GIT_SSH_COMMAND, "'/opt/putty/plink' -l me -batch", 'a single-quoted executable is read too');
       assert.deepStrictEqual(bare, { PATH: '/usr/bin' }, 'the environment given is not changed');
     });
 
@@ -205,13 +209,21 @@ async function runTests() {
       const fakeBin = path.join(tempBase, 'fake-ssh-bin');
       fs.mkdirSync(fakeBin, { recursive: true });
       const log = path.join(tempBase, 'fake-ssh-argv.txt');
-      fs.writeFileSync(path.join(fakeBin, 'ssh'), '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$EGC_TEST_SSH_LOG"\necho "Host key verification failed." >&2\nexit 255\n', { mode: 0o755 });
-      fs.writeFileSync(path.join(fakeBin, 'ssh.cmd'), '(@echo(%*) > "%EGC_TEST_SSH_LOG%"\r\n@echo Host key verification failed. 1>&2\r\n@exit /b 255\r\n');
-      const saved = { PATH: process.env.PATH, EGC_TEST_SSH_LOG: process.env.EGC_TEST_SSH_LOG, GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND, GIT_SSH: process.env.GIT_SSH };
+      // Each argument on a line of its own, then the prompt setting git
+      // handed down; the .cmd twin does the same where cmd.exe runs it.
+      const writeFakeSsh = (file, marker) => {
+        fs.writeFileSync(file, `#!/bin/sh\n{ printf '%s\\n' "$@"; printf 'GIT_TERMINAL_PROMPT=%s\\n' "$GIT_TERMINAL_PROMPT"; echo '${marker}'; } > "$EGC_TEST_SSH_LOG"\necho "Host key verification failed." >&2\nexit 255\n`, { mode: 0o755 });
+        fs.writeFileSync(`${file}.cmd`, `@echo off\r\n(for %%a in (%*) do @echo %%~a\r\necho GIT_TERMINAL_PROMPT=%GIT_TERMINAL_PROMPT%\r\necho ${marker}) > "%EGC_TEST_SSH_LOG%"\r\necho Host key verification failed. 1>&2\r\nexit /b 255\r\n`);
+      };
+      writeFakeSsh(path.join(fakeBin, 'ssh'), 'FAKE_SSH_ON_PATH');
+      writeFakeSsh(path.join(fakeBin, 'own-ssh'), 'OWN_SSH_FROM_GIT_SSH');
+      const argvLines = () => fs.readFileSync(log, 'utf8').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      const saved = { PATH: process.env.PATH, EGC_TEST_SSH_LOG: process.env.EGC_TEST_SSH_LOG, GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND, GIT_SSH: process.env.GIT_SSH, GIT_SSH_VARIANT: process.env.GIT_SSH_VARIANT };
       process.env.PATH = `${fakeBin}${path.delimiter}${process.env.PATH}`;
       process.env.EGC_TEST_SSH_LOG = log;
       delete process.env.GIT_SSH_COMMAND;
       delete process.env.GIT_SSH;
+      delete process.env.GIT_SSH_VARIANT;
       // An init that waited for a prompt would never return; the case gives
       // it a bound of its own instead of waiting on the suite's.
       const bounded = (promise, what) => Promise.race([
@@ -224,8 +236,10 @@ async function runTests() {
           () => backend.init({ backend: 'git', remote: 'ssh://git@sync.example.invalid/team/egc-memory.git', branch: 'main' }),
           /cannot be read: .*Host key verification failed/,
         ), 'init against the ssh remote');
-        const argv = fs.readFileSync(log, 'utf8');
-        assert.match(argv, /-oBatchMode=yes/, `ssh ran in batch mode, got: ${argv}`);
+        let lines = argvLines();
+        assert.ok(lines.includes('-oBatchMode=yes'), `ssh ran in batch mode, got: ${lines.join(' ')}`);
+        assert.ok(lines.includes('GIT_TERMINAL_PROMPT=0'), `git ran with its prompts off, got: ${lines.join(' ')}`);
+        assert.ok(lines.includes('FAKE_SSH_ON_PATH'), 'the ssh on PATH is the one git ran');
         await backend.destroy();
 
         // A core.sshCommand of the person, in the checkout the first init
@@ -237,8 +251,27 @@ async function runTests() {
           () => again.init({ backend: 'git', remote: 'ssh://git@sync.example.invalid/team/egc-memory.git', branch: 'main' }),
           /cannot be read: .*Host key verification failed/,
         ), 'the second init against the ssh remote');
-        assert.match(fs.readFileSync(log, 'utf8'), /^-i\nteam_key\n-oBatchMode=yes\n/, 'the configured ssh command runs with its own flags and the batch flag after them');
+        lines = argvLines();
+        assert.deepStrictEqual(lines.slice(0, 3), ['-i', 'team_key', '-oBatchMode=yes'], 'the configured ssh command runs with its own flags and the batch flag after them');
         await again.destroy();
+
+        // An ssh the person named in GIT_SSH is the one git runs, as they
+        // set it, with no flag added; the variant travels with it. The
+        // configured command leaves first, since git would prefer it.
+        git(['config', '--unset', 'core.sshCommand'], path.join(tempBase, 'repo-ssh'));
+        fs.rmSync(log, { force: true });
+        process.env.GIT_SSH = path.join(fakeBin, 'own-ssh');
+        process.env.GIT_SSH_VARIANT = 'ssh';
+        const own = new GitBackend(path.join(tempBase, 'repo-ssh'));
+        await bounded(assert.rejects(
+          () => own.init({ backend: 'git', remote: 'ssh://git@sync.example.invalid/team/egc-memory.git', branch: 'main' }),
+          /cannot be read: .*Host key verification failed/,
+        ), 'the init with GIT_SSH of the person');
+        lines = argvLines();
+        assert.ok(lines.includes('OWN_SSH_FROM_GIT_SSH'), `the ssh named in GIT_SSH is the one git ran, got: ${lines.join(' ')}`);
+        assert.ok(!lines.includes('-oBatchMode=yes'), 'no flag is added to an ssh the person chose');
+        assert.ok(lines.includes('GIT_TERMINAL_PROMPT=0'), 'the prompt setting still applies');
+        await own.destroy();
       } finally {
         for (const [key, value] of Object.entries(saved)) {
           if (value === undefined) delete process.env[key]; else process.env[key] = value;

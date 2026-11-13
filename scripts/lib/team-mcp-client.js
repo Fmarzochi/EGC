@@ -97,15 +97,29 @@ function describeExit(code, signal) {
   return signal ? `was stopped by ${signal}` : `exited with code ${code}`;
 }
 
+function hasExited(child) {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
 // Stops a child that did not leave on its own: the first signal, then a
 // kill a moment later; both timers let the process exit without them.
 function stopChild(child) {
-  child.kill();
+  if (hasExited(child)) return null;
+  try { child.kill(); } catch { /* already gone */ }
   const killTimer = setTimeout(() => {
+    if (hasExited(child)) return;
     try { child.kill('SIGKILL'); } catch { /* already gone */ }
   }, KILL_GRACE_MS);
   if (killTimer.unref) killTimer.unref();
   return killTimer;
+}
+
+// The pipes of a child that is gone: a grandchild that inherited them would
+// otherwise keep them, and the caller's process with them, open.
+function releasePipes(child) {
+  for (const stream of [child.stdin, child.stdout, child.stderr]) {
+    if (stream && !stream.destroyed) stream.destroy();
+  }
 }
 
 /**
@@ -144,6 +158,7 @@ function callMcpTool(toolName, args, options = {}) {
       if (settled) return;
       settled = true;
       clearTimers();
+      releasePipes(child);
       if (outcome) {
         if (outcome.error) reject(outcome.error);
         else resolve(outcome.value);
@@ -170,14 +185,18 @@ function callMcpTool(toolName, args, options = {}) {
       outcome = { error, value };
       clearTimers();
       child.stdin.end();
-      timers.push(setTimeout(() => timers.push(stopChild(child)), exitGraceMs));
+      timers.push(setTimeout(() => {
+        const killTimer = stopChild(child);
+        if (killTimer) timers.push(killTimer);
+      }, exitGraceMs));
     };
 
     timers.push(setTimeout(() => {
       if (outcome) return;
       timedOut = true;
       child.stdin.end();
-      timers.push(stopChild(child));
+      const killTimer = stopChild(child);
+      if (killTimer) timers.push(killTimer);
     }, timeoutMs));
 
     const send = message => child.stdin.write(JSON.stringify(message) + '\n');
@@ -193,7 +212,7 @@ function callMcpTool(toolName, args, options = {}) {
         send({ jsonrpc: '2.0', id: MCP_CALL_ID, method: 'tools/call', params: { name: toolName, arguments: args } });
         return;
       }
-      if (message.id === MCP_CALL_ID) {
+      if (initialized && message.id === MCP_CALL_ID) {
         try {
           record(null, toolCallValue(toolName, message));
         } catch (error) {

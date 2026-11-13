@@ -63,10 +63,10 @@ function runTests() {
     fs.writeFileSync(path.join(dir, '.egc', 'team.json'), JSON.stringify({ backend: 'git', remote: 'ssh://git@sync.example.invalid/team.git', branch: 'main', teamKey: TEAM_KEY }));
     return dir;
   };
-  const run = (dir, args, mode) => spawnSync(process.execPath, [cli, ...args], {
+  const run = (dir, args, mode, budget = '500') => spawnSync(process.execPath, [cli, ...args], {
     encoding: 'utf8',
     timeout: 60000,
-    env: { ...process.env, HOME: dir, USERPROFILE: dir, EGC_FAKE_MODE: mode, EGC_TEAM_CALL_TIMEOUT_MS: '500' },
+    env: { ...process.env, HOME: dir, USERPROFILE: dir, EGC_FAKE_MODE: mode, EGC_TEAM_CALL_TIMEOUT_MS: budget },
   });
 
   try {
@@ -101,6 +101,24 @@ function runTests() {
       assert.match(result.stdout, /run "git ls-remote <remote>" once in a terminal/);
       assert.match(result.stdout, /The config file is saved\./);
       assert.ok(fs.existsSync(path.join(dir, '.egc', 'team.json')), 'the configuration stays for the next sync');
+    });
+
+    test('init against a server that exits keeps the configuration and names the exit', () => {
+      const dir = home();
+      const result = run(dir, ['init', '--backend', 'git', '--remote', 'ssh://git@sync.example.invalid/team.git', '--key', TEAM_KEY], 'exits');
+      assert.strictEqual(result.status, 0, result.stderr);
+      assert.match(result.stdout, /Note: Memory server setup returned: The memory server exited with code 3 before answering team_init; the server wrote: \[memory\] store: cannot open \/nowhere\/state\.db/);
+      assert.ok(!result.stdout.includes('git ls-remote'), 'an exit is not a prompt');
+      assert.ok(fs.existsSync(path.join(dir, '.egc', 'team.json')), 'the configuration stays for the next sync');
+    });
+
+    test('a budget that is not a positive number falls back to the default instead of a zero budget', () => {
+      for (const budget of ['0', '-5', 'abc', '']) {
+        const result = run(home(), ['init', '--backend', 'git', '--remote', 'x', '--key', TEAM_KEY], 'refuses', budget);
+        assert.strictEqual(result.status, 1, `budget ${JSON.stringify(budget)}: ${result.stderr}`);
+        assert.match(result.stderr, /Error: The remote x cannot be read: refused/, `budget ${JSON.stringify(budget)} let the refusal through`);
+        assert.ok(!result.stderr.includes('did not answer'), `budget ${JSON.stringify(budget)} was not read as zero`);
+      }
     });
 
     test('status against a server that exits falls back to the local checkout instead of failing', () => {

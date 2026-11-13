@@ -31,8 +31,8 @@ function forwardedName(key: string): string | null {
 // -oBatchMode=yes, PuTTY's plink and tortoiseplink take -batch and refuse
 // the OpenSSH spelling.
 function batchFlag(sshCommand: string): string {
-  const match = /^\s*"([^"]+)"|^\s*(\S+)/.exec(sshCommand);
-  const executable = match ? (match[1] ?? match[2]) : sshCommand;
+  const match = /^\s*(?:"([^"]+)"|'([^']+)'|(\S+))/.exec(sshCommand);
+  const executable = match ? (match[1] ?? match[2] ?? match[3]) : sshCommand;
   return /(?:^|[\\/])(?:tortoise)?plink(?:\.exe)?$/i.test(executable) ? '-batch' : '-oBatchMode=yes';
 }
 
@@ -43,8 +43,13 @@ export function gitEnvironment(base: NodeJS.ProcessEnv, configuredSshCommand: st
     if (name !== null && value !== undefined && env[name] === undefined) env[name] = value;
   }
   if (!env.GIT_TERMINAL_PROMPT) env.GIT_TERMINAL_PROMPT = '0';
-  if (!env.GIT_SSH_COMMAND && !env.GIT_SSH) {
-    const ssh = configuredSshCommand?.trim() || 'ssh';
+  // git takes GIT_SSH_COMMAND first, then core.sshCommand, then GIT_SSH: a
+  // command of the person's own in the environment stands as it is; a
+  // configured core.sshCommand is what git would run even over GIT_SSH, so
+  // it is the one that gets the batch flag; GIT_SSH alone stands too.
+  const configured = configuredSshCommand?.trim() || '';
+  if (!env.GIT_SSH_COMMAND && (configured || !env.GIT_SSH)) {
+    const ssh = configured || 'ssh';
     env.GIT_SSH_COMMAND = `${ssh} ${batchFlag(ssh)}`;
   }
   return env;

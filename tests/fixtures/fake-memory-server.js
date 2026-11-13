@@ -15,11 +15,15 @@
  *   noisy           log lines on stdout around the answer, the last one with
  *                   no trailing newline
  *   exits           a line on stderr, then exit 3 before answering
- *   chatty-exit     thirty lines on stderr, then exit 2 before answering
+ *   chatty-exit     thirty long lines on stderr, then exit 2 before answering
+ *   orphan          a grandchild that inherits the pipes and lives on, then
+ *                   exit 4 before answering
+ *   self-kill       stopped by its own SIGTERM before answering (not Windows)
  *   hangs           a line on stderr, then no answer
  *   hangs-deaf      like hangs, and the first signal is ignored
  */
 
+const { spawn } = require('node:child_process');
 const readline = require('node:readline');
 
 const mode = process.env.EGC_FAKE_MODE || 'answers';
@@ -51,10 +55,21 @@ rl.on('line', line => {
       process.stderr.write('[memory] store: cannot open /nowhere/state.db\n', () => process.exit(3));
       break;
     case 'chatty-exit': {
-      const lines = Array.from({ length: 30 }, (_, index) => `[memory] line ${index + 1}\n`).join('');
+      // Thirty lines of two hundred characters: more than the client keeps,
+      // so the tail it quotes is cut by lines, not by characters.
+      const lines = Array.from({ length: 30 }, (_, index) => `[memory] line ${index + 1} ${'x'.repeat(180)}\n`).join('');
       process.stderr.write(lines, () => process.exit(2));
       break;
     }
+    case 'orphan': {
+      const grandchild = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 6000)'], { stdio: 'inherit', detached: true });
+      grandchild.unref();
+      process.stderr.write('[memory] leaving a grandchild on the pipes\n', () => process.exit(4));
+      break;
+    }
+    case 'self-kill':
+      process.stderr.write('[memory] stopped by a signal\n', () => process.kill(process.pid, 'SIGTERM'));
+      break;
     case 'hangs':
     case 'hangs-deaf':
       process.stderr.write('[memory] git: Host key verification pending\n');

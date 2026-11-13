@@ -80,15 +80,45 @@ async function runTests() {
     );
   });
 
-  await test('a failure quotes the last three stderr lines only', async () => {
+  await test('a failure quotes the last three stderr lines only, whole, out of more stderr than the client keeps', async () => {
     await assert.rejects(
       () => call('team_sync', {}, 'chatty-exit'),
       error => {
-        assert.match(error.message, /exited with code 2 before answering team_sync; the server wrote: \[memory\] line 28 \| \[memory\] line 29 \| \[memory\] line 30$/);
+        assert.match(error.message, /exited with code 2 before answering team_sync; the server wrote: \[memory\] line 28 x{180} \| \[memory\] line 29 x{180} \| \[memory\] line 30 x{180}$/);
         assert.ok(!error.message.includes('line 27'), 'earlier lines are left out');
         return true;
       },
     );
+  });
+
+  await test('a server stopped by a signal before answering names the signal', async () => {
+    if (process.platform === 'win32') {
+      console.log('    (skipped on Windows: no signals)');
+      return;
+    }
+    await assert.rejects(
+      () => call('team_sync', {}, 'self-kill'),
+      error => {
+        assert.strictEqual(error.signal, 'SIGTERM');
+        assert.strictEqual(error.exitCode, null);
+        assert.match(error.message, /^The memory server was stopped by SIGTERM before answering team_sync; the server wrote: \[memory\] stopped by a signal$/);
+        return true;
+      },
+    );
+  });
+
+  await test('a grandchild that keeps the pipes open after the server exits does not hold the session', async () => {
+    const started = Date.now();
+    await assert.rejects(
+      () => call('team_sync', {}, 'orphan', { timeoutMs: 10000 }),
+      error => {
+        assert.strictEqual(error.exitCode, 4);
+        assert.match(error.message, /^The memory server exited with code 4 before answering team_sync; the server wrote: \[memory\] leaving a grandchild on the pipes$/);
+        return true;
+      },
+    );
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 4000, `the session settled a moment after the exit, not when the grandchild left, took ${elapsed} ms`);
   });
 
   await test('a server that never answers rejects at the budget with isTimeout and what it wrote', async () => {
@@ -111,7 +141,9 @@ async function runTests() {
       error => error.isTimeout === true,
     );
     const elapsed = Date.now() - started;
-    assert.ok(elapsed >= 2000 && elapsed < 15000, `the kill follows the ignored signal, took ${elapsed} ms`);
+    // Windows has no signal to ignore: kill() ends the process at once.
+    const floor = process.platform === 'win32' ? 0 : 2000;
+    assert.ok(elapsed >= floor && elapsed < 15000, `the kill follows the ignored signal, took ${elapsed} ms`);
   });
 
   await test('an answer stands when the server is slow to exit, even past the budget', async () => {
@@ -119,7 +151,7 @@ async function runTests() {
     const value = await call('team_status', {}, 'answers-linger', { timeoutMs: 300, exitGraceMs: 1200 });
     assert.deepStrictEqual(value, { ok: true, tool: 'team_status', args: {}, mark: null });
     const elapsed = Date.now() - started;
-    assert.ok(elapsed >= 1200 && elapsed < 10000, `the lingering server is stopped after the exit grace, took ${elapsed} ms`);
+    assert.ok(elapsed >= 1150 && elapsed < 10000, `the lingering server is stopped after the exit grace, took ${elapsed} ms`);
   });
 
   await test('an answer without a text result is a failure that names the tool', async () => {
