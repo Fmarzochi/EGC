@@ -150,7 +150,7 @@ async function checkProjectScope(sessions, insiderAnnounce) {
     await outsider.tool('claim_path', { path: 'src/b-only.js' });
     const foreignRelease = await insider.tool('release_path', { session_id: outsiderId, path: 'src/b-only.js' });
     const locksAfter = await insider.tool('session_peers', {});
-    check('liberar lock em nome de outra sessao e recusado', REFUSED.test(foreignRelease) && locksAfter.includes(`${claimKeyOf(PROJECT_B, 'src/b-only.js')} held by ${outsiderId}`), foreignRelease.slice(0, 80));
+    check('liberar lock em nome de outra sessao e recusado', REFUSED.test(foreignRelease) && locksAfter.includes(`${claimKeyOf(fs.realpathSync.native(PROJECT_B), 'src/b-only.js')} held by ${outsiderId}`), foreignRelease.slice(0, 80));
 
     const before = await readPresence(insiderId);
     await new Promise(resolve => setTimeout(resolve, 20));

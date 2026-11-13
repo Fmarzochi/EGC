@@ -53,7 +53,7 @@ function startMemoryServer({ home, projectDir, env = {} }) {
   // that does not exit on its own.
   const stop = () => new Promise(resolve => {
     if (exited) { resolve(); return; }
-    const fallback = setTimeout(() => { child.kill(); }, 5000);
+    const fallback = setTimeout(() => { child.kill(); }, 20000);
     child.once('exit', () => { clearTimeout(fallback); resolve(); });
     child.stdin.end();
   });

@@ -115,12 +115,13 @@ async function run() {
 let shuttingDown = false;
 
 async function shutdown() {
-  if (shuttingDown) return;
+  if (shuttingDown) { process.exit(1); }
   shuttingDown = true;
   log('INFO', 'Shutting down gracefully');
   // The dispatch chain starts a handler in a microtask, so let that run before
   // the count is read, then wait for every call already accepted.
   await new Promise(resolve => setImmediate(resolve));
+  closeMeshTransport();
   while (inFlightRequests > 0) {
     await new Promise<void>(resolve => idleWaiters.push(resolve));
   }
