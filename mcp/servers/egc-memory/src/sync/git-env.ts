@@ -10,26 +10,42 @@
 // variable and a few others (EDITOR, VISUAL, PAGER, PREFIX, SSH_ASKPASS):
 // it drops them from the ambient environment and refuses them in an
 // environment given to it unless they are allowed. The server allows these
-// three and gives git none of the other guarded ones, which simple-git
-// would have dropped anyway.
-export const GIT_ENVIRONMENT_KEYS = ['GIT_TERMINAL_PROMPT', 'GIT_SSH_COMMAND', 'GIT_SSH'] as const;
-const GUARDED_KEYS = new Set(['EDITOR', 'VISUAL', 'PAGER', 'PREFIX', 'SSH_ASKPASS']);
+// four (the variant goes with GIT_SSH, so a plink named there keeps its
+// own argument style) and gives git none of the other guarded ones, which
+// simple-git would have dropped anyway; SSH_ASKPASS_REQUIRE goes with
+// SSH_ASKPASS.
+export const GIT_ENVIRONMENT_KEYS = ['GIT_TERMINAL_PROMPT', 'GIT_SSH_COMMAND', 'GIT_SSH', 'GIT_SSH_VARIANT'] as const;
+const GUARDED_KEYS = new Set(['EDITOR', 'VISUAL', 'PAGER', 'PREFIX', 'SSH_ASKPASS', 'SSH_ASKPASS_REQUIRE']);
 
-function isForwarded(key: string): boolean {
+// The name a variable is forwarded under: one of the four in its canonical
+// case (Windows keeps whatever case the variable was set with), any other
+// variable as it is, or nothing for a guarded one.
+function forwardedName(key: string): string | null {
   const upper = key.toUpperCase();
-  if ((GIT_ENVIRONMENT_KEYS as readonly string[]).includes(upper)) return true;
-  return !upper.startsWith('GIT_') && !GUARDED_KEYS.has(upper);
+  if ((GIT_ENVIRONMENT_KEYS as readonly string[]).includes(upper)) return upper;
+  if (upper.startsWith('GIT_') || GUARDED_KEYS.has(upper)) return null;
+  return key;
+}
+
+// The flag that keeps an ssh command from asking: OpenSSH takes
+// -oBatchMode=yes, PuTTY's plink and tortoiseplink take -batch and refuse
+// the OpenSSH spelling.
+function batchFlag(sshCommand: string): string {
+  const match = /^\s*"([^"]+)"|^\s*(\S+)/.exec(sshCommand);
+  const executable = match ? (match[1] ?? match[2]) : sshCommand;
+  return /(?:^|[\\/])(?:tortoise)?plink(?:\.exe)?$/i.test(executable) ? '-batch' : '-oBatchMode=yes';
 }
 
 export function gitEnvironment(base: NodeJS.ProcessEnv, configuredSshCommand: string | null): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(base)) {
-    if (value !== undefined && isForwarded(key)) env[key] = value;
+    const name = forwardedName(key);
+    if (name !== null && value !== undefined && env[name] === undefined) env[name] = value;
   }
   if (!env.GIT_TERMINAL_PROMPT) env.GIT_TERMINAL_PROMPT = '0';
   if (!env.GIT_SSH_COMMAND && !env.GIT_SSH) {
     const ssh = configuredSshCommand?.trim() || 'ssh';
-    env.GIT_SSH_COMMAND = `${ssh} -oBatchMode=yes`;
+    env.GIT_SSH_COMMAND = `${ssh} ${batchFlag(ssh)}`;
   }
   return env;
 }

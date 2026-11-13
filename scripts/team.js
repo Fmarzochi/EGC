@@ -11,7 +11,14 @@ const { callMcpTool: callMemoryTool } = require('./lib/team-mcp-client');
 
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
-const MCP_CALL_TIMEOUT_MS = 60000;
+// How long one call to the memory server may take; a remote on a slow link
+// can be given more through EGC_TEAM_CALL_TIMEOUT_MS (milliseconds).
+const MCP_CALL_TIMEOUT_MS = callBudget(process.env.EGC_TEAM_CALL_TIMEOUT_MS, 60000);
+
+function callBudget(raw, fallback) {
+  const parsed = Number.parseInt(raw ?? '', 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 // What a server that never answered most often waited for: a git that
 // stopped to ask something no one could answer inside the server.
 const GIT_PROMPT_HINT = 'A git remote that asks a question (an unknown host key, a key passphrase, a credential) cannot be answered inside the server: '

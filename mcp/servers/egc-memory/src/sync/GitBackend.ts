@@ -104,9 +104,13 @@ export class GitBackend extends SyncBackend {
   // the sync reports, instead of holding the server until the caller's
   // timeout. The person's own core.sshCommand, read here once, is kept.
   private async useNonInteractiveGit(): Promise<void> {
+    // Before the checkout exists a plain lookup would walk up to whatever
+    // repository holds the home directory; the person's global setting is
+    // what applies then.
+    const scope = fs.existsSync(path.join(this.repoDir, '.git')) ? [] : ['--global'];
     let configuredSshCommand: string | null = null;
     try {
-      configuredSshCommand = (await this.git.raw(['config', '--get', 'core.sshCommand'])).trim() || null;
+      configuredSshCommand = (await this.git.raw(['config', ...scope, '--get', 'core.sshCommand'])).trim() || null;
     } catch {
       // not configured
     }

@@ -26,9 +26,14 @@ const MCP_PROTOCOL_VERSION = '2024-11-05';
 const MCP_INITIALIZE_ID = 1;
 const MCP_CALL_ID = 2;
 const DEFAULT_TIMEOUT_MS = 60000;
-// A server that ignores the end of its stdin and the first signal is killed
-// this long after the budget ran out.
+// How long a server that has answered may take to exit once its stdin is
+// closed, before it is stopped; the answer stands either way.
+const EXIT_GRACE_MS = 10000;
+// A server that ignores the first signal is killed this long after it.
 const KILL_GRACE_MS = 2000;
+// How long the pipes may stay open after the server exited (a grandchild
+// that inherited them, a git or an ssh) before the session settles anyway.
+const CLOSE_GRACE_MS = 1000;
 // How much of the server's stderr is kept, and how many of its last lines
 // a failure message quotes.
 const STDERR_TAIL_CHARS = 4000;
@@ -71,11 +76,11 @@ function toolCallValue(toolName, message) {
     throw Object.assign(new Error(message.error.message || 'MCP tool call failed'), { isToolError: true });
   }
   const content = Array.isArray(message.result?.content) ? message.result.content : [];
-  const text = content.find(item => item.type === 'text');
+  const text = content.find(item => item && typeof item === 'object' && item.type === 'text');
   if (message.result?.isError) {
-    throw Object.assign(new Error(text ? text.text : 'MCP tool call failed'), { isToolError: true });
+    throw Object.assign(new Error(text && text.text ? text.text : 'MCP tool call failed'), { isToolError: true });
   }
-  if (!text) {
+  if (!text || typeof text.text !== 'string') {
     throw new Error(`The memory server answered ${toolName} without a text result`);
   }
   return parseJsonOrRaw(text.text);
@@ -92,6 +97,17 @@ function describeExit(code, signal) {
   return signal ? `was stopped by ${signal}` : `exited with code ${code}`;
 }
 
+// Stops a child that did not leave on its own: the first signal, then a
+// kill a moment later; both timers let the process exit without them.
+function stopChild(child) {
+  child.kill();
+  const killTimer = setTimeout(() => {
+    try { child.kill('SIGKILL'); } catch { /* already gone */ }
+  }, KILL_GRACE_MS);
+  if (killTimer.unref) killTimer.unref();
+  return killTimer;
+}
+
 /**
  * Calls one tool of the memory server and resolves with its value.
  *
@@ -99,10 +115,12 @@ function describeExit(code, signal) {
  * options.timeoutMs     how long the whole session may take (60 s by default)
  * options.env           the server's environment (this process's by default)
  * options.clientName    the client name of the MCP handshake
+ * options.exitGraceMs   how long a server that answered may take to exit
  */
 function callMcpTool(toolName, args, options = {}) {
   const serverScript = options.serverScript ?? DEFAULT_SERVER_SCRIPT;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const exitGraceMs = options.exitGraceMs ?? EXIT_GRACE_MS;
   const clientName = options.clientName ?? 'egc-team';
 
   return new Promise((resolve, reject) => {
@@ -112,25 +130,56 @@ function callMcpTool(toolName, args, options = {}) {
     });
     let initialized = false;
     let outcome = null;
+    let settled = false;
     let buffer = '';
     let stderr = '';
     let timedOut = false;
-    let killTimer = null;
+    const timers = [];
 
-    const record = (error, value) => {
-      if (outcome) return;
-      outcome = { error, value };
-      child.stdin.end();
+    const clearTimers = () => {
+      for (const timer of timers.splice(0)) clearTimeout(timer);
     };
-    const timer = setTimeout(() => {
+
+    const finish = (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      if (outcome) {
+        if (outcome.error) reject(outcome.error);
+        else resolve(outcome.value);
+        return;
+      }
+      const tail = stderrClause(stderr);
+      if (timedOut) {
+        reject(Object.assign(
+          new Error(`The memory server did not answer ${toolName} within ${timeoutMs / 1000} s${tail}`),
+          { isTimeout: true },
+        ));
+        return;
+      }
+      reject(Object.assign(
+        new Error(`The memory server ${describeExit(code, signal)} before answering ${toolName}${tail}`),
+        { exitCode: code, signal },
+      ));
+    };
+
+    // The answer is recorded once; stdin closes so the server leaves, and a
+    // server that does not leave in time is stopped without changing it.
+    const record = (error, value) => {
+      if (outcome || timedOut) return;
+      outcome = { error, value };
+      clearTimers();
+      child.stdin.end();
+      timers.push(setTimeout(() => timers.push(stopChild(child)), exitGraceMs));
+    };
+
+    timers.push(setTimeout(() => {
+      if (outcome) return;
       timedOut = true;
-      record(new Error('timed out'));
-      child.kill();
-      killTimer = setTimeout(() => {
-        try { child.kill('SIGKILL'); } catch { /* already gone */ }
-      }, KILL_GRACE_MS);
-      if (killTimer.unref) killTimer.unref();
-    }, timeoutMs);
+      child.stdin.end();
+      timers.push(stopChild(child));
+    }, timeoutMs));
+
     const send = message => child.stdin.write(JSON.stringify(message) + '\n');
 
     const onMessage = message => {
@@ -153,48 +202,39 @@ function callMcpTool(toolName, args, options = {}) {
       }
     };
 
+    const consume = line => {
+      if (outcome || timedOut) return;
+      const message = parseJsonRpcLine(line);
+      if (message) onMessage(message);
+    };
+
     // A server that exits before reading closes the pipe under the client;
-    // the close handler names that exit.
+    // the exit is what the session reports.
     child.stdin.on('error', () => {});
     child.stdout.setEncoding('utf-8');
     child.stdout.on('data', chunk => {
       const lines = (buffer + chunk).split('\n');
       buffer = lines.pop();
-      for (const line of lines) {
-        if (outcome) break;
-        const message = parseJsonRpcLine(line);
-        if (message) onMessage(message);
-      }
+      for (const line of lines) consume(line);
+    });
+    child.stdout.on('end', () => {
+      if (buffer) consume(buffer);
+      buffer = '';
     });
     child.stderr.setEncoding('utf-8');
     child.stderr.on('data', chunk => {
       stderr = (stderr + chunk).slice(-STDERR_TAIL_CHARS);
     });
-    child.on('error', error => record(error));
-    child.on('close', (code, signal) => {
-      clearTimeout(timer);
-      if (killTimer) clearTimeout(killTimer);
-      if (outcome && outcome.error === null) {
-        resolve(outcome.value);
-        return;
-      }
-      if (outcome && !timedOut) {
-        reject(outcome.error);
-        return;
-      }
-      const tail = stderrClause(stderr);
-      if (timedOut) {
-        reject(Object.assign(
-          new Error(`The memory server did not answer ${toolName} within ${timeoutMs / 1000} s${tail}`),
-          { isTimeout: true },
-        ));
-        return;
-      }
-      reject(Object.assign(
-        new Error(`The memory server ${describeExit(code, signal)} before answering ${toolName}${tail}`),
-        { exitCode: code, signal },
-      ));
+    child.on('error', error => {
+      if (!outcome && !timedOut) outcome = { error, value: undefined };
+      finish(null, null);
     });
+    // The pipes close after the exit; a grandchild that kept them open
+    // would hold the session forever, so the exit settles it after a moment.
+    child.on('exit', (code, signal) => {
+      timers.push(setTimeout(() => finish(code, signal), CLOSE_GRACE_MS));
+    });
+    child.on('close', (code, signal) => finish(code, signal));
 
     send({
       jsonrpc: '2.0',
