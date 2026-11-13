@@ -199,7 +199,7 @@ This machine already has a checkout made for another remote (as `origin`, for fe
 
 ### `Memory server not built` or `team sync needs the memory server`
 
-The command line talks to the memory server. Run `egc doctor`, and `npm run build` in `mcp/servers/egc-memory/` when you work from a source checkout.
+The command line talks to the memory server. Run `egc doctor`, and `npm run build` in `mcp/servers/egc-memory/` when you work from a source checkout. When the line continues with `The memory server did not answer team_sync within 60 s; the server wrote: ...` or `The memory server exited with code <n> before answering ...`, the server started and the quoted lines are the last thing it logged; the troubleshooting guide covers both, including the usual cause of the first with a server from before v1.1.24, a git remote that stopped to ask a question, and the budget `EGC_TEAM_CALL_TIMEOUT_MS` raises for a slow remote.
 
 ## Current limitations
 
