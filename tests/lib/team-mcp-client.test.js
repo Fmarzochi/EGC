@@ -144,14 +144,19 @@ async function runTests() {
     }
   });
 
+  // The budget of the cases that run out of it: long enough for a slow
+  // runner to start the fake server and reach the hang (a macOS runner took
+  // more than 400 ms to get there), short enough to keep the suite quick.
+  const HANG_BUDGET_MS = 2000;
+
   await test('a server that never answers rejects at the budget with isTimeout and what it wrote', async () => {
     const started = Date.now();
     await assert.rejects(
-      () => call('team_sync', {}, 'hangs', { timeoutMs: 400 }),
+      () => call('team_sync', {}, 'hangs', { timeoutMs: HANG_BUDGET_MS }),
       error => {
         assert.strictEqual(error.isTimeout, true);
         assert.strictEqual(error.initialized, true, 'the handshake had completed');
-        assert.match(error.message, /^The memory server did not answer team_sync within 0\.4 s; the server wrote: \[memory\] git: Host key verification pending$/);
+        assert.match(error.message, /^The memory server did not answer team_sync within 2 s; the server wrote: \[memory\] git: Host key verification pending$/);
         return true;
       },
     );
@@ -160,11 +165,11 @@ async function runTests() {
 
   await test('a server that never answers the handshake rejects at the budget as a timeout of the handshake, not of the call', async () => {
     await assert.rejects(
-      () => call('team_sync', {}, 'hangs-handshake', { timeoutMs: 400 }),
+      () => call('team_sync', {}, 'hangs-handshake', { timeoutMs: HANG_BUDGET_MS }),
       error => {
         assert.strictEqual(error.isTimeout, true);
         assert.strictEqual(error.initialized, false, 'the handshake never completed');
-        assert.match(error.message, /^The memory server did not answer the handshake before team_sync within 0\.4 s; the server wrote: \[memory\] opening the store$/);
+        assert.match(error.message, /^The memory server did not answer the handshake before team_sync within 2 s; the server wrote: \[memory\] opening the store$/);
         return true;
       },
     );
@@ -173,18 +178,24 @@ async function runTests() {
   await test('a hung server that ignores the first signal is killed a moment later', async () => {
     const started = Date.now();
     await assert.rejects(
-      () => call('team_sync', {}, 'hangs-deaf', { timeoutMs: 400 }),
-      error => error.isTimeout === true,
+      () => call('team_sync', {}, 'hangs-deaf', { timeoutMs: HANG_BUDGET_MS }),
+      error => {
+        assert.strictEqual(error.isTimeout, true);
+        // The line proves the server was up and deaf when the budget ran out,
+        // not ended by the first signal while it was still starting.
+        assert.ok(error.message.includes('Host key verification pending'), `the server had reached the hang, got: ${error.message}`);
+        return true;
+      },
     );
     const elapsed = Date.now() - started;
     // Windows has no signal to ignore: kill() ends the process at once.
-    const floor = process.platform === 'win32' ? 0 : 2000;
+    const floor = process.platform === 'win32' ? 0 : HANG_BUDGET_MS + 1900;
     assert.ok(elapsed >= floor && elapsed < 15000, `the kill follows the ignored signal, took ${elapsed} ms`);
   });
 
   await test('an answer stands when the server is slow to exit, even past the budget', async () => {
     const started = Date.now();
-    const value = await call('team_status', {}, 'answers-linger', { timeoutMs: 300, exitGraceMs: 1200 });
+    const value = await call('team_status', {}, 'answers-linger', { timeoutMs: HANG_BUDGET_MS, exitGraceMs: 1200 });
     assert.deepStrictEqual(value, { ok: true, tool: 'team_status', args: {}, mark: null });
     const elapsed = Date.now() - started;
     assert.ok(elapsed >= 1150 && elapsed < 10000, `the lingering server is stopped after the exit grace, took ${elapsed} ms`);

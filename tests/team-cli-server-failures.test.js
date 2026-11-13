@@ -63,7 +63,10 @@ function runTests() {
     fs.writeFileSync(path.join(dir, '.egc', 'team.json'), JSON.stringify({ backend: 'git', remote: 'ssh://git@sync.example.invalid/team.git', branch: 'main', teamKey: TEAM_KEY }));
     return dir;
   };
-  const run = (dir, args, mode, budget = '500') => spawnSync(process.execPath, [cli, ...args], {
+  // The budget the CLI gives the server: long enough for a slow runner to
+  // start the CLI and the fake server and reach the hang, short enough to
+  // keep the suite quick.
+  const run = (dir, args, mode, budget = '2000') => spawnSync(process.execPath, [cli, ...args], {
     encoding: 'utf8',
     timeout: 60000,
     env: { ...process.env, HOME: dir, USERPROFILE: dir, EGC_FAKE_MODE: mode, EGC_TEAM_CALL_TIMEOUT_MS: budget },
@@ -73,14 +76,14 @@ function runTests() {
     test('sync against a server that never answers exits 1, names the budget and what the server wrote, and says what a git prompt is', () => {
       const result = run(configured(), ['sync'], 'hangs');
       assert.strictEqual(result.status, 1, result.stderr);
-      assert.match(result.stderr, /team sync needs the memory server \(The memory server did not answer team_sync within 0\.5 s; the server wrote: \[memory\] git: Host key verification pending\)/);
+      assert.match(result.stderr, /team sync needs the memory server \(The memory server did not answer team_sync within 2 s; the server wrote: \[memory\] git: Host key verification pending\)/);
       assert.match(result.stderr, /run "git ls-remote <remote>" once in a terminal/);
     });
 
     test('sync against a server that never answers the handshake exits 1 naming the handshake, with no prompt hint', () => {
       const result = run(configured(), ['sync'], 'hangs-handshake');
       assert.strictEqual(result.status, 1, result.stderr);
-      assert.match(result.stderr, /team sync needs the memory server \(The memory server did not answer the handshake before team_sync within 0\.5 s; the server wrote: \[memory\] opening the store\)/);
+      assert.match(result.stderr, /team sync needs the memory server \(The memory server did not answer the handshake before team_sync within 2 s; the server wrote: \[memory\] opening the store\)/);
       assert.ok(!result.stderr.includes('git ls-remote'), 'a handshake that never came back is not a git prompt');
     });
 
@@ -104,7 +107,7 @@ function runTests() {
       const dir = home();
       const result = run(dir, ['init', '--backend', 'git', '--remote', 'ssh://git@sync.example.invalid/team.git', '--key', TEAM_KEY], 'hangs');
       assert.strictEqual(result.status, 0, result.stderr);
-      assert.match(result.stdout, /Note: Memory server setup returned: The memory server did not answer team_init within 0\.5 s; the server wrote: \[memory\] git: Host key verification pending/);
+      assert.match(result.stdout, /Note: Memory server setup returned: The memory server did not answer team_init within 2 s; the server wrote: \[memory\] git: Host key verification pending/);
       assert.match(result.stdout, /run "git ls-remote <remote>" once in a terminal/);
       assert.match(result.stdout, /The config file is saved\./);
       assert.ok(fs.existsSync(path.join(dir, '.egc', 'team.json')), 'the configuration stays for the next sync');
