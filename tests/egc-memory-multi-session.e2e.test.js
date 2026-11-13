@@ -22,6 +22,10 @@ if (!fs.existsSync(SERVER)) {
   process.exit(0);
 }
 
+// The same key function the server stores a claim under, so the listing match
+// below compares against the platform's path form instead of POSIX text.
+const { claimKeyOf } = require(path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'session-bus.js'));
+
 const FAKE_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mstest-home-'));
 const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mstest-proj-'));
 const N = Math.max(2, Number.parseInt(process.env.EGC_MSTEST_SESSIONS || '4', 10) || 4);
@@ -146,7 +150,7 @@ async function checkProjectScope(sessions, insiderAnnounce) {
     await outsider.tool('claim_path', { path: 'src/b-only.js' });
     const foreignRelease = await insider.tool('release_path', { session_id: outsiderId, path: 'src/b-only.js' });
     const locksAfter = await insider.tool('session_peers', {});
-    check('liberar lock em nome de outra sessao e recusado', REFUSED.test(foreignRelease) && locksAfter.includes(`src/b-only.js held by ${outsiderId}`), foreignRelease.slice(0, 80));
+    check('liberar lock em nome de outra sessao e recusado', REFUSED.test(foreignRelease) && locksAfter.includes(`${claimKeyOf(fs.realpathSync(PROJECT_B), 'src/b-only.js')} held by ${outsiderId}`), foreignRelease.slice(0, 80));
 
     const before = await readPresence(insiderId);
     await new Promise(resolve => setTimeout(resolve, 20));

@@ -450,6 +450,24 @@ async function main() {
         }
       });
     });
+
+    await run('waitForBusEvents re-reads once after the transport closes', async () => {
+      const event = { kind: 'committed-during-shutdown' };
+      let committed = false;
+      let quietReads = 0;
+      const result = await mesh.waitForBusEvents({
+        transport: { waitForChange: async () => { committed = true; return 'closed'; } },
+        readFresh: async () => [],
+        readQuiet: async () => {
+          quietReads += 1;
+          return committed ? [event] : [];
+        },
+        timeoutMs: 1000
+      });
+      assert.deepStrictEqual(result.events, [event]);
+      assert.strictEqual(quietReads, 1);
+      assert.strictEqual(result.rounds, 1);
+    });
   }
 
   await run('no watcher survives close()', async () => {

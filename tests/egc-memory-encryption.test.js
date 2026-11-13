@@ -123,8 +123,11 @@ if (test('loadOrCreateEncKey: returns a 32-byte Buffer and creates the file with
     assert.ok(Buffer.isBuffer(key));
     assert.strictEqual(key.length, 32);
     assert.ok(fs.existsSync(keyPath));
-    const mode = fs.statSync(keyPath).mode & 0o777;
-    assert.strictEqual(mode, 0o600, `expected mode 0600, got ${mode.toString(8)}`);
+    // Windows has no POSIX permission bits: statSync reports 0666 there.
+    if (process.platform !== 'win32') {
+      const mode = fs.statSync(keyPath).mode & 0o777;
+      assert.strictEqual(mode, 0o600, `expected mode 0600, got ${mode.toString(8)}`);
+    }
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

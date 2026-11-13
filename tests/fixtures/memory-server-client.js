@@ -46,11 +46,16 @@ function startMemoryServer({ home, projectDir, env = {} }) {
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const notify = (method, params) => child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+  // Ending stdin is the portable stop: the server and the client both close.
+  // Windows has no SIGTERM, and kill() there terminates the process without
+  // closing the database, leaving the write-ahead log behind for the next
+  // engine that opens the same file. kill() stays as the fallback for a server
+  // that does not exit on its own.
   const stop = () => new Promise(resolve => {
     if (exited) { resolve(); return; }
-    child.once('exit', () => resolve());
+    const fallback = setTimeout(() => { child.kill(); }, 20000);
+    child.once('exit', () => { clearTimeout(fallback); resolve(); });
     child.stdin.end();
-    child.kill();
   });
   return { request, notify, stop, stderr: () => stderr };
 }

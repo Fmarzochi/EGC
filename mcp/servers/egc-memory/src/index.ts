@@ -68,23 +68,36 @@ const TOOL_HANDLERS = {
   team_status: handleTeamStatus,
 } satisfies Record<string, (db: Database, toolArgs: unknown) => Promise<unknown>>;
 
+// Calls still running when the client closes stdin must finish before the
+// database closes. A client that writes its last call and then closes the pipe
+// reads the response from a server that is still working, not from one that has
+// already shut down.
+let inFlightRequests = 0;
+const idleWaiters: Array<() => void> = [];
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const db = await getDb();
-  const name = request.params.name;
+  inFlightRequests++;
   try {
-    if (!Object.hasOwn(TOOL_HANDLERS, name)) {
-      throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
+    const db = await getDb();
+    const name = request.params.name;
+    try {
+      if (!Object.hasOwn(TOOL_HANDLERS, name)) {
+        throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
+      }
+      return await TOOL_HANDLERS[name as keyof typeof TOOL_HANDLERS](db, request.params.arguments);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new McpError(ErrorCode.InvalidParams, `Invalid arguments: ${error.message}`);
+      }
+      log('ERROR', 'Tool execution failed', { tool: name, error: String(error) });
+      if (error instanceof Error && error.message.includes('SQLITE_FULL')) {
+        throw new McpError(ErrorCode.InternalError, `Database disk image is full: ${error.message}`);
+      }
+      throw error;
     }
-    return await TOOL_HANDLERS[name as keyof typeof TOOL_HANDLERS](db, request.params.arguments);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new McpError(ErrorCode.InvalidParams, `Invalid arguments: ${error.message}`);
-    }
-    log('ERROR', 'Tool execution failed', { tool: name, error: String(error) });
-    if (error instanceof Error && error.message.includes('SQLITE_FULL')) {
-      throw new McpError(ErrorCode.InternalError, `Database disk image is full: ${error.message}`);
-    }
-    throw error;
+  } finally {
+    inFlightRequests--;
+    if (inFlightRequests === 0) idleWaiters.splice(0).forEach(resolve => resolve());
   }
 });
 
@@ -99,8 +112,19 @@ async function run() {
   log('INFO', 'egc-memory-orchestrator initialized with Write Arbitration');
 }
 
+let shuttingDown = false;
+
 async function shutdown() {
+  if (shuttingDown) { process.exit(1); }
+  shuttingDown = true;
   log('INFO', 'Shutting down gracefully');
+  // The dispatch chain starts a handler in a microtask, so let that run before
+  // the count is read, then wait for every call already accepted.
+  await new Promise(resolve => setImmediate(resolve));
+  closeMeshTransport();
+  while (inFlightRequests > 0) {
+    await new Promise<void>(resolve => idleWaiters.push(resolve));
+  }
   closeMeshTransport();
   await closeDb();
   if (transport) {
@@ -111,6 +135,10 @@ async function shutdown() {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+// Windows does not deliver SIGTERM to a child stopped with kill(), so a stdio
+// client there asks the server to stop by closing its stdin. Shut down on that
+// path too, or the database is never closed and its write-ahead log survives.
+process.stdin.on('end', shutdown);
 
 run().catch((e) => {
   log('ERROR', 'Fatal startup error', { error: String(e) });
