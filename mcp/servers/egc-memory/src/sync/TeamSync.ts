@@ -267,11 +267,22 @@ export function writeTeamMarker(checkoutDir: string, teamKey: Buffer): void {
     fs.closeSync(descriptor);
   }
   try {
-    if (isLink(file)) removeSyncFile(file);
+    // Whatever sits at the marker and is not a regular file (a link, a
+    // directory, a pipe) is no marker and gives way; a regular file is
+    // replaced by the rename itself.
+    if (!isRegularFile(file)) fs.rmSync(file, { recursive: true, force: true });
     fs.renameSync(temporary, file);
   } catch (err) {
     removeSyncFile(temporary);
     throw err;
+  }
+}
+
+function isRegularFile(filePath: string): boolean {
+  try {
+    return fs.lstatSync(filePath).isFile();
+  } catch {
+    return false;
   }
 }
 

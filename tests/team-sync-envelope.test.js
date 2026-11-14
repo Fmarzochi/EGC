@@ -293,6 +293,9 @@ async function runTests() {
       const withDirectory = path.join(dir, 'marker-directory');
       fs.mkdirSync(path.join(withDirectory, 'TEAM'), { recursive: true });
       assert.strictEqual(teamSync.readMarkerState(withDirectory, teamKey), 'mismatch', 'a directory at the marker is no marker');
+      teamSync.writeTeamMarker(withDirectory, teamKey);
+      assert.strictEqual(teamSync.readMarkerState(withDirectory, teamKey), 'match', 'the directory gives way to the marker of a proven key');
+      assert.deepStrictEqual(fs.readdirSync(withDirectory), ['TEAM'], 'nothing but the marker is left');
       const withEmpty = path.join(dir, 'marker-empty-file');
       fs.mkdirSync(withEmpty, { recursive: true });
       fs.writeFileSync(path.join(withEmpty, 'TEAM'), '');

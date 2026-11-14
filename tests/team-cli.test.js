@@ -291,22 +291,29 @@ function runTests() {
       const checkout = path.join(HOME, '.egc', 'team-sync');
       const configPath = path.join(HOME, '.egc', 'team.json');
       const saved = fs.readFileSync(configPath, 'utf8');
-      // The repository loses its marker, as a repository made by an older
-      // version never had one, and keeps its state files.
-      git(['rm', '-q', 'TEAM'], checkout);
-      git(['-c', 'user.name=older', '-c', 'user.email=older@egc.local', 'commit', '-q', '-m', 'a repository without the marker'], checkout);
-      git(['push', '-q', 'origin', 'main'], checkout);
-      assert.ok(!remoteTree(REMOTE, 'main').includes('TEAM'), 'the remote has no marker');
-      assert.ok(remoteTree(REMOTE, 'main').some(entry => entry.startsWith('state/')), 'and still holds state');
+      try {
+        // The repository loses its marker, as a repository made by an older
+        // version never had one, and keeps its state files.
+        git(['rm', '-q', 'TEAM'], checkout);
+        git(['-c', 'user.name=older', '-c', 'user.email=older@egc.local', 'commit', '-q', '-m', 'a repository without the marker'], checkout);
+        git(['push', '-q', 'origin', 'main'], checkout);
+        assert.ok(!remoteTree(REMOTE, 'main').includes('TEAM'), 'the remote has no marker');
+        assert.ok(remoteTree(REMOTE, 'main').some(entry => entry.startsWith('state/')), 'and still holds state');
 
-      const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE]);
-      assert.strictEqual(run.status, 1, `a new key against state it cannot open is refused:\n${run.stdout}\n${run.stderr}`);
-      assert.ok(`${run.stdout}\n${run.stderr}`.includes('opens none of the state files'), `${run.stdout}\n${run.stderr}`);
-      assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is put back');
+        const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE]);
+        assert.strictEqual(run.status, 1, `a new key against state it cannot open is refused:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(`${run.stdout}\n${run.stderr}`.includes('opens none of the state files'), `${run.stdout}\n${run.stderr}`);
+        assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is put back');
 
-      const sync = teamCli(['sync']);
-      assert.strictEqual(sync.status, 0, `${sync.stdout}\n${sync.stderr}`);
-      assert.ok(remoteTree(REMOTE, 'main').includes('TEAM'), 'the sync with the key of the team writes the marker again');
+        const sync = teamCli(['sync']);
+        assert.strictEqual(sync.status, 0, `${sync.stdout}\n${sync.stderr}`);
+        assert.ok(remoteTree(REMOTE, 'main').includes('TEAM'), 'the sync with the key of the team writes the marker again');
+      } finally {
+        // The later cases need the team as it was: its configuration, and
+        // its marker on the remote, written back by a sync with the key.
+        fs.writeFileSync(configPath, saved);
+        if (!remoteTree(REMOTE, 'main').includes('TEAM')) teamCli(['sync']);
+      }
     });
 
     run('team autosync on and off round-trip in team.json, status shows the switch, and init --autosync turns it on', () => {
