@@ -12,6 +12,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execSync } = require('child_process');
+const { outsideHomeAndTemp, removeOutside } = require('../fixtures/outside-home-dir');
 
 const MODULE_PATH = path.join(
   __dirname,
@@ -67,6 +68,51 @@ let failed = 0;
 
 function run(name, fn) {
   if (test(name, fn)) passed++; else failed++;
+}
+
+// A checkout outside the home and the temp directory (#2109): its own
+// repository is read, a system directory and the filesystem root never are,
+// on the build and on the mirror the hooks use alike.
+function runOutsideHomeTest(api) {
+  const { detectBranch, detectOriginRemote, projectIdentity, trustedGitPath } = api;
+  run('a checkout outside the home and the temp directory is keyed by its remote and its branch, never one under a system directory (#2109)', () => {
+    const outside = outsideHomeAndTemp();
+    if (outside) {
+      try {
+        const repo = path.join(outside, 'repo');
+        fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+        fs.writeFileSync(path.join(repo, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+        fs.writeFileSync(path.join(repo, '.git', 'config'), '[remote "origin"]\n\turl = https://github.com/egc-field/example.git\n');
+        assert.strictEqual(detectBranch(repo), 'main', 'the branch of a checkout outside the home and the temp directory');
+        assert.strictEqual(detectOriginRemote(repo), 'https://github.com/egc-field/example.git', 'its origin');
+        assert.strictEqual(projectIdentity(repo).kind, 'remote');
+        const sub = path.join(repo, 'packages', 'app');
+        fs.mkdirSync(sub, { recursive: true });
+        assert.deepStrictEqual(projectIdentity(sub), projectIdentity(repo), 'a subdirectory of the checkout is the same project');
+        const hooks = require('../../scripts/lib/branch-state');
+        assert.deepStrictEqual(hooks.projectIdentity(sub), projectIdentity(repo), 'the hooks agree');
+        const head = path.join(repo, '.git', 'HEAD');
+        assert.strictEqual(trustedGitPath(head, { project: repo }), fs.realpathSync.native(head));
+        assert.strictEqual(trustedGitPath(head), null, 'without a project the roots are the home and the temp directory, as before');
+        const sibling = path.join(outside, 'sibling');
+        fs.mkdirSync(sibling);
+        assert.strictEqual(trustedGitPath(head, { project: sibling }), null, 'the repository of another project is not trusted on its account');
+        assert.strictEqual(detectBranch(sibling), null);
+      } finally {
+        removeOutside(outside);
+      }
+    } else if (process.env.EGC_REQUIRE_OUTSIDE_DIR) {
+      assert.fail('no writable directory outside the home and the temp directory, and EGC_REQUIRE_OUTSIDE_DIR asks for one');
+    } else {
+      console.log('    (no writable directory outside the home and the temp directory on this machine)');
+    }
+    const system = process.platform === 'win32' ? path.join(process.env.SystemRoot || String.raw`C:\Windows`, 'egc-x') : '/etc/egc-x';
+    assert.strictEqual(trustedGitPath(path.join(system, '.git', 'HEAD'), { project: system }), null, 'a .git under a system directory');
+    assert.strictEqual(trustedGitPath(path.join(system, '.git', 'HEAD'), { followed: true }), null, 'even when a trusted file named it');
+    const root = path.parse(os.homedir()).root;
+    assert.strictEqual(trustedGitPath(path.join(root, '.git', 'HEAD'), { project: root }), null, 'a .git at the filesystem root');
+    assert.strictEqual(trustedGitPath(path.join(root, '.git', 'HEAD'), { followed: true }), null, 'even when a trusted file named the root');
+  });
 }
 
 // The identity of a project by its origin remote (#2063), checked against
@@ -244,6 +290,8 @@ async function runTests() {
       }
     }
   })) passed++; else failed++;
+
+  runOutsideHomeTest(api);
 
   if (test('readHeadLine refuses to follow a symlink planted at HEAD after validation, even when the link target is itself a trusted .git path (#1807 TOCTOU narrowing)', () => {
     if (process.platform === 'win32') return; // symlink creation needs elevated privileges on Windows

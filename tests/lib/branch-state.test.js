@@ -28,6 +28,7 @@ const {
 } = require('../../scripts/lib/branch-state');
 
 const { collectMemoryState } = require('../../scripts/status');
+const { outsideHomeAndTemp, removeOutside } = require('../fixtures/outside-home-dir');
 
 const HOOK_PATH = path.join(__dirname, '../../scripts/hooks/egc-memory-load.js');
 const stateCrypto = require('../../scripts/lib/state-crypto');
@@ -396,6 +397,45 @@ function runTests() {
         fs.rmSync(base, { recursive: true, force: true });
       }
     }
+  }));
+
+  tally(test('a checkout outside the home and the temp directory is keyed by its remote and its branch, never one under a system directory (#2109)', () => {
+    const outside = outsideHomeAndTemp();
+    if (outside) {
+      try {
+        const repo = path.join(outside, 'repo');
+        fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+        fs.writeFileSync(path.join(repo, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+        fs.writeFileSync(path.join(repo, '.git', 'config'), '[remote "origin"]\n\turl = https://github.com/egc-field/example.git\n');
+        assert.strictEqual(detectBranch(repo), 'main', 'the branch of a checkout outside the home and the temp directory');
+        assert.strictEqual(detectOriginRemote(repo), 'https://github.com/egc-field/example.git', 'its origin');
+        assert.strictEqual(projectIdentity(repo).kind, 'remote');
+        const sub = path.join(repo, 'packages', 'app');
+        fs.mkdirSync(sub, { recursive: true });
+        assert.deepStrictEqual(projectIdentity(sub), projectIdentity(repo), 'a subdirectory of the checkout is the same project');
+        const head = path.join(repo, '.git', 'HEAD');
+        assert.strictEqual(trustedGitPath(head, { project: repo }), fs.realpathSync.native(head));
+        assert.strictEqual(trustedGitPath(head), null, 'without a project the roots are the home and the temp directory, as before');
+        const sibling = path.join(outside, 'sibling');
+        fs.mkdirSync(sibling);
+        assert.strictEqual(trustedGitPath(head, { project: sibling }), null, 'the repository of another project is not trusted on its account');
+        assert.strictEqual(detectBranch(sibling), null);
+      } finally {
+        removeOutside(outside);
+      }
+    } else if (process.env.EGC_REQUIRE_OUTSIDE_DIR) {
+      assert.fail('no writable directory outside the home and the temp directory, and EGC_REQUIRE_OUTSIDE_DIR asks for one');
+    } else {
+      console.log('    (no writable directory outside the home and the temp directory on this machine)');
+    }
+    // A system directory is never trusted on the account of a project or a
+    // pointer, and the filesystem root holds no repository.
+    const system = process.platform === 'win32' ? path.join(process.env.SystemRoot || String.raw`C:\Windows`, 'egc-x') : '/etc/egc-x';
+    assert.strictEqual(trustedGitPath(path.join(system, '.git', 'HEAD'), { project: system }), null, 'a .git under a system directory');
+    assert.strictEqual(trustedGitPath(path.join(system, '.git', 'HEAD'), { followed: true }), null, 'even when a trusted file named it');
+    const root = path.parse(os.homedir()).root;
+    assert.strictEqual(trustedGitPath(path.join(root, '.git', 'HEAD'), { project: root }), null, 'a .git at the filesystem root');
+    assert.strictEqual(trustedGitPath(path.join(root, '.git', 'HEAD'), { followed: true }), null, 'even when a trusted file named the root');
   }));
 
   tally(test('detectBranch returns null outside a git repo', () => {
