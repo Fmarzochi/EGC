@@ -569,6 +569,15 @@ async function main() {
           await evaluate(chained)
           assert.strictEqual(chained.effect, "ask", `a chained command stays with the person: ${JSON.stringify(command)}`)
         }
+        // A name that only starts like a formatter or a test runner is neither.
+        for (const command of ["npx jest-exfil", "pytest-evil-plugin --help", "prettierx --write a.ts", "npm tests"]) {
+          const lookalike = { sessionID: "s", action: "shell", resources: [command], effect: "ask" }
+          await evaluate(lookalike)
+          assert.strictEqual(lookalike.effect, "ask", `a lookalike stays with the person: ${JSON.stringify(command)}`)
+        }
+        const withArguments = { sessionID: "s", action: "shell", resources: ["npm test -- --watch"], effect: "ask" }
+        await evaluate(withArguments)
+        assert.strictEqual(withArguments.effect, "allow", "a test runner with arguments is still a test run")
         const denied = { sessionID: "s", action: "read", resources: [path.join(projectDir, "x")], effect: "deny" }
         await evaluate(denied)
         assert.strictEqual(denied.effect, "deny", "a decision already made is not reopened")
@@ -638,20 +647,23 @@ async function main() {
           )
           assert.deepStrictEqual(fake.gets, ["ses_home", "ses_other"], "the host is asked once per session")
 
-          // A host that cannot say, or has no session.get, leaves the location in charge.
+          // A host that cannot say, or has no session.get, leaves the location in
+          // charge. Every setup hands its cleanup to the finally block.
           const throwing = fakeContext(projectDir, { get: "throws" })
-          await inside.setup(throwing.ctx)
-          await assert.rejects(
-            () => throwing.registered.tool["execute.before"]({ tool: "write", sessionID: "ses_x", callID: "w4", input: { filePath: relativeSecret, content: "x" } }),
-            (error) => /Guardian/.test(error.message) && error.message.includes(path.join(projectDir, ".ssh", "id_rsa"))
-          )
           const without = fakeContext(projectDir, { get: "missing" })
-          await inside.setup(without.ctx)
-          await assert.rejects(
-            () => without.registered.tool["execute.before"]({ tool: "write", sessionID: "ses_y", callID: "w5", input: { filePath: relativeSecret, content: "x" } }),
-            (error) => /Guardian/.test(error.message) && error.message.includes(path.join(projectDir, ".ssh", "id_rsa"))
-          )
-          await cleanup()
+          const cleanups = [cleanup, await inside.setup(throwing.ctx), await inside.setup(without.ctx)]
+          try {
+            await assert.rejects(
+              () => throwing.registered.tool["execute.before"]({ tool: "write", sessionID: "ses_x", callID: "w4", input: { filePath: relativeSecret, content: "x" } }),
+              (error) => /Guardian/.test(error.message) && error.message.includes(path.join(projectDir, ".ssh", "id_rsa"))
+            )
+            await assert.rejects(
+              () => without.registered.tool["execute.before"]({ tool: "write", sessionID: "ses_y", callID: "w5", input: { filePath: relativeSecret, content: "x" } }),
+              (error) => /Guardian/.test(error.message) && error.message.includes(path.join(projectDir, ".ssh", "id_rsa"))
+            )
+          } finally {
+            await Promise.all(cleanups.map((dispose) => dispose()))
+          }
         })
       }),
     ],

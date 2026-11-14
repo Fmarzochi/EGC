@@ -11,7 +11,7 @@ import * as fs from "fs"
 import * as http from "http"
 import * as path from "path"
 import type { PluginInput } from "@opencode-ai/plugin"
-import { initStore, recordChange, clearChanges, type ChangeType } from "./changed-files-store.js"
+import { recordChange, clearChanges, type ChangeType } from "./changed-files-store.js"
 import {
   commandOf,
   filePathOf,
@@ -47,8 +47,10 @@ export type CoreOptions = {
 const PROFILE_ORDER: Record<HookProfile, number> = { minimal: 0, standard: 1, strict: 2 }
 const SCRIPT_FILE = /\.(ts|tsx|js|jsx)$/
 const READ_ONLY_TOOLS = new Set(["read", "glob", "grep", "search", "list"])
-const FORMATTER_COMMAND = /^(npx )?(prettier|biome|black|gofmt|rustfmt|swift-format)/
-const TEST_COMMAND = /^(npm test|npx vitest|npx jest|pytest|go test|cargo test)/
+// The tool name ends at whitespace or at the end of the command: a name that
+// only starts like a formatter or a test runner is neither.
+const FORMATTER_COMMAND = /^(npx )?(prettier|biome|black|gofmt|rustfmt|swift-format)(\s|$)/
+const TEST_COMMAND = /^(npm test|npx vitest|npx jest|pytest|go test|cargo test)(\s|$)/
 const LONG_RUNNING_COMMANDS = [/^(npm|pnpm|yarn|bun)\s+(install|build|test|run)/, /^cargo\s+(build|test|run)/, /^go\s+(build|test|run)/]
 const DOC_FILE = /\.(md|txt)$/i
 const DOC_FILE_KEPT = /README|CHANGELOG|LICENSE|CONTRIBUTING/
@@ -125,9 +127,10 @@ export function permissionDecision(action: string, command: string): string | nu
 export type EgcCore = ReturnType<typeof createEgcCore>
 
 export function createEgcCore(options: CoreOptions) {
+  // The changed-files store is one per process, initialized by the entrypoint
+  // that owns it, not by each core.
   const { worktreePath, pluginDir, log, shell } = options
   const scriptsRoot = options.scriptsRoot ?? worktreePath
-  initStore(worktreePath)
 
   const editedFiles = new Set<string>()
   const pendingWrites = new Map<string, { path: string; type: ChangeType }>()

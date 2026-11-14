@@ -21,6 +21,7 @@ import * as path from "path"
 import { fileURLToPath } from "url"
 import type { PluginInput } from "@opencode-ai/plugin"
 import changedFilesTool from "../tools/changed-files.js"
+import { initStore } from "./lib/changed-files-store.js"
 import { createEgcCore, dispatchBusEvent, permissionDecision, type EgcCore, type LogLevel, type Logger } from "./lib/egc-plugin-core.js"
 import { commandOf, type ToolArgs } from "./lib/guardian-bridge.js"
 
@@ -59,6 +60,7 @@ type V1PermissionAsk = { tool?: string; type?: string; pattern?: unknown; args?:
 const server = async ({ client, $, directory, worktree }: Partial<PluginInput> = {}) => {
   const worktreePath = worktree || directory || process.cwd()
   const log = loggerOf(client)
+  initStore(worktreePath)
   const core = createEgcCore({ worktreePath, pluginDir, log, shell: $ })
 
   return {
@@ -150,8 +152,10 @@ type CompactionEvent = { sessionID?: string; system?: Array<{ type: string; text
 type BusEvent = { properties?: { sessionID?: unknown; info?: { id?: unknown } } }
 type CoreResolver = (sessionID: unknown) => Promise<EgcCore>
 
-// How many sessions and checkouts one OpenCode process remembers; the oldest
-// entry leaves when a newer one arrives past the cap.
+// How many sessions one OpenCode process remembers the directory of; the
+// oldest entry leaves when a newer one arrives past the cap, and the host is
+// asked again for it. The cores themselves are never evicted: one per
+// checkout the process opens, each holding its pending writes and its audit.
 const MAX_REMEMBERED = 64
 
 function remember<Key, Value>(map: Map<Key, Value>, key: Key, value: Value): void {
@@ -229,6 +233,9 @@ async function setup(context?: PluginContext): Promise<() => Promise<void>> {
   const location = context?.location?.project?.directory ?? context?.location?.directory ?? process.cwd()
   const log = loggerOf(context?.client)
   const registrations: Array<{ dispose: () => unknown }> = []
+  // The changed-files store is one per process, rooted at the plugin location;
+  // a change in another checkout is recorded by its absolute path.
+  initStore(location)
 
   // One core per checkout: a session may work in another checkout than the
   // plugin instance, so its directory is asked of the host once per session,
@@ -240,7 +247,7 @@ async function setup(context?: PluginContext): Promise<() => Promise<void>> {
     let core = cores.get(directory)
     if (!core) {
       core = createEgcCore({ worktreePath: directory, pluginDir, scriptsRoot: location, log })
-      remember(cores, directory, core)
+      cores.set(directory, core)
     }
     return core
   }
