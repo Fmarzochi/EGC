@@ -143,6 +143,26 @@ function runTests() {
       assert.notStrictEqual(marker, JSON.parse(fs.readFileSync(path.join(HOME, '.egc', 'team.json'), 'utf8')).teamKey, 'the marker is not the key');
     });
 
+    run('team sync says a marker damaged on the remote as a warning, writes it again and still exits 0', () => {
+      const marker = git(['show', 'main:TEAM'], REMOTE).trim();
+      // Somebody edited the marker in the repository: the checkout of this
+      // machine pushes the damaged text, as another machine would have.
+      const checkout = path.join(HOME, '.egc', 'team-sync');
+      fs.writeFileSync(path.join(checkout, 'TEAM'), `${'a'.repeat(64)}\n`);
+      git(['add', 'TEAM'], checkout);
+      git(['-c', 'user.name=other', '-c', 'user.email=other@egc.local', 'commit', '-q', '-m', 'a damaged marker'], checkout);
+      git(['push', '-q', 'origin', 'main'], checkout);
+      assert.strictEqual(git(['show', 'main:TEAM'], REMOTE).trim(), 'a'.repeat(64), 'the remote holds the damaged marker');
+
+      const run = teamCli(['sync']);
+      assert.strictEqual(run.status, 0, `a damaged marker next to files the key opens is not a failure:\n${run.stdout}\n${run.stderr}`);
+      assert.ok(run.stdout.includes('Sync complete:'), run.stdout);
+      assert.ok(run.stdout.includes('Warning: The TEAM marker of'), `the damage is said:\n${run.stdout}`);
+      assert.ok(run.stdout.includes('written again with this sync'), run.stdout);
+      assert.strictEqual(git(['show', 'main:TEAM'], REMOTE).trim(), marker, 'the marker of the team is back on the remote');
+      assert.strictEqual(fs.readFileSync(path.join(checkout, 'TEAM'), 'utf8').trim(), marker, 'and in the checkout');
+    });
+
     run('team init with a key that is not the team\'s against a repository that names its team exits 1 and keeps the previous configuration', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const saved = fs.readFileSync(configPath, 'utf8');
