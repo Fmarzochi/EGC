@@ -54,14 +54,34 @@ OpenCode is an alternative CLI for AI-assisted development that supports **all**
 
 **OpenCode plugin (.opencode/plugins/prettier-hook.ts):**
 ```typescript
-export const PrettierPlugin = async ({ $ }) => {
-  return {
-    "file.edited": async (event) => {
-      if (event.path.match(/\.(ts|tsx|js|jsx)$/)) {
-        await $`prettier --write ${event.path}`
-      }
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+
+const run = promisify(execFile)
+
+// One default export, read by both loaders: OpenCode 2 takes `id` and
+// `setup`, OpenCode 1 (1.18.29 and newer) takes `server`. Nothing else is
+// exported, since OpenCode 1 calls every export as a plugin of its own.
+export default {
+  id: "prettier-hook",
+  // OpenCode 2 registers hooks on the context it hands over; no shell comes
+  // with it, so the formatter runs through child_process and is awaited, as
+  // the V1 branch awaits the shell.
+  async setup(ctx) {
+    await ctx.tool.hook("execute.after", async (event) => {
+      const file = event.input?.filePath
+      if (event.tool === "edit" && /\.(ts|tsx|js|jsx)$/.test(file)) await run("prettier", ["--write", file])
+    })
+  },
+  // OpenCode 1 reads the hooks object and hands over Bun's shell.
+  async server({ $ }) {
+    return {
+      "tool.execute.after": async (input) => {
+        const file = input.args?.filePath
+        if (input.tool === "edit" && /\.(ts|tsx|js|jsx)$/.test(file)) await $`prettier --write ${file}`
+      },
     }
-  }
+  },
 }
 ```
 
@@ -69,13 +89,14 @@ export const PrettierPlugin = async ({ $ }) => {
 
 The EGC OpenCode configuration includes translated hooks:
 
-| Hook | OpenCode Event | Purpose |
-|------|----------------|---------|
-| Prettier auto-format | `file.edited` | Format JS/TS files after edit |
-| TypeScript check | `tool.execute.after` | Run tsc after editing .ts files |
-| console.log warning | `file.edited` | Warn about console.log statements |
-| Session notification | `session.idle` | Notify when task completes |
-| Security check | `tool.execute.before` | Check for secrets before commit |
+| Hook | OpenCode 1 event | OpenCode 2 hook | Purpose |
+|------|------|------|---------|
+| Guardian and Fact-Forcing Gate | `tool.execute.before` | `tool.hook("execute.before")` | Refuse denied commands and protected writes, ask for the facts before the first edit |
+| Dashboard and changed files | `tool.execute.before`, `tool.execute.after` | `tool.hook("execute.before")`, `tool.hook("execute.after")` | Telemetry and change tracking |
+| Session lifecycle and file edits | `event` | `event.subscribe` | console.log audit, cleanup, edit tracking |
+| Shell environment | `shell.env` | `shell.hook("create.before")` | Project variables for every command |
+| Compaction | `experimental.session.compacting` | `session.hook("compaction")` | EGC block kept across a compaction |
+| Permissions | `permission.ask` | `permission.hook("evaluate")` | Read-only tools, formatters and test runners allowed |
 
 ## Migration Steps
 
@@ -319,6 +340,7 @@ If you want the full EGC OpenCode workflow surface, use the repository's bundled
 1. Verify plugin file exists in `.opencode/plugins/`
 2. Check TypeScript syntax is valid
 3. Ensure `plugin` array in `opencode.json` includes the path
+4. On OpenCode 2, the module must have a default export with an `id` and a `setup` function; a module that exports a function by name is refused with `Plugin must export a default definition with an id and an effect or setup function`. OpenCode 1 calls every export as a plugin, so keep that definition as the only export, with the V1 hooks object under its `server` entry
 
 ### Agent Not Found
 
