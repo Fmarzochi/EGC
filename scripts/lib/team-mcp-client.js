@@ -21,7 +21,17 @@
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
-const PACKAGE_VERSION = require('../../package.json').version;
+// The version the handshake announces; an install that copied this file
+// next to the hooks has no package.json two levels up.
+function packageVersion() {
+  try {
+    return require('../../package.json').version;
+  } catch {
+    return '0';
+  }
+}
+
+const PACKAGE_VERSION = packageVersion();
 const DEFAULT_SERVER_SCRIPT = path.join(__dirname, '..', '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const MCP_PROTOCOL_VERSION = '2024-11-05';
 const MCP_INITIALIZE_ID = 1;

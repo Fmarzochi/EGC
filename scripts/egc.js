@@ -115,7 +115,7 @@ const COMMANDS = {
   },
   team: {
     script: 'team.js',
-    description: 'Team memory sync: init, sync, or status. Share state across teammates.',
+    description: 'Team memory sync: init, sync, autosync, or status. Share state across your machines.',
   },
   budget: {
     script: 'budget.js',

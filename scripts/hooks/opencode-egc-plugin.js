@@ -23,6 +23,15 @@ const { run: runCrusherRewrite } = require('../scripts/hooks/pre-bash-crusher-re
 const { resolveNodeExecutable } = require('../scripts/lib/guardian-bin');
 const { isHookEnabled } = require('../scripts/lib/hook-flags');
 
+// The autosync switch of the Team Brain; an install without the helper has
+// the switch off.
+let isAutosyncOn = () => false;
+try {
+  ({ isAutosyncOn } = require('../scripts/lib/team-config'));
+} catch {
+  // an older install without the helper: the bridge keeps its short budget
+}
+
 const SESSION_CONTEXT_SCRIPT = path.join(
   __dirname,
   '..',
@@ -31,6 +40,19 @@ const SESSION_CONTEXT_SCRIPT = path.join(
   'opencode-session-start.js'
 );
 const DEFAULT_SESSION_CONTEXT_TIMEOUT_MS = 3000;
+// The bridge restores the state in well under a second; when the Team Brain
+// syncs before the read (#2059) it also waits on a remote, so its budget is
+// the sync's own (15 s) plus the restore.
+const AUTOSYNC_SESSION_CONTEXT_TIMEOUT_MS = 20000;
+
+// How long the bridge may take: the environment when set, else the default
+// of a plain restore, or the longer one when a sync runs first.
+function sessionContextTimeoutMs() {
+  return positiveIntegerEnv(
+    'EGC_SESSION_CONTEXT_TIMEOUT_MS',
+    isAutosyncOn() ? AUTOSYNC_SESSION_CONTEXT_TIMEOUT_MS : DEFAULT_SESSION_CONTEXT_TIMEOUT_MS
+  );
+}
 
 // OpenCode's file tools and the Claude-style names the write validator
 // expects; OpenCode passes filePath/content/newString in the tool args.
@@ -135,10 +157,7 @@ function withTimeout(operation, timeoutMs) {
 // has the same need.
 function loadSessionContext(projectDirectory, sessionId) {
   return new Promise(resolve => {
-    const timeoutMs = positiveIntegerEnv(
-      'EGC_SESSION_CONTEXT_TIMEOUT_MS',
-      DEFAULT_SESSION_CONTEXT_TIMEOUT_MS
-    );
+    const timeoutMs = sessionContextTimeoutMs();
     const maxOutputBytes = positiveIntegerEnv(
       'EGC_SESSION_CONTEXT_MAX_BYTES',
       DEFAULT_MAX_SESSION_CONTEXT_BYTES

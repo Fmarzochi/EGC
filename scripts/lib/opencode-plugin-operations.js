@@ -41,6 +41,14 @@ const SESSION_CONTEXT_LIB_SOURCES = [
   'scripts/lib/utils-paths.js',
   'scripts/lib/utils-session.js',
   'scripts/lib/utils-file.js',
+  // The Team Brain sync around the session (#2059): the adapter syncs
+  // through the memory server when team.json asks for it, the plugin reads
+  // the switch for the budget of the bridge, and both find the built server
+  // through the root resolver.
+  'scripts/lib/team-config.js',
+  'scripts/lib/team-autosync.js',
+  'scripts/lib/team-mcp-client.js',
+  'scripts/lib/resolve-egc-root.js',
   // propagate-state.js's commit-privacy guard shells out to this script as
   // the git clean-filter command -- must be present (this target preserves
   // the scripts/ prefix, so it lands one level up from propagate-state.js,
