@@ -212,22 +212,19 @@ function keyNotProven(merge: TeamMergeOutcome): boolean {
 export type MarkerState = 'absent' | 'match' | 'mismatch';
 
 // The remote as a message shows it: a credential a URL carries (user:token@
-// after the scheme) never reaches the terminal or a log, by a scan that
-// stays linear in the text.
+// after the scheme) never reaches the terminal or a log. A remote that is
+// not a URL (the scp form, a local path) has no credential and stands as it is.
 export function redactRemote(remote: string): string {
-  let shown = '';
-  let rest = remote;
-  for (;;) {
-    const scheme = rest.indexOf('://');
-    if (scheme === -1) return shown + rest;
-    const start = scheme + 3;
-    const authority = rest.slice(start);
-    const end = authority.search(/[/\s]/);
-    const host = end === -1 ? authority : authority.slice(0, end);
-    const at = host.lastIndexOf('@');
-    shown += rest.slice(0, start) + (at === -1 ? host : host.slice(at + 1));
-    rest = authority.slice(host.length);
+  let url: URL;
+  try {
+    url = new URL(remote);
+  } catch {
+    return remote;
   }
+  if (!url.username && !url.password) return remote;
+  url.username = '';
+  url.password = '';
+  return url.toString();
 }
 
 // What the TEAM marker of the checkout says about a key: absent when there
