@@ -9,7 +9,7 @@ import type { SyncConfig, SyncStatus, SyncResult } from './SyncBackend';
 import { isEncrypted, loadOrCreateEncKey, readPrivateKeyFile, readStateFile, writeStateFile } from '../encryption';
 import { loadOrCreateKey as loadOrCreateIntegrityKey, writeHmac } from '../integrity';
 import { branchStateKey, projectIdentity, projectSlug } from '../branch-state';
-import { generateTeamKey, openEnvelope, parseTeamKey, sealEnvelope } from './envelope';
+import { TEAM_MARKER_FILE, generateTeamKey, markerMatches, openEnvelope, parseTeamKey, sealEnvelope, teamKeyMarker } from './envelope';
 import { canonicalForm, mergeStateDocuments } from './merge-sections';
 
 // The integrity sidecar next to a state document is a per-machine value,
@@ -71,6 +71,13 @@ export async function teamInit(backend: string, remote: string, branch: string =
   const instance = new BackendClass();
   try {
     await instance.init(config);
+    // The init pulled the remote: a repository that already names its team
+    // refuses a key that is not that team's before any configuration is
+    // written, whether the key was given or made here for a new team, and a
+    // repository from before the marker that already holds state asks the
+    // key to open one of its files, as the sync would.
+    const judged = judgeTeamKey(SYNC_CHECKOUT_DIR, SYNC_STATE_DIR, parseTeamKey(config.teamKey) as Buffer, remote, { requireProofWithoutMarker: true });
+    if (judged.verdict === 'wrong') throw new Error(judged.message);
     writeTeamConfig(config);
     return config;
   } finally {
@@ -95,6 +102,7 @@ export async function teamSync(): Promise<SyncResult> {
     conflictCount: 0,
     rejectedCount: 0,
     errors: [],
+    warnings: [],
   };
   const teamKey = parseTeamKey(config.teamKey);
   if (!teamKey) {
@@ -124,6 +132,18 @@ export async function teamSync(): Promise<SyncResult> {
       result.errors.push(`Pull failed: ${String(err)}`);
       return result;
     }
+
+    // The marker of the team key, before anything is merged, written locally
+    // or pushed: a key that is not the team's stops here, a damaged marker
+    // (the key opens the state files the marker disowns) is said and
+    // rewritten with the push below, a repository without one keeps the rule
+    // of the opened files.
+    const judged = judgeTeamKey(SYNC_CHECKOUT_DIR, SYNC_STATE_DIR, teamKey, config.remote);
+    if (judged.verdict === 'wrong') {
+      result.errors.push(judged.message);
+      return result;
+    }
+    if (judged.verdict === 'damaged') result.warnings.push(judged.message);
 
     // Step 2: Merge into local state; only verified team envelopes count.
     const merge = mergeTeamStateFrom(SYNC_STATE_DIR, LOCAL_STATE_DIR, teamKey, personalKey, loadOrCreateIntegrityKey());
@@ -181,11 +201,152 @@ export async function teamStatus(): Promise<SyncStatus> {
   }
 }
 
-const SYNC_STATE_DIR = path.join(os.homedir(), '.egc', 'team-sync', 'state');
+const SYNC_CHECKOUT_DIR = path.join(os.homedir(), '.egc', 'team-sync');
+const SYNC_STATE_DIR = path.join(SYNC_CHECKOUT_DIR, 'state');
 const LOCAL_STATE_DIR = path.join(os.homedir(), '.egc', 'state');
 
 function keyNotProven(merge: TeamMergeOutcome): boolean {
   return merge.opened === 0 && merge.unopened.length > 0;
+}
+
+export type MarkerState = 'absent' | 'match' | 'mismatch';
+
+// The remote as a message shows it: a credential a URL carries (user:token@
+// after the scheme) never reaches the terminal or a log. A remote that is
+// not a URL (the scp form, a local path) has no credential and stands as it is.
+export function redactRemote(remote: string): string {
+  let url: URL;
+  try {
+    url = new URL(remote);
+  } catch {
+    return remote;
+  }
+  if (!url.username && !url.password) return remote;
+  url.username = '';
+  url.password = '';
+  return url.toString();
+}
+
+// What the TEAM marker of the checkout says about a key: absent when there
+// is no entry at all (a repository from before the marker, or still empty),
+// a match for the key of its team, a mismatch for any other text and for
+// anything that is not a regular file (a link, a pipe, a directory). The
+// entry is opened without following a link and without blocking, and read
+// only once it is known to be a regular file.
+export function readMarkerState(checkoutDir: string, teamKey: Buffer): MarkerState {
+  const file = path.join(checkoutDir, TEAM_MARKER_FILE);
+  if (isLink(file)) return 'mismatch';
+  let descriptor: number;
+  try {
+    descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'ENOENT' ? 'absent' : 'mismatch';
+  }
+  try {
+    if (!fs.fstatSync(descriptor).isFile()) return 'mismatch';
+    return markerMatches(fs.readFileSync(descriptor, 'utf-8'), teamKey) ? 'match' : 'mismatch';
+  } catch {
+    return 'mismatch';
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+// Writes the marker of this key at the root of the checkout, through a
+// temporary created exclusively and renamed over the marker: a link planted
+// or replaced at the marker is never written through, and the marker is
+// never seen half written.
+export function writeTeamMarker(checkoutDir: string, teamKey: Buffer): void {
+  const file = path.join(checkoutDir, TEAM_MARKER_FILE);
+  fs.mkdirSync(checkoutDir, { recursive: true });
+  const temporary = path.join(checkoutDir, `.${TEAM_MARKER_FILE}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`);
+  const descriptor = fs.openSync(temporary, 'wx', 0o644);
+  try {
+    fs.writeSync(descriptor, `${teamKeyMarker(teamKey)}\n`);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  try {
+    // Whatever sits at the marker and is not a regular file (a link, a
+    // directory, a pipe) is no marker and gives way; a regular file is
+    // replaced by the rename itself.
+    if (!isRegularFile(file)) fs.rmSync(file, { recursive: true, force: true });
+    fs.renameSync(temporary, file);
+  } catch (err) {
+    removeSyncFile(temporary);
+    throw err;
+  }
+}
+
+function isRegularFile(filePath: string): boolean {
+  try {
+    return fs.lstatSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+// The state files of the sync tree a key could open: regular files that are
+// neither sidecars nor hidden, none when the tree is missing or sits behind
+// a link, the same guard the merge applies before it walks the tree.
+function stateFilesOf(syncStateDir: string): string[] {
+  if (linkedDirectoryTowards(syncStateDir) || !fs.existsSync(syncStateDir)) return [];
+  return walkEntries(syncStateDir).files.filter(file => !isSidecar(file) && !isHiddenEntry(file, syncStateDir));
+}
+
+// Whether the key opens at least one envelope of the sync tree, reading
+// only: the proof the marker rule falls back on when the marker disagrees,
+// and the proof an init asks of a repository from before the marker.
+export function keyOpensAny(syncStateDir: string, teamKey: Buffer): boolean {
+  return stateFilesOf(syncStateDir).some(file => {
+    try {
+      return openEnvelope(fs.readFileSync(file, 'utf-8'), teamKey, path.relative(syncStateDir, file)) !== null;
+    } catch {
+      return false;
+    }
+  });
+}
+
+export interface TeamKeyJudgement {
+  verdict: 'ok' | 'damaged' | 'wrong';
+  message?: string;
+}
+
+export interface TeamKeyJudgementOptions {
+  // An init has no merge to fall back on: a repository without a marker
+  // that already holds state proves the key by opening one file, before
+  // any configuration is written; an empty repository takes any key, since
+  // it starts the team.
+  requireProofWithoutMarker?: boolean;
+}
+
+// The verdict on a key once the checkout holds the remote: ok when the
+// marker matches or is absent, damaged when it disagrees but the key opens
+// the state files (the marker was not written by this key, the files were),
+// wrong when it disagrees and the key opens none.
+export function judgeTeamKey(checkoutDir: string, syncStateDir: string, teamKey: Buffer, remote: string, options: TeamKeyJudgementOptions = {}): TeamKeyJudgement {
+  const shownRemote = redactRemote(remote);
+  const marker = readMarkerState(checkoutDir, teamKey);
+  if (marker === 'match') return { verdict: 'ok' };
+  if (marker === 'absent') {
+    if (options.requireProofWithoutMarker && stateFilesOf(syncStateDir).length > 0 && !keyOpensAny(syncStateDir, teamKey)) {
+      return {
+        verdict: 'wrong',
+        message: `This key opens none of the state files of ${shownRemote}, a repository from before the ${TEAM_MARKER_FILE} marker: it is not the key of that team. Join with the key of the team, or use an empty repository for a new one.`,
+      };
+    }
+    return { verdict: 'ok' };
+  }
+  if (keyOpensAny(syncStateDir, teamKey)) {
+    return {
+      verdict: 'damaged',
+      message: `The ${TEAM_MARKER_FILE} marker of ${shownRemote} did not match this key, but the key opens the state files of the repository: the marker was damaged and is written again with this sync.`,
+    };
+  }
+  return {
+    verdict: 'wrong',
+    message: `This key is not the key of the team that uses ${shownRemote}: the ${TEAM_MARKER_FILE} marker of the repository was written with another key, and this key opens none of its state files. Join with the key of that team, or use an empty repository for a new one.`,
+  };
 }
 
 function keyNotProvenMessage(count: number): string {
@@ -196,6 +357,10 @@ function keyNotProvenMessage(count: number): string {
 async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalKey: Buffer, unopened: readonly string[], result: SyncResult): Promise<void> {
   try {
     stageTeamState(LOCAL_STATE_DIR, SYNC_STATE_DIR, teamKey, personalKey, new Set(unopened));
+    // The key is the team's here (it opened a file, or the repository holds
+    // no state yet): a repository without the marker, or with a damaged
+    // one, gets the marker of this key in the same push.
+    if (readMarkerState(SYNC_CHECKOUT_DIR, teamKey) !== 'match') writeTeamMarker(SYNC_CHECKOUT_DIR, teamKey);
     if (await instance.push()) result.pushedCount = 1;
   } catch (err) {
     result.errors.push(`Push failed: ${String(err)}`);

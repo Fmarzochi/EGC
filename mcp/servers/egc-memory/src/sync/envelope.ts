@@ -28,8 +28,27 @@ export function envelopePath(relativePath: string): string {
   return path.sep === '/' ? relativePath : relativePath.replaceAll(path.sep, '/');
 }
 
-function derivedKey(teamKey: Buffer, purpose: 'encrypt' | 'sign'): Buffer {
+function derivedKey(teamKey: Buffer, purpose: 'encrypt' | 'sign' | 'marker'): Buffer {
   return Buffer.from(crypto.hkdfSync('sha256', teamKey, '', `egc-team-envelope-${purpose}`, 32));
+}
+
+// The file at the root of the shared repository that names its team: the
+// HMAC-SHA256 of a fixed text under a key derived from the team key for this
+// purpose alone (#2080). It proves a key is the team's before any state file
+// is read, and nothing in it lets anyone recover the key.
+export const TEAM_MARKER_FILE = 'TEAM';
+const TEAM_MARKER_SUBJECT = 'egc-team-key-marker';
+
+export function teamKeyMarker(teamKey: Buffer): string {
+  return crypto.createHmac('sha256', derivedKey(teamKey, 'marker')).update(TEAM_MARKER_SUBJECT, 'utf8').digest('hex');
+}
+
+// Whether a marker file's text is the marker of this key: a comparison in
+// constant time of the 64 hex characters, anything else is no match.
+export function markerMatches(text: string, teamKey: Buffer): boolean {
+  const given = text.trim();
+  if (!TEAM_KEY_HEX_RE.test(given)) return false;
+  return crypto.timingSafeEqual(Buffer.from(given, 'hex'), Buffer.from(teamKeyMarker(teamKey), 'hex'));
 }
 
 function signature(teamKey: Buffer, envelopeRelativePath: string, data: Buffer): Buffer {

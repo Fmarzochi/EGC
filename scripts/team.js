@@ -257,6 +257,7 @@ async function handleSync() {
   // the errors of the run; anything else is not a completed sync.
   const result = response?.result ?? {};
   const errors = Array.isArray(result.errors) ? result.errors : [];
+  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
   const failed = response?.success !== true || errors.length > 0;
   console.log(failed ? 'Sync did not complete:' : 'Sync complete:');
   if (result.pulledCount !== undefined) console.log(`  Pulled: ${result.pulledCount} files`);
@@ -266,6 +267,9 @@ async function handleSync() {
   }
   if (result.conflictCount !== undefined && result.conflictCount > 0) {
     console.log(`  Conflicts: ${result.conflictCount} (resolve manually in ~/.egc/team-sync/)`);
+  }
+  for (const warning of warnings) {
+    console.log(`  Warning: ${warning}`);
   }
   for (const error of errors) {
     console.error(`  Error: ${error}`);

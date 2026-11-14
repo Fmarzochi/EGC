@@ -18,6 +18,9 @@ export interface SyncResult {
   conflictCount: number;
   rejectedCount: number;
   errors: string[];
+  // What the sync fixed on the way and the person should know, without
+  // the sync having failed: a damaged team marker written again.
+  warnings: string[];
 }
 
 // readRemote false skips every read of the remote: the backend is set up
