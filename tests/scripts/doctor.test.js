@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { suiteEnv } = require('../fixtures/suite-env');
 const { execFileSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'doctor.js');
@@ -1292,7 +1293,7 @@ function runTests() {
     try {
       const result = run([], { cwd: projectRoot, homeDir });
       assert.strictEqual(result.code, 0, result.stdout + result.stderr);
-      assert.ok(result.stdout.includes('Team: not configured (egc team init --backend git --remote <url>)'), result.stdout);
+      assert.ok(result.stdout.includes('Team: not configured (egc team init --backend git --remote <url>, with --key <team key> to join a team)'), result.stdout);
       assert.ok(result.stdout.includes('Summary: checked=0, ok=0, warnings=0, errors=0'), result.stdout);
       const asJson = run(['--json'], { cwd: projectRoot, homeDir });
       assert.strictEqual(JSON.parse(asJson.stdout).team.configured, false);
@@ -1309,7 +1310,7 @@ function runTests() {
     try {
       const remote = path.join(homeDir, 'remote.git');
       const checkout = path.join(homeDir, '.egc', 'team-sync');
-      const gitEnv = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, GIT_CONFIG_NOSYSTEM: '1' };
+      const gitEnv = { ...suiteEnv(process.env), HOME: homeDir, USERPROFILE: homeDir, GIT_CONFIG_NOSYSTEM: '1' };
       const git = (args, cwd) => execFileSync(GIT_BIN, args, { cwd, env: gitEnv, encoding: 'utf8', stdio: 'pipe' }).trim();
       fs.mkdirSync(remote, { recursive: true });
       git(['init', '--bare', '-q', '-b', 'main'], remote);
@@ -1340,7 +1341,7 @@ function runTests() {
       writeJson(configPath, { backend: 'git', remote, branch: 'main', teamKey: 'not-a-key' });
       const badKey = run([], { cwd: projectRoot, homeDir });
       assert.strictEqual(badKey.code, 0, 'a team warning never fails the doctor');
-      assert.ok(badKey.stdout.includes('[WARNING] Team key missing or invalid in ~/.egc/team.json: run egc team init again'), badKey.stdout);
+      assert.ok(badKey.stdout.includes('[WARNING] Team key missing or invalid in ~/.egc/team.json: run egc team init --backend git --remote <url> --key <team key>'), badKey.stdout);
       assert.ok(badKey.stdout.includes('Summary: checked=0, ok=0, warnings=1, errors=0'), badKey.stdout);
       const asJson = run(['--json'], { cwd: projectRoot, homeDir });
       const parsed = JSON.parse(asJson.stdout);

@@ -157,7 +157,7 @@ A sync never deletes a local state file. A file removed on the remote is not rem
 
 ## Checking the team with `egc doctor`
 
-`egc doctor` ends with a `Team` block, after the MCP servers:
+`egc doctor` prints a `Team` block after the MCP servers (the lines about the state store, when there are any, come after it):
 
 ```text
 Team: git https://github.com/you/egc-memory.git, branch main, key present
@@ -168,7 +168,7 @@ Team: git https://github.com/you/egc-memory.git, branch main, key present
 Team summary: warnings=0
 ```
 
-Without a team the block is one line, `Team: not configured (egc team init --backend git --remote <url>)`, and no warning. `Last sync` is the time of the last commit of `~/.egc/team-sync/` (`never` before the first sync), `Local state` counts the documents under `~/.egc/state/` the next sync would seal, and `Remote` is one `git ls-remote` with a budget of 5 seconds, skipped with `not checked` when no network interface is up. A team key missing or not 64 hexadecimal characters, a `~/.egc/team-sync/` that is not a git repository, and a remote that cannot be read are warnings, counted in the doctor's total and never errors. The block reads files and runs git; it never calls the memory server.
+Without a team the block is one line, `Team: not configured (egc team init --backend git --remote <url>, with --key <team key> to join a team)`, and no warning. `Last sync` is the time of the last commit of `~/.egc/team-sync/` (`never` before the first sync), `Local state` counts the documents under `~/.egc/state/` the next sync would seal (hidden entries and `.hmac` sidecars left out), and `Remote` is one `git ls-remote` with a budget of 5 seconds, `reachable, no branch pushed yet` before the first sync of the team, skipped with `not checked` when no network interface is up. A remote URL that carries a credential is shown without it, in the block and in the warnings. These are warnings, counted in the doctor's total and never errors: a team key missing or not 64 hexadecimal characters, a `~/.egc/team.json` that exists but cannot be read as a configuration, a backend other than git, a `~/.egc/team-sync/` that is not a git repository or that follows another remote or branch than `team.json` (the next sync would refuse it), and a remote that cannot be read or did not answer within the budget. Each warning names the init to run with `--key <team key>`, since an init without the key starts a new team. The block reads files and runs git; it never calls the memory server.
 
 ## Troubleshooting
 
