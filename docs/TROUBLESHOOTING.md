@@ -122,6 +122,12 @@ The OpenCode log (`~/.local/share/opencode/log/opencode.log`, on Windows `%USERP
 
 **Fix:** update EGC and run `egc auto-update` (or `egc install --target opencode --profile full`). The plugin now serves both APIs from the same file: OpenCode 2 loads it through `setup`, OpenCode 1.18.29 and newer through the `server` entrypoint. Start OpenCode again (or `opencode reload`) and the line is gone. Releases of OpenCode 1 older than 1.18.29 call every export as a function and do not load the new file; update OpenCode.
 
+## On OpenCode 2 the Guardian and the Token Crusher do nothing, or every command and write is refused
+
+With the plugin loaded, a destructive command ran untouched and `egc run` never wrapped a noisy one, while a write to a protected path ended in `EGC Guardian could not validate this write, so it was not made: the validator stopped with exit code 1`, and from then on every command and write was refused (#2107). OpenCode 2 names its command tool `shell`, which the plugin did not judge, and inside OpenCode the plugin runs under Bun, where `process.execPath` is the `opencode` binary and not Node, so the validator could not start.
+
+**Fix:** update EGC and run `egc auto-update`. The plugin judges `shell` and `bash` alike, and the Guardian runs under the `node` found on an absolute `PATH` entry. While you repair an install, the plugin now honors the same flags as the other tools: `EGC_DISABLED_HOOKS=pre:bash:guardian-validate` lifts the command gate, `pre:edit-write:guardian-validate` the write gate, `pre:bash:crusher-rewrite` turns the rewrite off, and `EGC_HOOK_PROFILE=minimal` keeps the Guardian without the Crusher. Set them in the environment OpenCode starts from.
+
 ## `egc team sync` says the memory server did not answer
 
 The message reads `team sync needs the memory server (The memory server did not answer team_sync within 60 s; the server wrote: ...)`. The server started and took the call; something inside it never came back, and the lines after `the server wrote:` are the last thing it logged. When it reads `did not answer the handshake before team_sync` instead, the server never got to the call: it stopped while starting, before any git ran, and the logged lines and `~/.egc/logs/` say where.

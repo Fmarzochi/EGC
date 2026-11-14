@@ -86,6 +86,76 @@ function main() {
     assert.strictEqual(guardianFailureReason({ kind: 'something else' }, 5000), 'the validator gave no verdict');
   });
 
+  console.log('\nguardian-bin.js, resolveNodeExecutable() and callGuardianVerdict()');
+
+  const FAKE_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
+  const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+
+  run('runs the validator with process.execPath when that is Node', () => {
+    const { resolveNodeExecutable, callGuardianVerdict } = freshGuardianBin();
+    assert.strictEqual(resolveNodeExecutable(), process.execPath);
+    const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', CLI_TIMEOUT_MS);
+    assert.deepStrictEqual(answer, { ok: true, value: { allowed: true } });
+  });
+
+  run('runs the validator with the Node of an absolute PATH entry when process.execPath is another runtime (#2107)', () => {
+    // The OpenCode plugin runs under Bun, where process.execPath is the
+    // opencode binary: it cannot run the validator, and every call ended
+    // without a verdict. A relative PATH entry is never searched, so a node
+    // planted in the project directory is never the one that runs (#1530).
+    const originalExecPath = process.execPath;
+    const realNodeDir = path.dirname(process.execPath);
+    const nodeName = process.platform === 'win32' ? 'node.exe' : 'node';
+    try {
+      process.execPath = process.platform === 'win32' ? 'C:\\Users\\someone\\AppData\\Local\\opencode\\opencode.exe' : '/usr/local/bin/opencode';
+      withEnv({ PATH: `.${path.delimiter}${realNodeDir}` }, () => {
+        const { resolveNodeExecutable, findNodeOnPath, callGuardianVerdict } = freshGuardianBin();
+        assert.strictEqual(findNodeOnPath(), path.join(realNodeDir, nodeName));
+        assert.strictEqual(resolveNodeExecutable(), path.join(realNodeDir, nodeName));
+        const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', CLI_TIMEOUT_MS);
+        assert.deepStrictEqual(answer, { ok: true, value: { allowed: true } });
+      });
+      // The name Debian and Ubuntu packages gave the binary is found too: a
+      // directory that holds only `nodejs`, linked to the real Node.
+      if (process.platform !== 'win32') {
+        const aliasDir = createTempDir('egc-guardian-bin-nodejs-');
+        try {
+          // A file system that refuses links (a mount without them, a
+          // sandbox) skips the alias, as the suites that plant links do;
+          // any other failure is a real one.
+          let linked = true;
+          try {
+            fs.symlinkSync(path.join(realNodeDir, nodeName), path.join(aliasDir, 'nodejs'));
+          } catch (error) {
+            if (!['EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP'].includes(error.code)) throw error;
+            linked = false;
+            console.log(`    (nodejs alias skipped: links refused here, ${error.code})`);
+          }
+          if (linked) {
+            withEnv({ PATH: aliasDir }, () => {
+              const { findNodeOnPath, callGuardianVerdict } = freshGuardianBin();
+              assert.strictEqual(findNodeOnPath(), path.join(aliasDir, 'nodejs'));
+              const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', CLI_TIMEOUT_MS);
+              assert.deepStrictEqual(answer, { ok: true, value: { allowed: true } });
+            });
+          }
+        } finally {
+          fs.rmSync(aliasDir, { recursive: true, force: true });
+        }
+      }
+      withEnv({ PATH: `.${path.delimiter}` }, () => {
+        const { resolveNodeExecutable, callGuardianVerdict, guardianFailureReason } = freshGuardianBin();
+        assert.strictEqual(resolveNodeExecutable(), null, 'a relative entry is never searched');
+        const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', CLI_TIMEOUT_MS);
+        assert.strictEqual(answer.ok, false);
+        assert.strictEqual(answer.kind, 'unstartable');
+        assert.match(guardianFailureReason(answer, 10000), /the validator could not be started \(no node executable on an absolute PATH entry/);
+      });
+    } finally {
+      process.execPath = originalExecPath;
+    }
+  });
+
   console.log('\nguardian-bin.js, resolveGuardianCli()');
 
   run('never trusts a project-local .mcp.json (RCE closed)', () => {
