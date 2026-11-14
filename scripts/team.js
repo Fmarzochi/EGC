@@ -9,7 +9,7 @@ const { execFileSync } = require('node:child_process');
 
 const { callMcpTool: callMemoryTool } = require('./lib/team-mcp-client');
 const { teamConfigPath, readTeamConfig, publishTeamConfigText, writeTeamConfig } = require('./lib/team-config');
-const { lastAutosync } = require('./lib/team-autosync');
+const { lastAutosync, clearAutosyncStamp } = require('./lib/team-autosync');
 
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const TEAM_CONFIG_PATH = teamConfigPath();
@@ -154,12 +154,19 @@ async function handleInit(args) {
     }
   };
 
+  // The switch on top of whatever the server wrote: the server writes the
+  // configuration it was given, without it, whether it answered or timed
+  // out after writing. The record of the last automatic run belongs to the
+  // team before, so it goes.
+  const settle = () => {
+    if (autosync) writeTeamConfig({ ...(readTeamConfig() ?? config), autosync: true });
+    clearAutosyncStamp();
+  };
+
   // Now try to connect and set up via MCP tool.
   try {
     const result = await callMcpTool('team_init', { backend, remote, branch, team_key: teamKey });
-    // The server writes the configuration it was given, without the
-    // switch, so the switch goes back on top of what it wrote.
-    if (autosync) writeTeamConfig({ ...readTeamConfig(), autosync: true });
+    settle();
     report();
     if (result) {
       console.log('Sync backend configured successfully.');
@@ -175,6 +182,7 @@ async function handleInit(args) {
       console.error(previous === null ? 'No configuration was written.' : 'The previous configuration was kept.');
       process.exit(1);
     }
+    settle();
     report();
     console.log(`Note: Memory server setup returned: ${err.message}`);
     printPromptHint(err, console.log);

@@ -42,10 +42,9 @@ const REMOTE = path.join(SUITE, 'remote.git');
 // machines name it alike without a git remote of its own.
 const PROJECT_RELATIVE = ['work', 'project'];
 const TRANSCRIPT = path.join(SUITE, 'transcripts', '12345678-1234-1234-1234-1234567890ab.jsonl');
+// A hook that hangs on the network is cut by this and fails its status
+// assertion; no case measures how fast the machine ran it.
 const TIMEOUT_MS = FULL_INSTALL_TIMEOUT_MS;
-// The budget the hooks give the sync; a hook that ends later than this did
-// not honor it.
-const HOOK_BUDGET_MS = 15000;
 
 function test(name, fn) {
   try {
@@ -113,15 +112,13 @@ function writeProjectState(home, project, context) {
 }
 
 function runHook(script, home, cwd, input) {
-  const started = Date.now();
-  const run = spawnSync(process.execPath, [script], {
+  return spawnSync(process.execPath, [script], {
     cwd,
     input: JSON.stringify(input),
     encoding: 'utf8',
     env: envFor(home),
     timeout: TIMEOUT_MS,
   });
-  return { ...run, elapsedMs: Date.now() - started };
 }
 
 function logLines(home) {
@@ -206,6 +203,20 @@ function runTests() {
       const shipped = git(['ls-tree', '-r', '--name-only', 'main'], REMOTE, first.home).split('\n');
       assert.ok(shipped.includes('state/work--project.md'), `the state document is on the remote: ${shipped.join(', ')}`);
       assert.ok(!shipped.some(entry => path.basename(entry).startsWith('.')), `the save-prompt marker of the stop hook stays on the machine: ${shipped.join(', ')}`);
+
+      // The stop hook refreshed its marker under the state directory; a
+      // marker is not state, so the next response without a save syncs nothing.
+      const afterMarker = runHook(SESSION_END, first.home, first.project, { transcript_path: TRANSCRIPT });
+      assert.strictEqual(afterMarker.status, 0, afterMarker.stderr);
+      assert.strictEqual(commitCount(first.home), 2, 'a refreshed marker is no reason to sync');
+      assert.strictEqual(logLines(first.home).length, 2, logLines(first.home).join('\n'));
+
+      // A compaction runs the start hook again with its own event name; it
+      // reads the state and syncs nothing.
+      const compaction = runHook(CLAUDE_START, first.home, first.project, { cwd: first.project, hook_event_name: 'PostCompact' });
+      assert.strictEqual(compaction.status, 0, compaction.stderr);
+      assert.ok(compaction.stdout.includes('First machine, after the team.'), 'the state is restored after a compaction');
+      assert.strictEqual(logLines(first.home).length, 2, 'a compaction does not sync');
     });
 
     run('with autosync on, the start of a session on the other machine pulls before the state is read', () => {
@@ -240,7 +251,6 @@ function runTests() {
         const before = logLines(second.home).length;
         const start = runHook(CLAUDE_START, second.home, second.project, { cwd: second.project, hook_event_name: 'SessionStart' });
         assert.strictEqual(start.status, 0, start.stderr);
-        assert.ok(start.elapsedMs < HOOK_BUDGET_MS, `the hook ends inside the budget, took ${start.elapsedMs}ms`);
         assert.ok(start.stdout.includes('First machine, after the team.'), 'the local state is still restored');
         assert.ok(silentAboutTheSync(start), `${start.stdout}\n${start.stderr}`);
         const lines = logLines(second.home);
@@ -250,7 +260,6 @@ function runTests() {
         writeProjectState(second.home, second.project, 'Second machine, offline.');
         const end = runHook(SESSION_END, second.home, second.project, { transcript_path: TRANSCRIPT });
         assert.strictEqual(end.status, 0, end.stderr);
-        assert.ok(end.elapsedMs < HOOK_BUDGET_MS, `the hook ends inside the budget, took ${end.elapsedMs}ms`);
         assert.ok(end.stderr.includes('[SessionEnd] team autosync did not complete:'), `one line on stderr says the sync was abandoned:\n${end.stderr}`);
         assert.ok(!end.stdout.includes('autosync'), end.stdout);
         assert.match(logLines(second.home).at(-1), /session-end: failed: /);

@@ -235,16 +235,23 @@ async function runTests() {
       fs.mkdirSync(path.join(hiddenLocal, 'proj'), { recursive: true });
       fs.writeFileSync(path.join(hiddenSync, 'proj', 'main.md'), envelope.sealEnvelope(doc('2026-09-06T12:00:00.000Z', 'from the other machine'), teamKey, 'proj/main.md'));
       fs.writeFileSync(path.join(hiddenSync, '.save-prompt-proj'), envelope.sealEnvelope('2026-09-06T12:00:00.000Z', teamKey, '.save-prompt-proj'));
+      fs.mkdirSync(path.join(hiddenSync, '.private'), { recursive: true });
+      fs.writeFileSync(path.join(hiddenSync, '.private', 'notes.md'), envelope.sealEnvelope(doc('2026-09-06T12:00:00.000Z', 'below a hidden directory'), teamKey, '.private/notes.md'));
       fs.writeFileSync(path.join(hiddenLocal, '.save-prompt-other'), '2026-09-07T12:00:00.000Z');
+      fs.mkdirSync(path.join(hiddenLocal, '.cache'), { recursive: true });
+      encryption.writeStateFile(path.join(hiddenLocal, '.cache', 'scratch.md'), doc('2026-09-07T12:00:00.000Z', 'below a hidden directory here'), personalKey);
       const outcome = teamSync.mergeTeamStateFrom(hiddenSync, hiddenLocal, teamKey, personalKey);
       assert.strictEqual(outcome.merged, 1, 'the document merges');
-      assert.strictEqual(outcome.opened, 1, 'the hidden file is not an envelope to count');
-      assert.deepStrictEqual(outcome.unopened, [], 'a pushed hidden file is not reported as rejected');
+      assert.strictEqual(outcome.opened, 1, 'the hidden entries are not envelopes to count');
+      assert.deepStrictEqual(outcome.unopened, [], 'a pushed hidden entry is not reported as rejected');
       assert.ok(!fs.existsSync(path.join(hiddenSync, '.save-prompt-proj')), 'the hidden file an earlier version pushed is retired from the sync tree');
+      assert.ok(!fs.existsSync(path.join(hiddenSync, '.private', 'notes.md')), 'a file below a hidden directory is retired too');
       assert.ok(!fs.existsSync(path.join(hiddenLocal, '.save-prompt-proj')), 'the hidden file is never written locally');
+      assert.ok(!fs.existsSync(path.join(hiddenLocal, '.private')), 'nor the hidden directory');
       const stagedDir = path.join(dir, 'hidden-staged');
       assert.strictEqual(teamSync.stageTeamState(hiddenLocal, stagedDir, teamKey, personalKey), 1, 'only the document is staged');
       assert.ok(!fs.existsSync(path.join(stagedDir, '.save-prompt-other')), 'the marker of this machine stays on it');
+      assert.ok(!fs.existsSync(path.join(stagedDir, '.cache')), 'a file below a hidden directory stays too');
     });
 
     run('a local document the merge keeps gets its sidecar repaired when older versions left it unusable, and a well-formed mismatch is left alone', () => {

@@ -246,6 +246,7 @@ function runTests() {
         assert.ok(run.stdout.includes('Autosync: off'), run.stdout);
         run = teamCli(['autosync', 'maybe']);
         assert.strictEqual(run.status, 1, 'anything but on or off is refused');
+        assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).autosync, undefined, 'a refused value changes nothing');
         run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--key', JSON.parse(saved).teamKey, '--autosync']);
         assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
         assert.ok(run.stdout.includes('Autosync: on'), run.stdout);

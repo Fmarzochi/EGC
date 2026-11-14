@@ -123,9 +123,9 @@ The state syncs when a session starts, before it is read, and after a response t
 
 With it on:
 
-- When a session starts in Claude Code, OpenCode or Gemini CLI, the hook that restores the project state syncs first, so the state your other machine pushed is what the session restores.
-- When a response ends (the Stop hook of Claude Code, the session-end hook of Gemini CLI), the state syncs again when a state file changed since the last run, so what `update_state` wrote leaves the machine. A response that changed nothing syncs nothing.
-- Each run has the hook's budget, 15 seconds. A remote that does not answer in time is given up for that run and the session goes on with the local state. Nothing of this reaches the chat; the session-end hook alone says once on its stderr when its sync did not complete.
+- When a session starts in Claude Code or OpenCode, the hook that restores the project state syncs first, so the state your other machine pushed is what the session restores. A compaction, which runs the same hook in Claude Code, does not sync. The hooks of the plugin manifest (`hooks/hooks.json`, the layout the retired Gemini CLI loaded) carry the same sync for an install that still loads them.
+- When a response ends (the Stop hook of Claude Code, the session-end hook of the plugin manifest), the state syncs again when a state document changed since the last run, so what `update_state` wrote leaves the machine. After the first run, a response that changed nothing syncs nothing; the markers the hooks keep next to the state and the integrity sidecars do not count as a change.
+- Each hook has a budget of 15 seconds, shared with its other work: the session-end hook gives the sync what is left after its commit list, and skips it, saying so once on its stderr, when less than two seconds remain. A remote that does not answer in time is given up for that run and the session goes on with the local state. Nothing of this reaches the chat.
 
 The outcome of every run is one line in `~/.egc/logs/team-autosync.log`, and `egc team status` shows the last one:
 
@@ -137,7 +137,7 @@ Remote: https://github.com/you/egc-memory.git
 Autosync: on (last run 2026-11-14T06:40:12.418Z, session-end, ok: pulled 0 files, pushed 1 commits)
 ```
 
-Offline is normal: the run is logged as failed with git's reason and the next session tries again. The OpenCode plugin waits up to 20 seconds for the restore when the switch is on, since the sync runs before it.
+Offline is normal: the run is logged as failed with git's reason and the next session tries again. The OpenCode plugin waits up to 25 seconds for the restore when the switch is on: the sync's 15 seconds, the moments the sync gives a server that answered to leave, and the restore itself.
 
 ## How two copies are merged
 

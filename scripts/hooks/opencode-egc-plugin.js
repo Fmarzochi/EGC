@@ -42,8 +42,10 @@ const SESSION_CONTEXT_SCRIPT = path.join(
 const DEFAULT_SESSION_CONTEXT_TIMEOUT_MS = 3000;
 // The bridge restores the state in well under a second; when the Team Brain
 // syncs before the read (#2059) it also waits on a remote, so its budget is
-// the sync's own (15 s) plus the restore.
-const AUTOSYNC_SESSION_CONTEXT_TIMEOUT_MS = 20000;
+// the sync's own (15 s), the moments the sync client gives a server that
+// answered to leave (2 s of grace, 2 s before the kill, 1 s for the pipes),
+// and the restore, so an answer that came in time is never thrown away.
+const AUTOSYNC_SESSION_CONTEXT_TIMEOUT_MS = 25000;
 
 // How long the bridge may take: the environment when set, else the default
 // of a plain restore, or the longer one when a sync runs first.

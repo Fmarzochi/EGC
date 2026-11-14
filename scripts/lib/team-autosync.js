@@ -31,6 +31,7 @@ const DEFAULT_BUDGET_MS = 15000;
 // a hook is waiting on it, so shorter than the grace the CLI gives.
 const EXIT_GRACE_MS = 2000;
 const SERVER_RELATIVE = ['mcp', 'servers', 'egc-memory', 'build', 'index.js'];
+const SIDECAR_SUFFIX = '.hmac';
 
 function egcDir(homeDir) {
   return path.join(homeDir, '.egc');
@@ -97,8 +98,16 @@ function mtimeOf(file) {
   }
 }
 
-// Whether a file under ~/.egc/state was written after the given moment: the
-// state documents are what the sync ships, so nothing else counts.
+// What the sync never ships: the integrity sidecars and the hidden entries
+// (the markers the hooks keep next to the state), a hidden directory hiding
+// everything below it. The sync skips them, so a change in them is no
+// reason to run it.
+function isStateDocument(entry) {
+  return entry.isFile() && !entry.name.endsWith(SIDECAR_SUFFIX) && !entry.name.startsWith('.');
+}
+
+// Whether a state document under ~/.egc/state was written after the given
+// moment: the documents are what the sync ships, so nothing else counts.
 function stateChangedSince(homeDir, sinceMs) {
   const pending = [path.join(egcDir(homeDir), 'state')];
   while (pending.length > 0) {
@@ -111,11 +120,32 @@ function stateChangedSince(homeDir, sinceMs) {
     }
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) pending.push(full);
-      else if (entry.isFile() && mtimeOf(full) > sinceMs) return true;
+      if (entry.isDirectory() && !entry.name.startsWith('.')) pending.push(full);
+      else if (isStateDocument(entry) && mtimeOf(full) > sinceMs) return true;
     }
   }
   return false;
+}
+
+// Whether a run would start now: the switch on, and, when asked, a state
+// document changed since the last run (or no run yet). The hooks ask this
+// before giving up for lack of budget, so nothing is recorded as a run.
+function wouldSync(options = {}) {
+  const homeDir = options.homeDir ?? os.homedir();
+  if (!isAutosyncOn(readTeamConfig(homeDir))) return false;
+  if (!options.onlyIfStateChanged) return true;
+  const last = Date.parse(lastAutosync(homeDir)?.lastRun ?? '');
+  return !Number.isFinite(last) || stateChangedSince(homeDir, last);
+}
+
+// Forgets the last run: a machine that joins another team starts its
+// record anew, so the status never shows a run of the team before.
+function clearAutosyncStamp(homeDir = os.homedir()) {
+  try {
+    fs.rmSync(stampPath(homeDir), { force: true });
+  } catch {
+    // a stamp that cannot be removed is overwritten by the next run
+  }
 }
 
 // What a team_sync answer says: `success` with no error is a completed sync.
@@ -148,10 +178,7 @@ async function autosync(options = {}) {
   const homeDir = options.homeDir ?? os.homedir();
   const reason = options.reason ?? 'session';
   if (!isAutosyncOn(readTeamConfig(homeDir))) return { ran: false, why: 'off' };
-  if (options.onlyIfStateChanged) {
-    const last = Date.parse(lastAutosync(homeDir)?.lastRun ?? '');
-    if (Number.isFinite(last) && !stateChangedSince(homeDir, last)) return { ran: false, why: 'unchanged' };
-  }
+  if (options.onlyIfStateChanged && !wouldSync({ homeDir, onlyIfStateChanged: true })) return { ran: false, why: 'unchanged' };
   const serverScript = memoryServerScript();
   if (!serverScript) {
     appendLog(homeDir, reason, 'skipped: the memory server is not built or was not found');
@@ -177,4 +204,4 @@ async function autosync(options = {}) {
   return { ran: true, ...outcome };
 }
 
-module.exports = { autosync, lastAutosync, stateChangedSince, memoryServerScript, DEFAULT_BUDGET_MS };
+module.exports = { autosync, wouldSync, lastAutosync, clearAutosyncStamp, stateChangedSince, memoryServerScript, DEFAULT_BUDGET_MS };

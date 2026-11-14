@@ -121,7 +121,11 @@ async function runSessionStartAdapter({ host, projectEnv }) {
   }
   const input = readStdinJson();
   const projectPath = resolveProjectPath(input, projectEnv);
-  await pullTeamState();
+  // The sync belongs to the start of a session. Claude Code runs this same
+  // hook after a compaction (PostCompact), and a compaction is no moment to
+  // wait on a remote or to ship half a session; a payload without an event
+  // name (OpenCode's bridge) is a start.
+  if (!input.hook_event_name || input.hook_event_name === 'SessionStart') await pullTeamState();
   const restored = restoreContext(projectPath, normalizedHost);
   postSessionStart(restored.host || normalizedHost, input.session_id || null);
   if (input.session_id) {

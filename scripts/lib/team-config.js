@@ -19,12 +19,34 @@ function teamConfigPath(homeDir = os.homedir()) {
   return path.join(homeDir, '.egc', 'team.json');
 }
 
-// The configuration, or null when the file is missing or is not a JSON object.
-function readTeamConfig(homeDir = os.homedir()) {
-  const file = teamConfigPath(homeDir);
-  if (!fs.existsSync(file)) return null;
+// The text of a regular file, read without following a link and without
+// blocking on a FIFO planted at its path: a hook reads this at the start of
+// every session and must never hang on it. Null when there is no such file.
+function readRegularFile(file) {
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
+  let descriptor;
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    descriptor = fs.openSync(file, flags);
+  } catch {
+    return null;
+  }
+  try {
+    if (!fs.fstatSync(descriptor).isFile()) return null;
+    return fs.readFileSync(descriptor, 'utf-8');
+  } catch {
+    return null;
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+// The configuration, or null when the file is missing, is not a regular
+// file or is not a JSON object.
+function readTeamConfig(homeDir = os.homedir()) {
+  const text = readRegularFile(teamConfigPath(homeDir));
+  if (text === null) return null;
+  try {
+    const parsed = JSON.parse(text);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
@@ -53,7 +75,14 @@ function publishTeamConfigText(text, homeDir = os.homedir()) {
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   makePrivate(path.dirname(file), 0o700);
   const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  fs.writeFileSync(temporary, text, { encoding: 'utf-8', mode: 0o600 });
+  // Created exclusively: a link planted at the temporary name is never
+  // written through.
+  const descriptor = fs.openSync(temporary, 'wx', 0o600);
+  try {
+    fs.writeFileSync(descriptor, text, { encoding: 'utf-8' });
+  } finally {
+    fs.closeSync(descriptor);
+  }
   makePrivate(temporary, 0o600);
   fs.renameSync(temporary, file);
 }

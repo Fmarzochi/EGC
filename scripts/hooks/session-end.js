@@ -31,8 +31,9 @@ const { readHookStdin } = require('../lib/hook-stdin');
 // install recorded before it existed has no copy until egc repair refreshes
 // it, and then the session ends without a sync instead of the hook failing.
 let autosync = async (_options) => ({ ran: false, why: 'unavailable' });
+let wouldSync = (_options) => false;
 try {
-  ({ autosync } = require('../lib/team-autosync'));
+  ({ autosync, wouldSync } = require('../lib/team-autosync'));
 } catch {
   // an older install without the helper: no sync, no crash
 }
@@ -357,8 +358,9 @@ function createNewSession(sessionFile, today, currentTime, sessionMetadata, summ
 async function syncTeamState(deadline) {
   const budgetMs = deadline - Date.now();
   if (budgetMs < MIN_AUTOSYNC_BUDGET_MS) {
-    const outcome = await autosync({ reason: 'session-end', onlyIfStateChanged: true, budgetMs: 0 });
-    if (outcome.ran) log('[SessionEnd] team autosync did not complete: no budget left after the commit list');
+    // Nothing is started and nothing is recorded, so the next hook with a
+    // budget still sees the state as changed and runs the sync.
+    if (wouldSync({ onlyIfStateChanged: true })) log('[SessionEnd] team autosync did not complete: no budget left after the commit list');
     return;
   }
   const outcome = await autosync({ reason: 'session-end', onlyIfStateChanged: true, budgetMs });
