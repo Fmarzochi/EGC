@@ -17,6 +17,7 @@ const {
   describeServer,
   registrationSeverity,
 } = require('./lib/doctor-mcp');
+const { buildTeamReport, printTeamReport } = require('./lib/doctor-team');
 
 // Printed as an absolute path: the hint is read from wherever the person ran
 // egc doctor (a project folder, a global npm install on Windows), and a
@@ -280,6 +281,10 @@ async function main() {
     const stateDb = checkStateDb(homeDir);
     const plaintextState = checkPlaintextState(homeDir);
     const mcp = await buildMcpReport(homeDir, { timeoutMs: probeTimeoutMs(process.env) });
+    // The Team Brain of this machine: files and one read of the remote, no
+    // server. Its warnings join the doctor's total; it raises no error.
+    const team = buildTeamReport(homeDir);
+    const summary = { ...report.summary, warningCount: report.summary.warningCount + team.warningCount };
     // Warnings are informative: drift and version skew are worth reporting but
     // do not mean the install is broken, and a warnings-only run is a healthy
     // run. Exit 1 is reserved for real failures so scripts and CI can trust
@@ -288,13 +293,14 @@ async function main() {
     const hasFailures = report.summary.errorCount > 0 || mcp.errorCount > 0;
 
     if (options.json) {
-      const out = { ...report, mcp };
+      const out = { ...report, summary, mcp, team };
       if (stateDb) out.stateDb = stateDb;
       if (plaintextState) out.plaintextStateFiles = plaintextState;
       console.log(JSON.stringify(out, null, 2));
     } else {
-      printHuman(report);
+      printHuman({ ...report, summary });
       printMcpReport(mcp);
+      printTeamReport(team);
       if (stateDb) printStateStoreReport(stateDb);
       if (plaintextState) printPlaintextStateReport(plaintextState);
     }

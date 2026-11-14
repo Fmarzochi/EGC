@@ -1277,6 +1277,74 @@ function runTests() {
     }
   }));
 
+  tally(test('without a team the doctor prints one informational Team line and counts no warning (#2058)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes('Team: not configured (egc team init --backend git --remote <url>)'), result.stdout);
+      assert.ok(result.stdout.includes('Summary: checked=0, ok=0, warnings=0, errors=0'), result.stdout);
+      const asJson = run(['--json'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(JSON.parse(asJson.stdout).team.configured, false);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('with a team the doctor shows the remote, the last sync and the state to seal, and a bad key is one warning in the total (#2058)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const remote = path.join(homeDir, 'remote.git');
+      const checkout = path.join(homeDir, '.egc', 'team-sync');
+      const gitEnv = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, GIT_CONFIG_NOSYSTEM: '1' };
+      const git = (args, cwd) => execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf8', stdio: 'pipe' }).trim();
+      fs.mkdirSync(remote, { recursive: true });
+      git(['init', '--bare', '-q', '-b', 'main'], remote);
+      fs.mkdirSync(path.join(checkout, 'state'), { recursive: true });
+      git(['init', '-q', '-b', 'main'], checkout);
+      git(['config', 'user.email', 'doctor@example.test'], checkout);
+      git(['config', 'user.name', 'Doctor'], checkout);
+      git(['remote', 'add', 'origin', remote], checkout);
+      fs.writeFileSync(path.join(checkout, 'state', 'proj.md'), 'sealed');
+      git(['add', '-A'], checkout);
+      git(['commit', '-q', '-m', 'sync: team memory update'], checkout);
+      git(['push', '-q', 'origin', 'main'], checkout);
+      const lastCommit = git(['log', '-1', '--format=%cI'], checkout);
+      fs.mkdirSync(path.join(homeDir, '.egc', 'state'), { recursive: true });
+      fs.writeFileSync(path.join(homeDir, '.egc', 'state', 'proj.md'), 'EGC1:sealed');
+      const configPath = path.join(homeDir, '.egc', 'team.json');
+      writeJson(configPath, { backend: 'git', remote, branch: 'main', teamKey: 'ab'.repeat(32) });
+
+      const healthy = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(healthy.code, 0, healthy.stdout + healthy.stderr);
+      assert.ok(healthy.stdout.includes(`Team: git ${remote}, branch main, key present`), healthy.stdout);
+      assert.ok(healthy.stdout.includes(`  Last sync: ${lastCommit}`), healthy.stdout);
+      assert.ok(healthy.stdout.includes('  Local state: 1 files to seal'), healthy.stdout);
+      assert.ok(healthy.stdout.includes('  Autosync: off'), healthy.stdout);
+      assert.ok(healthy.stdout.includes('Team summary: warnings=0'), healthy.stdout);
+      assert.ok(healthy.stdout.includes('Summary: checked=0, ok=0, warnings=0, errors=0'), healthy.stdout);
+
+      writeJson(configPath, { backend: 'git', remote, branch: 'main', teamKey: 'not-a-key' });
+      const badKey = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(badKey.code, 0, 'a team warning never fails the doctor');
+      assert.ok(badKey.stdout.includes('[WARNING] Team key missing or invalid in ~/.egc/team.json: run egc team init again'), badKey.stdout);
+      assert.ok(badKey.stdout.includes('Summary: checked=0, ok=0, warnings=1, errors=0'), badKey.stdout);
+      const asJson = run(['--json'], { cwd: projectRoot, homeDir });
+      const parsed = JSON.parse(asJson.stdout);
+      assert.strictEqual(parsed.team.keyPresent, false);
+      assert.strictEqual(parsed.team.warningCount, 1);
+      assert.strictEqual(parsed.summary.warningCount, 1);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
