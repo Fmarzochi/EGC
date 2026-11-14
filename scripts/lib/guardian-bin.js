@@ -320,6 +320,36 @@ function resolveGuardianCli() {
   return fromEnv() || fromPackageLayout() || fromMcpConfigs() || fromCodexToml() || fromEgcHomeMarker();
 }
 
+// The Node that runs the validator. A hook that runs inside another runtime
+// has an execPath that is not Node: the OpenCode plugin runs under Bun, in
+// the opencode binary, which would read the CLI path as an argument of its
+// own and leave every call without a verdict (#2107). Node is then taken
+// from an absolute PATH entry only, never a relative one, so a node planted
+// in the project directory is never the one that runs (#1530).
+const NODE_BINARY_NAMES = new Set(['node', 'node.exe', 'nodejs', 'nodejs.exe']);
+
+function findNodeOnPath() {
+  const binaryName = process.platform === 'win32' ? 'node.exe' : 'node';
+  const entries = String(process.env.PATH ?? process.env.Path ?? '').split(path.delimiter);
+  for (const entry of entries) {
+    const dir = entry.replace(/^"(.*)"$/, '$1');
+    if (!path.isAbsolute(dir)) continue;
+    const candidate = path.join(dir, binaryName);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      if (fs.statSync(candidate).isFile()) return candidate;
+    } catch {
+      // Not in this entry; keep looking.
+    }
+  }
+  return null;
+}
+
+function resolveNodeExecutable() {
+  const binaryName = path.basename(process.execPath).toLowerCase();
+  return NODE_BINARY_NAMES.has(binaryName) ? process.execPath : findNodeOnPath();
+}
+
 // Invokes the guardian CLI with the payload on stdin, never in argv.
 // Untrusted content (prompts, commands, paths) must not travel as command
 // arguments where a leading dash could be parsed as a flag. argv carries
@@ -330,7 +360,11 @@ function resolveGuardianCli() {
 // (an empty answer, or one that is not JSON). A caller that must not run
 // without a verdict reads the kind; the others use callGuardian below.
 function callGuardianVerdict(cli, args, input, timeoutMs) {
-  const result = spawnSync(process.execPath, [cli, ...args], {
+  const node = resolveNodeExecutable();
+  if (!node) {
+    return { ok: false, kind: 'unstartable', detail: 'no node executable on an absolute PATH entry to run it with' };
+  }
+  const result = spawnSync(node, [cli, ...args], {
     input: String(input ?? ''),
     encoding: 'utf8',
     timeout: timeoutMs,
@@ -394,6 +428,8 @@ function callGuardian(cli, args, input, timeoutMs) {
 
 module.exports = {
   resolveGuardianCli,
+  resolveNodeExecutable,
+  findNodeOnPath,
   callGuardian,
   callGuardianVerdict,
   guardianFailureReason,

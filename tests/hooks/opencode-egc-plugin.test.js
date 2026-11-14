@@ -340,6 +340,125 @@ async function runTests() {
       process.env.EGC_ASSUME_EGC_CLI = '0';
     });
 
+    addCase('judges and rewrites the shell tool of OpenCode 2 the way it does bash, on both loaders', async () => {
+      // OpenCode 2 names its command tool `shell`; the plugin only knew `bash`,
+      // so every command there ran past the Guardian and the Crusher (#2107).
+      const hooks = await EgcGuardianCrusher({ directory: tempDir });
+      await assert.rejects(
+        () => hooks['tool.execute.before']({ tool: 'shell' }, { args: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/
+      );
+      const fake = fakeContext(tempDir);
+      await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+      await assert.rejects(
+        () => before({ tool: 'shell', sessionID: 'ses_shell', input: { command: 'rm -rf /' } }),
+        /EGC Guardian BLOCKED/
+      );
+      await before({ tool: 'shell', sessionID: 'ses_shell', input: {} });
+      const safe = { tool: 'shell', sessionID: 'ses_shell', input: { command: 'git status' } };
+      await before(safe);
+      assert.strictEqual(safe.input.command, 'git status');
+      await withEnvironment('EGC_ASSUME_EGC_CLI', '1', async () => {
+        const crushable = { tool: 'shell', sessionID: 'ses_shell', input: { command: 'npm test' } };
+        await before(crushable);
+        assert.strictEqual(crushable.input.command, 'egc run npm test');
+        const legacy = { args: { command: 'npm test' } };
+        await hooks['tool.execute.before']({ tool: 'shell' }, legacy);
+        assert.strictEqual(legacy.args.command, 'egc run npm test');
+      });
+    });
+
+    addCase('honors EGC_DISABLED_HOOKS and EGC_HOOK_PROFILE in-process, gate by gate', async () => {
+      // The hosts that spawn hooks read the flags in run-with-flags; the plugin
+      // runs the hooks in-process and read none, so the escape hatch the
+      // Guardian names when it cannot validate did nothing here (#2107).
+      const fake = fakeContext(tempDir);
+      await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+      const secret = path.join(tempDir, '.ssh', 'id_rsa');
+      await withEnvironment('EGC_DISABLED_HOOKS', 'pre:bash:guardian-validate', async () => {
+        const lifted = { tool: 'shell', sessionID: 'ses_flags', input: { command: 'rm -rf /' } };
+        await before(lifted);
+        assert.strictEqual(lifted.input.command, 'rm -rf /', 'the command gate is lifted');
+        await assert.rejects(
+          () => before({ tool: 'write', sessionID: 'ses_flags', input: { filePath: secret, content: 'x' } }),
+          /EGC Guardian BLOCKED/,
+          'the write gate stays'
+        );
+      });
+      await withEnvironment('EGC_DISABLED_HOOKS', 'pre:edit-write:guardian-validate', async () => {
+        const write = { tool: 'write', sessionID: 'ses_flags', input: { filePath: secret, content: 'x' } };
+        await before(write);
+        assert.strictEqual(write.input.content, 'x', 'the write gate is lifted');
+        await assert.rejects(
+          () => before({ tool: 'shell', sessionID: 'ses_flags', input: { command: 'rm -rf /' } }),
+          /EGC Guardian BLOCKED/,
+          'the command gate stays'
+        );
+      });
+      await withEnvironment('EGC_ASSUME_EGC_CLI', '1', async () => {
+        await withEnvironment('EGC_DISABLED_HOOKS', 'pre:bash:crusher-rewrite', async () => {
+          const plain = { tool: 'shell', sessionID: 'ses_flags', input: { command: 'npm test' } };
+          await before(plain);
+          assert.strictEqual(plain.input.command, 'npm test', 'the rewrite is off');
+        });
+        await withEnvironment('EGC_HOOK_PROFILE', 'minimal', async () => {
+          const plain = { tool: 'shell', sessionID: 'ses_flags', input: { command: 'npm test' } };
+          await before(plain);
+          assert.strictEqual(plain.input.command, 'npm test', 'the minimal profile has no rewrite');
+          await assert.rejects(
+            () => before({ tool: 'shell', sessionID: 'ses_flags', input: { command: 'rm -rf /' } }),
+            /EGC Guardian BLOCKED/,
+            'the minimal profile keeps the Guardian'
+          );
+        });
+      });
+    });
+
+    addCase('runs the Guardian validator with Node when process.execPath is the opencode binary', async () => {
+      // Inside OpenCode the plugin runs under Bun and process.execPath is the
+      // opencode binary, which cannot run the validator: every call ended
+      // without a verdict and the fail-closed hook refused every command and
+      // every write (#2107). The validator now runs with the Node on PATH.
+      const originalExecPath = process.execPath;
+      const originalPath = process.env.PATH;
+      const realNodeDir = path.dirname(process.execPath);
+      const fake = fakeContext(tempDir);
+      await plugin.setup(fake.ctx);
+      const before = fake.registered.tool['execute.before'];
+      try {
+        process.execPath = process.platform === 'win32' ? 'C:\\Users\\someone\\AppData\\Local\\opencode\\opencode.exe' : '/usr/local/bin/opencode';
+        process.env.PATH = `.${path.delimiter}${realNodeDir}`;
+        await assert.rejects(
+          () => before({ tool: 'shell', sessionID: 'ses_bun', input: { command: 'rm -rf /' } }),
+          /EGC Guardian BLOCKED/,
+          'a denial is still a verdict, not a validator that could not start'
+        );
+        const safe = { tool: 'shell', sessionID: 'ses_bun', input: { command: 'git status' } };
+        await before(safe);
+        assert.strictEqual(safe.input.command, 'git status', 'a safe command still passes');
+        await assert.rejects(
+          () => before({ tool: 'write', sessionID: 'ses_bun', input: { filePath: path.join(tempDir, '.ssh', 'id_rsa'), content: 'x' } }),
+          /EGC Guardian BLOCKED/
+        );
+        const fine = { tool: 'write', sessionID: 'ses_bun', input: { filePath: path.join(tempDir, 'notes.md'), content: 'hello' } };
+        await before(fine);
+        assert.strictEqual(fine.input.content, 'hello', 'a safe write still passes');
+
+        // Without any Node on an absolute PATH entry the gate stays closed and
+        // says why, instead of failing on a binary that is not Node.
+        process.env.PATH = `.${path.delimiter}`;
+        await assert.rejects(
+          () => before({ tool: 'shell', sessionID: 'ses_bun', input: { command: 'git status' } }),
+          /could not validate this command, so it did not run: the validator could not be started \(no node executable/
+        );
+      } finally {
+        process.execPath = originalExecPath;
+        process.env.PATH = originalPath;
+      }
+    });
+
     addCase('ignores relative PATH entries and planted node binary in project root', async () => {
       const originalExecPath = process.execPath;
       const originalPath = process.env.PATH;

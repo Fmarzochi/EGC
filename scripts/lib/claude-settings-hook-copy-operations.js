@@ -245,6 +245,9 @@ function createKiroV3GuardianHookFileOperation(targetRoot, hookScriptPath) {
 const BASH_GUARDIAN_HOOK_LIB_SOURCES = [
   'scripts/lib/guardian-bin.js',
   'scripts/lib/hook-stdin.js',
+  // The hook flags: a host that runs the Guardian in-process (the OpenCode
+  // plugin) reads EGC_DISABLED_HOOKS and EGC_HOOK_PROFILE through it.
+  'scripts/lib/hook-flags.js',
   'scripts/lib/shell-split.js',
   'scripts/lib/wrapper-options.js',
   'scripts/lib/shell-bindings.js',

@@ -3,15 +3,16 @@
 // OpenCode 2 requires a default export with an id and a setup function, and
 // OpenCode 1 (1.18.29 and newer) reads the server entrypoint of that same
 // default export while calling every other export as a function, so the
-// default export is the only export. Guardian and Crusher run directly, while
-// session restoration is delegated to a fail-open Node adapter around the
-// shared, host-neutral session-context-loader core.
+// default export is the only export. Guardian and Crusher run directly (the
+// command tool is `shell` in OpenCode 2 and `bash` in OpenCode 1), honoring
+// EGC_DISABLED_HOOKS and EGC_HOOK_PROFILE as the hosts that spawn hooks do,
+// while session restoration is delegated to a fail-open Node adapter around
+// the shared, host-neutral session-context-loader core.
 
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import fs from 'node:fs';
 
 // The hook scripts installed next to this plugin are CommonJS modules.
 const require = createRequire(import.meta.url);
@@ -19,6 +20,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { run: runGuardian } = require('../scripts/hooks/pre-bash-guardian-validate');
 const { run: runWriteGuardian } = require('../scripts/hooks/pre-write-guardian-validate');
 const { run: runCrusherRewrite } = require('../scripts/hooks/pre-bash-crusher-rewrite');
+const { resolveNodeExecutable } = require('../scripts/lib/guardian-bin');
+const { isHookEnabled } = require('../scripts/lib/hook-flags');
 
 const SESSION_CONTEXT_SCRIPT = path.join(
   __dirname,
@@ -32,6 +35,20 @@ const DEFAULT_SESSION_CONTEXT_TIMEOUT_MS = 3000;
 // OpenCode's file tools and the Claude-style names the write validator
 // expects; OpenCode passes filePath/content/newString in the tool args.
 const GUARDIAN_WRITE_TOOLS = { write: 'Write', edit: 'Edit' };
+// The tool that runs a command: `bash` in OpenCode 1, `shell` in OpenCode 2,
+// with the command in `command` either way.
+const SHELL_TOOLS = new Set(['bash', 'shell']);
+
+// The hook ids and profiles the hosts that spawn hooks give these three
+// through run-with-flags and the Bash dispatcher, honored in-process here
+// too: EGC_DISABLED_HOOKS lifts a gate (the one the Guardian's own message
+// names when it cannot validate), and EGC_HOOK_PROFILE=minimal keeps the
+// Guardian and drops the Crusher.
+const BASH_GUARDIAN_HOOK_ID = 'pre:bash:guardian-validate';
+const WRITE_GUARDIAN_HOOK_ID = 'pre:edit-write:guardian-validate';
+const CRUSHER_HOOK_ID = 'pre:bash:crusher-rewrite';
+const GUARDIAN_PROFILES = 'minimal,standard,strict';
+const CRUSHER_PROFILES = 'standard,strict';
 
 function writeToolInput(args) {
   return {
@@ -41,13 +58,19 @@ function writeToolInput(args) {
   };
 }
 
-// The Guardian's refusal for a write, edit or bash call, or null to proceed.
+function isShellCall(tool, args) {
+  return SHELL_TOOLS.has(tool) && typeof args.command === 'string';
+}
+
+// The Guardian's refusal for a write, edit or shell call, or null to proceed.
 function guardianDenial(tool, args, directory) {
   const writeTool = GUARDIAN_WRITE_TOOLS[tool];
   let verdict = null;
   if (writeTool) {
+    if (!isHookEnabled(WRITE_GUARDIAN_HOOK_ID, { profiles: GUARDIAN_PROFILES })) return null;
     verdict = runWriteGuardian({ tool_name: writeTool, tool_input: writeToolInput(args), cwd: directory });
-  } else if (tool === 'bash' && typeof args.command === 'string') {
+  } else if (isShellCall(tool, args)) {
+    if (!isHookEnabled(BASH_GUARDIAN_HOOK_ID, { profiles: GUARDIAN_PROFILES })) return null;
     verdict = runGuardian({ tool_name: 'Bash', tool_input: { command: args.command }, cwd: directory });
   }
   return verdict?.exitCode === 2 ? (verdict.stderr || 'Blocked by the EGC Guardian.') : null;
@@ -103,30 +126,9 @@ function withTimeout(operation, timeoutMs) {
   });
 }
 
-function findNodeOnPath() {
-  const binaryName = process.platform === 'win32' ? 'node.exe' : 'node';
-  const entries = (process.env.PATH ?? process.env.Path ?? '').split(path.delimiter);
-  for (const entry of entries) {
-    const dir = entry.replace(/^"(.*)"$/, '$1');
-    if (!path.isAbsolute(dir)) continue;
-    const candidate = path.join(dir, binaryName);
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      if (fs.statSync(candidate).isFile()) return candidate;
-    } catch {
-      // Not in this entry; keep looking.
-    }
-  }
-  return null;
-}
-
-function resolveNodeExecutable() {
-  const binaryName = path.basename(process.execPath).toLowerCase();
-  const isNode = ['node', 'node.exe', 'nodejs', 'nodejs.exe'].includes(binaryName);
-  
-  return isNode ? process.execPath : findNodeOnPath();
-}
-
+// The Node that runs the bridge comes from guardian-bin: under Bun, in the
+// opencode binary, process.execPath is not Node, and the Guardian validator
+// has the same need.
 function loadSessionContext(projectDirectory, sessionId) {
   return new Promise(resolve => {
     const timeoutMs = positiveIntegerEnv(
@@ -200,13 +202,14 @@ function loadSessionContext(projectDirectory, sessionId) {
 
 const PLUGIN_ID = 'egc';
 
-// The Guardian's verdict on a tool call, then the Crusher's rewrite of a bash
-// command, applied to the host's own args object. A denial throws, which both
-// loaders turn into a rejected call.
+// The Guardian's verdict on a tool call, then the Crusher's rewrite of a
+// shell command, applied to the host's own args object. A denial throws,
+// which both loaders turn into a rejected call.
 function enforceToolCall(tool, args, directory) {
   const denial = guardianDenial(tool, args, directory);
   if (denial) throw new Error(denial);
-  if (tool !== 'bash' || typeof args.command !== 'string') return;
+  if (!isShellCall(tool, args)) return;
+  if (!isHookEnabled(CRUSHER_HOOK_ID, { profiles: CRUSHER_PROFILES })) return;
 
   // The rewrite is an optimization: a Crusher that fails leaves the command
   // as the agent wrote it, after the Guardian has already judged it.
