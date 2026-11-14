@@ -155,6 +155,21 @@ A document from a version before the merge, or any file without the five section
 
 A sync never deletes a local state file. A file removed on the remote is not removed from your machine, and it comes back to the remote at your next sync.
 
+## Checking the team with `egc doctor`
+
+`egc doctor` prints a `Team` block after the MCP servers (the lines about the state store, when there are any, come after it):
+
+```text
+Team: git https://github.com/you/egc-memory.git, branch main, key present
+  Last sync: 2026-11-14T06:40:12+00:00
+  Local state: 3 files to seal
+  Autosync: on (last run 2026-11-14T06:40:12.418Z, session-end, ok)
+  Remote: reachable
+Team summary: warnings=0
+```
+
+Without a team the block is one line, `Team: not configured (egc team init --backend git --remote <url>, with --key <team key> to join a team)`, and no warning. `Last sync` is the time of the last commit of `~/.egc/team-sync/` (`never` before the first sync), `Local state` counts the documents under `~/.egc/state/` the next sync would seal (hidden entries and `.hmac` sidecars left out), and `Remote` is one `git ls-remote` with a budget of 5 seconds, `reachable, no branch pushed yet` before the first sync of the team, skipped with `not checked` when no network interface is up. A remote URL that carries a credential is shown without it, in the block and in the warnings. These are warnings, counted in the doctor's total and never errors: a team key missing or not 64 hexadecimal characters, a `~/.egc/team.json` that exists but cannot be read as a configuration, a backend other than git, a `~/.egc/team-sync/` that is not a git repository or that follows another remote or branch than `team.json` (the next sync would refuse it), and a remote that cannot be read or did not answer within the budget, with the reason git gave. The warnings about the configuration and the checkout name the init to run with `--key <team key>`, since an init without the key starts a new team; the remote warning carries the reason alone, since no init fixes a remote that does not answer. The block reads files and runs git; it never calls the memory server.
+
 ## Troubleshooting
 
 ### `Error: Team not initialized. Run "egc team init" first.`
@@ -240,7 +255,6 @@ The command line talks to the memory server. Run `egc doctor`, and `npm run buil
 - **Deleting a whole document does not propagate.** A document removed on one machine stays on the others and comes back at the next sync. An entry removed inside a document stays out while its retired mark is kept, up to thirty days and forty marks at most, unless a machine adds it again.
 - **No machine identity in the envelope.** The signature proves that the holder of the team key wrote the file, not which machine. Tracked in [#2056](https://github.com/Fmarzochi/EGC/issues/2056).
 - **Autosync waits on the remote at the start of a session.** With `autosync` on, a session start takes as long as the sync, up to 15 seconds on a remote that does not answer, before the state is read. Turn it off on a machine that is often offline and run `egc team sync` by hand there.
-- **No health line in `egc doctor`.** Tracked in [#2058](https://github.com/Fmarzochi/EGC/issues/2058).
 - **One commit per sync, even with nothing new.** Every sync seals each document again with a fresh nonce, so the files differ byte for byte and each run commits and pushes, which grows the history of the remote.
 - **The only backend is git.** `--backend` accepts `git` and nothing else.
 - **Tested on Windows 10 with Node 25 and an HTTPS remote.** The outputs above come from those runs, with home directories shortened to `~`, the remote renamed and the key replaced by a placeholder. macOS and Linux runs are tracked in [#2061](https://github.com/Fmarzochi/EGC/issues/2061). An SSH remote has not been run to a successful sync for this guide.

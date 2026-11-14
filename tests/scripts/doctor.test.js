@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const { suiteEnv } = require('../fixtures/suite-env');
 const { execFileSync } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'doctor.js');
@@ -23,6 +24,14 @@ const {
 } = require('../../scripts/lib/install-state');
 const { getEGCDir } = require('../../scripts/lib/utils');
 const { shellQuote } = require('../../scripts/lib/doctor-summary');
+
+// Fixed git locations before a PATH lookup, as the other git-backed suites do.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  '/opt/homebrew/bin/git',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
+].find(candidate => fs.existsSync(candidate)) || 'git';
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -1271,6 +1280,74 @@ function runTests() {
       assert.ok(issue, JSON.stringify(parsed.results[0].issues));
       assert.deepStrictEqual(issue.paths, ['SessionStart in ' + settingsPath]);
       assert.strictEqual(parsed.results[0].status, 'error');
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('without a team the doctor prints one informational Team line and counts no warning (#2058)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const result = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(result.code, 0, result.stdout + result.stderr);
+      assert.ok(result.stdout.includes('Team: not configured (egc team init --backend git --remote <url>, with --key <team key> to join a team)'), result.stdout);
+      assert.ok(result.stdout.includes('Summary: checked=0, ok=0, warnings=0, errors=0'), result.stdout);
+      const asJson = run(['--json'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(JSON.parse(asJson.stdout).team.configured, false);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
+  tally(test('with a team the doctor shows the remote, the last sync and the state to seal, and a bad key is one warning in the total (#2058)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+
+    try {
+      const remote = path.join(homeDir, 'remote.git');
+      const checkout = path.join(homeDir, '.egc', 'team-sync');
+      const gitEnv = { ...suiteEnv(process.env), HOME: homeDir, USERPROFILE: homeDir, GIT_CONFIG_NOSYSTEM: '1' };
+      const git = (args, cwd) => execFileSync(GIT_BIN, args, { cwd, env: gitEnv, encoding: 'utf8', stdio: 'pipe' }).trim();
+      fs.mkdirSync(remote, { recursive: true });
+      git(['init', '--bare', '-q', '-b', 'main'], remote);
+      fs.mkdirSync(path.join(checkout, 'state'), { recursive: true });
+      git(['init', '-q', '-b', 'main'], checkout);
+      git(['config', 'user.email', 'doctor@example.test'], checkout);
+      git(['config', 'user.name', 'Doctor'], checkout);
+      git(['remote', 'add', 'origin', remote], checkout);
+      fs.writeFileSync(path.join(checkout, 'state', 'proj.md'), 'sealed');
+      git(['add', '-A'], checkout);
+      git(['commit', '-q', '-m', 'sync: team memory update'], checkout);
+      git(['push', '-q', 'origin', 'main'], checkout);
+      const lastCommit = git(['log', '-1', '--format=%cI'], checkout);
+      fs.mkdirSync(path.join(homeDir, '.egc', 'state'), { recursive: true });
+      fs.writeFileSync(path.join(homeDir, '.egc', 'state', 'proj.md'), 'EGC1:sealed');
+      const configPath = path.join(homeDir, '.egc', 'team.json');
+      writeJson(configPath, { backend: 'git', remote, branch: 'main', teamKey: 'ab'.repeat(32) });
+
+      const healthy = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(healthy.code, 0, healthy.stdout + healthy.stderr);
+      assert.ok(healthy.stdout.includes(`Team: git ${remote}, branch main, key present`), healthy.stdout);
+      assert.ok(healthy.stdout.includes(`  Last sync: ${lastCommit}`), healthy.stdout);
+      assert.ok(healthy.stdout.includes('  Local state: 1 files to seal'), healthy.stdout);
+      assert.ok(healthy.stdout.includes('  Autosync: off'), healthy.stdout);
+      assert.ok(healthy.stdout.includes('Team summary: warnings=0'), healthy.stdout);
+      assert.ok(healthy.stdout.includes('Summary: checked=0, ok=0, warnings=0, errors=0'), healthy.stdout);
+
+      writeJson(configPath, { backend: 'git', remote, branch: 'main', teamKey: 'not-a-key' });
+      const badKey = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(badKey.code, 0, 'a team warning never fails the doctor');
+      assert.ok(badKey.stdout.includes('[WARNING] Team key missing or invalid in ~/.egc/team.json: run egc team init --backend git --remote <url> --key <team key>'), badKey.stdout);
+      assert.ok(badKey.stdout.includes('Summary: checked=0, ok=0, warnings=1, errors=0'), badKey.stdout);
+      const asJson = run(['--json'], { cwd: projectRoot, homeDir });
+      const parsed = JSON.parse(asJson.stdout);
+      assert.strictEqual(parsed.team.keyPresent, false);
+      assert.strictEqual(parsed.team.warningCount, 1);
+      assert.strictEqual(parsed.summary.warningCount, 1);
     } finally {
       cleanup(homeDir);
       cleanup(projectRoot);
