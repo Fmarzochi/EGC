@@ -5707,7 +5707,7 @@ function runTests() {
     assert.ok(destinations.includes(path.join(root, 'egc', 'library', 'rules', 'common', 'memory.md')), 'a rule lands under the EGC library folder');
     assert.ok(destinations.includes(path.join(root, 'AGENTS.md')), 'the root AGENTS.md lands where Kilo reads global instructions');
     assert.ok(destinations.includes(path.join(root, 'plugins', 'opencode-egc-plugin.js')), 'the EGC plugin lands under plugins/');
-    for (const script of ['pre-bash-guardian-validate.js', 'pre-write-guardian-validate.js', 'pre-bash-crusher-rewrite.js', 'opencode-session-start.js']) {
+    for (const script of ['pre-bash-guardian-validate.js', 'pre-write-guardian-validate.js', 'pre-bash-crusher-rewrite.js', 'opencode-session-start.js', 'mesh-events-inject.js']) {
       assert.ok(destinations.includes(path.join(root, 'scripts', 'hooks', script)), `${script} ships next to the plugin`);
     }
     assert.ok(!destinations.some(destination => destination.includes(`${path.sep}.opencode`)), 'nothing of the OpenCode npm package lands in the Kilo config');
