@@ -84,19 +84,72 @@ function trustedRoot(dir: string): string {
   }
 }
 
-// The canonical absolute form of a git path when it sits under a trusted
-// root (the home directory or the temp directory, untainted system values)
-// and carries '.git' as a path segment; null otherwise. The value returned
-// here is the one every read below uses, so a path handed in by a hook
-// payload or a CLI argument never reaches the filesystem unchecked, and a
-// traversal or a link leading to an unrelated location is refused before
-// any read.
-export function trustedGitPath(p: string): string | null {
+// The directories that hold the system, where no checkout of a person lives:
+// a .git under one of them is never read, whoever asks. The same roots
+// memory-project-path.ts refuses as a project path.
+const POSIX_SYSTEM_ROOTS = ['/etc', '/usr', '/bin', '/sbin', '/lib', '/lib64', '/boot', '/proc', '/sys', '/dev', '/root', '/var/lib', '/var/log', '/var/run', '/run'];
+
+function systemRoots(): string[] {
+  if (process.platform !== 'win32') return POSIX_SYSTEM_ROOTS;
+  const env = process.env;
+  return [
+    env.SystemRoot || String.raw`C:\Windows`,
+    env.ProgramFiles || String.raw`C:\Program Files`,
+    env['ProgramFiles(x86)'] || String.raw`C:\Program Files (x86)`,
+    env.ProgramData || String.raw`C:\ProgramData`,
+  ];
+}
+
+// Windows ignores the case of a path; the comparison does the same there.
+function foldCase(p: string): string {
+  return process.platform === 'win32' ? p.toLowerCase() : p;
+}
+
+function underSystemRoot(canonical: string): boolean {
+  return systemRoots().some(root => foldCase(canonical).startsWith(foldCase(trustedRoot(root))));
+}
+
+function isFilesystemRoot(dir: string): boolean {
+  return path.dirname(dir) === dir;
+}
+
+// What a git path may be trusted for, beyond the home and the temp directory.
+export interface GitTrust {
+  // The project the read serves: the .git of its own repository, the
+  // directory holding .git being the project or one of its ancestors, is
+  // trusted wherever the checkout lives (/opt, /srv, another drive), never
+  // under a system directory and never at the filesystem root.
+  project?: string;
+  // A path reached from a git directory already trusted: a file under it, or
+  // the directory a worktree pointer or a commondir names, followed once;
+  // trusted anywhere outside a system directory.
+  followed?: boolean;
+}
+
+// The canonical absolute form of a git path when it may be read, null
+// otherwise. A path under the home directory or the temp directory (untainted
+// system values) is trusted as it always was; a path elsewhere only through
+// the trust the caller states, so a path handed in by a hook payload or a CLI
+// argument never reaches the filesystem unchecked, and a traversal or a link
+// leading to an unrelated location is refused before any read. The value
+// returned is what every read below uses.
+export function trustedGitPath(p: string, trust: GitTrust = {}): string | null {
   const canonical = canonicalPath(p);
   if (!canonical) return null;
-  const underTrustedRoot = canonical.startsWith(trustedRoot(os.homedir())) || canonical.startsWith(trustedRoot(os.tmpdir()));
-  const hasGitSegment = canonical.split(path.sep).includes('.git');
-  return underTrustedRoot && hasGitSegment ? canonical : null;
+  const segments = canonical.split(path.sep);
+  const gitAt = segments.indexOf('.git');
+  if (gitAt === -1) return null;
+  if (canonical.startsWith(trustedRoot(os.homedir())) || canonical.startsWith(trustedRoot(os.tmpdir()))) return canonical;
+  if (underSystemRoot(canonical)) return null;
+  if (trust.followed) return canonical;
+  if (!trust.project) return null;
+  // The directory that holds .git: the root of the repository the path
+  // belongs to, which must hold the project too.
+  const repoRoot = segments.slice(0, gitAt).join(path.sep) || path.sep;
+  if (isFilesystemRoot(repoRoot)) return null;
+  const project = canonicalPath(trust.project);
+  if (!project) return null;
+  return project === repoRoot || project.startsWith(withTrailingSeparator(repoRoot)) ? canonical : null;
 }
 
 // Branch detection reads .git/HEAD instead of spawning git: no PATH
@@ -144,9 +197,10 @@ function readFileNoFollow(filePath: string): string | null {
   }
 }
 
-// The git directory of a project: the nearest .git under a trusted root,
-// never a link, with a worktree or submodule pointer file followed once and
-// checked the same way. trustedGitPath canonicalizes (follows symlinks) to
+// The git directory of a project: the nearest .git the project may read (its
+// own repository, or one under the home or the temp directory), never a
+// link, with a worktree or submodule pointer file followed once and checked
+// the same way. trustedGitPath canonicalizes (follows symlinks) to
 // decide whether a path is trustworthy, so its return value is the resolved
 // target, not the path that was asked about; using that value to open a
 // file would read straight through a symlink planted at gitDir or HEAD to
@@ -156,7 +210,7 @@ function readFileNoFollow(filePath: string): string | null {
 // one pointing at another trusted .git.
 function resolveGitDir(projectPath: string): string | null {
   let gitDir = findGitDir(projectPath);
-  if (!gitDir || !trustedGitPath(gitDir)) return null;
+  if (!gitDir || !trustedGitPath(gitDir, { project: projectPath })) return null;
   // Narrows the directory-component case too, though only for gitDir
   // itself: a link here never reaches the opens below (gitDir is only
   // used to build the paths read, each independently O_NOFOLLOW
@@ -172,7 +226,7 @@ function resolveGitDir(projectPath: string): string | null {
     // The directory the pointer names gets the same two checks as .git: a
     // link there would be traversed by every open below, since O_NOFOLLOW
     // only refuses a link at the final component.
-    if (!trustedGitPath(gitDir) || fs.lstatSync(gitDir).isSymbolicLink()) return null;
+    if (!trustedGitPath(gitDir, { followed: true }) || fs.lstatSync(gitDir).isSymbolicLink()) return null;
   }
   return gitDir;
 }
@@ -181,7 +235,7 @@ function resolveGitDir(projectPath: string): string | null {
 // when its path is trusted and never through a link; null otherwise.
 function readGitFile(gitDir: string, name: string): string | null {
   const filePath = path.resolve(gitDir, name);
-  if (!trustedGitPath(filePath)) return null;
+  if (!trustedGitPath(filePath, { followed: true })) return null;
   // Rechecked right before the open, with nothing in between: a link swapped
   // in at gitDir after resolveGitDir looked would redirect the open, since
   // O_NOFOLLOW only refuses a link at the final component.
@@ -190,7 +244,7 @@ function readGitFile(gitDir: string, name: string): string | null {
 }
 
 // Reads the raw, trimmed content of .git/HEAD, resolving worktree and
-// submodule pointer files and refusing anything outside the trusted roots.
+// submodule pointer files and refusing anything the project may not read.
 // Shared by detectBranch and detectDetachedCommit so both agree on exactly
 // what HEAD says.
 function readHeadLine(projectPath: string): string | null {
@@ -210,7 +264,7 @@ function resolveCommonDir(gitDir: string): string | null {
   const commondir = readGitFile(gitDir, 'commondir');
   if (commondir === null) return gitDir;
   const common = path.resolve(gitDir, commondir.trim());
-  return trustedGitPath(common) && !fs.lstatSync(common).isSymbolicLink() ? common : null;
+  return trustedGitPath(common, { followed: true }) && !fs.lstatSync(common).isSymbolicLink() ? common : null;
 }
 
 const CONFIG_ESCAPES: Record<string, string> = { n: '\n', t: '\t', b: '\b' };
