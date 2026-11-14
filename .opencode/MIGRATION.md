@@ -55,6 +55,9 @@ OpenCode is an alternative CLI for AI-assisted development that supports **all**
 **OpenCode plugin (.opencode/plugins/prettier-hook.ts):**
 ```typescript
 import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+
+const run = promisify(execFile)
 
 // One default export, read by both loaders: OpenCode 2 takes `id` and
 // `setup`, OpenCode 1 (1.18.29 and newer) takes `server`. Nothing else is
@@ -62,11 +65,12 @@ import { execFile } from "node:child_process"
 export default {
   id: "prettier-hook",
   // OpenCode 2 registers hooks on the context it hands over; no shell comes
-  // with it.
+  // with it, so the formatter runs through child_process and is awaited, as
+  // the V1 branch awaits the shell.
   async setup(ctx) {
     await ctx.tool.hook("execute.after", async (event) => {
       const file = event.input?.filePath
-      if (event.tool === "edit" && /\.(ts|tsx|js|jsx)$/.test(file)) execFile("prettier", ["--write", file])
+      if (event.tool === "edit" && /\.(ts|tsx|js|jsx)$/.test(file)) await run("prettier", ["--write", file])
     })
   },
   // OpenCode 1 reads the hooks object and hands over Bun's shell.

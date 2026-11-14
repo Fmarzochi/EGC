@@ -25,6 +25,7 @@ import {
 export const EGC_VERSION = "1.1.23"
 
 export type HookProfile = "minimal" | "standard" | "strict"
+export type ToolStatus = "success" | "error"
 export type LogLevel = "debug" | "info" | "warn" | "error"
 export type Logger = (level: LogLevel, message: string) => void
 // Bun's shell, when the host hands one over (OpenCode 1 does, OpenCode 2 does
@@ -33,8 +34,12 @@ export type Logger = (level: LogLevel, message: string) => void
 export type Shell = PluginInput["$"]
 
 export type CoreOptions = {
+  // The checkout the session works in: the Guardian judges calls there.
   worktreePath: string
   pluginDir: string
+  // The checkout the plugin lives in, where its hook scripts come from; the
+  // session's own checkout when the two are one (OpenCode 1).
+  scriptsRoot?: string
   log: Logger
   shell?: Shell
 }
@@ -44,7 +49,12 @@ const SCRIPT_FILE = /\.(ts|tsx|js|jsx)$/
 const READ_ONLY_TOOLS = new Set(["read", "glob", "grep", "search", "list"])
 const FORMATTER_COMMAND = /^(npx )?(prettier|biome|black|gofmt|rustfmt|swift-format)/
 const TEST_COMMAND = /^(npm test|npx vitest|npx jest|pytest|go test|cargo test)/
-const LONG_RUNNING_COMMAND = /^((npm|pnpm|yarn|bun)\s+(install|build|test|run)|cargo\s+(build|test|run)|go\s+(build|test|run))/
+const LONG_RUNNING_COMMANDS = [/^(npm|pnpm|yarn|bun)\s+(install|build|test|run)/, /^cargo\s+(build|test|run)/, /^go\s+(build|test|run)/]
+const DOC_FILE = /\.(md|txt)$/i
+const DOC_FILE_KEPT = /README|CHANGELOG|LICENSE|CONTRIBUTING/
+const TYPESCRIPT_FILE = /\.tsx?$/
+const ALL_PROFILES: HookProfile[] = ["minimal", "standard", "strict"]
+const STANDARD_AND_UP: HookProfile[] = ["standard", "strict"]
 const LOCKFILES: Record<string, string> = {
   "bun.lockb": "bun",
   "pnpm-lock.yaml": "pnpm",
@@ -96,11 +106,17 @@ function toolLabel(tool: string): string {
   return tool ? tool.charAt(0).toUpperCase() + tool.slice(1) : "Tool"
 }
 
+// A command that chains, pipes, substitutes or redirects is never vouched
+// for by its first word: `npm test && curl ... | sh` is not a test run.
+const SHELL_CONTROL = /[;&|`$<>()\n]/
+
 // The permission a plugin may answer for the person: read-only tools, the
-// formatters and the test runners; anything else stays with the person.
+// formatters and the test runners, each as one plain command; anything else
+// stays with the person.
 export function permissionDecision(action: string, command: string): string | null {
   if (READ_ONLY_TOOLS.has(action)) return "Read-only operation"
   if (!isShellTool(action)) return null
+  if (SHELL_CONTROL.test(command)) return null
   if (FORMATTER_COMMAND.test(command)) return "Formatter execution"
   if (TEST_COMMAND.test(command)) return "Test execution"
   return null
@@ -110,17 +126,21 @@ export type EgcCore = ReturnType<typeof createEgcCore>
 
 export function createEgcCore(options: CoreOptions) {
   const { worktreePath, pluginDir, log, shell } = options
+  const scriptsRoot = options.scriptsRoot ?? worktreePath
   initStore(worktreePath)
 
   const editedFiles = new Set<string>()
   const pendingWrites = new Map<string, { path: string; type: ChangeType }>()
-  const profile = normalizeProfile(process.env.EGC_HOOK_PROFILE)
-  const disabledHooks = new Set(
-    (process.env.EGC_DISABLED_HOOKS || "").split(",").map((item) => item.trim()).filter(Boolean)
-  )
+
+  // The flags are read at every call, as the hosts that spawn hooks read
+  // them, so a variable exported mid-session takes effect at once.
+  const currentProfile = (): HookProfile => normalizeProfile(process.env.EGC_HOOK_PROFILE)
+  const disabledHooks = (): Set<string> =>
+    new Set((process.env.EGC_DISABLED_HOOKS || "").split(",").map((item) => item.trim()).filter(Boolean))
 
   function hookEnabled(hookId: string, required: HookProfile | HookProfile[] = "standard"): boolean {
-    if (disabledHooks.has(hookId)) return false
+    if (disabledHooks().has(hookId)) return false
+    const profile = currentProfile()
     const needed = Array.isArray(required) ? required : [required]
     return needed.some((entry) => PROFILE_ORDER[profile] >= PROFILE_ORDER[entry])
   }
@@ -150,6 +170,24 @@ export function createEgcCore(options: CoreOptions) {
   // stands in for a host that gives none.
   const writeKey = (callID: string | undefined, filePath: string) => callID ?? filePath
 
+  function announceWrite(args: ToolArgs, callID?: string): void {
+    const filePath = filePathOf(args)
+    if (!filePath) return
+    pendingWrites.set(writeKey(callID, filePath), { path: filePath, type: hasProjectFile(filePath) ? "modified" : "added" })
+    if (hookEnabled("pre:write:doc-file-warning", STANDARD_AND_UP) && DOC_FILE.test(filePath) && !DOC_FILE_KEPT.test(filePath)) {
+      log("warn", `[EGC] Creating ${filePath} - consider if this documentation is necessary`)
+    }
+  }
+
+  function remindAboutCommand(command: string): void {
+    if (hookEnabled("pre:bash:git-push-reminder", "strict") && command.includes("git push")) {
+      log("info", "[EGC] Remember to review changes before pushing: git diff origin/main...HEAD")
+    }
+    if (hookEnabled("pre:bash:tmux-reminder", "strict") && LONG_RUNNING_COMMANDS.some((pattern) => pattern.test(command))) {
+      log("info", "[EGC] Long-running command detected - consider using background execution")
+    }
+  }
+
   function beforeTool(tool: string, args: ToolArgs, callID?: string): void {
     if (typeof tool !== "string" || !tool) return
     const detail = filePathOf(args) ?? (isShellTool(tool) ? commandOf(args) : "")
@@ -157,68 +195,64 @@ export function createEgcCore(options: CoreOptions) {
 
     // The Guardian first: a denied command or a protected or denied write is
     // refused before any other hook looks at the call.
-    const guardianReason = guardianDenyReason(pluginDir, worktreePath, tool, args)
+    const guardianReason = guardianDenyReason(pluginDir, scriptsRoot, worktreePath, tool, args)
     if (guardianReason) throw new Error(guardianReason)
 
     // The Fact-Forcing Gate: the first edit, write or command of a file (or of
     // the session, for a command) waits for the facts.
-    if (hookEnabled("pre:gateguard:fact-force", ["minimal", "standard", "strict"])) {
-      const gateReason = gateGuardDenyReason(pluginDir, worktreePath, tool, args)
+    if (hookEnabled("pre:gateguard:fact-force", ALL_PROFILES)) {
+      const gateReason = gateGuardDenyReason(pluginDir, scriptsRoot, tool, args)
       if (gateReason) throw new Error(gateReason)
     }
 
-    const filePath = filePathOf(args)
-    if (tool === "write" && filePath) {
-      pendingWrites.set(writeKey(callID, filePath), { path: filePath, type: hasProjectFile(filePath) ? "modified" : "added" })
-      if (
-        hookEnabled("pre:write:doc-file-warning", ["standard", "strict"]) &&
-        /\.(md|txt)$/i.test(filePath) &&
-        !/README|CHANGELOG|LICENSE|CONTRIBUTING/.test(filePath)
-      ) {
-        log("warn", `[EGC] Creating ${filePath} - consider if this documentation is necessary`)
-      }
-    }
+    if (tool === "write") announceWrite(args, callID)
+    if (isShellTool(tool)) remindAboutCommand(commandOf(args))
+  }
 
-    if (isShellTool(tool)) {
-      const command = commandOf(args)
-      if (hookEnabled("pre:bash:git-push-reminder", "strict") && command.includes("git push")) {
-        log("info", "[EGC] Remember to review changes before pushing: git diff origin/main...HEAD")
-      }
-      if (hookEnabled("pre:bash:tmux-reminder", "strict") && LONG_RUNNING_COMMAND.test(command)) {
-        log("info", "[EGC] Long-running command detected - consider using background execution")
-      }
+  function recordToolChange(tool: string, filePath: string | null, callID?: string): void {
+    if (!filePath) return
+    if (tool === "edit") {
+      recordChange(filePath, "modified")
+      return
+    }
+    if (tool !== "write") return
+    const key = writeKey(callID, filePath)
+    const pending = pendingWrites.get(key)
+    if (pending) {
+      recordChange(pending.path, pending.type)
+      pendingWrites.delete(key)
+    } else {
+      recordChange(filePath, "modified")
     }
   }
 
-  async function afterTool(tool: string, args: ToolArgs, callID?: string): Promise<void> {
+  // The type check of the strict profile, where a shell exists to run it.
+  async function typecheck(): Promise<void> {
+    if (!shell || !hookEnabled("post:edit:typecheck", ["strict"])) return
+    try {
+      await shell`npx tsc --noEmit 2>&1`
+      log("info", "[EGC] TypeScript check passed")
+    } catch (error: unknown) {
+      log("warn", "[EGC] TypeScript errors detected:")
+      const stdout = (error as { stdout?: string }).stdout
+      if (stdout) stdout.split("\n").slice(0, 5).forEach((line) => log("warn", `  ${line}`))
+    }
+  }
+
+  // A call that failed changed nothing: its telemetry says so, the write it
+  // announced is forgotten and no file is recorded.
+  async function afterTool(tool: string, args: ToolArgs, callID?: string, status: ToolStatus = "success"): Promise<void> {
     if (typeof tool !== "string" || !tool) return
-    emitDashboard({ ide: "opencode", event: "post_tool", tool: toolLabel(tool), agent: "main", status: "success" })
+    emitDashboard({ ide: "opencode", event: "post_tool", tool: toolLabel(tool), agent: "main", status })
 
     const filePath = filePathOf(args)
-    if (tool === "edit" && filePath) recordChange(filePath, "modified")
-    if (tool === "write" && filePath) {
-      const key = writeKey(callID, filePath)
-      const pending = pendingWrites.get(key)
-      if (pending) {
-        recordChange(pending.path, pending.type)
-        pendingWrites.delete(key)
-      } else {
-        recordChange(filePath, "modified")
-      }
+    if (status !== "success") {
+      if (tool === "write" && filePath) pendingWrites.delete(writeKey(callID, filePath))
+      return
     }
-
-    if (shell && hookEnabled("post:edit:typecheck", ["strict"]) && tool === "edit" && filePath && /\.tsx?$/.test(filePath)) {
-      try {
-        await shell`npx tsc --noEmit 2>&1`
-        log("info", "[EGC] TypeScript check passed")
-      } catch (error: unknown) {
-        log("warn", "[EGC] TypeScript errors detected:")
-        const stdout = (error as { stdout?: string }).stdout
-        if (stdout) stdout.split("\n").slice(0, 5).forEach((line) => log("warn", `  ${line}`))
-      }
-    }
-
-    if (hookEnabled("post:bash:pr-created", ["standard", "strict"]) && isShellTool(tool) && commandOf(args).includes("gh pr create")) {
+    recordToolChange(tool, filePath, callID)
+    if (tool === "edit" && filePath && TYPESCRIPT_FILE.test(filePath)) await typecheck()
+    if (hookEnabled("post:bash:pr-created", STANDARD_AND_UP) && isShellTool(tool) && commandOf(args).includes("gh pr create")) {
       log("info", "[EGC] PR created - check GitHub Actions status")
     }
   }
@@ -238,7 +272,7 @@ export function createEgcCore(options: CoreOptions) {
       }
     }
 
-    if (hookEnabled("post:edit:console-warn", ["standard", "strict"])) {
+    if (hookEnabled("post:edit:console-warn", STANDARD_AND_UP)) {
       const count = countConsoleLogs(file)
       if (count > 0) log("warn", `[EGC] console.log found in ${file} (${count} occurrence${count > 1 ? "s" : ""})`)
     }
@@ -260,15 +294,15 @@ export function createEgcCore(options: CoreOptions) {
   }
 
   function sessionCreated(): void {
-    if (!hookEnabled("session:start", ["minimal", "standard", "strict"])) return
-    log("info", `[EGC] Session started - profile=${profile}`)
+    if (!hookEnabled("session:start", ALL_PROFILES)) return
+    log("info", `[EGC] Session started - profile=${currentProfile()}`)
     if (hasProjectFile("GEMINI.md")) log("info", "[EGC] Found GEMINI.md - loading project context")
   }
 
   // The console.log audit of the files the session edited, then the desktop
   // notification where a shell exists to show one.
   async function sessionIdle(): Promise<void> {
-    if (!hookEnabled("stop:check-console-log", ["minimal", "standard", "strict"])) return
+    if (!hookEnabled("stop:check-console-log", ALL_PROFILES)) return
     if (editedFiles.size === 0) return
     log("info", "[EGC] Session idle - running console.log audit")
 
@@ -301,7 +335,7 @@ export function createEgcCore(options: CoreOptions) {
   }
 
   function sessionDeleted(): void {
-    if (!hookEnabled("session:end-marker", ["minimal", "standard", "strict"])) return
+    if (!hookEnabled("session:end-marker", ALL_PROFILES)) return
     log("info", "[EGC] Session ended - cleaning up")
     editedFiles.clear()
     clearChanges()
@@ -315,7 +349,7 @@ export function createEgcCore(options: CoreOptions) {
     const env: Record<string, string> = {
       EGC_VERSION,
       EGC_PLUGIN: "true",
-      EGC_HOOK_PROFILE: profile,
+      EGC_HOOK_PROFILE: currentProfile(),
       EGC_DISABLED_HOOKS: process.env.EGC_DISABLED_HOOKS || "",
       PROJECT_ROOT: worktreePath,
     }
@@ -358,7 +392,6 @@ export function createEgcCore(options: CoreOptions) {
   }
 
   return {
-    profile,
     hookEnabled,
     beforeTool,
     afterTool,

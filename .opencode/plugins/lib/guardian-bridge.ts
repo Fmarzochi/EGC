@@ -87,26 +87,33 @@ export function commandOf(args: ToolArgs): string {
 
 // The Guardian's refusal for a write, an edit or a shell command, or null to
 // proceed: the same validators Claude Code's hooks.json wires in, called
-// in-process. A blocking verdict (exit code 2) carries the reason.
-export function guardianDenyReason(pluginDir: string, worktreePath: string, tool: string, args: ToolArgs): string | null {
+// in-process. The scripts come from the checkout the plugin lives in
+// (`scriptsRoot`); the call is judged in the session's own directory (`cwd`),
+// which may be another checkout. A blocking verdict (exit code 2) carries the
+// reason.
+export function guardianDenyReason(pluginDir: string, scriptsRoot: string, cwd: string, tool: string, args: ToolArgs): string | null {
   let verdict: GuardianVerdict | undefined
   if (isShellTool(tool)) {
-    const guardian = loadHookModule(pluginDir, worktreePath, "pre-bash-guardian-validate.js")
+    const guardian = loadHookModule(pluginDir, scriptsRoot, "pre-bash-guardian-validate.js")
     verdict = guardian?.run({
       tool_name: "Bash",
       tool_input: { command: commandOf(args) },
-      cwd: worktreePath,
+      cwd,
     }) as GuardianVerdict | undefined
   } else if (GUARDIAN_WRITE_TOOLS[tool]) {
-    const guardian = loadHookModule(pluginDir, worktreePath, "pre-write-guardian-validate.js")
+    const guardian = loadHookModule(pluginDir, scriptsRoot, "pre-write-guardian-validate.js")
     verdict = guardian?.run({
       tool_name: GUARDIAN_WRITE_TOOLS[tool],
+      // The validator rebuilds the content an edit leaves behind from the old
+      // and the new string, so the whole result is judged, not the fragment.
       tool_input: {
         file_path: args?.filePath ?? args?.file_path ?? args?.path,
         content: args?.content,
+        old_string: typeof args?.oldString === "string" ? args.oldString : undefined,
         new_string: args?.newString,
+        replace_all: args?.replaceAll === true ? true : undefined,
       },
-      cwd: worktreePath,
+      cwd,
     }) as GuardianVerdict | undefined
   }
   return verdict?.exitCode === 2 ? (verdict.stderr || "Blocked by the EGC Guardian.") : null
@@ -141,28 +148,24 @@ function gateGuardDenyReasonOf(result: unknown): string | null {
 // The Fact-Forcing Gate's refusal of the first edit, write or command of a
 // file or a session, or null: the gate script runs in-process with the same
 // payload Claude Code sends it.
-export function gateGuardDenyReason(pluginDir: string, worktreePath: string, tool: string, args: ToolArgs): string | null {
-  const gateguard = loadHookModule(pluginDir, worktreePath, "gateguard-fact-force.js")
+export function gateGuardDenyReason(pluginDir: string, scriptsRoot: string, tool: string, args: ToolArgs): string | null {
+  const gateguard = loadHookModule(pluginDir, scriptsRoot, "gateguard-fact-force.js")
   if (!gateguard) return null
   const payload = gateGuardInput(tool, args)
   if (!payload) return null
   return gateGuardDenyReasonOf(gateguard.run(payload))
 }
 
-// The dashboard only accepts events that carry the token it minted at
-// startup (dashboard/ops.js); a missing token just means no telemetry. The
-// token changes only when the dashboard restarts, so a good read is kept and
-// the file is consulted again only while no token is known.
-let dashboardToken: string | null = null
-
+// The dashboard only accepts events that carry the token it keeps in
+// ~/.egc/dashboard-token (dashboard/ops.js); a missing or partial token just
+// means no telemetry. Read on every event, as scripts/lib/dashboard-token.js
+// does, so a rotated token is honored without a restart.
 export function readDashboardToken(): string | null {
-  if (dashboardToken) return dashboardToken
   try {
     const home = process.env.HOME || process.env.USERPROFILE || os.homedir()
     const raw = fs.readFileSync(path.join(home, ".egc", "dashboard-token"), "utf8").trim()
-    dashboardToken = /^[0-9a-f]{64}$/i.test(raw) ? raw : null
+    return /^[0-9a-f]{64}$/i.test(raw) ? raw : null
   } catch {
-    dashboardToken = null
+    return null
   }
-  return dashboardToken
 }

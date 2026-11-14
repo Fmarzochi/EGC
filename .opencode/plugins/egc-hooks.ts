@@ -21,7 +21,7 @@ import * as path from "path"
 import { fileURLToPath } from "url"
 import type { PluginInput } from "@opencode-ai/plugin"
 import changedFilesTool from "../tools/changed-files.js"
-import { createEgcCore, dispatchBusEvent, type EgcCore, type LogLevel, type Logger } from "./lib/egc-plugin-core.js"
+import { createEgcCore, dispatchBusEvent, permissionDecision, type EgcCore, type LogLevel, type Logger } from "./lib/egc-plugin-core.js"
 import { commandOf, type ToolArgs } from "./lib/guardian-bridge.js"
 
 const PLUGIN_ID = "egc-universal"
@@ -108,7 +108,7 @@ const server = async ({ client, $, directory, worktree }: Partial<PluginInput> =
       const action = stringOf(input?.tool) || stringOf(input?.type)
       log("info", `[EGC] Permission requested for: ${action}`)
       const command = commandOf(input?.args as ToolArgs) || stringOf(input?.metadata?.command) || stringOf(input?.pattern)
-      const reason = core.permissionDecision(action, command)
+      const reason = permissionDecision(action, command)
       if (!reason) return { approved: undefined }
       if (output && typeof output === "object") output.status = "allow"
       return { approved: true, reason }
@@ -134,18 +134,33 @@ type ToolEditor = {
     execute: (input: unknown, context: unknown) => Promise<{ content: string }>
   }) => unknown
 }
+type SessionInfo = { directory?: string; location?: { directory?: string } }
 type PluginContext = {
   location?: { directory?: string; project?: { directory?: string } }
   client?: unknown
   tool?: HookDomain & { transform?: (edit: (editor: ToolEditor) => unknown) => unknown }
-  session?: HookDomain
+  session?: HookDomain & { get?: (input: { sessionID: string }) => unknown }
   permission?: HookDomain
   shell?: HookDomain
   event?: { subscribe?: (options?: { types?: string[]; signal?: AbortSignal }) => AsyncIterable<unknown> }
 }
-type ToolBeforeEvent = { tool?: string; callID?: string; input?: unknown }
-type ToolAfterEvent = { tool?: string; callID?: string; input?: unknown; args?: unknown }
-type CompactionEvent = { system?: Array<{ type: string; text: string }> }
+type ToolBeforeEvent = { tool?: string; sessionID?: string; callID?: string; input?: unknown }
+type ToolAfterEvent = { tool?: string; sessionID?: string; callID?: string; input?: unknown; args?: unknown; status?: string }
+type CompactionEvent = { sessionID?: string; system?: Array<{ type: string; text: string }> }
+type BusEvent = { properties?: { sessionID?: unknown; info?: { id?: unknown } } }
+type CoreResolver = (sessionID: unknown) => Promise<EgcCore>
+
+// How many sessions and checkouts one OpenCode process remembers; the oldest
+// entry leaves when a newer one arrives past the cap.
+const MAX_REMEMBERED = 64
+
+function remember<Key, Value>(map: Map<Key, Value>, key: Key, value: Value): void {
+  if (!map.has(key) && map.size >= MAX_REMEMBERED) {
+    const oldest = map.keys().next()
+    if (!oldest.done) map.delete(oldest.value)
+  }
+  map.set(key, value)
+}
 type PermissionEvaluation = { action?: unknown; resources?: unknown; effect?: string; message?: string }
 type ShellCreateBefore = { env?: Record<string, string | undefined> }
 
@@ -183,8 +198,10 @@ async function registerChangedFilesTool(context: PluginContext | undefined): Pro
 }
 
 // The bus of OpenCode 2 is an async iterable: the loop runs until the cleanup
-// aborts it, and an event that fails does not stop the next one.
-function followBusEvents(context: PluginContext | undefined, core: EgcCore): () => void {
+// aborts it, and an event that fails does not stop the next one. Each event
+// drives the core of the session it names; one without a session drives the
+// core of the plugin location.
+function followBusEvents(context: PluginContext | undefined, coreOf: CoreResolver): () => void {
   const subscribe = context?.event?.subscribe
   if (typeof subscribe !== "function") return () => {}
   const controller = new AbortController()
@@ -192,6 +209,8 @@ function followBusEvents(context: PluginContext | undefined, core: EgcCore): () 
     for await (const event of subscribe.call(context?.event, { signal: controller.signal })) {
       if (controller.signal.aborted) break
       try {
+        const properties = (event as BusEvent | undefined)?.properties
+        const core = await coreOf(properties?.sessionID ?? properties?.info?.id)
         await dispatchBusEvent(core, event)
       } catch {
         // One event's failure is not the bus's.
@@ -207,9 +226,45 @@ function followBusEvents(context: PluginContext | undefined, core: EgcCore): () 
 // OpenCode 2 entrypoint: the same behaviors registered on the context the host
 // hands over. A host without one of the domains keeps the others.
 async function setup(context?: PluginContext): Promise<() => Promise<void>> {
-  const worktreePath = context?.location?.project?.directory ?? context?.location?.directory ?? process.cwd()
-  const core = createEgcCore({ worktreePath, pluginDir, log: loggerOf(context?.client) })
+  const location = context?.location?.project?.directory ?? context?.location?.directory ?? process.cwd()
+  const log = loggerOf(context?.client)
   const registrations: Array<{ dispose: () => unknown }> = []
+
+  // One core per checkout: a session may work in another checkout than the
+  // plugin instance, so its directory is asked of the host once per session,
+  // and the plugin location serves a session the host cannot describe. The
+  // hook scripts always come from the checkout the plugin lives in, never
+  // from the one a session happens to open.
+  const cores = new Map<string, EgcCore>()
+  const coreFor = (directory: string): EgcCore => {
+    let core = cores.get(directory)
+    if (!core) {
+      core = createEgcCore({ worktreePath: directory, pluginDir, scriptsRoot: location, log })
+      remember(cores, directory, core)
+    }
+    return core
+  }
+  const directories = new Map<string, Promise<string>>()
+  const directoryOf = (sessionID: unknown): Promise<string> => {
+    if (typeof sessionID !== "string" || !sessionID) return Promise.resolve(location)
+    let pending = directories.get(sessionID)
+    if (!pending) {
+      const get = context?.session?.get
+      pending = typeof get !== "function"
+        ? Promise.resolve(location)
+        : Promise.resolve()
+            .then(() => get.call(context?.session, { sessionID }))
+            .then((info) => {
+              const own = (info as SessionInfo | undefined)?.location?.directory ?? (info as SessionInfo | undefined)?.directory
+              return typeof own === "string" && own ? own : location
+            })
+            .catch(() => location)
+      remember(directories, sessionID, pending)
+    }
+    return pending
+  }
+  const coreOf: CoreResolver = async (sessionID) => coreFor(await directoryOf(sessionID))
+  const locationCore = coreFor(location)
 
   const register = async <Event>(
     domain: "tool" | "session" | "permission" | "shell",
@@ -232,41 +287,49 @@ async function setup(context?: PluginContext): Promise<() => Promise<void>> {
   await register<ToolBeforeEvent>("tool", "execute.before", async (event) => {
     const args = event?.input
     if (!args || typeof args !== "object") return
+    const core = await coreOf(event.sessionID)
     core.beforeTool(event.tool ?? "", args as ToolArgs, event.callID)
   })
+  // A failed call is reported as such and records no change.
   await register<ToolAfterEvent>("tool", "execute.after", async (event) => {
     if (!event || typeof event !== "object") return
     const args = event.input ?? event.args
-    await core.afterTool(event.tool ?? "", (args && typeof args === "object" ? args : undefined) as ToolArgs, event.callID)
+    const core = await coreOf(event.sessionID)
+    const status = event.status === "error" ? "error" : "success"
+    await core.afterTool(event.tool ?? "", (args && typeof args === "object" ? args : undefined) as ToolArgs, event.callID, status)
   })
   await register<CompactionEvent>("session", "compaction", async (event) => {
     if (!event || !Array.isArray(event.system)) return
+    const core = await coreOf(event.sessionID)
     event.system.push({ type: "text", text: core.compactionContext().context })
   })
   await register<PermissionEvaluation>("permission", "evaluate", async (event) => {
     if (!event || typeof event !== "object" || event.effect !== "ask") return
     const resources = Array.isArray(event.resources) ? event.resources : []
     const command = resources.find((entry): entry is string => typeof entry === "string") ?? ""
-    const reason = core.permissionDecision(stringOf(event.action), command)
+    const reason = permissionDecision(stringOf(event.action), command)
     if (!reason) return
     event.effect = "allow"
     event.message = reason
   })
+  // The shell hook names no session: the environment is the plugin location's.
   await register<ShellCreateBefore>("shell", "create.before", async (event) => {
     if (!event || typeof event !== "object" || !event.env || typeof event.env !== "object") return
-    Object.assign(event.env, core.shellEnv())
+    Object.assign(event.env, locationCore.shellEnv())
   })
 
   await registerChangedFilesTool(context)
-  const stopEvents = followBusEvents(context, core)
+  const stopEvents = followBusEvents(context, coreOf)
 
-  // Every registration is disposed whatever one disposer does, and the event
-  // loop ends with them.
+  // Every registration is disposed whatever one disposer does, the event loop
+  // ends with them and the sessions are forgotten.
   return async () => {
     stopEvents()
     await Promise.allSettled(
       registrations.splice(0).map((registration) => Promise.resolve().then(() => registration.dispose()))
     )
+    cores.clear()
+    directories.clear()
   }
 }
 

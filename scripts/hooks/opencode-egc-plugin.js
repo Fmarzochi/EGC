@@ -50,11 +50,15 @@ const CRUSHER_HOOK_ID = 'pre:bash:crusher-rewrite';
 const GUARDIAN_PROFILES = 'minimal,standard,strict';
 const CRUSHER_PROFILES = 'standard,strict';
 
+// The validator rebuilds the content an edit leaves behind from the old and
+// the new string, so the whole result is judged, not the inserted fragment.
 function writeToolInput(args) {
   return {
     file_path: args.filePath ?? args.file_path ?? args.path,
     content: typeof args.content === 'string' ? args.content : undefined,
+    old_string: typeof args.oldString === 'string' ? args.oldString : undefined,
     new_string: typeof args.newString === 'string' ? args.newString : undefined,
+    replace_all: args.replaceAll === true ? true : undefined,
   };
 }
 

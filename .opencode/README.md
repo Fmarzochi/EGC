@@ -133,7 +133,7 @@ opencode
 |------|------|------|---------|
 | Guardian and Fact-Forcing Gate | `tool.execute.before` | `tool.hook("execute.before")` | Refuse a denied command (`bash` or `shell`), a protected write, and the first edit of a file before the facts |
 | Dashboard and changed files | `tool.execute.before`, `tool.execute.after` | `tool.hook("execute.before")`, `tool.hook("execute.after")` | Telemetry and the files the session changed |
-| Session lifecycle | `event` (`session.created`, `session.idle`, `session.deleted`) | `event.subscribe` | Start log, console.log audit of the edited files, cleanup |
+| Session lifecycle | `event` (`session.created`, `session.idle`, `session.deleted`) | `event.subscribe` | Start log, console.log audit of the edited files, desktop notification on idle (OpenCode 1 only, it needs the shell), cleanup |
 | File edits | `event` (`file.edited`, `file.watcher.updated`) | `event.subscribe` | Track edits and warn about console.log (Prettier in the strict profile, OpenCode 1 only) |
 | Shell environment | `shell.env` | `shell.hook("create.before")` | `EGC_VERSION`, `PROJECT_ROOT`, `PACKAGE_MANAGER`, `DETECTED_LANGUAGES` for every command |
 | Compaction | `experimental.session.compacting` | `session.hook("compaction")` | Keep the EGC block across a compaction |
