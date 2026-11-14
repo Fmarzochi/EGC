@@ -81,8 +81,11 @@ function trustedRoot(dir) {
 }
 
 // The directories that hold the system, where no checkout of a person lives:
-// a .git under one of them is never read, whoever asks. The same roots the
-// memory server refuses as a project path.
+// a .git under one of them is never read on the account of a project or of a
+// pointer. The home and the temp directory come first, as a project under the
+// home is accepted by the memory server before a system directory is refused,
+// so the home of the root user stays usable. The same roots the server
+// refuses as a project path.
 const POSIX_SYSTEM_ROOTS = ['/etc', '/usr', '/bin', '/sbin', '/lib', '/lib64', '/boot', '/proc', '/sys', '/dev', '/root', '/var/lib', '/var/log', '/var/run', '/run'];
 
 function systemRoots() {
@@ -117,8 +120,12 @@ function isFilesystemRoot(dir) {
 // ancestors) is trusted wherever the checkout lives, never under a system
 // directory and never at the filesystem root; `followed`, a path reached from
 // a git directory already trusted (a file under it, or the directory a
-// worktree pointer or a commondir names), trusted anywhere outside a system
-// directory. So a path handed in by a hook payload or a CLI argument never
+// worktree pointer or a commondir names, followed once), trusted anywhere
+// outside a system directory and off the filesystem root: the pointer is in
+// the person's own checkout and git itself follows it, the reads stay HEAD,
+// commondir and config, and a link on the way is still refused, a deliberate
+// widening since the common directory of a worktree is in another repository
+// root than the checkout. So a path handed in by a hook payload or a CLI argument never
 // reaches the filesystem unchecked, and a traversal or a link leading to an
 // unrelated location is refused before any read. The value returned is what
 // every read below uses.
@@ -130,12 +137,13 @@ function trustedGitPath(p, trust = {}) {
   if (gitAt === -1) return null;
   if (canonical.startsWith(trustedRoot(os.homedir())) || canonical.startsWith(trustedRoot(os.tmpdir()))) return canonical;
   if (underSystemRoot(canonical)) return null;
-  if (trust.followed) return canonical;
-  if (!trust.project) return null;
   // The directory that holds .git: the root of the repository the path
-  // belongs to, which must hold the project too.
+  // belongs to. The filesystem root holds no repository of a person.
   const repoRoot = segments.slice(0, gitAt).join(path.sep) || path.sep;
   if (isFilesystemRoot(repoRoot)) return null;
+  if (trust.followed) return canonical;
+  if (!trust.project) return null;
+  // The repository must hold the project too.
   const project = canonicalPath(trust.project);
   if (!project) return null;
   return project === repoRoot || project.startsWith(withTrailingSeparator(repoRoot)) ? canonical : null;

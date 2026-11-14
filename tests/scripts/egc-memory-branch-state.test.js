@@ -101,6 +101,8 @@ function runOutsideHomeTest(api) {
       } finally {
         removeOutside(outside);
       }
+    } else if (process.env.EGC_REQUIRE_OUTSIDE_DIR) {
+      assert.fail('no writable directory outside the home and the temp directory, and EGC_REQUIRE_OUTSIDE_DIR asks for one');
     } else {
       console.log('    (no writable directory outside the home and the temp directory on this machine)');
     }
@@ -109,6 +111,7 @@ function runOutsideHomeTest(api) {
     assert.strictEqual(trustedGitPath(path.join(system, '.git', 'HEAD'), { followed: true }), null, 'even when a trusted file named it');
     const root = path.parse(os.homedir()).root;
     assert.strictEqual(trustedGitPath(path.join(root, '.git', 'HEAD'), { project: root }), null, 'a .git at the filesystem root');
+    assert.strictEqual(trustedGitPath(path.join(root, '.git', 'HEAD'), { followed: true }), null, 'even when a trusted file named the root');
   });
 }
 

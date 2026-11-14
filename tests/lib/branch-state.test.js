@@ -423,16 +423,19 @@ function runTests() {
       } finally {
         removeOutside(outside);
       }
+    } else if (process.env.EGC_REQUIRE_OUTSIDE_DIR) {
+      assert.fail('no writable directory outside the home and the temp directory, and EGC_REQUIRE_OUTSIDE_DIR asks for one');
     } else {
       console.log('    (no writable directory outside the home and the temp directory on this machine)');
     }
-    // A system directory is never trusted, whoever asks, and the filesystem
-    // root holds no repository.
+    // A system directory is never trusted on the account of a project or a
+    // pointer, and the filesystem root holds no repository.
     const system = process.platform === 'win32' ? path.join(process.env.SystemRoot || String.raw`C:\Windows`, 'egc-x') : '/etc/egc-x';
     assert.strictEqual(trustedGitPath(path.join(system, '.git', 'HEAD'), { project: system }), null, 'a .git under a system directory');
     assert.strictEqual(trustedGitPath(path.join(system, '.git', 'HEAD'), { followed: true }), null, 'even when a trusted file named it');
     const root = path.parse(os.homedir()).root;
     assert.strictEqual(trustedGitPath(path.join(root, '.git', 'HEAD'), { project: root }), null, 'a .git at the filesystem root');
+    assert.strictEqual(trustedGitPath(path.join(root, '.git', 'HEAD'), { followed: true }), null, 'even when a trusted file named the root');
   }));
 
   tally(test('detectBranch returns null outside a git repo', () => {

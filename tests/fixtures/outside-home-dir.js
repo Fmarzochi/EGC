@@ -12,9 +12,12 @@ function outsideHomeAndTemp() {
   const inside = (p, root) => p === root || p.startsWith(root + path.sep);
   const home = fs.realpathSync.native(os.homedir());
   const temp = fs.realpathSync.native(os.tmpdir());
+  // The candidate is only the parent: the directory the caller gets is a
+  // private one mkdtemp makes under it, and a checkout under /var/tmp is one
+  // of the cases this fixture exists for.
   const candidates = process.platform === 'win32'
     ? [path.join(path.parse(process.cwd()).root, 'egc-outside'), path.join(path.parse(home).root, 'egc-outside')]
-    : ['/var/tmp/egc-outside', '/opt/egc-outside', '/srv/egc-outside'];
+    : ['/var/tmp/egc-outside', '/opt/egc-outside', '/srv/egc-outside']; // NOSONAR: the run directory is a private mkdtemp under the candidate
   for (const candidate of candidates) {
     try {
       fs.mkdirSync(candidate, { recursive: true });
