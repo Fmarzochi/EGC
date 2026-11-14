@@ -30,13 +30,15 @@ jobs:
   test:
     name: Test (${{ matrix.os }}, Node ${{ matrix.node }}, ${{ matrix.pm }})
     runs-on: ${{ matrix.os }}
-    # The full suite takes a Windows lane 17 to 21 minutes on an idle runner
-    # (main, 2026-10-09) and past 25 when several pull requests share the
-    # runners. A macOS lane takes 7 to 13 and still ran past 24 once on a
-    # degraded host (main, 2026-11-13, Node 20 with bun, the suite moving the
-    # whole time), so macOS gets the Windows budget: the timeout is a hang
-    # detector, not a stopwatch. Linux finishes well inside 25.
-    timeout-minutes: ${{ matrix.os == 'ubuntu-latest' && 25 || 40 }}
+    # The full suite takes a Windows lane 17 to 36 minutes on main and 39 on
+    # a pull request (2026-11-14, #2115), two to four times a Linux lane, and
+    # more when several pull requests share the runners. A macOS lane takes 7
+    # to 13 and still ran past 24 once on a degraded host (main, 2026-11-13,
+    # Node 20 with bun, the suite moving the whole time), so macOS gets the
+    # Windows budget: the timeout is a hang detector, not a stopwatch, and it
+    # has to sit well above the slowest honest lane. Linux finishes well
+    # inside 25.
+    timeout-minutes: ${{ matrix.os == 'ubuntu-latest' && 25 || 55 }}
 
     strategy:
       fail-fast: false
