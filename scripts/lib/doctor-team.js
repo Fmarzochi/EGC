@@ -120,7 +120,7 @@ function lastSyncTime(dir, budgetMs, env) {
 // The same remote with or without a trailing slash; on Windows, where a
 // local path is spelled with either slash, with either slash too.
 function sameRemote(a, b) {
-  const normalize = url => (process.platform === 'win32' ? url.replace(/\\/g, '/') : url).replace(/\/$/, '');
+  const normalize = url => (process.platform === 'win32' ? url.replaceAll('\\', '/') : url).replace(/\/$/, '');
   return normalize(a) === normalize(b);
 }
 
