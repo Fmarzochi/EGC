@@ -26,7 +26,7 @@ try {
 }
 // The Team Brain sync around the session ships with the same runtime; an
 // older install without it ends the stop without a sync.
-let autosync = async () => ({ ran: false, why: 'unavailable' });
+let autosync = async (_options) => ({ ran: false, why: 'unavailable' });
 try {
   ({ autosync } = require('../lib/team-autosync'));
 } catch {

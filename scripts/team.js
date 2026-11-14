@@ -205,7 +205,8 @@ function handleAutosync(args) {
     console.error('Error: Team not initialized. Run "egc team init" first.');
     process.exit(1);
   }
-  const { autosync: _previous, ...rest } = config;
+  const rest = { ...config };
+  delete rest.autosync;
   writeTeamConfig(value === 'on' ? { ...rest, autosync: true } : rest);
   console.log(`Autosync: ${value}`);
   console.log(value === 'on'
@@ -217,9 +218,11 @@ function handleAutosync(args) {
 // was one.
 function printAutosyncStatus(config) {
   const last = lastAutosync();
-  const run = last?.lastRun
-    ? ` (last run ${last.lastRun}, ${last.reason}, ${last.ok ? 'ok' : 'failed'}: ${last.detail})`
-    : '';
+  let run = '';
+  if (last?.lastRun) {
+    const outcome = last.ok ? 'ok' : 'failed';
+    run = ` (last run ${last.lastRun}, ${last.reason}, ${outcome}: ${last.detail})`;
+  }
   console.log(`Autosync: ${config.autosync === true ? 'on' : 'off'}${run}`);
 }
 

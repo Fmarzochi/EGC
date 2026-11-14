@@ -94,4 +94,5 @@ async function main() {
   process.exit(0);
 }
 
-main();
+// Fail open: the runner passes the input through when the hook writes nothing.
+main().catch(() => process.exit(0));

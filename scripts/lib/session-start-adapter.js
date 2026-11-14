@@ -29,7 +29,7 @@ try {
 
 // The Team Brain sync before the state is read (#2059): an older install
 // without the helper restores the local state as it always did.
-let autosync = async () => ({ ran: false, why: 'unavailable' });
+let autosync = async (_options) => ({ ran: false, why: 'unavailable' });
 try {
   ({ autosync } = require('./team-autosync'));
 } catch {

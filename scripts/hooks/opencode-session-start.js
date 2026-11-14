@@ -17,4 +17,5 @@ async function main() {
   process.stdout.write(JSON.stringify(restored));
 }
 
-main();
+// Fail open: the plugin treats an empty answer as no context to inject.
+main().catch(() => process.exit(0));

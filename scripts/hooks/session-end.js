@@ -30,7 +30,7 @@ const { readHookStdin } = require('../lib/hook-stdin');
 // The Team Brain sync around the session ships with the hooks runtime; an
 // install recorded before it existed has no copy until egc repair refreshes
 // it, and then the session ends without a sync instead of the hook failing.
-let autosync = async () => ({ ran: false, why: 'unavailable' });
+let autosync = async (_options) => ({ ran: false, why: 'unavailable' });
 try {
   ({ autosync } = require('../lib/team-autosync'));
 } catch {

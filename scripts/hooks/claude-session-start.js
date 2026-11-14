@@ -19,4 +19,6 @@ async function main() {
   }
 }
 
-main();
+// Fail open: a startup that cannot restore the context still lets the
+// session begin.
+main().catch(() => process.exit(0));
