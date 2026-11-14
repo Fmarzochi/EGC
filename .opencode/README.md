@@ -129,14 +129,25 @@ opencode
 
 ### Plugin Hooks
 
-| Hook | Event | Purpose |
-|------|-------|---------|
-| SessionStart | `event` (`session.created`) | Restore matching EGC project memory |
-| Prettier | `file.edited` | Auto-format JS/TS |
-| TypeScript | `tool.execute.after` | Check for type errors |
-| console.log | `file.edited` | Warn about debug statements |
-| Notification | `session.idle` | Desktop notification |
-| Security | `tool.execute.before` | Check for secrets |
+| Hook | OpenCode 1 (`server`) | OpenCode 2 (`setup`) | Purpose |
+|------|------|------|---------|
+| Guardian and Fact-Forcing Gate | `tool.execute.before` | `tool.hook("execute.before")` | Refuse a denied command (`bash` or `shell`), a protected write, and the first edit of a file before the facts |
+| Dashboard and changed files | `tool.execute.before`, `tool.execute.after` | `tool.hook("execute.before")`, `tool.hook("execute.after")` | Telemetry and the files the session changed |
+| Session lifecycle | `event` (`session.created`, `session.idle`, `session.deleted`) | `event.subscribe` | Start log, console.log audit of the edited files, desktop notification on idle (OpenCode 1 only, it needs the shell), cleanup |
+| File edits | `event` (`file.edited`, `file.watcher.updated`) | `event.subscribe` | Track edits and warn about console.log (Prettier in the strict profile, OpenCode 1 only) |
+| Shell environment | `shell.env` | `shell.hook("create.before")` | `EGC_VERSION`, `PROJECT_ROOT`, `PACKAGE_MANAGER`, `DETECTED_LANGUAGES` for every command |
+| Compaction | `experimental.session.compacting` | `session.hook("compaction")` | Keep the EGC block across a compaction |
+| Permissions | `permission.ask` | `permission.hook("evaluate")` | Allow read-only tools, formatters and test runners |
+| changed-files tool | `tool` | `tool.transform` | List what the session changed |
+
+The SessionStart memory restore belongs to the plugin `egc install --target opencode` places under `~/.config/opencode/plugins/`, not to this one.
+
+### Which API each OpenCode version loads
+
+The plugin module (`.opencode/plugins/egc-hooks.ts`, the `plugins/index.ts` entry and the package entry) has one default export and nothing else, since OpenCode 1 calls every export as a plugin of its own.
+
+- OpenCode 2 reads `id` and `setup`; `setup` registers the hooks above on the context it receives. A host that refuses one hook, the tool editor or the bus keeps the others, and the cleanup `setup` returns disposes every registration and ends the event loop.
+- OpenCode 1.18.29 and newer read `server`, the V1 hooks object. Earlier releases, which called the default export as a function, do not load the plugin.
 
 ### Custom Tools
 

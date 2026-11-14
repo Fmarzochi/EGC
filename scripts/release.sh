@@ -59,9 +59,7 @@ update_version ".codex-plugin/plugin.json"
 update_version ".agents/plugins/marketplace.json"
 
 sed -i "s/${CURRENT}/${VERSION}/g" agent.yaml
-sed -i "s/EGC_VERSION: \"${CURRENT}\"/EGC_VERSION: \"${VERSION}\"/g" .opencode/plugins/egc-hooks.ts
-sed -i "s/Extended Global Context v${CURRENT}/Extended Global Context v${VERSION}/g" .opencode/plugins/egc-hooks.ts
-sed -i "s/export const VERSION = \"${CURRENT}\"/export const VERSION = \"${VERSION}\"/" .opencode/index.ts
+sed -i "s/export const EGC_VERSION = \"${CURRENT}\"/export const EGC_VERSION = \"${VERSION}\"/" .opencode/plugins/lib/egc-plugin-core.ts
 
 update_latest_release_heading "$ROOT_ZH_CN_README_FILE"
 
@@ -89,7 +87,7 @@ git add \
   .codex-plugin/plugin.json \
   .agents/plugins/marketplace.json \
   .opencode/package.json .opencode/package-lock.json \
-  .opencode/plugins/egc-hooks.ts .opencode/index.ts
+  .opencode/plugins/lib/egc-plugin-core.ts
 
 git commit -m "chore: bump plugin version to $VERSION" --signoff
 

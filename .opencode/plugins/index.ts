@@ -1,12 +1,9 @@
 /**
- * EGC - Extended Global Context plugins for OpenCode
+ * EGC - Extended Global Context plugin for OpenCode
  *
- * This module exports all EGC plugins for OpenCode integration.
- * Plugins provide hook-based automation that mirrors Claude Code's hook system
- * while taking advantage of OpenCode's more sophisticated 20+ event types.
+ * One default export serves both loaders: OpenCode 2 reads its id and setup,
+ * OpenCode 1 (1.18.29 and newer) reads its server entrypoint. OpenCode 1
+ * calls every other export as a plugin, so nothing else is exported here.
  */
 
-export { EGCHooksPlugin, default } from "./egc-hooks.js"
-
-// Re-export for named imports
-export * from "./egc-hooks.js"
+export { default } from "./egc-hooks.js"

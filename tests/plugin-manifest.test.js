@@ -33,7 +33,7 @@ const zhCnReadmePath = path.join(repoRoot, 'docs', 'zh-CN', 'README.md');
 const selectiveInstallArchitecturePath = path.join(repoRoot, 'docs', 'SELECTIVE-INSTALL-ARCHITECTURE.md');
 const opencodePackageJsonPath = path.join(repoRoot, '.opencode', 'package.json');
 const opencodePackageLockPath = path.join(repoRoot, '.opencode', 'package-lock.json');
-const opencodeHooksPluginPath = path.join(repoRoot, '.opencode', 'plugins', 'egc-hooks.ts');
+const opencodePluginCorePath = path.join(repoRoot, '.opencode', 'plugins', 'lib', 'egc-plugin-core.ts');
 const semverPattern = '[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?';
 
 let passed = 0;
@@ -135,10 +135,12 @@ test('docs/SELECTIVE-INSTALL-ARCHITECTURE.md repoVersion example matches package
   assert.strictEqual(match[1], expectedVersion);
 });
 
-test('.opencode/plugins/egc-hooks.ts active plugin banner matches package.json', () => {
-  const source = fs.readFileSync(opencodeHooksPluginPath, 'utf8');
-  const match = source.match(new RegExp(`## Active Plugin: EGC - Extended Global Context v(${semverPattern})`));
-  assert.ok(match, 'Expected .opencode/plugins/egc-hooks.ts to declare an active plugin banner');
+test('.opencode/plugins/lib/egc-plugin-core.ts EGC_VERSION matches package.json', () => {
+  // The version the plugin reports in the shell environment and the
+  // compaction banner, in one place that scripts/release.sh rewrites.
+  const source = fs.readFileSync(opencodePluginCorePath, 'utf8');
+  const match = source.match(new RegExp(`export const EGC_VERSION = "(${semverPattern})"`));
+  assert.ok(match, 'Expected .opencode/plugins/lib/egc-plugin-core.ts to declare EGC_VERSION');
   assert.strictEqual(match[1], expectedVersion);
 });
 
