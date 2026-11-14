@@ -16,7 +16,7 @@ The full guide, with real command output and troubleshooting, is [docs/TEAM-BRAI
 
 The `--key` value is visible in the process list while the command runs and is saved in your shell history. The CLI has no other way to take the key, so remove that line from the history afterwards and do not run it on a shared machine.
 
-The same operations exist as the MCP tools `team_init`, `team_sync` and `team_status`. With autosync on, each sync the hooks attempt leaves one line in `~/.egc/logs/team-autosync.log`; a response that changed no state document attempts none. Nothing about it reaches the chat. `egc doctor` prints a `Team` block after the MCP servers: the remote (without any credential it carries) and the branch, the key, the last sync, the state to seal, the autosync switch and whether the remote answers, with a bad key, an unreadable `team.json`, a checkout that follows another remote or branch, or a remote that does not answer as warnings, each naming the init to run with `--key <team key>`.
+The same operations exist as the MCP tools `team_init`, `team_sync` and `team_status`. With autosync on, each sync the hooks attempt leaves one line in `~/.egc/logs/team-autosync.log`; a response that changed no state document attempts none. Nothing about it reaches the chat. `egc doctor` prints a `Team` block after the MCP servers: the remote (without any credential it carries) and the branch, the key, the last sync, the state to seal, the autosync switch and whether the remote answers, with a bad key, an unreadable `team.json` or a checkout that follows another remote or branch as warnings that name the init to run with `--key <team key>`, and a remote that does not answer as a warning with the reason git gave.
 
 ## What travels and what stays
 

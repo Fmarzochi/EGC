@@ -182,9 +182,14 @@ function readRemote(config, options) {
     return { checked: false, reachable: null, branchFound: null, reason: 'no network interface is up' };
   }
   const budgetMs = options.remoteTimeoutMs ?? REMOTE_BUDGET_MS;
+  // ls-remote matches a pattern against the tail of a ref, so `main` would
+  // also answer with feature/main: the full ref is asked for and the answer
+  // is read for that exact ref.
+  const ref = `refs/heads/${config.branch || 'main'}`;
   try {
-    const out = runGit(['ls-remote', '--heads', config.remote, config.branch || 'main'], budgetMs, options.env ?? process.env);
-    return { checked: true, reachable: true, branchFound: out.length > 0, reason: null };
+    const out = runGit(['ls-remote', '--heads', config.remote, ref], budgetMs, options.env ?? process.env);
+    const branchFound = out.split(/\r?\n/).some(line => line.split('\t')[1] === ref);
+    return { checked: true, reachable: true, branchFound, reason: null };
   } catch (error) {
     return { checked: true, reachable: false, branchFound: null, reason: gitReason(error, budgetMs) };
   }

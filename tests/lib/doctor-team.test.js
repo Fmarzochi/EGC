@@ -203,10 +203,14 @@ function runTests() {
       assert.strictEqual(report.warningCount, 1, 'the other remote is reachable, only the checkout is wrong');
 
       writeTeamConfig({ backend: 'git', remote, branch: 'develop', teamKey: KEY }, home);
+      // A branch whose name ends in the configured one is not that branch.
+      git(['push', '-q', 'origin', 'main:feature/develop'], path.join(home, '.egc', 'team-sync'));
       report = buildTeamReport(home, { env: ENV, offline: false });
       assert.strictEqual(report.checkoutBranch, 'main');
       assert.ok(report.warnings.some(warning => warning.includes('is on branch main, not the configured develop')), report.warnings.join('\n'));
-      assert.deepStrictEqual(report.remoteCheck, { checked: true, reachable: true, branchFound: false, reason: null }, 'the remote has no develop branch');
+      assert.deepStrictEqual(report.remoteCheck, { checked: true, reachable: true, branchFound: false, reason: null }, 'the remote has feature/develop and no develop branch');
+      git(['push', '-q', 'origin', 'main:develop'], path.join(home, '.egc', 'team-sync'));
+      assert.strictEqual(buildTeamReport(home, { env: ENV, offline: false }).remoteCheck.branchFound, true, 'the exact branch is found once pushed');
     })),
 
     test('a backend that is not git is a warning, and the remote is not read for it', () => withHome(home => {
