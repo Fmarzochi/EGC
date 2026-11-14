@@ -23,6 +23,17 @@ const { run: runCrusherRewrite } = require('../scripts/hooks/pre-bash-crusher-re
 const { resolveNodeExecutable } = require('../scripts/lib/guardian-bin');
 const { isHookEnabled } = require('../scripts/lib/hook-flags');
 
+// The Session Mesh turn notice (#2097): the shared script the other hosts
+// run on every prompt, called in-process here as the Amp plugin calls it; an
+// install without the file leaves the notice off and the protocol drains
+// the bus alone.
+let runMeshNotice = () => null;
+try {
+  ({ run: runMeshNotice } = require('../scripts/hooks/mesh-events-inject'));
+} catch {
+  // an older install without the mesh script
+}
+
 // The autosync switch of the Team Brain; an install without the helper has
 // the switch off.
 let isAutosyncOn = () => false;
@@ -345,9 +356,23 @@ function createContextCache(directoryOf) {
   return load;
 }
 
+// The mesh notice of one request, or null: read on every request and never
+// cached, since the bus may move between two requests of one session. A
+// request without a session id has no look of its own to record and gets
+// none, so it never consumes the notice meant for another session.
+function meshNoticeFor(sessionId) {
+  if (typeof sessionId !== 'string' || !sessionId) return null;
+  try {
+    return runMeshNotice({ session_id: sessionId });
+  } catch {
+    return null;
+  }
+}
+
 // OpenCode 2 entrypoint: the tool hook carries Guardian and Crusher, and the
 // context hook adds the project memory to the system instructions of every
-// request of a session. A host without one of the domains keeps the other.
+// request of a session, and the Session Mesh notice when the bus moved. A
+// host without one of the domains keeps the other.
 async function setup(context) {
   const directoryOf = createDirectoryResolver(context);
   const loadOnce = createContextCache(directoryOf);
@@ -378,6 +403,11 @@ async function setup(context) {
     } catch {
       // Context restoration is best-effort and must never fail a request.
     }
+    // The turn notice rides the same hook (#2097), after the memory: a bus
+    // that moved since this session's last look adds one line, a quiet bus
+    // adds nothing.
+    const notice = meshNoticeFor(event.sessionID);
+    if (notice) event.system.push({ type: 'text', text: notice });
   });
 
   // Every registration is disposed and both caches are cleared whatever one

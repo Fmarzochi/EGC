@@ -9,6 +9,7 @@ const {
   createCrusherScriptCopyOperations,
   createWriteValidatorScriptCopyOperation,
 } = require('./claude-settings-hooks');
+const { createMeshNoticeScriptCopyOperations } = require('./claude-settings-hook-copy-operations');
 
 // OpenCode plugins run in-process, unlike hosts that spawn hooks.json
 // commands. Guardian and Crusher can run directly, while session restoration
@@ -97,6 +98,10 @@ function createOpenCodePluginOperations(adapter, targetRoot) {
     createWriteValidatorScriptCopyOperation(remap, targetRoot),
     ...createCrusherScriptCopyOperations(remap, targetRoot),
     ...createOpenCodeSessionContextOperations(remap, targetRoot),
+    // The Session Mesh turn notice (#2097): the plugin calls the shared
+    // script in-process on every request of OpenCode 2, so it ships next to
+    // the hook scripts the plugin already requires.
+    ...createMeshNoticeScriptCopyOperations(remap, targetRoot),
     pluginCopyOperation,
   ];
 }

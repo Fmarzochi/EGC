@@ -21,6 +21,7 @@ const SESSION_FILES = [
   'scripts/lib/state-crypto.js',
   'scripts/lib/learning-store.js',
   'scripts/lib/utils.js',
+  'scripts/hooks/mesh-events-inject.js',
 ];
 
 function install(homeDir) {
@@ -830,6 +831,72 @@ async function runTests() {
       } finally { restore(); }
     });
 
+    addCase('OpenCode 2: the context hook carries the mesh notice when the bus moved, on every request and after the memory, and nothing on a quiet bus (#2097)', async () => {
+      const project = path.join(tempDir, 'workspaces', 'v2-mesh');
+      fs.mkdirSync(project, { recursive: true });
+      writeState(tempDir, project, 'v2-mesh-memory-marker');
+      const memoryDir = path.join(tempDir, '.egc', 'memory');
+      const store = path.join(memoryDir, 'state.db');
+      fs.mkdirSync(memoryDir, { recursive: true });
+      fs.writeFileSync(store, 'the bus store of this home');
+      const fake = fakeContext(project);
+      await plugin.setup(fake.ctx);
+      const context = fake.registered.session.context;
+
+      const first = contextEvent('ses_v2_mesh');
+      await context(first);
+      assert.strictEqual(first.system.length, 2, 'the memory and the notice travel together on the first look');
+      assert.match(first.system[0].text, /v2-mesh-memory-marker/, 'the memory comes first');
+      assert.strictEqual(first.system[1].type, 'text');
+      assert.match(first.system[1].text, /^\[egc-mesh\] /, 'the notice follows the memory');
+      assert.ok(fs.existsSync(path.join(tempDir, '.egc', 'mesh', 'notice-ses_v2_mesh.json')), 'the look of this session is recorded');
+
+      const quiet = contextEvent('ses_v2_mesh');
+      await context(quiet);
+      assert.strictEqual(quiet.system.length, 1, 'a bus that did not move adds nothing to the next request');
+      assert.match(quiet.system[0].text, /v2-mesh-memory-marker/);
+
+      // The store moves again (a write from another session): the next
+      // request of the same session is woken again, with no cache in between.
+      const later = new Date(Date.now() + 60000);
+      fs.utimesSync(store, later, later);
+      const woken = contextEvent('ses_v2_mesh');
+      await context(woken);
+      assert.strictEqual(woken.system.length, 2, 'a bus that moved again wakes the session on its next request');
+      assert.match(woken.system[1].text, /^\[egc-mesh\] /);
+
+      const other = contextEvent('ses_v2_mesh_other');
+      await context(other);
+      assert.strictEqual(other.system.length, 2, 'another session has a look of its own and is woken on its first request');
+
+      const noSession = { system: [], messages: [], options: {} };
+      await context(noSession);
+      assert.strictEqual(noSession.system.length, 0, 'a request without a session id gets no notice, so it never consumes the look of another session');
+    });
+
+    addCase('OpenCode 2: an install without the mesh script keeps the memory and adds no notice (#2097)', async () => {
+      const olderHome = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-plugin-older-'));
+      try {
+        // The layout of an install made before the notice: the plugin of
+        // today next to the hook scripts, without the mesh script.
+        const olderRoot = install(olderHome);
+        fs.rmSync(path.join(olderRoot, 'scripts', 'hooks', 'mesh-events-inject.js'));
+        fs.writeFileSync(path.join(olderRoot, 'plugins', 'package.json'), '{ "type": "module" }\n');
+        const older = (await import(pathToFileURL(path.join(olderRoot, 'plugins', 'opencode-egc-plugin.js')).href)).default;
+        const project = path.join(tempDir, 'workspaces', 'v2-mesh-older');
+        fs.mkdirSync(project, { recursive: true });
+        writeState(tempDir, project, 'v2-mesh-older-marker');
+        const fake = fakeContext(project);
+        await older.setup(fake.ctx);
+        const event = contextEvent('ses_v2_mesh_older');
+        await assert.doesNotReject(() => fake.registered.session.context(event));
+        assert.strictEqual(event.system.length, 1, 'the memory alone: the bus store exists in this home, but the install has no script to read it');
+        assert.match(event.system[0].text, /v2-mesh-older-marker/);
+      } finally {
+        fs.rmSync(olderHome, { recursive: true, force: true });
+      }
+    });
+
     addCase('OpenCode 2: setup without the hook domains fails open', async () => {
       await assert.doesNotReject(() => plugin.setup({ location: { directory: tempDir } }));
       await assert.doesNotReject(() => plugin.setup({}));
@@ -842,7 +909,10 @@ async function runTests() {
       await plugin.setup(bare.ctx);
       const event = contextEvent('ses_v2_no_dir');
       await assert.doesNotReject(() => bare.registered.session.context(event));
-      assert.strictEqual(event.system.length, 0, 'a session without any directory gets no memory and no error');
+      // The mesh notice belongs to the machine, not to a directory, so it may
+      // still travel; the memory, which needs a directory, never does.
+      const memoryParts = event.system.filter(part => !part.text.startsWith('[egc-mesh] '));
+      assert.deepStrictEqual(memoryParts, [], 'a session without any directory gets no memory and no error');
     });
 
     addCase('OpenCode 2: a disposer that throws does not stop the other disposer or the cache cleanup', async () => {
