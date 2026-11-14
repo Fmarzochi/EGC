@@ -228,6 +228,25 @@ async function runTests() {
       assert.ok(!fs.existsSync(path.join(stagedDir, 'proj', 'main.md.hmac')), 'no sidecar leaves the machine');
     });
 
+    run('a hidden file under the state tree never travels: a pushed one is retired, none is written locally, none is staged (#2059)', () => {
+      const hiddenSync = path.join(dir, 'hidden-sync');
+      const hiddenLocal = path.join(dir, 'hidden-local');
+      fs.mkdirSync(path.join(hiddenSync, 'proj'), { recursive: true });
+      fs.mkdirSync(path.join(hiddenLocal, 'proj'), { recursive: true });
+      fs.writeFileSync(path.join(hiddenSync, 'proj', 'main.md'), envelope.sealEnvelope(doc('2026-09-06T12:00:00.000Z', 'from the other machine'), teamKey, 'proj/main.md'));
+      fs.writeFileSync(path.join(hiddenSync, '.save-prompt-proj'), envelope.sealEnvelope('2026-09-06T12:00:00.000Z', teamKey, '.save-prompt-proj'));
+      fs.writeFileSync(path.join(hiddenLocal, '.save-prompt-other'), '2026-09-07T12:00:00.000Z');
+      const outcome = teamSync.mergeTeamStateFrom(hiddenSync, hiddenLocal, teamKey, personalKey);
+      assert.strictEqual(outcome.merged, 1, 'the document merges');
+      assert.strictEqual(outcome.opened, 1, 'the hidden file is not an envelope to count');
+      assert.deepStrictEqual(outcome.unopened, [], 'a pushed hidden file is not reported as rejected');
+      assert.ok(!fs.existsSync(path.join(hiddenSync, '.save-prompt-proj')), 'the hidden file an earlier version pushed is retired from the sync tree');
+      assert.ok(!fs.existsSync(path.join(hiddenLocal, '.save-prompt-proj')), 'the hidden file is never written locally');
+      const stagedDir = path.join(dir, 'hidden-staged');
+      assert.strictEqual(teamSync.stageTeamState(hiddenLocal, stagedDir, teamKey, personalKey), 1, 'only the document is staged');
+      assert.ok(!fs.existsSync(path.join(stagedDir, '.save-prompt-other')), 'the marker of this machine stays on it');
+    });
+
     run('a local document the merge keeps gets its sidecar repaired when older versions left it unusable, and a well-formed mismatch is left alone', () => {
       const repairSync = path.join(dir, 'repair-sync');
       const repairLocal = path.join(dir, 'repair-local');

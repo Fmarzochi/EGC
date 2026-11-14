@@ -79,17 +79,25 @@ function shouldPromptSave(input, nowMs) {
   return true;
 }
 
+// `done` runs once: a request destroyed on its timeout also emits an error,
+// and what follows the post (the sync, the exit) must not run twice.
 function post(ev, done) {
   const body = JSON.stringify(ev);
   const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
   const token = readDashboardToken();
   if (token) headers['x-egc-token'] = token;
+  let settled = false;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    done();
+  };
   const req = http.request(
     { hostname: '127.0.0.1', port: DASHBOARD_PORT, path: '/event', method: 'POST', headers, timeout: 300 },
-    () => done()
+    () => finish()
   );
-  req.on('error', () => done());
-  req.on('timeout', () => { req.destroy(); done(); });
+  req.on('error', () => finish());
+  req.on('timeout', () => { req.destroy(); finish(); });
   req.end(body);
 }
 

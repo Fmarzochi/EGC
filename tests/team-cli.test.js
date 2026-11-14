@@ -228,6 +228,33 @@ function runTests() {
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     });
 
+    run('team autosync on and off round-trip in team.json, status shows the switch, and init --autosync turns it on', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      try {
+        let run = teamCli(['autosync', 'on']);
+        assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+        assert.ok(run.stdout.includes('Autosync: on'), run.stdout);
+        assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).autosync, true, 'on writes the switch');
+        run = teamCli(['status']);
+        assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+        assert.ok(run.stdout.includes('Autosync: on'), `the status shows the switch:\n${run.stdout}`);
+        run = teamCli(['autosync', 'off']);
+        assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+        assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).autosync, undefined, 'off removes the switch, so the file reads as before');
+        run = teamCli(['status']);
+        assert.ok(run.stdout.includes('Autosync: off'), run.stdout);
+        run = teamCli(['autosync', 'maybe']);
+        assert.strictEqual(run.status, 1, 'anything but on or off is refused');
+        run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--key', JSON.parse(saved).teamKey, '--autosync']);
+        assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+        assert.ok(run.stdout.includes('Autosync: on'), run.stdout);
+        assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).autosync, true, 'init --autosync writes the switch');
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
+    });
+
     run('team sync fails loudly when the server reports errors', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));

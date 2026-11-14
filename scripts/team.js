@@ -157,6 +157,9 @@ async function handleInit(args) {
   // Now try to connect and set up via MCP tool.
   try {
     const result = await callMcpTool('team_init', { backend, remote, branch, team_key: teamKey });
+    // The server writes the configuration it was given, without the
+    // switch, so the switch goes back on top of what it wrote.
+    if (autosync) writeTeamConfig({ ...readTeamConfig(), autosync: true });
     report();
     if (result) {
       console.log('Sync backend configured successfully.');
