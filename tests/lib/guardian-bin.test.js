@@ -120,13 +120,25 @@ function main() {
       if (process.platform !== 'win32') {
         const aliasDir = createTempDir('egc-guardian-bin-nodejs-');
         try {
-          fs.symlinkSync(path.join(realNodeDir, nodeName), path.join(aliasDir, 'nodejs'));
-          withEnv({ PATH: aliasDir }, () => {
-            const { findNodeOnPath, callGuardianVerdict } = freshGuardianBin();
-            assert.strictEqual(findNodeOnPath(), path.join(aliasDir, 'nodejs'));
-            const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', CLI_TIMEOUT_MS);
-            assert.deepStrictEqual(answer, { ok: true, value: { allowed: true } });
-          });
+          // A file system that refuses links (a mount without them, a
+          // sandbox) skips the alias, as the suites that plant links do;
+          // any other failure is a real one.
+          let linked = true;
+          try {
+            fs.symlinkSync(path.join(realNodeDir, nodeName), path.join(aliasDir, 'nodejs'));
+          } catch (error) {
+            if (!['EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP'].includes(error.code)) throw error;
+            linked = false;
+            console.log(`    (nodejs alias skipped: links refused here, ${error.code})`);
+          }
+          if (linked) {
+            withEnv({ PATH: aliasDir }, () => {
+              const { findNodeOnPath, callGuardianVerdict } = freshGuardianBin();
+              assert.strictEqual(findNodeOnPath(), path.join(aliasDir, 'nodejs'));
+              const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', CLI_TIMEOUT_MS);
+              assert.deepStrictEqual(answer, { ok: true, value: { allowed: true } });
+            });
+          }
         } finally {
           fs.rmSync(aliasDir, { recursive: true, force: true });
         }
