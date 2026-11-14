@@ -327,20 +327,26 @@ function resolveGuardianCli() {
 // from an absolute PATH entry only, never a relative one, so a node planted
 // in the project directory is never the one that runs (#1530).
 const NODE_BINARY_NAMES = new Set(['node', 'node.exe', 'nodejs', 'nodejs.exe']);
+// The names Node is installed under, in the order each PATH entry is tried:
+// `nodejs` is the name Debian and Ubuntu packages gave the binary.
+const NODE_BINARY_CANDIDATES = process.platform === 'win32' ? ['node.exe', 'nodejs.exe'] : ['node', 'nodejs'];
+
+function isExecutableFile(candidate) {
+  try {
+    fs.accessSync(candidate, fs.constants.X_OK);
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
 
 function findNodeOnPath() {
-  const binaryName = process.platform === 'win32' ? 'node.exe' : 'node';
   const entries = String(process.env.PATH ?? process.env.Path ?? '').split(path.delimiter);
   for (const entry of entries) {
     const dir = entry.replace(/^"(.*)"$/, '$1');
     if (!path.isAbsolute(dir)) continue;
-    const candidate = path.join(dir, binaryName);
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      if (fs.statSync(candidate).isFile()) return candidate;
-    } catch {
-      // Not in this entry; keep looking.
-    }
+    const found = NODE_BINARY_CANDIDATES.map(name => path.join(dir, name)).find(isExecutableFile);
+    if (found) return found;
   }
   return null;
 }

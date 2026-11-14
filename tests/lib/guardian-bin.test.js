@@ -89,11 +89,12 @@ function main() {
   console.log('\nguardian-bin.js, resolveNodeExecutable() and callGuardianVerdict()');
 
   const FAKE_CLI = path.join(__dirname, '..', 'fixtures', 'fake-guardian-cli.js');
+  const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
   run('runs the validator with process.execPath when that is Node', () => {
     const { resolveNodeExecutable, callGuardianVerdict } = freshGuardianBin();
     assert.strictEqual(resolveNodeExecutable(), process.execPath);
-    const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', 10000);
+    const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', CLI_TIMEOUT_MS);
     assert.deepStrictEqual(answer, { ok: true, value: { allowed: true } });
   });
 
@@ -111,13 +112,29 @@ function main() {
         const { resolveNodeExecutable, findNodeOnPath, callGuardianVerdict } = freshGuardianBin();
         assert.strictEqual(findNodeOnPath(), path.join(realNodeDir, nodeName));
         assert.strictEqual(resolveNodeExecutable(), path.join(realNodeDir, nodeName));
-        const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', 10000);
+        const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', CLI_TIMEOUT_MS);
         assert.deepStrictEqual(answer, { ok: true, value: { allowed: true } });
       });
+      // The name Debian and Ubuntu packages gave the binary is found too: a
+      // directory that holds only `nodejs`, linked to the real Node.
+      if (process.platform !== 'win32') {
+        const aliasDir = createTempDir('egc-guardian-bin-nodejs-');
+        try {
+          fs.symlinkSync(path.join(realNodeDir, nodeName), path.join(aliasDir, 'nodejs'));
+          withEnv({ PATH: aliasDir }, () => {
+            const { findNodeOnPath, callGuardianVerdict } = freshGuardianBin();
+            assert.strictEqual(findNodeOnPath(), path.join(aliasDir, 'nodejs'));
+            const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', CLI_TIMEOUT_MS);
+            assert.deepStrictEqual(answer, { ok: true, value: { allowed: true } });
+          });
+        } finally {
+          fs.rmSync(aliasDir, { recursive: true, force: true });
+        }
+      }
       withEnv({ PATH: `.${path.delimiter}` }, () => {
         const { resolveNodeExecutable, callGuardianVerdict, guardianFailureReason } = freshGuardianBin();
         assert.strictEqual(resolveNodeExecutable(), null, 'a relative entry is never searched');
-        const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', 10000);
+        const answer = callGuardianVerdict(FAKE_CLI, ['write'], '/tmp/notes.md', CLI_TIMEOUT_MS);
         assert.strictEqual(answer.ok, false);
         assert.strictEqual(answer.kind, 'unstartable');
         assert.match(guardianFailureReason(answer, 10000), /the validator could not be started \(no node executable on an absolute PATH entry/);
