@@ -399,10 +399,12 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
     removeSyncFile(link);
   }
   // A sidecar an earlier version pushed has no meaning on any other
-  // machine: it is retired from the shared tree and never written locally.
-  for (const sidecar of entries.files.filter(isSidecar)) removeSyncFile(sidecar);
+  // machine, and neither has a hidden file (the markers the hooks keep
+  // next to the state): both are retired from the shared tree and never
+  // written locally.
+  for (const stray of entries.files.filter(file => isSidecar(file) || isHiddenEntry(file, syncStateDir))) removeSyncFile(stray);
   const context: MergeContext = { syncStateDir, localStateDir, teamKey, personalKey, integrityKey, outcome, legacy: indexLegacyDocuments(localStateDir, personalKey) };
-  for (const syncFile of entries.files.filter(file => !isSidecar(file))) mergeOneSyncFile(syncFile, context);
+  for (const syncFile of entries.files.filter(file => !isSidecar(file) && !isHiddenEntry(file, syncStateDir))) mergeOneSyncFile(syncFile, context);
   // A team sync never removes local state files: a file absent from the sync
   // repo may be one this machine created and has not pushed yet, and deleting
   // it would be silent, unrecoverable memory loss. Remote deletions therefore
@@ -550,7 +552,15 @@ export function stageTeamState(localStateDir: string, syncStateDir: string, team
 
   const context: StageContext = { localStateDir, syncStateDir, teamKey, personalKey, keep, stagedByPath: new Map() };
   for (const localFile of walkEntries(localStateDir).files) {
-    if (!isSidecar(localFile)) stageOneDocument(localFile, context);
+    if (!isSidecar(localFile) && !isHiddenEntry(localFile, localStateDir)) stageOneDocument(localFile, context);
   }
   return context.stagedByPath.size;
+}
+
+// A hidden entry under the state tree is not a state document: the hooks
+// keep their markers there (the save-prompt throttle of the Claude Code
+// stop hook), and those belong to one machine. A hidden directory hides
+// everything below it.
+function isHiddenEntry(filePath: string, root: string): boolean {
+  return path.relative(root, filePath).split(path.sep).some(segment => segment.startsWith('.'));
 }

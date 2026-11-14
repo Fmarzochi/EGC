@@ -40,6 +40,8 @@ function makeTree(base) {
   const copies = [
     ['scripts/team.js', 'scripts/team.js'],
     ['scripts/lib/team-mcp-client.js', 'scripts/lib/team-mcp-client.js'],
+    ['scripts/lib/team-config.js', 'scripts/lib/team-config.js'],
+    ['scripts/lib/team-autosync.js', 'scripts/lib/team-autosync.js'],
     ['tests/fixtures/fake-memory-server.js', 'mcp/servers/egc-memory/build/index.js'],
   ];
   for (const [from, to] of copies) {

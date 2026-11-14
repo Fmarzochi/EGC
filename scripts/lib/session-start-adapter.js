@@ -27,6 +27,15 @@ try {
   // an older install without the helper: nothing to migrate, no crash
 }
 
+// The Team Brain sync before the state is read (#2059): an older install
+// without the helper restores the local state as it always did.
+let autosync = async (_options) => ({ ran: false, why: 'unavailable' });
+try {
+  ({ autosync } = require('./team-autosync'));
+} catch {
+  // an older install without the helper: no sync, no crash
+}
+
 const DEFAULT_DASHBOARD_PORT = 7890;
 const DASHBOARD_TIMEOUT_MS = 200;
 
@@ -90,7 +99,19 @@ function postSessionStart(host, sessionId) {
   request.end(body);
 }
 
-function runSessionStartAdapter({ host, projectEnv }) {
+// The Team Brain sync before the state is read, when the team configuration
+// asks for it: the state the other machine pushed is what this session
+// restores. Offline is normal; the outcome goes to the EGC log and the local
+// state is read either way, so the promise never rejects.
+async function pullTeamState() {
+  try {
+    await autosync({ reason: 'session-start' });
+  } catch {
+    // the helper reports through its log; restoration goes on
+  }
+}
+
+async function runSessionStartAdapter({ host, projectEnv }) {
   const normalizedHost = typeof host === 'string' && host ? host : 'unknown';
   try {
     migrateLegacyLearningStore();
@@ -100,6 +121,11 @@ function runSessionStartAdapter({ host, projectEnv }) {
   }
   const input = readStdinJson();
   const projectPath = resolveProjectPath(input, projectEnv);
+  // The sync belongs to the start of a session. Claude Code runs this same
+  // hook after a compaction (PostCompact), and a compaction is no moment to
+  // wait on a remote or to ship half a session; a payload without an event
+  // name (OpenCode's bridge) is a start.
+  if (!input.hook_event_name || input.hook_event_name === 'SessionStart') await pullTeamState();
   const restored = restoreContext(projectPath, normalizedHost);
   postSessionStart(restored.host || normalizedHost, input.session_id || null);
   if (input.session_id) {

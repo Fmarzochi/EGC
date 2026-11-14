@@ -27,6 +27,16 @@ const {
   log
 } = require('../lib/utils');
 const { readHookStdin } = require('../lib/hook-stdin');
+// The Team Brain sync around the session ships with the hooks runtime; an
+// install recorded before it existed has no copy until egc repair refreshes
+// it, and then the session ends without a sync instead of the hook failing.
+let autosync = async (_options) => ({ ran: false, why: 'unavailable' });
+let wouldSync = (_options) => false;
+try {
+  ({ autosync, wouldSync } = require('../lib/team-autosync'));
+} catch {
+  // an older install without the helper: no sync, no crash
+}
 
 const SUMMARY_START_MARKER = '<!-- EGC:SUMMARY:START -->';
 const SUMMARY_END_MARKER = '<!-- EGC:SUMMARY:END -->';
@@ -167,11 +177,15 @@ function buildSessionHeader(today, currentTime, metadata, existingContent = '') 
 }
 
 const MAX_SESSION_COMMITS = 30;
-// The two git calls of the commit list share this budget, well inside the
-// 30 seconds the hook runner gives the whole hook. A loaded machine (a CI
-// runner on Windows, a disk being scanned) can take seconds for a log over
-// every branch, and a call cut short leaves the list empty.
+// The two git calls of the commit list and the Team Brain sync that follows
+// the save share this budget, well inside the 30 seconds the hook runner
+// gives the whole hook. A loaded machine (a CI runner on Windows, a disk
+// being scanned) can take seconds for a log over every branch, and a call
+// cut short leaves the list empty.
 const SESSION_COMMITS_GIT_BUDGET_MS = 15000;
+// Less than this left of the budget and the sync is not started: the MCP
+// handshake alone takes longer, and a sync cut short does nothing.
+const MIN_AUTOSYNC_BUDGET_MS = 2000;
 // S4036: prefer fixed git locations over a PATH lookup, as check-state-leak.js
 // does; the bare name is the last resort for layouts like nix or portable Git.
 const GIT_BIN = [
@@ -201,8 +215,7 @@ function sessionStartOf(content) {
 // runs with separate arguments and the email as a fixed string; any failure
 // (no git, not a repository, a call that ran out of time) leaves the list
 // empty and says so on stderr, so a lost list can be traced.
-function getSessionCommits(start) {
-  const deadline = Date.now() + SESSION_COMMITS_GIT_BUDGET_MS;
+function getSessionCommits(start, deadline = Date.now() + SESSION_COMMITS_GIT_BUDGET_MS) {
   const git = args => execFileSync(GIT_BIN, args, {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -304,13 +317,13 @@ function injectSummaryIntoContent(updatedContent, summary) {
   );
 }
 
-function updateExistingSession(sessionFile, today, currentTime, sessionMetadata, summary) {
+function updateExistingSession(sessionFile, today, currentTime, sessionMetadata, summary, deadline) {
   const existing = readFile(sessionFile);
   let updatedContent = existing;
 
   if (existing) {
     const start = sessionStartOf(existing);
-    const metadata = start ? { ...sessionMetadata, commits: getSessionCommits(start) } : sessionMetadata;
+    const metadata = start ? { ...sessionMetadata, commits: getSessionCommits(start, deadline) } : sessionMetadata;
     const merged = mergeSessionHeader(existing, today, currentTime, metadata);
     if (merged) {
       updatedContent = merged;
@@ -337,7 +350,25 @@ function createNewSession(sessionFile, today, currentTime, sessionMetadata, summ
   log('[SessionEnd] Created session file');
 }
 
+// The Team Brain sync after the state is saved, inside what is left of the
+// hook's budget, only when the team configuration asks for it and a state
+// file changed since the last run. A sync that fails or has no budget is
+// said once on stderr; the session ends either way, and the outcome is in
+// the EGC log.
+async function syncTeamState(deadline) {
+  const budgetMs = deadline - Date.now();
+  if (budgetMs < MIN_AUTOSYNC_BUDGET_MS) {
+    // Nothing is started and nothing is recorded, so the next hook with a
+    // budget still sees the state as changed and runs the sync.
+    if (wouldSync({ onlyIfStateChanged: true })) log('[SessionEnd] team autosync did not complete: no budget left after the commit list');
+    return;
+  }
+  const outcome = await autosync({ reason: 'session-end', onlyIfStateChanged: true, budgetMs });
+  if (outcome.ran && !outcome.ok) log(`[SessionEnd] team autosync did not complete: ${outcome.detail}`);
+}
+
 async function main() {
+  const deadline = Date.now() + SESSION_COMMITS_GIT_BUDGET_MS;
   const transcriptPath = resolveTranscriptPath(stdinData);
   const sessionsDir = getSessionsDir();
   const today = getDateString();
@@ -359,11 +390,12 @@ async function main() {
   }
 
   if (fs.existsSync(sessionFile)) {
-    updateExistingSession(sessionFile, today, currentTime, sessionMetadata, summary);
+    updateExistingSession(sessionFile, today, currentTime, sessionMetadata, summary, deadline);
   } else {
     createNewSession(sessionFile, today, currentTime, sessionMetadata, summary);
   }
 
+  await syncTeamState(deadline);
   process.exit(0);
 }
 

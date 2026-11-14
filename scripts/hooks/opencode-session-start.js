@@ -1,15 +1,21 @@
 #!/usr/bin/env node
 'use strict';
 
-// OpenCode's thin child-process bridge: the shared adapter restores state and
-// emits telemetry; the plugin consumes the serialized result and injects it.
+// OpenCode's thin child-process bridge: the shared adapter syncs the Team
+// Brain when asked, restores state and emits telemetry; the plugin consumes
+// the serialized result and injects it.
 
-let restored = { host: 'opencode', context: '' };
-try {
-  const { runSessionStartAdapter } = require('../lib/session-start-adapter');
-  restored = runSessionStartAdapter({ host: 'opencode', projectEnv: 'OPENCODE_PROJECT_DIR' });
-} catch (_) { // NOSONAR: keep the bridge fail-open
-  // Keep the empty fallback above.
+async function main() {
+  let restored = { host: 'opencode', context: '' };
+  try {
+    const { runSessionStartAdapter } = require('../lib/session-start-adapter');
+    restored = await runSessionStartAdapter({ host: 'opencode', projectEnv: 'OPENCODE_PROJECT_DIR' });
+  } catch (_) { // NOSONAR: keep the bridge fail-open
+    // Keep the empty fallback above.
+  }
+
+  process.stdout.write(JSON.stringify(restored));
 }
 
-process.stdout.write(JSON.stringify(restored));
+// Fail open: the plugin treats an empty answer as no context to inject.
+main().catch(() => process.exit(0));

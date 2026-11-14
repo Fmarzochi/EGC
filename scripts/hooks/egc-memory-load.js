@@ -14,6 +14,19 @@ function tryRequire(modulePath) {
 
 const globalState = tryRequire('../lib/global-state');
 const stateCrypto = tryRequire('../lib/state-crypto');
+// The Team Brain sync before the state is read (#2059), when the team
+// configuration asks for it; an install without the helper reads the local
+// state as it always did.
+const teamAutosync = tryRequire('../lib/team-autosync');
+
+async function pullTeamState() {
+  if (!teamAutosync) return;
+  try {
+    await teamAutosync.autosync({ reason: 'session-start' });
+  } catch {
+    // the helper reports through its log; the local state is read either way
+  }
+}
 
 // The state file is read through the crypto helper of the hooks when it is
 // there (legacy plaintext passes, an encrypted file is decrypted, an
@@ -35,7 +48,7 @@ function withoutRetiredLine(content) {
   return lines.filter((line, index) => index >= headerEnd || !line.startsWith('retired:')).join('\n');
 }
 
-function main() {
+async function main() {
   let raw = '';
   try {
     raw = fs.readFileSync(0, 'utf8');
@@ -52,6 +65,7 @@ function main() {
     process.exit(0);
   }
 
+  await pullTeamState();
   try {
     const projectPath = process.env.PWD || process.cwd();
     const { branch, detachedCommit } = resolveHeadState(projectPath);
@@ -80,4 +94,5 @@ function main() {
   process.exit(0);
 }
 
-main();
+// Fail open: the runner passes the input through when the hook writes nothing.
+main().catch(() => process.exit(0));

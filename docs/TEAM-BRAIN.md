@@ -109,6 +109,36 @@ Remote: https://github.com/you/egc-memory.git
 
 The time is that of the last commit in `~/.egc/team-sync/`, which is also set by a pull that fetched a teammate's commit. It does not prove that your own last sync reached the remote.
 
+## Syncing by itself
+
+By default nothing syncs until you run `egc team sync`. To let the sessions do it:
+
+```text
+$ egc team autosync on
+Autosync: on
+The state syncs when a session starts, before it is read, and after a response that changed it. The outcome of each run is in ~/.egc/logs/team-autosync.log.
+```
+
+`egc team init ... --autosync` turns it on at init, and `egc team autosync off` turns it off. The switch is `autosync: true` in `~/.egc/team.json` of that machine, nowhere else: turn it on where you want it.
+
+With it on:
+
+- When a session starts in Claude Code or OpenCode, the hook that restores the project state syncs first, so the state your other machine pushed is what the session restores. A compaction, which runs the same hook in Claude Code, does not sync. The hooks of the plugin manifest (`hooks/hooks.json`, the layout the retired Gemini CLI loaded) carry the same sync for an install that still loads them.
+- When a response ends (the Stop hook of Claude Code, the session-end hook of the plugin manifest), the state syncs again when a state document changed since the last run, so what `update_state` wrote leaves the machine. After the first run, a response that changed nothing syncs nothing; the markers the hooks keep next to the state and the integrity sidecars do not count as a change.
+- Each hook has a budget of 15 seconds, shared with its other work: the session-end hook gives the sync what is left after its commit list, and skips it, saying so once on its stderr, when less than two seconds remain. A remote that does not answer in time is given up for that run and the session goes on with the local state. Nothing of this reaches the chat.
+
+The outcome of every run is one line in `~/.egc/logs/team-autosync.log`, and `egc team status` shows the last one:
+
+```text
+$ egc team status
+Last sync: 2026-11-14T06:40:12+00:00
+Uncommitted changes: false
+Remote: https://github.com/you/egc-memory.git
+Autosync: on (last run 2026-11-14T06:40:12.418Z, session-end, ok: pulled 0 files, pushed 1 commits)
+```
+
+Offline is normal: the run is logged as failed with git's reason and the next session tries again. The OpenCode plugin waits up to 25 seconds for the restore when the switch is on: the sync's 15 seconds, the moments the sync gives a server that answered to leave, and the restore itself.
+
 ## How two copies are merged
 
 When both machines have a copy of the same document, the sync merges them section by section, the way `update_state` merges an update into the existing document (the merge rules of the AMI specification, `docs/spec/agent-memory-interchange.md`, section 5):
@@ -209,7 +239,7 @@ The command line talks to the memory server. Run `egc doctor`, and `npm run buil
 - **Two repositories on one host of your own that differ only by a leading slash are one identity.** The scp-like forms `host:dir/repo.git` and `host:/dir/repo.git` fold together, as GitHub, GitLab and the other hosting services treat them; use the `ssh://` form for both when a host of your own holds two such repositories.
 - **Deleting a whole document does not propagate.** A document removed on one machine stays on the others and comes back at the next sync. An entry removed inside a document stays out while its retired mark is kept, up to thirty days and forty marks at most, unless a machine adds it again.
 - **No machine identity in the envelope.** The signature proves that the holder of the team key wrote the file, not which machine. Tracked in [#2056](https://github.com/Fmarzochi/EGC/issues/2056).
-- **Manual only.** Nothing syncs by itself; you run `egc team sync`. Automatic sync at the start and end of a session is tracked in [#2059](https://github.com/Fmarzochi/EGC/issues/2059).
+- **Autosync waits on the remote at the start of a session.** With `autosync` on, a session start takes as long as the sync, up to 15 seconds on a remote that does not answer, before the state is read. Turn it off on a machine that is often offline and run `egc team sync` by hand there.
 - **No health line in `egc doctor`.** Tracked in [#2058](https://github.com/Fmarzochi/EGC/issues/2058).
 - **One commit per sync, even with nothing new.** Every sync seals each document again with a fresh nonce, so the files differ byte for byte and each run commits and pushes, which grows the history of the remote.
 - **The only backend is git.** `--backend` accepts `git` and nothing else.

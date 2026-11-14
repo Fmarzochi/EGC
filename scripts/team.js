@@ -8,9 +8,11 @@ const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 
 const { callMcpTool: callMemoryTool } = require('./lib/team-mcp-client');
+const { teamConfigPath, readTeamConfig, publishTeamConfigText, writeTeamConfig } = require('./lib/team-config');
+const { lastAutosync, clearAutosyncStamp } = require('./lib/team-autosync');
 
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
-const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
+const TEAM_CONFIG_PATH = teamConfigPath();
 // The longest delay a Node timer takes; a larger one fires at once.
 const MAX_TIMER_MS = 2147483647;
 // How long one call to the memory server may take; a remote on a slow link
@@ -67,36 +69,33 @@ function showHelp() {
 EGC Team Memory: Sync state across teammates
 
 Usage:
-  egc team init --backend <backend> --remote <url> [--branch <branch>] [--key <hex>]
+  egc team init --backend <backend> --remote <url> [--branch <branch>] [--key <hex>] [--autosync]
   egc team sync
+  egc team autosync on|off
   egc team status
 
 Commands:
-  init     Configure a sync backend (e.g. git) and a remote URL
-  sync     Pull the teammates' sealed state, merge it, and push local state sealed with the team key
-  status   Show last sync time, conflict count, and health
+  init      Configure a sync backend (e.g. git) and a remote URL
+  sync      Pull the teammates' sealed state, merge it, and push local state sealed with the team key
+  autosync  Turn the sync around the session on or off: a sync when a session starts, before the
+            state is read, and one after a response that changed the state (off by default)
+  status    Show last sync time, conflict count, the autosync switch and its last run, and health
 
 Options:
   --backend   Sync backend type (default: git)
   --remote    Remote URL for the sync storage
   --key       Team key (64 hex) shared by the member who initialized the team; omit to create a new team
   --branch    Git branch to use (default: main)
+  --autosync  Turn the sync around the session on at init
 
 Examples:
   egc team init --backend git --remote git@github.com:org/egc-memory
   egc team init --backend git --remote git@github.com:org/egc-memory --branch team
+  egc team init --backend git --remote git@github.com:org/egc-memory --key <hex> --autosync
   egc team sync
+  egc team autosync on
   egc team status
 `);
-}
-
-function getTeamConfig() {
-  if (!fs.existsSync(TEAM_CONFIG_PATH)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(TEAM_CONFIG_PATH, 'utf-8'));
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -135,33 +134,39 @@ async function handleInit(args) {
     process.exit(1);
   }
 
-  const config = { backend, remote, branch, teamKey };
+  const autosync = args.includes('--autosync');
+  const config = autosync ? { backend, remote, branch, teamKey, autosync } : { backend, remote, branch, teamKey };
   // The configuration this command found, put back when the server refuses
   // the init: a sync must not run with a remote or a branch the checkout
   // does not follow.
   const previous = fs.existsSync(TEAM_CONFIG_PATH) ? fs.readFileSync(TEAM_CONFIG_PATH) : null;
-  fs.mkdirSync(path.dirname(TEAM_CONFIG_PATH), { recursive: true, mode: 0o700 });
-  try {
-    fs.chmodSync(path.dirname(TEAM_CONFIG_PATH), 0o700);
-  } catch {
-    // modes are not supported on this filesystem
-  }
 
-  publishTeamConfig(JSON.stringify(config, null, 2));
+  writeTeamConfig(config);
   const report = () => {
     console.log(`Team initialized:
   Backend: ${backend}
   Remote:  ${remote}
   Branch:  ${branch}
+  Autosync: ${autosync ? 'on' : 'off'}
   Config:  ${TEAM_CONFIG_PATH}`);
     if (provided === undefined) {
       console.log(`Team key (share it out of band; teammates join with --key):\n  ${teamKey}`);
     }
   };
 
+  // The switch on top of whatever the server wrote: the server writes the
+  // configuration it was given, without it, whether it answered or timed
+  // out after writing. The record of the last automatic run belongs to the
+  // team before, so it goes.
+  const settle = () => {
+    if (autosync) writeTeamConfig({ ...(readTeamConfig() ?? config), autosync: true });
+    clearAutosyncStamp();
+  };
+
   // Now try to connect and set up via MCP tool.
   try {
     const result = await callMcpTool('team_init', { backend, remote, branch, team_key: teamKey });
+    settle();
     report();
     if (result) {
       console.log('Sync backend configured successfully.');
@@ -177,25 +182,12 @@ async function handleInit(args) {
       console.error(previous === null ? 'No configuration was written.' : 'The previous configuration was kept.');
       process.exit(1);
     }
+    settle();
     report();
     console.log(`Note: Memory server setup returned: ${err.message}`);
     printPromptHint(err, console.log);
     console.log('The config file is saved. Run "egc team sync" to start syncing.');
   }
-}
-
-// Writes the team configuration whole to a private temporary next to it and
-// renames it into place, so an interrupted write never leaves a truncated
-// file that would look like a missing team.
-function publishTeamConfig(content) {
-  const temporary = `${TEAM_CONFIG_PATH}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  fs.writeFileSync(temporary, content, { encoding: 'utf-8', mode: 0o600 });
-  try {
-    fs.chmodSync(temporary, 0o600);
-  } catch {
-    // modes are not supported on this filesystem
-  }
-  fs.renameSync(temporary, TEAM_CONFIG_PATH);
 }
 
 // Puts back the team configuration a refused init found: the file as it
@@ -205,11 +197,45 @@ function restoreTeamConfig(previous) {
     fs.rmSync(TEAM_CONFIG_PATH, { force: true });
     return;
   }
-  publishTeamConfig(previous);
+  publishTeamConfigText(previous);
+}
+
+// The switch of the sync around the session, in the configuration file
+// where the rest of the team lives: the hooks read it on every session.
+function handleAutosync(args) {
+  const value = args[1];
+  if (value !== 'on' && value !== 'off') {
+    console.error('Error: egc team autosync takes "on" or "off"');
+    process.exit(1);
+  }
+  const config = readTeamConfig();
+  if (!config) {
+    console.error('Error: Team not initialized. Run "egc team init" first.');
+    process.exit(1);
+  }
+  const rest = { ...config };
+  delete rest.autosync;
+  writeTeamConfig(value === 'on' ? { ...rest, autosync: true } : rest);
+  console.log(`Autosync: ${value}`);
+  console.log(value === 'on'
+    ? 'The state syncs when a session starts, before it is read, and after a response that changed it. The outcome of each run is in ~/.egc/logs/team-autosync.log.'
+    : 'Nothing syncs by itself; run "egc team sync".');
+}
+
+// The autosync line of the status: the switch, and the last run when there
+// was one.
+function printAutosyncStatus(config) {
+  const last = lastAutosync();
+  let run = '';
+  if (last?.lastRun) {
+    const outcome = last.ok ? 'ok' : 'failed';
+    run = ` (last run ${last.lastRun}, ${last.reason}, ${outcome}: ${last.detail})`;
+  }
+  console.log(`Autosync: ${config.autosync === true ? 'on' : 'off'}${run}`);
 }
 
 async function handleSync() {
-  const config = getTeamConfig();
+  const config = readTeamConfig();
   if (!config) {
     console.error('Error: Team not initialized. Run "egc team init" first.');
     process.exit(1);
@@ -265,7 +291,7 @@ function printFallbackStatus(config) {
 }
 
 async function handleStatus() {
-  const config = getTeamConfig();
+  const config = readTeamConfig();
   if (!config) {
     console.error('Error: Team not initialized. Run "egc team init" first.');
     process.exit(1);
@@ -281,6 +307,7 @@ async function handleStatus() {
   } catch {
     printFallbackStatus(config);
   }
+  printAutosyncStatus(config);
 }
 
 async function main() {
@@ -301,6 +328,10 @@ async function main() {
 
     case 'sync':
       await handleSync();
+      break;
+
+    case 'autosync':
+      handleAutosync(args);
       break;
 
     case 'status':

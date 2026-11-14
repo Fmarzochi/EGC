@@ -24,6 +24,14 @@ try {
 } catch {
   // an older install without the helper: no token, no crash
 }
+// The Team Brain sync around the session ships with the same runtime; an
+// older install without it ends the stop without a sync.
+let autosync = async (_options) => ({ ran: false, why: 'unavailable' });
+try {
+  ({ autosync } = require('../lib/team-autosync'));
+} catch {
+  // an older install without the helper: no sync, no crash
+}
 const _egcRaw = process.env.EGC_PORT;
 const _egcParsed = (_egcRaw && /^\d+$/.test(_egcRaw)) ? Number(_egcRaw) : Number.NaN;
 const DASHBOARD_PORT = (!Number.isNaN(_egcParsed) && _egcParsed >= 1 && _egcParsed <= 65535) ? _egcParsed : 7890;
@@ -71,17 +79,25 @@ function shouldPromptSave(input, nowMs) {
   return true;
 }
 
+// `done` runs once: a request destroyed on its timeout also emits an error,
+// and what follows the post (the sync, the exit) must not run twice.
 function post(ev, done) {
   const body = JSON.stringify(ev);
   const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) };
   const token = readDashboardToken();
   if (token) headers['x-egc-token'] = token;
+  let settled = false;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    done();
+  };
   const req = http.request(
     { hostname: '127.0.0.1', port: DASHBOARD_PORT, path: '/event', method: 'POST', headers, timeout: 300 },
-    () => done()
+    () => finish()
   );
-  req.on('error', () => done());
-  req.on('timeout', () => { req.destroy(); done(); });
+  req.on('error', () => finish());
+  req.on('timeout', () => { req.destroy(); finish(); });
   req.end(body);
 }
 
@@ -151,7 +167,11 @@ function main() {
   // Write the assistant prompt to stdout first (synchronous, always completes).
   // Then post the session_end event and exit only after the dashboard has
   // acknowledged it (or the 300ms timeout fires). This prevents process.exit()
-  // from tearing down the socket before the HTTP request is flushed.
+  // from tearing down the socket before the HTTP request is flushed. The Team
+  // Brain sync comes last, when the configuration asks for it and a state
+  // file changed since its last run: what update_state wrote this turn
+  // leaves the machine, inside the sync's own budget, with its outcome in the
+  // EGC log and never in the chat.
   process.stdout.write(JSON.stringify(output));
   post({
     ide: 'claude',
@@ -161,7 +181,9 @@ function main() {
     stop_reason: input.stop_reason || null,
     model: input.model || transcript.model || null,
     usage: input.usage || transcript.usage || null,
-  }, () => process.exit(0));
+  }, () => {
+    autosync({ reason: 'session-end', onlyIfStateChanged: true }).then(() => process.exit(0), () => process.exit(0));
+  });
 }
 
 main();

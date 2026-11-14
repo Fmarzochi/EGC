@@ -166,6 +166,14 @@ const HOOK_LIB_SOURCES = [
   'scripts/lib/utils-session.js',
   'scripts/lib/utils-file.js',
   'scripts/lib/hook-stdin.js',
+  // The Team Brain sync around the session (#2059): the adapter and the stop
+  // hook sync through the memory server when team.json asks for it, and
+  // find the built server through the root resolver in an install that
+  // copied them here.
+  'scripts/lib/team-config.js',
+  'scripts/lib/team-autosync.js',
+  'scripts/lib/team-mcp-client.js',
+  'scripts/lib/resolve-egc-root.js',
   // propagate-state.js's commit-privacy guard shells out to this script as
   // the git clean-filter command -- it must land next to propagate-state.js
   // (both flatten to the same libDestDir below), or the filter config points
