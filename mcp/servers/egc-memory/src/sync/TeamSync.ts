@@ -73,8 +73,10 @@ export async function teamInit(backend: string, remote: string, branch: string =
     await instance.init(config);
     // The init pulled the remote: a repository that already names its team
     // refuses a key that is not that team's before any configuration is
-    // written, whether the key was given or made here for a new team.
-    const judged = judgeTeamKey(SYNC_CHECKOUT_DIR, SYNC_STATE_DIR, parseTeamKey(config.teamKey) as Buffer, remote);
+    // written, whether the key was given or made here for a new team, and a
+    // repository from before the marker that already holds state asks the
+    // key to open one of its files, as the sync would.
+    const judged = judgeTeamKey(SYNC_CHECKOUT_DIR, SYNC_STATE_DIR, parseTeamKey(config.teamKey) as Buffer, remote, { requireProofWithoutMarker: true });
     if (judged.verdict === 'wrong') throw new Error(judged.message);
     writeTeamConfig(config);
     return config;
@@ -131,10 +133,11 @@ export async function teamSync(): Promise<SyncResult> {
       return result;
     }
 
-    // The marker of the team key, before any state file is read: a key that
-    // is not the team's stops here, a damaged marker is said and rewritten
-    // with the push below, a repository without one keeps the rule of the
-    // opened files.
+    // The marker of the team key, before anything is merged, written locally
+    // or pushed: a key that is not the team's stops here, a damaged marker
+    // (the key opens the state files the marker disowns) is said and
+    // rewritten with the push below, a repository without one keeps the rule
+    // of the opened files.
     const judged = judgeTeamKey(SYNC_CHECKOUT_DIR, SYNC_STATE_DIR, teamKey, config.remote);
     if (judged.verdict === 'wrong') {
       result.errors.push(judged.message);
@@ -208,36 +211,86 @@ function keyNotProven(merge: TeamMergeOutcome): boolean {
 
 export type MarkerState = 'absent' | 'match' | 'mismatch';
 
-// What the TEAM marker of the checkout says about a key: absent on a
-// repository from before the marker or still empty, a match for the key of
-// its team, a mismatch for any other text, a link included.
+// The remote as a message shows it: a credential a URL carries (user:token@
+// after the scheme) never reaches the terminal or a log, by a scan that
+// stays linear in the text.
+export function redactRemote(remote: string): string {
+  let shown = '';
+  let rest = remote;
+  for (;;) {
+    const scheme = rest.indexOf('://');
+    if (scheme === -1) return shown + rest;
+    const start = scheme + 3;
+    const authority = rest.slice(start);
+    const end = authority.search(/[/\s]/);
+    const host = end === -1 ? authority : authority.slice(0, end);
+    const at = host.lastIndexOf('@');
+    shown += rest.slice(0, start) + (at === -1 ? host : host.slice(at + 1));
+    rest = authority.slice(host.length);
+  }
+}
+
+// What the TEAM marker of the checkout says about a key: absent when there
+// is no entry at all (a repository from before the marker, or still empty),
+// a match for the key of its team, a mismatch for any other text and for
+// anything that is not a regular file (a link, a pipe, a directory). The
+// entry is opened without following a link and without blocking, and read
+// only once it is known to be a regular file.
 export function readMarkerState(checkoutDir: string, teamKey: Buffer): MarkerState {
   const file = path.join(checkoutDir, TEAM_MARKER_FILE);
   if (isLink(file)) return 'mismatch';
-  let text: string;
+  let descriptor: number;
   try {
-    text = fs.readFileSync(file, 'utf-8');
-  } catch {
-    return 'absent';
+    descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'ENOENT' ? 'absent' : 'mismatch';
   }
-  return markerMatches(text, teamKey) ? 'match' : 'mismatch';
+  try {
+    if (!fs.fstatSync(descriptor).isFile()) return 'mismatch';
+    return markerMatches(fs.readFileSync(descriptor, 'utf-8'), teamKey) ? 'match' : 'mismatch';
+  } catch {
+    return 'mismatch';
+  } finally {
+    fs.closeSync(descriptor);
+  }
 }
 
-// Writes the marker of this key at the root of the checkout; a link planted
-// there is removed, never written through.
+// Writes the marker of this key at the root of the checkout, through a
+// temporary created exclusively and renamed over the marker: a link planted
+// or replaced at the marker is never written through, and the marker is
+// never seen half written.
 export function writeTeamMarker(checkoutDir: string, teamKey: Buffer): void {
   const file = path.join(checkoutDir, TEAM_MARKER_FILE);
-  if (isLink(file)) removeSyncFile(file);
   fs.mkdirSync(checkoutDir, { recursive: true });
-  fs.writeFileSync(file, `${teamKeyMarker(teamKey)}\n`, 'utf-8');
+  const temporary = path.join(checkoutDir, `.${TEAM_MARKER_FILE}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`);
+  const descriptor = fs.openSync(temporary, 'wx', 0o644);
+  try {
+    fs.writeSync(descriptor, `${teamKeyMarker(teamKey)}\n`);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  try {
+    if (isLink(file)) removeSyncFile(file);
+    fs.renameSync(temporary, file);
+  } catch (err) {
+    removeSyncFile(temporary);
+    throw err;
+  }
+}
+
+// The state files of the sync tree a key could open: regular files that are
+// neither sidecars nor hidden, none when the tree is missing or sits behind
+// a link, the same guard the merge applies before it walks the tree.
+function stateFilesOf(syncStateDir: string): string[] {
+  if (linkedDirectoryTowards(syncStateDir) || !fs.existsSync(syncStateDir)) return [];
+  return walkEntries(syncStateDir).files.filter(file => !isSidecar(file) && !isHiddenEntry(file, syncStateDir));
 }
 
 // Whether the key opens at least one envelope of the sync tree, reading
-// only: the proof the marker rule falls back on when the marker disagrees.
+// only: the proof the marker rule falls back on when the marker disagrees,
+// and the proof an init asks of a repository from before the marker.
 export function keyOpensAny(syncStateDir: string, teamKey: Buffer): boolean {
-  if (!fs.existsSync(syncStateDir)) return false;
-  return walkEntries(syncStateDir).files.some(file => {
-    if (isSidecar(file) || isHiddenEntry(file, syncStateDir)) return false;
+  return stateFilesOf(syncStateDir).some(file => {
     try {
       return openEnvelope(fs.readFileSync(file, 'utf-8'), teamKey, path.relative(syncStateDir, file)) !== null;
     } catch {
@@ -251,21 +304,40 @@ export interface TeamKeyJudgement {
   message?: string;
 }
 
+export interface TeamKeyJudgementOptions {
+  // An init has no merge to fall back on: a repository without a marker
+  // that already holds state proves the key by opening one file, before
+  // any configuration is written; an empty repository takes any key, since
+  // it starts the team.
+  requireProofWithoutMarker?: boolean;
+}
+
 // The verdict on a key once the checkout holds the remote: ok when the
-// marker is absent or matches, damaged when it disagrees but the key opens
+// marker matches or is absent, damaged when it disagrees but the key opens
 // the state files (the marker was not written by this key, the files were),
 // wrong when it disagrees and the key opens none.
-export function judgeTeamKey(checkoutDir: string, syncStateDir: string, teamKey: Buffer, remote: string): TeamKeyJudgement {
-  if (readMarkerState(checkoutDir, teamKey) !== 'mismatch') return { verdict: 'ok' };
+export function judgeTeamKey(checkoutDir: string, syncStateDir: string, teamKey: Buffer, remote: string, options: TeamKeyJudgementOptions = {}): TeamKeyJudgement {
+  const shownRemote = redactRemote(remote);
+  const marker = readMarkerState(checkoutDir, teamKey);
+  if (marker === 'match') return { verdict: 'ok' };
+  if (marker === 'absent') {
+    if (options.requireProofWithoutMarker && stateFilesOf(syncStateDir).length > 0 && !keyOpensAny(syncStateDir, teamKey)) {
+      return {
+        verdict: 'wrong',
+        message: `This key opens none of the state files of ${shownRemote}, a repository from before the ${TEAM_MARKER_FILE} marker: it is not the key of that team. Join with the key of the team, or use an empty repository for a new one.`,
+      };
+    }
+    return { verdict: 'ok' };
+  }
   if (keyOpensAny(syncStateDir, teamKey)) {
     return {
       verdict: 'damaged',
-      message: `The ${TEAM_MARKER_FILE} marker of ${remote} did not match this key, but the key opens the state files of the repository: the marker was damaged and is written again with this sync.`,
+      message: `The ${TEAM_MARKER_FILE} marker of ${shownRemote} did not match this key, but the key opens the state files of the repository: the marker was damaged and is written again with this sync.`,
     };
   }
   return {
     verdict: 'wrong',
-    message: `This key is not the key of the team that uses ${remote}: the ${TEAM_MARKER_FILE} marker of the repository was written with another key, and this key opens none of its state files. Join with the key of that team, or use an empty repository for a new one.`,
+    message: `This key is not the key of the team that uses ${shownRemote}: the ${TEAM_MARKER_FILE} marker of the repository was written with another key, and this key opens none of its state files. Join with the key of that team, or use an empty repository for a new one.`,
   };
 }
 
