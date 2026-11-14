@@ -27,7 +27,7 @@ const { isHookEnabled } = require('../scripts/lib/hook-flags');
 // run on every prompt, called in-process here as the Amp plugin calls it; an
 // install without the file leaves the notice off and the protocol drains
 // the bus alone.
-let runMeshNotice = () => null;
+let runMeshNotice = _payload => null;
 try {
   ({ run: runMeshNotice } = require('../scripts/hooks/mesh-events-inject'));
 } catch {
