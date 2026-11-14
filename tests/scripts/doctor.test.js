@@ -24,6 +24,14 @@ const {
 const { getEGCDir } = require('../../scripts/lib/utils');
 const { shellQuote } = require('../../scripts/lib/doctor-summary');
 
+// Fixed git locations before a PATH lookup, as the other git-backed suites do.
+const GIT_BIN = [
+  '/usr/bin/git',
+  '/usr/local/bin/git',
+  '/opt/homebrew/bin/git',
+  String.raw`C:\Program Files\Git\cmd\git.exe`,
+].find(candidate => fs.existsSync(candidate)) || 'git';
+
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -1302,7 +1310,7 @@ function runTests() {
       const remote = path.join(homeDir, 'remote.git');
       const checkout = path.join(homeDir, '.egc', 'team-sync');
       const gitEnv = { ...process.env, HOME: homeDir, USERPROFILE: homeDir, GIT_CONFIG_NOSYSTEM: '1' };
-      const git = (args, cwd) => execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf8', stdio: 'pipe' }).trim();
+      const git = (args, cwd) => execFileSync(GIT_BIN, args, { cwd, env: gitEnv, encoding: 'utf8', stdio: 'pipe' }).trim();
       fs.mkdirSync(remote, { recursive: true });
       git(['init', '--bare', '-q', '-b', 'main'], remote);
       fs.mkdirSync(path.join(checkout, 'state'), { recursive: true });
