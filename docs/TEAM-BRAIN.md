@@ -11,7 +11,7 @@ This page covers one person with two or more machines. Teams of several people a
 | The project state documents under `~/.egc/state/<project>/`, one file per branch: context, decisions, things to avoid, preferences, next steps. `<project>` is the name of the repository followed by `--` and the SHA-256 of its normalized `origin` URL (`app--3f9a...`), the same on every machine that has that repository, whatever the folder it sits in; a directory without a remote is named after the last two segments of its path (`Projects--app`), and a machine upgraded from a version before the remote identity can still hold that path-named directory next to the keyed one, read until the project is written again. Current versions name the file after the sanitized branch name (`/` becomes `-`, other unusual characters become `_`, and the readable part is cut at 120 characters) followed by `--` and the SHA-256 of the full branch name; versions before the hash named it after the branch alone (`main.md`), and a machine upgraded from one of them can hold both, which is why the examples below show `main.md` | The SQLite memory store under `~/.egc/memory/` (lessons, history, the session bus, working memory), and the integrity sidecars (`<file>.hmac`) next to the state documents, made with this machine's own integrity key and written anew after a merge |
 | | The machine's own keys: `~/.egc/encryption.key`, which seals the local copy of the state, and `~/.egc/integrity.key`, which makes the sidecars |
 | | Logs under `~/.egc/logs/` |
-| | The team key, except inside `~/.egc/team.json` on each of your machines |
+| A marker of the team key, the file `TEAM` at the root of the repository: the HMAC-SHA256 of a fixed text under a key derived from the team key, 64 hexadecimal characters that name the team without holding anything the key can be recovered from. Written by the first sync of a machine whose key is the team's, and checked by every init and sync before a state file is read | The team key, except inside `~/.egc/team.json` on each of your machines |
 
 Each state document is encrypted with the team key (AES-256-GCM) and signed with a key derived from it (HMAC-SHA256) before it is committed. The signature covers the file's path in the repository, so a file copied to another path, edited in the repository or written by someone without the team key is not accepted. The remote sees these sealed files and their paths. It also sees the commits, whose message and author carry your local username (`sync: team memory update from <user>`, author `<user>@egc.local`).
 
@@ -172,6 +172,16 @@ Add `--remote <url>`.
 ### `Team key missing or invalid in team.json`
 
 `~/.egc/team.json` has no usable `teamKey`, for example after editing it by hand. Run `egc team init` again with `--key` to restore it. Nothing was synced.
+
+### `This key is not the key of the team that uses <remote>`
+
+```text
+$ egc team init --backend git --remote https://github.com/you/egc-memory.git --key <another key>
+Error: This key is not the key of the team that uses https://github.com/you/egc-memory.git: the TEAM marker of the repository was written with another key, and this key opens none of its state files. Join with the key of that team, or use an empty repository for a new one.
+No configuration was written.
+```
+
+The repository carries the marker of its team, and the key you gave is not that team's. `egc team init` stops before writing the configuration, and `egc team sync` with a key changed by hand in `~/.egc/team.json` stops the same way before any state file is read or written. Run `init` again with the key of the team, or point a new team at an empty repository. A repository made by a version before the marker has none until a machine with the right key syncs once; until then the rule of the opened files applies, below. A marker that does not match while the key opens the state files is a damaged marker, not a wrong key: the sync says so as a warning and writes the marker again.
 
 ### `Rejected sync file (not a verified team envelope for its path)`
 

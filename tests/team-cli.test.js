@@ -137,6 +137,23 @@ function runTests() {
       assert.ok(tree.some(entry => entry.startsWith('state/')), `the sealed state reaches the remote, got: ${tree.join(', ') || 'nothing'}`);
       assert.deepStrictEqual(tree.filter(entry => entry.startsWith('memory/')), [], 'the memory database never ships');
       assert.deepStrictEqual(tree.filter(entry => entry.endsWith('.hmac')), [], 'the integrity sidecars never ship');
+      assert.ok(tree.includes('TEAM'), `the marker of the team key travels with the first push: ${tree.join(', ')}`);
+      const marker = git(['show', 'main:TEAM'], REMOTE).trim();
+      assert.match(marker, /^[0-9a-f]{64}$/, 'the marker is 64 hex characters');
+      assert.notStrictEqual(marker, JSON.parse(fs.readFileSync(path.join(HOME, '.egc', 'team.json'), 'utf8')).teamKey, 'the marker is not the key');
+    });
+
+    run('team init with a key that is not the team\'s against a repository that names its team exits 1 and keeps the previous configuration', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      try {
+        const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--key', 'e'.repeat(64)]);
+        assert.strictEqual(run.status, 1, `a key that is not the team's is refused:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(`${run.stdout}\n${run.stderr}`.includes('This key is not the key of the team that uses'), `${run.stdout}\n${run.stderr}`);
+        assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is put back');
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
     });
 
     run('team status answers through the memory server with its fields', () => {
@@ -214,17 +231,19 @@ function runTests() {
       }
     });
 
-    run('team sync with a key that opens nothing on the remote pushes nothing, so the shared state survives a wrong key', () => {
+    run('team sync with a key that is not the team\'s stops at the marker before any file is merged, so the shared state survives a wrong key', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       const before = remoteTree(REMOTE, 'main');
       const commitsBefore = git(['rev-list', '--count', 'main'], REMOTE);
+      const localState = fs.readdirSync(path.join(HOME, '.egc', 'state')).sort();
       fs.writeFileSync(configPath, JSON.stringify({ ...config, teamKey: 'f'.repeat(64) }, null, 2));
       const run = teamCli(['sync']);
-      assert.notStrictEqual(run.status, 0, `a sync whose key opened nothing is not a success:\n${run.stdout}\n${run.stderr}`);
-      assert.ok(`${run.stdout}\n${run.stderr}`.includes('nothing was pushed'), `${run.stdout}\n${run.stderr}`);
+      assert.notStrictEqual(run.status, 0, `a sync with a key that is not the team's is not a success:\n${run.stdout}\n${run.stderr}`);
+      assert.ok(`${run.stdout}\n${run.stderr}`.includes('This key is not the key of the team that uses'), `${run.stdout}\n${run.stderr}`);
       assert.deepStrictEqual(remoteTree(REMOTE, 'main'), before, 'the shared state is exactly what it was');
       assert.strictEqual(git(['rev-list', '--count', 'main'], REMOTE), commitsBefore, 'no commit reached the remote');
+      assert.deepStrictEqual(fs.readdirSync(path.join(HOME, '.egc', 'state')).sort(), localState, 'no local state file was written');
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     });
 

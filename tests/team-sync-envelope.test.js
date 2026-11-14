@@ -254,6 +254,46 @@ async function runTests() {
       assert.ok(!fs.existsSync(path.join(stagedDir, '.cache')), 'a file below a hidden directory stays too');
     });
 
+    run('the marker of the team key names the team without holding the key, and the verdict on a key follows it (#2080)', () => {
+      const marker = envelope.teamKeyMarker(teamKey);
+      assert.match(marker, /^[0-9a-f]{64}$/);
+      assert.strictEqual(envelope.teamKeyMarker(teamKey), marker, 'the marker of a key is always the same');
+      assert.notStrictEqual(envelope.teamKeyMarker(otherKey), marker, 'another key has another marker');
+      assert.notStrictEqual(marker, teamKey.toString('hex'), 'the marker is not the key');
+      assert.ok(envelope.markerMatches(`${marker}\n`, teamKey));
+      assert.ok(!envelope.markerMatches(marker, otherKey));
+      assert.ok(!envelope.markerMatches('not a marker', teamKey));
+      const checkout = path.join(dir, 'marker-checkout');
+      const syncState = path.join(checkout, 'state');
+      fs.mkdirSync(path.join(syncState, 'proj'), { recursive: true });
+      assert.strictEqual(teamSync.readMarkerState(checkout, teamKey), 'absent');
+      assert.strictEqual(teamSync.judgeTeamKey(checkout, syncState, teamKey, 'r').verdict, 'ok', 'a repository without the marker keeps the rule of the opened files');
+      teamSync.writeTeamMarker(checkout, teamKey);
+      assert.strictEqual(fs.readFileSync(path.join(checkout, 'TEAM'), 'utf8').trim(), marker);
+      assert.strictEqual(teamSync.readMarkerState(checkout, teamKey), 'match');
+      assert.strictEqual(teamSync.readMarkerState(checkout, otherKey), 'mismatch');
+      const wrong = teamSync.judgeTeamKey(checkout, syncState, otherKey, 'r');
+      assert.strictEqual(wrong.verdict, 'wrong', 'another key against a marked repository without files it opens is refused');
+      assert.ok(wrong.message.includes('This key is not the key of the team that uses r'), wrong.message);
+      fs.writeFileSync(path.join(syncState, 'proj', 'main.md'), envelope.sealEnvelope(doc('2026-09-06T12:00:00.000Z', 'theirs'), otherKey, 'proj/main.md'));
+      assert.ok(teamSync.keyOpensAny(syncState, otherKey));
+      assert.ok(!teamSync.keyOpensAny(syncState, teamKey));
+      const damaged = teamSync.judgeTeamKey(checkout, syncState, otherKey, 'r');
+      assert.strictEqual(damaged.verdict, 'damaged', 'a marker that disagrees while the key opens the files is a damaged marker');
+      assert.ok(damaged.message.includes('written again'), damaged.message);
+      const linked = path.join(dir, 'marker-linked');
+      fs.mkdirSync(linked, { recursive: true });
+      try {
+        fs.symlinkSync(path.join(checkout, 'TEAM'), path.join(linked, 'TEAM'));
+      } catch {
+        return;
+      }
+      assert.strictEqual(teamSync.readMarkerState(linked, teamKey), 'mismatch', 'a link planted at the marker is no marker');
+      teamSync.writeTeamMarker(linked, teamKey);
+      assert.ok(!isLinkPath(path.join(linked, 'TEAM')), 'the link is replaced by a real marker');
+      assert.strictEqual(fs.readFileSync(path.join(checkout, 'TEAM'), 'utf8').trim(), marker, 'the file behind the link is untouched');
+    });
+
     run('a local document the merge keeps gets its sidecar repaired when older versions left it unusable, and a well-formed mismatch is left alone', () => {
       const repairSync = path.join(dir, 'repair-sync');
       const repairLocal = path.join(dir, 'repair-local');
