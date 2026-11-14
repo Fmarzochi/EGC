@@ -2,8 +2,10 @@
  * EGC - Extended Global Context plugin for OpenCode
  *
  * This package provides the published EGC OpenCode plugin module:
- * - Plugin hooks (auto-format, TypeScript check, console.log warning, env injection, etc.)
- * - Custom tools (run-tests, check-coverage, security-audit, format-code, lint-check, git-summary)
+ * - Plugin hooks (Guardian and GateGuard on tool calls, dashboard events,
+ *   session lifecycle, shell environment, compaction context, permissions)
+ * - Custom tools (run-tests, check-coverage, security-audit, format-code,
+ *   lint-check, git-summary, changed-files), under the ./tools entry
  * - Bundled reference config/assets for the wider EGC OpenCode setup
  *
  * Usage:
@@ -31,50 +33,11 @@
  * opencode
  * ```
  *
+ * One default export serves both loaders: OpenCode 2 reads its id and setup,
+ * OpenCode 1 (1.18.29 and newer) reads its server entrypoint. OpenCode 1
+ * calls every other export as a plugin, so nothing else is exported here.
+ *
  * @packageDocumentation
  */
 
-// Export the main plugin
-export { EGCHooksPlugin, default } from "./plugins/index.js"
-
-// Export individual components for selective use
-export * from "./plugins/index.js"
-
-// Version export
-export const VERSION = "1.1.23"
-
-// Plugin metadata
-export const metadata = {
-  name: "egc-universal",
-  version: VERSION,
-  description: "EGC plugin for OpenCode",
-  author: "Fmarzochi",
-  features: {
-    agents: 13,
-    commands: 31,
-    skills: 37,
-    configAssets: true,
-    hookEvents: [
-      "file.edited",
-      "tool.execute.before",
-      "tool.execute.after",
-      "session.created",
-      "session.idle",
-      "session.deleted",
-      "file.watcher.updated",
-      "permission.ask",
-      "todo.updated",
-      "shell.env",
-      "experimental.session.compacting",
-    ],
-    customTools: [
-      "run-tests",
-      "check-coverage",
-      "security-audit",
-      "format-code",
-      "lint-check",
-      "git-summary",
-      "changed-files",
-    ],
-  },
-}
+export { default } from "./plugins/index.js"

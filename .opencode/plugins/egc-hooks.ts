@@ -1,713 +1,117 @@
 /**
- * EGC - Extended Global Context plugin hooks for OpenCode
+ * EGC - Extended Global Context plugin for OpenCode: the repository's own
+ * copy, loaded when OpenCode opens this repository (.opencode/plugins) and
+ * published as the egc-universal module.
  *
- * This plugin translates Claude Code hooks to OpenCode's plugin system.
- * OpenCode's plugin system is MORE sophisticated than Claude Code with 20+ events
- * compared to Claude Code's 3 phases (PreToolUse, PostToolUse, Stop).
+ * Two loaders read this file. OpenCode 2 requires a default export with an
+ * `id` and a `setup` function and hands `setup` a context to register hooks
+ * on; OpenCode 1 (1.18.29 and newer) reads the `server` entrypoint of the
+ * same default export, the V1 hooks object, and calls every other export as a
+ * plugin of its own. The default export is therefore the only export.
  *
- * Hook Event Mapping:
- * - PreToolUse → tool.execute.before
- * - PostToolUse → tool.execute.after
- * - Stop → session.idle / session.status
- * - SessionStart → session.created
- * - SessionEnd → session.deleted
+ * Hook event mapping (Claude Code to OpenCode):
+ * - PreToolUse: tool.execute.before (V1), tool.hook("execute.before") (V2)
+ * - PostToolUse: tool.execute.after (V1), tool.hook("execute.after") (V2)
+ * - SessionStart / Stop / SessionEnd: the session.created, session.idle and
+ *   session.deleted bus events, through the V1 `event` hook or the V2
+ *   event.subscribe loop
  */
 
-import type { PluginInput } from "@opencode-ai/plugin"
-import * as fs from "fs"
-import * as os from "os"
 import * as path from "path"
-import { createRequire } from "module"
 import { fileURLToPath } from "url"
-import {
-  initStore,
-  recordChange,
-  clearChanges,
-} from "./lib/changed-files-store.js"
+import type { PluginInput } from "@opencode-ai/plugin"
 import changedFilesTool from "../tools/changed-files.js"
+import { createEgcCore, dispatchBusEvent, type EgcCore, type LogLevel, type Logger } from "./lib/egc-plugin-core.js"
+import { commandOf, type ToolArgs } from "./lib/guardian-bridge.js"
 
-// GateGuard Fact-Forcing Gate bridge.
-//
-// OpenCode's tool.execute.before hook (docs: https://opencode.ai/docs/plugins/)
-// runs gateguard-fact-force.js's own run() function in-process and throws to
-// block, since OpenCode has no exit-code/stdout wire contract like Claude
-// Code or Codex - it is a real JS function call, not a subprocess.
-//
-// The compiled plugin can live in two different layouts relative to
-// scripts/hooks/gateguard-fact-force.js: this repo's own .opencode/plugins/
-// (dogfooding, two levels above the repo root) or an installed copy under
-// <opencode root>/plugins/ with gateguard-fact-force.js copied alongside at
-// <opencode root>/scripts/hooks/ (one level up). Try both.
-type HookModule = { run: (input: unknown) => unknown }
+const PLUGIN_ID = "egc-universal"
+const pluginDir = path.dirname(fileURLToPath(import.meta.url))
 
-// Keyed by the resolved file, so two worktrees served by one process each
-// load their own copy instead of sharing the first one's dependencies.
-const hookModules = new Map<string, HookModule>()
-
-// The worktree may supply hook scripts only when this plugin file itself
-// lives inside it (the EGC repository running its own plugin): a project
-// cannot forge where the installed plugin sits, so an installed plugin never
-// loads code from whatever project it opens.
-function pluginInsideWorktree(pluginDir: string, worktreePath: string): boolean {
-  try {
-    const plugin = fs.realpathSync(pluginDir)
-    const worktree = fs.realpathSync(worktreePath)
-    return plugin === worktree || plugin.startsWith(worktree + path.sep)
-  } catch {
-    return false
-  }
+type ClientLike = {
+  app?: { log?: (input: { body: { service: string; level: LogLevel; message: string } }) => unknown }
 }
 
-function resolveHookModulePath(pluginDir: string, worktreePath: string, fileName: string): string | null {
-  const candidates = [
-    path.join(pluginDir, "..", "scripts", "hooks", fileName),
-    path.join(pluginDir, "..", "..", "scripts", "hooks", fileName),
-  ]
-  if (pluginInsideWorktree(pluginDir, worktreePath)) candidates.push(path.join(worktreePath, "scripts", "hooks", fileName))
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? null
-}
-
-// Loads one of the hook scripts in-process; a script that is not there is
-// looked up again on the next call, so an install that lands mid-session is
-// picked up without a restart.
-function loadHookModule(pluginDir: string, worktreePath: string, fileName: string): HookModule | null {
-  const modulePath = resolveHookModulePath(pluginDir, worktreePath, fileName)
-  if (!modulePath) return null
-  const cached = hookModules.get(modulePath)
-  if (cached) return cached
-  try {
-    const loaded = createRequire(import.meta.url)(modulePath) as HookModule
-    hookModules.set(modulePath, loaded)
-    return loaded
-  } catch {
-    return null
-  }
-}
-
-function loadGateGuard(pluginDir: string, worktreePath: string): HookModule | null {
-  return loadHookModule(pluginDir, worktreePath, "gateguard-fact-force.js")
-}
-
-// EGC Guardian: the same validators Claude Code's hooks.json wires in,
-// called in-process. A blocking verdict (exit code 2) throws, which is how
-// an OpenCode plugin refuses a tool call.
-const GUARDIAN_WRITE_TOOLS: Record<string, string> = { write: "Write", edit: "Edit" }
-type GuardianVerdict = { exitCode?: number; stderr?: string }
-
-function guardianDenyReason(
-  pluginDir: string,
-  worktreePath: string,
-  tool: string,
-  args: Record<string, unknown> | undefined
-): string | null {
-  let verdict: GuardianVerdict | undefined
-  if (tool === "bash") {
-    const guardian = loadHookModule(pluginDir, worktreePath, "pre-bash-guardian-validate.js")
-    verdict = guardian?.run({
-      tool_name: "Bash",
-      tool_input: { command: String(args?.command ?? "") },
-      cwd: worktreePath,
-    }) as GuardianVerdict | undefined
-  } else if (GUARDIAN_WRITE_TOOLS[tool]) {
-    const guardian = loadHookModule(pluginDir, worktreePath, "pre-write-guardian-validate.js")
-    verdict = guardian?.run({
-      tool_name: GUARDIAN_WRITE_TOOLS[tool],
-      tool_input: {
-        file_path: args?.filePath ?? args?.file_path ?? args?.path,
-        content: args?.content,
-        new_string: args?.newString,
-      },
-      cwd: worktreePath,
-    }) as GuardianVerdict | undefined
-  }
-  return verdict?.exitCode === 2 ? (verdict.stderr || "Blocked by the EGC Guardian.") : null
-}
-
-// The dashboard only accepts events that carry the token it minted at
-// startup (dashboard/ops.js); a missing token just means no telemetry. The
-// token changes only when the dashboard restarts, so a good read is kept
-// and the file is consulted again only while no token is known.
-let dashboardToken: string | null = null
-
-function readDashboardToken(): string | null {
-  if (dashboardToken) return dashboardToken
-  try {
-    const home = process.env.HOME || process.env.USERPROFILE || os.homedir()
-    const raw = fs.readFileSync(path.join(home, ".egc", "dashboard-token"), "utf8").trim()
-    dashboardToken = /^[0-9a-f]{64}$/i.test(raw) ? raw : null
-  } catch {
-    dashboardToken = null
-  }
-  return dashboardToken
-}
-
-const OPENCODE_TOOL_TO_GATEGUARD: Record<string, string> = {
-  edit: "Edit",
-  write: "Write",
-  bash: "Bash",
-}
-
-function buildGateGuardInput(tool: string, args: Record<string, unknown> | undefined): string | null {
-  const mappedTool = OPENCODE_TOOL_TO_GATEGUARD[tool]
-  if (!mappedTool) return null
-
-  if (mappedTool === "Bash") {
-    return JSON.stringify({ tool_name: "Bash", tool_input: { command: String(args?.command ?? "") } })
-  }
-
-  const filePath = (args?.filePath ?? args?.file_path ?? args?.path) as string | undefined
-  if (typeof filePath !== "string" || !filePath.trim()) return null
-  return JSON.stringify({ tool_name: mappedTool, tool_input: { file_path: filePath } })
-}
-
-function extractGateGuardDenyReason(result: unknown): string | null {
-  if (!result || typeof result !== "object") return null
-  const stdout = (result as { stdout?: unknown }).stdout
-  if (typeof stdout !== "string") return null
-  try {
-    const parsed = JSON.parse(stdout)
-    if (parsed?.hookSpecificOutput?.permissionDecision === "deny") {
-      return String(parsed.hookSpecificOutput.permissionDecisionReason || "Blocked by the GateGuard Fact-Forcing Gate.")
-    }
-  } catch {
-    return null
-  }
-  return null
-}
-
-type EGCHooksPluginFn = (input: PluginInput) => Promise<Record<string, unknown>>
-
-export const EGCHooksPlugin: EGCHooksPluginFn = async ({
-  client,
-  $,
-  directory,
-  worktree,
-}: PluginInput) => {
-  type HookProfile = "minimal" | "standard" | "strict"
-
-  const worktreePath = worktree || directory
-  const pluginDir = path.dirname(fileURLToPath(import.meta.url))
-  initStore(worktreePath)
-
-  const editedFiles = new Set<string>()
-
-  function resolvePath(p: string): string {
-    if (path.isAbsolute(p)) return p
-    return path.join(worktreePath, p)
-  }
-
-  function hasProjectFile(relativePath: string): boolean {
+// OpenCode 1 logs through the SDK client; OpenCode 2 documents no logger on
+// its context, so a host without one gets a plugin that says nothing.
+function loggerOf(client: unknown): Logger {
+  const app = (client as ClientLike | undefined)?.app
+  const log = app?.log
+  if (typeof log !== "function") return () => {}
+  return (level, message) => {
     try {
-      return fs.existsSync(resolvePath(relativePath))
+      const result = log.call(app, { body: { service: "egc", level, message } }) as { catch?: (fn: () => void) => unknown } | undefined
+      if (result && typeof result.catch === "function") result.catch(() => {})
     } catch {
-      return false
+      // A logger that fails never fails the hook.
     }
   }
+}
 
-  const pendingToolChanges = new Map<string, { path: string; type: "added" | "modified" }>()
-  let writeCounter = 0
+function stringOf(value: unknown): string {
+  return typeof value === "string" ? value : ""
+}
 
-  function getFilePath(args: Record<string, unknown> | undefined): string | null {
-    if (!args) return null
-    const p = (args.filePath ?? args.file_path ?? args.path) as string | undefined
-    return typeof p === "string" && p.trim() ? p : null
-  }
+type V1ToolCall = { tool?: string; sessionID?: string; callID?: string; args?: ToolArgs }
+type V1FileEvent = { path?: string; file?: string; type?: string; event?: string }
+type V1PermissionAsk = { tool?: string; type?: string; pattern?: unknown; args?: unknown; metadata?: Record<string, unknown> }
 
-  // Helper to call the SDK's log API with correct signature
-  const log = (level: "debug" | "info" | "warn" | "error", message: string) =>
-    client.app.log({ body: { service: "egc", level, message } })
-
-  const normalizeProfile = (value: string | undefined): HookProfile => {
-    if (value === "minimal" || value === "strict") return value
-    return "standard"
-  }
-
-  const currentProfile = normalizeProfile(process.env.EGC_HOOK_PROFILE)
-  const disabledHooks = new Set(
-    (process.env.EGC_DISABLED_HOOKS || "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean)
-  )
-
-  const profileOrder: Record<HookProfile, number> = {
-    minimal: 0,
-    standard: 1,
-    strict: 2,
-  }
-
-  const profileAllowed = (required: HookProfile | HookProfile[]): boolean => {
-    if (Array.isArray(required)) {
-      return required.some((entry) => profileOrder[currentProfile] >= profileOrder[entry])
-    }
-    return profileOrder[currentProfile] >= profileOrder[required]
-  }
-
-  const hookEnabled = (
-    hookId: string,
-    requiredProfile: HookProfile | HookProfile[] = "standard"
-  ): boolean => {
-    if (disabledHooks.has(hookId)) return false
-    return profileAllowed(requiredProfile)
-  }
+// OpenCode 1 entrypoint: the hooks object of the V1 plugin API.
+const server = async ({ client, $, directory, worktree }: Partial<PluginInput> = {}) => {
+  const worktreePath = worktree || directory || process.cwd()
+  const log = loggerOf(client)
+  const core = createEgcCore({ worktreePath, pluginDir, log, shell: $ })
 
   return {
-    /**
-     * Prettier Auto-Format Hook
-     * Equivalent to Claude Code PostToolUse hook for prettier
-     *
-     * Triggers: After any JS/TS/JSX/TSX file is edited
-     * Action: Runs prettier --write on the file
-     */
-    "file.edited": async (event: { path: string }) => {
-      editedFiles.add(event.path)
-      recordChange(event.path, "modified")
-
-      // Auto-format JS/TS files
-      if (hookEnabled("post:edit:format", ["strict"]) && event.path.match(/\.(ts|tsx|js|jsx)$/)) {
-        try {
-          await $`prettier --write ${event.path} 2>/dev/null`
-          log("info", `[EGC] Formatted: ${event.path}`)
-        } catch {
-          // Prettier not installed or failed - silently continue
-        }
-      }
-
-      // Console.log warning check
-      if (hookEnabled("post:edit:console-warn", ["standard", "strict"]) && event.path.match(/\.(ts|tsx|js|jsx)$/)) {
-        try {
-          const result = await $`grep -n "console\\.log" ${event.path} 2>/dev/null`.text()
-          if (result.trim()) {
-            const lines = result.trim().split("\n").length
-            log(
-              "warn",
-              `[EGC] console.log found in ${event.path} (${lines} occurrence${lines > 1 ? "s" : ""})`
-            )
-          }
-        } catch {
-          // No console.log found (grep returns non-zero) - this is good
-        }
-      }
+    // OpenCode 1 delivers the bus through this hook: the session lifecycle,
+    // the file edits, the watcher and the todo list.
+    event: async ({ event }: { event?: unknown } = {}) => {
+      await dispatchBusEvent(core, event)
     },
 
-    /**
-     * TypeScript Check Hook
-     * Equivalent to Claude Code PostToolUse hook for tsc
-     *
-     * Triggers: After edit tool completes on .ts/.tsx files
-     * Action: Runs tsc --noEmit to check for type errors
-     */
-    "tool.execute.after": async (
-      input: { tool: string; callID?: string; args?: { filePath?: string; file_path?: string; path?: string } },
-      output: unknown
-    ) => {
-      // Emit to EGC Dashboard
-      try {
-        const http = await import("http")
-        const tool = input.tool.charAt(0).toUpperCase() + input.tool.slice(1)
-        const body = JSON.stringify({ ide:"opencode", event:"post_tool", tool, agent:"main", status:"success" })
-        const req = http.default.request({ hostname:"127.0.0.1", port:7890, path:"/event", method:"POST", headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(body)}, timeout:300 }, ()=>{})
-        req.on("error", ()=>{})
-        req.end(body)
-      } catch(_) {}
+    // The event-specific forms stay for dispatchers that call them by name.
+    "session.created": async () => core.sessionCreated(),
+    "session.idle": async () => core.sessionIdle(),
+    "session.deleted": async () => core.sessionDeleted(),
+    "file.edited": async (event: V1FileEvent) => core.fileEdited(event?.path ?? event?.file ?? ""),
+    "file.watcher.updated": async (event: V1FileEvent) =>
+      core.watcherUpdated(event?.path ?? event?.file ?? "", event?.type ?? event?.event ?? ""),
+    "todo.updated": async (event: { todos?: unknown }) => core.todoUpdated(event?.todos),
 
-      const filePath = getFilePath(input.args as Record<string, unknown>)
-      if (input.tool === "edit" && filePath) {
-        recordChange(filePath, "modified")
-      }
-      if (input.tool === "write" && filePath) {
-        const key = input.callID ?? `write-${++writeCounter}-${filePath}`
-        const pending = pendingToolChanges.get(key)
-        if (pending) {
-          recordChange(pending.path, pending.type)
-          pendingToolChanges.delete(key)
-        } else {
-          recordChange(filePath, "modified")
-        }
-      }
-
-      // Check if a TypeScript file was edited
-      if (
-        hookEnabled("post:edit:typecheck", ["strict"]) &&
-        input.tool === "edit" &&
-        input.args?.filePath?.match(/\.tsx?$/)
-      ) {
-        try {
-          await $`npx tsc --noEmit 2>&1`
-          log("info", "[EGC] TypeScript check passed")
-        } catch (error: unknown) {
-          const err = error as { stdout?: string }
-          log("warn", "[EGC] TypeScript errors detected:")
-          if (err.stdout) {
-            // Log first few errors
-            const errors = err.stdout.split("\n").slice(0, 5)
-            errors.forEach((line: string) => log("warn", `  ${line}`))
-          }
-        }
-      }
-
-      // PR creation logging
-      if (
-        hookEnabled("post:bash:pr-created", ["standard", "strict"]) &&
-        input.tool === "bash" &&
-        input.args?.toString().includes("gh pr create")
-      ) {
-        log("info", "[EGC] PR created - check GitHub Actions status")
-      }
+    // OpenCode 1 passes the arguments in the output half of the pair, where
+    // the plugin may edit them; older dispatchers put them on the input.
+    "tool.execute.before": async (input: V1ToolCall, output?: { args?: ToolArgs }) => {
+      core.beforeTool(input?.tool ?? "", output?.args ?? input?.args, input?.callID)
+    },
+    "tool.execute.after": async (input: V1ToolCall) => {
+      await core.afterTool(input?.tool ?? "", input?.args, input?.callID)
     },
 
-    /**
-     * Pre-Tool Security Check
-     * Equivalent to Claude Code PreToolUse hook
-     *
-     * Triggers: Before tool execution
-     * Action: Warns about potential security issues
-     */
-    "tool.execute.before": async (
-      input: { tool: string; callID?: string; args?: Record<string, unknown> }
-    ) => {
-      // Emit to EGC Dashboard
-      try {
-        const http = await import("http")
-        const detail = (input.args?.filePath ?? input.args?.file_path ?? input.args?.path ?? input.args?.command ?? "") as string
-        const tool = input.tool.charAt(0).toUpperCase() + input.tool.slice(1)
-        const body = JSON.stringify({ ide:"opencode", event:"pre_tool", tool, agent:"main", detail, status:"running" })
-        const headers: Record<string, string | number> = { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
-        const token = readDashboardToken()
-        if (token) headers["x-egc-token"] = token
-        const req = http.default.request({ hostname:"127.0.0.1", port:7890, path:"/event", method:"POST", headers, timeout:300 }, ()=>{})
-        req.on("error", ()=>{})
-        req.end(body)
-      } catch(_) {}
-
-      // EGC Guardian first: a denied command or a protected/denied write is
-      // refused before any other hook looks at the call.
-      const guardianReason = guardianDenyReason(pluginDir, worktreePath, input.tool, input.args)
-      if (guardianReason) {
-        throw new Error(guardianReason)
-      }
-
-      // Fact-Forcing Gate: block the first Edit/Write/Bash per file (or per
-      // session for Bash) and demand investigation before allowing it.
-      if (hookEnabled("pre:gateguard:fact-force", ["minimal", "standard", "strict"])) {
-        const gateguard = loadGateGuard(pluginDir, worktreePath)
-        if (gateguard) {
-          const payload = buildGateGuardInput(input.tool, input.args)
-          if (payload) {
-            const denyReason = extractGateGuardDenyReason(gateguard.run(payload))
-            if (denyReason) {
-              throw new Error(denyReason)
-            }
-          }
-        }
-      }
-
-      if (input.tool === "write") {
-        const filePath = getFilePath(input.args)
-        if (filePath) {
-          const absPath = resolvePath(filePath)
-          let type: "added" | "modified" = "modified"
-          try {
-            if (typeof fs.existsSync === "function") {
-              type = fs.existsSync(absPath) ? "modified" : "added"
-            }
-          } catch {
-            type = "modified"
-          }
-          const key = input.callID ?? `write-${++writeCounter}-${filePath}`
-          pendingToolChanges.set(key, { path: filePath, type })
-        }
-      }
-
-      // Git push review reminder
-      if (
-        hookEnabled("pre:bash:git-push-reminder", "strict") &&
-        input.tool === "bash" &&
-        input.args?.toString().includes("git push")
-      ) {
-        log(
-          "info",
-          "[EGC] Remember to review changes before pushing: git diff origin/main...HEAD"
-        )
-      }
-
-      // Block creation of unnecessary documentation files
-      if (
-        hookEnabled("pre:write:doc-file-warning", ["standard", "strict"]) &&
-        input.tool === "write" &&
-        input.args?.filePath &&
-        typeof input.args.filePath === "string"
-      ) {
-        const filePath = input.args.filePath
-        if (
-          filePath.match(/\.(md|txt)$/i) &&
-          !filePath.includes("README") &&
-          !filePath.includes("CHANGELOG") &&
-          !filePath.includes("LICENSE") &&
-          !filePath.includes("CONTRIBUTING")
-        ) {
-          log(
-            "warn",
-            `[EGC] Creating ${filePath} - consider if this documentation is necessary`
-          )
-        }
-      }
-
-      // Long-running command reminder
-      if (hookEnabled("pre:bash:tmux-reminder", "strict") && input.tool === "bash") {
-        const cmd = String(input.args?.command || input.args || "")
-        if (
-          cmd.match(/^(npm|pnpm|yarn|bun)\s+(install|build|test|run)/) ||
-          cmd.match(/^cargo\s+(build|test|run)/) ||
-          cmd.match(/^go\s+(build|test|run)/)
-        ) {
-          log(
-            "info",
-            "[EGC] Long-running command detected - consider using background execution"
-          )
-        }
-      }
-    },
-
-    /**
-     * Session Created Hook
-     * Equivalent to Claude Code SessionStart hook
-     *
-     * Triggers: When a new session starts
-     * Action: Loads context and displays welcome message
-     */
-    "session.created": async () => {
-      if (!hookEnabled("session:start", ["minimal", "standard", "strict"])) return
-
-      log("info", `[EGC] Session started - profile=${currentProfile}`)
-
-      // Check for project-specific context files
-      if (hasProjectFile("GEMINI.md")) {
-        log("info", "[EGC] Found GEMINI.md - loading project context")
-      }
-    },
-
-    /**
-     * Session Idle Hook
-     * Equivalent to Claude Code Stop hook
-     *
-     * Triggers: When session becomes idle (task completed)
-     * Action: Runs console.log audit on all edited files
-     */
-    "session.idle": async () => {
-      if (!hookEnabled("stop:check-console-log", ["minimal", "standard", "strict"])) return
-      if (editedFiles.size === 0) return
-
-      log("info", "[EGC] Session idle - running console.log audit")
-
-      let totalConsoleLogCount = 0
-      const filesWithConsoleLogs: string[] = []
-
-      for (const file of editedFiles) {
-        if (!file.match(/\.(ts|tsx|js|jsx)$/)) continue
-
-        try {
-          const result = await $`grep -c "console\\.log" ${file} 2>/dev/null`.text()
-          const count = parseInt(result.trim(), 10)
-          if (count > 0) {
-            totalConsoleLogCount += count
-            filesWithConsoleLogs.push(file)
-          }
-        } catch {
-          // No console.log found
-        }
-      }
-
-      if (totalConsoleLogCount > 0) {
-        log(
-          "warn",
-          `[EGC] Audit: ${totalConsoleLogCount} console.log statement(s) in ${filesWithConsoleLogs.length} file(s)`
-        )
-        filesWithConsoleLogs.forEach((f) =>
-          log("warn", `  - ${f}`)
-        )
-        log("warn", "[EGC] Remove console.log statements before committing")
-      } else {
-        log("info", "[EGC] Audit passed: No console.log statements found")
-      }
-
-      // Desktop notification (macOS)
-      try {
-        await $`osascript -e 'display notification "Task completed!" with title "OpenCode EGC"' 2>/dev/null`
-      } catch {
-        // Notification not supported or failed
-      }
-
-      // Clear tracked files for next task
-      editedFiles.clear()
-    },
-
-    /**
-     * Session Deleted Hook
-     * Equivalent to Claude Code SessionEnd hook
-     *
-     * Triggers: When session ends
-     * Action: Final cleanup and state saving
-     */
-    "session.deleted": async () => {
-      if (!hookEnabled("session:end-marker", ["minimal", "standard", "strict"])) return
-      log("info", "[EGC] Session ended - cleaning up")
-      editedFiles.clear()
-      clearChanges()
-      pendingToolChanges.clear()
-    },
-
-    /**
-     * File Watcher Hook
-     * OpenCode-only feature
-     *
-     * Triggers: When file system changes are detected
-     * Action: Updates tracking
-     */
-    "file.watcher.updated": async (event: { path: string; type: string }) => {
-      let changeType: "added" | "modified" | "deleted" = "modified"
-      if (event.type === "create" || event.type === "add") changeType = "added"
-      else if (event.type === "delete" || event.type === "remove") changeType = "deleted"
-      recordChange(event.path, changeType)
-      if (event.type === "change" && event.path.match(/\.(ts|tsx|js|jsx)$/)) {
-        editedFiles.add(event.path)
-      }
-    },
-
-    /**
-     * Todo Updated Hook
-     * OpenCode-only feature
-     *
-     * Triggers: When todo list is updated
-     * Action: Logs progress
-     */
-    "todo.updated": async (event: { todos: Array<{ text: string; done: boolean }> }) => {
-      const completed = event.todos.filter((t) => t.done).length
-      const total = event.todos.length
-      if (total > 0) {
-        log("info", `[EGC] Progress: ${completed}/${total} tasks completed`)
-      }
-    },
-
-    /**
-     * Shell Environment Hook
-     * OpenCode-specific: Inject environment variables into shell commands
-     *
-     * Triggers: Before shell command execution
-     * Action: Sets PROJECT_ROOT, PACKAGE_MANAGER, DETECTED_LANGUAGES, EGC_VERSION
-     */
-    "shell.env": async () => {
-      const env: Record<string, string> = {
-        EGC_VERSION: "1.1.23",
-        EGC_PLUGIN: "true",
-        EGC_HOOK_PROFILE: currentProfile,
-        EGC_DISABLED_HOOKS: process.env.EGC_DISABLED_HOOKS || "",
-        PROJECT_ROOT: worktreePath,
-      }
-
-      // Detect package manager
-      const lockfiles: Record<string, string> = {
-        "bun.lockb": "bun",
-        "pnpm-lock.yaml": "pnpm",
-        "yarn.lock": "yarn",
-        "package-lock.json": "npm",
-      }
-      for (const [lockfile, pm] of Object.entries(lockfiles)) {
-        if (hasProjectFile(lockfile)) {
-          env.PACKAGE_MANAGER = pm
-          break
-        }
-      }
-
-      // Detect languages
-      const langDetectors: Record<string, string> = {
-        "tsconfig.json": "typescript",
-        "go.mod": "go",
-        "pyproject.toml": "python",
-        "Cargo.toml": "rust",
-        "Package.swift": "swift",
-      }
-      const detected: string[] = []
-      for (const [file, lang] of Object.entries(langDetectors)) {
-        if (hasProjectFile(file)) {
-          detected.push(lang)
-        }
-      }
-      if (detected.length > 0) {
-        env.DETECTED_LANGUAGES = detected.join(",")
-        env.PRIMARY_LANGUAGE = detected[0]
-      }
-
+    // The environment of every shell command, written into the output
+    // OpenCode 1 reads and returned for the dispatchers that read the value.
+    "shell.env": async (_input?: unknown, output?: { env?: Record<string, string> }) => {
+      const env = core.shellEnv()
+      if (output?.env && typeof output.env === "object") Object.assign(output.env, env)
       return env
     },
 
-    /**
-     * Session Compacting Hook
-     * OpenCode-specific: Control context compaction behavior
-     *
-     * Triggers: Before context compaction
-     * Action: Push EGC context block and custom compaction prompt
-     */
-    "experimental.session.compacting": async () => {
-      const contextBlock = [
-        "# EGC Context (preserve across compaction)",
-        "",
-        "## Active Plugin: EGC - Extended Global Context v1.1.23",
-        "- Hooks: file.edited, tool.execute.before/after, session.created/idle/deleted, shell.env, compacting, permission.ask",
-        "- Tools: run-tests, check-coverage, security-audit, format-code, lint-check, git-summary, changed-files",
-        "- Agents: 13 specialized (planner, architect, tdd-guide, code-reviewer, security-reviewer, build-error-resolver, e2e-runner, refactor-cleaner, doc-updater, go-reviewer, go-build-resolver, database-reviewer, python-reviewer)",
-        "",
-        "## Key Principles",
-        "- TDD: write tests first, 80%+ coverage",
-        "- Immutability: never mutate, always return new copies",
-        "- Security: validate inputs, no hardcoded secrets",
-        "",
-      ]
-
-      // Include recently edited files
-      if (editedFiles.size > 0) {
-        contextBlock.push("## Recently Edited Files")
-        for (const f of editedFiles) {
-          contextBlock.push(`- ${f}`)
-        }
-        contextBlock.push("")
-      }
-
-      return {
-        context: contextBlock.join("\n"),
-        compaction_prompt: "Focus on preserving: 1) Current task status and progress, 2) Key decisions made, 3) Files created/modified, 4) Remaining work items, 5) Any security concerns flagged. Discard: verbose tool outputs, intermediate exploration, redundant file listings.",
-      }
+    // The EGC block joins the context of the compaction; the host keeps its
+    // own prompt.
+    "experimental.session.compacting": async (_input?: unknown, output?: { context?: string[] }) => {
+      const { context, prompt } = core.compactionContext()
+      if (output && Array.isArray(output.context)) output.context.push(context)
+      return { context, compaction_prompt: prompt }
     },
 
-    /**
-     * Permission Auto-Approve Hook
-     * OpenCode-specific: Auto-approve safe operations
-     *
-     * Triggers: When permission is requested
-     * Action: Auto-approve reads, formatters, and test commands; log all for audit
-     */
-    "permission.ask": async (event: { tool: string; args: unknown }) => {
-      log("info", `[EGC] Permission requested for: ${event.tool}`)
-
-      const cmd = String((event.args as Record<string, unknown>)?.command || event.args || "")
-
-      // Auto-approve: read/search tools
-      if (["read", "glob", "grep", "search", "list"].includes(event.tool)) {
-        return { approved: true, reason: "Read-only operation" }
-      }
-
-      // Auto-approve: formatters
-      if (event.tool === "bash" && /^(npx )?(prettier|biome|black|gofmt|rustfmt|swift-format)/.test(cmd)) {
-        return { approved: true, reason: "Formatter execution" }
-      }
-
-      // Auto-approve: test execution
-      if (event.tool === "bash" && /^(npm test|npx vitest|npx jest|pytest|go test|cargo test)/.test(cmd)) {
-        return { approved: true, reason: "Test execution" }
-      }
-
-      // Everything else: let user decide
-      return { approved: undefined }
+    // A permission the plugin may answer for the person; the rest stays with
+    // the person, as "ask".
+    "permission.ask": async (input: V1PermissionAsk, output?: { status?: string }) => {
+      const action = stringOf(input?.tool) || stringOf(input?.type)
+      log("info", `[EGC] Permission requested for: ${action}`)
+      const command = commandOf(input?.args as ToolArgs) || stringOf(input?.metadata?.command) || stringOf(input?.pattern)
+      const reason = core.permissionDecision(action, command)
+      if (!reason) return { approved: undefined }
+      if (output && typeof output === "object") output.status = "allow"
+      return { approved: true, reason }
     },
 
     tool: {
@@ -716,4 +120,154 @@ export const EGCHooksPlugin: EGCHooksPluginFn = async ({
   }
 }
 
-export default EGCHooksPlugin
+type Registration = { dispose?: () => unknown } | undefined
+// A callback typed for its own event is assignable to a parameter typed for
+// `never`, so every registration below keeps its event shape.
+type HookDomain = {
+  hook?: (name: string, callback: (event: never) => unknown) => Promise<Registration> | Registration
+}
+type ToolEditor = {
+  add: (definition: {
+    name: string
+    description: string
+    input: Record<string, unknown>
+    execute: (input: unknown, context: unknown) => Promise<{ content: string }>
+  }) => unknown
+}
+type PluginContext = {
+  location?: { directory?: string; project?: { directory?: string } }
+  client?: unknown
+  tool?: HookDomain & { transform?: (edit: (editor: ToolEditor) => unknown) => unknown }
+  session?: HookDomain
+  permission?: HookDomain
+  shell?: HookDomain
+  event?: { subscribe?: (options?: { types?: string[]; signal?: AbortSignal }) => AsyncIterable<unknown> }
+}
+type ToolBeforeEvent = { tool?: string; callID?: string; input?: unknown }
+type ToolAfterEvent = { tool?: string; callID?: string; input?: unknown; args?: unknown }
+type CompactionEvent = { system?: Array<{ type: string; text: string }> }
+type PermissionEvaluation = { action?: unknown; resources?: unknown; effect?: string; message?: string }
+type ShellCreateBefore = { env?: Record<string, string | undefined> }
+
+const CHANGED_FILES_INPUT = {
+  type: "object",
+  properties: {
+    filter: { type: "string", enum: ["all", "added", "modified", "deleted"], description: "Filter by change type (default: all)" },
+    format: { type: "string", enum: ["tree", "json"], description: "Output format: tree for terminal display, json for structured data (default: tree)" },
+  },
+  additionalProperties: false,
+}
+
+// The changed-files tool of the V1 object, offered to OpenCode 2 through the
+// tool editor; a host that refuses it keeps the hooks.
+async function registerChangedFilesTool(context: PluginContext | undefined): Promise<void> {
+  const transform = context?.tool?.transform
+  if (typeof transform !== "function") return
+  try {
+    await transform.call(context?.tool, (editor: ToolEditor) => {
+      editor.add({
+        name: "changed-files",
+        description: changedFilesTool.description,
+        input: CHANGED_FILES_INPUT,
+        execute: async (input, toolContext) => ({
+          content: await changedFilesTool.execute(
+            input as Parameters<typeof changedFilesTool.execute>[0],
+            toolContext as Parameters<typeof changedFilesTool.execute>[1]
+          ),
+        }),
+      })
+    })
+  } catch {
+    // The tool is a convenience; the Guardian and the gate do not depend on it.
+  }
+}
+
+// The bus of OpenCode 2 is an async iterable: the loop runs until the cleanup
+// aborts it, and an event that fails does not stop the next one.
+function followBusEvents(context: PluginContext | undefined, core: EgcCore): () => void {
+  const subscribe = context?.event?.subscribe
+  if (typeof subscribe !== "function") return () => {}
+  const controller = new AbortController()
+  const loop = async () => {
+    for await (const event of subscribe.call(context?.event, { signal: controller.signal })) {
+      if (controller.signal.aborted) break
+      try {
+        await dispatchBusEvent(core, event)
+      } catch {
+        // One event's failure is not the bus's.
+      }
+    }
+  }
+  loop().catch(() => {
+    // A subscription the host ends or refuses leaves the hooks working.
+  })
+  return () => controller.abort()
+}
+
+// OpenCode 2 entrypoint: the same behaviors registered on the context the host
+// hands over. A host without one of the domains keeps the others.
+async function setup(context?: PluginContext): Promise<() => Promise<void>> {
+  const worktreePath = context?.location?.project?.directory ?? context?.location?.directory ?? process.cwd()
+  const core = createEgcCore({ worktreePath, pluginDir, log: loggerOf(context?.client) })
+  const registrations: Array<{ dispose: () => unknown }> = []
+
+  const register = async <Event>(
+    domain: "tool" | "session" | "permission" | "shell",
+    name: string,
+    callback: (event: Event) => unknown
+  ) => {
+    const owner = context?.[domain]
+    const hook = owner?.hook
+    if (typeof hook !== "function") return
+    try {
+      const registration = await hook.call(owner, name, callback)
+      if (registration && typeof registration.dispose === "function") registrations.push(registration as { dispose: () => unknown })
+    } catch {
+      // A hook the host refuses leaves that feature off; the plugin still loads.
+    }
+  }
+
+  // Every callback is async, so a refusal reaches the host as a rejection,
+  // whichever way it awaits the hook.
+  await register<ToolBeforeEvent>("tool", "execute.before", async (event) => {
+    const args = event?.input
+    if (!args || typeof args !== "object") return
+    core.beforeTool(event.tool ?? "", args as ToolArgs, event.callID)
+  })
+  await register<ToolAfterEvent>("tool", "execute.after", async (event) => {
+    if (!event || typeof event !== "object") return
+    const args = event.input ?? event.args
+    await core.afterTool(event.tool ?? "", (args && typeof args === "object" ? args : undefined) as ToolArgs, event.callID)
+  })
+  await register<CompactionEvent>("session", "compaction", async (event) => {
+    if (!event || !Array.isArray(event.system)) return
+    event.system.push({ type: "text", text: core.compactionContext().context })
+  })
+  await register<PermissionEvaluation>("permission", "evaluate", async (event) => {
+    if (!event || typeof event !== "object" || event.effect !== "ask") return
+    const resources = Array.isArray(event.resources) ? event.resources : []
+    const command = resources.find((entry): entry is string => typeof entry === "string") ?? ""
+    const reason = core.permissionDecision(stringOf(event.action), command)
+    if (!reason) return
+    event.effect = "allow"
+    event.message = reason
+  })
+  await register<ShellCreateBefore>("shell", "create.before", async (event) => {
+    if (!event || typeof event !== "object" || !event.env || typeof event.env !== "object") return
+    Object.assign(event.env, core.shellEnv())
+  })
+
+  await registerChangedFilesTool(context)
+  const stopEvents = followBusEvents(context, core)
+
+  // Every registration is disposed whatever one disposer does, and the event
+  // loop ends with them.
+  return async () => {
+    stopEvents()
+    await Promise.allSettled(
+      registrations.splice(0).map((registration) => Promise.resolve().then(() => registration.dispose()))
+    )
+  }
+}
+
+export default { id: PLUGIN_ID, setup, server }
