@@ -56,7 +56,7 @@ function addOperationCoverage(operation, repoRoot, covered) {
 // granularity the install-state records: one destination per file, so a
 // file that left a planned directory, or another module's file under a
 // directory copied onto the target root itself (codex's `.agents`, egc's
-// `.gemini-plugin`, cursor's `.cursor/scripts`), is no longer shielded.
+// `.claude-plugin`, cursor's `.cursor/scripts`), is no longer shielded.
 function collectCurrentlyCoveredDestinations(operations, repoRoot) {
   const covered = { files: new Set(), dirs: new Set() };
   for (const operation of Array.isArray(operations) ? operations : []) {

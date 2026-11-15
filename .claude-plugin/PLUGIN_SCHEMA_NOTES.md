@@ -5,13 +5,13 @@ This document captures **undocumented but enforced constraints** of the Claude C
 These rules are based on real installation failures, validator behavior, and comparison with known working plugins.
 They exist to prevent silent breakage and repeated regressions.
 
-If you edit `.gemini-plugin/plugin.json`, read this first.
+If you edit `.claude-plugin/plugin.json`, read this first.
 
 ---
 
 ## Summary (Read This First)
 
-The Gemini plugin manifest validator is **strict and opinionated**.
+The Claude Code plugin manifest validator is **strict and opinionated**.
 It enforces rules that are not fully documented in public schema references.
 
 The most common failure mode is:
@@ -137,7 +137,7 @@ The test `plugin.json does NOT have explicit hooks declaration` in `tests/hooks/
 EGC keeps `.mcp.json` at the repository root for Codex plugin installs and manual MCP setup.
 Claude Code also auto-discovers plugin-root `.mcp.json` files by convention, which would bundle the same MCP servers into plugin installs.
 
-Keep this field in `.gemini-plugin/plugin.json`:
+Keep this field in `.claude-plugin/plugin.json`:
 
 ```json
 {
@@ -145,7 +145,7 @@ Keep this field in `.gemini-plugin/plugin.json`:
 }
 ```
 
-This explicit empty object prevents Gemini plugin installs from auto-loading EGC's root MCP definitions.
+This explicit empty object prevents Claude Code plugin installs from auto-loading EGC's root MCP definitions.
 Without the opt-out, strict OpenAI-compatible gateways can reject plugin MCP tool names such as `mcp__plugin_everything-gemini_github__create_pull_request_review` because they exceed 64 characters.
 
 Users who want the bundled MCP servers should configure them manually from `.mcp.json` or `mcp-configs/mcp-servers.json`.
@@ -162,7 +162,7 @@ These look correct but are rejected:
 * Relying on inferred paths
 * Assuming marketplace behavior matches local validation
 * **Adding `"hooks": "./hooks/hooks.json"`** - auto-loaded by convention, causes duplicate error
-* Removing `"mcpServers": {}` - re-enables root `.mcp.json` auto-discovery for Gemini plugin installs and can produce overlong MCP tool names
+* Removing `"mcpServers": {}` - re-enables root `.mcp.json` auto-discovery for Claude Code plugin installs and can produce overlong MCP tool names
 
 Avoid cleverness. Be explicit.
 
@@ -178,7 +178,7 @@ Avoid cleverness. Be explicit.
 }
 ```
 
-This structure has been validated against the Gemini plugin validator.
+This structure has been validated against the Claude Code plugin validator.
 
 **Important:** Notice there is NO `"hooks"` field and NO `"agents"` field. Both are loaded automatically by convention. Adding either explicitly causes errors.
 
@@ -191,11 +191,11 @@ Before submitting changes that touch `plugin.json`:
 1. Ensure all component fields are arrays
 2. Include a `version`
 3. Do NOT add `agents` or `hooks` fields (both are auto-loaded by convention)
-4. Preserve `"mcpServers": {}` unless you are intentionally changing Gemini plugin MCP bundling behavior
+4. Preserve `"mcpServers": {}` unless you are intentionally changing Claude Code plugin MCP bundling behavior
 5. Run:
 
 ```bash
-egc plugin validate .gemini-plugin/plugin.json
+egc plugin validate .claude-plugin/plugin.json
 ```
 
 If in doubt, choose verbosity over convenience.

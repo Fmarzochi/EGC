@@ -13,7 +13,7 @@ Antigravity, OpenCode, Kiro, Trae, and Codebuddy harnesses.
 
 | Layer | Path | Role |
 |---|---|---|
-| Manifests | `.gemini-plugin/`, `.codex-plugin/`, `.gemini-plugin/marketplace.json` | Static plugin discovery |
+| Manifests | `.claude-plugin/`, `.codex-plugin/`, `.claude-plugin/marketplace.json` | Static plugin discovery |
 | Install adapters | `scripts/lib/install-targets/` | Per-target materialization |
 | Install entry | `scripts/install-apply.js`, `scripts/install.sh`, `scripts/install.ps1` | User-facing installers |
 | Hooks pipeline | `hooks/hooks.json` + `scripts/hooks/*` | Pre/Post-tool, session, governance hooks |

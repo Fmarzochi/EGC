@@ -163,11 +163,11 @@ function runTests() {
 
     try {
       fs.mkdirSync(path.join(projectRoot, 'scripts'), { recursive: true });
-      fs.mkdirSync(path.join(projectRoot, '.gemini-plugin'), { recursive: true });
+      fs.mkdirSync(path.join(projectRoot, '.claude-plugin'), { recursive: true });
       fs.mkdirSync(path.join(projectRoot, 'agents'), { recursive: true });
       fs.mkdirSync(path.join(projectRoot, 'skills'), { recursive: true });
       fs.writeFileSync(path.join(projectRoot, 'scripts', 'harness-audit.js'), '#!/usr/bin/env node\n');
-      fs.writeFileSync(path.join(projectRoot, '.gemini-plugin', 'plugin.json'), JSON.stringify({ name: 'egc' }, null, 2));
+      fs.writeFileSync(path.join(projectRoot, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'egc' }, null, 2));
       fs.writeFileSync(
         path.join(projectRoot, 'package.json'),
         JSON.stringify({ name: 'forked-harness', scripts: { test: 'node scripts/validate-commands.js && node tests/run-all.js' } }, null, 2)
@@ -186,9 +186,9 @@ function runTests() {
     const projectRoot = createTempDir('harness-audit-project-');
 
     try {
-      fs.mkdirSync(path.join(homeDir, '.gemini', 'plugins', 'egc', '.gemini-plugin'), { recursive: true });
+      fs.mkdirSync(path.join(homeDir, '.gemini', 'plugins', 'egc', '.claude-plugin'), { recursive: true });
       fs.writeFileSync(
-        path.join(homeDir, '.gemini', 'plugins', 'egc', '.gemini-plugin', 'plugin.json'),
+        path.join(homeDir, '.gemini', 'plugins', 'egc', '.claude-plugin', 'plugin.json'),
         JSON.stringify({ name: 'egc' }, null, 2)
       );
 
@@ -318,14 +318,14 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('detects marketplace-installed Gemini plugins under home marketplaces/', () => {
+  if (test('detects marketplace-installed Claude Code plugins under home marketplaces/', () => {
     const homeDir = createTempDir('harness-audit-marketplace-home-');
     const projectRoot = createTempDir('harness-audit-marketplace-project-');
 
     try {
-      fs.mkdirSync(path.join(homeDir, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.gemini-plugin'), { recursive: true });
+      fs.mkdirSync(path.join(homeDir, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.claude-plugin'), { recursive: true });
       fs.writeFileSync(
-        path.join(homeDir, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.gemini-plugin', 'plugin.json'),
+        path.join(homeDir, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.claude-plugin', 'plugin.json'),
         JSON.stringify({ name: 'everything-gemini' }, null, 2)
       );
 
@@ -351,14 +351,14 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('detects marketplace-installed Gemini plugins under project marketplaces/', () => {
+  if (test('detects marketplace-installed Claude Code plugins under project marketplaces/', () => {
     const homeDir = createTempDir('harness-audit-marketplace-home-');
     const projectRoot = createTempDir('harness-audit-marketplace-project-');
 
     try {
-      fs.mkdirSync(path.join(projectRoot, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.gemini-plugin'), { recursive: true });
+      fs.mkdirSync(path.join(projectRoot, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.claude-plugin'), { recursive: true });
       fs.writeFileSync(
-        path.join(projectRoot, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.gemini-plugin', 'plugin.json'),
+        path.join(projectRoot, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.claude-plugin', 'plugin.json'),
         JSON.stringify({ name: 'everything-gemini' }, null, 2)
       );
 
@@ -384,14 +384,14 @@ function runTests() {
     }
   })) passed++; else failed++;
 
-  if (test('detects marketplace-installed Gemini plugins from USERPROFILE fallback on Windows-style setups', () => {
+  if (test('detects marketplace-installed Claude Code plugins from USERPROFILE fallback on Windows-style setups', () => {
     const homeDir = createTempDir('harness-audit-marketplace-home-');
     const projectRoot = createTempDir('harness-audit-marketplace-project-');
 
     try {
-      fs.mkdirSync(path.join(homeDir, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.gemini-plugin'), { recursive: true });
+      fs.mkdirSync(path.join(homeDir, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.claude-plugin'), { recursive: true });
       fs.writeFileSync(
-        path.join(homeDir, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.gemini-plugin', 'plugin.json'),
+        path.join(homeDir, '.gemini', 'plugins', 'marketplaces', 'everything-gemini', '.claude-plugin', 'plugin.json'),
         JSON.stringify({ name: 'everything-gemini' }, null, 2)
       );
 

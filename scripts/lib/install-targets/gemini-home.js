@@ -34,7 +34,7 @@ const AGY_SKILLS_SUBDIR = 'config/skills';
 // (helpers.js, planGenericRetirements); a file the person edited stays.
 // The same retirement collects the rules/egc tree and the agents/ and
 // commands/ copies, now that those families install under config/.
-const GEMINI_CLI_ONLY_SOURCE_PREFIXES = new Set(['.agents', 'hooks', 'mcp-configs', '.gemini-plugin']);
+const GEMINI_CLI_ONLY_SOURCE_PREFIXES = new Set(['.agents', 'hooks', 'mcp-configs', '.claude-plugin']);
 
 function isGeminiCliOnlySource(sourceRelativePath) {
   return GEMINI_CLI_ONLY_SOURCE_PREFIXES.has(normalizeRelativePath(sourceRelativePath).split('/')[0]);

@@ -2041,7 +2041,7 @@ function runTests() {
         ['skills/testing/tdd-workflow/SKILL.md', path.join(geminiRoot, 'skills', 'egc', 'tdd-workflow', 'SKILL.md'), 'workflow-quality'],
         ['.agents/AGENTS.md', path.join(geminiRoot, '.agents', 'AGENTS.md'), 'agents-core'],
         ['mcp-configs/mcp-servers.json', path.join(geminiRoot, 'mcp-configs', 'mcp-servers.json'), 'platform-configs'],
-        ['.gemini-plugin/plugin.json', path.join(geminiRoot, 'plugin.json'), 'platform-configs'],
+        ['.claude-plugin/plugin.json', path.join(geminiRoot, 'plugin.json'), 'platform-configs'],
       ];
       for (const [source, destination] of residue) {
         fs.mkdirSync(path.dirname(destination), { recursive: true });
