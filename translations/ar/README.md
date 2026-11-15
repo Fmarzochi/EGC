@@ -58,8 +58,8 @@ npm install -g @egchq/egc && egc install
 
 ```bash
 egc team init --backend git --بعد https://github.com/you/egc-memory.git
-egc team init --backend git --remote https://github.com/you/egc-memory. ه-المفتاح <team key>   # على جهاز بعضه؛ المسلسلات الرئيسية في قائمة العملية و تبقى في سجل القذيفة، قم بمسح هذا الخط وتجنب المزامنة المشتركة
-فريق البيض
+egc team init --backend git --remote https://github.com/you/egc-memory. ه-المفتاح <team key>   # على جهاز بعضه؛ المسلسلات الرئيسية في قائمة العمليات والبقاء في سجل الصوف، قم بمسح هذا الخط وتجنب الماكينات المشتركة
+فريق البيض المزامنة # باليد؛ كما أن الجلسات مزامنة بنفسها من داخلها (إيقاف تشغيل فريق البيض التلقائي لإيقاف التشغيل)
 ```
 
 ### شبكة الجلسة: الجلسات المفتوحة الخاصة بك راجع بعضها البعض

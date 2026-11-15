@@ -58,8 +58,8 @@ npm install -g @egchq/egc && egc install
 
 ```bash
 egc team init --backend git --remote https://github.com/you/egc-memory.git
-egc team init --backend git --remote https://github.com/you/egc-memory. это --key <team key>   # на каждой другой машине; клавиша отображается в списке процессов и остается в истории оболочек, чтобы очистить, что линия и избежать синхронизации общих машин
-egc команды
+egc team init --backend git --remote https://github.com/you/egc-memory. это --key <team key>   # на каждой другой машине; клавиша показывает в списке процессов и остается в истории оболочки, так что очистите, что строка и избегайте общих машин
+egc team sync # вручную; сеансы также синхронизируются сами по себе из init (автосинхронизация egc команды выключена)
 ```
 
 ### Сеанс сессии: Ваши открытые сессии просматривают каждый другой
