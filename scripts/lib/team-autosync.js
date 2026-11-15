@@ -17,6 +17,7 @@
  * that `egc team status` reads, never to the tool's chat.
  */
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -75,9 +76,16 @@ function lastAutosync(homeDir = os.homedir()) {
 function writeStamp(homeDir, stamp) {
   try {
     fs.mkdirSync(egcDir(homeDir), { recursive: true });
-    // Written whole and moved into place, so a reader never sees a partial stamp.
-    const draft = `${stampPath(homeDir)}.${process.pid}.tmp`;
-    fs.writeFileSync(draft, JSON.stringify(stamp, null, 2), 'utf-8');
+    // Written whole into a sibling of its own, created exclusively so a
+    // planted link at the name is never followed, then moved into place: a
+    // reader never sees a partial stamp.
+    const draft = `${stampPath(homeDir)}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+    const descriptor = fs.openSync(draft, 'wx', 0o600);
+    try {
+      fs.writeSync(descriptor, JSON.stringify(stamp, null, 2));
+    } finally {
+      fs.closeSync(descriptor);
+    }
     fs.renameSync(draft, stampPath(homeDir));
   } catch {
     // The stamp serves the status and the next run; a hook never fails on it.
