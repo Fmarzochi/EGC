@@ -37,8 +37,8 @@ function manifestPlanFor(record, context, state) {
 
 // A recorded plan replays what an older install wrote, and replaying brings
 // each recorded file up to the current package. A file the package added
-// since was never recorded: the Bash guardian split into five modules in
-// #1945, and a replay updated pre-bash-guardian-validate.js to the version
+// since was never recorded: the Bash guardian split into five modules for
+// #1712 (in #1945), and a replay updated pre-bash-guardian-validate.js to the version
 // that requires them without copying them, so every Guardian hook crashed
 // and the tool let the command through. For every module the record already
 // installs by copy, the copies the current plan has for that module and the
