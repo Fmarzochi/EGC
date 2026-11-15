@@ -153,7 +153,7 @@ async function handleInit(args) {
   const report = () => {
     console.log(`Team initialized:
   Backend: ${backend}
-  Remote:  ${remote}
+  Remote:  ${displayRemote(remote)}
   Branch:  ${branch}
   Autosync: ${autosync ? 'on' : 'off'}
   Config:  ${TEAM_CONFIG_PATH}`);
@@ -242,24 +242,45 @@ function printAutosyncStatus(config) {
   console.log(`Autosync: ${config.autosync === true ? 'on' : 'off'}${run}`);
 }
 
+// The remote as the CLI shows it: a credential embedded in the URL is
+// masked, and the raw value is only ever handed to git.
+function displayRemote(remote) {
+  try {
+    const url = new URL(remote);
+    if (!url.username && !url.password) return remote;
+    url.username = '***';
+    url.password = '';
+    return url.toString();
+  } catch {
+    return remote;
+  }
+}
+
 // Leaves the team on this machine: the configuration (with the key) and the
 // sync checkout go, the state files of this machine stay, and the sealed
 // state on the remote stays for the other machines. init --key joins again.
+// A file that is not a readable configuration is refused, like every other
+// team command refuses it, never removed.
 function handleLeave() {
   if (!fs.existsSync(TEAM_CONFIG_PATH)) {
     console.error('Error: Team not initialized. Nothing to leave.');
     process.exit(1);
   }
   const config = readTeamConfig();
+  if (!config) {
+    console.error(`Error: ${TEAM_CONFIG_PATH} is not a readable team configuration. Nothing was removed; inspect the file before removing it by hand.`);
+    process.exit(1);
+  }
   fs.rmSync(TEAM_CONFIG_PATH, { force: true });
   fs.rmSync(TEAM_SYNC_DIR, { recursive: true, force: true });
   clearAutosyncStamp();
-  const remote = config?.remote ?? '<remote>';
+  const remote = typeof config.remote === 'string' && config.remote ? displayRemote(config.remote) : '<remote>';
+  const branch = typeof config.branch === 'string' && config.branch ? ` --branch ${config.branch}` : '';
   console.log(`Left the team:
   Removed: ${TEAM_CONFIG_PATH} (the configuration and the key of this machine)
   Removed: ${TEAM_SYNC_DIR} (the sync checkout)
   Kept:    the state files of this machine under ~/.egc/state, and the sealed state on ${remote}
-To join again: egc team init --backend ${config?.backend ?? 'git'} --remote ${remote} --key <team key>`);
+To join again: egc team init --backend ${config.backend ?? 'git'} --remote ${remote}${branch} --key <team key>`);
 }
 
 async function handleSync() {

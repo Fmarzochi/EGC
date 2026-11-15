@@ -352,21 +352,28 @@ function runTests() {
       }
     });
 
-    run('team leave removes the configuration and the sync checkout, keeps the state files, and refuses when there is no team', () => {
+    run('team leave removes the configuration and the sync checkout, keeps the state files, prints the way back with the branch and without the credential, and refuses when there is no team or the file is not a configuration', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const checkout = path.join(HOME, '.egc', 'team-sync');
       const stateDir = path.join(HOME, '.egc', 'state');
       const saved = fs.readFileSync(configPath, 'utf8');
-      const stateBefore = fs.existsSync(stateDir) ? fs.readdirSync(stateDir).length : 0;
+      const stateBefore = fs.existsSync(stateDir) ? treeDigest(stateDir) : {};
       try {
+        fs.writeFileSync(configPath, JSON.stringify({ ...JSON.parse(saved), remote: 'https://user:secret@example.com/team.git', branch: 'team' }));
         let run = teamCli(['leave']);
         assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
         assert.ok(!fs.existsSync(configPath), 'team.json is gone');
         assert.ok(!fs.existsSync(checkout), 'the sync checkout is gone');
-        assert.strictEqual(fs.existsSync(stateDir) ? fs.readdirSync(stateDir).length : 0, stateBefore, 'the state files of the machine stay');
-        assert.ok(run.stdout.includes('--key'), `the way back is printed:\n${run.stdout}`);
+        assert.deepStrictEqual(fs.existsSync(stateDir) ? treeDigest(stateDir) : {}, stateBefore, 'no state file of the machine was removed or changed');
+        assert.ok(run.stdout.includes('--remote https://***@example.com/team.git --branch team --key'), `the way back names the branch and masks the credential:\n${run.stdout}`);
+        assert.ok(!run.stdout.includes('secret'), 'the credential is never printed');
         run = teamCli(['leave']);
         assert.strictEqual(run.status, 1, 'leaving twice is refused');
+        fs.writeFileSync(configPath, '{not json');
+        run = teamCli(['leave']);
+        assert.strictEqual(run.status, 1, 'a file that is not a configuration is refused');
+        assert.ok(fs.existsSync(configPath), 'and is not removed');
+        assert.ok(run.stderr.includes('not a readable team configuration'), run.stderr);
       } finally {
         fs.writeFileSync(configPath, saved);
         teamCli(['sync']);

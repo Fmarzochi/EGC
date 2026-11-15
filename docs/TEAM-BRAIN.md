@@ -119,7 +119,7 @@ Autosync: off
 Nothing syncs by itself; run "egc team sync".
 ```
 
-`egc team autosync on` turns it back on. The switch is `autosync: true` in `~/.egc/team.json` of that machine, nowhere else: set it where you want it. A `team.json` written before this version keeps the switch it has.
+`egc team autosync on` turns it back on. The switch is `autosync: true` in `~/.egc/team.json` of that machine, nowhere else: set it where you want it. A `team.json` written before this version keeps the switch it has until `egc team init` runs again on that machine: `init` writes the switch on unless `--no-autosync` is passed.
 
 With it on:
 
@@ -147,10 +147,10 @@ Left the team:
   Removed: ~/.egc/team.json (the configuration and the key of this machine)
   Removed: ~/.egc/team-sync (the sync checkout)
   Kept:    the state files of this machine under ~/.egc/state, and the sealed state on https://github.com/you/egc-memory.git
-To join again: egc team init --backend git --remote https://github.com/you/egc-memory.git --key <team key>
+To join again: egc team init --backend git --remote https://github.com/you/egc-memory.git --branch main --key <team key>
 ```
 
-The state files of this machine stay where they are and keep working without a team; nothing is removed from the remote, so the other machines go on syncing. The key leaves with the configuration: keep it on another machine, or out of band, before the last machine leaves.
+The state files of this machine stay where they are and keep working without a team; nothing is removed from the remote, so the other machines go on syncing. The key leaves with the configuration: keep it on another machine, or out of band, before the last machine leaves. The remote is printed as the configuration has it, with a credential embedded in the URL masked; a `team.json` that is not a readable configuration is refused, not removed.
 
 ## How two copies are merged
 
