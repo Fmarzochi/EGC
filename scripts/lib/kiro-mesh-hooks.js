@@ -23,7 +23,7 @@ function resolveMeshHookFilePath(targetRoot) {
 }
 
 function buildMeshHookCommand(meshScriptPath) {
-  return `${buildHookCommand(meshScriptPath)} --format=text`;
+  return `${buildHookCommand(meshScriptPath)} --format=text --team-sync`;
 }
 
 function buildMeshHookDocument(meshScriptPath) {

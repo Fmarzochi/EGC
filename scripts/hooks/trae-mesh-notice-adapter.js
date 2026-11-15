@@ -16,7 +16,7 @@ const { run, readStdinPayload } = require('./mesh-events-inject');
 
 void (async () => {
   try {
-    const notice = run(await readStdinPayload());
+    const notice = run(await readStdinPayload(), { teamSync: true });
     if (notice) {
       fs.writeSync(1, notice);
     }

@@ -2935,7 +2935,9 @@ function runTests() {
     const projectRoot = '/workspace/app';
 
     const cases = [
-      { target: 'codex', input: { homeDir }, hooksFilePath: path.join(homeDir, '.codex', 'hooks.json'), root: path.join(homeDir, '.codex') },
+      // Codex has no session hook, so its registered command is the host
+      // adapter that turns the Team Brain sync on at the turn boundary.
+      { target: 'codex', input: { homeDir }, hooksFilePath: path.join(homeDir, '.codex', 'hooks.json'), root: path.join(homeDir, '.codex'), registeredScript: 'codex-mesh-notice-adapter.js' },
       // Trae feeds plain-text stdout to the model, so its registered command
       // is the host adapter, not the shared JSON-emitting script directly.
       { target: 'trae', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.trae', 'hooks.json'), root: path.join(projectRoot, '.trae'), registeredScript: 'trae-mesh-notice-adapter.js' },

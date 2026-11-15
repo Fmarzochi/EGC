@@ -144,7 +144,7 @@ function stateChangedSince(homeDir, sinceMs) {
 // changed), so no push has a floor.
 const PULL_FLOOR_MS = 20000;
 // The runs that pull before the state is read; the floor is between them.
-const PULL_REASONS = new Set(['session-start']);
+const PULL_REASONS = new Set(['session-start', 'turn-start']);
 // The claim one session holds while it pulls, so two sessions starting at
 // once do not both pull before either has left its stamp. A claim older
 // than this belongs to a session that died holding it, and is taken over.

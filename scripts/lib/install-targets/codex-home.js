@@ -31,7 +31,13 @@ const {
   createMeshNoticeScriptCopyOperations,
   createMeshNoticeHookMergeOperationForDestination,
   resolveMeshNoticeHookScriptDestination,
+  MESH_NOTICE_HOOK_MODULE_ID,
 } = require('../claude-settings-hooks');
+
+// Codex has no session start or stop hook EGC can use, so the command its
+// hooks.json registers is this adapter, which turns the Team Brain sync on at
+// the turn boundary and prints the same JSON as the shared script it requires.
+const CODEX_MESH_ADAPTER_SOURCE_RELATIVE_PATH = 'scripts/hooks/codex-mesh-notice-adapter.js';
 
 // Codex CLI's skills root (~/.agents, this adapter's own resolveRoot()) and
 // its runtime config root (~/.codex, where hooks.json/config.toml live) are
@@ -251,12 +257,20 @@ function createCodexMeshNoticeOperations(adapter, codexHome) {
     codexHome
   );
 
+  const adapterDestination = path.join(
+    path.dirname(resolveMeshNoticeHookScriptDestination(codexHome)),
+    path.basename(CODEX_MESH_ADAPTER_SOURCE_RELATIVE_PATH)
+  );
   const mergeOperation = createMeshNoticeHookMergeOperationForDestination(
     path.join(codexHome, 'hooks.json'),
-    resolveMeshNoticeHookScriptDestination(codexHome)
+    adapterDestination
   );
 
-  return [...copyOperations, mergeOperation];
+  return [
+    ...copyOperations,
+    createRemappedOperation(adapter, MESH_NOTICE_HOOK_MODULE_ID, CODEX_MESH_ADAPTER_SOURCE_RELATIVE_PATH, adapterDestination, { strategy: 'preserve-relative-path' }),
+    mergeOperation,
+  ];
 }
 
 module.exports = createInstallTargetAdapter({

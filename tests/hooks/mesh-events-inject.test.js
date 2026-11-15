@@ -156,5 +156,54 @@ run('malformed stdin is treated as an anonymous session, never a crash', () => {
   assert.ok(JSON.parse(result.stdout).additionalContext.includes('[egc-mesh]'));
 });
 
+run('--team-sync without a team leaves the notice as it is and syncs nothing', () => {
+  const home = makeHome();
+  touchWal(home, 1000000000000);
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  const result = spawnSync(process.execPath, [HOOK, '--team-sync'], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS, input: JSON.stringify({ session_id: 'turn-1' }) });
+  assert.strictEqual(result.status, 0, result.stderr);
+  assert.ok(JSON.parse(result.stdout).additionalContext.includes('[egc-mesh]'));
+  assert.ok(!fs.existsSync(path.join(home, '.egc', 'logs', 'team-autosync.log')), 'no team: no sync log');
+  assert.ok(!fs.existsSync(path.join(home, '.egc', 'mesh', 'team-pull-turn-1.json')), 'no team: no pull mark');
+});
+
+run('--team-sync with a team pulls once per session at the turn boundary, logs the outcome, and the next turn syncs only what changed', () => {
+  const home = makeHome();
+  touchWal(home, 1000000000000);
+  fs.mkdirSync(path.join(home, '.egc'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.egc', 'team.json'), JSON.stringify({ backend: 'git', remote: path.join(home, 'no-such-remote.git'), branch: 'main', teamKey: 'ab'.repeat(32), autosync: true }));
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  const prompt = () => spawnSync(process.execPath, [HOOK, '--team-sync'], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS, input: JSON.stringify({ session_id: 'turn-2' }) });
+  const logPath = path.join(home, '.egc', 'logs', 'team-autosync.log');
+  const lines = () => (fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean) : []);
+  const first = prompt();
+  assert.strictEqual(first.status, 0, first.stderr);
+  assert.ok(fs.existsSync(path.join(home, '.egc', 'mesh', 'team-pull-turn-2.json')), 'the session is marked as pulled');
+  assert.strictEqual(lines().length, 1, `one run is logged:\n${lines().join('\n')}`);
+  assert.match(lines()[0], /turn-start: (ok|failed|skipped)/);
+  const second = prompt();
+  assert.strictEqual(second.status, 0, second.stderr);
+  if (!/skipped: the memory server/.test(lines()[0])) {
+    assert.strictEqual(lines().length, 1, 'nothing changed since the pull: the next turn runs no sync');
+  }
+});
+
+run('the Codex adapter prints the dual-field notice with the Team Brain sync on, and nothing when quiet', () => {
+  const adapter = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'codex-mesh-notice-adapter.js');
+  const home = makeHome();
+  touchWal(home, 1000000000000);
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  const loud = spawnSync(process.execPath, [adapter], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS, input: JSON.stringify({ session_id: 'codex-1' }) });
+  assert.strictEqual(loud.status, 0, loud.stderr);
+  const answer = JSON.parse(loud.stdout);
+  assert.ok(answer.additionalContext.includes('[egc-mesh]'), 'the top-level field Codex reads');
+  assert.strictEqual(answer.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
+  assert.ok(answer.hookSpecificOutput.additionalContext.includes('[egc-mesh]'), 'the nested field too');
+  assert.ok(!fs.existsSync(path.join(home, '.egc', 'logs', 'team-autosync.log')), 'no team: no sync ran');
+  const quiet = spawnSync(process.execPath, [adapter], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS, input: JSON.stringify({ session_id: 'codex-1' }) });
+  assert.strictEqual(quiet.status, 0, quiet.stderr);
+  assert.strictEqual(quiet.stdout, '', 'the second prompt of the session, nothing new: silence');
+});
+
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

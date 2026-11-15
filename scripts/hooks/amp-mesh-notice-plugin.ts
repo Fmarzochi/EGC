@@ -25,7 +25,7 @@ export default function egcMeshNoticePlugin(amp: any) {
     const sessionId = event && typeof event.sessionId === 'string'
       ? event.sessionId
       : `amp-${process.pid}`;
-    const notice = runMeshNotice({ session_id: sessionId });
+    const notice = runMeshNotice({ session_id: sessionId }, { teamSync: true });
     if (!notice) return undefined;
     // display:false keeps the notice out of the visible thread; it reaches
     // the model as context, mirroring additionalContext on hook hosts.

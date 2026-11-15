@@ -88,8 +88,16 @@ function storeMtimeMs(memoryDir) {
 // must never write to stdout, exit, or throw past its own guards). Returns
 // the notice string when the store moved since this session's last look,
 // null when there is nothing to say.
-function run(payload) {
+function run(payload, options = {}) {
   const sessionKey = safeSessionKey(payload?.session_id);
+  // The Team Brain sync at the turn boundary, for the hosts that have no
+  // session start or stop hook: before the notice, so a pull lands before
+  // the agent reads the state. An install without the helper skips it.
+  if (options.teamSync) {
+    try {
+      require('../lib/team-autosync-turn').turnSync({ sessionKey });
+    } catch (_) { /* a sync that could not run is a log line, never a broken turn */ } // NOSONAR
+  }
   const memoryDir = path.join(os.homedir(), '.egc', 'memory');
   const mtime = storeMtimeMs(memoryDir);
   if (mtime === 0) return null; // no bus store on this machine: stay silent
@@ -113,7 +121,7 @@ function run(payload) {
 
 async function main() {
   const payload = await readStdinPayload();
-  const notice = run(payload);
+  const notice = run(payload, { teamSync: process.argv.includes('--team-sync') });
   if (!notice) return;
 
   // Synchronous write to fd 1: process.exit() right after an async

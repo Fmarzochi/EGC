@@ -101,7 +101,7 @@ function createOpenCodePluginOperations(adapter, targetRoot) {
     // The Session Mesh turn notice (#2097): the plugin calls the shared
     // script in-process on every request of OpenCode 2, so it ships next to
     // the hook scripts the plugin already requires.
-    ...createMeshNoticeScriptCopyOperations(remap, targetRoot),
+    ...createMeshNoticeScriptCopyOperations(remap, targetRoot, { withTeamSync: false }),
     pluginCopyOperation,
   ];
 }
