@@ -157,7 +157,7 @@
       "kind": "platform",
       "description": "Baseline platform configs, package-manager setup, and MCP catalog.",
       "paths": [
-        ".gemini-plugin",
+        ".claude-plugin",
         ".codex",
         ".cursor",
         ".opencode",

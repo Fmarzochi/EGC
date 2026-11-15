@@ -1012,5 +1012,23 @@ test('a session name resolves to the .orchestration folder the orchestrator writ
   }
 });
 
+// N4: a worker the dmux snapshot carries without its status, task, handoff or
+// files object (a worker folder with only some of its files written) used to
+// throw a TypeError from the property read; it now normalizes with the same
+// defaults an empty object gives.
+test('dmux normalization keeps a worker that lacks status, task, handoff or files', () => {
+  const sourceTarget = { type: 'session', value: 'edge-session' };
+  const bare = { workerSlug: 'half-written', pane: null };
+  const normalized = normalizeDmuxSnapshot(dmuxSnapshot({ workerCount: 1, workers: [bare] }), sourceTarget);
+  const worker = normalized.workers[0];
+  assert.strictEqual(worker.id, 'half-written');
+  assert.strictEqual(worker.state, 'unknown');
+  assert.strictEqual(worker.branch, null);
+  assert.strictEqual(worker.intent.objective, '');
+  assert.deepStrictEqual(worker.intent.seedPaths, []);
+  assert.deepStrictEqual(worker.outputs.summary, []);
+  assert.strictEqual(worker.artifacts.statusFile, null);
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`);
 if (failed > 0) process.exit(1);

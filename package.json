@@ -62,7 +62,7 @@
     "manifests/",
     "mcp-configs/",
     "examples/",
-    ".gemini-plugin/",
+    ".claude-plugin/",
     ".codex-plugin/",
     ".codex/",
     ".opencode/",
