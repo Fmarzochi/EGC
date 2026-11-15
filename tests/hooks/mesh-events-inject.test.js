@@ -18,6 +18,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const HOOK = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'mesh-events-inject.js');
+const { markKey } = require('../../scripts/lib/team-autosync-turn');
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 function makeHome() {
@@ -167,7 +168,7 @@ run('--team-sync without a team leaves the notice as it is and syncs nothing', (
   assert.ok(!fs.existsSync(path.join(home, '.egc', 'mesh', 'team-pull-turn-1.json')), 'no team: no pull mark');
 });
 
-run('--team-sync with a team pulls once per session at the turn boundary, logs the outcome, and the next turn syncs only what changed', () => {
+run('--team-sync with a team syncs whole at the first turn of a session, stays quiet while nothing changed, and pushes at the turn after a document changed', () => {
   const home = makeHome();
   touchWal(home, 1000000000000);
   fs.mkdirSync(path.join(home, '.egc'), { recursive: true });
@@ -178,20 +179,26 @@ run('--team-sync with a team pulls once per session at the turn boundary, logs t
   const lines = () => (fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean) : []);
   const first = prompt();
   assert.strictEqual(first.status, 0, first.stderr);
-  assert.ok(fs.existsSync(path.join(home, '.egc', 'mesh', 'team-pull-turn-2.json')), 'the session is marked as pulled');
   assert.strictEqual(lines().length, 1, `one run is logged:\n${lines().join('\n')}`);
-  assert.match(lines()[0], /turn-start: (ok|failed|skipped)/);
-  const second = prompt();
-  assert.strictEqual(second.status, 0, second.stderr);
-  if (!/skipped: the memory server/.test(lines()[0])) {
-    assert.strictEqual(lines().length, 1, 'nothing changed since the pull: the next turn runs no sync');
-  }
+  assert.match(lines()[0], /turn-start: (ok|failed): /, 'the memory server of this checkout ran the sync against a remote that does not exist');
+  assert.ok(fs.existsSync(path.join(home, '.egc', 'mesh', `team-pull-${markKey('turn-2')}.json`)), 'the session is marked as synced, under a hash of its id');
+  const quiet = prompt();
+  assert.strictEqual(quiet.status, 0, quiet.stderr);
+  assert.strictEqual(lines().length, 1, 'nothing changed since: the next turn runs no sync');
+  fs.mkdirSync(path.join(home, '.egc', 'state', 'proj'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.egc', 'state', 'proj', 'main.md'), '# state\n');
+  const changed = prompt();
+  assert.strictEqual(changed.status, 0, changed.stderr);
+  assert.strictEqual(lines().length, 2, `a changed document makes the next turn push:\n${lines().join('\n')}`);
+  assert.match(lines()[1], /turn: (ok|failed): /);
 });
 
-run('the Codex adapter prints the dual-field notice with the Team Brain sync on, and nothing when quiet', () => {
+run('the Codex adapter prints the dual-field notice, runs the Team Brain sync of the first turn, and prints nothing when quiet', () => {
   const adapter = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'codex-mesh-notice-adapter.js');
   const home = makeHome();
   touchWal(home, 1000000000000);
+  fs.mkdirSync(path.join(home, '.egc'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.egc', 'team.json'), JSON.stringify({ backend: 'git', remote: path.join(home, 'no-such-remote.git'), branch: 'main', teamKey: 'ab'.repeat(32), autosync: true }));
   const env = { ...process.env, HOME: home, USERPROFILE: home };
   const loud = spawnSync(process.execPath, [adapter], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS, input: JSON.stringify({ session_id: 'codex-1' }) });
   assert.strictEqual(loud.status, 0, loud.stderr);
@@ -199,7 +206,10 @@ run('the Codex adapter prints the dual-field notice with the Team Brain sync on,
   assert.ok(answer.additionalContext.includes('[egc-mesh]'), 'the top-level field Codex reads');
   assert.strictEqual(answer.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
   assert.ok(answer.hookSpecificOutput.additionalContext.includes('[egc-mesh]'), 'the nested field too');
-  assert.ok(!fs.existsSync(path.join(home, '.egc', 'logs', 'team-autosync.log')), 'no team: no sync ran');
+  const logPath = path.join(home, '.egc', 'logs', 'team-autosync.log');
+  assert.ok(fs.existsSync(logPath), 'the adapter turned the Team Brain sync on');
+  assert.match(fs.readFileSync(logPath, 'utf8'), /turn-start: (ok|failed): /);
+  assert.ok(fs.existsSync(path.join(home, '.egc', 'mesh', `team-pull-${markKey('codex-1')}.json`)), 'the session is marked as synced');
   const quiet = spawnSync(process.execPath, [adapter], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS, input: JSON.stringify({ session_id: 'codex-1' }) });
   assert.strictEqual(quiet.status, 0, quiet.stderr);
   assert.strictEqual(quiet.stdout, '', 'the second prompt of the session, nothing new: silence');

@@ -180,6 +180,7 @@ const MESH_NOTICE_TEAM_SYNC_SOURCES = [
   'scripts/lib/utils-paths.js',
   'scripts/lib/utils-session.js',
   'scripts/lib/utils-file.js',
+  'scripts/lib/hook-stdin.js',
 ];
 
 function createMeshNoticeScriptCopyOperations(createRemappedOperation, targetRoot, { withTeamSync = true } = {}) {
@@ -398,6 +399,7 @@ module.exports = {
   createPreToolUseCrusherHookMergeOperation,
   createCrusherHookMergeOperationForDestination,
   resolveCrusherHookScriptDestination,
+  MESH_NOTICE_TEAM_SYNC_SOURCES,
   createMeshNoticeScriptCopyOperations,
   createMeshNoticeHookMergeOperationForDestination,
   createKiroMeshHookFileOperation,

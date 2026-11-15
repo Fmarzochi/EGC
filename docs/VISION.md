@@ -43,7 +43,7 @@ Decided on 2026-11-01. Targeted at the next release; no date is promised until i
 - A merge of the memory documents with retire marks and caps instead of last-write-wins (#2055); the author of a document travels in its header, and a signature per member moved to the team service below (#2056)
 - Secrets refused on the way out, and size and rate limits on the sync
 - `egc team leave` next to `init`, `sync`, `autosync` and `status` (joining is `init --key`), a subcommand this release adds; `members` and key rotation belong to the team service below
-- Pull and push through the hooks of the tools: around the session in Claude Code and OpenCode (#2059), at the turn boundary in Antigravity, Codex, Trae, Amp and Kiro; Cursor and Copilot have no hook to call and read the shared state when a session starts
+- Pull and push through the hooks of the tools: around the session in Claude Code and OpenCode (#2059), at the turn boundary in Antigravity, Codex, Trae, Amp and Kiro; Cursor's prompt hook cannot inject context and Copilot has no hook to call, so both read the shared state when a session starts
 - Team health in `egc doctor` (#2058) and a marker of the team key in the shared repository, so a wrong key fails at `init` (#2080)
 - No feature flag: the Team Brain is on when `~/.egc/team.json` exists and off when it does not; the autosync, opt-in today (`init --autosync` or `egc team autosync on`), becomes on from `egc team init` in this release, with `egc team autosync off` to turn it off
 - The session mesh between a person's machines in real time is part of the free engine, through a relay the person runs on one of their own machines and never a server of ours; its design follows this release, and the hosted relay is the team service below
