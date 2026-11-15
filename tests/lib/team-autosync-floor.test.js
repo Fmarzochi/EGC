@@ -10,7 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { pullTooSoon, wouldSync, claimPull, releasePull, PULL_FLOOR_MS } = require('../../scripts/lib/team-autosync');
+const { pullTooSoon, wouldSync, claimPull, releasePull, holdStamp, releaseStamp, PULL_FLOOR_MS } = require('../../scripts/lib/team-autosync');
 
 let passed = 0;
 let failed = 0;
@@ -73,6 +73,15 @@ try {
     fs.utimesSync(claim, old, old);
     assert.strictEqual(claimPull(home), true, 'a claim left by a session that died is taken over');
     releasePull(home);
+  });
+
+  test('the stamp is held while it is rewritten: a second holder waits, gives up, and takes it once released', () => {
+    assert.strictEqual(holdStamp(home), true, 'the first hold is taken');
+    assert.strictEqual(holdStamp(home), false, 'a run ending at the same moment finds it held');
+    releaseStamp(home);
+    assert.ok(!fs.existsSync(path.join(home, '.egc', 'team-autosync.json.hold')), 'released, the hold is gone');
+    assert.strictEqual(holdStamp(home), true, 'and is taken again');
+    releaseStamp(home);
   });
 } finally {
   fs.rmSync(home, { recursive: true, force: true });

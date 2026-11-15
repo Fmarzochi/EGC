@@ -75,7 +75,10 @@ function lastAutosync(homeDir = os.homedir()) {
 function writeStamp(homeDir, stamp) {
   try {
     fs.mkdirSync(egcDir(homeDir), { recursive: true });
-    fs.writeFileSync(stampPath(homeDir), JSON.stringify(stamp, null, 2), 'utf-8');
+    // Written whole and moved into place, so a reader never sees a partial stamp.
+    const draft = `${stampPath(homeDir)}.${process.pid}.tmp`;
+    fs.writeFileSync(draft, JSON.stringify(stamp, null, 2), 'utf-8');
+    fs.renameSync(draft, stampPath(homeDir));
   } catch {
     // The stamp serves the status and the next run; a hook never fails on it.
   }
@@ -143,9 +146,9 @@ function pullClaimPath(homeDir) {
   return path.join(egcDir(homeDir), 'team-autosync.pull');
 }
 
-function claimIsStale(claim, nowMs) {
+function claimIsStale(claim, nowMs, staleMs = PULL_CLAIM_STALE_MS) {
   try {
-    return nowMs - fs.statSync(claim).mtimeMs >= PULL_CLAIM_STALE_MS;
+    return nowMs - fs.statSync(claim).mtimeMs >= staleMs;
   } catch {
     return true;
   }
@@ -177,6 +180,67 @@ function releasePull(homeDir) {
     fs.rmSync(pullClaimPath(homeDir), { force: true });
   } catch {
     // a claim that cannot be removed goes stale and is taken over
+  }
+}
+
+// A short exclusive hold on the stamp while it is read and rewritten, so a
+// push and a pull ending together do not lose each other's record. It waits
+// a few moments at most, since a hook is waiting on it, and a hold left by
+// a session that died is taken over.
+const STAMP_HOLD_RETRIES = 10;
+const STAMP_HOLD_WAIT_MS = 20;
+const STAMP_HOLD_STALE_MS = 5000;
+
+function stampHoldPath(homeDir) {
+  return `${stampPath(homeDir)}.hold`;
+}
+
+function pause(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function holdStamp(homeDir) {
+  const hold = stampHoldPath(homeDir);
+  for (let attempt = 0; attempt < STAMP_HOLD_RETRIES; attempt += 1) {
+    try {
+      fs.mkdirSync(path.dirname(hold), { recursive: true });
+      fs.writeFileSync(hold, String(process.pid), { flag: 'wx' });
+      return true;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') return false;
+      if (!claimIsStale(hold, Date.now(), STAMP_HOLD_STALE_MS)) {
+        pause(STAMP_HOLD_WAIT_MS);
+        continue;
+      }
+      try {
+        fs.rmSync(hold, { force: true });
+      } catch {
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+function releaseStamp(homeDir) {
+  try {
+    fs.rmSync(stampHoldPath(homeDir), { force: true });
+  } catch {
+    // a hold that cannot be removed goes stale and is taken over
+  }
+}
+
+// The record of a run. The moment of the last pull travels with it through
+// the pushes, so the floor still holds after one; it is read and written
+// under the hold, so two runs ending together keep each other's record.
+function recordRun(homeDir, reason, outcome) {
+  const held = holdStamp(homeDir);
+  try {
+    const lastRun = new Date().toISOString();
+    const lastPull = PULL_REASONS.has(reason) ? lastRun : lastPullOf(lastAutosync(homeDir));
+    writeStamp(homeDir, { lastRun, reason, ok: outcome.ok, detail: outcome.detail, lastPull });
+  } finally {
+    if (held) releaseStamp(homeDir);
   }
 }
 
@@ -289,13 +353,10 @@ async function runAutosync(homeDir, reason, options) {
     outcome = { ok: false, detail: error?.message || String(error) };
   }
   // The stamp is taken after the run, so the files the merge itself wrote
-  // do not count as a change for the next one. The moment of the last pull
-  // travels with it through the pushes, so the floor still holds after one.
-  const lastRun = new Date().toISOString();
-  const lastPull = PULL_REASONS.has(reason) ? lastRun : lastPullOf(lastAutosync(homeDir));
-  writeStamp(homeDir, { lastRun, reason, ok: outcome.ok, detail: outcome.detail, lastPull });
+  // do not count as a change for the next one.
+  recordRun(homeDir, reason, outcome);
   appendLog(homeDir, reason, `${outcome.ok ? 'ok' : 'failed'}: ${outcome.detail}`);
   return { ran: true, ...outcome };
 }
 
-module.exports = { autosync, wouldSync, lastAutosync, clearAutosyncStamp, stateChangedSince, memoryServerScript, pullTooSoon, claimPull, releasePull, DEFAULT_BUDGET_MS, PULL_FLOOR_MS, PULL_REASONS };
+module.exports = { autosync, wouldSync, lastAutosync, clearAutosyncStamp, stateChangedSince, memoryServerScript, pullTooSoon, claimPull, releasePull, holdStamp, releaseStamp, DEFAULT_BUDGET_MS, PULL_FLOOR_MS, PULL_REASONS };

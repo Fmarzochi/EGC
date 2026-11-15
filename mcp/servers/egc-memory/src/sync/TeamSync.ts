@@ -809,6 +809,7 @@ function sealDocuments(byPath: ReadonlyMap<string, string>, context: StageContex
   let staged = 0;
   for (const [sharedPath, plaintext] of byPath) {
     const target = path.join(context.syncStateDir, sharedPath);
+    if (hasLinkedAncestor(target, context.syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${sharedPath} and is not written`);
     if (alreadySealed(target, plaintext, context, sharedPath)) {
       staged += 1;
       continue;
@@ -820,7 +821,6 @@ function sealDocuments(byPath: ReadonlyMap<string, string>, context: StageContex
       continue;
     }
     if (isLink(target)) removeSyncFile(target);
-    if (hasLinkedAncestor(target, context.syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${sharedPath} and is not written`);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, sealEnvelope(plaintext, context.teamKey, sharedPath), 'utf-8');
     stagedBytes += bytes;
