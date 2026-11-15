@@ -140,8 +140,8 @@ const sortedItems = useMemo(
 # Analyze bundle composition
 npx webpack-bundle-analyzer build/static/js/*.js
 
-# Check for duplicate dependencies
-npx duplicate-package-checker-analyzer
+# Check for duplicate dependencies (npm prints what it would deduplicate)
+npm dedupe --dry-run
 
 # Find largest files
 du -sh node_modules/* | sort -hr | head -20

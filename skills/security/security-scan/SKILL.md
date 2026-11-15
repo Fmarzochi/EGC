@@ -1,133 +1,70 @@
 ---
 name: security-scan
-description: Scan your Claude Code configuration (.claude/ directory) for security vulnerabilities, misconfigurations, and injection risks using AgentShield. Checks CLAUDE.md, settings.json, MCP servers, hooks, and agent definitions.
+description: Scan the configuration of an AI coding tool (Claude Code, Gemini, Codex, OpenCode) for security vulnerabilities and misconfigurations with the built-in egc harness-audit and the Guardian, plus a review checklist for permissions, hooks, MCP registrations, instructions and agents. Installs nothing beyond EGC.
 origin: EGC
 ---
 
 # Security Scan Skill
 
-Audit your Claude Code configuration for security issues using [AgentShield](https://github.com/Fmarzochi/agentshield).
+Audit the configuration of an AI coding tool for security issues with what EGC already ships: the deterministic harness audit (`egc harness-audit`) for the scorecard, the Guardian MCP server for every file you then write, and a review checklist for the surfaces no scanner reads for you. Nothing else is installed: a scan that begins with `npx` of a package nobody vetted is itself a supply-chain risk.
 
 ## When to Activate
 
-- Setting up a new project with your AI coding tool
-- After modifying `.claude/settings.json`, `CLAUDE.md`, or MCP configs
-- Before committing configuration changes
-- When onboarding to a new repository with existing Claude Code configs
-- Periodic security hygiene checks
-
-## What It Scans
-
-| File | Checks |
-|------|--------|
-| `GEMINI.md` | Hardcoded secrets, auto-run instructions, prompt injection patterns |
-| `settings.json` | Overly permissive allow lists, missing deny lists, dangerous bypass flags |
-| `mcp.json` | Risky MCP servers, hardcoded env secrets, npx supply chain risks |
-| `hooks/` | Command injection via interpolation, data exfiltration, silent error suppression |
-| `agents/*.md` | Unrestricted tool access, prompt injection surface, missing model specs |
+- New project with an AI coding tool
+- Changed settings.json, CLAUDE.md or an MCP config
+- Before committing config changes
+- Onboarding to a repo with tool configs
+- Periodic security hygiene
 
 ## Prerequisites
 
-AgentShield must be installed. Check and install if needed:
-
-```bash
-# Check if installed
-npx egc-agentshield --version
-
-# Install globally (recommended)
-npm install -g egc-agentshield
-
-# Or run directly via npx (no install needed)
-npx egc-agentshield scan .
-```
+EGC installed (`npm install -g @egchq/egc`): the harness audit and the Guardian come with it. Nothing else.
 
 ## Usage
 
-### Basic Scan
-
-Run against the current project's `.gemini/` directory:
+### Deterministic scorecard
 
 ```bash
-# Scan current project
-npx egc-agentshield scan
+# The current project; EGC repository mode or consumer-project mode is detected
+egc harness-audit
 
-# Scan a specific path
-npx egc-agentshield scan --path /path/to/.gemini
+# One scope, machine-readable
+egc harness-audit hooks --format json
 
-# Scan with minimum severity filter
-npx egc-agentshield scan --min-severity medium
+# Another checkout
+egc harness-audit repo --root /path/to/project
 ```
 
-### Output Formats
+The audit scores tool coverage, context strategy, quality gates, memory, evaluation, security guardrails and cost, and in a consumer project also the security policy, the secret hygiene of the config and the guardrails of the hooks. Read the security lines first: `checks[]` names each check with its file and whether it passed, and `top_actions` carries the fix for the three biggest gaps.
+
+### Review by hand
+
+The audit says what is missing, not what a file says. Open each surface and apply its check:
+
+| Surface | Check |
+|---|---|
+| `CLAUDE.md`, `GEMINI.md`, `AGENTS.md` | hardcoded secrets, instructions that run commands without asking, prompt injection patterns |
+| `settings.json` | allow lists broader than the work needs, no deny list, bypass flags |
+| `.mcp.json`, `opencode.json`, other MCP configs | servers with shell or filesystem reach, remote transports, unpinned `npx`, secrets in `env` |
+| `hooks/` and the hook entries of the settings | command injection through interpolation, data leaving the machine, errors silenced |
+| `agents/*.md` | unrestricted tool access, prompts that handle untrusted content without defenses, no model named |
+
+### Fixing what you find
+
+Fix by hand, one surface at a time. With the Guardian registered in your tool (`egc init` or `egc install` does that; a global `npm install` alone does not), it judges every Write and Edit and refuses the protected paths (keys, credentials, the settings of the tool itself). Re-run `egc harness-audit` afterwards and compare the score.
+
+### CI
 
 ```bash
-# Terminal output (default): colored report with grade
-npx egc-agentshield scan
-
-# JSON: for CI/CD integration
-npx egc-agentshield scan --format json
-
-# Markdown: for documentation
-npx egc-agentshield scan --format markdown
-
-# HTML: self-contained dark-theme report
-npx egc-agentshield scan --format html > security-report.html
+egc harness-audit repo --format json > harness-audit.json
+node -e "const r = require('./harness-audit.json'); if (!(r.overall_score / r.max_score >= 0.75)) process.exit(1)"
 ```
 
-### Auto-Fix
-
-Apply safe fixes automatically (only fixes marked as auto-fixable):
-
-```bash
-npx egc-agentshield scan --fix
-```
-
-This will:
-- Replace hardcoded secrets with environment variable references
-- Tighten wildcard permissions to scoped alternatives
-- Never modify manual-only suggestions
-
-### Opus 4.6 Deep Analysis
-
-Run the adversarial three-agent pipeline for deeper analysis:
-
-```bash
-# Requires ANTHROPIC_API_KEY
-export ANTHROPIC_API_KEY=your-key
-npx egc-agentshield scan --gemini-2.5-pro --stream
-```
-
-This runs:
-1. **Attacker (Red Team)**: finds attack vectors
-2. **Defender (Blue Team)**: recommends hardening
-3. **Auditor (Final Verdict)**: synthesizes both perspectives
-
-### Initialize Secure Config
-
-Scaffold a new secure `.gemini/` configuration from scratch:
-
-```bash
-npx egc-agentshield init
-```
-
-Creates:
-- `settings.json` with scoped permissions and deny list
-- `GEMINI.md` with security best practices
-- `mcp.json` placeholder
-
-### GitHub Action
-
-Add to your CI pipeline:
-
-```yaml
-- uses: Fmarzochi/agentshield@v1
-  with:
-    path: '.'
-    min-severity: 'medium'
-    fail-on-findings: true
-```
+The audit exits 0 even when checks fail, so the second line is what fails the job: here under 75 percent of the points, with the Node every runner already has. `checks[]` names each check with its file and whether it passed; `top_actions` carries the fix for up to three failed checks.
 
 ## Severity Levels
+
+The score below is `overall_score` as a percentage of `max_score`; the raw points depend on the scope (the repo scope has 70, so 63 of 70 is 90).
 
 | Grade | Score | Meaning |
 |-------|-------|---------|
@@ -161,5 +98,6 @@ Add to your CI pipeline:
 
 ## Links
 
-- **GitHub**: [github.com/Fmarzochi/agentshield](https://github.com/Fmarzochi/agentshield)
-- **npm**: [npmjs.com/package/egc-agentshield](https://www.npmjs.com/package/egc-agentshield)
+- Command: `commands/security-scan.md`
+- Agent: `agents/security-reviewer.md`
+- Audit engine: `scripts/harness-audit.js`

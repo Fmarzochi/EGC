@@ -1,37 +1,29 @@
 ---
-description: Run AgentShield against agent, hook, MCP, permission, and secret surfaces.
+description: Run the EGC harness audit on the agent, hook, MCP, permission and secret surfaces and turn the findings into a remediation plan.
 agent: everything-Gemini-code:security-reviewer
 subtask: true
 ---
 
 # Security Scan Command
 
-Run AgentShield against the current project or a target path, then turn the findings into a prioritized remediation plan.
+Run the harness audit that ships with EGC against the current project or a target path, review the surfaces it does not read, and turn the findings into a prioritized remediation plan.
 
 ## Usage
 
-`/security-scan [path] [--format text|json|markdown|html] [--min-severity low|medium|high|critical] [--fix]`
+`/security-scan [path] [--format text|json]`
 
-- `path` (optional): defaults to the current project. Use a `.Gemini/` path, a repo root, or a checked-in template directory.
-- `--format`: output format. Use `json` for CI, `markdown` for handoffs, and `html` for standalone review reports.
-- `--min-severity`: filters lower-priority findings.
-- `--fix`: applies only AgentShield fixes explicitly marked as safe and auto-fixable.
+- `path` (optional): defaults to the current project. Use a repo root or a checked-in template directory.
+- `--format`: `text` for a terminal report, `json` for CI and handoffs.
 
 ## Deterministic Engine
 
-Prefer the packaged scanner:
+Always run the audit that ships with EGC; it installs nothing:
 
 ```bash
-npx egc-agentshield scan --path "${TARGET_PATH:-.}" --format text
+egc harness-audit repo --root "${TARGET_PATH:-.}" --format json
 ```
 
-For local AgentShield development, run from the AgentShield checkout:
-
-```bash
-npm run scan -- --path "${TARGET_PATH:-.}" --format text
-```
-
-Do not invent findings. Use AgentShield output as the source of truth and separate scanner facts from follow-up judgment.
+Inside this repository, `node scripts/harness-audit.js repo --format json` is the same engine. Do not invent findings: the audit output is the source of truth for what is missing, the review below is the source of truth for what a file says, and the report keeps the two apart.
 
 ## Review Checklist
 
@@ -52,9 +44,9 @@ Do not invent findings. Use AgentShield output as the source of truth and separa
    - runtime confidence
    - why it matters
    - exact remediation
-   - whether it is safe to auto-fix
-4. If `--fix` is requested, state the planned edits before applying fixes.
-5. Re-run the scan after fixes and report the before/after score.
+   - whether it is safe to fix now
+4. Before editing, state the planned edits; the Guardian judges each write.
+5. Re-run the audit after the fixes and report the before/after score.
 
 ## Output Contract
 
@@ -65,28 +57,26 @@ Return:
 3. Critical/high findings with exact paths.
 4. Lower-confidence findings grouped separately.
 5. A remediation order.
-6. Commands run and whether the scan was local, CI, or npx-backed.
+6. Commands run and whether the scan was local or in CI.
 
 ## CI Pattern
 
-Use AgentShield in GitHub Actions for enforced gates:
-
 ```yaml
-- uses: Fmarzochi/agentshield@v1
-  with:
-    path: "."
-    min-severity: "medium"
-    fail-on-findings: true
+- run: npm install -g @egchq/egc
+- run: egc harness-audit repo --format json > harness-audit.json
+- run: node -e "const r = require('./harness-audit.json'); if (!(r.overall_score / r.max_score >= 0.75)) process.exit(1)"
 ```
+
+The audit exits 0 even when checks fail; the last step fails the job under the floor (75 percent of the points here) with the Node every runner already has.
 
 ## Links
 
 - Skill: `skills/security/security-scan/SKILL.md`
 - Agent: `agents/security-reviewer.md`
-- Scanner: <https://github.com/Fmarzochi/agentshield>
+- Audit engine: `scripts/harness-audit.js`
 
 ## Arguments
 
 $ARGUMENTS:
 - optional target path
-- optional AgentShield flags
+- optional `--format text|json`

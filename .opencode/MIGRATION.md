@@ -104,7 +104,7 @@ The EGC OpenCode configuration includes translated hooks:
 
 ```bash
 # Install OpenCode CLI
-npm install -g opencode
+npm install -g opencode-ai
 # or
 curl -fsSL https://opencode.ai/install | bash
 ```
@@ -305,23 +305,15 @@ After migration, ALL 23 commands are available:
 
 The `.opencode/` directory contains everything pre-configured.
 
-### Option 2: Install as npm Package
+### Option 2: Install with the EGC installer
 
 ```bash
-npm install egc-universal
+npm install -g @egchq/egc && egc install --target opencode --profile full
 ```
 
-Then in your `opencode.json`:
-```json
-{
-  "plugin": ["egc-universal"]
-}
-```
+The installer places the managed plugin under `~/.config/opencode/plugins/`, its runtime under `~/.config/opencode/scripts/`, and registers the EGC commands, prompts and instructions next to them. There is no separate plugin module to name in `opencode.json`: the package on npm is `@egchq/egc`, the installer itself.
 
-This only loads the published EGC OpenCode plugin module (hooks/events and exported plugin tools).
-It does **not** automatically inject EGC's full `agent`, `command`, or `instructions` config into your project.
-
-If you want the full EGC OpenCode workflow surface, use the repository's bundled `.opencode/opencode.json` as your base config or copy these pieces into your project:
+If you want the full EGC OpenCode workflow surface inside one project instead, use the repository's bundled `.opencode/opencode.json` as your base config or copy these pieces into your project:
 - `.opencode/commands/`
 - `.opencode/prompts/`
 - `.opencode/instructions/INSTRUCTIONS.md`
@@ -353,7 +345,7 @@ If you want the full EGC OpenCode workflow surface, use the repository's bundled
 1. Verify the command is defined in `opencode.json` or as `.md` file in `.opencode/commands/`
 2. Check the referenced agent exists
 3. Ensure the template uses `$ARGUMENTS` for user input
-4. If you installed only `plugin: ["egc-universal"]`, note that npm plugin install does not auto-add EGC commands or agents to your project config
+4. If you installed with `egc install --target opencode`, run `egc doctor` to confirm the commands landed under `~/.config/opencode/`
 
 ## Best Practices
 
