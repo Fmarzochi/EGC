@@ -127,12 +127,28 @@ function stateChangedSince(homeDir, sinceMs) {
   return false;
 }
 
-// Whether a run would start now: the switch on, and, when asked, a state
-// document changed since the last run (or no run yet). The hooks ask this
-// before giving up for lack of budget, so nothing is recorded as a run.
+// The floor between two automatic pulls of one machine: several tabs
+// opening at once pull once, not once each. A push is paced by the state
+// itself (it runs only when a document changed), so it has no floor.
+const PULL_FLOOR_MS = 20000;
+
+// Whether a pull now would come too soon after the last automatic pull.
+function pullTooSoon(homeDir, reason, nowMs = Date.now()) {
+  if (reason !== 'session-start') return false;
+  const last = lastAutosync(homeDir);
+  if (!last || last.reason !== 'session-start') return false;
+  const lastMs = Date.parse(last.lastRun ?? '');
+  return Number.isFinite(lastMs) && nowMs - lastMs < PULL_FLOOR_MS;
+}
+
+// Whether a run would start now: the switch on, the floor between pulls
+// respected, and, when asked, a state document changed since the last run
+// (or no run yet). The hooks ask this before giving up for lack of budget,
+// so nothing is recorded as a run.
 function wouldSync(options = {}) {
   const homeDir = options.homeDir ?? os.homedir();
   if (!isAutosyncOn(readTeamConfig(homeDir))) return false;
+  if (pullTooSoon(homeDir, options.reason)) return false;
   if (!options.onlyIfStateChanged) return true;
   const last = Date.parse(lastAutosync(homeDir)?.lastRun ?? '');
   return !Number.isFinite(last) || stateChangedSince(homeDir, last);
@@ -178,7 +194,11 @@ async function autosync(options = {}) {
   const homeDir = options.homeDir ?? os.homedir();
   const reason = options.reason ?? 'session';
   if (!isAutosyncOn(readTeamConfig(homeDir))) return { ran: false, why: 'off' };
-  if (options.onlyIfStateChanged && !wouldSync({ homeDir, onlyIfStateChanged: true })) return { ran: false, why: 'unchanged' };
+  if (pullTooSoon(homeDir, reason)) {
+    appendLog(homeDir, reason, `skipped: the last pull was under ${PULL_FLOOR_MS / 1000} s ago`);
+    return { ran: false, why: 'too-soon' };
+  }
+  if (options.onlyIfStateChanged && !wouldSync({ homeDir, reason, onlyIfStateChanged: true })) return { ran: false, why: 'unchanged' };
   const serverScript = memoryServerScript();
   if (!serverScript) {
     appendLog(homeDir, reason, 'skipped: the memory server is not built or was not found');
@@ -204,4 +224,4 @@ async function autosync(options = {}) {
   return { ran: true, ...outcome };
 }
 
-module.exports = { autosync, wouldSync, lastAutosync, clearAutosyncStamp, stateChangedSince, memoryServerScript, DEFAULT_BUDGET_MS };
+module.exports = { autosync, wouldSync, lastAutosync, clearAutosyncStamp, stateChangedSince, memoryServerScript, pullTooSoon, DEFAULT_BUDGET_MS, PULL_FLOOR_MS };

@@ -19,6 +19,16 @@ An earlier version of `egc team sync` also copied `~/.egc/memory/` into the chec
 
 The local copy of your state stays encrypted at rest with the machine's own key, as it is without the Team Brain. The two keys are unrelated: replacing one never touches the other.
 
+## What is refused on the way out
+
+Before a document is sealed for the push, three checks keep it on the machine:
+
+- A document that holds what looks like a credential (a private key block, an AWS access key id, a GitHub, Slack or Google token, an Anthropic or OpenAI key, a JSON web token, or a `password = ...` style assignment) is not staged. The sync warns `Not pushed: state/<path> holds what looks like a GitHub token`; rewrite the document on that machine (the next `update_state` rewrites it) and sync again. The version pushed before, if any, stays on the remote.
+- A document above 256 KiB of text is not staged, with its size in the warning.
+- A push carries at most 4 MiB of documents; once it reaches that, the documents left are refused with the same warning and go out with the next push, after the state was trimmed.
+
+The automatic pull has a floor: several sessions starting on one machine within 20 seconds pull once, not once each. A push is paced by the state itself, since it runs only when a document changed.
+
 ## Before you start
 
 - Node and git on every machine, and `egc` installed with the memory server built (`egc doctor` checks this).

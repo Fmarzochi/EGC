@@ -249,6 +249,9 @@ function runTests() {
       fs.renameSync(REMOTE, away);
       try {
         const before = logLines(second.home).length;
+        // The floor between two automatic pulls: this start comes right after the pull above on the same machine, so the record of that pull is aged past the floor first.
+        const stampFile = path.join(second.home, '.egc', 'team-autosync.json');
+        if (fs.existsSync(stampFile)) fs.writeFileSync(stampFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(stampFile, 'utf8')), lastRun: new Date(Date.now() - 60000).toISOString() }));
         const start = runHook(CLAUDE_START, second.home, second.project, { cwd: second.project, hook_event_name: 'SessionStart' });
         assert.strictEqual(start.status, 0, start.stderr);
         assert.ok(start.stdout.includes('First machine, after the team.'), 'the local state is still restored');
