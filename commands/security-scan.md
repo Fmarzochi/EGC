@@ -64,7 +64,7 @@ Return:
 ```yaml
 - run: npm install -g @egchq/egc
 - run: egc harness-audit repo --format json > harness-audit.json
-- run: node -e "const r = require('./harness-audit.json'); process.exit(r.overall_score / r.max_score >= 0.75 ? 0 : 1)"
+- run: node -e "const r = require('./harness-audit.json'); if (!(r.overall_score / r.max_score >= 0.75)) process.exit(1)"
 ```
 
 The audit exits 0 even when checks fail; the last step fails the job under the floor (75 percent of the points here) with the Node every runner already has.
