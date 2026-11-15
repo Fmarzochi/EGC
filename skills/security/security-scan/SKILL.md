@@ -57,10 +57,10 @@ Fix by hand, one surface at a time. With the Guardian registered in your tool (`
 
 ```bash
 egc harness-audit repo --format json > harness-audit.json
-jq -e '(.overall_score / .max_score) >= 0.75' harness-audit.json
+node -e "const r = require('./harness-audit.json'); process.exit(r.overall_score / r.max_score >= 0.75 ? 0 : 1)"
 ```
 
-The audit exits 0 even when checks fail, so the second line is what fails the job: here under 75 percent of the points. `checks[]` names each check with its file and whether it passed; `top_actions` carries the fix for up to three failed checks.
+The audit exits 0 even when checks fail, so the second line is what fails the job: here under 75 percent of the points, with the Node every runner already has. `checks[]` names each check with its file and whether it passed; `top_actions` carries the fix for up to three failed checks.
 
 ## Severity Levels
 
