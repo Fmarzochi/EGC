@@ -86,7 +86,7 @@ function writeManifestSourceFixture(root) {
           'missing.txt',
           'skills/demo',
           path.join('runtime', 'egc', 'install-state.json'),
-          '.gemini-plugin',
+          '.claude-plugin',
         ],
         targets: ['egc'],
         dependencies: [],
@@ -114,7 +114,7 @@ function writeManifestSourceFixture(root) {
   writeFile(root, path.join('skills', 'demo', 'SKILL.md'), '# Demo\n');
   writeFile(root, 'standalone.txt', 'standalone\n');
   writeFile(root, path.join('runtime', 'egc', 'install-state.json'), '{}\n');
-  writeJson(root, path.join('.gemini-plugin', 'plugin.json'), { name: 'fixture' });
+  writeJson(root, path.join('.claude-plugin', 'plugin.json'), { name: 'fixture' });
 }
 
 function test(name, fn) {
@@ -505,7 +505,7 @@ function runTests() {
       assert.ok(normalizedSources.includes('rules/common/coding-style.md'));
       assert.ok(normalizedSources.includes('skills/demo/SKILL.md'));
       assert.ok(normalizedSources.includes('standalone.txt'));
-      assert.ok(!normalizedSources.includes('.gemini-plugin/plugin.json'), 'the plugin manifest only the retired Gemini CLI read is not planned');
+      assert.ok(!normalizedSources.includes('.claude-plugin/plugin.json'), 'the plugin manifest only the retired Gemini CLI read is not planned');
       assert.ok(!normalizedSources.includes('missing.txt'));
       assert.ok(!normalizedSources.includes('runtime/egc/install-state.json'));
       assert.ok(!normalizedSources.includes('src/nested/egc-install-state.json'));

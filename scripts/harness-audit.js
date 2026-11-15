@@ -196,7 +196,7 @@ function detectTargetMode(rootDir) {
 
   if (
     fileExists(rootDir, 'scripts/harness-audit.js') &&
-    fileExists(rootDir, '.gemini-plugin/plugin.json') &&
+    fileExists(rootDir, '.claude-plugin/plugin.json') &&
     fileExists(rootDir, 'agents') &&
     fileExists(rootDir, 'skills')
   ) {
@@ -222,7 +222,7 @@ function findPluginInstall(rootDir) {
   ].filter(Boolean);
   const candidates = candidateRoots.flatMap((pluginsDir) =>
     pluginDirs.flatMap((pluginDir) => [
-      path.join(pluginsDir, pluginDir, '.gemini-plugin', 'plugin.json'),
+      path.join(pluginsDir, pluginDir, '.claude-plugin', 'plugin.json'),
       path.join(pluginsDir, pluginDir, 'plugin.json'),
     ])
   );

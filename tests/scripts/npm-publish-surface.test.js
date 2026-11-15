@@ -122,7 +122,7 @@ function main() {
         "scripts/lib/scrubber/engine.js",
         "skills/security/content-scrubber/SKILL.md",
         "manifests/install-modules.json",
-        ".gemini-plugin/plugin.json",
+        ".claude-plugin/plugin.json",
         "schemas/install-state.schema.json",
       ]) {
         assert.ok(
