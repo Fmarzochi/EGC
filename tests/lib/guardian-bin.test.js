@@ -800,7 +800,7 @@ function main() {
   // compared case on Windows too, so a config spelling the home in another
   // case (c:\users\ana for C:\Users\Ana) made the CLI unresolvable and every
   // hook fall open as if the Guardian were not installed.
-  run('isUnderHome: Windows paths match the home in any case, POSIX paths only as written (N3)', () => {
+  run('isUnderHome: Windows and macOS paths match the home in any case, Linux paths only as written, a root home matches nothing (N3)', () => {
     const { isUnderHome } = freshGuardianBin();
     const winHome = String.raw`C:\Users\Ana`;
     assert.strictEqual(isUnderHome(String.raw`c:\users\ana\AppData\Roaming\npm\node_modules\@egchq\egc\mcp\servers\egc-guardian\build\guardian-cli.js`, winHome, 'win32'), true);
@@ -810,6 +810,9 @@ function main() {
     assert.strictEqual(isUnderHome('/home/ana/.egc/guardian-cli.js', '/home/ana', 'linux'), true);
     assert.strictEqual(isUnderHome('/home/Ana/.egc/guardian-cli.js', '/home/ana', 'linux'), false, 'case is part of the name on POSIX');
     assert.strictEqual(isUnderHome('/home/anabel/x.js', '/home/ana', 'linux'), false);
+    assert.strictEqual(isUnderHome('/users/ana/.egc/guardian-cli.js', '/Users/ana', 'darwin'), true, 'macOS does not tell case apart either');
+    assert.strictEqual(isUnderHome('/opt/evil/guardian-cli.js', '/', 'linux'), false, 'a home that is the file system root qualifies nothing');
+    assert.strictEqual(isUnderHome('C:/tmp/evil.js', 'C:', 'win32'), false, 'nor a drive root');
   });
 
   console.log(`\n${passed} passed, ${failed} failed`);

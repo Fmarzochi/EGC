@@ -251,6 +251,7 @@ test('resolveSnapshotTarget refuses a plan file whose sessionName is missing or 
       ['missing', { repoRoot: tempRoot }],
       ['not a string', { sessionName: 42, repoRoot: tempRoot }],
       ['a traversal', { sessionName: '../outside', repoRoot: tempRoot }],
+      ['a bare null plan', null],
     ]) {
       const planPath = path.join(tempRoot, `plan-${label.replace(/\s+/g, '-')}.json`);
       fs.writeFileSync(planPath, JSON.stringify(plan));

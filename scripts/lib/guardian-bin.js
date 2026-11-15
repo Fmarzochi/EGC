@@ -10,16 +10,25 @@ const { spawnSync } = require('node:child_process');
 // package-relative layout (repo checkout and npm install share it), then the
 // egc-guardian entry in the MCP configs the user already registered.
 
-// Whether `candidate` is the home directory or inside it. Windows paths do
-// not tell case apart, so a config that spells the home `c:\users\ana`
-// where os.homedir() says `C:\Users\Ana` is still the home there; anywhere
-// else case is part of the name.
+// Whether `candidate` is the home directory or inside it. Windows and macOS
+// file systems do not tell case apart by default, so a config that spells
+// the home `c:\users\ana` where os.homedir() says `C:\Users\Ana` (or
+// `/users/ana` for `/Users/ana`) is still the home there; on Linux case is
+// part of the name. A home that is the file system root qualifies nothing:
+// every path would be under it, and the lookup would trust a script anywhere.
 function isUnderHome(candidate, home, platform = process.platform) {
   const sep = platform === 'win32' ? '\\' : '/';
-  const fold = platform === 'win32' ? value => value.toLowerCase() : value => value;
-  const child = fold(candidate);
+  const foldsCase = platform === 'win32' || platform === 'darwin';
+  const fold = foldsCase ? value => value.toLowerCase() : value => value;
   const root = fold(home);
+  if (isFileSystemRoot(root, platform)) return false;
+  const child = fold(candidate);
   return child === root || child.startsWith(root.endsWith(sep) ? root : root + sep);
+}
+
+// `/` on POSIX, a drive root such as `C:\` on Windows (already folded).
+function isFileSystemRoot(folded, platform) {
+  return platform === 'win32' ? /^[a-z]:\\?$/.test(folded) : folded === '/';
 }
 
 function fromEnv() {
