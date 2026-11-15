@@ -62,7 +62,7 @@ egc team sync
 
 ### Session Mesh: Your Open Sessions See Each Other
 
-Two Cursor tabs, a Claude Code terminal and an Antigravity session share one live bus. They announce what they are working on, claim the files they edit, hand work to each other and pick up events the moment they land: the tools with a turn hook (Claude Code, Antigravity, Codex, Trae, Amp, Kiro and OpenCode) get the notice at their next turn, and Cursor or Copilot read the bus through the session tools. Parallel sessions cooperate instead of colliding.
+Two Cursor tabs, a Claude Code terminal and an Antigravity session share one live bus. They announce what they are working on, claim the files they edit, hand work to each other and pick up events: a session parked in `session_wait` wakes the moment one lands, the tools with a turn hook that can inject context (Claude Code, Antigravity, Codex, Trae, Amp, Kiro and OpenCode 2) get the notice at their next turn, and Cursor or Copilot read the bus through the session tools. Parallel sessions cooperate instead of colliding.
 
 ### Guardian: A Safety Layer in Front of Every Command
 
