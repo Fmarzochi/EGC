@@ -19,11 +19,23 @@ const path = require('node:path');
 
 const HOOK = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'mesh-events-inject.js');
 const { markKey } = require('../../scripts/lib/team-autosync-turn');
-// A lane without the built memory server (the yarn lanes of the CI) still
+const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+const AUTOSYNC = path.join(__dirname, '..', '..', 'scripts', 'lib', 'team-autosync.js');
+
+// Whether the hook under test will find a built memory server: resolved the
+// way the hook resolves it, in a child under the same home, so a server
+// installed in the developer's real home never makes the answer differ from
+// the child's. A lane without the build (the yarn lanes of the CI) still
 // runs these tests: there the first sync is denied, the session stays
 // unmarked, and the next prompt tries again.
-const SERVER_BUILT = require('../../scripts/lib/team-autosync').memoryServerScript() !== null;
-const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
+function serverBuiltFor(home) {
+  const probe = spawnSync(process.execPath, ['-e', 'process.stdout.write(String(require(process.argv[1]).memoryServerScript() !== null))', AUTOSYNC], {
+    env: { ...process.env, HOME: home, USERPROFILE: home },
+    encoding: 'utf8',
+    timeout: CLI_TIMEOUT_MS,
+  });
+  return probe.stdout.trim() === 'true';
+}
 
 function makeHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mesh-hook-'));
@@ -185,7 +197,7 @@ run('--team-sync with a team syncs whole at the first turn of a session, stays q
   assert.strictEqual(first.status, 0, first.stderr);
   assert.strictEqual(lines().length, 1, `one run is logged:\n${lines().join('\n')}`);
   const mark = path.join(home, '.egc', 'mesh', `team-pull-${markKey('turn-2')}.json`);
-  if (!SERVER_BUILT) {
+  if (!serverBuiltFor(home)) {
     assert.match(lines()[0], /turn-start: skipped: the memory server/);
     assert.ok(!fs.existsSync(mark), 'a denied first sync leaves no mark');
     const again = prompt();
@@ -222,7 +234,7 @@ run('the Codex adapter prints the dual-field notice, runs the Team Brain sync of
   const logPath = path.join(home, '.egc', 'logs', 'team-autosync.log');
   assert.ok(fs.existsSync(logPath), 'the adapter turned the Team Brain sync on');
   const codexMark = path.join(home, '.egc', 'mesh', `team-pull-${markKey('codex-1')}.json`);
-  if (SERVER_BUILT) {
+  if (serverBuiltFor(home)) {
     assert.match(fs.readFileSync(logPath, 'utf8'), /turn-start: (ok|failed): /);
     assert.ok(fs.existsSync(codexMark), 'the session is marked as synced');
   } else {

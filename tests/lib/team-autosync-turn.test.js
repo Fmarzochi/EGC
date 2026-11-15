@@ -74,10 +74,13 @@ try {
     fs.mkdirSync(path.join(home, '.egc', 'mesh'), { recursive: true });
     const victim = path.join(home, 'victim.txt');
     fs.writeFileSync(victim, 'keep');
+    // A platform that refuses links to this process skips the link case;
+    // any other failure is a failure.
     let linked = true;
     try {
       fs.symlinkSync(victim, mark('s3'));
-    } catch {
+    } catch (error) {
+      if (!['EPERM', 'EACCES', 'ENOSYS', 'ENOTSUP'].includes(error.code)) throw error;
       linked = false;
     }
     if (linked) {

@@ -92,12 +92,12 @@ function run(payload, options = {}) {
   const sessionKey = safeSessionKey(payload?.session_id);
   // The Team Brain sync at the turn boundary, for the hosts that have no
   // session start or stop hook: before the notice, so a pull lands before
-  // the agent reads the state. It gets the raw session id, since its mark
-  // is named by a hash of it, not by the flattened key of the cache. An
-  // install without the helper skips it.
+  // the agent reads the state. It gets the raw session id, with the same
+  // fallback the cache key has, since its mark is named by a hash of it, not
+  // by the flattened key. An install without the helper skips it.
   if (options.teamSync) {
     try {
-      require('../lib/team-autosync-turn').turnSync({ sessionId: payload?.session_id });
+      require('../lib/team-autosync-turn').turnSync({ sessionId: payload?.session_id || process.env.EGC_SESSION_ID });
     } catch (_) { /* a sync that could not run is a log line, never a broken turn */ } // NOSONAR
   }
   const memoryDir = path.join(os.homedir(), '.egc', 'memory');
