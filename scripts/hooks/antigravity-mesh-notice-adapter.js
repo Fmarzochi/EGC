@@ -26,7 +26,7 @@ function conversationIdOf(event) {
 }
 
 function buildInjection(event) {
-  const notice = run({ session_id: conversationIdOf(event) });
+  const notice = run({ session_id: conversationIdOf(event) }, { teamSync: true });
   return notice ? { injectSteps: [{ ephemeralMessage: notice }] } : {};
 }
 

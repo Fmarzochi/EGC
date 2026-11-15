@@ -2935,7 +2935,9 @@ function runTests() {
     const projectRoot = '/workspace/app';
 
     const cases = [
-      { target: 'codex', input: { homeDir }, hooksFilePath: path.join(homeDir, '.codex', 'hooks.json'), root: path.join(homeDir, '.codex') },
+      // Codex has no session hook, so its registered command is the host
+      // adapter that turns the Team Brain sync on at the turn boundary.
+      { target: 'codex', input: { homeDir }, hooksFilePath: path.join(homeDir, '.codex', 'hooks.json'), root: path.join(homeDir, '.codex'), registeredScript: 'codex-mesh-notice-adapter.js' },
       // Trae feeds plain-text stdout to the model, so its registered command
       // is the host adapter, not the shared JSON-emitting script directly.
       { target: 'trae', input: { projectRoot }, hooksFilePath: path.join(projectRoot, '.trae', 'hooks.json'), root: path.join(projectRoot, '.trae'), registeredScript: 'trae-mesh-notice-adapter.js' },
@@ -2968,6 +2970,34 @@ function runTests() {
         )),
         `${target}: shared mesh implementation scaffolded`
       );
+      // The Team Brain sync at the turn boundary runs beside the mesh
+      // script: every helper it requires travels to the same root, or the
+      // sync is inert where it is installed.
+      const { MESH_NOTICE_TEAM_SYNC_SOURCES } = require('../../scripts/lib/claude-settings-hooks');
+      for (const source of MESH_NOTICE_TEAM_SYNC_SOURCES) {
+        assert.ok(
+          plan.operations.some(operation => (
+            normalizedRelativePath(operation.sourceRelativePath) === source
+            && operation.destinationPath === path.join(root, ...source.split('/'))
+          )),
+          `${target}: ${source} travels with the mesh script`
+        );
+      }
+    }
+  }));
+
+  // The copy set of the turn-boundary sync is closed under require: a helper
+  // that requires a sibling the set lacks would crash where it is installed.
+  tally(test('the helpers of the turn-boundary sync travel with every sibling they require', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const { MESH_NOTICE_TEAM_SYNC_SOURCES } = require('../../scripts/lib/claude-settings-hooks');
+    for (const source of MESH_NOTICE_TEAM_SYNC_SOURCES) {
+      const text = fs.readFileSync(path.join(repoRoot, source), 'utf8');
+      for (const match of text.matchAll(/require\('(\.\/[^']+)'\)/g)) {
+        const sibling = path.posix.join(path.posix.dirname(source), match[1]);
+        const required = sibling.endsWith('.js') ? sibling : `${sibling}.js`;
+        assert.ok(MESH_NOTICE_TEAM_SYNC_SOURCES.includes(required), `${source} requires ${required}, which must travel too`);
+      }
     }
   }));
 

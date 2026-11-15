@@ -164,7 +164,27 @@ function resolveMeshNoticeHookScriptDestination(targetRoot) {
   return path.join(targetRoot, 'scripts', 'hooks', 'mesh-events-inject.js');
 }
 
-function createMeshNoticeScriptCopyOperations(createRemappedOperation, targetRoot) {
+// The Team Brain sync at the turn boundary (team-autosync-turn.js) runs
+// beside the shared script in every host root that loads it, so its helpers
+// travel with the script; a host that syncs around the session instead
+// (OpenCode's plugin) asks for the script alone.
+const MESH_NOTICE_TEAM_SYNC_SOURCES = [
+  'scripts/lib/team-autosync-turn.js',
+  'scripts/lib/team-autosync-run.js',
+  'scripts/lib/team-autosync.js',
+  'scripts/lib/team-config.js',
+  'scripts/lib/team-mcp-client.js',
+  'scripts/lib/resolve-egc-root.js',
+  'scripts/lib/utils.js',
+  'scripts/lib/utils-platform.js',
+  'scripts/lib/utils-paths.js',
+  'scripts/lib/utils-session.js',
+  'scripts/lib/utils-file.js',
+  'scripts/lib/hook-stdin.js',
+];
+
+function createMeshNoticeScriptCopyOperations(createRemappedOperation, targetRoot, { withTeamSync = true } = {}) {
+  const sources = withTeamSync ? MESH_NOTICE_TEAM_SYNC_SOURCES : [];
   return [
     createRemappedOperation(
       MESH_NOTICE_HOOK_MODULE_ID,
@@ -172,6 +192,12 @@ function createMeshNoticeScriptCopyOperations(createRemappedOperation, targetRoo
       resolveMeshNoticeHookScriptDestination(targetRoot),
       { strategy: 'preserve-relative-path' }
     ),
+    ...sources.map(source => createRemappedOperation(
+      MESH_NOTICE_HOOK_MODULE_ID,
+      source,
+      path.join(targetRoot, ...source.split('/')),
+      { strategy: 'preserve-relative-path' }
+    )),
   ];
 }
 
@@ -373,6 +399,7 @@ module.exports = {
   createPreToolUseCrusherHookMergeOperation,
   createCrusherHookMergeOperationForDestination,
   resolveCrusherHookScriptDestination,
+  MESH_NOTICE_TEAM_SYNC_SOURCES,
   createMeshNoticeScriptCopyOperations,
   createMeshNoticeHookMergeOperationForDestination,
   createKiroMeshHookFileOperation,

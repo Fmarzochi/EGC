@@ -71,7 +71,7 @@ run('apply writes the v1 UserPromptSubmit command document and is idempotent', (
     assert.strictEqual(parsed.hooks[0].trigger, 'UserPromptSubmit');
     assert.strictEqual(parsed.hooks[0].action.type, 'command');
     assert.strictEqual(parsed.hooks[0].action.command, buildMeshHookCommand(scriptPath));
-    assert.ok(parsed.hooks[0].action.command.endsWith(' --format=text'), 'raw-stdout host gets the bare notice');
+    assert.ok(parsed.hooks[0].action.command.endsWith(' --format=text --team-sync'), 'raw-stdout host gets the bare notice, with the Team Brain sync at the turn boundary');
     assert.strictEqual(parsed.hooks[0].enabled, true);
 
     const second = applyKiroMeshHookToFile(hookFile, scriptPath);
