@@ -31,10 +31,11 @@ Usage: node scripts/doctor.js [--target <${SUPPORTED_INSTALL_TARGETS.join('|')}>
 
 Diagnose drift and missing managed files for EGC install-state in the current context,
 list every tool whose config carries the EGC MCP servers, and start each registered
-server to check that it answers tools/list. Every Guardian hook an install recorded
-is run with a call the Guardian always refuses, in its tool's own event shape, and a
-hook that does not refuse it is an error (EGC_DOCTOR_PROBE_TIMEOUT_MS caps the wait
-per server and per hook, ${DEFAULT_PROBE_TIMEOUT_MS} ms by default).
+server to check that it answers tools/list. Every Guardian hook script an install
+recorded is run with a call the Guardian always refuses, in its tool's own event shape,
+and a hook whose answer is not the Guardian's own refusal is an error; the Amp and
+OpenCode plugins run inside the tool and are not probed (EGC_DOCTOR_PROBE_TIMEOUT_MS
+caps the wait per server and per hook, ${DEFAULT_PROBE_TIMEOUT_MS} ms by default).
 
 Without --repo-root, the reference repo is always wherever the running \`egc\`
 binary lives (the published npm package for a global install). If the install
@@ -96,7 +97,7 @@ function printMcpReport(mcp) {
 // none, and an empty section would read as a problem.
 function printHookReport(hooks) {
   if (hooks.probes.length === 0) return;
-  console.log('\nGuardian hooks (each run with a call the Guardian always refuses):');
+  console.log('\nGuardian hook scripts (each run with a call the Guardian always refuses; the Amp and OpenCode plugins are not probed):');
   for (const probe of hooks.probes) {
     const tag = probe.status === 'ok' ? 'OK' : 'ERROR';
     console.log(`  - [${tag}] ${probe.target}: ${probe.script} ${probe.detail} (${probe.scriptPath})`);

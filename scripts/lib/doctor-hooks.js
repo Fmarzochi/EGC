@@ -1,7 +1,9 @@
 'use strict';
-// The hook half of `egc doctor`: for every Guardian hook an install recorded,
-// run the script the tool runs, with a command the Guardian always refuses,
-// in that tool's own event shape, and check that the answer is a refusal.
+// The hook half of `egc doctor`: for every Guardian hook script an install
+// recorded, run the script the tool runs, with a command the Guardian always
+// refuses, in that tool's own event shape, and check that the answer is the
+// Guardian's refusal. The Guardian of Amp and OpenCode runs as a plugin inside
+// the tool, not as a script a config names, and is not probed here.
 // A hook entry can sit in the tool's config and still protect nothing: the
 // script gone, an adapter that no longer reads the tool's payload, a Guardian
 // CLI it cannot find from where it was copied (and a missing CLI allows).
@@ -17,6 +19,11 @@ const { readInstallState } = require('./install-state');
 const PROBE_COMMAND = 'rm -rf /';
 const DEFAULT_HOOK_PROBE_TIMEOUT_MS = 15000;
 const STDERR_TAIL_CHARS = 300;
+// What every answer of the Guardian carries: in the stderr of the hooks that
+// exit 2, and in the reason of the adapters' JSON. A refusal without it came
+// from another hook in the chain (the fact gate, the verification gate) and
+// says nothing about the Guardian, which may be off.
+const GUARDIAN_SIGNATURE = /EGC Guardian/;
 
 const SHELL_PROBE = `the command ${JSON.stringify(PROBE_COMMAND)}`;
 const WRITE_PROBE = 'a write to ~/.ssh/id_rsa';
@@ -84,12 +91,33 @@ function isRefusal(result) {
     || (typeof specific === 'object' && specific !== null && specific.permissionDecision === 'deny');
 }
 
+// A refusal that is the Guardian's own, by its signature in the answer.
+function isGuardianRefusal(result) {
+  return isRefusal(result) && GUARDIAN_SIGNATURE.test(`${result.stderr || ''}\n${result.stdout || ''}`);
+}
+
+function clipLine(line) {
+  return line.length > STDERR_TAIL_CHARS ? `${line.slice(0, STDERR_TAIL_CHARS)}...` : line;
+}
+
+// The first line of the reason a refusal gave, from the field its tool reads
+// or from stderr.
+function refusalLine(result) {
+  const answer = lastJsonObject(result.stdout) || {};
+  const text = answer.hookSpecificOutput?.permissionDecisionReason
+    ?? answer.permissionDecisionReason
+    ?? answer.reason
+    ?? answer.user_message
+    ?? result.stderr
+    ?? '';
+  return clipLine(String(text).split(/\r?\n/).map(line => line.trim()).find(Boolean) || '');
+}
+
 // One line of what the hook printed on stderr: the first that names an
 // error (a crash leads with "Error: Cannot find module ..."), or the last.
 function stderrLine(text) {
   const lines = String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-  const line = lines.find(entry => /\berror\b/i.test(entry)) || lines.at(-1) || '';
-  return line.length > STDERR_TAIL_CHARS ? `${line.slice(0, STDERR_TAIL_CHARS)}...` : line;
+  return clipLine(lines.find(entry => /\berror\b/i.test(entry)) || lines.at(-1) || '');
 }
 
 function probeHook(scriptPath, event, { timeoutMs, env, cwd, what = SHELL_PROBE }) {
@@ -113,8 +141,16 @@ function probeHook(scriptPath, event, { timeoutMs, env, cwd, what = SHELL_PROBE 
       detail: timedOut ? `did not answer within ${timeoutMs} ms` : result.error.message,
     };
   }
-  if (isRefusal(result)) {
+  if (isGuardianRefusal(result)) {
     return { status: 'ok', reason: 'refused', detail: `refuses ${what} (exit ${result.status})` };
+  }
+  if (isRefusal(result)) {
+    const line = refusalLine(result);
+    return {
+      status: 'error',
+      reason: 'other-gate',
+      detail: `refuses ${what}, but not through the Guardian: another hook answered (exit ${result.status}${line ? ': ' + line : ''}); the Guardian is off or never ran`,
+    };
   }
   const stderr = stderrLine(result.stderr);
   return {
@@ -177,7 +213,9 @@ module.exports = {
   DEFAULT_HOOK_PROBE_TIMEOUT_MS,
   HOOK_PROBES,
   PROBE_COMMAND,
+  GUARDIAN_SIGNATURE,
   buildHookReport,
+  isGuardianRefusal,
   isRefusal,
   probeHook,
   recordedGuardianHooks,

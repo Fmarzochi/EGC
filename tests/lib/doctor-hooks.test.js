@@ -1,9 +1,9 @@
 'use strict';
 
 // The hook probe of egc doctor (PR-G1 of the September audit): every
-// Guardian hook an install recorded is run with a call the Guardian always
-// refuses, in its tool's own event shape, and a hook that does not refuse is
-// an error. The contract cases run each probe event against the real script
+// Guardian hook script an install recorded is run with a call the Guardian
+// always refuses, in its tool's own event shape, and a hook whose answer is
+// not the Guardian's own refusal is an error. The contract cases run each probe event against the real script
 // in this repository, so an adapter whose wire shape changes breaks here
 // before a doctor run reports a working hook as broken.
 
@@ -16,10 +16,16 @@ const { test } = require('node:test');
 const {
   HOOK_PROBES,
   buildHookReport,
+  isGuardianRefusal,
   isRefusal,
   probeHook,
   recordedGuardianHooks,
 } = require('../../scripts/lib/doctor-hooks');
+
+const GUARDIAN_STDERR = 'EGC Guardian BLOCKED this command: probe\n';
+const OTHER_GATE_ANSWER = JSON.stringify({
+  hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: '[Fact-Forcing Gate]\n\nDestructive command detected.' },
+});
 const { createInstallState, writeInstallState } = require('../../scripts/lib/install-state');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
@@ -69,6 +75,15 @@ test('refusals in every shape the tools read are recognized, and an allow is not
   assert.strictEqual(isRefusal({ status: 0, stdout: '{"decision":"allow"}' }), false);
 });
 
+test('a refusal is the Guardian\'s only with its signature: another gate in the chain is not the Guardian', () => {
+  assert.strictEqual(isGuardianRefusal({ status: 2, stdout: '', stderr: GUARDIAN_STDERR }), true, 'the exit-2 hooks carry it on stderr');
+  assert.strictEqual(isGuardianRefusal({ status: 0, stdout: '{"decision":"deny","reason":"Blocked by the EGC Guardian."}', stderr: '' }), true, 'the adapters carry it in the reason');
+  assert.strictEqual(isGuardianRefusal({ status: 0, stdout: OTHER_GATE_ANSWER, stderr: '' }), false, 'the fact gate refused, the Guardian did not answer');
+  assert.strictEqual(isRefusal({ status: 0, stdout: OTHER_GATE_ANSWER, stderr: '' }), true, 'it is still a refusal in shape');
+  assert.strictEqual(isGuardianRefusal({ status: 2, stdout: '', stderr: '' }), false, 'a bare exit 2 names nobody');
+  assert.strictEqual(isGuardianRefusal({ status: 0, stdout: '{"decision":"allow"}', stderr: GUARDIAN_STDERR }), false, 'the signature without a refusal is not one');
+});
+
 test('a hook that crashes, allows, is missing or hangs is reported with the reason', () => {
   const dir = tempDir('egc-doctor-hooks-');
   try {
@@ -88,8 +103,14 @@ test('a hook that crashes, allows, is missing or hangs is reported with the reas
     const hang = probeHook(script(dir, 'hang.js', 'setInterval(() => {}, 1000);\n'), {}, { ...options, timeoutMs: 500 });
     assert.strictEqual(hang.reason, 'timeout');
 
-    const refuse = probeHook(script(dir, 'refuse.js', 'process.exitCode = 2;\n'), {}, options);
+    const refuse = probeHook(script(dir, 'refuse.js', `process.stderr.write(${JSON.stringify(GUARDIAN_STDERR)}); process.exitCode = 2;\n`), {}, options);
     assert.strictEqual(refuse.status, 'ok');
+
+    const otherGate = probeHook(script(dir, 'other-gate.js', `process.stdout.write(${JSON.stringify(OTHER_GATE_ANSWER)});\n`), {}, options);
+    assert.strictEqual(otherGate.status, 'error');
+    assert.strictEqual(otherGate.reason, 'other-gate');
+    assert.match(otherGate.detail, /not through the Guardian/);
+    assert.match(otherGate.detail, /Fact-Forcing Gate/, 'the detail names who answered');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -100,7 +121,7 @@ test('the report probes the Guardian hooks an install recorded, once per script,
   try {
     const hooksDir = path.join(dir, 'scripts', 'hooks');
     fs.mkdirSync(hooksDir, { recursive: true });
-    const guardian = script(hooksDir, 'pre-bash-guardian-validate.js', 'process.exitCode = 2;\n');
+    const guardian = script(hooksDir, 'pre-bash-guardian-validate.js', `process.stderr.write(${JSON.stringify(GUARDIAN_STDERR)}); process.exitCode = 2;\n`);
     const crusher = script(hooksDir, 'crusher-hook.js', 'process.exit(0);\n');
     const statePath = path.join(dir, 'egc', 'install-state.json');
     const hookOperation = (scriptPath, matcher) => ({
