@@ -116,7 +116,7 @@ To use Plankton hooks in your own project:
 | Concern | EGC | Plankton |
 |---------|-----|----------|
 | Code quality enforcement | PostToolUse hooks (Prettier, tsc) | PostToolUse hooks (20+ linters + subprocess fixes) |
-| Security scanning | AgentShield, security-reviewer agent | Bandit (Python), Semgrep (TypeScript) |
+| Security scanning | egc harness-audit, security-reviewer agent | Bandit (Python), Semgrep (TypeScript) |
 | Config protection |: | PreToolUse blocks + Stop hook detection |
 | Package manager | Detection + setup | Enforcement (blocks legacy PMs) |
 | CI integration |: | Pre-commit hooks for git |
@@ -126,7 +126,7 @@ To use Plankton hooks in your own project:
 
 1. Install EGC as your plugin (agents, skills, commands, rules)
 2. Add Plankton hooks for write-time quality enforcement
-3. Use AgentShield for security audits
+3. Use `egc harness-audit` for security audits
 4. Use EGC's verification-loop as a final gate before PRs
 
 ### Avoiding Hook Conflicts
