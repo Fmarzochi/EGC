@@ -53,8 +53,8 @@ update_latest_release_heading() {
 
 update_version "$ROOT_PACKAGE_JSON"
 update_version ".opencode/package.json"
-update_version ".gemini-plugin/plugin.json"
-update_version ".gemini-plugin/marketplace.json"
+update_version ".claude-plugin/plugin.json"
+update_version ".claude-plugin/marketplace.json"
 update_version ".codex-plugin/plugin.json"
 update_version ".agents/plugins/marketplace.json"
 
@@ -83,7 +83,7 @@ node tests/plugin-manifest.test.js
 
 git add \
   "$ROOT_PACKAGE_JSON" package-lock.json agent.yaml \
-  .gemini-plugin/plugin.json .gemini-plugin/marketplace.json \
+  .claude-plugin/plugin.json .claude-plugin/marketplace.json \
   .codex-plugin/plugin.json \
   .agents/plugins/marketplace.json \
   .opencode/package.json .opencode/package-lock.json \

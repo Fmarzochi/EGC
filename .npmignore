@@ -5,7 +5,7 @@ README.zh-CN.md
 scripts/release.sh
 
 # Plugin dev notes (not needed by consumers)
-.gemini-plugin/PLUGIN_SCHEMA_NOTES.md
+.claude-plugin/PLUGIN_SCHEMA_NOTES.md
 
 # =========================================================
 # PRIVATE INTERNAL AUDITS — NEVER PUBLISH

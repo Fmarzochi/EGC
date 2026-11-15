@@ -64,7 +64,7 @@ egc team
 
 ### Sessione Mesh: Le Sessioni Aperte Vedi Ogni Altro
 
-Due schede Cursore, un terminale Codice Claude e una sessione Antigravity condividono un bus dal vivo. Essi annunciano che cosa stanno lavorando su, rivendicare i file che hanno modificato, lavorare a mano gli uni agli altri e raccogliere gli eventi nel momento in cui atterrano, così le sessioni parallele cooperano invece di collidere.
+Due schede Cursore, un terminale Codice Claude e una sessione Antigravity condividono un bus dal vivo. Essi annunciano che cosa stanno lavorando su, rivendicare i file che hanno modificato, lavoro a mano a vicenda e raccogliere eventi: una sessione parcheggiata in `session_wait` risveglia il momento in cui uno terrestre, gli strumenti con un gancio girevole in grado di iniettare il contesto (Claude Code, Antigravity, Codex, Trae, Amp, Kiro e OpenCode 2) ottenere l'avviso al loro prossimo turno, e Cursore o Copilot leggere il bus attraverso gli strumenti di sessione. Le sessioni parallele collaborano invece di collidere.
 
 ### Guardian: uno strato di sicurezza davanti ad ogni comando
 

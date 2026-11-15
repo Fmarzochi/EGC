@@ -6,7 +6,7 @@ const path = require('node:path');
 const { isIgnoredSourceDirectory, isIgnoredSourceFile } = require('../install-source-filters');
 
 const PLATFORM_SOURCE_PATH_OWNERS = Object.freeze({
-  '.gemini-plugin': 'egc',
+  '.claude-plugin': 'egc',
   '.codex': 'codex',
   '.cursor': 'cursor',
   '.gemini': 'gemini',

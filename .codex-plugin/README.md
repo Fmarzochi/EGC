@@ -46,7 +46,7 @@ stay below provider length limits.
 
 ## Notes
 
-- The `skills/` directory at the repo root is shared between all tool adapters (`.gemini-plugin/`, `.codex-plugin/`, etc.): same source of truth, no duplication
+- The `skills/` directory at the repo root is shared between all tool adapters (`.claude-plugin/`, `.codex-plugin/`, etc.): same source of truth, no duplication
 - EGC is moving to a skills-first workflow surface. Legacy `commands/` remain for
   compatibility on harnesses that still expect slash-entry shims.
 - MCP server credentials are inherited from the launching environment (env vars)

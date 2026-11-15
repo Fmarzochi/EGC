@@ -17,7 +17,7 @@ Claude Code, Codex, OpenCode, Cursor, Gemini, and future harnesses should adapt 
 
 | Surface | Shared Source | Harness Adapter | Current Status |
 |---------|---------------|-----------------|----------------|
-| Skills | `skills/*/SKILL.md` | gemini plugin, Codex plugin, `.agents/skills`, Cursor skill copies, OpenCode plugin/config | Supported with harness-specific packaging |
+| Skills | `skills/*/SKILL.md` | Claude Code plugin, Codex plugin, `.agents/skills`, Cursor skill copies, OpenCode plugin/config | Supported with harness-specific packaging |
 | Rules and instructions | `rules/`, `AGENTS.md`, translated docs | gemini rules install, Codex `AGENTS.md`, Cursor rules, OpenCode instructions | Supported, but not identical across harnesses |
 | Hooks | `hooks/hooks.json`, `scripts/hooks/` | gemini native hooks, OpenCode plugin events, Cursor hook adapter | Hook-backed in gemini/OpenCode/Cursor; instruction-backed in Codex |
 | MCPs | `.mcp.json`, `mcp-configs/` | Native MCP config import per harness | Supported where the harness exposes MCP |

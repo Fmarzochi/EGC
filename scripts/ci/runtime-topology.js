@@ -148,10 +148,10 @@ const NODES = [
         summary: 'Node bridge that spawns the Python llm.cli.prompt backend.'
     },
     {
-        id: 'manifest:gemini-plugin',
+        id: 'manifest:claude-plugin',
         class: 'ACTIVE',
         kind: 'manifest',
-        path: '.gemini-plugin/plugin.json',
+        path: '.claude-plugin/plugin.json',
         summary: 'Plugin manifest of the marketplace layout, kept in step by scripts/release.sh and tests/plugin-manifest.test.js; the egc install target no longer copies it under ~/.gemini.'
     },
     {

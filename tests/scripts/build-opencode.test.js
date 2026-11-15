@@ -114,12 +114,12 @@ function main() {
         "npm pack should include compiled OpenCode tool output"
       )
       assert.ok(
-        packagedPaths.has(".gemini-plugin/marketplace.json"),
-        "npm pack should include .gemini-plugin/marketplace.json"
+        packagedPaths.has(".claude-plugin/marketplace.json"),
+        "npm pack should include .claude-plugin/marketplace.json"
       )
       assert.ok(
-        packagedPaths.has(".gemini-plugin/plugin.json"),
-        "npm pack should include .gemini-plugin/plugin.json"
+        packagedPaths.has(".claude-plugin/plugin.json"),
+        "npm pack should include .claude-plugin/plugin.json"
       )
       assert.ok(
         packagedPaths.has(".codex-plugin/plugin.json"),

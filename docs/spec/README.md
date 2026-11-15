@@ -22,7 +22,7 @@ A 90-day deprecation window applies for `MAJOR` breaking changes to public-facin
 | Install paths per tool | [`tool-paths.md`](./tool-paths.md) (generated from `manifests/tool-paths.json`) | `tests/ci/tool-paths-contract.test.js` |
 | Agent memory interchange | [`agent-memory-interchange.md`](./agent-memory-interchange.md) | `tests/scripts/export.test.js` (export, section 8.1); gap: reference `egc import` planned |
 | Hooks contract | `schemas/hooks.schema.json` | `tests/spec/schemas.test.js` against `hooks/hooks.json`; `scripts/ci/validate-hooks.js` in CI |
-| Plugin manifest | `schemas/plugin.schema.json` | `tests/spec/schemas.test.js` against `.gemini-plugin/plugin.json`; `tests/plugin-manifest.test.js` checks the manifests field by field |
+| Plugin manifest | `schemas/plugin.schema.json` | `tests/spec/schemas.test.js` against `.claude-plugin/plugin.json`; `tests/plugin-manifest.test.js` checks the manifests field by field |
 | Runtime map | `schemas/runtime-map.schema.json` | `tests/spec/schemas.test.js` against the file `scripts/runtime/discovery.js` writes |
 | Install profiles | `schemas/install-profiles.schema.json` | `tests/spec/schemas.test.js` against `manifests/install-profiles.json`; `scripts/ci/validate-install-manifests.js` in CI |
 | Install modules | `schemas/install-modules.schema.json` | `tests/spec/schemas.test.js` against `manifests/install-modules.json`; `scripts/ci/validate-install-manifests.js` in CI |

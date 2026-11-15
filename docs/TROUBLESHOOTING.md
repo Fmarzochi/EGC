@@ -66,6 +66,49 @@ If the lock does not clear, a reboot releases it. Nothing needs to be uninstalle
 
 ---
 
+## `running scripts is disabled on this system` in Windows PowerShell
+
+**Symptom:** on a desktop Windows, in Windows PowerShell 5.1, the first command of either install path stops before EGC runs:
+
+```
+npm : File C:\Program Files\nodejs\npm.ps1 cannot be loaded because running scripts is disabled on
+this system. For more information, see about_Execution_Policies at https:/go.microsoft.com/fwlink/?LinkID=135170.
+```
+
+```
+.\scripts\install.ps1 : File C:\Users\<you>\EGC\scripts\install.ps1 cannot be loaded because running scripts is disabled
+on this system.
+```
+
+After an install made another way, `egc` itself gives the same message for `...\npm\egc.ps1`.
+
+**Cause:** Windows PowerShell on a desktop Windows ships with the `Restricted` execution policy, which refuses every `.ps1` file. Node.js puts an `npm.ps1` next to `npm.cmd`, npm puts an `egc.ps1` next to `egc.cmd`, and PowerShell picks the `.ps1` first. PowerShell 7 defaults to `RemoteSigned` and cmd has no execution policy, so neither shows this.
+
+**Fix:** either of these, with no administrator rights.
+
+Call the `.cmd` twins, which the execution policy does not govern, and lift the policy for one run of the clone's installer:
+
+```powershell
+npm.cmd install -g @egchq/egc
+egc.cmd install
+```
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+Then keep calling `egc.cmd` in Windows PowerShell (`egc.cmd init`, `egc.cmd doctor`). Both were run end to end on a fresh Windows VM under `Restricted` for #1379, with `egc doctor` at `errors=0`.
+
+Or allow local scripts for your own account once, after which `npm`, `egc` and `install.ps1` run as written:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+`RemoteSigned` runs the scripts on your disk and still refuses unsigned ones downloaded from the internet; see Microsoft's [about_Execution_Policies](https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_execution_policies).
+
+---
+
 ## `egc doctor` says some state files are plain text
 
 **Symptom:** the doctor report ends with a `State files` section:
@@ -107,6 +150,21 @@ MCP servers:
 **Fix:** `egc init` registers the two servers in every tool it detects and rewrites a registration that points at an old path. For a server that exits or does not answer, run the printed path with `node` by hand and read its stderr; a missing build in a dev checkout is `npm run build` in `mcp/servers/egc-guardian` and `mcp/servers/egc-memory`. A slow machine can raise the wait with `EGC_DOCTOR_PROBE_TIMEOUT_MS` (8000 by default).
 
 A hook that EGC wrote into a tool's settings and that is no longer there is reported in the same run as `[error] missing-hook-entries`; the text report gives the count and `egc doctor --json` lists each event and file in `issue.paths`. `egc repair` puts it back.
+
+## `egc doctor` reports a Guardian hook that lets a call through
+
+**Symptom:** the doctor report has a `Guardian hooks` section with an `[ERROR]` line, and the run exits 1:
+
+```text
+Guardian hook scripts (each run with a call the Guardian always refuses; the Amp and OpenCode plugins are not probed):
+  - [OK] claude-home: bash-hook-dispatcher.js refuses the command "rm -rf /" (exit 2) (~/.claude/scripts/hooks/bash-hook-dispatcher.js)
+  - [ERROR] codex-home: pre-bash-guardian-validate.js let the command "rm -rf /" through, which the Guardian always refuses (exit 1): Error: Cannot find module './pre-bash-guardian-script-files' (~/.codex/scripts/hooks/pre-bash-guardian-validate.js)
+Hook summary: probed=2, refusing=1, errors=1
+```
+
+**Cause:** the doctor runs every Guardian hook script an install recorded (the Guardian of Amp and OpenCode runs as a plugin inside the tool and is not probed), with a destructive command (or, for the write validator, a write to `~/.ssh/id_rsa`) in the event shape that tool sends, and reads the answer the way the tool does. The hook only judges the call; nothing runs it. Only the Guardian's own refusal counts: a refusal by another hook in the chain (the Fact-Forcing Gate, the verification gate) means the Guardian is off or never ran, and is an error too. A hook that crashes or exits 1 is the dangerous case in most tools: they treat that as a hook error, not a refusal, and run the command, so the entry sits in the config and protects nothing. Vibe is the exception: EGC installs its Guardian hook strict, so a crash there denies every call and the tool is blocked instead of unprotected; either way the hook is broken. `Cannot find module` means a script was updated without a file it now requires; `the script the hook entry runs is not there` means it was removed; an exit 0 with no refusal usually means the hook could not find the Guardian CLI from where it was copied.
+
+**Fix:** `egc auto-update` reinstalls every managed target from the current package with the arguments it was installed with, files new since that install included. `egc repair` does the same for a module it already installs by copy. Then run `egc doctor` again.
 
 ## OpenCode stops responding on every request after installing EGC
 

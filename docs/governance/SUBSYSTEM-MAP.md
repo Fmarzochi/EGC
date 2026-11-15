@@ -38,7 +38,7 @@ clean checkout may not have yet.
 | `manifests/install-modules.json`, `manifests/install-profiles.json`, `manifests/install-components.json` | ACTIVE | Install adapter driver, checked by `scripts/ci/validate-install-manifests.js` |
 | `schemas/` | ACTIVE | Partly validated, see [Schemas](#schemas) |
 | `agent.yaml` | ACTIVE | Published in the npm package; `scripts/release.sh` bumps its version and `tests/plugin-manifest.test.js` checks it matches `package.json` |
-| `.gemini-plugin/`, `.codex-plugin/` | ACTIVE | Plugin manifests |
+| `.claude-plugin/`, `.codex-plugin/` | ACTIVE | Plugin manifests |
 | `.cursor/`, `.codex/`, `.kiro/`, `.trae/`, `.codebuddy/`, `.opencode/` | ACTIVE | Harness-specific source bundles |
 | `.agents/` | ACTIVE | Shared `.agents` tree: `.agents/AGENTS.md`, `.agents/plugins/` and `.agents/skills/` |
 | `tests/` | ACTIVE | Every .test.js file under it run by `tests/run-all.js`; `tests/test_*.py` run by the `pytest tests/` step of `.github/workflows/ci.yml` |
@@ -59,7 +59,7 @@ data, and fails when a schema has no case there.
 | `schemas/state-store.schema.json` | Read at runtime by `scripts/lib/state-store/schema.js` |
 | `schemas/provenance.schema.json` | Not loaded at runtime; `validateProvenance()` in `scripts/lib/skill-evolution/provenance.js` checks the same records by hand on every read and write |
 | `schemas/package-manager.schema.json` | Not loaded at runtime; checked against the file `scripts/lib/package-manager.js` writes |
-| `schemas/plugin.schema.json` | Not loaded at runtime; checked against `.gemini-plugin/plugin.json`, and `tests/plugin-manifest.test.js` checks the manifests field by field |
+| `schemas/plugin.schema.json` | Not loaded at runtime; checked against `.claude-plugin/plugin.json`, and `tests/plugin-manifest.test.js` checks the manifests field by field |
 | `schemas/runtime-map.schema.json` | Not loaded at runtime; checked against the file `scripts/runtime/discovery.js` writes |
 
 ### Generated / regeneratable
