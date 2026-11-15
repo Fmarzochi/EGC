@@ -78,6 +78,42 @@ function test(name, fn) {
   }
 }
 
+// An install recorded before a file joined the plan: the Bash guardian split
+// into five modules in #1945, and a repair that only replayed the record
+// updated pre-bash-guardian-validate.js without the modules it now requires,
+// so the hook crashed and the tool let every command through.
+function repairsNewlyPlannedCopies() {
+  return test('repairs a recorded install with the files the current plan added since (#1945 modules)', () => {
+    const homeDir = createTempDir('repair-new-files-home-');
+    const projectRoot = createTempDir('repair-new-files-project-');
+    try {
+      const installResult = runNode(INSTALL_SCRIPT, ['--target', 'codex', '--profile', 'full'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(installResult.code, 0, installResult.stderr);
+
+      const statePath = path.join(homeDir, '.agents', 'egc', 'codex-install-state.json');
+      const moduleSource = 'scripts/hooks/pre-bash-guardian-segmentation.js';
+      const modulePath = path.join(homeDir, '.codex', 'scripts', 'hooks', 'pre-bash-guardian-segmentation.js');
+      const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      assert.ok(state.operations.some(operation => operation.kind !== 'copy-file'), 'the codex record carries hook merges, so repair replays it');
+      state.operations = state.operations.filter(operation => operation.sourceRelativePath !== moduleSource);
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+      fs.rmSync(modulePath);
+
+      const repairResult = runNode(REPAIR_SCRIPT, ['--target', 'codex', '--json'], { cwd: projectRoot, homeDir });
+      assert.strictEqual(repairResult.code, 0, repairResult.stderr);
+      assert.ok(fs.existsSync(modulePath), 'the module the updated hook requires is copied');
+      const repaired = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      assert.ok(repaired.operations.some(operation => operation.sourceRelativePath === moduleSource), 'and recorded, so the next repair keeps it');
+
+      const hookPath = path.join(homeDir, '.codex', 'scripts', 'hooks', 'pre-bash-guardian-validate.js');
+      execFileSync(process.execPath, ['-e', `require(${JSON.stringify(hookPath)})`], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  });
+}
+
 function runTests() {
   console.log('\n=== Testing repair.js ===\n');
 
@@ -129,6 +165,10 @@ function runTests() {
       cleanup(projectRoot);
     }
   })) passed++; else failed++;
+
+  const newlyPlanned = repairsNewlyPlannedCopies();
+  passed += Number(newlyPlanned);
+  failed += Number(!newlyPlanned);
 
   if (test('repairs the drift and prunes the orphaned entry, instead of abandoning the target', () => {
     const homeDir = createTempDir('repair-home-');

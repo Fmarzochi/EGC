@@ -151,6 +151,21 @@ MCP servers:
 
 A hook that EGC wrote into a tool's settings and that is no longer there is reported in the same run as `[error] missing-hook-entries`; the text report gives the count and `egc doctor --json` lists each event and file in `issue.paths`. `egc repair` puts it back.
 
+## `egc doctor` reports a Guardian hook that lets a call through
+
+**Symptom:** the doctor report has a `Guardian hooks` section with an `[ERROR]` line, and the run exits 1:
+
+```text
+Guardian hook scripts (each run with a call the Guardian always refuses; the Amp and OpenCode plugins are not probed):
+  - [OK] claude-home: bash-hook-dispatcher.js refuses the command "rm -rf /" (exit 2) (~/.claude/scripts/hooks/bash-hook-dispatcher.js)
+  - [ERROR] codex-home: pre-bash-guardian-validate.js let the command "rm -rf /" through, which the Guardian always refuses (exit 1): Error: Cannot find module './pre-bash-guardian-script-files' (~/.codex/scripts/hooks/pre-bash-guardian-validate.js)
+Hook summary: probed=2, refusing=1, errors=1
+```
+
+**Cause:** the doctor runs every Guardian hook script an install recorded (the Guardian of Amp and OpenCode runs as a plugin inside the tool and is not probed), with a destructive command (or, for the write validator, a write to `~/.ssh/id_rsa`) in the event shape that tool sends, and reads the answer the way the tool does. The hook only judges the call; nothing runs it. Only the Guardian's own refusal counts: a refusal by another hook in the chain (the Fact-Forcing Gate, the verification gate) means the Guardian is off or never ran, and is an error too. A hook that crashes or exits 1 is the dangerous case in most tools: they treat that as a hook error, not a refusal, and run the command, so the entry sits in the config and protects nothing. Vibe is the exception: EGC installs its Guardian hook strict, so a crash there denies every call and the tool is blocked instead of unprotected; either way the hook is broken. `Cannot find module` means a script was updated without a file it now requires; `the script the hook entry runs is not there` means it was removed; an exit 0 with no refusal usually means the hook could not find the Guardian CLI from where it was copied.
+
+**Fix:** `egc auto-update` reinstalls every managed target from the current package with the arguments it was installed with, files new since that install included. `egc repair` does the same for a module it already installs by copy. Then run `egc doctor` again.
+
 ## OpenCode stops responding on every request after installing EGC
 
 Installs made with EGC 1.1.21 or earlier copied the whole `egc-universal` package into `~/.config/opencode/` (on Windows `%USERPROFILE%\.config\opencode\`). OpenCode imports every file under `tools/` and `plugins/` in that directory when it starts, the copied TypeScript sources fail to load, and every prompt dies before an answer comes back (#1396). The same copy left a `package.json` there, which makes OpenCode's own background dependency install fail, and replaced your `opencode.json` with EGC's.
