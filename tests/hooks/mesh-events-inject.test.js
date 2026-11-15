@@ -19,6 +19,10 @@ const path = require('node:path');
 
 const HOOK = path.join(__dirname, '..', '..', 'scripts', 'hooks', 'mesh-events-inject.js');
 const { markKey } = require('../../scripts/lib/team-autosync-turn');
+// A lane without the built memory server (the yarn lanes of the CI) still
+// runs these tests: there the first sync is denied, the session stays
+// unmarked, and the next prompt tries again.
+const SERVER_BUILT = require('../../scripts/lib/team-autosync').memoryServerScript() !== null;
 const { CLI_TIMEOUT_MS } = require('../fixtures/subprocess-timeouts');
 
 function makeHome() {
@@ -180,8 +184,17 @@ run('--team-sync with a team syncs whole at the first turn of a session, stays q
   const first = prompt();
   assert.strictEqual(first.status, 0, first.stderr);
   assert.strictEqual(lines().length, 1, `one run is logged:\n${lines().join('\n')}`);
+  const mark = path.join(home, '.egc', 'mesh', `team-pull-${markKey('turn-2')}.json`);
+  if (!SERVER_BUILT) {
+    assert.match(lines()[0], /turn-start: skipped: the memory server/);
+    assert.ok(!fs.existsSync(mark), 'a denied first sync leaves no mark');
+    const again = prompt();
+    assert.strictEqual(again.status, 0, again.stderr);
+    assert.strictEqual(lines().length, 2, 'the next prompt tries the first sync again');
+    return;
+  }
   assert.match(lines()[0], /turn-start: (ok|failed): /, 'the memory server of this checkout ran the sync against a remote that does not exist');
-  assert.ok(fs.existsSync(path.join(home, '.egc', 'mesh', `team-pull-${markKey('turn-2')}.json`)), 'the session is marked as synced, under a hash of its id');
+  assert.ok(fs.existsSync(mark), 'the session is marked as synced, under a hash of its id');
   const quiet = prompt();
   assert.strictEqual(quiet.status, 0, quiet.stderr);
   assert.strictEqual(lines().length, 1, 'nothing changed since: the next turn runs no sync');
@@ -208,8 +221,14 @@ run('the Codex adapter prints the dual-field notice, runs the Team Brain sync of
   assert.ok(answer.hookSpecificOutput.additionalContext.includes('[egc-mesh]'), 'the nested field too');
   const logPath = path.join(home, '.egc', 'logs', 'team-autosync.log');
   assert.ok(fs.existsSync(logPath), 'the adapter turned the Team Brain sync on');
-  assert.match(fs.readFileSync(logPath, 'utf8'), /turn-start: (ok|failed): /);
-  assert.ok(fs.existsSync(path.join(home, '.egc', 'mesh', `team-pull-${markKey('codex-1')}.json`)), 'the session is marked as synced');
+  const codexMark = path.join(home, '.egc', 'mesh', `team-pull-${markKey('codex-1')}.json`);
+  if (SERVER_BUILT) {
+    assert.match(fs.readFileSync(logPath, 'utf8'), /turn-start: (ok|failed): /);
+    assert.ok(fs.existsSync(codexMark), 'the session is marked as synced');
+  } else {
+    assert.match(fs.readFileSync(logPath, 'utf8'), /turn-start: skipped: the memory server/);
+    assert.ok(!fs.existsSync(codexMark), 'a denied first sync leaves no mark');
+  }
   const quiet = spawnSync(process.execPath, [adapter], { env, encoding: 'utf8', timeout: CLI_TIMEOUT_MS, input: JSON.stringify({ session_id: 'codex-1' }) });
   assert.strictEqual(quiet.status, 0, quiet.stderr);
   assert.strictEqual(quiet.stdout, '', 'the second prompt of the session, nothing new: silence');
