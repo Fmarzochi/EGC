@@ -318,9 +318,9 @@ export const CATALOG_SKILLS_3: ReadonlyArray<CatalogEntry> = [
   {
     "kind": "skill",
     "name": "security-scan",
-    "description": "Audit the configuration of an AI coding tool for security issues with what EGC ships, the harness audit and the Guardian, plus a review checklist for permissions, hooks, MCP registrations, instructions and agents. Installs nothing beyond EGC.",
+    "description": "Scan the configuration of an AI coding tool (Claude Code, Gemini, Codex, OpenCode) for security vulnerabilities and misconfigurations with the built-in egc harness-audit and the Guardian, plus a review checklist for permissions, hooks, MCP registrations, instructions and agents. Installs nothing beyond EGC.",
     "source": "skills/security/security-scan/SKILL.md",
-    "triggers": "Setting up a new project with your AI coding tool After modifying settings.json , CLAUDE.md , GEMINI.md , AGENTS.md or an MCP config Before committing configuration changes When onboarding to a"
+    "triggers": "New project with an AI coding tool Changed settings.json, CLAUDE.md or an MCP config Before committing config changes Onboarding to a repo with tool configs Periodic security hygiene"
   },
   {
     "kind": "skill",

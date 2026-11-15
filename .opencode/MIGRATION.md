@@ -345,7 +345,7 @@ If you want the full EGC OpenCode workflow surface inside one project instead, u
 1. Verify the command is defined in `opencode.json` or as `.md` file in `.opencode/commands/`
 2. Check the referenced agent exists
 3. Ensure the template uses `$ARGUMENTS` for user input
-4. If you installed only `plugin: ["egc-universal"]`, note that npm plugin install does not auto-add EGC commands or agents to your project config
+4. If you installed with `egc install --target opencode`, run `egc doctor` to confirm the commands landed under `~/.config/opencode/`
 
 ## Best Practices
 

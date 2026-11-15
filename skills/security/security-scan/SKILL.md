@@ -1,6 +1,6 @@
 ---
 name: security-scan
-description: Audit the configuration of an AI coding tool for security issues with what EGC ships, the harness audit and the Guardian, plus a review checklist for permissions, hooks, MCP registrations, instructions and agents. Installs nothing beyond EGC.
+description: Scan the configuration of an AI coding tool (Claude Code, Gemini, Codex, OpenCode) for security vulnerabilities and misconfigurations with the built-in egc harness-audit and the Guardian, plus a review checklist for permissions, hooks, MCP registrations, instructions and agents. Installs nothing beyond EGC.
 origin: EGC
 ---
 
@@ -10,11 +10,11 @@ Audit the configuration of an AI coding tool for security issues with what EGC a
 
 ## When to Activate
 
-- Setting up a new project with your AI coding tool
-- After modifying `settings.json`, `CLAUDE.md`, `GEMINI.md`, `AGENTS.md` or an MCP config
-- Before committing configuration changes
-- When onboarding to a repository with existing tool configs
-- Periodic security hygiene checks
+- New project with an AI coding tool
+- Changed settings.json, CLAUDE.md or an MCP config
+- Before committing config changes
+- Onboarding to a repo with tool configs
+- Periodic security hygiene
 
 ## Prerequisites
 
@@ -35,7 +35,7 @@ egc harness-audit hooks --format json
 egc harness-audit repo --root /path/to/project
 ```
 
-The audit scores tool coverage, context strategy, quality gates, memory, evaluation, security guardrails and cost, and in a consumer project also the security policy, the secret hygiene of the config and the guardrails of the hooks. Read the security lines first: each names the file behind it and the fix.
+The audit scores tool coverage, context strategy, quality gates, memory, evaluation, security guardrails and cost, and in a consumer project also the security policy, the secret hygiene of the config and the guardrails of the hooks. Read the security lines first: `checks[]` names each check with its file and whether it passed, and `top_actions` carries the fix for the three biggest gaps.
 
 ### Review by hand
 
@@ -51,17 +51,20 @@ The audit says what is missing, not what a file says. Open each surface and appl
 
 ### Fixing what you find
 
-Fix by hand, one surface at a time. With EGC installed the Guardian judges every Write and Edit and refuses the protected paths (keys, credentials, the settings of the tool itself). Re-run `egc harness-audit` afterwards and compare the score.
+Fix by hand, one surface at a time. With the Guardian registered in your tool (`egc init` or `egc install` does that; a global `npm install` alone does not), it judges every Write and Edit and refuses the protected paths (keys, credentials, the settings of the tool itself). Re-run `egc harness-audit` afterwards and compare the score.
 
 ### CI
 
 ```bash
-egc harness-audit repo --format json
+egc harness-audit repo --format json > harness-audit.json
+jq -e '(.overall_score / .max_score) >= 0.75' harness-audit.json
 ```
 
-Fail the job when the score falls under your floor; the JSON names each failed check and its fix.
+The audit exits 0 even when checks fail, so the second line is what fails the job: here under 75 percent of the points. `checks[]` names each check with its file and whether it passed; `top_actions` carries the fix for up to three failed checks.
 
 ## Severity Levels
+
+The score below is `overall_score` as a percentage of `max_score`; the raw points depend on the scope (the repo scope has 70, so 63 of 70 is 90).
 
 | Grade | Score | Meaning |
 |-------|-------|---------|

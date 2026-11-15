@@ -33,7 +33,7 @@ To install a profile or specific modules into a target harness:
 
 ```bash
 ./install.sh --target cursor --dry-run typescript
-egc install --target codex --profile full
+egc install --target codex --profile developer --with lang:typescript
 ```
 
 ## Safety Rules

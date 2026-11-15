@@ -9,15 +9,12 @@ Extended Global Context (EGC) plugin for OpenCode - agents, commands, hooks, and
 
 ## Installation Overview
 
-There are three ways to use Extended Global Context (EGC):
+There are two ways to use Extended Global Context (EGC):
 
 1. **EGC OpenCode target (recommended for full EGC installs)**
    Run `egc install --target opencode` to install the global OpenCode plugin, selected skills, Guardian, Token Crusher, and automatic persistent-context restoration.
 
-2. **npm plugin package**
-   Install the OpenCode-specific npm plugin and configure it in `opencode.json`.
-
-3. **Direct clone / plugin mode**
+2. **Direct clone / plugin mode**
    Clone the repository and run OpenCode directly inside it.
 
 Choose the method that matches your workflow below.

@@ -64,9 +64,10 @@ Return:
 ```yaml
 - run: npm install -g @egchq/egc
 - run: egc harness-audit repo --format json > harness-audit.json
+- run: jq -e '(.overall_score / .max_score) >= 0.75' harness-audit.json
 ```
 
-Fail the job when the score falls under your floor.
+The audit exits 0 even when checks fail; the last step fails the job under the floor (75 percent of the points here).
 
 ## Links
 
