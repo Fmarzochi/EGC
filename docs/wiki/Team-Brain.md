@@ -8,15 +8,16 @@ The full guide, with real command output and troubleshooting, is [docs/TEAM-BRAI
 
 | Command | What it does |
 |---|---|
-| `egc team init --backend git --remote <url> [--branch <name>] [--autosync]` | Configures this machine and makes a new team key, printed once. |
-| `egc team init --backend git --remote <url> [--branch <name>] --key <64 hex> [--autosync]` | Joins this machine to an existing team. |
+| `egc team init --backend git --remote <url> [--branch <name>] [--no-autosync]` | Configures this machine and makes a new team key, printed once. |
+| `egc team init --backend git --remote <url> [--branch <name>] --key <64 hex> [--no-autosync]` | Joins this machine to an existing team. |
 | `egc team sync` | Pulls the sealed state, merges it, and pushes this machine's state. |
-| `egc team autosync on` / `egc team autosync off` | Turns the sync around the session on or off: before the state is read when a session starts, and after a response that changed it. Off by default; the switch is `autosync: true` in `~/.egc/team.json`. |
+| `egc team autosync on` / `egc team autosync off` | Turns the sync around the session on or off: before the state is read when a session starts, and after a response that changed it. On from init (`--no-autosync` leaves it off); the switch is `autosync: true` in `~/.egc/team.json`. |
+| `egc team leave` | Removes the configuration (with the key) and the sync checkout of this machine; the state files of the machine and the sealed state on the remote stay. |
 | `egc team status` | Shows the last commit time, uncommitted changes, the remote, the autosync switch and its last run. |
 
 The `--key` value is visible in the process list while the command runs and is saved in your shell history. The CLI has no other way to take the key, so remove that line from the history afterwards and do not run it on a shared machine.
 
-The same operations exist as the MCP tools `team_init`, `team_sync` and `team_status`. With autosync on, each sync the hooks attempt leaves one line in `~/.egc/logs/team-autosync.log`; a response that changed no state document attempts none. Nothing about it reaches the chat. `egc doctor` prints a `Team` block after the MCP servers: the remote (without any credential it carries) and the branch, the key, the last sync, the state to seal, the autosync switch and whether the remote answers, with a bad key, an unreadable `team.json` or a checkout that follows another remote or branch as warnings that name the init to run with `--key <team key>`, and a remote that does not answer as a warning with the reason git gave.
+The same operations exist as the MCP tools `team_init`, `team_sync` and `team_status`; `egc team autosync` and `egc team leave` are CLI only. With autosync on, each sync the hooks attempt leaves one line in `~/.egc/logs/team-autosync.log`; a response that changed no state document attempts none, once a first run has left its record (the first run after init or after `autosync on` syncs regardless, so the machine starts from the shared state). Nothing about it reaches the chat. `egc doctor` prints a `Team` block after the MCP servers: the remote (without any credential it carries) and the branch, the key, the last sync, the state to seal, the autosync switch and whether the remote answers, with a bad key, an unreadable `team.json` or a checkout that follows another remote or branch as warnings that name the init to run with `--key <team key>`, and a remote that does not answer as a warning with the reason git gave.
 
 ## What travels and what stays
 

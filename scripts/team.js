@@ -13,6 +13,8 @@ const { lastAutosync, clearAutosyncStamp } = require('./lib/team-autosync');
 
 const MEMORY_SERVER_SCRIPT = path.join(__dirname, '..', 'mcp', 'servers', 'egc-memory', 'build', 'index.js');
 const TEAM_CONFIG_PATH = teamConfigPath();
+// The sync checkout the memory server keeps next to the configuration.
+const TEAM_SYNC_DIR = path.join(os.homedir(), '.egc', 'team-sync');
 // The longest delay a Node timer takes; a larger one fires at once.
 const MAX_TIMER_MS = 2147483647;
 // How long one call to the memory server may take; a remote on a slow link
@@ -69,16 +71,19 @@ function showHelp() {
 EGC Team Memory: Sync state across teammates
 
 Usage:
-  egc team init --backend <backend> --remote <url> [--branch <branch>] [--key <hex>] [--autosync]
+  egc team init --backend <backend> --remote <url> [--branch <branch>] [--key <hex>] [--no-autosync]
   egc team sync
   egc team autosync on|off
+  egc team leave
   egc team status
 
 Commands:
   init      Configure a sync backend (e.g. git) and a remote URL
   sync      Pull the teammates' sealed state, merge it, and push local state sealed with the team key
   autosync  Turn the sync around the session on or off: a sync when a session starts, before the
-            state is read, and one after a response that changed the state (off by default)
+            state is read, and one after a response that changed the state (on from init)
+  leave     Remove the configuration, the key and the sync checkout of this machine; the state
+            files of this machine and the sealed state on the remote stay
   status    Show last sync time, conflict count, the autosync switch and its last run, and health
 
 Options:
@@ -86,14 +91,15 @@ Options:
   --remote    Remote URL for the sync storage
   --key       Team key (64 hex) shared by the member who initialized the team; omit to create a new team
   --branch    Git branch to use (default: main)
-  --autosync  Turn the sync around the session on at init
+  --no-autosync  Leave the sync around the session off at init (it is on otherwise)
 
 Examples:
   egc team init --backend git --remote git@github.com:org/egc-memory
   egc team init --backend git --remote git@github.com:org/egc-memory --branch team
-  egc team init --backend git --remote git@github.com:org/egc-memory --key <hex> --autosync
+  egc team init --backend git --remote git@github.com:org/egc-memory --key <hex> --no-autosync
   egc team sync
-  egc team autosync on
+  egc team autosync off
+  egc team leave
   egc team status
 `);
 }
@@ -134,7 +140,9 @@ async function handleInit(args) {
     process.exit(1);
   }
 
-  const autosync = args.includes('--autosync');
+  // On from init: the sync around the session is what a team of machines is
+  // for; --no-autosync leaves it off on a machine that syncs by hand.
+  const autosync = !args.includes('--no-autosync');
   const config = autosync ? { backend, remote, branch, teamKey, autosync } : { backend, remote, branch, teamKey };
   // The configuration this command found, put back when the server refuses
   // the init: a sync must not run with a remote or a branch the checkout
@@ -145,7 +153,7 @@ async function handleInit(args) {
   const report = () => {
     console.log(`Team initialized:
   Backend: ${backend}
-  Remote:  ${remote}
+  Remote:  ${displayRemote(remote)}
   Branch:  ${branch}
   Autosync: ${autosync ? 'on' : 'off'}
   Config:  ${TEAM_CONFIG_PATH}`);
@@ -232,6 +240,47 @@ function printAutosyncStatus(config) {
     run = ` (last run ${last.lastRun}, ${last.reason}, ${outcome}: ${last.detail})`;
   }
   console.log(`Autosync: ${config.autosync === true ? 'on' : 'off'}${run}`);
+}
+
+// The remote as the CLI shows it: a credential embedded in the URL is
+// masked, and the raw value is only ever handed to git.
+function displayRemote(remote) {
+  try {
+    const url = new URL(remote);
+    if (!url.username && !url.password) return remote;
+    url.username = '***';
+    url.password = '';
+    return url.toString();
+  } catch {
+    return remote;
+  }
+}
+
+// Leaves the team on this machine: the configuration (with the key) and the
+// sync checkout go, the state files of this machine stay, and the sealed
+// state on the remote stays for the other machines. init --key joins again.
+// A file that is not a readable configuration is refused, like every other
+// team command refuses it, never removed.
+function handleLeave() {
+  if (!fs.existsSync(TEAM_CONFIG_PATH)) {
+    console.error('Error: Team not initialized. Nothing to leave.');
+    process.exit(1);
+  }
+  const config = readTeamConfig();
+  if (!config) {
+    console.error(`Error: ${TEAM_CONFIG_PATH} is not a readable team configuration. Nothing was removed; inspect the file before removing it by hand.`);
+    process.exit(1);
+  }
+  fs.rmSync(TEAM_CONFIG_PATH, { force: true });
+  fs.rmSync(TEAM_SYNC_DIR, { recursive: true, force: true });
+  clearAutosyncStamp();
+  const remote = typeof config.remote === 'string' && config.remote ? displayRemote(config.remote) : '<remote>';
+  const branch = typeof config.branch === 'string' && config.branch ? ` --branch ${config.branch}` : '';
+  console.log(`Left the team:
+  Removed: ${TEAM_CONFIG_PATH} (the configuration and the key of this machine)
+  Removed: ${TEAM_SYNC_DIR} (the sync checkout)
+  Kept:    the state files of this machine under ~/.egc/state, and the sealed state on ${remote}
+To join again: egc team init --backend ${config.backend ?? 'git'} --remote ${remote}${branch} --key <team key>`);
 }
 
 async function handleSync() {
@@ -336,6 +385,10 @@ async function main() {
 
     case 'autosync':
       handleAutosync(args);
+      break;
+
+    case 'leave':
+      handleLeave();
       break;
 
     case 'status':

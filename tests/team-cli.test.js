@@ -316,7 +316,7 @@ function runTests() {
       }
     });
 
-    run('team autosync on and off round-trip in team.json, status shows the switch, and init --autosync turns it on', () => {
+    run('team autosync on and off round-trip in team.json, status shows the switch, and init turns it on unless --no-autosync', () => {
       const configPath = path.join(HOME, '.egc', 'team.json');
       const saved = fs.readFileSync(configPath, 'utf8');
       try {
@@ -339,8 +339,44 @@ function runTests() {
         assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
         assert.ok(run.stdout.includes('Autosync: on'), run.stdout);
         assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).autosync, true, 'init --autosync writes the switch');
+        run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--key', JSON.parse(saved).teamKey]);
+        assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+        assert.ok(run.stdout.includes('Autosync: on'), run.stdout);
+        assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).autosync, true, 'init turns the switch on by default');
+        run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--key', JSON.parse(saved).teamKey, '--no-autosync']);
+        assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+        assert.ok(run.stdout.includes('Autosync: off'), run.stdout);
+        assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).autosync, undefined, 'init --no-autosync leaves the switch off');
       } finally {
         fs.writeFileSync(configPath, saved);
+      }
+    });
+
+    run('team leave removes the configuration and the sync checkout, keeps the state files, prints the way back with the branch and without the credential, and refuses when there is no team or the file is not a configuration', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const checkout = path.join(HOME, '.egc', 'team-sync');
+      const stateDir = path.join(HOME, '.egc', 'state');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      const stateBefore = fs.existsSync(stateDir) ? treeDigest(stateDir) : {};
+      try {
+        fs.writeFileSync(configPath, JSON.stringify({ ...JSON.parse(saved), remote: 'https://user:secret@example.com/team.git', branch: 'team' }));
+        let run = teamCli(['leave']);
+        assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+        assert.ok(!fs.existsSync(configPath), 'team.json is gone');
+        assert.ok(!fs.existsSync(checkout), 'the sync checkout is gone');
+        assert.deepStrictEqual(fs.existsSync(stateDir) ? treeDigest(stateDir) : {}, stateBefore, 'no state file of the machine was removed or changed');
+        assert.ok(run.stdout.includes('--remote https://***@example.com/team.git --branch team --key'), `the way back names the branch and masks the credential:\n${run.stdout}`);
+        assert.ok(!run.stdout.includes('secret'), 'the credential is never printed');
+        run = teamCli(['leave']);
+        assert.strictEqual(run.status, 1, 'leaving twice is refused');
+        fs.writeFileSync(configPath, '{not json');
+        run = teamCli(['leave']);
+        assert.strictEqual(run.status, 1, 'a file that is not a configuration is refused');
+        assert.ok(fs.existsSync(configPath), 'and is not removed');
+        assert.ok(run.stderr.includes('not a readable team configuration'), run.stderr);
+      } finally {
+        fs.writeFileSync(configPath, saved);
+        teamCli(['sync']);
       }
     });
 
