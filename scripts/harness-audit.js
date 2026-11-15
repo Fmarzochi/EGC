@@ -215,6 +215,11 @@ function findPluginInstall(rootDir) {
     'everything-gemini@everything-gemini',
   ];
   const candidateRoots = [
+    // Claude Code's plugin roots first; the .gemini ones are where an install made before the rename landed.
+    path.join(rootDir, '.claude', 'plugins'),
+    path.join(rootDir, '.claude', 'plugins', 'marketplaces'),
+    homeDir && path.join(homeDir, '.claude', 'plugins'),
+    homeDir && path.join(homeDir, '.claude', 'plugins', 'marketplaces'),
     path.join(rootDir, '.gemini', 'plugins'),
     path.join(rootDir, '.gemini', 'plugins', 'marketplaces'),
     homeDir && path.join(homeDir, '.gemini', 'plugins'),

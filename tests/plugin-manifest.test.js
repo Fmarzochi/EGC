@@ -242,7 +242,7 @@ test('egc marketplace.json exists', () => {
 
 const claudeMarketplace = loadJsonObject(claudeMarketplacePath, '.claude-plugin/marketplace.json');
 
-test('egc marketplace.json keeps only Gemini-supported top-level keys', () => {
+test('egc marketplace.json keeps only Claude Code-supported top-level keys', () => {
   const unsupportedTopLevelKeys = ['$schema', 'description'];
   for (const key of unsupportedTopLevelKeys) {
     assert.ok(

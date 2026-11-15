@@ -505,7 +505,7 @@ function runTests() {
       assert.ok(normalizedSources.includes('rules/common/coding-style.md'));
       assert.ok(normalizedSources.includes('skills/demo/SKILL.md'));
       assert.ok(normalizedSources.includes('standalone.txt'));
-      assert.ok(!normalizedSources.includes('.claude-plugin/plugin.json'), 'the plugin manifest only the retired Gemini CLI read is not planned');
+      assert.ok(!normalizedSources.includes('.claude-plugin/plugin.json'), 'the Claude Code plugin manifest is not an install source');
       assert.ok(!normalizedSources.includes('missing.txt'));
       assert.ok(!normalizedSources.includes('runtime/egc/install-state.json'));
       assert.ok(!normalizedSources.includes('src/nested/egc-install-state.json'));
