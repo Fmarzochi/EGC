@@ -64,7 +64,7 @@ egc team
 
 ### Session Mesh: Tus sesiones abiertas se ven entre sí
 
-Dos pestañas Cursor, un terminal Claude Code y una sesión Antigravity comparten un autobús en vivo. Anuncian en qué están trabajando, reclaman los archivos que editan, trabajar unos a otros y recoger los eventos en el momento de su aterrizaje, por lo que las sesiones paralelas cooperan en lugar de chocar.
+Dos pestañas Cursor, un terminal Claude Code y una sesión Antigravity comparten un autobús en vivo. Anuncian en qué están trabajando, reclaman los archivos que editan, trabajar unos a otros y recoger eventos: una sesión aparcada en `session_wait` despierta el momento en que uno de ellos, las herramientas con un gancho de giro que puede inyectar contexto (Claude Code, Antigüedad, Codex, Trae, Amp, Kiro y OpenCode 2) reciben el aviso a su siguiente turno, y Cursor o Copilot leen el bus a través de las herramientas de sesión. Las sesiones paralelas cooperan en lugar de chocar.
 
 ### Guardiana: una capa de seguridad frente a cada comando
 

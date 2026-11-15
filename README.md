@@ -57,12 +57,12 @@ To keep your project state in step across your own machines, point EGC at a priv
 ```bash
 egc team init --backend git --remote https://github.com/you/egc-memory.git
 egc team init --backend git --remote https://github.com/you/egc-memory.git --key <team key>   # on each other machine; the key shows in the process list and stays in shell history, so clear that line and avoid shared machines
-egc team sync
+egc team sync   # by hand; the sessions also sync by themselves from init (egc team autosync off turns that off)
 ```
 
 ### Session Mesh: Your Open Sessions See Each Other
 
-Two Cursor tabs, a Claude Code terminal and an Antigravity session share one live bus. They announce what they are working on, claim the files they edit, hand work to each other and pick up events the moment they land, so parallel sessions cooperate instead of colliding.
+Two Cursor tabs, a Claude Code terminal and an Antigravity session share one live bus. They announce what they are working on, claim the files they edit, hand work to each other and pick up events: a session parked in `session_wait` wakes the moment one lands, the tools with a turn hook that can inject context (Claude Code, Antigravity, Codex, Trae, Amp, Kiro and OpenCode 2) get the notice at their next turn, and Cursor or Copilot read the bus through the session tools. Parallel sessions cooperate instead of colliding.
 
 ### Guardian: A Safety Layer in Front of Every Command
 

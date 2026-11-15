@@ -288,7 +288,7 @@ function runTests() {
         { id: 'agents-core', paths: ['.agents', 'agents', 'AGENTS.md'] },
         { id: 'commands-core', paths: ['commands'] },
         { id: 'hooks-runtime', paths: ['hooks', 'scripts/hooks', 'scripts/lib'] },
-        { id: 'platform-configs', paths: ['.gemini-plugin', 'mcp-configs', 'scripts/setup-package-manager.js'] },
+        { id: 'platform-configs', paths: ['.claude-plugin', 'mcp-configs', 'scripts/setup-package-manager.js'] },
       ],
     });
 
@@ -321,8 +321,8 @@ function runTests() {
     for (const residue of ['.agents', 'hooks', 'mcp-configs']) {
       assert.ok(!under(path.join(root, residue)), `${residue} was the retired Gemini CLI layout: nothing is planned there`);
     }
-    assert.ok(!destinations.includes(root), 'the .gemini-plugin manifest is no longer spread over the root (plugin.json, marketplace.json, README.md)');
-    assert.ok(!destinations.some(destination => destination.includes('.gemini-plugin')), 'nor copied as a directory');
+    assert.ok(!destinations.includes(root), 'the .claude-plugin manifest is no longer spread over the root (plugin.json, marketplace.json, README.md)');
+    assert.ok(!destinations.some(destination => destination.includes('.claude-plugin')), 'nor copied as a directory');
   }));
 
   tally(test('plans scaffold operations and flattens native target roots', () => {
@@ -1936,12 +1936,12 @@ function runTests() {
       modules: [
         {
           id: 'workflow',
-          paths: ['.cursor', '.opencode', '.gemini', '.gemini-plugin', 'skills/workflow/tdd-workflow'],
+          paths: ['.cursor', '.opencode', '.gemini', '.claude-plugin', 'skills/workflow/tdd-workflow'],
         },
       ],
     });
 
-    for (const foreign of ['.cursor', '.opencode', '.gemini', '.gemini-plugin']) {
+    for (const foreign of ['.cursor', '.opencode', '.gemini', '.claude-plugin']) {
       assert.ok(
         !plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === foreign),
         `Should filter out ${foreign} (owned by a different platform) instead of copying it into ~/.agents/`
@@ -2002,12 +2002,12 @@ function runTests() {
       modules: [
         {
           id: 'workflow',
-          paths: ['.cursor', '.codex', '.gemini', '.gemini-plugin', 'skills/workflow/tdd-workflow'],
+          paths: ['.cursor', '.codex', '.gemini', '.claude-plugin', 'skills/workflow/tdd-workflow'],
         },
       ],
     });
 
-    for (const foreign of ['.cursor', '.codex', '.gemini', '.gemini-plugin']) {
+    for (const foreign of ['.cursor', '.codex', '.gemini', '.claude-plugin']) {
       assert.ok(
         !plan.operations.some(op => normalizedRelativePath(op.sourceRelativePath) === foreign),
         `Should filter out ${foreign} (owned by a different platform) instead of copying it into ~/.config/opencode/`

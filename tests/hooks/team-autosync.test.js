@@ -162,9 +162,9 @@ function runTests() {
       assert.deepStrictEqual(logLines(first.home), [], 'no team: nothing to log');
       assert.ok(!fs.existsSync(path.join(first.home, '.egc', 'team-sync')), 'no team: no checkout appears');
 
-      teamCli(first.home, ['init', '--backend', 'git', '--remote', REMOTE]);
+      teamCli(first.home, ['init', '--backend', 'git', '--remote', REMOTE, '--no-autosync']);
       teamKey = teamConfig(first.home).teamKey;
-      assert.strictEqual(teamConfig(first.home).autosync, undefined, 'init without --autosync leaves the switch off');
+      assert.strictEqual(teamConfig(first.home).autosync, undefined, 'init --no-autosync leaves the switch off');
       hook = runHook(SESSION_END, first.home, first.project, { transcript_path: TRANSCRIPT });
       assert.strictEqual(hook.status, 0, hook.stderr);
       hook = runHook(CLAUDE_START, first.home, first.project, { cwd: first.project, hook_event_name: 'SessionStart' });

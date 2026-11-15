@@ -1,12 +1,12 @@
 /**
  * Tests for plugin manifests:
- *   - .gemini-plugin/plugin.json (Claude Code plugin)
+ *   - .claude-plugin/plugin.json (Claude Code plugin)
  *   - .codex-plugin/plugin.json (Codex native plugin)
  *   - .mcp.json (MCP server config at plugin root)
  *   - .agents/plugins/marketplace.json (Codex marketplace discovery)
  *
  * Enforces rules from:
- *   - .gemini-plugin/PLUGIN_SCHEMA_NOTES.md (Claude Code validator rules)
+ *   - .claude-plugin/PLUGIN_SCHEMA_NOTES.md (Claude Code validator rules)
  *   - https://platform.openai.com/docs/codex/plugins (Codex official docs)
  *
  * Run with: node tests/run-all.js
@@ -176,17 +176,17 @@ test('README.zh-CN.md latest release heading matches package.json', () => {
   );
 });
 
-// ── Gemini plugin manifest ────────────────────────────────────────────────────
-console.log('\n=== .gemini-plugin/plugin.json ===\n');
+// ── Claude Code plugin manifest ────────────────────────────────────────────────────
+console.log('\n=== .claude-plugin/plugin.json ===\n');
 
-const claudePluginPath = path.join(repoRoot, '.gemini-plugin', 'plugin.json');
-const claudeMarketplacePath = path.join(repoRoot, '.gemini-plugin', 'marketplace.json');
+const claudePluginPath = path.join(repoRoot, '.claude-plugin', 'plugin.json');
+const claudeMarketplacePath = path.join(repoRoot, '.claude-plugin', 'marketplace.json');
 
 test('egc plugin.json exists', () => {
-  assert.ok(fs.existsSync(claudePluginPath), 'Expected .gemini-plugin/plugin.json to exist');
+  assert.ok(fs.existsSync(claudePluginPath), 'Expected .claude-plugin/plugin.json to exist');
 });
 
-const claudePlugin = loadJsonObject(claudePluginPath, '.gemini-plugin/plugin.json');
+const claudePlugin = loadJsonObject(claudePluginPath, '.claude-plugin/plugin.json');
 
 test('egc plugin.json has version field', () => {
   assert.ok(claudePlugin.version, 'Expected version field');
@@ -223,7 +223,7 @@ test('egc plugin.json disables bundled MCP servers for provider tool-name compat
   assert.deepStrictEqual(
     claudePlugin.mcpServers,
     {},
-    'Gemini plugin installs must not auto-bundle root MCP servers; document/manual MCP install remains supported',
+    'Claude Code plugin installs must not auto-bundle root MCP servers; document/manual MCP install remains supported',
   );
 });
 
@@ -234,20 +234,20 @@ test('egc plugin.json does NOT have explicit hooks declaration', () => {
   );
 });
 
-console.log('\n=== .gemini-plugin/marketplace.json ===\n');
+console.log('\n=== .claude-plugin/marketplace.json ===\n');
 
 test('egc marketplace.json exists', () => {
-  assert.ok(fs.existsSync(claudeMarketplacePath), 'Expected .gemini-plugin/marketplace.json to exist');
+  assert.ok(fs.existsSync(claudeMarketplacePath), 'Expected .claude-plugin/marketplace.json to exist');
 });
 
-const claudeMarketplace = loadJsonObject(claudeMarketplacePath, '.gemini-plugin/marketplace.json');
+const claudeMarketplace = loadJsonObject(claudeMarketplacePath, '.claude-plugin/marketplace.json');
 
-test('egc marketplace.json keeps only Gemini-supported top-level keys', () => {
+test('egc marketplace.json keeps only Claude Code-supported top-level keys', () => {
   const unsupportedTopLevelKeys = ['$schema', 'description'];
   for (const key of unsupportedTopLevelKeys) {
     assert.ok(
       !(key in claudeMarketplace),
-      `.gemini-plugin/marketplace.json must not declare unsupported top-level key "${key}"`,
+      `.claude-plugin/marketplace.json must not declare unsupported top-level key "${key}"`,
     );
   }
 });

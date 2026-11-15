@@ -121,15 +121,15 @@ The time is that of the last commit in `~/.egc/team-sync/`, which is also set by
 
 ## Syncing by itself
 
-By default nothing syncs until you run `egc team sync`. To let the sessions do it:
+The sync around the session is on from `egc team init`: the sessions sync by themselves, and `egc team init ... --no-autosync` leaves it off on a machine that should only sync by hand with `egc team sync`. To change it later:
 
 ```text
-$ egc team autosync on
-Autosync: on
-The state syncs when a session starts, before it is read, and after a response that changed it. The outcome of each run is in ~/.egc/logs/team-autosync.log.
+$ egc team autosync off
+Autosync: off
+Nothing syncs by itself; run "egc team sync".
 ```
 
-`egc team init ... --autosync` turns it on at init, and `egc team autosync off` turns it off. The switch is `autosync: true` in `~/.egc/team.json` of that machine, nowhere else: turn it on where you want it.
+`egc team autosync on` turns it back on. The switch is `autosync: true` in `~/.egc/team.json` of that machine, nowhere else: set it where you want it. A `team.json` written before this version keeps the switch it has until `egc team init` runs again on that machine: `init` writes the switch on unless `--no-autosync` is passed.
 
 With it on:
 
@@ -148,6 +148,19 @@ Autosync: on (last run 2026-11-14T06:40:12.418Z, session-end, ok: pulled 0 files
 ```
 
 Offline is normal: the run is logged as failed with git's reason and the next session tries again. The OpenCode plugin waits up to 25 seconds for the restore when the switch is on: the sync's 15 seconds, the moments the sync gives a server that answered to leave, and the restore itself.
+
+## Leaving the team
+
+```text
+$ egc team leave
+Left the team:
+  Removed: ~/.egc/team.json (the configuration and the key of this machine)
+  Removed: ~/.egc/team-sync (the sync checkout)
+  Kept:    the state files of this machine under ~/.egc/state, and the sealed state on https://github.com/you/egc-memory.git
+To join again: egc team init --backend git --remote https://github.com/you/egc-memory.git --branch main --key <team key>
+```
+
+The state files of this machine stay where they are and keep working without a team; nothing is removed from the remote, so the other machines go on syncing. The key leaves with the configuration: keep it on another machine, or out of band, before the last machine leaves. The remote is printed as the configuration has it, with a credential embedded in the URL masked; a `team.json` that is not a readable configuration is refused, not removed.
 
 ## How two copies are merged
 

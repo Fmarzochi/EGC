@@ -80,7 +80,7 @@ const CASES = {
   'tool-paths.schema.json': () => assertValid('tool-paths.schema.json', repoJson('manifests/tool-paths.json'), 'manifests/tool-paths.json'),
   'install-profiles.schema.json': () => assertValid('install-profiles.schema.json', repoJson('manifests/install-profiles.json'), 'manifests/install-profiles.json'),
   'install-components.schema.json': () => assertValid('install-components.schema.json', repoJson('manifests/install-components.json'), 'manifests/install-components.json'),
-  'plugin.schema.json': () => assertValid('plugin.schema.json', repoJson('.gemini-plugin/plugin.json'), '.gemini-plugin/plugin.json'),
+  'plugin.schema.json': () => assertValid('plugin.schema.json', repoJson('.claude-plugin/plugin.json'), '.claude-plugin/plugin.json'),
   'runtime-map.schema.json': () => withTempDir(dir => {
     const outputPath = path.join(dir, 'runtime-map.json');
     discover({ outputPath });
@@ -159,7 +159,7 @@ test('the spec index lists only schemas that exist', () => {
 
 test('the spec index points only at documents that exist', () => {
   const spec = fs.readFileSync(path.join(repoRoot, 'docs', 'spec', 'README.md'), 'utf8');
-  const missing = [...new Set([...spec.matchAll(/`((?:docs|tests|schemas|scripts|manifests|hooks|\.gemini-plugin)\/[^`\s{}]+)`/g)].map(match => match[1]))]
+  const missing = [...new Set([...spec.matchAll(/`((?:docs|tests|schemas|scripts|manifests|hooks|\.claude-plugin)\/[^`\s{}]+)`/g)].map(match => match[1]))]
     .filter(relative => !fs.existsSync(path.join(repoRoot, relative)));
   assert.deepStrictEqual(missing, [], `docs/spec/README.md points at paths that do not exist: ${missing.join(', ')}`);
 });

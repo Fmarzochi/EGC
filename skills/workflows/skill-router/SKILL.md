@@ -20,7 +20,7 @@ The **Skill Router** describes how skills and agents from the EGC library
 
 The dynamic skill router (`scripts/runtime/router.js`) is not active in the
 current v1.x release. The runtime is fully driven by the static plugin
-manifests (`.gemini-plugin/plugin.json`, `.codex-plugin/plugin.json`) and the
+manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`) and the
 install adapters in `scripts/lib/install-targets/`.
 
 To inspect the available skill catalog, run:

@@ -196,7 +196,7 @@ function detectTargetMode(rootDir) {
 
   if (
     fileExists(rootDir, 'scripts/harness-audit.js') &&
-    fileExists(rootDir, '.gemini-plugin/plugin.json') &&
+    fileExists(rootDir, '.claude-plugin/plugin.json') &&
     fileExists(rootDir, 'agents') &&
     fileExists(rootDir, 'skills')
   ) {
@@ -215,6 +215,11 @@ function findPluginInstall(rootDir) {
     'everything-gemini@everything-gemini',
   ];
   const candidateRoots = [
+    // Claude Code's plugin roots first; the .gemini ones are where an install made before the rename landed.
+    path.join(rootDir, '.claude', 'plugins'),
+    path.join(rootDir, '.claude', 'plugins', 'marketplaces'),
+    homeDir && path.join(homeDir, '.claude', 'plugins'),
+    homeDir && path.join(homeDir, '.claude', 'plugins', 'marketplaces'),
     path.join(rootDir, '.gemini', 'plugins'),
     path.join(rootDir, '.gemini', 'plugins', 'marketplaces'),
     homeDir && path.join(homeDir, '.gemini', 'plugins'),
@@ -222,7 +227,7 @@ function findPluginInstall(rootDir) {
   ].filter(Boolean);
   const candidates = candidateRoots.flatMap((pluginsDir) =>
     pluginDirs.flatMap((pluginDir) => [
-      path.join(pluginsDir, pluginDir, '.gemini-plugin', 'plugin.json'),
+      path.join(pluginsDir, pluginDir, '.claude-plugin', 'plugin.json'),
       path.join(pluginsDir, pluginDir, 'plugin.json'),
     ])
   );

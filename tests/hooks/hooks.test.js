@@ -1990,7 +1990,7 @@ async function runTests() {
       // Claude Code automatically loads hooks/hooks.json by convention.
       // Explicitly declaring it in plugin.json causes a duplicate detection error.
       // See: https://github.com/Fmarzochi/EGC/issues/103
-      const pluginPath = path.join(__dirname, '..', '..', '.gemini-plugin', 'plugin.json');
+      const pluginPath = path.join(__dirname, '..', '..', '.claude-plugin', 'plugin.json');
       const plugin = JSON.parse(fs.readFileSync(pluginPath, 'utf8'));
 
       assert.ok(!plugin.hooks, 'plugin.json should NOT have "hooks" field - Claude Code auto-loads hooks/hooks.json');

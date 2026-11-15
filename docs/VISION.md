@@ -25,7 +25,7 @@ The prompt library (agents, skills, commands and rules) ships in the same packag
 
 - **Agent Memory Interchange.** A specification for how memory moves between agents and tools, so EGC's memory is readable and writable by anything that speaks the format; `egc export` is the first reference implementation (see [spec/](spec/README.md)).
 - **Team Brain.** Shared memory across machines and people. For one person it is part of the free engine: two or more machines on their own network, synchronized through a git remote they own, with no server of ours. For a team inside a company it becomes a paid service on top of the same code: a relay in real time, key distribution and rotation, SSO and SCIM, an audit trail and a dashboard, with organization-level installs, role-based scoping, cross-project federation and a stable, versioned MCP API. How a company buys it without touching the source code is designed once the single-person flow works.
-- **Neural mesh.** Assistants that talk to each other in real time over the session bus, the next step beyond the durable event queue that already carries messages between sessions.
+- **Neural mesh, the next layers.** The real-time layer already ships on each machine: sessions in every supported tool announce what they work on, address each other and claim the files they edit through the session tools; a session parked in `session_wait` wakes the moment a peer writes to the bus, and the hosts whose hook can inject context (Claude Code, Antigravity, Codex, Trae, Amp, Kiro and OpenCode 2) get the notice at the turn boundary, with expiring events and a cap on what one sender can leave unread. Two layers come next. Between the machines of one person the same bus crosses the network through a relay the person runs on one of their own machines, never a server of ours, so a tab on one computer sees what another computer works on; it is part of the free engine and its design follows the 1.1.24 release. On top of that: roles a group of sessions agrees on (conductor, worker, reviewer), handoffs in the middle of a task, locks that negotiate instead of refusing, and hop limits with a human circuit breaker as part of the protocol.
 - **Public savings.** The Token Crusher's ledger, `egc gain`, as a number people can compare and publish.
 - **One-command onboarding.** With the library opt-in, the three-stage install (bare install, project setup, optional library) folds into a single guided `egc install`.
 
@@ -40,18 +40,19 @@ EGC is maintained by one developer. The plan against a bus factor of one is peop
 Decided on 2026-11-01. Targeted at the next release; no date is promised until it ships. It builds on the `egc team` commands and the `team_init`, `team_sync` and `team_status` tools that already synchronize memory over a git remote, and turns them into something one person can trust between their own machines:
 
 - The same repository is the same project on every machine: the state is keyed by the normalized `origin` remote when the checkout has one, under the home or the temp directory, and by the folder path otherwise (#2063)
-- A merge of the memory documents with tombstones and caps instead of last-write-wins; author and signature on every entry
-- An identity per machine and a team key wrapped per member, with rotation and revocation
-- Secrets refused on the way out; size and rate limits on the sync
-- `join`, `leave`, `members` and key rotation as MCP tools and `egc team` subcommands; pull and push through the hooks of the tools that have them; team health in `egc doctor`
-- Everything behind a flag until it is proven on two real machines
-- The neural mesh between machines rides on the same transport first; a real-time relay comes with the team service below
+- A merge of the memory documents with retire marks and caps instead of last-write-wins (#2055); the author of a document travels in its header, and a signature per member moved to the team service below (#2056)
+- Secrets refused on the way out, and size and rate limits on the sync
+- `egc team leave` next to `init`, `sync`, `autosync` and `status` (joining is `init --key`), a subcommand this release adds; `members` and key rotation belong to the team service below
+- Pull and push through the hooks of the tools that have a session hook: Claude Code and OpenCode today (#2059), then Antigravity, Codex, Trae, Amp and Kiro; Cursor and Copilot have no hook to call and read the shared state when a session starts
+- Team health in `egc doctor` (#2058) and a marker of the team key in the shared repository, so a wrong key fails at `init` (#2080)
+- No feature flag: the Team Brain is on when `~/.egc/team.json` exists and off when it does not; the autosync, opt-in today (`init --autosync` or `egc team autosync on`), becomes on from `egc team init` in this release, with `egc team autosync off` to turn it off
+- The session mesh between a person's machines in real time is part of the free engine, through a relay the person runs on one of their own machines and never a server of ours; its design follows this release, and the hosted relay is the team service below
 
 ### Later: Team Brain for companies, as a paid service
 
 About three releases after the single-person Team Brain, on top of the same code and never as a lock inside it:
 
-- A relay in real time between machines, key distribution and rotation for a team, SSO and SCIM, an audit trail and a dashboard
+- A relay in real time between machines hosted by us, an identity per machine and a signature per member in the envelope (#2056), key distribution and rotation for a team with `members` and `rotate` commands, SSO and SCIM, an audit trail and a dashboard
 - Organization-level installations and role-based context scoping
 - Cross-project memory federation
 - Stable MCP server API with versioned interfaces
