@@ -64,7 +64,7 @@ egc team init --backend git --remote https://github.com/you/egc-memory. it --key
 
 ### Mesure de session : Vos sessions ouvertes Voir les autres
 
-Deux onglets Cursor, un terminal Claude Code et une session d'antigravité partagent un bus en direct. Ils annoncent sur quoi ils travaillent, réclament les fichiers qu'ils modifient, travaillent à la main les uns aux autres et ramassent les événements le moment où ils atterrissent, de sorte que les sessions parallèles coopèrent au lieu de collision.
+Deux onglets Cursor, un terminal Claude Code et une session d'antigravité partagent un bus en direct. Ils annoncent sur quoi ils travaillent, réclament les fichiers qu'ils modifient, travail main à la main et ramasser des événements : une session gardée dans `session_wait` réveille le moment où une terre, les outils avec un crochet qui peut injecter le contexte (Claude Code, Antigravity, Codex, Trae, Amp, Kiro et OpenCode 2) reçoivent l'avis à leur tour suivant, et Cursor ou Copilot lisent le bus à travers les outils de session. Les sessions parallèles coopèrent au lieu de se heurter.
 
 ### Gardien : Une couche de sécurité devant chaque commande
 

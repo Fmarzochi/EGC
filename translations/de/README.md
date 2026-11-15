@@ -64,7 +64,7 @@ egc Team-Sync
 
 ### Sitzungsnetz: Ihre offenen Sitzungen sehen jede andere
 
-Zwei Cursor-Registerkarten, ein Claude Code Terminal und eine Antigravity Session teilen sich einen Live-Bus. Sie verkünden, woran sie arbeiten, beanspruchen die Dateien, die sie bearbeiten, Hand arbeiten sich gegenseitig und holen die Veranstaltungen in dem Moment ab, in dem sie landen, so dass parallele Sitzungen zusammenarbeiten statt zu kollidieren.
+Zwei Cursor-Registerkarten, ein Claude Code Terminal und eine Antigravity Session teilen sich einen Live-Bus. Sie verkünden, woran sie arbeiten, beanspruchen die Dateien, die sie bearbeiten, handarbeit sich gegenseitig und holt Events ab: Eine Sitzung, die in `session_wait` geparkt ist, weckt den Moment eines Landes die Werkzeuge mit einem Turn Hook, der Kontext injizieren kann (Claude Code, Antigravity, Codex, Trae, Amp, Kiro und OpenCode 2) erhalten den Hinweis bei der nächsten Zugfahrt und Cursor oder Copilot lesen den Bus durch die Session-Tools. Parallele Sitzungen kooperieren statt kollidieren.
 
 ### Wächter: Eine Sicherheitsebene vor jedem Kommando
 
