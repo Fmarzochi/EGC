@@ -216,6 +216,14 @@ async function runTests() {
       const capped = [];
       teamSync.stageTeamState(refusedLocal, path.join(dir, 'capped-staged'), teamKey, personalKey, new Set(), capped, { documentBytes: 1024 * 1024, pushBytes: 100 });
       assert.ok(capped.some(entry => /past the 100 bytes one push may carry/.test(entry.reason)), `a push at its cap refuses what is left: ${JSON.stringify(capped)}`);
+      const again = [];
+      const second = teamSync.stageTeamState(refusedLocal, refusedStaged, teamKey, personalKey, new Set(), again, { documentBytes: 1024 * 1024, pushBytes: 10 });
+      assert.strictEqual(second, 1, 'the clean document, on the remote as it is, is counted and costs the push nothing');
+      assert.ok(!again.some(entry => /clean\.md/.test(entry.path)), `a document already sealed is never refused by the cap: ${JSON.stringify(again)}`);
+      assert.strictEqual(teamSync.secretShapeIn('ASIA' + 'A'.repeat(16) + ' is a temporary key'), 'an AWS access key id', 'temporary AWS keys are refused too');
+      assert.strictEqual(teamSync.secretShapeIn('client_secret = "s3cr3t-with.punct/uation!"'), 'a credential assignment', 'a quoted value with punctuation is refused');
+      assert.strictEqual(teamSync.secretShapeIn("password: 'correct horse battery'"), 'a credential assignment');
+      assert.strictEqual(teamSync.secretShapeIn('the token budget: 15000 tokens left this month'), null, 'prose with a colon is not a credential');
     });
 
     run('staging leaves a path the merge could not open as it is, so this machine never writes over an envelope it cannot read', () => {

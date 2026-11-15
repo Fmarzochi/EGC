@@ -29,26 +29,58 @@ const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
 // it is rewritten, and the version pushed before, if any, stays on the remote.
 const SECRET_SHAPES: ReadonlyArray<{ label: string; pattern: RegExp }> = [
   { label: 'a private key block', pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-  { label: 'an AWS access key id', pattern: /\bAKIA[0-9A-Z]{16}\b/ },
+  { label: 'an AWS access key id', pattern: /\bA(?:KIA|SIA)[0-9A-Z]{16}\b/ },
   { label: 'a GitHub token', pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_\w{22,})\b/ },
   { label: 'a Slack token', pattern: /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/ },
   { label: 'a Google API key', pattern: /\bAIza[0-9A-Za-z_-]{35}\b/ },
   { label: 'an Anthropic or OpenAI key', pattern: /\bsk-(?:ant-)?[A-Za-z0-9_-]{32,}\b/ },
   { label: 'a JSON web token', pattern: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/ },
-  { label: 'a credential assignment', pattern: /\b(?:api[_-]?key|secret|password|passwd|token)\b\s*[:=]\s*["']?[a-z0-9_\-/+]{20,}/i },
 ];
+
+// A credential assignment: one of the usual names, whole as a word, then
+// `=` or `:` and a value, quoted of eight characters or more or bare of
+// twelve or more. The names are a list, not one regular expression, so each
+// is checked as a word of its own.
+const CREDENTIAL_NAMES = [
+  'api_key', 'api-key', 'apikey',
+  'client_secret', 'client-secret', 'clientsecret',
+  'access_token', 'access-token', 'accesstoken',
+  'auth_token', 'auth-token', 'authtoken',
+  'refresh_token', 'refresh-token', 'refreshtoken',
+  'secret', 'password', 'passwd', 'token',
+];
+const ASSIGNED_VALUE = /^\s*[:=]\s*(?:"[^"\n]{8,}"|'[^'\n]{8,}'|[^\s"']{12,})/;
+const WORD_CHARACTER = /[a-z0-9_]/;
+
+function isWordAt(lower: string, start: number, end: number): boolean {
+  const before = start === 0 || !WORD_CHARACTER.test(lower[start - 1]);
+  const after = end === lower.length || !WORD_CHARACTER.test(lower[end]);
+  return before && after;
+}
+
+function hasCredentialAssignment(text: string): boolean {
+  const lower = text.toLowerCase();
+  for (const name of CREDENTIAL_NAMES) {
+    for (let at = lower.indexOf(name); at !== -1; at = lower.indexOf(name, at + name.length)) {
+      const end = at + name.length;
+      if (isWordAt(lower, at, end) && ASSIGNED_VALUE.test(text.slice(end))) return true;
+    }
+  }
+  return false;
+}
 
 export function secretShapeIn(text: string): string | null {
   for (const shape of SECRET_SHAPES) {
     if (shape.pattern.test(text)) return shape.label;
   }
-  return null;
+  return hasCredentialAssignment(text) ? 'a credential assignment' : null;
 }
 
 // How much one document, and one push, may carry: the state is prose about
 // a project, not a dump. A document above its cap is refused with its size;
-// once a push reaches its cap the documents left are refused too, and go
-// out with the next push after the person trimmed the state.
+// once a push reaches its cap the documents left are refused too and go out
+// with the next push, since a document already on the remote as it is costs
+// a push nothing.
 export const MAX_DOCUMENT_BYTES = 256 * 1024;
 export const MAX_PUSH_BYTES = 4 * 1024 * 1024;
 export interface StagingLimits { documentBytes: number; pushBytes: number }
@@ -720,46 +752,81 @@ function indexLegacyDocuments(localStateDir: string, personalKey: Buffer): Map<s
 // `keep` holds the relative paths the merge could not open: this machine
 // never writes its own state over an envelope it cannot read, so those
 // paths are left as they are and not staged.
-type StageContext = { localStateDir: string; syncStateDir: string; teamKey: Buffer; personalKey: Buffer; keep: ReadonlySet<string>; stagedByPath: Map<string, string>; refused: StagingRefusal[]; limits: StagingLimits; stagedBytes: number };
+type StageContext = { localStateDir: string; syncStateDir: string; teamKey: Buffer; personalKey: Buffer; keep: ReadonlySet<string>; refused: StagingRefusal[]; limits: StagingLimits };
 
 // Why a document may not leave: a secret shape in it, a size above the cap
 // of one document, or a push already at its cap. Null when it may leave.
-function refusalFor(plaintext: string, context: StageContext): string | null {
+function refusalFor(plaintext: string, bytes: number, stagedBytes: number, limits: StagingLimits): string | null {
   const shape = secretShapeIn(plaintext);
   if (shape) return `holds what looks like ${shape}`;
-  const bytes = Buffer.byteLength(plaintext, 'utf-8');
-  if (bytes > context.limits.documentBytes) return `is ${bytes} bytes, above the ${context.limits.documentBytes} bytes one document may carry`;
-  if (context.stagedBytes + bytes > context.limits.pushBytes) return `would take this push past the ${context.limits.pushBytes} bytes one push may carry`;
+  if (bytes > limits.documentBytes) return `is ${bytes} bytes, above the ${limits.documentBytes} bytes one document may carry`;
+  if (stagedBytes + bytes > limits.pushBytes) return `would take this push past the ${limits.pushBytes} bytes one push may carry`;
   return null;
 }
 
-// Seals one local document into the sync tree at the path it is shared
-// under. Two legacy documents of one repository (two checkouts of it on this
-// machine) share one path: what leaves is their merge, section by section.
-function stageOneDocument(localFile: string, context: StageContext): void {
-  let plaintext: string;
+// The first pass: every local document by the path it is shared under. Two
+// legacy documents of one repository (two checkouts of it on this machine)
+// share one path, and what leaves is their merge, section by section. The
+// merge is judged whole in the second pass, so a refusal leaves nothing of
+// either copy in the sync tree.
+function collectDocuments(context: StageContext): Map<string, string> {
+  const byPath = new Map<string, string>();
+  for (const localFile of walkEntries(context.localStateDir).files) {
+    if (isSidecar(localFile) || isHiddenEntry(localFile, context.localStateDir)) continue;
+    let plaintext: string;
+    try {
+      plaintext = readStateFile(localFile, context.personalKey);
+    } catch {
+      continue;
+    }
+    const sharedPath = sharedRelativePath(context.localStateDir, path.relative(context.localStateDir, localFile), plaintext);
+    if (sharedPath === null || context.keep.has(sharedPath)) continue;
+    const already = byPath.get(sharedPath);
+    byPath.set(sharedPath, already === undefined ? plaintext : mergeStateDocuments(already, plaintext));
+  }
+  return byPath;
+}
+
+// Whether the envelope already in the sync tree opens to this very text:
+// the document is on the remote as it is, so it is neither written again
+// nor counted against the push. A state larger than one push may carry
+// therefore goes out over several pushes instead of refusing the same
+// documents every time.
+function alreadySealed(target: string, plaintext: string, context: StageContext, sharedPath: string): boolean {
+  if (!fs.existsSync(target) || isLink(target)) return false;
   try {
-    plaintext = readStateFile(localFile, context.personalKey);
+    return openEnvelope(fs.readFileSync(target, 'utf-8'), context.teamKey, sharedPath) === plaintext;
   } catch {
-    return;
+    return false;
   }
-  const sharedPath = sharedRelativePath(context.localStateDir, path.relative(context.localStateDir, localFile), plaintext);
-  if (sharedPath === null || context.keep.has(sharedPath)) return;
-  const already = context.stagedByPath.get(sharedPath);
-  const chosen = already === undefined ? plaintext : mergeStateDocuments(already, plaintext);
-  if (chosen === already) return;
-  const refusal = refusalFor(chosen, context);
-  if (refusal !== null) {
-    context.refused.push({ path: sharedPath, reason: refusal });
-    return;
+}
+
+// The second pass: each document is judged whole and sealed into the sync
+// tree at the path it is shared under. Returns how many documents the tree
+// holds for this machine, written now or already there as they are.
+function sealDocuments(byPath: ReadonlyMap<string, string>, context: StageContext): number {
+  let stagedBytes = 0;
+  let staged = 0;
+  for (const [sharedPath, plaintext] of byPath) {
+    const target = path.join(context.syncStateDir, sharedPath);
+    if (alreadySealed(target, plaintext, context, sharedPath)) {
+      staged += 1;
+      continue;
+    }
+    const bytes = Buffer.byteLength(plaintext, 'utf-8');
+    const refusal = refusalFor(plaintext, bytes, stagedBytes, context.limits);
+    if (refusal !== null) {
+      context.refused.push({ path: sharedPath, reason: refusal });
+      continue;
+    }
+    if (isLink(target)) removeSyncFile(target);
+    if (hasLinkedAncestor(target, context.syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${sharedPath} and is not written`);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, sealEnvelope(plaintext, context.teamKey, sharedPath), 'utf-8');
+    stagedBytes += bytes;
+    staged += 1;
   }
-  const target = path.join(context.syncStateDir, sharedPath);
-  if (isLink(target)) removeSyncFile(target);
-  if (hasLinkedAncestor(target, context.syncStateDir)) throw new Error(`the sync state tree has a linked directory above ${sharedPath} and is not written`);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, sealEnvelope(chosen, context.teamKey, sharedPath), 'utf-8');
-  context.stagedByPath.set(sharedPath, chosen);
-  context.stagedBytes += Buffer.byteLength(chosen, 'utf-8');
+  return staged;
 }
 
 export function stageTeamState(localStateDir: string, syncStateDir: string, teamKey: Buffer, personalKey: Buffer, keep: ReadonlySet<string> = new Set(), refusals: StagingRefusal[] = [], limits: StagingLimits = DEFAULT_LIMITS): number {
@@ -769,11 +836,8 @@ export function stageTeamState(localStateDir: string, syncStateDir: string, team
   if (linkedSync) throw new Error(`the sync state tree is a link at ${linkedSync} and is not written`);
   if (!fs.existsSync(localStateDir)) return 0;
 
-  const context: StageContext = { localStateDir, syncStateDir, teamKey, personalKey, keep, stagedByPath: new Map(), refused: refusals, limits, stagedBytes: 0 };
-  for (const localFile of walkEntries(localStateDir).files) {
-    if (!isSidecar(localFile) && !isHiddenEntry(localFile, localStateDir)) stageOneDocument(localFile, context);
-  }
-  return context.stagedByPath.size;
+  const context: StageContext = { localStateDir, syncStateDir, teamKey, personalKey, keep, refused: refusals, limits };
+  return sealDocuments(collectDocuments(context), context);
 }
 
 // A hidden entry under the state tree is not a state document: the hooks

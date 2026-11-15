@@ -128,16 +128,71 @@ function stateChangedSince(homeDir, sinceMs) {
 }
 
 // The floor between two automatic pulls of one machine: several tabs
-// opening at once pull once, not once each. A push is paced by the state
-// itself (it runs only when a document changed), so it has no floor.
+// opening at once pull once, not once each. The push at the end of a
+// response is paced by the state itself (it runs only when a document
+// changed), so no push has a floor.
 const PULL_FLOOR_MS = 20000;
+// The runs that pull before the state is read; the floor is between them.
+const PULL_REASONS = new Set(['session-start']);
+// The claim one session holds while it pulls, so two sessions starting at
+// once do not both pull before either has left its stamp. A claim older
+// than this belongs to a session that died holding it, and is taken over.
+const PULL_CLAIM_STALE_MS = 60000;
+
+function pullClaimPath(homeDir) {
+  return path.join(egcDir(homeDir), 'team-autosync.pull');
+}
+
+function claimIsStale(claim, nowMs) {
+  try {
+    return nowMs - fs.statSync(claim).mtimeMs >= PULL_CLAIM_STALE_MS;
+  } catch {
+    return true;
+  }
+}
+
+// Takes the pull claim for this process: false when another live session
+// of this machine holds it.
+function claimPull(homeDir, nowMs = Date.now()) {
+  const claim = pullClaimPath(homeDir);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      fs.mkdirSync(path.dirname(claim), { recursive: true });
+      fs.writeFileSync(claim, JSON.stringify({ pid: process.pid, since: new Date(nowMs).toISOString() }), { flag: 'wx' });
+      return true;
+    } catch (error) {
+      if (error?.code !== 'EEXIST' || !claimIsStale(claim, nowMs)) return false;
+      try {
+        fs.rmSync(claim, { force: true });
+      } catch {
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+function releasePull(homeDir) {
+  try {
+    fs.rmSync(pullClaimPath(homeDir), { force: true });
+  } catch {
+    // a claim that cannot be removed goes stale and is taken over
+  }
+}
+
+// The moment of the last automatic pull: its own field in the stamp, kept
+// through the pushes written after it; a stamp from before that field
+// names it by its reason.
+function lastPullOf(stamp) {
+  if (!stamp) return undefined;
+  if (typeof stamp.lastPull === 'string') return stamp.lastPull;
+  return PULL_REASONS.has(stamp.reason) && typeof stamp.lastRun === 'string' ? stamp.lastRun : undefined;
+}
 
 // Whether a pull now would come too soon after the last automatic pull.
 function pullTooSoon(homeDir, reason, nowMs = Date.now()) {
-  if (reason !== 'session-start') return false;
-  const last = lastAutosync(homeDir);
-  if (!last || last.reason !== 'session-start') return false;
-  const lastMs = Date.parse(last.lastRun ?? '');
+  if (!PULL_REASONS.has(reason)) return false;
+  const lastMs = Date.parse(lastPullOf(lastAutosync(homeDir)) ?? '');
   return Number.isFinite(lastMs) && nowMs - lastMs < PULL_FLOOR_MS;
 }
 
@@ -187,13 +242,29 @@ function serverEnvironment(homeDir) {
  * options.onlyIfStateChanged  skip when no state file changed since the last run
  * options.homeDir             the home to read and write (the person's by default)
  *
- * Resolves with { ran: false, why } when nothing ran ('off', 'unchanged' or
- * 'no-server'), or with { ran: true, ok, detail }.
+ * Resolves with { ran: false, why } when nothing ran ('off', 'unchanged',
+ * 'no-server' or 'too-soon'), or with { ran: true, ok, detail }.
  */
 async function autosync(options = {}) {
   const homeDir = options.homeDir ?? os.homedir();
   const reason = options.reason ?? 'session';
   if (!isAutosyncOn(readTeamConfig(homeDir))) return { ran: false, why: 'off' };
+  // A pull runs under the claim of this machine: a second session starting
+  // at the same moment finds it held and leaves the pull to the first.
+  const pulls = PULL_REASONS.has(reason);
+  if (pulls && !claimPull(homeDir)) {
+    appendLog(homeDir, reason, 'skipped: another session of this machine is pulling right now');
+    return { ran: false, why: 'too-soon' };
+  }
+  try {
+    return await runAutosync(homeDir, reason, options);
+  } finally {
+    if (pulls) releasePull(homeDir);
+  }
+}
+
+// The run itself, under the claim when it pulls.
+async function runAutosync(homeDir, reason, options) {
   if (pullTooSoon(homeDir, reason)) {
     appendLog(homeDir, reason, `skipped: the last pull was under ${PULL_FLOOR_MS / 1000} s ago`);
     return { ran: false, why: 'too-soon' };
@@ -218,10 +289,13 @@ async function autosync(options = {}) {
     outcome = { ok: false, detail: error?.message || String(error) };
   }
   // The stamp is taken after the run, so the files the merge itself wrote
-  // do not count as a change for the next one.
-  writeStamp(homeDir, { lastRun: new Date().toISOString(), reason, ok: outcome.ok, detail: outcome.detail });
+  // do not count as a change for the next one. The moment of the last pull
+  // travels with it through the pushes, so the floor still holds after one.
+  const lastRun = new Date().toISOString();
+  const lastPull = PULL_REASONS.has(reason) ? lastRun : lastPullOf(lastAutosync(homeDir));
+  writeStamp(homeDir, { lastRun, reason, ok: outcome.ok, detail: outcome.detail, lastPull });
   appendLog(homeDir, reason, `${outcome.ok ? 'ok' : 'failed'}: ${outcome.detail}`);
   return { ran: true, ...outcome };
 }
 
-module.exports = { autosync, wouldSync, lastAutosync, clearAutosyncStamp, stateChangedSince, memoryServerScript, pullTooSoon, DEFAULT_BUDGET_MS, PULL_FLOOR_MS };
+module.exports = { autosync, wouldSync, lastAutosync, clearAutosyncStamp, stateChangedSince, memoryServerScript, pullTooSoon, claimPull, releasePull, DEFAULT_BUDGET_MS, PULL_FLOOR_MS, PULL_REASONS };

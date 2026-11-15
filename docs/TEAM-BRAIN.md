@@ -23,11 +23,11 @@ The local copy of your state stays encrypted at rest with the machine's own key,
 
 Before a document is sealed for the push, three checks keep it on the machine:
 
-- A document that holds what looks like a credential (a private key block, an AWS access key id, a GitHub, Slack or Google token, an Anthropic or OpenAI key, a JSON web token, or a `password = ...` style assignment) is not staged. The sync warns `Not pushed: state/<path> holds what looks like a GitHub token`; rewrite the document on that machine (the next `update_state` rewrites it) and sync again. The version pushed before, if any, stays on the remote.
+- A document that holds what looks like a credential (a private key block, an AWS access key id, a GitHub, Slack or Google token, an Anthropic or OpenAI key, a JSON web token, or a `password = ...` style assignment) is not staged. The sync warns `Not pushed: state/<path> holds what looks like a GitHub token`; remove or replace that content on that machine and sync again (an `update_state` that leaves the entry in place keeps the document refused). The version pushed before, if any, stays on the remote.
 - A document above 256 KiB of text is not staged, with its size in the warning.
-- A push carries at most 4 MiB of documents; once it reaches that, the documents left are refused with the same warning and go out with the next push, after the state was trimmed.
+- A push carries at most 4 MiB of new or changed documents; a document already on the remote as it is costs nothing, so a state larger than that goes out over several pushes, the documents left over refused with the same warning until their turn.
 
-The automatic pull has a floor: several sessions starting on one machine within 20 seconds pull once, not once each. A push is paced by the state itself, since it runs only when a document changed.
+The automatic pull has a floor: several sessions starting on one machine within 20 seconds pull once, not once each (one of them holds a claim while it pulls, the others see the claim or the record it leaves). The automatic push at the end of a response runs only when a document changed since the last run; the pull when a session starts and `egc team sync` by hand push whatever is new.
 
 ## Before you start
 

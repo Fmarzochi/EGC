@@ -10,7 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { pullTooSoon, wouldSync, PULL_FLOOR_MS } = require('../../scripts/lib/team-autosync');
+const { pullTooSoon, wouldSync, claimPull, releasePull, PULL_FLOOR_MS } = require('../../scripts/lib/team-autosync');
 
 let passed = 0;
 let failed = 0;
@@ -30,6 +30,7 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-autosync-floor-'));
 fs.mkdirSync(path.join(home, '.egc'), { recursive: true });
 fs.writeFileSync(path.join(home, '.egc', 'team.json'), JSON.stringify({ backend: 'git', remote: 'https://example.invalid/team.git', branch: 'main', teamKey: 'ab'.repeat(32), autosync: true }));
 const stamp = (lastRun, reason) => fs.writeFileSync(path.join(home, '.egc', 'team-autosync.json'), JSON.stringify({ lastRun, reason, ok: true, detail: 'ok' }));
+const stampFull = value => fs.writeFileSync(path.join(home, '.egc', 'team-autosync.json'), JSON.stringify(value));
 
 try {
   test('a pull right after another automatic pull is too soon, and wouldSync says so', () => {
@@ -51,6 +52,27 @@ try {
     assert.strictEqual(pullTooSoon(home, 'session-start'), false);
     fs.rmSync(path.join(home, '.egc', 'team-autosync.json'), { force: true });
     assert.strictEqual(pullTooSoon(home, 'session-start'), false);
+  });
+
+  test('a push keeps the record of the last pull, so the floor still holds after it', () => {
+    const now = new Date().toISOString();
+    stampFull({ lastRun: now, reason: 'session-end', ok: true, detail: 'pushed', lastPull: now });
+    assert.strictEqual(pullTooSoon(home, 'session-start'), true, 'the pull a moment ago counts after a push wrote the stamp');
+    stampFull({ lastRun: now, reason: 'session-end', ok: true, detail: 'pushed', lastPull: new Date(Date.now() - PULL_FLOOR_MS - 1000).toISOString() });
+    assert.strictEqual(pullTooSoon(home, 'session-start'), false, 'a pull older than the floor does not hold the next');
+  });
+
+  test('one session holds the pull claim at a time, and the claim of a session that died is taken over', () => {
+    const claim = path.join(home, '.egc', 'team-autosync.pull');
+    assert.strictEqual(claimPull(home), true, 'the first claim is taken');
+    assert.strictEqual(claimPull(home), false, 'a second session finds it held');
+    releasePull(home);
+    assert.ok(!fs.existsSync(claim), 'released, the claim is gone');
+    assert.strictEqual(claimPull(home), true, 'and is taken again');
+    const old = new Date(Date.now() - 120000);
+    fs.utimesSync(claim, old, old);
+    assert.strictEqual(claimPull(home), true, 'a claim left by a session that died is taken over');
+    releasePull(home);
   });
 } finally {
   fs.rmSync(home, { recursive: true, force: true });
