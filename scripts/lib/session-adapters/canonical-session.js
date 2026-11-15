@@ -36,6 +36,15 @@ function ensureString(value, fieldPath) {
   }
 }
 
+// A text field that may be empty: a worker whose task file is not written
+// yet has no objective, and that is a state of the session, not a malformed
+// snapshot.
+function ensureText(value, fieldPath) {
+  if (typeof value !== 'string') {
+    throw new TypeError(`Canonical session snapshot requires ${fieldPath} to be a string`);
+  }
+}
+
 function ensureOptionalString(value, fieldPath) {
   if (value !== null && value !== undefined && typeof value !== 'string') {
     throw new Error(`Canonical session snapshot requires ${fieldPath} to be a string or null`);
@@ -210,7 +219,7 @@ function validateCanonicalSnapshot(snapshot) {
       throw new Error(`Canonical session snapshot requires workers[${index}].intent to be an object`);
     }
 
-    ensureString(worker.intent.objective, `workers[${index}].intent.objective`);
+    ensureText(worker.intent.objective, `workers[${index}].intent.objective`);
     ensureArrayOfStrings(worker.intent.seedPaths, `workers[${index}].intent.seedPaths`);
 
     if (!isObject(worker.outputs)) {
@@ -424,14 +433,25 @@ function persistCanonicalSnapshot(snapshot, options = {}) {
   return writeFallbackSessionRecording(snapshot, options);
 }
 
-function normalizeDmuxSnapshot(snapshot, sourceTarget) {
-  const workers = (snapshot.workers || []).map(worker => ({
+// A worker folder can carry only some of its files (a pane that died before
+// writing its handoff, a status file not written yet): a missing status,
+// task, handoff or files object reads as an empty one.
+function objectOrEmpty(value) {
+  return isObject(value) ? value : {};
+}
+
+function normalizeDmuxWorker(worker) {
+  const status = objectOrEmpty(worker.status);
+  const task = objectOrEmpty(worker.task);
+  const handoff = objectOrEmpty(worker.handoff);
+  const files = objectOrEmpty(worker.files);
+  return {
     id: worker.workerSlug,
     label: worker.workerSlug,
-    state: worker.status.state || 'unknown',
+    state: status.state || 'unknown',
     health: deriveWorkerHealth(worker),
-    branch: worker.status.branch || null,
-    worktree: worker.status.worktree || null,
+    branch: status.branch || null,
+    worktree: status.worktree || null,
     runtime: {
       kind: 'tmux-pane',
       command: worker.pane ? worker.pane.currentCommand || null : null,
@@ -440,20 +460,24 @@ function normalizeDmuxSnapshot(snapshot, sourceTarget) {
       dead: worker.pane ? Boolean(worker.pane.dead) : false,
     },
     intent: {
-      objective: worker.task.objective || '',
-      seedPaths: Array.isArray(worker.task.seedPaths) ? worker.task.seedPaths : []
+      objective: task.objective || '',
+      seedPaths: Array.isArray(task.seedPaths) ? task.seedPaths : []
     },
     outputs: {
-      summary: Array.isArray(worker.handoff.summary) ? worker.handoff.summary : [],
-      validation: Array.isArray(worker.handoff.validation) ? worker.handoff.validation : [],
-      remainingRisks: Array.isArray(worker.handoff.remainingRisks) ? worker.handoff.remainingRisks : []
+      summary: Array.isArray(handoff.summary) ? handoff.summary : [],
+      validation: Array.isArray(handoff.validation) ? handoff.validation : [],
+      remainingRisks: Array.isArray(handoff.remainingRisks) ? handoff.remainingRisks : []
     },
     artifacts: {
-      statusFile: worker.files.status,
-      taskFile: worker.files.task,
-      handoffFile: worker.files.handoff
+      statusFile: files.status ?? null,
+      taskFile: files.task ?? null,
+      handoffFile: files.handoff ?? null
     }
-  }));
+  };
+}
+
+function normalizeDmuxSnapshot(snapshot, sourceTarget) {
+  const workers = (snapshot.workers || []).map(normalizeDmuxWorker);
 
   return validateCanonicalSnapshot({
     schemaVersion: SESSION_SCHEMA_VERSION,

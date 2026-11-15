@@ -66,7 +66,7 @@ If a surface exists only as a primitive, call that out. Example:
 
 Compare the workspace against:
 
-- official Gemini plugins that overlap with setup, review, docs, design, or workflow quality
+- official Claude Code plugins that overlap with setup, review, docs, design, or workflow quality
 - locally installed plugins in Gemini or Codex
 - the user's currently connected app surfaces
 
