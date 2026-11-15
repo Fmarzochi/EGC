@@ -58,8 +58,8 @@ Para manter o estado do seu projeto passo em suas próprias máquinas, aponte o 
 
 ```bash
 equipe egc init --backend git --remote https://github.com/you/egc-memory.git
-egc team init --backend git --remote https://github.com/you/egc-memory. --key <team key>   # uma na outra máquina; a chave mostra na lista de processos e permanece no histórico de shell tão claro que essa linha e evita que máquinas
-sincronize com a equipe egc
+egc team init --backend git --remote https://github.com/you/egc-memory. --key <team key>   # uma na outra máquina; a chave mostra na lista de processos e permanece no histórico de shell tão claro que essa linha e evite máquinas compartilhadas da equipe
+egc sincronização # manualmente; as sessões também sincronizam sozinhas a partir do init (sincronização automática do time egc desliga esse desligamento)
 ```
 
 ### format@@0 Session Mesh: Your Open Sessions See each other

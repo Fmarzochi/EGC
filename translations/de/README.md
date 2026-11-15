@@ -58,8 +58,8 @@ Um Ihren Projektstatus über Ihre eigenen Maschinen hinweg im Schritt zu halten,
 
 ```bash
 egc team init --backend git --remote https://github.com/you/egc-memory.git
-egc team init --backend git --remote https://github.com/you/egc-memory. es --key <team key>   # auf einander Maschine; der Schlüssel wird in der Prozessliste angezeigt und bleibt in der Shell-Chronik, so klar dass die Zeile und die Vermeidung gemeinsamer Maschinen
-egc Team-Sync
+egc team init --backend git --remote https://github.com/you/egc-memory. es --key <team key>   # auf einander Maschine; der Schlüssel wird in der Prozessliste angezeigt und bleibt in der Shell Historie so klar diese Zeile und vermeide geteilte Maschinen
+egc team synchronisieren # per Hand; die Sitzungen selbst von init synchronisieren (egc team autosync schaltet das aus)
 ```
 
 ### Sitzungsnetz: Ihre offenen Sitzungen sehen jede andere
