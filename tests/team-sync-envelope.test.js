@@ -193,6 +193,39 @@ async function runTests() {
       assert.ok(!fs.existsSync(path.join(stagedDir, 'proj', 'locked.md')), 'an undecryptable local file is not staged');
     });
 
+    run('a document that holds what looks like a secret, or more than a document or a push may carry, is refused on the way out and reported', () => {
+      const refusedLocal = path.join(dir, 'refused-local');
+      const refusedStaged = path.join(dir, 'refused-staged');
+      fs.mkdirSync(path.join(refusedLocal, 'proj'), { recursive: true });
+      encryption.writeStateFile(path.join(refusedLocal, 'proj', 'clean.md'), doc('2026-09-01T12:00:00.000Z', 'nothing to hide'), personalKey);
+      encryption.writeStateFile(path.join(refusedLocal, 'proj', 'key.md'), doc('2026-09-01T12:00:00.000Z', 'pasted by mistake\n-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----'), personalKey);
+      encryption.writeStateFile(path.join(refusedLocal, 'proj', 'token.md'), doc('2026-09-01T12:00:00.000Z', 'the token ghp_' + 'a'.repeat(36) + ' is in the notes'), personalKey);
+      encryption.writeStateFile(path.join(refusedLocal, 'proj', 'huge.md'), doc('2026-09-01T12:00:00.000Z', 'x'.repeat(300 * 1024)), personalKey);
+      const refusals = [];
+      const count = teamSync.stageTeamState(refusedLocal, refusedStaged, teamKey, personalKey, new Set(), refusals);
+      assert.strictEqual(count, 1, 'only the clean document is staged');
+      assert.ok(fs.existsSync(path.join(refusedStaged, 'proj', 'clean.md')), 'the clean document leaves');
+      for (const name of ['key.md', 'token.md', 'huge.md']) {
+        assert.ok(!fs.existsSync(path.join(refusedStaged, 'proj', name)), `${name} never leaves`);
+      }
+      const byPath = Object.fromEntries(refusals.map(entry => [entry.path.split(path.sep).join('/'), entry.reason]));
+      assert.match(byPath['proj/key.md'], /private key/);
+      assert.match(byPath['proj/token.md'], /GitHub token/);
+      assert.match(byPath['proj/huge.md'], /bytes, above the/);
+      assert.strictEqual(teamSync.secretShapeIn('a token budget of 15000 and secret scanning 0'), null, 'plain prose about tokens is not a secret');
+      const capped = [];
+      teamSync.stageTeamState(refusedLocal, path.join(dir, 'capped-staged'), teamKey, personalKey, new Set(), capped, { documentBytes: 1024 * 1024, pushBytes: 100 });
+      assert.ok(capped.some(entry => /past the 100 bytes one push may carry/.test(entry.reason)), `a push at its cap refuses what is left: ${JSON.stringify(capped)}`);
+      const again = [];
+      const second = teamSync.stageTeamState(refusedLocal, refusedStaged, teamKey, personalKey, new Set(), again, { documentBytes: 1024 * 1024, pushBytes: 10 });
+      assert.strictEqual(second, 1, 'the clean document, on the remote as it is, is counted and costs the push nothing');
+      assert.ok(!again.some(entry => /clean\.md/.test(entry.path)), `a document already sealed is never refused by the cap: ${JSON.stringify(again)}`);
+      assert.strictEqual(teamSync.secretShapeIn('ASIA' + 'A'.repeat(16) + ' is a temporary key'), 'an AWS access key id', 'temporary AWS keys are refused too');
+      assert.strictEqual(teamSync.secretShapeIn('client_secret = "s3cr3t-with.punct/uation!"'), 'a credential assignment', 'a quoted value with punctuation is refused');
+      assert.strictEqual(teamSync.secretShapeIn("password: 'correct horse battery'"), 'a credential assignment');
+      assert.strictEqual(teamSync.secretShapeIn('the token budget: 15000 tokens left this month'), null, 'prose with a colon is not a credential');
+    });
+
     run('staging leaves a path the merge could not open as it is, so this machine never writes over an envelope it cannot read', () => {
       const keptDir = path.join(dir, 'kept');
       fs.mkdirSync(path.join(keptDir, 'proj'), { recursive: true });
