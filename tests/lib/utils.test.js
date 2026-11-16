@@ -2731,6 +2731,13 @@ function runTests() {
   }));
 
   // Summary
+  tally(test('samePath compares resolved paths, folding case only where the platform does', () => {
+    assert.strictEqual(utils.samePath('/tmp/a/../b', '/tmp/b'), true, 'the paths are resolved before they are compared');
+    assert.strictEqual(utils.samePath('/tmp/b', '/tmp/c'), false);
+    const folded = process.platform === 'win32' || process.platform === 'darwin';
+    assert.strictEqual(utils.samePath('/tmp/Egc', '/tmp/egc'), folded, 'case is folded on Windows and macOS, kept on Linux');
+  }));
+
   console.log('\n=== Test Results ===');
   console.log(`Passed: ${passed}`);
   console.log(`Failed: ${failed}`);

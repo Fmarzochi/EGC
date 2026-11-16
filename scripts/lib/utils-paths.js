@@ -221,11 +221,15 @@ function ensurePrivateDir(dirPath) {
   return dirPath;
 }
 
-// The same directory on this platform: Windows paths compare without case.
+// The same directory on this platform: Windows and the default macOS
+// filesystems (HFS+, APFS) keep case without distinguishing it, so paths
+// compare folded there; Linux stays case-sensitive, like its filesystems.
+const CASE_INSENSITIVE_PATHS = process.platform === 'win32' || process.platform === 'darwin';
+
 function samePath(a, b) {
   const resolvedA = path.resolve(a);
   const resolvedB = path.resolve(b);
-  return process.platform === 'win32' ? resolvedA.toLowerCase() === resolvedB.toLowerCase() : resolvedA === resolvedB;
+  return CASE_INSENSITIVE_PATHS ? resolvedA.toLowerCase() === resolvedB.toLowerCase() : resolvedA === resolvedB;
 }
 
 module.exports = {
