@@ -55,6 +55,10 @@ Pass `scope: "global"` to write to the user-wide memory shared across all projec
 
 When more than one session works on this project at the same time, coordinate through the session bus: call `session_announce` at start (registers presence and territory, doubles as heartbeat), check `session_peers` before picking work, and `claim_path` before editing shared files. A refused claim means another live session holds that path: coordinate or work elsewhere, never retry in a loop.
 
+## One package, one install command
+
+EGC ships as a single npm package, `@egchq/egc`, installed with `npm install -g @egchq/egc` and configured with `egc install`. No other package name is published, reserved or written as an install command, anywhere. The package names that the private security advisory GHSA-v2wx-wrf4-9574 found in the library (names nobody had published, removed in #2128) never appear in public text and are never registered on npm, not even as placeholders. Before a release, every install command in the Markdown of the repository is checked against the npm registry.
+
 ## Where state is stored
 
 `~/.egc/state/<project-slug>/<branch>.md`: one file per project branch (flat `<project-slug>.md` files from older versions are still read). Files are encrypted at rest with AES-256-GCM (key at `~/.egc/encryption.key`); the memory server and session hooks decrypt them transparently.
