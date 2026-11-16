@@ -20,7 +20,7 @@ A 90-day deprecation window applies for `MAJOR` breaking changes to public-facin
 |---------|--------------|--------------|
 | Integration tiers | [`integration-tiers.md`](./integration-tiers.md) | `tests/spec/integration-tiers.test.js` |
 | Install paths per tool | [`tool-paths.md`](./tool-paths.md) (generated from `manifests/tool-paths.json`) | `tests/ci/tool-paths-contract.test.js` |
-| Agent memory interchange | [`agent-memory-interchange.md`](./agent-memory-interchange.md) | `tests/scripts/export.test.js` (export, section 8.1); gap: reference `egc import` planned |
+| Agent memory interchange | [`agent-memory-interchange.md`](./agent-memory-interchange.md) | `tests/scripts/export.test.js` (export, section 8.1); `tests/scripts/import.test.js` (import, section 8.2) |
 | Hooks contract | `schemas/hooks.schema.json` | `tests/spec/schemas.test.js` against `hooks/hooks.json`; `scripts/ci/validate-hooks.js` in CI |
 | Plugin manifest | `schemas/plugin.schema.json` | `tests/spec/schemas.test.js` against `.claude-plugin/plugin.json`; `tests/plugin-manifest.test.js` checks the manifests field by field |
 | Runtime map | `schemas/runtime-map.schema.json` | `tests/spec/schemas.test.js` against the file `scripts/runtime/discovery.js` writes |

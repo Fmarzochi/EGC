@@ -3,6 +3,8 @@
 This document is the release-by-release record of EGC (Extended Global Context): what shipped in each version and what is queued under Unreleased. The direction, the milestones and the non-goals live in [VISION.md](VISION.md).
 
 ## Unreleased
+- The agent registry of the repository's OpenCode configuration is generated from `agents/` like the prompts: one subagent per definition with its description, its model tier and its tool toggles (MCP tools a definition names stay enabled), the primary build agent kept in place, so the 37 agents the hand-written block never listed are available to OpenCode, and the drift check and the CI test cover the registry (#2153).
+- The committed catalog index follows the agent definitions again: it had kept the old description of `e2e-runner` after #2151; it is regenerated, and the integrity test fails when the committed index differs from what the skills, agents and rules generate today or when the TypeScript parts differ from the JSON twin (#2154).
 
 ## v1.1.25: The Fourteen Debts (Released 2026-11-16)
 - Every MCP tool of both servers is rate limited: the memory server gets the per-tool, per-project limiter the Guardian had (120 calls a minute for the memory server, 60 for the Guardian, each tool and project counted apart), a caller over the limit gets an error that names the tool, the limit and the variable that raises it, the refusal goes to the audit log, and `EGC_MCP_RATE_MAX_CALLS` and `EGC_MCP_RATE_WINDOW_MS` set the limit for both servers; `session_wait` is one call however long it parks (#2142).
