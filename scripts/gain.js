@@ -117,28 +117,29 @@ function printScopedTokens(label, totals, unavailableMessage) {
   console.log(`  ${label.padEnd(20)} ${value}`);
 }
 
-function main() {
-  const json = process.argv.includes('--json');
-
-  if (process.argv.includes('--share')) {
+// The two forms that read the raw entry list and print before the ledger
+// snapshot: --share and --history. Every other path uses a single
+// savingsLedgerOp() snapshot so the entry count and aggregate totals always
+// describe the same read (fixes double-read race reported in review).
+function printEarlyForm(argv, json) {
+  if (argv.includes('--share')) {
     const report = shareReport(readAll());
     if (json) console.log(JSON.stringify(report, null, 2));
     else printShare(report);
-    return;
+    return true;
   }
-
-  // --history needs the raw entry list; for all other paths we use a single
-  // savingsLedgerOp() snapshot so the entry count and aggregate totals always
-  // describe the same read (fixes double-read race reported in review).
-  if (process.argv.includes('--history')) {
+  if (argv.includes('--history')) {
     const entries = readAll();
-    if (json) {
-      console.log(JSON.stringify(entries, null, 2));
-      return;
-    }
-    printHistory(entries);
-    return;
+    if (json) console.log(JSON.stringify(entries, null, 2));
+    else printHistory(entries);
+    return true;
   }
+  return false;
+}
+
+function main() {
+  const json = process.argv.includes('--json');
+  if (printEarlyForm(process.argv, json)) return;
 
   const report = savingsLedgerOp();
   const totals = report.sinceInstall;

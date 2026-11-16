@@ -192,9 +192,13 @@ function changeSummary(before, after) {
   return summary;
 }
 
+function summaryVerb(opts, mode) {
+  if (opts.dryRun) return `would ${mode}`;
+  return mode === 'replace' ? 'replaced' : 'merged into';
+}
+
 function printSummary(opts, target, mode, summary) {
-  const verb = opts.dryRun ? `would ${mode}` : (mode === 'replace' ? 'replaced' : 'merged into');
-  console.log(`egc import: ${verb} ${target.label}`);
+  console.log(`egc import: ${summaryVerb(opts, mode)} ${target.label}`);
   console.log(`  file: ${target.file}`);
   for (const [heading, counts] of Object.entries(summary)) {
     console.log(`  ${heading}: ${counts.before} -> ${counts.after}`);

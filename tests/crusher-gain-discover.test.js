@@ -213,7 +213,7 @@ run('gain --share prints totals, kinds and layers and nothing that names the mac
   fs.writeFileSync(path.join(ledgerDir, 'crusher.jsonl'), rows.map(row => JSON.stringify(row)).join('\n') + '\n');
   const env = { ...process.env, HOME: home, USERPROFILE: home, EGC_CRUSHER_METRICS_FILE: path.join(ledgerDir, 'crusher.jsonl') };
 
-  const text = spawnSync('node', [GAIN, '--share'], { encoding: 'utf8', env });
+  const text = spawnSync(process.execPath, [GAIN, '--share'], { encoding: 'utf8', env });
   assert.strictEqual(text.status, 0, text.stderr);
   assert.ok(text.stdout.includes('| Crushed runs | 2 |'), text.stdout);
   assert.ok(text.stdout.includes('| Tokens saved | ~4.0K |'), text.stdout);
@@ -224,7 +224,7 @@ run('gain --share prints totals, kinds and layers and nothing that names the mac
     assert.ok(!text.stdout.includes(secret), `the shared block must not carry ${secret}`);
   }
 
-  const json = spawnSync('node', [GAIN, '--share', '--json'], { encoding: 'utf8', env });
+  const json = spawnSync(process.execPath, [GAIN, '--share', '--json'], { encoding: 'utf8', env });
   assert.strictEqual(json.status, 0, json.stderr);
   const report = JSON.parse(json.stdout);
   assert.deepStrictEqual(Object.keys(report).sort(), ['byKind', 'byLayer', 'bytesIn', 'bytesOut', 'efficiency', 'runs', 'tokensSaved']);
@@ -233,7 +233,7 @@ run('gain --share prints totals, kinds and layers and nothing that names the mac
     assert.ok(!json.stdout.includes(secret), `the JSON must not carry ${secret}`);
   }
 
-  const empty = spawnSync('node', [GAIN, '--share'], { encoding: 'utf8', env: { ...env, EGC_CRUSHER_METRICS_FILE: path.join(ledgerDir, 'none.jsonl') } });
+  const empty = spawnSync(process.execPath, [GAIN, '--share'], { encoding: 'utf8', env: { ...env, EGC_CRUSHER_METRICS_FILE: path.join(ledgerDir, 'none.jsonl') } });
   assert.strictEqual(empty.status, 0, empty.stderr);
   assert.ok(empty.stdout.includes('nothing to share'), empty.stdout);
 });
