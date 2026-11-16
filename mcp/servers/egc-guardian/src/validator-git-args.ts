@@ -604,6 +604,59 @@ function checkGitCommandOptions(subcommand: string, rest: string[], cwd?: string
   return null;
 }
 
+// The git commands that throw work away with no remote copy, no confirmation
+// and nothing but the reflog or the stash list to remember it: a reset that
+// rewrites the worktree, a branch deleted unmerged, a tag deleted, a restore
+// or a checkout that overwrites a path, a stash dropped or cleared. Each
+// refusal says what would be lost and the form that keeps it.
+const GIT_DISCARD_REASONS = {
+  resetHard: 'git reset --hard is forbidden: it throws away every change you have not committed, and the commits the branch moves off. Commit or stash the changes first, and move the branch with git reset --soft or --keep.',
+  resetMerge: 'git reset --merge is forbidden: it throws away the changes in the files the reset touches. Commit or stash them first.',
+  branchDelete: 'git branch -D is forbidden: it deletes a branch whose commits are merged nowhere, and only the reflog remembers them. Merge the branch, or delete it with git branch -d once it is merged.',
+  tagDelete: 'git tag -d is forbidden: a deleted tag has to be recreated on the exact commit it marked, and a release tag is what other people installed. Leave the tag in place.',
+  restore: 'git restore of the worktree is forbidden: it overwrites the changes in those files with the committed version, with no way to get them back. Commit or stash first; git restore --staged, which only unstages, stays allowed.',
+  checkoutPath: 'git checkout of a path is forbidden: it overwrites the changes in those files with the committed version, with no way to get them back. Commit or stash first; checking out a branch stays allowed.',
+  stashDrop: 'git stash drop is forbidden: it deletes stashed work that only the stash list holds. Apply or pop the stash instead.',
+  stashClear: 'git stash clear is forbidden: it deletes every stash at once. Apply or pop the stashes you want and leave the rest.',
+};
+
+function shortFlagCluster(token: string, letter: string): boolean {
+  return /^-[A-Za-z]+$/.test(token) && token.includes(letter);
+}
+
+function checkGitDiscardingWork(subcommand: string, rest: string[]): ValidationResult | null {
+  const exact = rest.map(stripQuotes);
+  const lower = exact.map(token => token.toLowerCase());
+  const deny = (reason: string): ValidationResult => ({ allowed: false, reason, trust_level: 'DANGEROUS' });
+  switch (subcommand) {
+    case 'reset':
+      if (lower.includes('--hard')) return deny(GIT_DISCARD_REASONS.resetHard);
+      if (lower.includes('--merge')) return deny(GIT_DISCARD_REASONS.resetMerge);
+      return null;
+    case 'branch':
+      return exact.some(token => shortFlagCluster(token, 'D')) ? deny(GIT_DISCARD_REASONS.branchDelete) : null;
+    case 'tag':
+      return lower.includes('--delete') || exact.some(token => shortFlagCluster(token, 'd'))
+        ? deny(GIT_DISCARD_REASONS.tagDelete)
+        : null;
+    case 'restore': {
+      const staged = exact.some(token => token === '--staged' || shortFlagCluster(token, 'S'));
+      const worktree = exact.some(token => token === '--worktree' || shortFlagCluster(token, 'W'));
+      return staged && !worktree ? null : deny(GIT_DISCARD_REASONS.restore);
+    }
+    case 'checkout':
+      return exact.includes('--') ? deny(GIT_DISCARD_REASONS.checkoutPath) : null;
+    case 'stash': {
+      const action = lower.find(token => !token.startsWith('-'));
+      if (action === 'drop') return deny(GIT_DISCARD_REASONS.stashDrop);
+      if (action === 'clear') return deny(GIT_DISCARD_REASONS.stashClear);
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
 export function validateGitArgs(args: string[], cwd?: string): ValidationResult {
   const subcommandIdx = findGitSubcommandIndex(args);
   const forceDenial = checkGitForceFlag(args, subcommandIdx, cwd);
@@ -620,6 +673,8 @@ export function validateGitArgs(args: string[], cwd?: string): ValidationResult 
   if (directoryDenial) return directoryDenial;
   const subcommand = bareToken(args[subcommandIdx]);
   const rest = args.slice(subcommandIdx + 1);
+  const discardDenial = checkGitDiscardingWork(subcommand, rest);
+  if (discardDenial) return discardDenial;
   const fileDenial = checkGitFileOperands(subcommand, rest, cwd);
   if (fileDenial) return fileDenial;
   const commandDenial = checkGitCommandOptions(subcommand, rest, cwd) ?? checkNewRepositorySettings(subcommand, rest, cwd);
