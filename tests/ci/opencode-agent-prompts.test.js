@@ -93,7 +93,16 @@ test('a registry entry carries the description, the model tier, the prompt file 
   const bare = registryEntry('z', '---\nname: z\ndescription: Does z\nmodel: sonnet\n---\nYou are z.\n');
   assert.strictEqual(bare.model, 'pro', 'any other model is the pro tier');
   assert.ok(!Object.hasOwn(bare, 'tools'), 'no tools field leaves the toggles to OpenCode');
+  const mcp = registryEntry('docs', '---\nname: docs\ndescription: "Looks things up."\ntools: ["Read", "Grep", "mcp__context7__resolve-library-id", "mcp__context7__query-docs"]\n---\nYou look up.\n');
+  assert.strictEqual(mcp.description, 'Looks things up.', 'a quoted description loses its quotes');
+  assert.deepStrictEqual(mcp.tools, {
+    read: true, bash: false, write: false, edit: false,
+    'mcp__context7__resolve-library-id': true, 'mcp__context7__query-docs': true,
+  }, 'an MCP tool the definition names stays enabled under its own key');
+  const block = registryEntry('b', '---\nname: b\ndescription: Block list\ntools:\n  - Read\n  - "Bash"\n  - mcp__github__get_issue\nmodel: gemini-3.1-pro\n---\nYou are b.\n');
+  assert.deepStrictEqual(block.tools, { read: true, bash: true, write: false, edit: false, mcp__github__get_issue: true }, 'a tools list written in block form reads like the flow form');
   assert.deepStrictEqual(agentFrontmatter('No frontmatter at all'), {});
+  assert.deepStrictEqual(agentFrontmatter("---\nname: 'q'\ntools:\n---\nBody\n"), { name: 'q', tools: [] }, 'single quotes drop too, and an empty block list is empty');
 });
 
 test('writeRegistry keeps the primary agents and the other sections, registers every definition and drops an entry without an agent', () => {
@@ -121,6 +130,9 @@ test('writeRegistry keeps the primary agents and the other sections, registers e
 
     const config = JSON.parse(fs.readFileSync(path.join(root, CONFIG_FILE), 'utf8'));
     assert.deepStrictEqual(Object.keys(config), ['$schema', 'model', 'agent', 'command', 'permission'], 'the other sections stay in their place');
+    assert.strictEqual(config.$schema, 'https://opencode.ai/config.json');
+    assert.strictEqual(config.model, 'flash');
+    assert.deepStrictEqual(config.permission, { 'mcp_*': 'ask' }, 'the permission section is kept as written');
     assert.deepStrictEqual(Object.keys(config.agent), ['build', 'one', 'two'], 'the primary agent first, then one entry per definition, the stray one gone');
     assert.deepStrictEqual(config.agent.build, build, 'the primary agent is kept as written');
     assert.strictEqual(config.agent.two.description, 'Does two');
@@ -135,7 +147,9 @@ test('writeRegistry keeps the primary agents and the other sections, registers e
 
 test('every agent is registered in opencode.json, no entry drifted and no entry is without an agent', () => {
   const report = registryDrift(ROOT);
-  assert.ok(report.total >= 60, `expected the agent library plus the primary agent, found ${report.total}`);
+  const definitions = fs.readdirSync(path.join(ROOT, 'agents')).filter(name => name.endsWith('.md')).length;
+  assert.strictEqual(report.total, definitions + 1, `expected the ${definitions} agents plus the primary build agent, found ${report.total}`);
+  assert.ok(Object.hasOwn(JSON.parse(fs.readFileSync(path.join(ROOT, CONFIG_FILE), 'utf8')).agent, 'build'), 'the primary build agent stays registered');
   assert.deepStrictEqual(report.missing, [], `agents without a registry entry: ${report.missing.join(', ')}`);
   assert.deepStrictEqual(report.drifted, [], `registry entries drifted from agents/: ${report.drifted.join(', ')}`);
   assert.deepStrictEqual(report.orphans, [], `registry entries without an agent: ${report.orphans.join(', ')}`);

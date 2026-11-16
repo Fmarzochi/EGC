@@ -91,26 +91,57 @@ function writePrompts(root) {
   return { written, total: Object.keys(expected).length };
 }
 
-/** The frontmatter fields of an agent definition, one `key: value` per line. */
+// A YAML scalar may be written between matching quotes; the quotes are not
+// part of the value.
+function unquote(value) {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  if ((quote === '"' || quote === "'") && trimmed.length > 1 && trimmed.endsWith(quote)) return trimmed.slice(1, -1);
+  return trimmed;
+}
+
+/**
+ * The frontmatter fields of an agent definition: `key: value` lines, and a
+ * key followed by `- item` lines for a list written in block form.
+ */
 function agentFrontmatter(markdown) {
   const match = markdown.match(FRONTMATTER);
   const fields = {};
   if (!match) return fields;
+  let listKey = null;
   for (const line of match[0].split(/\r?\n/)) {
+    if (line.startsWith('---')) continue;
+    const indented = line !== line.trimStart();
+    const trimmed = line.trim();
+    if (indented && listKey && trimmed.startsWith('-')) {
+      const item = unquote(trimmed.slice(1));
+      if (item) fields[listKey].push(item);
+      continue;
+    }
     const colon = line.indexOf(':');
-    if (colon < 1 || line.startsWith('---')) continue;
-    fields[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+    if (colon < 1 || indented) continue;
+    const key = line.slice(0, colon).trim();
+    const value = line.slice(colon + 1).trim();
+    if (value === '') {
+      fields[key] = [];
+      listKey = key;
+    } else {
+      fields[key] = unquote(value);
+      listKey = null;
+    }
   }
   return fields;
 }
 
-// The tools field is an inline list, quoted or not: ["Read", "Bash"] or
-// [Read, Bash]. Only the names matter here.
+// The tools field is a list in flow form, quoted or not (["Read", "Bash"] or
+// [Read, Bash]), or already an array when it was written in block form. Only
+// the names matter here.
 function toolNames(value) {
+  if (Array.isArray(value)) return value.map(name => unquote(name)).filter(Boolean);
   return value
     .replace(/^\[|\]$/g, '')
     .split(',')
-    .map(name => name.trim().replace(/^["']|["']$/g, ''))
+    .map(name => unquote(name))
     .filter(Boolean);
 }
 
@@ -122,14 +153,21 @@ function registryModel(model) {
 
 // Read, Grep and Glob are all reads in OpenCode; the four toggles are spelt
 // out so a definition without Write or Edit cannot write through a default.
+// An MCP tool the definition names (mcp__<server>__<tool>) stays enabled
+// under its own key, so the agent keeps the server it was written for.
 function registryTools(value) {
-  const names = new Set(toolNames(value));
-  return {
-    read: ['Read', 'Grep', 'Glob'].some(name => names.has(name)),
-    bash: names.has('Bash'),
-    write: names.has('Write'),
-    edit: names.has('Edit'),
+  const names = toolNames(value);
+  const has = new Set(names);
+  const tools = {
+    read: ['Read', 'Grep', 'Glob'].some(name => has.has(name)),
+    bash: has.has('Bash'),
+    write: has.has('Write'),
+    edit: has.has('Edit'),
   };
+  for (const name of names) {
+    if (name.startsWith('mcp__')) tools[name] = true;
+  }
+  return tools;
 }
 
 /** The opencode.json agent entry a definition asks for. */
@@ -141,7 +179,7 @@ function registryEntry(name, markdown) {
     model: registryModel(fields.model),
     prompt: `{file:prompts/agents/${name}.txt}`,
   };
-  if (fields.tools) entry.tools = registryTools(fields.tools);
+  if (fields.tools && fields.tools.length > 0) entry.tools = registryTools(fields.tools);
   return entry;
 }
 

@@ -260,7 +260,9 @@
         "read": true,
         "bash": false,
         "write": false,
-        "edit": false
+        "edit": false,
+        "mcp__context7__resolve-library-id": true,
+        "mcp__context7__query-docs": true
       }
     },
     "e2e-runner": {
@@ -324,7 +326,7 @@
       }
     },
     "gan-evaluator": {
-      "description": "\"GAN Harness: Evaluator agent. Tests the live running application via Playwright, scores against rubric, and provides actionable feedback to the Generator.\"",
+      "description": "GAN Harness: Evaluator agent. Tests the live running application via Playwright, scores against rubric, and provides actionable feedback to the Generator.",
       "mode": "subagent",
       "model": "pro",
       "prompt": "{file:prompts/agents/gan-evaluator.txt}",
@@ -336,7 +338,7 @@
       }
     },
     "gan-generator": {
-      "description": "\"GAN Harness: Generator agent. Implements features according to the spec, reads evaluator feedback, and iterates until quality threshold is met.\"",
+      "description": "GAN Harness: Generator agent. Implements features according to the spec, reads evaluator feedback, and iterates until quality threshold is met.",
       "mode": "subagent",
       "model": "pro",
       "prompt": "{file:prompts/agents/gan-generator.txt}",
@@ -348,7 +350,7 @@
       }
     },
     "gan-planner": {
-      "description": "\"GAN Harness: Planner agent. Expands a one-line prompt into a full product specification with features, sprints, evaluation criteria, and design direction.\"",
+      "description": "GAN Harness: Planner agent. Expands a one-line prompt into a full product specification with features, sprints, evaluation criteria, and design direction.",
       "mode": "subagent",
       "model": "pro",
       "prompt": "{file:prompts/agents/gan-planner.txt}",
