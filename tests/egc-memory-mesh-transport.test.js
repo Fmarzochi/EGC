@@ -11,8 +11,9 @@
  * no duplicates) across two live sqlite connections to the same store.
  *
  * Compiles the real src/ modules via tests/lib/egc-memory-src.js and skips
- * cleanly when the TypeScript compiler or the sqlite driver is not reachable
- * from the root or the server's node_modules (yarn's linker hoists neither).
+ * cleanly when neither the root nor the server's node_modules offers a usable
+ * TypeScript compiler API or a sqlite driver that loads (yarn's linker hoists
+ * neither, and the root copies may resolve without being runnable).
  *
  * Run with: node tests/egc-memory-mesh-transport.test.js
  */
@@ -20,11 +21,17 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { loadTypescript, loadSqliteDriver, compileMemoryModule } = require('./lib/egc-memory-src');
+const {
+  loadTypescriptDetail,
+  loadSqliteDriver,
+  compileMemoryModule,
+  describeTypescriptCandidates,
+  describeSqliteCandidates
+} = require('./lib/egc-memory-src');
 
-const ts = loadTypescript();
+const { ts, candidates: typescriptCandidates } = loadTypescriptDetail();
 if (!ts) {
-  console.log('[SKIP] typescript not resolvable from the root or server node_modules.');
+  console.log(`[SKIP] no usable TypeScript compiler API: ${describeTypescriptCandidates(typescriptCandidates)}`);
   process.exit(0);
 }
 const mesh = compileMemoryModule('mesh-transport', ts);
@@ -259,7 +266,7 @@ async function main() {
 
   const driver = loadSqliteDriver();
   if (!driver) {
-    console.log('[SKIP] sqlite driver not resolvable; end-to-end bus delivery not exercised.');
+    console.log(`[SKIP] no loadable sqlite driver; end-to-end bus delivery not exercised: ${describeSqliteCandidates()}`);
   } else {
     await run('wake-on-write delivers real bus events in order, no loss, no duplicates', async () => {
       await withTempDir(async dir => {
