@@ -25,10 +25,25 @@
  * hunt through every suite.
  */
 
+// Under tests/run-all.js --jobs the file shares the CPU with the other
+// workers of the pool (the runner marks those children with EGC_TEST_POOL),
+// and the same install that takes 40 s alone took more than 180 s on this
+// machine with eight workers (#2145). The budgets double there; alone, and
+// in the serial group, they stay as they are.
+const POOL_MULTIPLIER = 2;
+const POOL_SCALE = process.env.EGC_TEST_POOL ? POOL_MULTIPLIER : 1;
+const BASE_FULL_INSTALL_TIMEOUT_MS = 180000;
+const BASE_CLI_TIMEOUT_MS = 30000;
+
 // For suites that install or uninstall a target end to end.
-const FULL_INSTALL_TIMEOUT_MS = 180000;
+const FULL_INSTALL_TIMEOUT_MS = BASE_FULL_INSTALL_TIMEOUT_MS * POOL_SCALE;
 
 // For suites that only spawn a CLI to read output (--help, --json probes).
-const CLI_TIMEOUT_MS = 30000;
+const CLI_TIMEOUT_MS = BASE_CLI_TIMEOUT_MS * POOL_SCALE;
 
-module.exports = { FULL_INSTALL_TIMEOUT_MS, CLI_TIMEOUT_MS };
+// What a pooled child reads as CLI_TIMEOUT_MS, computed here so the runner,
+// which is never pooled itself, can hand the same number to the Guardian
+// budget of that child (EGC_GUARDIAN_TIMEOUT_MS in tests/fixtures/suite-env.js).
+const POOLED_CLI_TIMEOUT_MS = BASE_CLI_TIMEOUT_MS * POOL_MULTIPLIER;
+
+module.exports = { FULL_INSTALL_TIMEOUT_MS, CLI_TIMEOUT_MS, POOL_SCALE, POOLED_CLI_TIMEOUT_MS };

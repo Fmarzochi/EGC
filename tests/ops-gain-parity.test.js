@@ -15,6 +15,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
+const { seedLedger } = require('./fixtures/crusher-ledger');
 const { savingsLedger: savingsLedgerOp } = require('../scripts/lib/operations/index');
 const { createOpsHandler } = require('../dashboard/ops');
 
@@ -97,9 +98,7 @@ function createFixtureLedger(nowDate) {
 test('savingsLedger operation reads environment-configured metrics ledger without client path parameter exposure', () => {
   const origFile = process.env.EGC_CRUSHER_METRICS_FILE;
   const metricsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-metrics-dir-'));
-  const validLedger = path.join(metricsDir, 'crusher.jsonl');
-  
-  fs.writeFileSync(validLedger, JSON.stringify({ ts: new Date().toISOString(), tokensSaved: 100 }) + '\n');
+  const { ledgerPath: validLedger } = seedLedger(metricsDir, [{ ts: new Date().toISOString(), tokensSaved: 100 }]);
 
   try {
     process.env.EGC_CRUSHER_METRICS_FILE = validLedger;
