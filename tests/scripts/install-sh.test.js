@@ -264,12 +264,18 @@ function runTests() {
         fs.mkdirSync(path.dirname(path.join(sandbox, file)), { recursive: true });
         fs.copyFileSync(path.join(serverRoot, file), path.join(sandbox, file));
       }
+      const startedAt = Date.now();
       const res = spawnSync('bash', ['-c', `set -e\n${helper}\ncd "$1"\n${buildBlocks[0]}`, 'install-build', sandbox], {
         encoding: 'utf8',
         env: { ...process.env, ROOT_DIR: repoRoot, NODE_ENV: 'production' },
         timeout: FULL_INSTALL_TIMEOUT_MS,
       });
-      assert.strictEqual(res.status, 0, `${res.stdout}\n${res.stderr}`);
+      const elapsedMs = Date.now() - startedAt;
+      assert.strictEqual(
+        res.status,
+        0,
+        `install-build exited with ${res.status} (signal ${res.signal}) after ${elapsedMs} ms, budget ${FULL_INSTALL_TIMEOUT_MS} ms${process.env.EGC_TEST_POOL ? ' (pooled run)' : ''}\n${res.stdout}\n${res.stderr}`
+      );
       assert.ok(fs.existsSync(path.join(sandbox, 'build', 'index.js')), 'the built server exists');
     } finally {
       cleanup(sandbox);
