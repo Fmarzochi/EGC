@@ -234,6 +234,12 @@ const server = http.createServer((req, res) => {
     const MAX_SIZE = 256 * 1024; // 256 KB cap
     let exceeded = false;
 
+    // A body that ends mid-chunk or a socket that drops still gets an answer
+    // instead of a request left hanging (#2140).
+    req.on('error', () => {
+      if (!res.headersSent) sendJson(res, 400, { error: 'Malformed request body' });
+    });
+
     req.on('data', d => {
       if (exceeded) return;
       
@@ -268,7 +274,14 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      if (accumulateEvent(ev)) {
+      let accepted;
+      try {
+        accepted = accumulateEvent(ev);
+      } catch {
+        sendJson(res, 400, { error: 'Malformed event' });
+        return;
+      }
+      if (accepted) {
         const msg = JSON.stringify(ev);
         for (const ws of clients) { if (ws.readyState === 1) ws.send(msg); }
       }

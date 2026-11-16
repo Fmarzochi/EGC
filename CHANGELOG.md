@@ -4,6 +4,16 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+### Added (CLI and dashboard)
+
+- **`egc import`, the way back from `egc export`** (#2138): `egc import <file> [--project <path>] [--scope project|global] [--replace] [--dry-run] [--json]` reads an AMI document (`docs/spec/agent-memory-interchange.md`), refuses one that does not parse or that carries the shape of a credential (the refusal names the shape, never the value), merges it into the memory of the scope (entries the memory lacks are appended to their sections, the Context is taken from the document when it has one) or replaces that memory with `--replace`, and writes through the same encrypted, locked path the hooks use, with the integrity sidecar; `--dry-run` prints the change per section and writes nothing. The spec page lists the command.
+- **`egc gain --share`, the savings as a block a person can paste anywhere** (#2139): runs, output before and after, tokens saved, efficiency, the top command kinds and the layers, in Markdown or as an object with `--json`, and nothing that names the machine, a project, a session or a command line.
+- **The OpenCode prompt of every agent is generated from `agents/`** (#2141): `node scripts/opencode-agent-prompts.js` writes `.opencode/prompts/agents/<name>.txt` from the body of each definition (61 prompts, where 24 hand-written ones had drifted from their agents), `--check` reports a missing, drifted or orphan prompt, and `tests/ci/opencode-agent-prompts.test.js` fails on any of the three.
+
+### Fixed (CLI and dashboard)
+
+- **One browser tab per dashboard launch, the ping on the address the server listens on, and `POST /event` always answers** (#2140): `egc init` and `egc install` start `scripts/dashboard.js` with `--no-browser` and open the tab themselves once the server answers (two tabs before, reported on Windows in #1523); the launcher and the script ping `127.0.0.1`, where the server listens, while the browser keeps `localhost`; a request body that ends mid-chunk or an event the accumulator cannot take gets a 400 instead of a request left hanging. The panel itself is unchanged.
+
 ## [1.1.24] - 2026-11-16
 
 ### Added

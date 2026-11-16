@@ -5,7 +5,7 @@
 // ledger only and prints to the terminal, so the report itself costs zero
 // tokens. `egc saved` stays as the short summary; gain is the detailed view.
 
-const { readAll, metricsFilePath } = require('./lib/crusher/metrics');
+const { readAll, metricsFilePath, aggregate } = require('./lib/crusher/metrics');
 const { savingsLedger: savingsLedgerOp } = require('./lib/operations/index');
 
 
@@ -66,6 +66,50 @@ function printHistory(entries) {
   }
 }
 
+// The numbers a person can paste anywhere (#2139): totals, kinds and layers,
+// nothing that names the machine, a project or a session. The kinds are the
+// crusher's own categories (git-log, npm-install, ...), never a command line.
+const SHARE_TOP_KINDS = 5;
+
+function shareReport(entries) {
+  const totals = aggregate(entries);
+  const efficiency = totals.bytesIn > 0 ? Math.round((1 - totals.bytesOut / totals.bytesIn) * 100) : 0;
+  const byKind = Object.fromEntries(
+    Object.entries(totals.byKind)
+      .sort((a, b) => b[1].tokensSaved - a[1].tokensSaved)
+      .map(([kind, value]) => [kind, { runs: value.runs, tokensSaved: value.tokensSaved }])
+  );
+  const byLayer = Object.fromEntries(
+    Object.entries(totals.byLayer || {}).map(([layer, value]) => [layer, { runs: value.runs, tokensSaved: value.tokensSaved }])
+  );
+  return { runs: totals.runs, bytesIn: totals.bytesIn, bytesOut: totals.bytesOut, tokensSaved: totals.tokensSaved, efficiency, byKind, byLayer };
+}
+
+function printShare(report) {
+  if (report.runs === 0) {
+    console.log('EGC Token Crusher: no crushed runs recorded yet, nothing to share.');
+    return;
+  }
+  const kinds = Object.entries(report.byKind).slice(0, SHARE_TOP_KINDS)
+    .map(([kind, value]) => `${kind} ~${formatTokens(value.tokensSaved)}`).join(', ');
+  const layers = Object.entries(report.byLayer)
+    .map(([layer, value]) => `${layer} ~${formatTokens(value.tokensSaved)}`).join(', ');
+  console.log('### EGC Token Crusher savings');
+  console.log('');
+  console.log('| Metric | Value |');
+  console.log('|---|---|');
+  console.log(`| Crushed runs | ${report.runs} |`);
+  console.log(`| Output before | ${formatBytes(report.bytesIn)} |`);
+  console.log(`| Output after | ${formatBytes(report.bytesOut)} |`);
+  console.log(`| Tokens saved | ~${formatTokens(report.tokensSaved)} |`);
+  console.log(`| Efficiency | ${report.efficiency}% |`);
+  console.log('');
+  console.log(`By command kind: ${kinds}`);
+  console.log(`By layer: ${layers}`);
+  console.log('');
+  console.log('Measured locally by EGC (egc gain --share); no machine, project or session identifiers.');
+}
+
 function printScopedTokens(label, totals, unavailableMessage) {
   const value = totals?.available === false
     ? unavailableMessage
@@ -75,6 +119,13 @@ function printScopedTokens(label, totals, unavailableMessage) {
 
 function main() {
   const json = process.argv.includes('--json');
+
+  if (process.argv.includes('--share')) {
+    const report = shareReport(readAll());
+    if (json) console.log(JSON.stringify(report, null, 2));
+    else printShare(report);
+    return;
+  }
 
   // --history needs the raw entry list; for all other paths we use a single
   // savingsLedgerOp() snapshot so the entry count and aggregate totals always

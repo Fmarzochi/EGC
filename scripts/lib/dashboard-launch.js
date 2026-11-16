@@ -11,6 +11,10 @@ const { spawn, spawnSync } = require('node:child_process');
 const { PORT } = require(path.join(__dirname, '..', '..', 'dashboard', 'port'));
 
 const DASHBOARD_URL = `http://localhost:${PORT}`;
+// The browser gets localhost, which is the origin the panel's CORS rules
+// expect; the ping goes to 127.0.0.1, the address the server listens on, so
+// a machine where localhost resolves to ::1 first still sees it (#2140).
+const PING_URL = `http://127.0.0.1:${PORT}`;
 
 /**
  * Checks whether the dashboard server answers /ping.
@@ -19,7 +23,7 @@ const DASHBOARD_URL = `http://localhost:${PORT}`;
  */
 function pingDashboard() {
   return new Promise(resolve => {
-    const req = http.get(`${DASHBOARD_URL}/ping`, res => { res.resume(); resolve(res.statusCode === 200); });
+    const req = http.get(`${PING_URL}/ping`, res => { res.resume(); resolve(res.statusCode === 200); });
     req.on('error', () => resolve(false));
     req.setTimeout(500, () => { req.destroy(); resolve(false); });
   });
@@ -31,10 +35,10 @@ function pingDashboard() {
  * @param {number} timeoutMs Budget in milliseconds to wait for the dashboard to respond.
  * @returns {Promise<boolean>} True if dashboard becomes reachable within timeoutMs.
  */
-async function waitForDashboard(timeoutMs) {
+async function waitForDashboard(timeoutMs, ping = pingDashboard) {
   const deadline = Date.now() + timeoutMs;
   async function poll() {
-    const up = await pingDashboard();
+    const up = await ping();
     if (up) return true;
     if (Date.now() >= deadline) return false;
     await new Promise(resolve => setTimeout(resolve, 250));
@@ -91,9 +95,11 @@ function createLaunchResult(ready, browserOpened) {
  * @param {object} [options]
  * @param {(msg: string) => void} [options.log] Callback for user-facing log lines.
  * @param {() => boolean} [options.browserOpener] Browser opener function.
+ * @param {typeof spawn} [options.spawner] Starts the dashboard script (a test hands in a recorder).
+ * @param {() => Promise<boolean>} [options.ping] Asks whether the server answers (a test hands in a script).
  * @returns {Promise<false | { ready: true, browserOpened: boolean }>}
  */
-async function launchDashboard({ log = () => {}, browserOpener = openBrowser } = {}) {
+async function launchDashboard({ log = () => {}, browserOpener = openBrowser, spawner = spawn, ping = pingDashboard } = {}) {
   // The script to run is derived from this file's own location, never from
   // a caller-supplied root. Every caller (init.js, install-apply.js, the
   // shell wrapper) already resolved the same package root, so nothing
@@ -104,7 +110,7 @@ async function launchDashboard({ log = () => {}, browserOpener = openBrowser } =
   if (!fs.existsSync(dashboardScript)) return false;
 
   try {
-    const already = await pingDashboard();
+    const already = await ping();
     if (already) {
       log(`Dashboard already running at ${DASHBOARD_URL}`);
       const browserOpened = browserOpener();
@@ -121,7 +127,10 @@ async function launchDashboard({ log = () => {}, browserOpener = openBrowser } =
     // explicit that shell is only needed for .bat/.cmd files, that detached
     // works on Windows without it, and that enabling it with unsanitized
     // input allows arbitrary command execution.
-    const child = spawn(process.execPath, [dashboardScript], {
+    // --no-browser: the script's own start() would open a tab as soon as the
+    // server answers, and this function opens one below, so egc init showed
+    // two (#2140, reported on Windows in #1523). One opener, here.
+    const child = spawner(process.execPath, [dashboardScript, 'start', '--no-browser'], {
       detached: true,
       stdio: 'ignore',
       env: { ...process.env, EGC_PORT: String(PORT) },
@@ -145,7 +154,7 @@ async function launchDashboard({ log = () => {}, browserOpener = openBrowser } =
     const installAhead = depsReport.missing.length > 0 && depsReport.writable && depsReport.manifestError === null;
     if (installAhead) log('First launch may install dashboard dependencies; giving it up to a minute.');
     const budgetMs = installAhead ? 60000 : 4000;
-    const ready = await waitForDashboard(budgetMs);
+    const ready = await waitForDashboard(budgetMs, ping);
     if (ready) {
       const browserOpened = browserOpener();
       if (browserOpened) {

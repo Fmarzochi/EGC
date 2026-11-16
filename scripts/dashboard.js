@@ -13,6 +13,10 @@ const PID_FILE = path.join(require('node:os').homedir(), '.egc', 'dashboard.pid'
 
 const args = process.argv.slice(2);
 const flag = args[0];
+// egc init and egc install start this script through scripts/lib/dashboard-launch.js,
+// which opens the browser itself once the server answers; they pass
+// --no-browser so this script does not open a second tab (#2140).
+const openWanted = wantsBrowser(args);
 
 // Resolve port lazily so a missing dashboard directory produces the friendly
 // "EGC Dashboard not found" error instead of a MODULE_NOT_FOUND crash.
@@ -23,7 +27,10 @@ function getPort() {
 function isRunning() {
   const port = getPort();
   return new Promise(resolve => {
-    const req = http.get(`http://localhost:${port}/ping`, res => {
+    // The server listens on 127.0.0.1 (dashboard/server.js); the ping goes to
+    // the same address, so a machine where localhost resolves to ::1 first
+    // does not report a running server as down.
+    const req = http.get(`http://127.0.0.1:${port}/ping`, res => {
       res.resume();
       resolve(res.statusCode === 200);
     });
@@ -103,7 +110,7 @@ async function start() {
   const already = await isRunning();
   if (already) {
     console.log(`EGC Dashboard already running at http://localhost:${PORT}`);
-    openBrowser();
+    if (openWanted) openBrowser();
     return;
   }
 
@@ -129,7 +136,7 @@ async function start() {
     process.exit(1);
   }
   console.log(`EGC Dashboard running at http://localhost:${PORT}`);
-  openBrowser();
+  if (openWanted) openBrowser();
 }
 
 async function stop() {
@@ -168,12 +175,16 @@ async function status() {
   }
 }
 
-(async () => {
+function wantsBrowser(argv) {
+  return !argv.includes('--no-browser');
+}
+
+if (require.main === module) (async () => {
   if (flag === '--stop' || flag === 'stop') return stop();
   if (flag === '--status' || flag === 'status') return status();
   if (flag === '--help' || flag === '-h') {
     console.log('Usage: egc dashboard [stop|status]');
-    console.log('  (no args)  Start dashboard and open browser');
+    console.log('  (no args)  Start dashboard and open browser (--no-browser starts it without the tab)');
     console.log('  stop       Stop the background server');
     console.log('  status     Show whether the server is running');
     return;
@@ -183,3 +194,5 @@ async function status() {
   console.error(`Error: ${error.message}`);
   process.exit(1);
 });
+
+module.exports = { wantsBrowser };
