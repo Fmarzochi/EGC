@@ -35,11 +35,59 @@
         "changed-files": true
       }
     },
-    "planner": {
-      "description": "Expert planning specialist for complex features and refactoring. Use for implementation planning, architectural changes, or complex refactoring.",
+    "a11y-architect": {
+      "description": "Accessibility Architect specializing in WCAG 2.2 compliance for Web and Native platforms. Use PROACTIVELY when designing UI components, establishing design systems, or auditing code for inclusive user experiences.",
       "mode": "subagent",
       "model": "pro",
-      "prompt": "{file:prompts/agents/planner.txt}",
+      "prompt": "{file:prompts/agents/a11y-architect.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "architect": {
+      "description": "REPO-OWNED ARCHITECT for system design, scalability, and technical decision-making. Use PROACTIVELY when planning new features, refactoring large systems, or making architectural decisions.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/architect.txt}",
+      "tools": {
+        "read": true,
+        "bash": false,
+        "write": false,
+        "edit": false
+      }
+    },
+    "build-error-resolver": {
+      "description": "Build and TypeScript error resolution specialist. Use PROACTIVELY when build fails or type errors occur. Fixes build/type errors only with minimal diffs, no architectural edits. Focuses on getting the build green quickly.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/build-error-resolver.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "chief-of-staff": {
+      "description": "Personal communication chief of staff that triages email, Slack, LINE, and Messenger. Classifies messages into 4 tiers (skip/info_only/meeting_info/action_required), generates draft replies, and enforces post-send follow-through via hooks. Use when managing multi-channel communication workflows.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/chief-of-staff.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "code-architect": {
+      "description": "Designs feature architectures by analyzing existing codebase patterns and conventions, then providing implementation blueprints with concrete files, interfaces, data flow, and build order.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/code-architect.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -47,11 +95,11 @@
         "edit": false
       }
     },
-    "architect": {
-      "description": "Software architecture specialist for system design, scalability, and technical decision-making.",
+    "code-explorer": {
+      "description": "Deeply analyzes existing codebase features by tracing execution paths, mapping architecture layers, and documenting dependencies to inform new development.",
       "mode": "subagent",
       "model": "pro",
-      "prompt": "{file:prompts/agents/architect.txt}",
+      "prompt": "{file:prompts/agents/code-explorer.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -60,7 +108,7 @@
       }
     },
     "code-reviewer": {
-      "description": "Expert code review specialist. Reviews code for quality, security, and maintainability. Use immediately after writing or modifying code.",
+      "description": "Expert code review specialist. Proactively reviews code for quality, security, and maintainability. Use immediately after writing or modifying code. MUST BE USED for all code changes.",
       "mode": "subagent",
       "model": "pro",
       "prompt": "{file:prompts/agents/code-reviewer.txt}",
@@ -71,11 +119,11 @@
         "edit": false
       }
     },
-    "security-reviewer": {
-      "description": "Security vulnerability detection and remediation specialist. Use after writing code that handles user input, authentication, API endpoints, or sensitive data.",
+    "code-simplifier": {
+      "description": "Simplifies and refines code for clarity, consistency, and maintainability while preserving behavior. Focus on recently modified code unless instructed otherwise.",
       "mode": "subagent",
       "model": "pro",
-      "prompt": "{file:prompts/agents/security-reviewer.txt}",
+      "prompt": "{file:prompts/agents/code-simplifier.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -83,71 +131,11 @@
         "edit": true
       }
     },
-    "tdd-guide": {
-      "description": "Test-Driven Development specialist enforcing write-tests-first methodology. Use when writing new features, fixing bugs, or refactoring code. Ensures 80%+ test coverage.",
+    "comment-analyzer": {
+      "description": "Analyze code comments for accuracy, completeness, maintainability, and comment rot risk.",
       "mode": "subagent",
       "model": "pro",
-      "prompt": "{file:prompts/agents/tdd-guide.txt}",
-      "tools": {
-        "read": true,
-        "write": true,
-        "edit": true,
-        "bash": true
-      }
-    },
-    "build-error-resolver": {
-      "description": "Build and TypeScript error resolution specialist. Use when build fails or type errors occur. Fixes build/type errors only with minimal diffs.",
-      "mode": "subagent",
-      "model": "pro",
-      "prompt": "{file:prompts/agents/build-error-resolver.txt}",
-      "tools": {
-        "read": true,
-        "write": true,
-        "edit": true,
-        "bash": true
-      }
-    },
-    "e2e-runner": {
-      "description": "End-to-end testing specialist using Playwright. Generates, maintains, and runs E2E tests for critical user flows.",
-      "mode": "subagent",
-      "model": "pro",
-      "prompt": "{file:prompts/agents/e2e-runner.txt}",
-      "tools": {
-        "read": true,
-        "write": true,
-        "edit": true,
-        "bash": true
-      }
-    },
-    "doc-updater": {
-      "description": "Documentation and codemap specialist. Use for updating codemaps and documentation.",
-      "mode": "subagent",
-      "model": "pro",
-      "prompt": "{file:prompts/agents/doc-updater.txt}",
-      "tools": {
-        "read": true,
-        "write": true,
-        "edit": true,
-        "bash": true
-      }
-    },
-    "refactor-cleaner": {
-      "description": "Dead code cleanup and consolidation specialist. Use for removing unused code, duplicates, and refactoring.",
-      "mode": "subagent",
-      "model": "pro",
-      "prompt": "{file:prompts/agents/refactor-cleaner.txt}",
-      "tools": {
-        "read": true,
-        "write": true,
-        "edit": true,
-        "bash": true
-      }
-    },
-    "go-reviewer": {
-      "description": "Expert Go code reviewer specializing in idiomatic Go, concurrency patterns, error handling, and performance.",
-      "mode": "subagent",
-      "model": "pro",
-      "prompt": "{file:prompts/agents/go-reviewer.txt}",
+      "prompt": "{file:prompts/agents/comment-analyzer.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -155,32 +143,32 @@
         "edit": false
       }
     },
-    "go-build-resolver": {
-      "description": "Go build, vet, and compilation error resolution specialist. Fixes Go build errors with minimal changes.",
+    "conversation-analyzer": {
+      "description": "Use this agent when analyzing conversation transcripts to find behaviors worth preventing with hooks. Triggered by /hookify without arguments.",
       "mode": "subagent",
       "model": "pro",
-      "prompt": "{file:prompts/agents/go-build-resolver.txt}",
+      "prompt": "{file:prompts/agents/conversation-analyzer.txt}",
       "tools": {
         "read": true,
-        "write": true,
-        "edit": true,
-        "bash": true
+        "bash": false,
+        "write": false,
+        "edit": false
       }
     },
-    "database-reviewer": {
-      "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance.",
+    "cpp-build-resolver": {
+      "description": "C++ build, CMake, and compilation error resolution specialist. Fixes build errors, linker issues, and template errors with minimal changes. Use when C++ builds fail.",
       "mode": "subagent",
       "model": "pro",
-      "prompt": "{file:prompts/agents/database-reviewer.txt}",
+      "prompt": "{file:prompts/agents/cpp-build-resolver.txt}",
       "tools": {
         "read": true,
+        "bash": true,
         "write": true,
-        "edit": true,
-        "bash": true
+        "edit": true
       }
     },
     "cpp-reviewer": {
-      "description": "Expert C++ code reviewer specializing in memory safety, modern C++ idioms, concurrency, and performance. Use for all C++ code changes.",
+      "description": "Expert C++ code reviewer specializing in memory safety, modern C++ idioms, concurrency, and performance. Use for all C++ code changes. MUST BE USED for C++ projects.",
       "mode": "subagent",
       "model": "pro",
       "prompt": "{file:prompts/agents/cpp-reviewer.txt}",
@@ -191,23 +179,11 @@
         "edit": false
       }
     },
-    "cpp-build-resolver": {
-      "description": "C++ build, CMake, and compilation error resolution specialist. Fixes build errors, linker issues, and template errors with minimal changes.",
+    "csharp-reviewer": {
+      "description": "Expert C# code reviewer specializing in .NET conventions, async patterns, security, nullable reference types, and performance. Use for all C# code changes. MUST BE USED for C# projects.",
       "mode": "subagent",
       "model": "pro",
-      "prompt": "{file:prompts/agents/cpp-build-resolver.txt}",
-      "tools": {
-        "read": true,
-        "write": true,
-        "edit": true,
-        "bash": true
-      }
-    },
-    "docs-lookup": {
-      "description": "Documentation specialist using Context7 MCP to fetch current library and API documentation with code examples.",
-      "mode": "subagent",
-      "model": "flash",
-      "prompt": "{file:prompts/agents/docs-lookup.txt}",
+      "prompt": "{file:prompts/agents/csharp-reviewer.txt}",
       "tools": {
         "read": true,
         "bash": true,
@@ -215,19 +191,262 @@
         "edit": false
       }
     },
+    "dart-build-resolver": {
+      "description": "Dart/Flutter build, analysis, and dependency error resolution specialist. Fixes `dart analyze` errors, Flutter compilation failures, pub dependency conflicts, and build_runner issues with minimal, surgical changes. Use when Dart/Flutter builds fail.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/dart-build-resolver.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "database-reviewer": {
+      "description": "PostgreSQL database specialist for query optimization, schema design, security, and performance. Use PROACTIVELY when writing SQL, creating migrations, designing schemas, or troubleshooting database performance.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/database-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "django-build-resolver": {
+      "description": "Django/Python build, migration, and dependency error resolution specialist. Fixes pip/Poetry errors, migration conflicts, import errors, Django configuration issues, and collectstatic failures with minimal changes. Use when Django setup or startup fails.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/django-build-resolver.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "django-reviewer": {
+      "description": "Expert Django code reviewer specializing in ORM correctness, DRF patterns, migration safety, security misconfigurations, and production-grade Django practices. Use for all Django code changes. MUST BE USED for Django projects.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/django-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "doc-updater": {
+      "description": "Documentation and codemap specialist. Use PROACTIVELY for updating codemaps and documentation. Runs /update-codemaps and /update-docs, generates docs/CODEMAPS/*, updates READMEs and guides.",
+      "mode": "subagent",
+      "model": "flash",
+      "prompt": "{file:prompts/agents/doc-updater.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "docs-lookup": {
+      "description": "When the user asks how to use a library, framework, or API or needs up-to-date code examples, use Context7 MCP to fetch current documentation and return answers with examples. Invoke for docs/API/setup questions.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/docs-lookup.txt}",
+      "tools": {
+        "read": true,
+        "bash": false,
+        "write": false,
+        "edit": false,
+        "mcp__context7__resolve-library-id": true,
+        "mcp__context7__query-docs": true
+      }
+    },
+    "e2e-runner": {
+      "description": "End-to-end testing specialist that explores flows with Vercel Agent Browser and writes and runs them as Playwright tests. Use PROACTIVELY for generating, maintaining, and running E2E tests. Manages test journeys, quarantines flaky tests, uploads artifacts (screenshots, videos, traces), and ensures critical user flows work.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/e2e-runner.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "engineering-auditor": {
+      "description": "Full-spectrum engineering health auditor. Evaluates Cyclomatic Complexity, Cognitive Complexity, Nesting Depth, Function Length, File Length, Maintainability, Code Smells, Duplicate Code, Technical Debt, Type Safety, Test Coverage, Test Quality, Security Findings, Dependency Risk, Build Health, Lint Health, Documentation Coverage, and Architectural Smells. Produces a ranked issue list, an Engineering Score, and a concrete remediation plan. NEVER modifies files: audit and plan only.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/engineering-auditor.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "fastapi-reviewer": {
+      "description": "Reviews FastAPI applications for async correctness, dependency injection, Pydantic schemas, security, OpenAPI quality, testing, and production readiness.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/fastapi-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "flutter-reviewer": {
+      "description": "Flutter and Dart code reviewer. Reviews Flutter code for widget best practices, state management patterns, Dart idioms, performance pitfalls, accessibility, and clean architecture violations. Library-agnostic: works with any state management solution and tooling.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/flutter-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "fsharp-reviewer": {
+      "description": "Expert F# code reviewer specializing in functional idioms, type safety, pattern matching, computation expressions, and performance. Use for all F# code changes. MUST BE USED for F# projects.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/fsharp-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "gan-evaluator": {
+      "description": "GAN Harness: Evaluator agent. Tests the live running application via Playwright, scores against rubric, and provides actionable feedback to the Generator.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/gan-evaluator.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": false
+      }
+    },
+    "gan-generator": {
+      "description": "GAN Harness: Generator agent. Implements features according to the spec, reads evaluator feedback, and iterates until quality threshold is met.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/gan-generator.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "gan-planner": {
+      "description": "GAN Harness: Planner agent. Expands a one-line prompt into a full product specification with features, sprints, evaluation criteria, and design direction.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/gan-planner.txt}",
+      "tools": {
+        "read": true,
+        "bash": false,
+        "write": true,
+        "edit": false
+      }
+    },
+    "go-build-resolver": {
+      "description": "Go build, vet, and compilation error resolution specialist. Fixes build errors, go vet issues, and linter warnings with minimal changes. Use when Go builds fail.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/go-build-resolver.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "go-reviewer": {
+      "description": "Expert Go code reviewer specializing in idiomatic Go, concurrency patterns, error handling, and performance. Use for all Go code changes. MUST BE USED for Go projects.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/go-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "harmonyos-app-resolver": {
+      "description": "HarmonyOS application development expert specializing in ArkTS and ArkUI. Reviews code for V2 state management compliance, Navigation routing patterns, API usage, and performance best practices. Use for HarmonyOS/OpenHarmony projects.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/harmonyos-app-resolver.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
     "harness-optimizer": {
       "description": "Analyze and improve the local agent harness configuration for reliability, cost, and throughput.",
       "mode": "subagent",
-      "model": "flash",
+      "model": "pro",
       "prompt": "{file:prompts/agents/harness-optimizer.txt}",
       "tools": {
         "read": true,
         "bash": true,
+        "write": false,
+        "edit": true
+      }
+    },
+    "healthcare-reviewer": {
+      "description": "Reviews healthcare application code for clinical safety, CDSS accuracy, PHI compliance, and medical data integrity. Specialized for EMR/EHR, clinical decision support, and health information systems.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/healthcare-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": false,
+        "write": false,
+        "edit": false
+      }
+    },
+    "homelab-architect": {
+      "description": "Designs home and small-lab network plans from hardware inventory, goals, and operator experience level, with safe staged changes and rollback guidance.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/homelab-architect.txt}",
+      "tools": {
+        "read": true,
+        "bash": false,
+        "write": false,
+        "edit": false
+      }
+    },
+    "java-build-resolver": {
+      "description": "Java/Maven/Gradle build, compilation, and dependency error resolution specialist. Fixes build errors, Java compiler errors, and Maven/Gradle issues with minimal changes. Use when Java or Spring Boot builds fail.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/java-build-resolver.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
         "edit": true
       }
     },
     "java-reviewer": {
-      "description": "Expert Java and Spring Boot code reviewer specializing in layered architecture, JPA patterns, security, and concurrency.",
+      "description": "Expert Java and Spring Boot code reviewer specializing in layered architecture, JPA patterns, security, and concurrency. Use for all Java code changes. MUST BE USED for Spring Boot projects.",
       "mode": "subagent",
       "model": "pro",
       "prompt": "{file:prompts/agents/java-reviewer.txt}",
@@ -238,20 +457,20 @@
         "edit": false
       }
     },
-    "java-build-resolver": {
-      "description": "Java/Maven/Gradle build, compilation, and dependency error resolution specialist. Fixes build errors with minimal changes.",
+    "kotlin-build-resolver": {
+      "description": "Kotlin/Gradle build, compilation, and dependency error resolution specialist. Fixes build errors, Kotlin compiler errors, and Gradle issues with minimal changes. Use when Kotlin builds fail.",
       "mode": "subagent",
       "model": "pro",
-      "prompt": "{file:prompts/agents/java-build-resolver.txt}",
+      "prompt": "{file:prompts/agents/kotlin-build-resolver.txt}",
       "tools": {
         "read": true,
+        "bash": true,
         "write": true,
-        "edit": true,
-        "bash": true
+        "edit": true
       }
     },
     "kotlin-reviewer": {
-      "description": "Kotlin and Android/KMP code reviewer. Reviews Kotlin code for idiomatic patterns, coroutine safety, Compose best practices.",
+      "description": "Kotlin and Android/KMP code reviewer. Reviews Kotlin code for idiomatic patterns, coroutine safety, Compose best practices, clean architecture violations, and common Android pitfalls.",
       "mode": "subagent",
       "model": "pro",
       "prompt": "{file:prompts/agents/kotlin-reviewer.txt}",
@@ -262,31 +481,140 @@
         "edit": false
       }
     },
-    "kotlin-build-resolver": {
-      "description": "Kotlin/Gradle build, compilation, and dependency error resolution specialist. Fixes Kotlin build errors with minimal changes.",
-      "mode": "subagent",
-      "model": "pro",
-      "prompt": "{file:prompts/agents/kotlin-build-resolver.txt}",
-      "tools": {
-        "read": true,
-        "write": true,
-        "edit": true,
-        "bash": true
-      }
-    },
     "loop-operator": {
       "description": "Operate autonomous agent loops, monitor progress, and intervene safely when loops stall.",
       "mode": "subagent",
-      "model": "flash",
+      "model": "pro",
       "prompt": "{file:prompts/agents/loop-operator.txt}",
       "tools": {
         "read": true,
         "bash": true,
+        "write": false,
         "edit": true
       }
     },
+    "mle-reviewer": {
+      "description": "Production machine-learning engineering reviewer for data contracts, feature pipelines, training reproducibility, offline/online evaluation, model serving, monitoring, and rollback. Use when ML, MLOps, model training, inference, feature store, or evaluation code changes.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/mle-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "network-architect": {
+      "description": "Designs enterprise or multi-site network architecture from requirements, using existing network skills for focused routing, validation, automation, and troubleshooting detail.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/network-architect.txt}",
+      "tools": {
+        "read": true,
+        "bash": false,
+        "write": false,
+        "edit": false
+      }
+    },
+    "network-config-reviewer": {
+      "description": "Reviews router and switch configurations for security, correctness, stale references, risky change-window commands, and missing operational guardrails.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/network-config-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": false,
+        "write": false,
+        "edit": false
+      }
+    },
+    "network-troubleshooter": {
+      "description": "Diagnoses network connectivity, routing, DNS, interface, and policy symptoms with a read-only OSI-layer workflow and evidence-backed root cause summary.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/network-troubleshooter.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "opensource-forker": {
+      "description": "Fork any project for open-sourcing. Copies files, strips secrets and credentials (20+ patterns), replaces internal references with placeholders, generates .env.example, and cleans git history. First stage of the opensource-pipeline skill.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/opensource-forker.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "opensource-packager": {
+      "description": "Generate complete open-source packaging for a sanitized project. Produces GEMINI.md, setup.sh, README.md, LICENSE, CONTRIBUTING.md, and GitHub issue templates. Makes any repo immediately usable with your AI coding tool. Third stage of the opensource-pipeline skill.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/opensource-packager.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "opensource-sanitizer": {
+      "description": "Verify an open-source fork is fully sanitized before release. Scans for leaked secrets, PII, internal references, and dangerous files using 20+ regex patterns. Generates a PASS/FAIL/PASS-WITH-WARNINGS report. Second stage of the opensource-pipeline skill. Use PROACTIVELY before any public release.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/opensource-sanitizer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "performance-optimizer": {
+      "description": "Performance analysis and optimization specialist. Use PROACTIVELY for identifying bottlenecks, optimizing slow code, reducing bundle sizes, and improving runtime performance. Profiling, memory leaks, render optimization, and algorithmic improvements.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/performance-optimizer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "planner": {
+      "description": "Expert planning specialist for complex features and refactoring. Use PROACTIVELY when users request feature implementation, architectural changes, or complex refactoring. Automatically activated for planning tasks.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/planner.txt}",
+      "tools": {
+        "read": true,
+        "bash": false,
+        "write": false,
+        "edit": false
+      }
+    },
+    "pr-test-analyzer": {
+      "description": "Review pull request test coverage quality and completeness, with emphasis on behavioral coverage and real bug prevention.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/pr-test-analyzer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
     "python-reviewer": {
-      "description": "Expert Python code reviewer specializing in PEP 8 compliance, Pythonic idioms, type hints, security, and performance.",
+      "description": "Expert Python code reviewer specializing in PEP 8 compliance, Pythonic idioms, type hints, security, and performance. Use for all Python code changes. MUST BE USED for Python projects.",
       "mode": "subagent",
       "model": "pro",
       "prompt": "{file:prompts/agents/python-reviewer.txt}",
@@ -297,8 +625,44 @@
         "edit": false
       }
     },
+    "pytorch-build-resolver": {
+      "description": "PyTorch runtime, CUDA, and training error resolution specialist. Fixes tensor shape mismatches, device errors, gradient issues, DataLoader problems, and mixed precision failures with minimal changes. Use when PyTorch training or inference crashes.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/pytorch-build-resolver.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "refactor-cleaner": {
+      "description": "Dead code cleanup and consolidation specialist. Use PROACTIVELY for removing unused code, duplicates, and refactoring. Runs analysis tools (knip, depcheck, ts-prune) to identify dead code and safely removes it.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/refactor-cleaner.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "rust-build-resolver": {
+      "description": "Rust build, compilation, and dependency error resolution specialist. Fixes cargo build errors, borrow checker issues, and Cargo.toml problems with minimal changes. Use when Rust builds fail.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/rust-build-resolver.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
     "rust-reviewer": {
-      "description": "Expert Rust code reviewer specializing in idiomatic Rust, ownership, lifetimes, concurrency, and performance.",
+      "description": "Expert Rust code reviewer specializing in ownership, lifetimes, error handling, unsafe usage, and idiomatic patterns. Use for all Rust code changes. MUST BE USED for Rust projects.",
       "mode": "subagent",
       "model": "pro",
       "prompt": "{file:prompts/agents/rust-reviewer.txt}",
@@ -309,16 +673,100 @@
         "edit": false
       }
     },
-    "rust-build-resolver": {
-      "description": "Rust build, Cargo, and compilation error resolution specialist. Fixes Rust build errors with minimal changes.",
+    "security-reviewer": {
+      "description": "Security vulnerability detection and remediation specialist. Use PROACTIVELY after writing code that handles user input, authentication, API endpoints, or sensitive data. Flags secrets, SSRF, injection, unsafe crypto, and OWASP Top 10 vulnerabilities.",
       "mode": "subagent",
       "model": "pro",
-      "prompt": "{file:prompts/agents/rust-build-resolver.txt}",
+      "prompt": "{file:prompts/agents/security-reviewer.txt}",
       "tools": {
         "read": true,
+        "bash": true,
         "write": true,
-        "edit": true,
-        "bash": true
+        "edit": true
+      }
+    },
+    "seo-specialist": {
+      "description": "SEO specialist for technical SEO audits, on-page optimization, structured data, Core Web Vitals, and content/keyword mapping. Use for site audits, meta tag reviews, schema markup, sitemap and robots issues, and SEO remediation plans.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/seo-specialist.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "silent-failure-hunter": {
+      "description": "Review code for silent failures, swallowed errors, bad fallbacks, and missing error propagation.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/silent-failure-hunter.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "swift-build-resolver": {
+      "description": "Swift/Xcode build, compilation, and dependency error resolution specialist. Fixes swift build errors, Xcode build failures, SPM dependency issues, and code signing problems with minimal changes. Use when Swift builds fail.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/swift-build-resolver.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "swift-reviewer": {
+      "description": "Expert Swift code reviewer specializing in protocol-oriented design, value semantics, ARC memory management, Swift Concurrency, and idiomatic patterns. Use for all Swift code changes. MUST BE USED for Swift projects.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/swift-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "tdd-guide": {
+      "description": "Test-Driven Development specialist enforcing write-tests-first methodology. Use PROACTIVELY when writing new features, fixing bugs, or refactoring code. Ensures 80%+ test coverage.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/tdd-guide.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": true,
+        "edit": true
+      }
+    },
+    "type-design-analyzer": {
+      "description": "Analyze type design for encapsulation, invariant expression, usefulness, and enforcement.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/type-design-analyzer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
+      }
+    },
+    "typescript-reviewer": {
+      "description": "Expert TypeScript/JavaScript code reviewer specializing in type safety, async correctness, Node/web security, and idiomatic patterns. Use for all TypeScript and JavaScript code changes. MUST BE USED for TypeScript/JavaScript projects.",
+      "mode": "subagent",
+      "model": "pro",
+      "prompt": "{file:prompts/agents/typescript-reviewer.txt}",
+      "tools": {
+        "read": true,
+        "bash": true,
+        "write": false,
+        "edit": false
       }
     }
   },

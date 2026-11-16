@@ -4,19 +4,23 @@
 // The OpenCode prompt of every agent is the body of its definition under
 // agents/, the frontmatter removed: agents/<name>.md becomes
 // .opencode/prompts/agents/<name>.txt, the file opencode.json points at with
-// {file:prompts/agents/<name>.txt}. This script writes the whole set and
-// tests/ci/opencode-agent-prompts.test.js fails when one is missing or
-// drifted from its source (#2141).
+// {file:prompts/agents/<name>.txt}. The agent block of opencode.json is
+// derived from the same definitions: one subagent per agent, its description,
+// model and tools read from the frontmatter, the primary agents the file
+// already has kept as they are. This script writes both and
+// tests/ci/opencode-agent-prompts.test.js fails when a prompt or a registry
+// entry is missing, drifted or without an agent (#2141).
 //
 // Usage: node scripts/opencode-agent-prompts.js [--check] [--root <dir>]
-//   writes the prompts; --check only reports what differs and exits 1 if
-//   anything does.
+//   writes the prompts and the registry; --check only reports what differs
+//   and exits 1 if anything does.
 
 const fs = require('node:fs');
 const path = require('node:path');
 
 const AGENTS_DIR = 'agents';
 const PROMPTS_DIR = path.join('.opencode', 'prompts', 'agents');
+const CONFIG_FILE = path.join('.opencode', 'opencode.json');
 // A BOM before the first dashes and a frontmatter that ends at the end of the
 // file are both frontmatter: without this the YAML would become the prompt.
 // The BOM is spelt by its code: an escape for it does not survive every editor.
@@ -87,6 +91,145 @@ function writePrompts(root) {
   return { written, total: Object.keys(expected).length };
 }
 
+// A YAML scalar may be written between matching quotes; the quotes are not
+// part of the value.
+function unquote(value) {
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  if ((quote === '"' || quote === "'") && trimmed.length > 1 && trimmed.endsWith(quote)) return trimmed.slice(1, -1);
+  return trimmed;
+}
+
+/**
+ * The frontmatter fields of an agent definition: `key: value` lines, and a
+ * key followed by `- item` lines for a list written in block form.
+ */
+function agentFrontmatter(markdown) {
+  const match = markdown.match(FRONTMATTER);
+  const fields = {};
+  if (!match) return fields;
+  let listKey = null;
+  for (const line of match[0].split(/\r?\n/)) {
+    if (line.startsWith('---')) continue;
+    const indented = line !== line.trimStart();
+    const trimmed = line.trim();
+    if (indented && listKey && trimmed.startsWith('-')) {
+      const item = unquote(trimmed.slice(1));
+      if (item) fields[listKey].push(item);
+      continue;
+    }
+    const colon = line.indexOf(':');
+    if (colon < 1 || indented) continue;
+    const key = line.slice(0, colon).trim();
+    const value = line.slice(colon + 1).trim();
+    if (value === '') {
+      fields[key] = [];
+      listKey = key;
+    } else {
+      fields[key] = unquote(value);
+      listKey = null;
+    }
+  }
+  return fields;
+}
+
+// The tools field is a list in flow form, quoted or not (["Read", "Bash"] or
+// [Read, Bash]), or already an array when it was written in block form. Only
+// the names matter here.
+function toolNames(value) {
+  if (Array.isArray(value)) return value.map(name => unquote(name)).filter(Boolean);
+  return value
+    .replace(/^\[|\]$/g, '')
+    .split(',')
+    .map(name => unquote(name))
+    .filter(Boolean);
+}
+
+// OpenCode knows the model aliases of this configuration: flash for the fast
+// tier, pro for the rest, the way the hand-written entries used them.
+function registryModel(model) {
+  return /flash/i.test(model || '') ? 'flash' : 'pro';
+}
+
+// Read, Grep and Glob are all reads in OpenCode; the four toggles are spelt
+// out so a definition without Write or Edit cannot write through a default.
+// An MCP tool the definition names (mcp__<server>__<tool>) stays enabled
+// under its own key, so the agent keeps the server it was written for.
+function registryTools(value) {
+  const names = toolNames(value);
+  const has = new Set(names);
+  const tools = {
+    read: ['Read', 'Grep', 'Glob'].some(name => has.has(name)),
+    bash: has.has('Bash'),
+    write: has.has('Write'),
+    edit: has.has('Edit'),
+  };
+  for (const name of names) {
+    if (name.startsWith('mcp__')) tools[name] = true;
+  }
+  return tools;
+}
+
+/** The opencode.json agent entry a definition asks for. */
+function registryEntry(name, markdown) {
+  const fields = agentFrontmatter(markdown);
+  const entry = {
+    description: fields.description || '',
+    mode: 'subagent',
+    model: registryModel(fields.model),
+    prompt: `{file:prompts/agents/${name}.txt}`,
+  };
+  if (fields.tools && fields.tools.length > 0) entry.tools = registryTools(fields.tools);
+  return entry;
+}
+
+function configPath(root) {
+  return path.join(root, CONFIG_FILE);
+}
+
+function readConfig(root) {
+  return JSON.parse(fs.readFileSync(configPath(root), 'utf8'));
+}
+
+/**
+ * The agent block opencode.json should carry: the primary agents it already
+ * has, in their place, then one subagent per definition under agents/.
+ */
+function expectedRegistry(root, config) {
+  const agents = {};
+  for (const [name, entry] of Object.entries(config.agent || {})) {
+    if (entry?.mode === 'primary') agents[name] = entry;
+  }
+  for (const name of agentNames(root)) {
+    agents[name] = registryEntry(name, fs.readFileSync(path.join(root, AGENTS_DIR, `${name}.md`), 'utf8'));
+  }
+  return agents;
+}
+
+function sameEntry(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/** What differs between the agent block of opencode.json and the definitions. */
+function registryDrift(root) {
+  const config = readConfig(root);
+  const expected = expectedRegistry(root, config);
+  const current = config.agent || {};
+  const missing = Object.keys(expected).filter(name => !Object.hasOwn(current, name));
+  const drifted = Object.keys(expected).filter(name => Object.hasOwn(current, name) && !sameEntry(current[name], expected[name]));
+  const orphans = Object.keys(current).filter(name => !Object.hasOwn(expected, name)).sort((left, right) => left.localeCompare(right));
+  return { missing, drifted, orphans, total: Object.keys(expected).length };
+}
+
+function writeRegistry(root) {
+  const config = readConfig(root);
+  const expected = expectedRegistry(root, config);
+  const total = Object.keys(expected).length;
+  if (sameEntry(config.agent, expected)) return { written: false, total };
+  fs.writeFileSync(configPath(root), `${JSON.stringify({ ...config, agent: expected }, null, 2)}\n`);
+  return { written: true, total };
+}
+
 function parseArgs(argv) {
   const options = { check: false, root: path.join(__dirname, '..') };
   for (let index = 0; index < argv.length; index++) {
@@ -98,19 +241,27 @@ function parseArgs(argv) {
   return options;
 }
 
+function reportProblems(label, report) {
+  if (report.missing.length) console.log(`${label} missing: ${report.missing.join(', ')}`);
+  if (report.drifted.length) console.log(`${label} drifted: ${report.drifted.join(', ')}`);
+  if (report.orphans.length) console.log(`${label} without an agent: ${report.orphans.join(', ')}`);
+  return report.missing.length + report.drifted.length + report.orphans.length;
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.check) {
-    const report = driftReport(options.root);
-    const problems = report.missing.length + report.drifted.length + report.orphans.length;
-    if (report.missing.length) console.log(`missing: ${report.missing.join(', ')}`);
-    if (report.drifted.length) console.log(`drifted: ${report.drifted.join(', ')}`);
-    if (report.orphans.length) console.log(`no agent: ${report.orphans.join(', ')}`);
-    console.log(problems === 0 ? `${report.total} prompts in step with agents/` : `${problems} problem(s); run node scripts/opencode-agent-prompts.js`);
+    const prompts = driftReport(options.root);
+    const registry = registryDrift(options.root);
+    const problems = reportProblems('prompt', prompts) + reportProblems('registry entry', registry);
+    console.log(problems === 0
+      ? `${prompts.total} prompts and ${registry.total} registry entries in step with agents/`
+      : `${problems} problem(s); run node scripts/opencode-agent-prompts.js`);
     process.exit(problems === 0 ? 0 : 1);
   }
-  const result = writePrompts(options.root);
-  console.log(`${result.written} prompt(s) written, ${result.total} in step with agents/`);
+  const prompts = writePrompts(options.root);
+  const registry = writeRegistry(options.root);
+  console.log(`${prompts.written} prompt(s) written, ${prompts.total} in step with agents/; registry ${registry.written ? 'rewritten' : 'unchanged'}, ${registry.total} entries`);
 }
 
 if (require.main === module) {
@@ -122,4 +273,16 @@ if (require.main === module) {
   }
 }
 
-module.exports = { agentPromptBody, expectedPrompts, driftReport, writePrompts, PROMPTS_DIR };
+module.exports = {
+  agentPromptBody,
+  expectedPrompts,
+  driftReport,
+  writePrompts,
+  agentFrontmatter,
+  registryEntry,
+  expectedRegistry,
+  registryDrift,
+  writeRegistry,
+  PROMPTS_DIR,
+  CONFIG_FILE,
+};
