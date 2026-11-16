@@ -160,7 +160,7 @@ function readConfig(root) {
 function expectedRegistry(root, config) {
   const agents = {};
   for (const [name, entry] of Object.entries(config.agent || {})) {
-    if (entry && entry.mode === 'primary') agents[name] = entry;
+    if (entry?.mode === 'primary') agents[name] = entry;
   }
   for (const name of agentNames(root)) {
     agents[name] = registryEntry(name, fs.readFileSync(path.join(root, AGENTS_DIR, `${name}.md`), 'utf8'));
@@ -179,7 +179,7 @@ function registryDrift(root) {
   const current = config.agent || {};
   const missing = Object.keys(expected).filter(name => !Object.hasOwn(current, name));
   const drifted = Object.keys(expected).filter(name => Object.hasOwn(current, name) && !sameEntry(current[name], expected[name]));
-  const orphans = Object.keys(current).filter(name => !Object.hasOwn(expected, name)).sort();
+  const orphans = Object.keys(current).filter(name => !Object.hasOwn(expected, name)).sort((left, right) => left.localeCompare(right));
   return { missing, drifted, orphans, total: Object.keys(expected).length };
 }
 
