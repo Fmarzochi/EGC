@@ -86,7 +86,7 @@ function refuseOverRateLimit(tool: string, args: unknown): void {
   log('AUDIT', 'RATE_LIMIT_EXCEEDED', { tool, project_path: projectPath, limit: RATE_LIMIT.maxCalls, window_ms: RATE_LIMIT.windowMs });
   throw new McpError(
     ErrorCode.InvalidRequest,
-    `Rate limit exceeded for tool '${tool}': at most ${RATE_LIMIT.maxCalls} calls per ${Math.round(RATE_LIMIT.windowMs / 1000)}s for one tool and project. Wait a moment; EGC_MCP_RATE_MAX_CALLS raises the limit.`
+    `Rate limit exceeded for tool '${tool}': at most ${RATE_LIMIT.maxCalls} calls per ${RATE_LIMIT.windowMs} ms for one tool and project. Wait a moment; EGC_MCP_RATE_MAX_CALLS raises the limit.`
   );
 }
 

@@ -1363,24 +1363,28 @@ function runTests() {
     try {
       const egcDir = path.join(homeDir, '.egc');
       fs.mkdirSync(path.join(egcDir, 'state', 'Projetos--demo'), { recursive: true });
-      fs.writeFileSync(path.join(egcDir, 'encryption.key'), 'f'.repeat(64), { mode: 0o644 });
+      // chmod after the write: the mode of writeFileSync passes through the umask.
+      const fixture = (file, mode) => { fs.writeFileSync(file, file.endsWith('.key') ? 'f'.repeat(64) : sealed); fs.chmodSync(file, mode); };
       const sealed = Buffer.concat([Buffer.from('EGC1:'), Buffer.alloc(40, 7)]);
-      fs.writeFileSync(path.join(egcDir, 'state', 'Projetos--demo', 'main.md'), sealed, { mode: 0o600 });
-      fs.writeFileSync(path.join(egcDir, 'state', 'Projetos--open.md'), sealed, { mode: 0o644 });
-      fs.writeFileSync(path.join(egcDir, 'state', 'Projetos--locked.md'), sealed, { mode: 0o400 });
+      fixture(path.join(egcDir, 'encryption.key'), 0o644);
+      fixture(path.join(egcDir, 'state', 'Projetos--demo', 'main.md'), 0o600);
+      fixture(path.join(egcDir, 'state', 'Projetos--open.md'), 0o644);
+      fixture(path.join(egcDir, 'state', 'Projetos--locked.md'), 0o400);
+      const env = { EGC_ENCRYPTION_KEY_FILE: '' };
 
-      const human = run([], { cwd: projectRoot, homeDir });
+      const human = run([], { cwd: projectRoot, homeDir, env });
       assert.strictEqual(human.code, 0, 'disk warnings never fail the doctor');
       assert.ok(human.stdout.includes('WARNING: ' + path.join(egcDir, 'encryption.key') + ' is readable by other users (mode 644); run chmod 600 on it'), human.stdout);
       assert.ok(human.stdout.includes('WARNING: 1 of 3 state files under'), human.stdout);
+      assert.ok(human.stdout.includes('WARNING: 2 of 3 state files under'), human.stdout);
       assert.ok(human.stdout.includes('are readable by other users:'), human.stdout);
       assert.ok(human.stdout.includes('are writable (written before 1.1.25, or by a tool that bypassed the memory server):'), human.stdout);
       assert.ok(human.stdout.includes('chmod 0400 '), human.stdout);
 
-      const parsed = JSON.parse(run(['--json'], { cwd: projectRoot, homeDir }).stdout);
+      const parsed = JSON.parse(run(['--json'], { cwd: projectRoot, homeDir, env }).stdout);
       assert.deepStrictEqual(parsed.encryptionKey.problems.length, 1);
       assert.deepStrictEqual(parsed.stateFileModes.exposed, [path.join(egcDir, 'state', 'Projetos--open.md')]);
-      assert.deepStrictEqual(parsed.stateFileModes.writable, [path.join(egcDir, 'state', 'Projetos--demo', 'main.md')]);
+      assert.deepStrictEqual(parsed.stateFileModes.writable.sort(), [path.join(egcDir, 'state', 'Projetos--demo', 'main.md'), path.join(egcDir, 'state', 'Projetos--open.md')].sort(), 'a file is listed in every category it fails');
       assert.strictEqual(parsed.summary.warningCount, 3);
     } finally {
       cleanup(homeDir);
@@ -1394,6 +1398,7 @@ function runTests() {
     try {
       fs.mkdirSync(path.join(homeDir, '.egc'), { recursive: true });
       fs.writeFileSync(path.join(homeDir, '.egc', 'encryption.key'), 'f'.repeat(64), { mode: 0o600 });
+      fs.chmodSync(path.join(homeDir, '.egc', 'encryption.key'), 0o600);
       const configured = path.join(homeDir, 'vault', 'egc.key');
       const parsed = JSON.parse(run(['--json'], { cwd: projectRoot, homeDir, env: { EGC_ENCRYPTION_KEY_FILE: configured } }).stdout);
       assert.strictEqual(parsed.encryptionKey.configured, configured);

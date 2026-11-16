@@ -102,7 +102,7 @@ tally(test('a key whose newest call left the window is evicted on the next check
 tally(test('rateLimitSettings reads EGC_MCP_RATE_MAX_CALLS and EGC_MCP_RATE_WINDOW_MS and keeps the defaults for a bad value (#2142)', () => {
   const defaults = { windowMs: 60_000, maxCalls: 60 };
   assert.deepStrictEqual(rateLimitSettings({}, defaults), defaults);
-  assert.deepStrictEqual(rateLimitSettings({ EGC_MCP_RATE_MAX_CALLS: '200' }, defaults), { windowMs: 60_000, maxCalls: 200 });
+  assert.deepStrictEqual(rateLimitSettings({ EGC_MCP_RATE_MAX_CALLS: '200', EGC_MCP_RATE_WINDOW_MS: '30000' }, defaults), { windowMs: 30_000, maxCalls: 200 });
   assert.deepStrictEqual(rateLimitSettings({ EGC_MCP_RATE_WINDOW_MS: '0', EGC_MCP_RATE_MAX_CALLS: 'lots' }, defaults), defaults);
 }));
 

@@ -372,7 +372,10 @@ if (test('quarantineUndecryptableStateFile: renames the corrupted file to a back
 if (test('EGC_ENCRYPTION_KEY_FILE moves the key: loadOrCreateEncKey() creates it there, private, and reads it back (#2144)', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-key-file-'));
   const configured = path.join(tmpDir, 'vault', 'egc.key');
-  const previous = process.env.EGC_ENCRYPTION_KEY_FILE;
+  const previous = { key: process.env.EGC_ENCRYPTION_KEY_FILE, home: process.env.HOME, profile: process.env.USERPROFILE };
+  // A home of its own: the machine's ~/.egc/encryption.key must not be in play.
+  process.env.HOME = tmpDir;
+  process.env.USERPROFILE = tmpDir;
   process.env.EGC_ENCRYPTION_KEY_FILE = configured;
   try {
     const key = loadOrCreateEncKey();
@@ -381,9 +384,41 @@ if (test('EGC_ENCRYPTION_KEY_FILE moves the key: loadOrCreateEncKey() creates it
     if (process.platform !== 'win32') assert.strictEqual(fs.statSync(configured).mode & 0o777, 0o600, 'the configured key is private');
     assert.ok(loadOrCreateEncKey().equals(key), 'the second call reads the same key back');
   } finally {
-    if (previous === undefined) delete process.env.EGC_ENCRYPTION_KEY_FILE;
-    else process.env.EGC_ENCRYPTION_KEY_FILE = previous;
+    if (previous.key === undefined) delete process.env.EGC_ENCRYPTION_KEY_FILE;
+    else process.env.EGC_ENCRYPTION_KEY_FILE = previous.key;
+    process.env.HOME = previous.home;
+    if (previous.profile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previous.profile;
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('EGC_ENCRYPTION_KEY_FILE expands a leading ~, and a configured path with nothing at it is refused while the home key exists (#2144)', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-key-home-'));
+  const previousKey = process.env.EGC_ENCRYPTION_KEY_FILE;
+  const previousHome = process.env.HOME;
+  const previousProfile = process.env.USERPROFILE;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  try {
+    const { configuredKeyPath } = require(buildPath);
+    process.env.EGC_ENCRYPTION_KEY_FILE = '~/vault/egc.key';
+    assert.strictEqual(configuredKeyPath(), path.join(home, 'vault', 'egc.key'), 'a leading ~ is the home');
+
+    delete process.env.EGC_ENCRYPTION_KEY_FILE;
+    const homeKey = loadOrCreateEncKey();
+    assert.strictEqual(homeKey.length, 32, 'the default key is created under the home');
+
+    process.env.EGC_ENCRYPTION_KEY_FILE = path.join(home, 'vault', 'missing.key');
+    assert.throws(() => loadOrCreateEncKey(), /names .*missing\.key, which does not exist, while .*encryption\.key does/, 'no second key for a typo or an unmounted volume');
+    assert.ok(!fs.existsSync(path.join(home, 'vault', 'missing.key')), 'nothing was created at the configured path');
+  } finally {
+    if (previousKey === undefined) delete process.env.EGC_ENCRYPTION_KEY_FILE;
+    else process.env.EGC_ENCRYPTION_KEY_FILE = previousKey;
+    process.env.HOME = previousHome;
+    if (previousProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previousProfile;
+    fs.rmSync(home, { recursive: true, force: true });
   }
 })) passed++; else failed++;
 
@@ -395,7 +430,10 @@ if (test('writeStateFile leaves the file read-only, and a second write still rep
     const key = crypto.randomBytes(32);
     writeStateFile(filePath, 'first', key);
     assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o400, 'read-only once written');
-    assert.throws(() => fs.writeFileSync(filePath, 'in place'), /EACCES|EPERM/, 'nothing opens it in place');
+    // root writes through any mode, so the refusal is asserted for everyone else.
+    if (typeof process.getuid !== 'function' || process.getuid() !== 0) {
+      assert.throws(() => fs.writeFileSync(filePath, 'in place'), /EACCES|EPERM/, 'nothing opens it in place');
+    }
     writeStateFile(filePath, 'second', key);
     assert.strictEqual(readStateFile(filePath, key), 'second', 'the next write replaces the file');
     assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o400, 'and leaves it read-only again');

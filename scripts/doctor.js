@@ -10,7 +10,7 @@ const { resolveStateStorePath } = require('./lib/state-store/path');
 const { parseTargetArgs } = require('./lib/cli-target-args');
 const { consolidateCommand, shellQuote } = require('./lib/doctor-summary');
 const { findPlaintextStateFiles, listStateMarkdown, stateRoot } = require('./lib/state-plaintext');
-const { defaultKeyPath } = require('./lib/state-crypto');
+const { defaultKeyPath, homeKeyPath } = require('./lib/state-crypto');
 const { getStateDir } = require('./lib/branch-state');
 const {
   DEFAULT_PROBE_TIMEOUT_MS,
@@ -218,16 +218,17 @@ const ENCRYPT_SCRIPT = path.join(__dirname, 'maintenance', 'encrypt-plaintext-st
 // or ~/.egc/encryption.key), whether a configured file exists while the
 // default one does, and whether other users can read it. Windows has no
 // mode bits to judge.
-function checkEncryptionKey(homeDir) {
+function checkEncryptionKey() {
   const configured = (process.env.EGC_ENCRYPTION_KEY_FILE || '').trim();
   const keyPath = defaultKeyPath();
-  const defaultPath = path.join(homeDir, '.egc', 'encryption.key');
+  // The same resolver the key readers use, so the two never look at different homes.
+  const defaultPath = homeKeyPath();
   const problems = [];
-  let stat;
+  let stat = null;
   try {
     stat = fs.lstatSync(keyPath);
-  } catch {
-    stat = null;
+  } catch (error) {
+    if (error.code !== 'ENOENT') problems.push(`${keyPath} cannot be inspected (${error.code || error.name})`);
   }
   if (configured && !stat && fs.existsSync(defaultPath)) {
     problems.push(`EGC_ENCRYPTION_KEY_FILE names ${keyPath}, which does not exist, while ${defaultPath} does: move the key there or unset the variable, or the encrypted state will not open`);
@@ -266,7 +267,7 @@ function checkStateFileModes(homeDir) {
     }
     if (!stat.isFile()) continue;
     if ((stat.mode & 0o044) !== 0) exposed.push(file);
-    else if ((stat.mode & 0o222) !== 0) writable.push(file);
+    if ((stat.mode & 0o222) !== 0) writable.push(file);
   }
   if (writable.length === 0 && exposed.length === 0) return null;
   return { stateDir, checked: files.length, writable, exposed, warningCount: (writable.length > 0 ? 1 : 0) + (exposed.length > 0 ? 1 : 0) };
@@ -285,7 +286,8 @@ function printStateFileModesReport(report) {
     console.log(shown(report.writable));
   }
   console.log('  The next save by the memory server makes a file read-only; to do it now:');
-  console.log(`    chmod 0400 ${[...report.exposed, ...report.writable].slice(0, STATE_MODE_SHOWN).map(file => shellQuote(file)).join(' ')}`);
+  const every = [...new Set([...report.exposed, ...report.writable])];
+  console.log(`    chmod 0400 ${every.map(file => shellQuote(file)).join(' ')}`);
 }
 
 function checkPlaintextState(homeDir) {
@@ -359,7 +361,7 @@ function printStateStoreReport(stateDb) {
 // The checks on the files under ~/.egc: the state stores, plain-text state,
 // the key and the state file modes. Each one is null when there is nothing to say.
 function checkLocalFiles(homeDir) {
-  const encryptionKey = checkEncryptionKey(homeDir);
+  const encryptionKey = checkEncryptionKey();
   const stateFileModes = checkStateFileModes(homeDir);
   return {
     stateDb: checkStateDb(homeDir),

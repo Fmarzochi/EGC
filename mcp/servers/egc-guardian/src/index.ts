@@ -669,7 +669,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     if (!checkRateLimit(tool, projectPath)) {
       auditLog('RATE_LIMIT_EXCEEDED', 'DENIED', { tool, project_path: projectPath, limit: RATE_MAX_CALLS, window_ms: RATE_WINDOW_MS });
-      return { content: [{ type: "text", text: `[DENIED] Rate limit exceeded for tool '${tool}': max ${RATE_MAX_CALLS} calls per ${RATE_WINDOW_MS / 1000}s` }] };
+      return { content: [{ type: "text", text: `[DENIED] Rate limit exceeded for tool '${tool}': max ${RATE_MAX_CALLS} calls per ${RATE_WINDOW_MS} ms for one tool and project; EGC_MCP_RATE_MAX_CALLS raises the limit` }] };
     }
     
     switch (request.params.name) {

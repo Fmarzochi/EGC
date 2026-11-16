@@ -1,8 +1,10 @@
 // A per-tool, per-project limit on the calls this server answers (#2142): an
 // honest session never reaches it, a looping agent or a runaway script gets a
 // clear refusal instead of hammering the state store or the session bus. One
-// sliding window per key, the keys of callers that went quiet dropped as the
-// others are looked at, so the map never outgrows the live callers.
+// sliding window per key; the keys of callers that went quiet are dropped once
+// per window, so the map never outgrows the callers of the last two windows.
+
+import path from 'node:path';
 
 export interface RateLimitSettings {
   windowMs: number;
@@ -12,6 +14,14 @@ export interface RateLimitSettings {
 export interface RateLimiter {
   check(tool: string, projectPath?: string | null, now?: number): boolean;
   size(): number;
+}
+
+interface Bucket {
+  stamps: number[];
+  // The newest call the key ever saw, kept apart from the array: a clock that
+  // steps backwards pushes an older stamp last, and the sweep must not take
+  // that tail for the key's most recent call.
+  newest: number;
 }
 
 const ENV_NAMES: Array<[keyof RateLimitSettings, string]> = [
@@ -32,19 +42,40 @@ export function rateLimitSettings(env: NodeJS.ProcessEnv, defaults: RateLimitSet
   return settings;
 }
 
-export function createRateLimiter(settings: RateLimitSettings): RateLimiter {
-  const recent = new Map<string, number[]>();
+// One bucket per project however the path is spelt (/repo, /repo/, ../repo).
+function bucketKey(tool: string, projectPath?: string | null): string {
+  const trimmed = (projectPath ?? '').trim();
+  return `${trimmed ? path.resolve(trimmed) : ''}::${tool}`;
+}
 
-  function check(tool: string, projectPath?: string | null, now: number = Date.now()): boolean {
-    const key = `${(projectPath ?? '').trim()}::${tool}`;
-    const live = (recent.get(key) ?? []).filter(stamp => now - stamp < settings.windowMs);
-    live.push(now);
-    recent.set(key, live);
-    for (const [other, stamps] of recent) {
-      if (other !== key && now - stamps[stamps.length - 1] >= settings.windowMs) recent.delete(other);
+export function createRateLimiter(settings: RateLimitSettings): RateLimiter {
+  const buckets = new Map<string, Bucket>();
+  let sweptAt = Number.NEGATIVE_INFINITY;
+
+  // At most once per window, not on every call: a burst spread over many
+  // project paths would otherwise walk the whole map for each call. A clock
+  // that stepped backwards sweeps at once instead of waiting to catch up with
+  // the last sweep, and `newest` keeps a key with a recent call alive.
+  function dropIdle(now: number): void {
+    if (now >= sweptAt && now - sweptAt < settings.windowMs) return;
+    sweptAt = now;
+    for (const [key, bucket] of buckets) {
+      if (now - bucket.newest >= settings.windowMs) buckets.delete(key);
     }
-    return live.length <= settings.maxCalls;
   }
 
-  return { check, size: () => recent.size };
+  function check(tool: string, projectPath?: string | null, now: number = Date.now()): boolean {
+    dropIdle(now);
+    const key = bucketKey(tool, projectPath);
+    const bucket = buckets.get(key);
+    const live = (bucket?.stamps ?? []).filter(stamp => now - stamp < settings.windowMs);
+    live.push(now);
+    const allowed = live.length <= settings.maxCalls;
+    // Only the newest maxCalls stamps are kept: a caller that keeps hammering
+    // costs the same as one at the limit, and the verdict is the same.
+    buckets.set(key, { stamps: live.slice(-settings.maxCalls), newest: Math.max(bucket?.newest ?? now, now) });
+    return allowed;
+  }
+
+  return { check, size: () => buckets.size };
 }

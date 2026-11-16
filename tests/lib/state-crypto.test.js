@@ -37,6 +37,24 @@ function cleanup(dirPath) {
   fs.rmSync(dirPath, { recursive: true, force: true });
 }
 
+// Runs fn with these variables set (undefined removes one) and puts every one
+// of them back afterwards, whatever fn did to them in between.
+function withEnv(overrides, fn) {
+  const previous = Object.fromEntries(Object.keys(overrides).map(name => [name, process.env[name]]));
+  const apply = values => {
+    for (const [name, value] of Object.entries(values)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  };
+  apply(overrides);
+  try {
+    return fn();
+  } finally {
+    apply(previous);
+  }
+}
+
 // Mirrors the write side in mcp/servers/egc-memory/src/encryption.ts so the
 // fixtures match real server output without requiring a server build.
 function encryptFixture(plaintext, key) {
@@ -57,15 +75,16 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => { if (ok) passed++; else failed++; };
 
-  if (test('isEncryptedBuffer detects the magic header', () => {
+  tally(test('isEncryptedBuffer detects the magic header', () => {
     const key = crypto.randomBytes(32);
     assert.strictEqual(isEncryptedBuffer(encryptFixture('state', key)), true);
     assert.strictEqual(isEncryptedBuffer(Buffer.from('# Project State\n')), false);
     assert.strictEqual(isEncryptedBuffer(Buffer.alloc(0)), false);
-  })) passed++; else failed++;
+  }));
 
-  if (test('round-trips a state file encrypted with the server format', () => {
+  tally(test('round-trips a state file encrypted with the server format', () => {
     const dir = createTempDir('state-crypto-');
     try {
       const key = crypto.randomBytes(32);
@@ -78,9 +97,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('legacy plaintext passes through unchanged', () => {
+  tally(test('legacy plaintext passes through unchanged', () => {
     const dir = createTempDir('state-crypto-');
     try {
       const filePath = path.join(dir, 'flat.md');
@@ -93,9 +112,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('refuses a key reached through a link, on the read path as well', () => {
+  tally(test('refuses a key reached through a link, on the read path as well', () => {
     if (process.platform === 'win32') return;
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-state-crypto-link-'));
     try {
@@ -128,9 +147,9 @@ function runTests() {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('a read-only load never changes the key mode: a private key is read, a wide one is refused as it is', () => {
+  tally(test('a read-only load never changes the key mode: a private key is read, a wide one is refused as it is', () => {
     if (process.platform === 'win32' || typeof process.getuid !== 'function' || process.getuid() === 0) return;
     const dir = createTempDir('state-crypto-readonly-');
     try {
@@ -149,9 +168,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns null when the key file is missing', () => {
+  tally(test('returns null when the key file is missing', () => {
     const dir = createTempDir('state-crypto-');
     try {
       const key = crypto.randomBytes(32);
@@ -162,9 +181,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns null when the key file is malformed', () => {
+  tally(test('returns null when the key file is malformed', () => {
     const dir = createTempDir('state-crypto-');
     try {
       const key = crypto.randomBytes(32);
@@ -177,9 +196,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns null for tampered ciphertext', () => {
+  tally(test('returns null for tampered ciphertext', () => {
     const dir = createTempDir('state-crypto-');
     try {
       const key = crypto.randomBytes(32);
@@ -191,9 +210,9 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('returns null for a missing state file', () => {
+  tally(test('returns null for a missing state file', () => {
     const dir = createTempDir('state-crypto-');
     try {
       assert.strictEqual(
@@ -203,26 +222,34 @@ function runTests() {
     } finally {
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('EGC_ENCRYPTION_KEY_FILE is where defaultKeyPath() points and where loadOrCreateKeySync() creates the key (#2144)', () => {
+  tally(test('EGC_ENCRYPTION_KEY_FILE is where defaultKeyPath() points and where loadOrCreateKeySync() creates the key (#2144)', () => {
     const stateCrypto = require('../../scripts/lib/state-crypto');
     const dir = createTempDir('egc-key-file-');
     const configured = path.join(dir, 'elsewhere', 'egc.key');
-    const previous = process.env.EGC_ENCRYPTION_KEY_FILE;
-    process.env.EGC_ENCRYPTION_KEY_FILE = configured;
     try {
-      assert.strictEqual(stateCrypto.defaultKeyPath(), configured);
-      const key = stateCrypto.loadOrCreateKeySync();
-      assert.strictEqual(key.length, 32);
-      assert.ok(fs.existsSync(configured), 'the key is created at the configured path');
-      assert.ok(stateCrypto.loadKey().equals(key), 'loadKey() reads the configured key');
+      // A home of its own: the machine's ~/.egc/encryption.key must not be in play.
+      withEnv({ HOME: dir, USERPROFILE: dir, EGC_ENCRYPTION_KEY_FILE: configured }, () => {
+        assert.strictEqual(stateCrypto.defaultKeyPath(), configured);
+        const key = stateCrypto.loadOrCreateKeySync();
+        assert.strictEqual(key.length, 32);
+        assert.ok(fs.existsSync(configured), 'the key is created at the configured path');
+        assert.ok(stateCrypto.loadKey().equals(key), 'loadKey() reads the configured key');
+
+        process.env.EGC_ENCRYPTION_KEY_FILE = '~/vault/egc.key';
+        assert.strictEqual(stateCrypto.defaultKeyPath(), path.join(dir, 'vault', 'egc.key'), 'a leading ~ is the home');
+
+        delete process.env.EGC_ENCRYPTION_KEY_FILE;
+        stateCrypto.loadOrCreateKeySync();
+        process.env.EGC_ENCRYPTION_KEY_FILE = path.join(dir, 'vault', 'missing.key');
+        assert.throws(() => stateCrypto.loadOrCreateKeySync(), /names .*missing\.key, which does not exist, while .*encryption\.key does/, 'no second key for a typo or an unmounted volume');
+        assert.ok(!fs.existsSync(path.join(dir, 'vault', 'missing.key')));
+      });
     } finally {
-      if (previous === undefined) delete process.env.EGC_ENCRYPTION_KEY_FILE;
-      else process.env.EGC_ENCRYPTION_KEY_FILE = previous;
       cleanup(dir);
     }
-  })) passed++; else failed++;
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

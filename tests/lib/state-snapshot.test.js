@@ -199,8 +199,12 @@ function runTests() {
     const { home } = setupHome('egc-snapshot-mode-');
     const previousHome = process.env.HOME;
     const previousProfile = process.env.USERPROFILE;
+    const previousKeyFile = process.env.EGC_ENCRYPTION_KEY_FILE;
     process.env.HOME = home;
     process.env.USERPROFILE = home;
+    // The fixture's key lives under the temporary home; a configured key file
+    // in the caller's environment must not take its place.
+    delete process.env.EGC_ENCRYPTION_KEY_FILE;
     try {
       const filePath = path.join(home, '.egc', 'state', 'demo', 'main.md');
       saveState(filePath, '# Project State\nproject: demo\n\n## Context\nfirst\n');
@@ -214,6 +218,7 @@ function runTests() {
       process.env.HOME = previousHome;
       if (previousProfile === undefined) delete process.env.USERPROFILE;
       else process.env.USERPROFILE = previousProfile;
+      if (previousKeyFile !== undefined) process.env.EGC_ENCRYPTION_KEY_FILE = previousKeyFile;
       cleanup(home);
     }
   })) passed++; else failed++;
