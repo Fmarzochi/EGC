@@ -66,6 +66,10 @@ test('writePrompts creates a missing prompt and rewrites a drifted one, and leav
     assert.strictEqual(fs.readFileSync(path.join(promptsDir, 'two.txt'), 'utf8'), 'You are two.\n');
     assert.deepStrictEqual(writePrompts(root), { written: 0, total: 2 }, 'a second run writes nothing');
     assert.deepStrictEqual(driftReport(root).orphans, ['stray'], 'a stray prompt is reported, never deleted');
+
+    fs.writeFileSync(path.join(promptsDir, 'one.txt'), 'You are one.\r\n');
+    assert.deepStrictEqual(driftReport(root).drifted, [], 'a checkout that converted the line endings is not a drift');
+    assert.deepStrictEqual(writePrompts(root), { written: 0, total: 2 }, 'and nothing is rewritten for it');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

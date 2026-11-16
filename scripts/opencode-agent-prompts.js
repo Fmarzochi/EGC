@@ -48,6 +48,12 @@ function expectedPrompts(root) {
   return prompts;
 }
 
+// A checkout that converts line endings (git autocrlf on Windows) hands the
+// prompt back with CRLF; the comparison is on the text, not on the endings.
+function readPrompt(file) {
+  return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+}
+
 /** What differs between the prompts on disk and the agent definitions. */
 function driftReport(root) {
   const expected = expectedPrompts(root);
@@ -56,7 +62,7 @@ function driftReport(root) {
   for (const [name, prompt] of Object.entries(expected)) {
     const file = promptPath(root, name);
     if (!fs.existsSync(file)) missing.push(name);
-    else if (fs.readFileSync(file, 'utf8') !== prompt) drifted.push(name);
+    else if (readPrompt(file) !== prompt) drifted.push(name);
   }
   const promptsDir = path.join(root, PROMPTS_DIR);
   const orphans = fs.existsSync(promptsDir)
@@ -74,7 +80,7 @@ function writePrompts(root) {
   let written = 0;
   for (const [name, prompt] of Object.entries(expected)) {
     const file = promptPath(root, name);
-    if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === prompt) continue;
+    if (fs.existsSync(file) && readPrompt(file) === prompt) continue;
     fs.writeFileSync(file, prompt);
     written++;
   }

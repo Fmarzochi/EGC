@@ -35,8 +35,10 @@ function test(name, fn) {
 }
 
 function sandbox() {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-import-home-'));
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-import-project-'));
+  // Real paths: on macOS the temp directory sits behind a link (/var to
+  // /private/var), and the child reports the project as process.cwd() gives it.
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-import-home-')));
+  const project = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'egc-import-project-')));
   const env = { ...process.env, HOME: home, USERPROFILE: home };
   delete env.EGC_DIR;
   const run = (script, args) => spawnSync(process.execPath, [script, ...args], { cwd: project, env, encoding: 'utf8' });
