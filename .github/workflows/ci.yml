@@ -354,10 +354,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The two scripts are what npm run lint runs locally, so the gate here and
-      # the one on a developer machine cannot drift (#2146).
+      # npm run lint is the whole-tree run a developer machine does, and lint:md
+      # its Markdown part, so the gate here and the local one cannot drift (#2146).
       - name: Run ESLint
-        run: npm run lint:eslint
+        run: npm run lint
 
       - name: Run markdownlint
         run: npm run lint:md

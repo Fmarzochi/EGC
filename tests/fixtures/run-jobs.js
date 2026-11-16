@@ -14,6 +14,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { removeDirWithRetries } = require('./remove-dir');
+const { POOLED_CLI_TIMEOUT_MS } = require('./subprocess-timeouts');
 
 const MAX_JOBS = 64;
 
@@ -62,8 +63,9 @@ function orderLongestFirst(files, sizeOf) {
 
 // A file that runs in the pool shares the machine with the other workers, so
 // its subprocess budgets (tests/fixtures/subprocess-timeouts.js) read this
-// mark and stretch; a file rerun alone after a pooled failure, and the serial
-// group, run without it.
+// mark and stretch, and the Guardian budget suite-env.js computed in this
+// unpooled process is handed down already stretched; a file rerun alone after
+// a pooled failure, and the serial group, run without either.
 const POOL_MARK = 'EGC_TEST_POOL';
 
 function privateEnv(baseEnv, dir) {
@@ -71,7 +73,16 @@ function privateEnv(baseEnv, dir) {
   const tmp = path.join(dir, 'tmp');
   fs.mkdirSync(home, { recursive: true });
   fs.mkdirSync(tmp, { recursive: true });
-  return { ...baseEnv, HOME: home, USERPROFILE: home, TMPDIR: tmp, TEMP: tmp, TMP: tmp, [POOL_MARK]: '1' };
+  return {
+    ...baseEnv,
+    HOME: home,
+    USERPROFILE: home,
+    TMPDIR: tmp,
+    TEMP: tmp,
+    TMP: tmp,
+    [POOL_MARK]: '1',
+    EGC_GUARDIAN_TIMEOUT_MS: String(POOLED_CLI_TIMEOUT_MS),
+  };
 }
 
 function runNode(testPath, env) {
