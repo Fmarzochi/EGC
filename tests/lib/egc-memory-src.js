@@ -59,9 +59,10 @@ function typescriptVersion(ts) {
 }
 
 // Every place typescript was looked for, with what was found there, so a SKIP
-// can name the toolchain instead of guessing at the cause.
-function typescriptCandidates() {
-  return resolvePaths.map(dir => {
+// can name the toolchain instead of guessing at the cause. The roots are a
+// parameter so a test can put a native package in front of a usable one.
+function typescriptCandidates(paths = resolvePaths) {
+  return paths.map(dir => {
     const candidate = { dir, resolved: null, loaded: null, error: null, missing: [] };
     try {
       candidate.resolved = require.resolve('typescript', { paths: [dir] });
@@ -80,8 +81,8 @@ function typescriptCandidates() {
 }
 
 // Returns the first candidate that loads and provides the compiler API.
-function loadTypescriptDetail() {
-  const candidates = typescriptCandidates();
+function loadTypescriptDetail(paths = resolvePaths) {
+  const candidates = typescriptCandidates(paths);
   const usable = candidates.find(candidate => candidate.loaded && candidate.missing.length === 0);
   return { ts: usable ? usable.loaded : null, candidates };
 }
@@ -105,8 +106,8 @@ function describeTypescriptCandidates(candidates = typescriptCandidates()) {
 // whose native build was skipped still resolves from the root and throws
 // "Could not locate the bindings file" on require. Candidates are therefore
 // judged by loading them, not by resolution.
-function sqliteCandidates() {
-  return resolvePaths.map(dir => {
+function sqliteCandidates(paths = resolvePaths) {
+  return paths.map(dir => {
     const candidate = { dir, resolved: null, loaded: null, error: null };
     try {
       candidate.resolved = require.resolve('sqlite3', { paths: [dir] });
@@ -131,11 +132,11 @@ function describeSqliteCandidates(candidates = sqliteCandidates()) {
   return parts.join('; ');
 }
 
-function loadSqliteDriver() {
-  const candidates = sqliteCandidates();
+function loadSqliteDriver(paths = resolvePaths) {
+  const candidates = sqliteCandidates(paths);
   const usable = candidates.find(candidate => candidate.loaded);
   if (!usable) return null;
-  const sqlite = tryRequireFrom('sqlite', [usable.dir, ...resolvePaths]);
+  const sqlite = tryRequireFrom('sqlite', [usable.dir, ...paths]);
   if (!sqlite) return null;
   return { sqlite3: usable.loaded, open: sqlite.open };
 }

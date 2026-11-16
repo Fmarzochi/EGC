@@ -17,7 +17,8 @@ const {
   describeSqliteCandidates,
   loadTypescriptDetail,
   loadTypescript,
-  loadSqliteDriver
+  loadSqliteDriver,
+  resolvePaths
 } = require('./egc-memory-src');
 
 function test(name, fn) {
@@ -108,6 +109,12 @@ function runTests() {
     check('selects a sqlite driver that loaded, with an open function', () => {
       assert.strictEqual(typeof driver.open, 'function');
       assert.strictEqual(typeof driver.sqlite3.Database, 'function');
+    });
+
+    check('falls through when an earlier resolution path cannot load sqlite', () => {
+      const fallback = loadSqliteDriver(['/nonexistent-root-path', ...resolvePaths]);
+      assert.strictEqual(fallback !== null, true);
+      assert.strictEqual(typeof fallback.open, 'function');
     });
   }
 
