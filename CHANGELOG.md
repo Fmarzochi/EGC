@@ -4,6 +4,8 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+## [1.1.25] - 2026-11-16
+
 ### Security (memory hardening)
 
 - **Every MCP tool of both servers is rate limited** (#2142): the memory server gets the per-tool, per-project limiter the Guardian had (120 calls a minute for the memory server, 60 for the Guardian, each tool and project counted apart), a caller over the limit gets a clear error that names the tool, the limit and the variable that raises it, the refusal goes to the audit log, and `EGC_MCP_RATE_MAX_CALLS` and `EGC_MCP_RATE_WINDOW_MS` set the limit for both servers. `session_wait` is one call however long it parks.
