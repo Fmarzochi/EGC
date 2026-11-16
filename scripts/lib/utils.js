@@ -26,6 +26,7 @@ module.exports = {
 
   // Directories
   getHomeDir: paths.getHomeDir,
+  samePath: paths.samePath,
   getEGCDir: paths.getEGCDir,
   getLearningDir: paths.getLearningDir,
   resolveEGCDir: paths.resolveEGCDir,

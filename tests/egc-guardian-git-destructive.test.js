@@ -99,9 +99,15 @@ test('git checkout of a path is refused, checkout of a branch stays allowed', ()
   denied('git checkout -- .', 'git checkout');
   denied('git checkout HEAD src/app.js', 'git checkout');
   denied('git checkout main src/a.js src/b.js', 'git checkout');
+  denied('git checkout -p', 'git checkout --patch');
+  denied('git checkout --patch src/app.js', 'git checkout --patch');
+  denied('git checkout -B feature/x origin/main', 'git checkout -B');
+  denied('git switch -C feature/x', 'git switch -C');
+  denied('git switch --force-create feature/x', 'git switch -C');
   passes('git checkout main');
-  passes('git checkout -B feature/x origin/main');
   passes('git checkout --orphan gh-pages');
+  passes('git switch main');
+  passes('git switch -c feature/x');
   passes('git checkout -b feature/x');
   passes('git checkout -b feature/x origin/main');
   passes('git checkout --detach HEAD~1');

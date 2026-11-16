@@ -176,6 +176,15 @@ function runTests() {
         assert.strictEqual(incomplete.reason, 'incomplete');
         assert.strictEqual(describeVerification(incomplete), 'its manifest lacks a hash');
 
+        const stray = SHIM_BINARY_NAMES[0];
+        fs.writeFileSync(manifestFile, JSON.stringify({ version, dispatch: 'f'.repeat(64), binaries: {}, launchers: {} }));
+        fs.writeFileSync(path.join(shim, process.platform === 'win32' ? `${stray}.cmd` : stray), 'left behind\n');
+        const unlisted = verify();
+        assert.strictEqual(unlisted.state, 'stale');
+        assert.strictEqual(unlisted.reason, 'unlisted');
+        assert.deepStrictEqual(unlisted.altered, [stray]);
+        assert.strictEqual(describeVerification(unlisted), `a launcher on disk is not in its manifest: ${stray}`);
+
         assert.strictEqual(verify(path.join(dir, 'nowhere')).state, 'missing');
       });
     } finally {

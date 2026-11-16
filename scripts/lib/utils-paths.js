@@ -221,8 +221,16 @@ function ensurePrivateDir(dirPath) {
   return dirPath;
 }
 
+// The same directory on this platform: Windows paths compare without case.
+function samePath(a, b) {
+  const resolvedA = path.resolve(a);
+  const resolvedB = path.resolve(b);
+  return process.platform === 'win32' ? resolvedA.toLowerCase() === resolvedB.toLowerCase() : resolvedA === resolvedB;
+}
+
 module.exports = {
   getHomeDir,
+  samePath,
   getEGCDir,
   getLearningDir,
   resolveEGCDir,

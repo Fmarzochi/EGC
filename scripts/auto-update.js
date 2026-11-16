@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { samePath } = require('./lib/utils');
 const { spawnSync } = require('node:child_process');
 const { version: PKG_VERSION } = require('../package.json');
 
@@ -295,7 +296,7 @@ function refreshCrusherShim(options, dependencies) {
   if (options.dryRun) return null;
   // The shim lives in the real home. An update run for another home (a test,
   // a staged install) leaves it alone unless a stub is handed in.
-  const realHome = !options.homeDir || path.resolve(options.homeDir) === path.resolve(os.homedir());
+  const realHome = !options.homeDir || samePath(options.homeDir, os.homedir());
   const shimInstall = dependencies.shimInstall || (realHome ? require('./lib/crusher/shim-install') : null);
   if (!shimInstall) return { state: 'skipped', refreshed: false };
   try {
@@ -401,9 +402,21 @@ function runAutoUpdate(options = {}, dependencies = {}) {
   };
 }
 
+function printCrusherShim(result) {
+  if (result.crusherShim?.refreshed) {
+    const wrote = result.crusherShim.version ? `EGC ${result.crusherShim.version}` : 'an install before the pinning';
+    console.log(`Token Crusher shim: refreshed (the one on disk was ${result.crusherShim.state}, written by ${wrote})\n`);
+  } else if (result.crusherShim?.error) {
+    console.log(`Token Crusher shim: not refreshed (${result.crusherShim.error})\n`);
+  }
+}
+
 function printHuman(result) {
   if (result.results.length === 0) {
     console.log('No EGC install-state files found for the current home/project context.');
+    // The shim is refreshed on this path too, and a failed refresh is the
+    // reason the command exits 1, so it is said here.
+    printCrusherShim(result);
     return;
   }
 
@@ -423,12 +436,7 @@ function printHuman(result) {
     console.log('');
   }
 
-  if (result.crusherShim?.refreshed) {
-    const wrote = result.crusherShim.version ? `EGC ${result.crusherShim.version}` : 'an install before the pinning';
-    console.log(`Token Crusher shim: refreshed (the one on disk was ${result.crusherShim.state}, written by ${wrote})\n`);
-  } else if (result.crusherShim?.error) {
-    console.log(`Token Crusher shim: not refreshed (${result.crusherShim.error})\n`);
-  }
+  printCrusherShim(result);
 
   for (const entry of result.results) {
     console.log(`- ${entry.adapter.id}`);

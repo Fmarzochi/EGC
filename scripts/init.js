@@ -349,7 +349,9 @@ function reportCrusherStatus() {
   const shim = readShimStatus();
   if (!shim) {
     skip('token crusher', 'status unavailable');
-  } else if (shim.dirExists && shim.shimmed.length > 0) {
+  } else if (shim.dirExists && (shim.shimmed.length > 0 || (shim.state && shim.state !== 'missing'))) {
+    // A manifest that cannot be read lists no binaries and is still an install
+    // to report, with the reason, rather than "not installed".
     let msg;
     if (shim.activeInCurrentShell) {
       msg = 'shim installed and on PATH';

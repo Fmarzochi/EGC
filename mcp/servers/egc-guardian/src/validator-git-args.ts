@@ -619,6 +619,8 @@ const GIT_DISCARD_REASONS = {
   tagDelete: 'git tag -d is forbidden: a deleted tag has to be recreated on the exact commit it marked, and a release tag is what other people installed. Leave the tag in place.',
   restore: 'git restore of the worktree is forbidden: it overwrites the changes in those files with the committed version, with no way to get them back. Commit or stash first; git restore --staged, which only unstages, stays allowed.',
   checkoutPath: 'git checkout of a path is forbidden: it overwrites the changes in those files with the committed version, with no way to get them back. Commit or stash first; checking out a branch stays allowed.',
+  checkoutPatch: 'git checkout --patch is forbidden: it discards hunks of the worktree one by one, with no way to get them back. Commit or stash first.',
+  branchReset: 'git checkout -B and git switch -C are forbidden: they move an existing branch to another commit, and the commits it pointed at are left to the reflog. Create a new branch with git checkout -b or git switch -c, or move the branch once it is merged.',
   stashDrop: 'git stash drop is forbidden: it deletes stashed work that only the stash list holds. Apply or pop the stash instead.',
   stashClear: 'git stash clear is forbidden: it deletes every stash at once. Apply or pop the stashes you want and leave the rest.',
 };
@@ -628,14 +630,9 @@ function shortFlagCluster(token: string, letter: string): boolean {
 }
 
 // Git accepts any unambiguous prefix of a long option (--har for --hard, --del
-// for --delete), so a refusal that compared the whole word let the
-// abbreviation through. One letter after the dashes is the shortest Git takes.
-function longOption(token: string, name: string): boolean {
-  return token.startsWith('--') && token.length >= 3 && name.startsWith(token);
-}
-
+// for --delete), so the long form is matched the way the force flags are.
 function hasOption(options: string[], longName: string, shortLetter: string | null): boolean {
-  return options.some(token => longOption(token.toLowerCase(), longName)
+  return options.some(token => abbreviates(token.toLowerCase(), longName)
     || (shortLetter !== null && shortFlagCluster(token, shortLetter)));
 }
 
@@ -681,11 +678,21 @@ function restoreDiscard(options: string[]): string | null {
   return staged && !worktree ? null : GIT_DISCARD_REASONS.restore;
 }
 
-// A single operand is a branch to Git before it is a path, and the validator
-// cannot resolve refs; a second operand, or the terminator, can only mean paths.
-function checkoutDiscard(_options: string[], exact: string[], terminator: number): string | null {
+// Patch mode throws hunks away with no operand at all, and -B moves a branch
+// that exists. For paths: a single operand is a branch to Git before it is a
+// path, and the validator cannot resolve refs; a second operand, or the
+// terminator, can only mean paths.
+function checkoutDiscard(options: string[], exact: string[], terminator: number): string | null {
+  if (options.some(token => shortFlagCluster(token, 'p') || abbreviates(token.toLowerCase(), '--patch'))) return GIT_DISCARD_REASONS.checkoutPatch;
+  if (options.some(token => shortFlagCluster(token, 'B'))) return GIT_DISCARD_REASONS.branchReset;
   if (terminator !== -1) return GIT_DISCARD_REASONS.checkoutPath;
-  return gitOperands(exact, ['-b', '-B', '--orphan']).length > 1 ? GIT_DISCARD_REASONS.checkoutPath : null;
+  return gitOperands(exact, ['-b', '--orphan']).length > 1 ? GIT_DISCARD_REASONS.checkoutPath : null;
+}
+
+function switchDiscard(options: string[]): string | null {
+  return options.some(token => shortFlagCluster(token, 'C') || abbreviates(token.toLowerCase(), '--force-create'))
+    ? GIT_DISCARD_REASONS.branchReset
+    : null;
 }
 
 function stashDiscard(_options: string[], exact: string[]): string | null {
@@ -701,6 +708,7 @@ const GIT_DISCARD_CHECKS = new Map<string, DiscardCheck>([
   ['tag', tagDiscard],
   ['restore', restoreDiscard],
   ['checkout', checkoutDiscard],
+  ['switch', switchDiscard],
   ['stash', stashDiscard],
 ]);
 

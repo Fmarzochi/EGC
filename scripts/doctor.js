@@ -5,7 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { doctor: doctorOp } = require('./lib/operations/index');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
-const { getKnownHarnessDirs } = require('./lib/utils');
+const { getKnownHarnessDirs, samePath } = require('./lib/utils');
 const { resolveStateStorePath } = require('./lib/state-store/path');
 const { parseTargetArgs } = require('./lib/cli-target-args');
 const { consolidateCommand, shellQuote } = require('./lib/doctor-summary');
@@ -143,13 +143,6 @@ function printHuman(report) {
 // Windows filesystems are case-insensitive and drive letters arrive in
 // either case depending on the shell (C:\Users vs c:\users under Git
 // Bash), so path identity folds case there; POSIX stays case-sensitive.
-function samePath(a, b) {
-  const resolvedA = path.resolve(a);
-  const resolvedB = path.resolve(b);
-  if (process.platform === 'win32') return resolvedA.toLowerCase() === resolvedB.toLowerCase();
-  return resolvedA === resolvedB;
-}
-
 // Stray copies of the CLI store left in harness directories by the
 // pre-#1104 resolution order (the state-fragmentation bug). Reported with
 // size and last write so the person can tell live data from stale copies.
@@ -212,7 +205,7 @@ function checkStateDb(homeDir) {
 // no shim to judge; a shim another version wrote, or one edited on disk,
 // still runs, so it is a warning that names the command to refresh it.
 function checkCrusherShim(homeDir) {
-  if (path.resolve(homeDir) !== path.resolve(os.homedir())) return null;
+  if (!samePath(homeDir, os.homedir())) return null;
   const shim = require('./lib/crusher/shim-install').verify();
   return !shim.installed || shim.state === 'ok' ? null : shim;
 }

@@ -30,7 +30,9 @@ function suiteEnv(env) {
   // egc run hands its child EGC_CRUSHER_RAW=1 so the shim steps aside; a suite
   // started through egc run must not inherit it, or its crusher tests would
   // see a shim that passes everything through.
-  delete copy.EGC_CRUSHER_RAW;
+  for (const key of Object.keys(copy)) {
+    if (key.toUpperCase() === 'EGC_CRUSHER_RAW') delete copy[key];
+  }
   return copy;
 }
 

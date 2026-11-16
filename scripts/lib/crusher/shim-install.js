@@ -209,6 +209,9 @@ function install() {
   for (const name of SHIM_BINARY_NAMES) {
     const realPath = resolveWithoutShim(name);
     if (!realPath) {
+      // A launcher from an earlier install must not outlive its binary: it
+      // would stay on PATH outside the manifest, where verify() cannot see it.
+      removeLauncher(dir, name);
       skipped.push(name);
       continue;
     }
@@ -268,9 +271,10 @@ function isPathPersisted(dir = shimDir()) {
  * Compares the shim on disk with what this package would write: the version
  * that wrote the manifest, the dispatch module hash and the hash of every
  * launcher. missing: nothing installed; legacy: a manifest from before the
- * pinning; stale: a manifest that cannot be read or lacks a hash, another
- * version or another dispatch module; altered: a launcher whose content
- * changed; ok: all of it matches. reason names which of those it was.
+ * pinning; stale: a manifest that cannot be read or lacks a hash, a launcher
+ * on disk the manifest does not list, another version or another dispatch
+ * module; altered: a launcher whose content changed; ok: all of it matches.
+ * reason names which of those it was.
  *
  * @returns {{ installed: boolean, state: string, reason: string|null, version: string|null, expectedVersion: string, altered: string[], dir: string }}
  */
@@ -285,6 +289,8 @@ function verify(dir = shimDir()) {
   if (!record.dispatch || names.some(name => typeof record.launchers[name] !== 'string')) {
     return { ...base, installed: true, state: 'stale', reason: 'incomplete' };
   }
+  const unlisted = SHIM_BINARY_NAMES.filter(name => !record.binaries[name] && fs.existsSync(launcherPath(dir, name)));
+  if (unlisted.length > 0) return { ...base, installed: true, state: 'stale', altered: unlisted, reason: 'unlisted' };
   const altered = names.filter(name => record.launchers[name] !== sha256File(launcherPath(dir, name)));
   if (record.version !== expectedVersion) return { ...base, installed: true, state: 'stale', altered, reason: 'version' };
   if (record.dispatch !== sha256File(DISPATCH_MODULE)) return { ...base, installed: true, state: 'stale', altered, reason: 'dispatch' };
@@ -299,6 +305,7 @@ function describeVerification(report) {
     case 'corrupt': return 'its manifest cannot be read';
     case 'legacy': return 'its manifest predates the version pinning';
     case 'incomplete': return 'its manifest lacks a hash';
+    case 'unlisted': return `a launcher on disk is not in its manifest: ${report.altered.join(', ')}`;
     case 'version': return `it was written by EGC ${report.version}, this is ${report.expectedVersion}`;
     case 'dispatch': return 'the dispatch module changed since it was written';
     case 'launchers': return `a launcher changed on disk: ${report.altered.join(', ')}`;
