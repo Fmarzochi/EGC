@@ -212,10 +212,12 @@ jobs:
         run: node tests/run-all.js
         env:
           GEMINI_CODE_PACKAGE_MANAGER: ${{ matrix.pm }}
-          # Opt-in: a repository variable EGC_TEST_JOBS=N runs the independent test
-          # files N at a time (tests/run-all.js --jobs). Unset or empty keeps the
-          # serial run, byte for byte.
-          EGC_TEST_JOBS: ${{ vars.EGC_TEST_JOBS }}
+          # The independent test files run N at a time (tests/run-all.js --jobs).
+          # A repository variable EGC_TEST_JOBS=N sets N for every lane. Without
+          # it, the Windows lanes run four at a time: their 35 minutes were 34 of
+          # suite on a 4 vCPU runner against 8 on Linux, with the installs and the
+          # two server builds under a minute (#2147); Linux and macOS stay serial.
+          EGC_TEST_JOBS: ${{ vars.EGC_TEST_JOBS || (runner.os == 'Windows' && '4' || '') }}
 
       # Upload test artifacts on failure
       - name: Upload test artifacts
@@ -352,11 +354,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The two scripts are what npm run lint runs locally, so the gate here and
+      # the one on a developer machine cannot drift (#2146).
       - name: Run ESLint
-        run: npx eslint "scripts/**/*.js" "tests/**/*.js" "mcp/servers/*/src/**/*.ts"
+        run: npm run lint:eslint
 
       - name: Run markdownlint
-        run: npx markdownlint --config .github/.markdownlint.json "agents/**/*.md" "skills/**/*.md" "commands/**/*.md" "rules/**/*.md"
+        run: npm run lint:md
 
       - name: Verify npm pack surface
         run: |

@@ -142,9 +142,21 @@ function runSuite(runAll, args, tmp) {
       assert.strictEqual(env.TMP, env.TMPDIR);
       assert.ok(fs.statSync(env.HOME).isDirectory() && fs.statSync(env.TMPDIR).isDirectory());
       assert.ok(!('EGC_DIR' in env));
+      assert.strictEqual(env.EGC_TEST_POOL, '1', 'a pooled child is marked so its subprocess budgets can stretch (#2145)');
     } finally {
       removeDirWithRetries(dir);
     }
+  });
+
+  await test('the subprocess budgets double under the pool mark and stay as they are without it (#2145)', () => {
+    const fixture = path.join(__dirname, '..', 'fixtures', 'subprocess-timeouts.js');
+    const read = env => JSON.parse(spawnSync(process.execPath, [
+      '-p', `JSON.stringify(require(${JSON.stringify(fixture)}))`,
+    ], { encoding: 'utf8', env }).stdout);
+    const alone = read({ ...process.env, EGC_TEST_POOL: '' });
+    const pooled = read({ ...process.env, EGC_TEST_POOL: '1' });
+    assert.deepStrictEqual(alone, { FULL_INSTALL_TIMEOUT_MS: 180000, CLI_TIMEOUT_MS: 30000, POOL_SCALE: 1 });
+    assert.deepStrictEqual(pooled, { FULL_INSTALL_TIMEOUT_MS: 360000, CLI_TIMEOUT_MS: 60000, POOL_SCALE: 2 });
   });
 
   await test('runInPrivateEnv runs the file in a home of its own and removes it afterwards', async () => {

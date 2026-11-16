@@ -12,6 +12,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+const { seedLedger } = require('./fixtures/crusher-ledger');
 const ROOT = path.join(__dirname, '..');
 const GAIN = path.join(ROOT, 'scripts', 'gain.js');
 const DISCOVER = path.join(ROOT, 'scripts', 'discover.js');
@@ -48,22 +49,10 @@ run('gain --history --json returns the raw ledger entries', () => {
   // Point the spawned child at a synthetic HOME so --json reports exactly the
   // seeded ledger instead of the real ~/.egc ledger, whose size would exceed
   // the spawn buffer and kill the child with status === null.
-  const home = tempDir('egc-gain-home-');
-  const ledgerDir = path.join(home, '.egc', 'metrics');
-  fs.mkdirSync(ledgerDir, { recursive: true });
   const entry = { ts: '2026-07-26T04:00:00Z', kind: 'git-log', cmd: 'git log --stat', tokensSaved: 5000, bytesIn: 100000, bytesOut: 2000 };
-  fs.writeFileSync(path.join(ledgerDir, 'crusher.jsonl'), `${JSON.stringify(entry)}\n`);
+  const { env } = seedLedger(tempDir('egc-gain-home-'), [entry]);
 
-  const res = spawnSync('node', [GAIN, '--history', '--json'], {
-    encoding: 'utf8',
-    maxBuffer: 10 * 1024 * 1024,
-    env: {
-      ...process.env,
-      HOME: home,
-      USERPROFILE: home,
-      EGC_CRUSHER_METRICS_FILE: path.join(ledgerDir, 'crusher.jsonl'),
-    },
-  });
+  const res = spawnSync('node', [GAIN, '--history', '--json'], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, env });
   assert.strictEqual(res.status, 0, res.stderr);
   const entries = JSON.parse(res.stdout);
   assert.ok(Array.isArray(entries), 'history is an array');
@@ -73,16 +62,10 @@ run('gain --history --json returns the raw ledger entries', () => {
 });
 
 run('gain --history prints local time with its offset and leaves the ledger in UTC (#1659)', () => {
-  const home = tempDir('egc-gain-home-');
-  const ledgerDir = path.join(home, '.egc', 'metrics');
-  fs.mkdirSync(ledgerDir, { recursive: true });
-  const ledger = path.join(ledgerDir, 'crusher.jsonl');
-  const line = `${JSON.stringify({ ts: '2026-07-26T04:00:00Z', kind: 'git-log', cmd: 'git log --stat', tokensSaved: 5000, bytesIn: 100000, bytesOut: 2000 })}\n`;
-  fs.writeFileSync(ledger, line);
-  const historyIn = tz => spawnSync('node', [GAIN, '--history'], {
-    encoding: 'utf8',
-    env: { ...process.env, HOME: home, USERPROFILE: home, EGC_CRUSHER_METRICS_FILE: ledger, TZ: tz },
-  });
+  const row = { ts: '2026-07-26T04:00:00Z', kind: 'git-log', cmd: 'git log --stat', tokensSaved: 5000, bytesIn: 100000, bytesOut: 2000 };
+  const line = `${JSON.stringify(row)}\n`;
+  const { env, ledgerPath: ledger } = seedLedger(tempDir('egc-gain-home-'), [row]);
+  const historyIn = tz => spawnSync('node', [GAIN, '--history'], { encoding: 'utf8', env: { ...env, TZ: tz } });
 
   const utc = historyIn('UTC');
   assert.strictEqual(utc.status, 0, utc.stderr);
@@ -96,16 +79,10 @@ run('gain --history prints local time with its offset and leaves the ledger in U
 });
 
 run('gain summary prints the biggest crush with its command', () => {
-  const home = tempDir('egc-gain-home-');
-  const ledgerDir = path.join(home, '.egc', 'metrics');
-  fs.mkdirSync(ledgerDir, { recursive: true });
   const entry = { ts: '2026-07-26T04:00:00Z', kind: 'git-log', cmd: 'git log --stat', tokensSaved: 5000, bytesIn: 100000, bytesOut: 2000 };
-  fs.writeFileSync(path.join(ledgerDir, 'crusher.jsonl'), `${JSON.stringify(entry)}\n`);
+  const { env } = seedLedger(tempDir('egc-gain-home-'), [entry]);
 
-  const res = spawnSync('node', [GAIN], {
-    encoding: 'utf8',
-    env: { ...process.env, HOME: home, USERPROFILE: home },
-  });
+  const res = spawnSync('node', [GAIN], { encoding: 'utf8', env });
   assert.strictEqual(res.status, 0, res.stderr);
   // Regression for the .command/.cmd mismatch: the ledger stores `cmd`, so the
   // Biggest crush line must surface the command instead of never printing.

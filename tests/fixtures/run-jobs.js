@@ -60,12 +60,18 @@ function orderLongestFirst(files, sizeOf) {
   return [...files].sort((a, b) => sizeOf(b) - sizeOf(a) || compareNames(a, b));
 }
 
+// A file that runs in the pool shares the machine with the other workers, so
+// its subprocess budgets (tests/fixtures/subprocess-timeouts.js) read this
+// mark and stretch; a file rerun alone after a pooled failure, and the serial
+// group, run without it.
+const POOL_MARK = 'EGC_TEST_POOL';
+
 function privateEnv(baseEnv, dir) {
   const home = path.join(dir, 'home');
   const tmp = path.join(dir, 'tmp');
   fs.mkdirSync(home, { recursive: true });
   fs.mkdirSync(tmp, { recursive: true });
-  return { ...baseEnv, HOME: home, USERPROFILE: home, TMPDIR: tmp, TEMP: tmp, TMP: tmp };
+  return { ...baseEnv, HOME: home, USERPROFILE: home, TMPDIR: tmp, TEMP: tmp, TMP: tmp, [POOL_MARK]: '1' };
 }
 
 function runNode(testPath, env) {

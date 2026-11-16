@@ -4,6 +4,12 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+### Changed (tests and CI)
+
+- **The Windows lanes of the test job run the independent test files four at a time** (#2147): the study of the last `main` run put 34 of the 35 minutes of a Windows lane in the suite itself (2051 s against 467 s on Linux), with the dependency installs and the two server builds under a minute, so caching had nothing to cut; the lane now runs `tests/run-all.js` with four workers on the 4 vCPU runner, Linux and macOS stay serial, and a repository variable `EGC_TEST_JOBS` still sets every lane. Before and after of the slowest lane in the pull request.
+- **The subprocess budgets of the suite stretch under the pool** (#2145): the runner marks a pooled child with `EGC_TEST_POOL`, `tests/fixtures/subprocess-timeouts.js` doubles `FULL_INSTALL_TIMEOUT_MS` and `CLI_TIMEOUT_MS` under that mark and keeps them alone and in the serial group, and the full install case of `install-sh.test.js` says, when it fails, how long it ran against which budget.
+- **One ledger fixture for the Crusher suites, and `npm run lint` equal to the CI Lint job** (#2146): `tests/fixtures/crusher-ledger.js` seeds the ledger and returns the environment a child needs, used by the gain and the parity suites instead of four copies of the same mkdir and write; `npm run lint` now runs `lint:eslint` (the globs the CI uses) and `lint:md`, and the Lint job calls those two scripts, so the local gate and the CI gate cannot drift.
+
 ## [1.1.24] - 2026-11-16
 
 ### Added
