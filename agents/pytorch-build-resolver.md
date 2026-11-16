@@ -85,7 +85,7 @@ print(f'Max allocated: {torch.cuda.max_memory_allocated()/1e9:.2f} GB')
 Common memory fixes:
 - Wrap validation in `with torch.no_grad():`
 - Use `del tensor; torch.cuda.empty_cache()`
-- Enable gradient checkpointing: `model.gradient_checkpointing_enable()`
+- Enable gradient checkpointing: `torch.utils.checkpoint.checkpoint` around the heavy blocks; `model.gradient_checkpointing_enable()` only on a model class that provides it (Hugging Face transformers do, a plain `nn.Module` does not)
 - Use `torch.cuda.amp.autocast()` for mixed precision
 
 ## Key Principles

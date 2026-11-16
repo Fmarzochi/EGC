@@ -69,6 +69,10 @@ const COMMANDS = {
     script: 'export.js',
     description: 'Print the decrypted memory document for a project or the global scope, as text or --json (read-only)',
   },
+  import: {
+    script: 'import.js',
+    description: 'Bring an exported memory document into the memory of a project or the global scope: merge by default, --replace, --dry-run',
+  },
   overview: {
     script: 'overview.js',
     description: 'Aggregated read-only view of every per-project memory state',
@@ -173,6 +177,7 @@ const PRIMARY_COMMANDS = [
   'status',
   'overview',
   'export',
+  'import',
   'verify',
   'sessions',
   'replay',

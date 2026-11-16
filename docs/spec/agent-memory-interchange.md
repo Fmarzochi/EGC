@@ -127,7 +127,7 @@ When assembling context for an agent, consumers MUST apply precedence: branch ov
 
 ## 8. Interchange operations (reference behavior)
 
-Two operations complete the interchange story. They are specified here by behavior; `egc export` is the reference implementation of the first, `egc import` is planned.
+Two operations complete the interchange story. They are specified here by behavior; `egc export` is the reference implementation of the first and `egc import` of the second.
 
 ### 8.1 Export
 
@@ -146,6 +146,8 @@ Read a foreign memory artifact and merge it into an AMI document using the Secti
 | Free-form notes | Split by the importer into the five sections, with the user reviewing the result |
 
 Importers MUST preserve the source meaning, MUST NOT invent entries, and SHOULD tag imported entries with their origin when the source is another person's memory.
+
+Reference: `egc import <file> [--project <path>] [--scope project|global] [--replace] [--dry-run] [--json]` reads an AMI document, refuses one that does not parse or that carries the shape of a credential (the refusal names the shape, never the value), and merges it into the memory of the scope with the rules of Section 5: the document's entries go first, one copy of each text, capped per section; the Context is taken from the document when it has one; Next Session is rewritten when the document carries the section; what the cap pushes out is retired in the header (Section 4.1), a retirement newer than the document's `updated` keeps its entry out, and an entry that comes back while its retirement is held is restored; `--replace` writes the document in place of the memory, retiring what the memory held and the document lacks. The write goes through the same encrypted, locked path the hooks use, with the integrity sidecar, and `--dry-run` prints the change per section and writes nothing. The foreign formats in the table above become an AMI document first, by hand or by another tool, and then go through `egc import`.
 
 ## 9. Conformance
 

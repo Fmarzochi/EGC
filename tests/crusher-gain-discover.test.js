@@ -178,6 +178,43 @@ run('discover reports zero on an empty directory', () => {
   assert.strictEqual(report.missedRuns, 0);
 });
 
+run('gain --share prints totals, kinds and layers and nothing that names the machine, a project or a session (#2139)', () => {
+  const home = tempDir('egc-gain-home-');
+  const ledgerDir = path.join(home, '.egc', 'metrics');
+  fs.mkdirSync(ledgerDir, { recursive: true });
+  const project = path.join(home, 'work', 'secret-client-project');
+  const rows = [
+    { ts: '2026-11-16T01:00:00Z', kind: 'git-log', cmd: 'git log --stat', layer: 'shim', tokensSaved: 3000, bytesIn: 50000, bytesOut: 1000, session: 'ses_private_42', project },
+    { ts: '2026-11-16T01:01:00Z', kind: 'npm-install', cmd: 'npm install', layer: 'run', tokensSaved: 1000, bytesIn: 20000, bytesOut: 4000, session: 'ses_private_42', project },
+  ];
+  fs.writeFileSync(path.join(ledgerDir, 'crusher.jsonl'), rows.map(row => JSON.stringify(row)).join('\n') + '\n');
+  const env = { ...process.env, HOME: home, USERPROFILE: home, EGC_CRUSHER_METRICS_FILE: path.join(ledgerDir, 'crusher.jsonl') };
+
+  const text = spawnSync(process.execPath, [GAIN, '--share'], { encoding: 'utf8', env });
+  assert.strictEqual(text.status, 0, text.stderr);
+  assert.ok(text.stdout.includes('| Crushed runs | 2 |'), text.stdout);
+  assert.ok(text.stdout.includes('| Tokens saved | ~4.0K |'), text.stdout);
+  assert.ok(text.stdout.includes('| Efficiency | 93% |'), text.stdout);
+  assert.ok(text.stdout.includes('By command kind: git-log ~3.0K, npm-install ~1.0K'), text.stdout);
+  assert.ok(text.stdout.includes('By layer: shim ~3.0K, run ~1.0K'), text.stdout);
+  for (const secret of [home, project, 'secret-client-project', 'ses_private_42', 'git log --stat']) {
+    assert.ok(!text.stdout.includes(secret), `the shared block must not carry ${secret}`);
+  }
+
+  const json = spawnSync(process.execPath, [GAIN, '--share', '--json'], { encoding: 'utf8', env });
+  assert.strictEqual(json.status, 0, json.stderr);
+  const report = JSON.parse(json.stdout);
+  assert.deepStrictEqual(Object.keys(report).sort(), ['byKind', 'byLayer', 'bytesIn', 'bytesOut', 'efficiency', 'runs', 'tokensSaved']);
+  assert.deepStrictEqual(report.byLayer, { shim: { runs: 1, tokensSaved: 3000 }, run: { runs: 1, tokensSaved: 1000 } });
+  for (const secret of [home, project, 'ses_private_42', 'git log']) {
+    assert.ok(!json.stdout.includes(secret), `the JSON must not carry ${secret}`);
+  }
+
+  const empty = spawnSync(process.execPath, [GAIN, '--share'], { encoding: 'utf8', env: { ...env, EGC_CRUSHER_METRICS_FILE: path.join(ledgerDir, 'none.jsonl') } });
+  assert.strictEqual(empty.status, 0, empty.stderr);
+  assert.ok(empty.stdout.includes('nothing to share'), empty.stdout);
+});
+
 for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
 run('no directory a case made is left behind, including one a case made without tempDir', () => {
   assert.ok(tempDirs.length >= 4, 'the cases made their directories through tempDir');

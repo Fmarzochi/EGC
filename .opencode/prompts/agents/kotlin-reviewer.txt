@@ -29,7 +29,7 @@ Apply the Kotlin/Android security guidance before continuing:
 - keystore, token, and credential handling
 - platform-specific storage and permission risks
 
-If you find a CRITICAL security issue, stop the review and hand off to `security-reviewer`.
+If you find a CRITICAL security issue, stop the review and hand off to `security-reviewer` before doing any further analysis.
 
 ### Step 3: Read and Review
 
@@ -57,6 +57,15 @@ Use the output format below. Only report issues with >80% confidence.
 - **Flow collection in `init {}`**: Should use `stateIn()` or launch in scope
 - **Missing `WhileSubscribed`**: `stateIn(scope, SharingStarted.Eagerly)` when `WhileSubscribed` is appropriate
 
+```kotlin
+// BAD: swallows cancellation
+try { fetchData() } catch (e: Exception) { log(e) }
+
+// GOOD: preserves cancellation
+try { fetchData() } catch (e: CancellationException) { throw e } catch (e: Exception) { log(e) }
+// or use runCatching and check
+```
+
 ### Compose (HIGH)
 
 - **Unstable parameters**: Composables receiving mutable types cause unnecessary recomposition
@@ -64,6 +73,16 @@ Use the output format below. Only report issues with >80% confidence.
 - **NavController passed deep**: Pass lambdas instead of `NavController` references
 - **Missing `key()` in LazyColumn**: Items without stable keys cause poor performance
 - **`remember` with missing keys**: Computation not recalculated when dependencies change
+- **Object allocation in parameters**: Creating objects inline causes recomposition
+
+```kotlin
+// BAD: new lambda every recomposition
+Button(onClick = { viewModel.doThing(item.id) })
+
+// GOOD: stable reference
+val onClick = remember(item.id) { { viewModel.doThing(item.id) } }
+Button(onClick = onClick)
+```
 
 ### Kotlin Idioms (MEDIUM)
 
@@ -89,6 +108,12 @@ Use the output format below. Only report issues with >80% confidence.
 - **Sensitive logging**: Tokens, credentials, PII, or secrets emitted to logs
 
 If any CRITICAL security issue is present, stop and escalate to `security-reviewer`.
+
+### Gradle & Build (LOW)
+
+- **Version catalog not used**: Hardcoded versions instead of `libs.versions.toml`
+- **Unnecessary dependencies**: Dependencies added but not used
+- **Missing KMP source sets**: Declaring `androidMain` code that could be `commonMain`
 
 ## Output Format
 

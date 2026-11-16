@@ -29,7 +29,7 @@ Scan every text file (excluding `node_modules`, `.git`, `__pycache__`, `*.min.js
 pattern: [A-Za-z0-9_]*(api[_-]?key|apikey|api[_-]?secret)[A-Za-z0-9_]*\s*[=:]\s*['"]?[A-Za-z0-9+/=_-]{16,}
 
 # AWS
-pattern: AKIA[0-9A-Z]{16}
+pattern: (AKIA|ASIA)[0-9A-Z]{16}
 pattern: (?i)(aws_secret_access_key|aws_secret)\s*[=:]\s*['"]?[A-Za-z0-9+/=]{20,}
 
 # Database URLs with credentials
@@ -76,7 +76,7 @@ pattern: (192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+
 severity: CRITICAL (if not documented as placeholder in .env.example)
 
 # SSH connection strings
-pattern: ssh\s+[a-z]+@[0-9.]+
+pattern: ssh\s+[a-z][a-z0-9_-]*@([0-9.]+|\[[0-9a-fA-F:]+\]|[A-Za-z0-9.-]+)
 severity: CRITICAL
 ```
 
@@ -84,7 +84,7 @@ severity: CRITICAL
 
 ```
 # Absolute paths to specific user home directories
-pattern: /home/[a-z][a-z0-9_-]*/  (anything other than /home/user/)
+pattern: /home/[a-z][a-z0-9_-]*(/|$)  (anything other than /home/user, the documented placeholder, which is exempt)
 pattern: /Users/[A-Za-z][A-Za-z0-9_-]*/  (macOS home directories)
 pattern: C:\\Users\\[A-Za-z]  (Windows home directories)
 severity: CRITICAL
@@ -99,7 +99,7 @@ severity: CRITICAL
 
 Verify these do NOT exist:
 ```
-.env (any variant: .env.local, .env.production, .env.*.local)
+.env and .env.* (every mode-specific variant: .env.local, .env.development, .env.production, .env.*.local); .env.example is the one file allowed
 *.pem, *.key, *.p12, *.pfx, *.jks
 credentials.json, service-account*.json
 .secrets/, secrets/
@@ -124,8 +124,8 @@ cd PROJECT_DIR
 git log --oneline | wc -l
 # If > 1, history was not cleaned: FAIL
 
-# Search history for potential secrets
-git log -p | grep -iE '(password|secret|api.?key|token)' | head -20
+# Search every commit of every ref with the whole Step 1 pattern set, no cap on the matches: a leak past the first twenty is still a leak
+git log --all -p | grep -nE '(password|passwd|secret|api[_-]?key|token|(AKIA|ASIA)[0-9A-Z]{16}|BEGIN .*PRIVATE KEY|gh[pousr]_[A-Za-z0-9_]{36,}|github_pat_|GOCSPX-|hooks\.slack\.com|eyJ[A-Za-z0-9_-]{20,}\.eyJ)'
 ```
 
 ## Output Format

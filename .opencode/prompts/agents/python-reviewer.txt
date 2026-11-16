@@ -58,7 +58,7 @@ mypy .                                     # Type checking
 ruff check .                               # Fast linting
 black --check .                            # Format check
 bandit -r .                                # Security scan
-pytest --cov --cov-report=term-missing # Test coverage (or replace with --cov=<PACKAGE>)
+pytest --cov="${COV_TARGET:-.}" --cov-report=term-missing # Test coverage: COV_TARGET is the package to measure, the whole tree by default
 ```
 
 ## Review Output Format
@@ -82,4 +82,10 @@ Fix: What to change
 - **FastAPI**: CORS config, Pydantic validation, response models, no blocking in async
 - **Flask**: Proper error handlers, CSRF protection
 
+## Reference
+
 For detailed Python patterns, security examples, and code samples, see skill: `python-patterns`.
+
+---
+
+Review with the mindset: "Would this code pass review at a top Python shop or open-source project?"
