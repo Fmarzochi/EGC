@@ -284,6 +284,7 @@ function resolveRepoRootForRecords(records, requestedRepoRoot, results) {
 // installs are reapplied, a shim another version wrote, or one edited on
 // disk, is rewritten so its launchers match the package now installed.
 function refreshCrusherShim(options, dependencies) {
+  if (options.dryRun) return null;
   // The shim lives in the real home. An update run for another home (a test,
   // a staged install) leaves it alone unless a stub is handed in.
   const realHome = !options.homeDir || path.resolve(options.homeDir) === path.resolve(os.homedir());
@@ -374,7 +375,7 @@ function runAutoUpdate(options = {}, dependencies = {}) {
   const cognitiveBootstrap = options.dryRun ? null : runCognitiveBootstrap(repoRoot, env, execute);
 
   results.push(...applyInstalls(validRecords, options, repoRoot, env, execute));
-  const crusherShim = options.dryRun ? null : refreshCrusherShim(options, dependencies);
+  const crusherShim = refreshCrusherShim(options, dependencies);
 
   return {
     dryRun: Boolean(options.dryRun),

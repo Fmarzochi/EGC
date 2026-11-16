@@ -4,6 +4,13 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+### Added (Guardian and hooks)
+
+- **The Guardian refuses the git commands that discard work** (#2134): `git reset --hard` and `--merge`, `git branch -D`, `git tag -d`, `git restore` of the worktree, `git checkout` of a path and `git stash drop` or `clear` are refused with a reason that says what each one would throw away and the form that keeps it (`reset --soft` or `--keep`, `branch -d`, `restore --staged`, checkout of a branch, `stash pop` or `apply`), next to the force flags and `git clean` the validator already refused. `tests/egc-guardian-git-destructive.test.js` pins both lists.
+- **The content a Read or a WebFetch brings in is scanned for prompt injection, and a flagged result reaches the model** (#2135): the PostToolUse scan that existed for WebFetch now runs for Read too (`post:read:injection-scan` in `hooks/hooks.json`), reads the result in every shape Claude Code sends (a string, MCP content blocks, `file.content`), and answers a flagged result with `hookSpecificOutput.additionalContext` naming the count and the categories, never the matched snippets, since a PostToolUse hook can add context but cannot change the result the model already received; a clean result prints nothing, and the hook never blocks.
+- **The Token Crusher ledger records the layer of every row, and `egc gain` shows the automatic shim apart from the `egc run` prefix** (#2136): the binary shim in `~/.egc/bin` writes `layer: shim`, `egc run` writes `layer: run`, rows from before the field show as `unlabeled`, and `egc gain` prints the split under "By layer" (`byLayer` in `--json`). This closes the plan of 3 October for a PostToolUse compressor: the Claude Code hooks documentation is explicit that a PostToolUse hook cannot replace the tool result the model sees, so the shim is the automatic layer and the prefix the explicit one, as `docs/token-optimization.md` now says.
+- **The Token Crusher shim is pinned to the version that wrote it** (#2137): the manifest in `~/.egc/bin` records the package version, the hash of the dispatch module and one hash per launcher; `egc doctor` and `egc init` warn when the shim was written by another version or a launcher changed on disk, naming the version or the launcher and the command that refreshes it; `egc auto-update` rewrites a stale, altered or pre-pinning shim by itself; a manifest from before the pinning still reads.
+
 ## [1.1.24] - 2026-11-16
 
 ### Added
