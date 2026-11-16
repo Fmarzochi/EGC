@@ -291,19 +291,22 @@ const Component = () => {
   }, [largeData]);
 };
 
-// GOOD: Use refs or proper dependencies
-const largeDataRef = useRef(largeData);
-useEffect(() => {
-  largeDataRef.current = largeData;
-}, [largeData]);
+// GOOD: Use refs or proper dependencies, inside the component
+const Component = () => {
+  const largeData = useLargeData();
+  const largeDataRef = useRef(largeData);
+  useEffect(() => {
+    largeDataRef.current = largeData;
+  }, [largeData]);
 
-useEffect(() => {
-  const handleUpdate = () => {
-    console.log(largeDataRef.current);
-  };
-  eventEmitter.on('update', handleUpdate);
-  return () => eventEmitter.off('update', handleUpdate);
-}, []);
+  useEffect(() => {
+    const handleUpdate = () => {
+      console.log(largeDataRef.current);
+    };
+    eventEmitter.on('update', handleUpdate);
+    return () => eventEmitter.off('update', handleUpdate);
+  }, []);
+};
 ```
 
 **Memory Leak Detection:**
@@ -354,14 +357,14 @@ npx lighthouse https://your-app.com --only-categories=performance
 ### Web Vitals Monitoring
 
 ```typescript
-// Track Core Web Vitals
-import { getCLS, getFID, getLCP, getFCP, getTTFB } from 'web-vitals';
+// Track Core Web Vitals (web-vitals v4: the on* callbacks; FID gave way to INP)
+import { onCLS, onINP, onLCP, onFCP, onTTFB } from 'web-vitals';
 
-getCLS(console.log);  // Cumulative Layout Shift
-getFID(console.log);  // First Input Delay
-getLCP(console.log);  // Largest Contentful Paint
-getFCP(console.log);  // First Contentful Paint
-getTTFB(console.log); // Time to First Byte
+onCLS(console.log);  // Cumulative Layout Shift
+onINP(console.log);  // Interaction to Next Paint
+onLCP(console.log);  // Largest Contentful Paint
+onFCP(console.log);  // First Contentful Paint
+onTTFB(console.log); // Time to First Byte
 ```
 
 ## Performance Report Template

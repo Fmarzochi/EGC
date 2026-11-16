@@ -179,8 +179,8 @@ User = apps.get_model('users', 'User')
 # Test database connection
 python manage.py dbshell
 
-# Check DATABASES setting
-python -c "from django.conf import settings; print(settings.DATABASES)"
+# Check DATABASES setting: engine, name, host and port only, never the credentials
+python -c "from django.conf import settings; print({name: {key: cfg.get(key) for key in ('ENGINE', 'NAME', 'HOST', 'PORT')} for name, cfg in settings.DATABASES.items()})"
 ```
 
 ### collectstatic / Static Files Errors
@@ -202,8 +202,10 @@ python manage.py collectstatic --clear --noinput
 ### runserver Failures
 
 ```bash
-# Port already in use
-lsof -ti:8000 | xargs kill -9
+# Port already in use: see who holds it before anything is stopped
+lsof -i :8000
+# Stop only the stale runserver you recognise, by its PID, then start again
+kill <pid>
 python manage.py runserver
 
 # Use alternate port

@@ -42,7 +42,7 @@ psql -c "SELECT indexrelname, idx_scan, idx_tup_read FROM pg_stat_user_indexes O
 - Use `lowercase_snake_case` identifiers (no quoted mixed-case)
 
 ### 3. Security (CRITICAL)
-- RLS enabled on multi-tenant tables with `(SELECT auth.uid())` pattern
+- RLS enabled on multi-tenant tables, the tenant taken from the application's session context (`(SELECT auth.uid())` on Supabase; a session variable or the connected role elsewhere)
 - RLS policy columns indexed
 - Least privilege access: no `GRANT ALL` to application users
 - Public schema permissions revoked
@@ -53,7 +53,7 @@ psql -c "SELECT indexrelname, idx_scan, idx_tup_read FROM pg_stat_user_indexes O
 - **Use partial indexes**: `WHERE deleted_at IS NULL` for soft deletes
 - **Covering indexes**: `INCLUDE (col)` to avoid table lookups
 - **SKIP LOCKED for queues**: 10x throughput for worker patterns
-- **Cursor pagination**: `WHERE id > $last` instead of `OFFSET`
+- **Cursor pagination**: a predicate on the complete unique `ORDER BY` key (`WHERE id > $last` when ordering by `id`) instead of `OFFSET`, where keyset pagination fits
 - **Batch inserts**: Multi-row `INSERT` or `COPY`, never individual inserts in loops
 - **Short transactions**: Never hold locks during external API calls
 - **Consistent lock ordering**: `ORDER BY id FOR UPDATE` to prevent deadlocks

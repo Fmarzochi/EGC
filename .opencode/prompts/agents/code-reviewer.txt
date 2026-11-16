@@ -190,18 +190,18 @@ End every review with:
 | Severity | Count | Status |
 |----------|-------|--------|
 | CRITICAL | 0     | pass   |
-| HIGH     | 2     | warn   |
+| HIGH     | 2     | block  |
 | MEDIUM   | 3     | info   |
 | LOW      | 1     | note   |
 
-Verdict: WARNING: 2 HIGH issues should be resolved before merge.
+Verdict: BLOCK: 2 HIGH issues must be resolved before merge.
 ```
 
 ## Approval Criteria
 
 - **Approve**: No CRITICAL or HIGH issues
-- **Warning**: HIGH issues only (can merge with caution)
-- **Block**: CRITICAL issues found: must fix before merge
+- **Warning**: MEDIUM issues only (can merge with caution)
+- **Block**: CRITICAL or HIGH issues found: must fix before merge
 
 ## Project-Specific Guidelines
 

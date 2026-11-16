@@ -55,7 +55,7 @@ try:
                 items.append((cc, f['filePath'], m['line'], m['message']))
     for cc, fp, line, msg in sorted(items, reverse=True)[:30]:
         print(f'CC={cc} {fp}:{line}')
-except: pass
+except Exception as e: print(f'UNAVAILABLE: the tool output could not be read ({e})')
 " 2>/dev/null
 ```
 
@@ -78,7 +78,7 @@ try:
     for fp, line, msg in fn_violations[:20]: print(f'  {fp}:{line} {msg}')
     print('=== LONG FILES ===')
     for fp, msg in file_violations[:20]: print(f'  {fp} {msg}')
-except: pass
+except Exception as e: print(f'UNAVAILABLE: the tool output could not be read ({e})')
 " 2>/dev/null
 ```
 
@@ -93,7 +93,7 @@ try:
         for m in f.get('messages', []):
             if m.get('ruleId') == 'max-depth':
                 print(f'  {f[\"filePath\"]}:{m[\"line\"]} {m[\"message\"]}')
-except: pass
+except Exception as e: print(f'UNAVAILABLE: the tool output could not be read ({e})')
 " 2>/dev/null | head -30
 ```
 
@@ -124,13 +124,13 @@ try:
     meta = d.get('metadata', {})
     vulns = meta.get('vulnerabilities', {})
     print(f'critical={vulns.get(\"critical\",0)} high={vulns.get(\"high\",0)} moderate={vulns.get(\"moderate\",0)} low={vulns.get(\"low\",0)}')
-except: pass
+except Exception as e: print(f'UNAVAILABLE: the tool output could not be read ({e})')
 "
 ```
 
-Check for hardcoded secrets:
+Check for hardcoded secrets. The report names the file and the line, never the value; a dedicated scanner (gitleaks, trufflehog) is the real audit when one is available:
 ```bash
-grep -rn "password\s*=\s*['\"][^'\"]\|api_key\s*=\s*['\"][^'\"]\|secret\s*=\s*['\"][^'\"]" --include="*.ts" --include="*.js" . | grep -v "node_modules\|test\|spec\|\.env" | head -20
+grep -rnE "(password|passwd|secret|token|api[_-]?key|client[_-]?secret|private[_-]?key)\s*[:=]\s*['\"][^'\"]{8,}" --include="*.ts" --include="*.js" --include="*.json" --include="*.yml" --include="*.yaml" --include=".env*" . | grep -v node_modules | cut -d: -f1,2 | head -40
 ```
 
 ### 1.8 Dependency Risk
@@ -149,7 +149,7 @@ if wildcards: print(f'Unpinned: {wildcards}')
 ### 1.9 Build Health
 
 ```bash
-npm run build 2>&1 | tail -20
+npm run build > /tmp/egc-audit-build.log 2>&1; status=$?; tail -20 /tmp/egc-audit-build.log; echo "build exit: $status"
 ```
 
 ### 1.10 Documentation Coverage

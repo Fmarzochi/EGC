@@ -15,7 +15,7 @@ Every message gets classified into exactly one tier, applied in priority order:
 
 ### 1. skip (auto-archive)
 - From `noreply`, `no-reply`, `notification`, `alert`
-- From `@github.com`, `@slack.com`, `@jira`, `@notion.so`
+- Automated mail from `@github.com`, `@slack.com`, `@jira`, `@notion.so` that carries no question, mention or review request; one that asks something of the user is action_required, whatever the sender
 - Bot messages, channel join/leave, automated alerts
 - Official LINE accounts, Messenger page notifications
 
@@ -91,9 +91,9 @@ For each action_required message:
 4. **Pending responses**: Set follow-up deadlines, remove resolved items
 5. **Archive**: Remove processed message from inbox
 6. **Triage files**: Update LINE/Messenger draft status
-7. **Git commit & push**: Version-control all knowledge file changes
+7. **Git**: Prepare the knowledge-file changes for review; commit and push only after the user confirms
 
-This checklist is enforced by a `PostToolUse` hook that blocks completion until all steps are done. The hook intercepts `gmail send` / `conversations_add_message` and injects the checklist as a system reminder.
+This checklist is a required post-send procedure: verify each item explicitly after every send. A host that offers `PostToolUse` hooks can re-inject it as a reminder after `gmail send` or `conversations_add_message`; nothing enforces it in your place.
 
 ## Briefing Output Format
 
@@ -122,7 +122,7 @@ This checklist is enforced by a `PostToolUse` hook that blocks completion until 
 
 ## Key Design Principles
 
-- **Hooks over prompts for reliability**: LLMs forget instructions ~20% of the time. `PostToolUse` hooks enforce checklists at the tool level: the LLM physically cannot skip them.
+- **Hooks over prompts where the host offers them**: LLMs forget instructions ~20% of the time; a `PostToolUse` hook that re-injects a checklist is more reliable than a prompt line, and where there is none the checklist above is yours to run.
 - **Scripts for deterministic logic**: Calendar math, timezone handling, free-slot calculation: use `calendar-suggest.js`, not the LLM.
 - **Knowledge files are memory**: `relationships.md`, `preferences.md`, `todo.md` persist across stateless sessions via git.
 - **Rules are system-injected**: `.gemini/rules/*.md` files load automatically every session. Unlike prompt instructions, the LLM cannot choose to ignore them.

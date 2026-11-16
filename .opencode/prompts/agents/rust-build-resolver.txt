@@ -30,7 +30,8 @@ if command -v cargo-audit >/dev/null; then cargo audit; else echo "cargo-audit n
 3. Apply minimal fix    -> Only what's needed
 4. cargo check          -> Verify fix
 5. cargo clippy         -> Check for warnings
-6. cargo test           -> Ensure nothing broke
+6. cargo fmt --check    -> Verify formatting
+7. cargo test           -> Ensure nothing broke
 ```
 
 ## Common Fix Patterns

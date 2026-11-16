@@ -234,11 +234,22 @@ const server = http.createServer((req, res) => {
     const MAX_SIZE = 256 * 1024; // 256 KB cap
     let exceeded = false;
 
-    // A body that ends mid-chunk or a socket that drops still gets an answer
-    // instead of a request left hanging (#2140).
-    req.on('error', () => {
-      if (!res.headersSent) sendJson(res, 400, { error: 'Malformed request body' });
-    });
+    // A body that ends mid-chunk, a socket that drops or a stream error never
+    // leaves the request hanging (#2140): the 400 goes out while the socket is
+    // still open, and a client that already left gets nothing, since nobody is
+    // there to read it. Node reports a body cut short as 'aborted' and, on the
+    // newer versions, as an 'error' as well; both paths meet here once.
+    let bodyRefused = false;
+    const refuseBody = () => {
+      if (bodyRefused || res.headersSent) return;
+      bodyRefused = true;
+      if (!req.socket || req.socket.destroyed) return;
+      try {
+        sendJson(res, 400, { error: 'Malformed request body' });
+      } catch { /* the client left while the answer was being written */ }
+    };
+    req.on('error', refuseBody);
+    req.on('aborted', refuseBody);
 
     req.on('data', d => {
       if (exceeded) return;

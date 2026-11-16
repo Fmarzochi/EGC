@@ -46,16 +46,19 @@ function recorder() {
   });
 
   await test('a cold start runs the dashboard script with --no-browser and opens the browser once when it answers', async () => {
-    let opened = 0;
-    let pings = 0;
+    const events = [];
     const { calls, spawner } = recorder();
     const result = await launchDashboard({
-      browserOpener: () => { opened++; return true; },
+      browserOpener: () => { events.push('open'); return true; },
       spawner,
-      ping: async () => { pings++; return pings >= 3; },
+      ping: async () => {
+        const ready = events.filter(event => event.startsWith('ping')).length >= 2;
+        events.push(ready ? 'ping:ready' : 'ping:down');
+        return ready;
+      },
     });
     assert.deepStrictEqual(result, { ready: true, browserOpened: true });
-    assert.strictEqual(opened, 1, 'the launcher is the only opener');
+    assert.deepStrictEqual(events, ['ping:down', 'ping:down', 'ping:ready', 'open'], 'the tab opens once, and only after the server answered');
     assert.strictEqual(calls.length, 1, 'the script starts once');
     const [executable, scriptArgs] = calls[0];
     assert.strictEqual(executable, process.execPath);

@@ -17,7 +17,11 @@ const path = require('node:path');
 
 const AGENTS_DIR = 'agents';
 const PROMPTS_DIR = path.join('.opencode', 'prompts', 'agents');
-const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---\r?\n/;
+// A BOM before the first dashes and a frontmatter that ends at the end of the
+// file are both frontmatter: without this the YAML would become the prompt.
+// The BOM is spelt by its code: an escape for it does not survive every editor.
+const BOM = String.fromCharCode(0xFEFF);
+const FRONTMATTER = new RegExp(`^${BOM}?---\\r?\\n[\\s\\S]*?\\r?\\n---(?:\\r?\\n|$)`);
 
 function agentPromptBody(markdown) {
   const body = markdown.replace(FRONTMATTER, '');

@@ -106,40 +106,36 @@ For each design decision, document:
 
 ## Architecture Decision Records (ADRs)
 
-For significant architectural decisions, create ADRs:
+For significant architectural decisions, create ADRs from this template, every bracket replaced with the decision of the repository at hand:
 
 ```markdown
-# ADR-001: Use Redis for Semantic Search Vector Storage
+# ADR-001: [Decision Title]
 
 ## Context
-Need to store and query 1536-dimensional embeddings for semantic market search.
+[What situation requires a decision]
 
 ## Decision
-Use Redis Stack with vector search capability.
+[The decision made]
 
 ## Consequences
 
 ### Positive
-- Fast vector similarity search (<10ms)
-- Built-in KNN algorithm
-- Simple deployment
-- Good performance up to 100K vectors
+- [Benefit 1]
+- [Benefit 2]
 
 ### Negative
-- In-memory storage (expensive for large datasets)
-- Single point of failure without clustering
-- Limited to cosine similarity
+- [Drawback 1]
+- [Drawback 2]
 
 ### Alternatives Considered
-- **PostgreSQL pgvector**: Slower, but persistent storage
-- **Pinecone**: Managed service, higher cost
-- **Weaviate**: More features, more complex setup
+- **[Alternative 1]**: [Description and why rejected]
+- **[Alternative 2]**: [Description and why rejected]
 
 ## Status
-Accepted
+Accepted / Proposed / Deprecated
 
 ## Date
-2025-01-15
+YYYY-MM-DD
 ```
 
 ## System Design Checklist

@@ -568,6 +568,20 @@ test('POST /event with the token, JSON and the panel origin (or none) is accepte
   assert.equal(panel.status, 200);
 }));
 
+test('POST /event whose body stops before its Content-Length does not hang the server: the next request is answered (#2140)', () => withDashboardServer(async port => {
+  await new Promise(resolve => {
+    const socket = require('net').connect(port, '127.0.0.1', () => {
+      socket.write(`POST /event HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n${TOKEN_HEADER}: ${dashboardToken()}\r\nContent-Length: 200\r\n\r\n{"ide":"claude",`);
+      setTimeout(() => socket.destroy(), 100);
+    });
+    socket.on('close', resolve);
+    socket.on('error', () => {});
+  });
+  const res = await requestDashboard(port, { body: EVENT, headers: eventHeaders() });
+  assert.equal(res.status, 200, 'the truncated request left the server answering');
+  assert.equal(JSON.parse(res.body).ok, true);
+}));
+
 test('POST /event refuses an ide the dashboard does not know, including markup', () => withDashboardServer(async port => {
   for (const ide of ['<img src=x onerror=alert(1)>', 'not-a-real-tool', 'CLAUDE', '']) {
     const res = await requestDashboard(port, { body: JSON.stringify({ ide, event: 'pre_tool' }), headers: eventHeaders() });

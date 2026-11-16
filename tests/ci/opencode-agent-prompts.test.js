@@ -35,6 +35,8 @@ test('the prompt is the agent body without the frontmatter, with one final newli
   assert.strictEqual(agentPromptBody('---\nname: x\ntools: ["Read"]\n---\n\nYou are x.\n\n## Role\n- a\n'), 'You are x.\n\n## Role\n- a\n');
   assert.strictEqual(agentPromptBody('---\r\nname: x\r\n---\r\nYou are x.\r\n'), 'You are x.\n');
   assert.strictEqual(agentPromptBody('No frontmatter at all'), 'No frontmatter at all\n');
+  assert.strictEqual(agentPromptBody(String.fromCharCode(0xFEFF) + '---\nname: x\n---\nYou are x.\n'), 'You are x.\n', 'a BOM before the dashes is still frontmatter');
+  assert.strictEqual(agentPromptBody('---\nname: x\n---'), '\n', 'a frontmatter that ends with the file leaves an empty prompt, not the YAML');
 });
 
 test('every agent has a prompt, no prompt drifted and no prompt is without an agent', () => {

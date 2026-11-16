@@ -18,6 +18,7 @@ const stateCrypto = require('./lib/state-crypto');
 const { parseHeader } = require('./export');
 const { saveState, withStateFileLockSync } = require('./lib/state-snapshot');
 const { findSecretShapes } = require('./lib/secret-shapes');
+const { mergeDocuments } = require('./lib/ami-merge');
 
 const MAX_DOCUMENT_BYTES = 1024 * 1024;
 const SECTIONS = ['Context', 'Active Decisions', 'Do Not Repeat', 'Preferences', 'Next Session'];
@@ -25,10 +26,12 @@ const SECTIONS = ['Context', 'Active Decisions', 'Do Not Repeat', 'Preferences',
 const USAGE = `Usage: egc import <file> [--project <path>] [--scope project|global] [--replace] [--dry-run] [--json]
 Reads an exported memory document (the AMI format egc export prints) and
 brings it into the memory of a project (default: the current directory) or
-of the user-wide global scope. By default the document is merged: entries the
-memory does not have yet are appended to their sections, and the Context is
-taken from the document when it has one. --replace writes the document in
-place of the memory. --dry-run prints what would change and writes nothing.
+of the user-wide global scope. By default the document is merged the way the
+spec says (section 5): its entries go first, one copy of each text, capped per
+section; the Context is taken from the document when it has one; Next Session
+is rewritten when the document carries the section. --replace writes the
+document in place of the memory. --dry-run prints what would change and
+writes nothing.
 Exit codes: 0 written (or dry run), 1 usage error, a document that does not
 parse, carries the shape of a credential or cannot be written, 2 a document
 with nothing to import.`;
@@ -50,7 +53,9 @@ function parseArgs(argv) {
   let index = 0;
   const next = message => {
     index += 1;
-    if (!argv[index]) throw new Error(message);
+    // An option in the value's place is a missing value, not a path or a scope:
+    // --project --dry-run must not run a real import into a folder named --dry-run.
+    if (!argv[index] || argv[index].startsWith('-')) throw new Error(message);
     return argv[index];
   };
   while (index < argv.length) {
@@ -104,9 +109,17 @@ function parseDocument(text) {
 }
 
 // The match names the shape, never the value, so the refusal can be pasted
-// anywhere without carrying the secret along.
-function refuseSecrets(sections) {
-  for (const [heading, entries] of Object.entries(sections)) {
+// anywhere without carrying the secret along. Every value that can be
+// rendered is scanned: the entries and the header fields (the author lands in
+// the state file too).
+function refuseSecrets(imported) {
+  for (const [field, value] of Object.entries(imported.header)) {
+    const shapes = findSecretShapes(String(value));
+    if (shapes.length > 0) {
+      fail(1, `the header field "${field}" carries ${shapes[0]}; a memory document must not carry credentials. Remove it and import again; nothing was written`);
+    }
+  }
+  for (const [heading, entries] of Object.entries(imported.sections)) {
     for (const entry of entries) {
       const shapes = findSecretShapes(entry);
       if (shapes.length > 0) {
@@ -134,33 +147,42 @@ function resolveTarget(opts) {
   };
 }
 
+// Thrown instead of exiting: the read happens under the state file lock, and
+// an exit there would leave the lock behind.
+class UnreadableMemory extends Error {}
+
 function currentDocument(target) {
   if (!target.readFile || !fs.existsSync(target.readFile)) return null;
   const content = stateCrypto.readStateFileDecrypted(target.readFile, stateCrypto.defaultKeyPath());
-  if (content === null) fail(1, `${target.label} cannot be decrypted with the key of this machine; nothing was written`);
+  if (content === null) throw new UnreadableMemory(`${target.label} cannot be decrypted with the key of this machine; nothing was written`);
   return parseDocument(content);
 }
 
+// Section 5 of the spec, without retired marks: the document's entries first,
+// one copy of each text, capped; the Context from the document when it has
+// one; Next Session from the document when it carries the section.
 function mergeSections(current, imported) {
-  const merged = {};
-  const headings = [...SECTIONS, ...Object.keys(current).filter(h => !SECTIONS.includes(h)), ...Object.keys(imported).filter(h => !SECTIONS.includes(h))];
-  for (const heading of new Set(headings)) {
-    const have = current[heading] || [];
-    const incoming = imported[heading] || [];
-    if (heading === 'Context') {
-      merged[heading] = incoming.length > 0 ? incoming : have;
-      continue;
-    }
-    const seen = new Set(have);
-    const added = [];
-    for (const entry of incoming) {
-      if (seen.has(entry)) continue;
-      seen.add(entry);
-      added.push(entry);
-    }
-    merged[heading] = [...have, ...added];
-  }
-  return merged;
+  return mergeDocuments({
+    current: { header: {}, sections: current },
+    imported: { header: {}, sections: imported },
+    mode: 'merge',
+    now: new Date().toISOString(),
+  }).sections;
+}
+
+// What the import writes: the mode, the document rendered for the target and
+// the change per section. Read and merged in one go, so a caller that holds
+// the state file lock covers the read as well as the write.
+function planImport(opts, target, imported) {
+  const current = currentDocument(target);
+  const mode = opts.replace || !current ? 'replace' : 'merge';
+  const now = new Date().toISOString();
+  const { sections, retired } = mergeDocuments({ current, imported, mode, now });
+  const header = {
+    author: (current && current.header.author) || imported.header.author || os.userInfo().username,
+    retired,
+  };
+  return { mode, now, content: renderDocument(target, header, sections, now), summary: changeSummary(current ? current.sections : null, sections) };
 }
 
 function renderDocument(target, header, sections, now) {
@@ -221,28 +243,28 @@ function main() {
   }
 
   const imported = parseDocument(readDocument(opts.file));
-  refuseSecrets(imported.sections);
+  refuseSecrets(imported);
   if (Object.values(imported.sections).every(entries => entries.length === 0)) fail(2, `${opts.file} has nothing to import: every section is empty`);
 
   const target = resolveTarget(opts);
-  const current = currentDocument(target);
-  const mode = opts.replace || !current ? 'replace' : 'merge';
-  const sections = mode === 'merge' ? mergeSections(current.sections, imported.sections) : imported.sections;
-  const header = {
-    author: (current && current.header.author) || imported.header.author || os.userInfo().username,
-    retired: current ? current.header.retired : undefined,
-  };
-  const now = new Date().toISOString();
-  const content = renderDocument(target, header, sections, now);
-  const summary = changeSummary(current ? current.sections : null, sections);
-
-  if (!opts.dryRun) {
-    try {
-      withStateFileLockSync(target.file, () => saveState(target.file, content));
-    } catch (err) {
-      fail(1, `${target.label} could not be written: ${err.message}`);
-    }
+  let plan;
+  try {
+    // The read, the merge and the write happen under the lock the hooks and
+    // the server take, so an update_state in between is never overwritten by
+    // a merge of what the memory held before it. A dry run reads without the
+    // lock: it writes nothing, and taking the lock would create the state
+    // directory of a memory that may not exist yet.
+    plan = opts.dryRun
+      ? planImport(opts, target, imported)
+      : withStateFileLockSync(target.file, () => {
+        const planned = planImport(opts, target, imported);
+        saveState(target.file, planned.content);
+        return planned;
+      });
+  } catch (err) {
+    fail(1, err instanceof UnreadableMemory ? err.message : `${target.label} could not be written: ${err.message}`);
   }
+  const { mode, now, summary } = plan;
 
   if (opts.json) {
     console.log(JSON.stringify({ file: target.file, scope: opts.scope, mode, written: !opts.dryRun, updated: now, sections: summary }, null, 2));

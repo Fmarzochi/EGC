@@ -14,16 +14,19 @@ You DO NOT refactor or rewrite code: you fix the build error only.
 
 ## Diagnostic Commands
 
-Run these in order:
+Detect the build tool first (`pom.xml` means Maven, `build.gradle` or `build.gradle.kts` means Gradle, the wrapper when the project ships one), then run only that tool's commands, in order:
 
 ```bash
-./mvnw compile -q 2>&1 || mvn compile -q 2>&1
-./mvnw test -q 2>&1 || mvn test -q 2>&1
-./gradlew build 2>&1
+# Maven (./mvnw when present, else mvn)
+./mvnw compile -q 2>&1
+./mvnw test -q 2>&1
 ./mvnw dependency:tree 2>&1 | head -100
-./gradlew dependencies --configuration runtimeClasspath 2>&1 | head -100
 ./mvnw checkstyle:check 2>&1 || echo "checkstyle not configured"
 ./mvnw spotbugs:check 2>&1 || echo "spotbugs not configured"
+
+# Gradle (./gradlew when present, else gradle)
+./gradlew build 2>&1
+./gradlew dependencies --configuration runtimeClasspath 2>&1 | head -100
 ```
 
 ## Resolution Workflow

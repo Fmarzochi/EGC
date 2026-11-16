@@ -1,9 +1,11 @@
 'use strict';
 /**
  * egc import brings an exported memory document back into the state (#2138):
- * a round trip through egc export, a merge that appends only what the memory
- * lacks, a file that does not parse, an entry with the shape of a credential,
- * and a dry run that writes nothing. Everything runs under a temporary HOME.
+ * a round trip through egc export, the merge of section 5 of the spec (the
+ * document's entries first, capped, with the entries pushed out retired in
+ * the header), a file that does not parse, an entry or a header field with
+ * the shape of a credential, a held state file lock, and a dry run that
+ * writes nothing. Everything runs under a temporary HOME.
  *
  * Run with: node tests/scripts/import.test.js
  */
@@ -15,7 +17,8 @@ const { spawnSync } = require('node:child_process');
 
 const IMPORT = path.join(__dirname, '..', '..', 'scripts', 'import.js');
 const EXPORT = path.join(__dirname, '..', '..', 'scripts', 'export.js');
-const { mergeSections } = require('../../scripts/import');
+const { mergeSections, parseArgs } = require('../../scripts/import');
+const stateCrypto = require('../../scripts/lib/state-crypto');
 
 let passed = 0;
 let failed = 0;
@@ -39,6 +42,24 @@ function sandbox() {
   const run = (script, args) => spawnSync(process.execPath, [script, ...args], { cwd: project, env, encoding: 'utf8' });
   const docPath = name => path.join(home, name);
   return { home, project, run, docPath, cleanup: () => { fs.rmSync(home, { recursive: true, force: true }); fs.rmSync(project, { recursive: true, force: true }); } };
+}
+
+// The one state file of the sandbox, decrypted with its own key: the header
+// lines export leaves out (retired) are read here.
+function stateFile(box) {
+  const stateDir = path.join(box.home, '.egc', 'state');
+  const files = fs.readdirSync(stateDir, { recursive: true }).filter(name => String(name).endsWith('.md'));
+  assert.strictEqual(files.length, 1, `one state file, got ${files.join(', ')}`);
+  return path.join(stateDir, String(files[0]));
+}
+
+function readState(box) {
+  return stateCrypto.readStateFileDecrypted(stateFile(box), path.join(box.home, '.egc', 'encryption.key'));
+}
+
+function retiredMarks(box) {
+  const match = /^retired: (.*)$/m.exec(readState(box));
+  return match ? match[1].split(' ') : [];
 }
 
 const FIRST = [
@@ -112,7 +133,7 @@ test('a document is imported into an empty memory and comes back through egc exp
   }
 });
 
-test('a second document merges: new entries are appended once, the Context is replaced, nothing is lost', () => {
+test('a second document merges: its entries go first, the Context is replaced, Next Session is rewritten, nothing else is lost', () => {
   const box = sandbox();
   try {
     fs.writeFileSync(box.docPath('first.md'), FIRST);
@@ -129,12 +150,13 @@ test('a second document merges: new entries are appended once, the Context is re
     const doc = JSON.parse(box.run(EXPORT, ['--json']).stdout);
     assert.strictEqual(doc.context, 'A service that sends invoices and credit notes.');
     assert.deepStrictEqual(doc.active_decisions, [
-      'Invoices are numbered per year',
       'PDF rendering stays in the worker',
       'Credit notes share the invoice numbering',
-    ]);
+      'Invoices are numbered per year',
+    ], 'the document entries first, in their order, then what the memory had');
     assert.deepStrictEqual(doc.do_not_repeat, ['Rendering in the request thread timed out'], 'a section the document lacks keeps what the memory had');
-    assert.deepStrictEqual(doc.next_session, ['Wire the retry queue', 'Add the credit note template']);
+    assert.deepStrictEqual(doc.next_session, ['Wire the retry queue', 'Add the credit note template'], 'the document carries the section, so it is rewritten');
+    assert.deepStrictEqual(retiredMarks(box), [], 'nothing left, nothing retired');
   } finally {
     box.cleanup();
   }
@@ -150,6 +172,9 @@ test('--replace writes the document in place of the memory', () => {
     const doc = JSON.parse(box.run(EXPORT, ['--json']).stdout);
     assert.deepStrictEqual(doc.active_decisions, ['PDF rendering stays in the worker', 'Credit notes share the invoice numbering']);
     assert.deepStrictEqual(doc.do_not_repeat, []);
+    const marks = retiredMarks(box);
+    assert.strictEqual(marks.length, 3, 'the decision, the lesson and the preference the document dropped are retired');
+    assert.ok(marks.every(mark => /^[0-9a-f]{12}@\d{4}-/.test(mark)), `retirement marks, hash and time: ${marks.join(' ')}`);
   } finally {
     box.cleanup();
   }
@@ -214,18 +239,91 @@ test('a missing file, an empty document and a bad flag are refused with their ow
   }
 });
 
-test('mergeSections keeps order, drops duplicates and takes the Context from the document when it has one', () => {
+test('mergeSections puts the document first, drops duplicates and takes the Context from the document when it has one', () => {
   const merged = mergeSections(
     { 'Context': ['old'], 'Active Decisions': ['a', 'b'], 'Preferences': ['p'] },
     { 'Context': [], 'Active Decisions': ['b', 'c', 'c'], 'Next Session': ['n'] }
   );
   assert.deepStrictEqual(merged, {
     'Context': ['old'],
-    'Active Decisions': ['a', 'b', 'c'],
+    'Active Decisions': ['b', 'c', 'a'],
     'Do Not Repeat': [],
     'Preferences': ['p'],
     'Next Session': ['n'],
   });
+});
+
+test('the caps of section 5 apply, what they push out is retired, and a document older than a retirement cannot bring the entry back', () => {
+  const box = sandbox();
+  try {
+    fs.writeFileSync(box.docPath('first.md'), FIRST);
+    assert.strictEqual(box.run(IMPORT, [box.docPath('first.md')]).status, 0);
+    const many = ['# Project State', 'project: /elsewhere', 'updated: 2026-11-10T00:00:00.000Z', '', '## Active Decisions',
+      ...Array.from({ length: 16 }, (_, i) => `- Decision number ${i + 1}`), ''].join('\n');
+    fs.writeFileSync(box.docPath('many.md'), many);
+    const merged = JSON.parse(box.run(IMPORT, [box.docPath('many.md'), '--json']).stdout);
+    assert.deepStrictEqual(merged.sections['Active Decisions'], { before: 2, after: 15 });
+    const doc = JSON.parse(box.run(EXPORT, ['--json']).stdout);
+    assert.strictEqual(doc.active_decisions[0], 'Decision number 1', 'the document entries go first');
+    assert.strictEqual(doc.active_decisions.length, 15);
+    assert.ok(!doc.active_decisions.includes('PDF rendering stays in the worker'), 'the entries the memory had aged out past the cap');
+    assert.strictEqual(retiredMarks(box).length, 3, 'Decision number 16 and the two entries of the memory are retired');
+
+    fs.writeFileSync(box.docPath('old.md'), FIRST);
+    assert.strictEqual(box.run(IMPORT, [box.docPath('old.md')]).status, 0);
+    const after = JSON.parse(box.run(EXPORT, ['--json']).stdout);
+    assert.ok(!after.active_decisions.includes('PDF rendering stays in the worker'), 'a copy written before the retirement does not restore the entry');
+
+    fs.writeFileSync(box.docPath('fresh.md'), '## Active Decisions\n- PDF rendering stays in the worker\n');
+    assert.strictEqual(box.run(IMPORT, [box.docPath('fresh.md')]).status, 0);
+    const restored = JSON.parse(box.run(EXPORT, ['--json']).stdout);
+    assert.strictEqual(restored.active_decisions[0], 'PDF rendering stays in the worker', 'a document without a date is a deliberate import and brings the entry back');
+    assert.ok(retiredMarks(box).some(mark => mark.includes('+')), 'the return is recorded as a restoration');
+  } finally {
+    box.cleanup();
+  }
+});
+
+test('an option in the place of a value is a missing value, never a path or a scope', () => {
+  assert.throws(() => parseArgs(['doc.md', '--project', '--dry-run']), /--project needs a path/);
+  assert.throws(() => parseArgs(['doc.md', '--scope', '--json']), /--scope needs project or global/);
+  assert.strictEqual(parseArgs(['doc.md', '--project', 'here', '--dry-run']).dryRun, true);
+});
+
+test('a header field with the shape of a credential is refused like an entry, and nothing is written', () => {
+  const box = sandbox();
+  try {
+    fs.writeFileSync(box.docPath('leak.md'), '# Project State\nauthor: token = "abcdefghij"\n\n## Active Decisions\n- Harmless\n');
+    const result = box.run(IMPORT, [box.docPath('leak.md')]);
+    assert.strictEqual(result.status, 1);
+    assert.match(result.stderr, /header field "author" carries a credential assignment/);
+    assert.ok(!result.stderr.includes('abcdefghij'), 'the value never appears in the output');
+    assert.ok(!fs.existsSync(path.join(box.home, '.egc', 'state')));
+  } finally {
+    box.cleanup();
+  }
+});
+
+test('a state file lock another process holds stops the import, and the memory stays as it was', () => {
+  const box = sandbox();
+  try {
+    fs.writeFileSync(box.docPath('first.md'), FIRST);
+    fs.writeFileSync(box.docPath('second.md'), SECOND);
+    assert.strictEqual(box.run(IMPORT, [box.docPath('first.md')]).status, 0);
+    const lock = `${stateFile(box)}.merge.lock`;
+    fs.writeFileSync(lock, String(process.pid));
+    try {
+      const result = box.run(IMPORT, [box.docPath('second.md')]);
+      assert.strictEqual(result.status, 1, result.stdout);
+      assert.match(result.stderr, /lock/);
+    } finally {
+      fs.unlinkSync(lock);
+    }
+    const doc = JSON.parse(box.run(EXPORT, ['--json']).stdout);
+    assert.deepStrictEqual(doc.active_decisions, ['Invoices are numbered per year', 'PDF rendering stays in the worker']);
+  } finally {
+    box.cleanup();
+  }
 });
 
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

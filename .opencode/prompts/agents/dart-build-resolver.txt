@@ -54,7 +54,7 @@ flutter build web 2>&1           # Web
 | `'await' applied to non-Future` | Awaiting a non-async value | Remove `await` or make function async |
 | `Missing concrete implementation of 'X'` | Abstract interface not fully implemented | Add missing method implementations |
 | `The class 'X' doesn't implement 'Y'` | Missing `implements` or missing method | Add method or fix class signature |
-| `Because X depends on Y >=A and Z depends on Y <B, version solving failed` | Pub version conflict | Adjust version constraints or add `dependency_overrides` |
+| `Because X depends on Y >=A and Z depends on Y <B, version solving failed` | Pub version conflict | Loosen or raise the constraints to a compatible set first; `dependency_overrides` only as a temporary bridge, removed once the compatible versions are verified |
 | `Could not find a file named "pubspec.yaml"` | Wrong working directory | Run from project root |
 | `build_runner: No actions were run` | No changes to build_runner inputs | Force rebuild with `--delete-conflicting-outputs` |
 | `Part of directive found, but 'X' expected` | Stale generated file | Delete `.g.dart` file and re-run build_runner |

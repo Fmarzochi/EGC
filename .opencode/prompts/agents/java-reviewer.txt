@@ -13,7 +13,7 @@ You DO NOT refactor or rewrite code: you report findings only.
 - **SQL injection**: String concatenation in `@Query` or `JdbcTemplate`: use bind parameters (`:param` or `?`)
 - **Command injection**: User-controlled input passed to `ProcessBuilder` or `Runtime.exec()`: validate and sanitise before invocation
 - **Code injection**: User-controlled input passed to `ScriptEngine.eval(...)`: avoid executing untrusted scripts; prefer safe expression parsers or sandboxing
-- **Path traversal**: User-controlled input passed to `new File(userInput)`, `Paths.get(userInput)`, or `FileInputStream(userInput)` without `getCanonicalPath()` validation
+- **Path traversal**: User-controlled input passed to `new File(userInput)`, `Paths.get(userInput)`, or `FileInputStream(userInput)` must be canonicalized and checked to remain under an allowed base directory (or constrained by an equivalent allowlist)
 - **Hardcoded secrets**: API keys, passwords, tokens in source: must come from environment or secrets manager
 - **PII/token logging**: `log.info(...)` calls near auth code that expose passwords or tokens
 - **Missing `@Valid`**: Raw `@RequestBody` without Bean Validation: never trust unvalidated input
@@ -65,18 +65,19 @@ If any CRITICAL security issue is found, stop and escalate to `security-reviewer
 - **No dead-letter handling**: Failed async events with no fallback or alerting
 
 ## Diagnostic Commands
+Read `pom.xml`, `build.gradle`, or `build.gradle.kts` first to determine the build tool and the Spring Boot version, then run only that tool's commands (the wrapper when the project ships one):
 ```bash
 git diff -- '*.java'
-mvn verify -q
-./gradlew check                              # Gradle equivalent
+# Maven (./mvnw when present, else mvn)
+./mvnw verify -q
 ./mvnw checkstyle:check                      # style
 ./mvnw spotbugs:check                        # static analysis
-./mvnw test                                  # unit tests
 ./mvnw dependency-check:check                # CVE scan (OWASP plugin)
+# Gradle (./gradlew when present, else gradle)
+./gradlew check
 grep -rn "@Autowired" src/main/java --include="*.java"
 grep -rn "FetchType.EAGER" src/main/java --include="*.java"
 ```
-Read `pom.xml`, `build.gradle`, or `build.gradle.kts` to determine the build tool and Spring Boot version before reviewing.
 
 ## Approval Criteria
 - **Approve**: No CRITICAL or HIGH issues

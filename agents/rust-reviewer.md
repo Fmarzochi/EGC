@@ -83,7 +83,7 @@ cargo fmt --check
 cargo test
 if command -v cargo-audit >/dev/null; then cargo audit; else echo "cargo-audit not installed"; fi
 if command -v cargo-deny >/dev/null; then cargo deny check; else echo "cargo-deny not installed"; fi
-cargo build --release 2>&1 | head -50
+cargo build --release
 ```
 
 ## Approval Criteria

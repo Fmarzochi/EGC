@@ -28,6 +28,8 @@ find SOURCE_DIR -type f | grep -v node_modules | grep -v .git | grep -v __pycach
 ### Step 2: Create Staging Copy
 
 ```bash
+# A reused target must be empty: stale files from an earlier run would be committed as if they had been sanitized
+if [ -d TARGET_DIR ] && [ -n "$(ls -A TARGET_DIR)" ]; then echo "TARGET_DIR is not empty; pick an empty directory"; exit 1; fi
 mkdir -p TARGET_DIR
 rsync -av --exclude='.git' --exclude='node_modules' --exclude='__pycache__' \
   --exclude='.env*' --exclude='*.pyc' --exclude='.venv' --exclude='venv' \
@@ -37,24 +39,24 @@ rsync -av --exclude='.git' --exclude='node_modules' --exclude='__pycache__' \
 
 ### Step 3: Secret Detection and Stripping
 
-Scan ALL files for these patterns. Extract values to `.env.example` rather than deleting them:
+Scan ALL files for these patterns. Record each variable name in `.env.example` with a placeholder (`change-me`, `your-value`) and never copy a matched value anywhere: not into `.env.example`, not into the report, not into a commit message:
 
 ```
 # API keys and tokens
-[A-Za-z0-9_]*(KEY|TOKEN|SECRET|PASSWORD|PASS|API_KEY|AUTH)[A-Za-z0-9_]*\s*[=:]\s*['\"]?[A-Za-z0-9+/=_-]{8,}
+[A-Za-z0-9_]*(KEY|TOKEN|SECRET|PASSWORD|PASS|API_KEY|AUTH)[A-Za-z0-9_]*\s*[=:]\s*(['\"][^'\"]{8,}['\"]|[^\s'\"]{12,})
 
 # AWS credentials
-AKIA[0-9A-Z]{16}
+(AKIA|ASIA)[0-9A-Z]{16}
 (?i)(aws_secret_access_key|aws_secret)\s*[=:]\s*['"]?[A-Za-z0-9+/=]{20,}
 
 # Database connection strings
-(postgres|mysql|mongodb|redis):\/\/[^\s'"]+
+(postgres|postgresql|mysql|mongodb|redis):\/\/[^\s'"]+
 
 # JWT tokens (3-segment: header.payload.signature)
 eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+
 
 # Private keys
------BEGIN (RSA |EC |DSA )?PRIVATE KEY-----
+-----BEGIN (RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----
 
 # GitHub tokens (personal, server, OAuth, user-to-server)
 gh[pousr]_[A-Za-z0-9_]{36,}
@@ -185,7 +187,7 @@ Output: `FORK_REPORT.md` listing all changes, staging directory ready for saniti
 
 - **Never** leave any secret in output, even commented out
 - **Never** remove functionality: always parameterize, do not delete config
-- **Always** generate `.env.example` for every extracted value
+- **Always** generate `.env.example` with one line per extracted variable, a placeholder in place of the value
 - **Always** create `FORK_REPORT.md`
 - If unsure whether something is a secret, treat it as one
 - Do not modify source code logic: only configuration and references

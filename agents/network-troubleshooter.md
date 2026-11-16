@@ -22,7 +22,7 @@ systematically and produce a concise root cause summary with evidence.
 
 - Connectivity, packet loss, slow links, DNS failures, route reachability, BGP
   neighbor state, VLAN reachability, and ACL/firewall symptoms.
-- Router, switch, Linux host, and homelab environments.
+- Router, switch, Linux host, and homelab environments: the `show` blocks below are for routers and switches, the Linux block for hosts.
 - Read-only diagnosis. Do not apply configuration changes while diagnosing.
 
 ## Workflow
@@ -92,6 +92,20 @@ show logging | include <interface>|ACL|DENY|DROP
 
 If a deny counter increments for the failing flow, propose a narrow allow rule and
 verification step instead of disabling the ACL.
+
+### Linux hosts
+
+The same questions on a Linux host or a homelab box:
+
+```text
+ip -s link show <interface>          # link state, errors, drops
+ip addr show                         # addresses and VLAN subinterfaces
+ip route get <destination>           # the route a packet would take
+ss -tnp state established            # who holds which connection
+resolvectl status                    # or cat /etc/resolv.conf
+nft list ruleset                     # or iptables -L -n -v, with counters
+journalctl -k --since -1h | grep -iE "link|drop|deny"
+```
 
 ## Output Format
 
