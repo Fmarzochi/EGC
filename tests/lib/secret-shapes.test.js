@@ -26,18 +26,29 @@ function test(name, fn) {
 
 console.log('\n=== secret shapes ===\n');
 
+// The documented example key id of AWS, assembled at run time: written whole,
+// the temporary form trips the secret scanning of the repository host.
+const EXAMPLE_KEY_TAIL = 'IOSFODNN7EXAMPLE';
+
 test('an AWS access key id is found in its long-lived and its temporary form', () => {
-  assert.deepStrictEqual(findSecretShapes('the key is AKIAIOSFODNN7EXAMPLE for now'), ['an AWS access key id']);
-  assert.deepStrictEqual(findSecretShapes('the key is ASIAIOSFODNN7EXAMPLE for now'), ['an AWS access key id']);
+  assert.deepStrictEqual(findSecretShapes(`the key is AKIA${EXAMPLE_KEY_TAIL} for now`), ['an AWS access key id']);
+  assert.deepStrictEqual(findSecretShapes(`the key is ASIA${EXAMPLE_KEY_TAIL} for now`), ['an AWS access key id']);
   assert.deepStrictEqual(findSecretShapes('AKIA alone is a word'), []);
 });
 
 test('a credential assignment is one of the names, a separator and a value of the contract length', () => {
   assert.strictEqual(CREDENTIAL_NAMES.length, 8, 'the eight names of the contract');
-  for (const name of ['password', 'passwd', 'secret', 'token', 'api_key', 'api-key', 'apikey', 'access_token', 'private_key', 'client_secret', 'CLIENT-SECRET']) {
+  const names = [
+    'password', 'passwd', 'secret', 'token',
+    'api_key', 'api-key', 'apikey',
+    'access_token', 'access-token',
+    'private_key', 'private-key',
+    'client_secret', 'client-secret', 'CLIENT-SECRET',
+  ];
+  for (const name of names) {
     assert.ok(hasCredentialAssignment(`${name} = "eightchr"`), `${name} with a quoted value of eight`);
     assert.ok(hasCredentialAssignment(`${name}: 'eightchr'`), `${name} with a single-quoted value of eight`);
-    assert.ok(hasCredentialAssignment(`${name}=twelvechars12`), `${name} with a bare value of twelve`);
+    assert.ok(hasCredentialAssignment(`${name}=abc!def/ghi?`), `${name} with a bare value of exactly twelve, punctuation included`);
   }
   assert.ok(!hasCredentialAssignment('password = "seven77"'), 'a quoted value of seven is not one');
   assert.ok(!hasCredentialAssignment('token=elevenchars'), 'a bare value of eleven is not one');
