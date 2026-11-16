@@ -18,7 +18,7 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const index = require(path.join(ROOT, 'scripts', 'lib', 'skill-index.json'));
-const { parseFrontmatter } = require(path.join(ROOT, 'scripts', 'build-skill-index.js'));
+const { collectEntries } = require(path.join(ROOT, 'scripts', 'build-skill-index.js'));
 const GUARDIAN_SRC = path.join(ROOT, 'mcp', 'servers', 'egc-guardian', 'src');
 const MAX_GENERATED_LINES = 800;
 const PART_FILE_RE = /^catalog-(?:skills|agents|rules)-\d+\.ts$/;
@@ -27,8 +27,24 @@ function lineCount(file) {
   return fs.readFileSync(file, 'utf8').split('\n').length;
 }
 
-function entryCount(file) {
-  return (fs.readFileSync(file, 'utf8').match(/"kind": "/g) || []).length;
+// A part file is a header, one import and `export const X = <JSON array>;`.
+function partEntries(file) {
+  const text = fs.readFileSync(file, 'utf8');
+  const start = text.indexOf('= [');
+  const end = text.lastIndexOf('];');
+  assert.ok(start > 0 && end > start, `${path.basename(file)} does not carry a JSON array`);
+  return JSON.parse(text.slice(start + 2, end + 1));
+}
+
+// The order the aggregator concatenates the parts in: every skill, then
+// every agent, then every rule, each kind by part number.
+function partOrder(name) {
+  const [, kind, number] = name.match(/^catalog-([a-z]+)-(\d+)\.ts$/);
+  return ['skills', 'agents', 'rules'].indexOf(kind) * 1000 + Number(number);
+}
+
+function namesOf(entries) {
+  return entries.map(e => `${e.kind}:${e.name}`);
 }
 
 function countSkillMd(dir) {
@@ -84,7 +100,7 @@ run('no description collapsed to a bare YAML block-scalar indicator', () => {
   );
 });
 
-run('the TypeScript catalog is parts under 800 lines, all imported by the aggregator, carrying every entry', () => {
+run('the TypeScript catalog is parts under 800 lines, all imported by the aggregator, carrying the entries of the JSON twin in its order', () => {
   const parts = fs.readdirSync(GUARDIAN_SRC).filter(name => PART_FILE_RE.test(name)).sort();
   assert.ok(parts.length > 0, 'expected catalog-<kind>-<n>.ts part files next to catalog-index.ts');
   const oversized = ['catalog-index.ts', ...parts].filter(name => lineCount(path.join(GUARDIAN_SRC, name)) > MAX_GENERATED_LINES);
@@ -92,8 +108,10 @@ run('the TypeScript catalog is parts under 800 lines, all imported by the aggreg
   const aggregator = fs.readFileSync(path.join(GUARDIAN_SRC, 'catalog-index.ts'), 'utf8');
   const imported = [...aggregator.matchAll(/from '\.\/(catalog-[a-z]+-\d+)\.js'/g)].map(match => `${match[1]}.ts`).sort();
   assert.deepStrictEqual(imported, parts, 'the aggregator must import exactly the part files present');
-  const carried = parts.reduce((sum, name) => sum + entryCount(path.join(GUARDIAN_SRC, name)), 0);
-  assert.strictEqual(carried, index.entries.length, 'the parts must carry every entry of the JSON twin');
+  const carried = [...parts]
+    .sort((left, right) => partOrder(left) - partOrder(right))
+    .flatMap(name => partEntries(path.join(GUARDIAN_SRC, name)));
+  assert.deepStrictEqual(carried, index.entries, 'the parts must carry exactly the entries of the JSON twin, in its order');
 });
 
 run('every entry has a non-empty name and description', () => {
@@ -101,18 +119,24 @@ run('every entry has a non-empty name and description', () => {
   assert.strictEqual(empty.length, 0, `entries missing name/description: ${empty.length}`);
 });
 
-// The index is generated at build time, so a definition edited without a
-// regeneration leaves the committed twin behind: the e2e-runner description
-// changed in #2151 and the index kept the old text until the next pack.
-run('every agent and skill entry carries the name and description its source file declares today', () => {
-  const drifted = index.entries
-    .filter(e => e.kind === 'agent' || e.kind === 'skill')
-    .filter(e => {
-      const fm = parseFrontmatter(fs.readFileSync(path.join(ROOT, e.source), 'utf8')) || {};
-      return String(fm.name) !== e.name || String(fm.description) !== e.description;
-    })
-    .map(e => e.name);
-  assert.deepStrictEqual(drifted, [], `entries out of step with their source, run node scripts/build-skill-index.js: ${drifted.join(', ')}`);
+// The index is generated at build time, so a definition edited, added or
+// removed without a regeneration leaves the committed twin behind: the
+// e2e-runner description changed in #2151 and the index kept the old text
+// until the next pack. The committed index must equal what the sources
+// generate today, entry for entry.
+run('the committed index equals what the skills, agents and rules generate today', () => {
+  const generated = collectEntries();
+  const committed = new Set(namesOf(index.entries));
+  const current = new Set(namesOf(generated));
+  const missing = [...current].filter(name => !committed.has(name));
+  const stale = [...committed].filter(name => !current.has(name));
+  const hint = 'run node scripts/build-skill-index.js';
+  assert.deepStrictEqual(missing, [], `sources without an index entry (${hint}): ${missing.join(', ')}`);
+  assert.deepStrictEqual(stale, [], `index entries without a source (${hint}): ${stale.join(', ')}`);
+  const drifted = generated
+    .filter((entry, position) => JSON.stringify(entry) !== JSON.stringify(index.entries[position]))
+    .map(entry => `${entry.kind}:${entry.name}`);
+  assert.deepStrictEqual(drifted, [], `index entries out of step with their source or out of order (${hint}): ${drifted.join(', ')}`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

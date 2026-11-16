@@ -10,7 +10,7 @@ All notable changes to EGC are documented here.
 
 ### Fixed
 
-- **The committed catalog index follows the agent definitions again**: the description of `e2e-runner` changed in #2151 and `scripts/lib/skill-index.json` and its TypeScript twin kept the old text, because the index is generated at build time and nothing compared the committed copy with the sources; both are regenerated, `scripts/build-skill-index.js` exposes its frontmatter parser instead of running on require, and `tests/ci/skill-index-integrity.test.js` fails when any agent or skill entry no longer carries the name and description its source file declares.
+- **The committed catalog index follows the agent definitions again**: the description of `e2e-runner` changed in #2151 and `scripts/lib/skill-index.json` and its TypeScript twin kept the old text, because the index is generated at build time and nothing compared the committed copy with the sources; both are regenerated, `scripts/build-skill-index.js` exposes its collector instead of running on require, and `tests/ci/skill-index-integrity.test.js` fails when the committed index differs from what the skills, agents and rules generate today (an entry missing, stale, changed or out of order) or when the TypeScript parts no longer carry the entries of the JSON twin.
 
 ## [1.1.25] - 2026-11-16
 
