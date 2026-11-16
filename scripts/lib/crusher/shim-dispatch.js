@@ -170,6 +170,7 @@ function runShim(name, args) {
     crusher.record({
       cmd: name,
       kind: crushed.kind,
+      layer: 'shim',
       bytesIn: crushed.bytesIn,
       bytesOut: crushed.bytesOut,
       tokensSaved: crushed.tokensSaved,

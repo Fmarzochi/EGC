@@ -29,12 +29,41 @@ function manifestPath() {
   return path.join(shimDir(), 'manifest.json');
 }
 
-function readManifest(dir = shimDir()) {
+// The manifest is the record of what the install wrote: the real path of
+// each shimmed binary and, since the shim was pinned, the EGC version that
+// wrote it and the hash of each launcher and of the dispatch module. A
+// manifest from before the pinning is a flat name-to-path map and still
+// reads, so an older install keeps working until it is refreshed.
+function readManifestRecord(dir = shimDir()) {
+  const file = path.join(dir, 'manifest.json');
+  if (!fs.existsSync(file)) return null;
+  let parsed;
   try {
-    return JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
-    return {};
+    parsed = null;
   }
+  // A manifest that exists and cannot be read is a shim to rewrite, not an
+  // absent one: the launchers next to it may still be on PATH.
+  if (!parsed || typeof parsed !== 'object') {
+    return { corrupt: true, legacy: false, version: null, dispatch: null, binaries: {}, launchers: {} };
+  }
+  if (parsed.binaries && typeof parsed.binaries === 'object') {
+    return {
+      corrupt: false,
+      legacy: false,
+      version: typeof parsed.version === 'string' ? parsed.version : null,
+      dispatch: typeof parsed.dispatch === 'string' ? parsed.dispatch : null,
+      binaries: parsed.binaries,
+      launchers: parsed.launchers && typeof parsed.launchers === 'object' ? parsed.launchers : {},
+    };
+  }
+  return { corrupt: false, legacy: true, version: null, dispatch: null, binaries: parsed, launchers: {} };
+}
+
+function readManifest(dir = shimDir()) {
+  const record = readManifestRecord(dir);
+  return record ? record.binaries : {};
 }
 
 function pathEnvKey() {
@@ -159,6 +188,7 @@ module.exports = {
   shimDir,
   manifestPath,
   readManifest,
+  readManifestRecord,
   pathEnvKey,
   normalizePathForCompare,
   realpathOrResolve,

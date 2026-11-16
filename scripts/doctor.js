@@ -5,7 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { doctor: doctorOp } = require('./lib/operations/index');
 const { SUPPORTED_INSTALL_TARGETS } = require('./lib/install-manifests');
-const { getKnownHarnessDirs } = require('./lib/utils');
+const { getKnownHarnessDirs, samePath } = require('./lib/utils');
 const { resolveStateStorePath } = require('./lib/state-store/path');
 const { parseTargetArgs } = require('./lib/cli-target-args');
 const { consolidateCommand, shellQuote } = require('./lib/doctor-summary');
@@ -143,13 +143,6 @@ function printHuman(report) {
 // Windows filesystems are case-insensitive and drive letters arrive in
 // either case depending on the shell (C:\Users vs c:\users under Git
 // Bash), so path identity folds case there; POSIX stays case-sensitive.
-function samePath(a, b) {
-  const resolvedA = path.resolve(a);
-  const resolvedB = path.resolve(b);
-  if (process.platform === 'win32') return resolvedA.toLowerCase() === resolvedB.toLowerCase();
-  return resolvedA === resolvedB;
-}
-
 // Stray copies of the CLI store left in harness directories by the
 // pre-#1104 resolution order (the state-fragmentation bug). Reported with
 // size and last write so the person can tell live data from stale copies.
@@ -205,6 +198,22 @@ function checkStateDb(homeDir) {
   // One predictable shape for --json consumers no matter which condition
   // fired.
   return { missing, dbPath, canonicalDbPath, memoryDbPath, hasHarnessDb, hasMemoryDb, cliStoreMisplaced, fragments };
+}
+
+// The Token Crusher shim in ~/.egc/bin, against what this package writes
+// (#2137). It lives in the real home, so a doctor run for another home has
+// no shim to judge; a shim another version wrote, or one edited on disk,
+// still runs, so it is a warning that names the command to refresh it.
+function checkCrusherShim(homeDir) {
+  if (!samePath(homeDir, os.homedir())) return null;
+  const shim = require('./lib/crusher/shim-install').verify();
+  return !shim.installed || shim.state === 'ok' ? null : shim;
+}
+
+function printCrusherShimReport(shim) {
+  const { describeVerification } = require('./lib/crusher/shim-install');
+  console.log(`\n  WARNING: Token Crusher shim in ${shim.dir} is ${shim.state}: ${describeVerification(shim)}.`);
+  console.log('    Run egc crusher-shim install to refresh it.');
 }
 
 const PLAINTEXT_STATE_SHOWN = 5;
@@ -300,7 +309,8 @@ async function main() {
     // The Team Brain of this machine: files and one read of the remote, no
     // server. Its warnings join the doctor's total; it raises no error.
     const team = buildTeamReport(homeDir);
-    const summary = { ...report.summary, warningCount: report.summary.warningCount + team.warningCount };
+    const crusherShim = checkCrusherShim(homeDir);
+    const summary = { ...report.summary, warningCount: report.summary.warningCount + team.warningCount + (crusherShim ? 1 : 0) };
     const hooks = buildHookReport(report.results, { homeDir, timeoutMs: probeTimeoutMs(process.env) });
     // Warnings are informative: drift and version skew are worth reporting but
     // do not mean the install is broken, and a warnings-only run is a healthy
@@ -313,6 +323,7 @@ async function main() {
       const out = { ...report, summary, mcp, team, hooks };
       if (stateDb) out.stateDb = stateDb;
       if (plaintextState) out.plaintextStateFiles = plaintextState;
+      if (crusherShim) out.crusherShim = crusherShim;
       console.log(JSON.stringify(out, null, 2));
     } else {
       printHuman({ ...report, summary });
@@ -321,6 +332,7 @@ async function main() {
       printHookReport(hooks);
       if (stateDb) printStateStoreReport(stateDb);
       if (plaintextState) printPlaintextStateReport(plaintextState);
+      if (crusherShim) printCrusherShimReport(crusherShim);
     }
 
     process.exitCode = hasFailures ? 1 : 0;

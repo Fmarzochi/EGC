@@ -194,6 +194,23 @@ function main() {
     console.log('');
   }
 
+  // The shim compresses by itself whatever the harness runs; egc run is the
+  // prefix typed by a person or written by a hook. The split says how much of
+  // the saving arrived without anyone asking for it.
+  const layers = Object.entries(totals.byLayer || {}).sort((a, b) => b[1].tokensSaved - a[1].tokensSaved);
+  if (layers.length > 0) {
+    console.log('  By layer (shim: automatic, run: the egc run prefix)');
+    console.log('  ' + '─'.repeat(50));
+    const top = layers[0][1].tokensSaved || 1;
+    for (const [layer, layerTotals] of layers) {
+      console.log(
+        `  ${layer.padEnd(14)} ${String(layerTotals.runs).padStart(4)} runs  ` +
+        `~${formatTokens(layerTotals.tokensSaved).padStart(7)}  ${bar(layerTotals.tokensSaved / top, 10)}`
+      );
+    }
+    console.log('');
+  }
+
   console.log(`  Ledger: ${metricsFilePath()}`);
 }
 
