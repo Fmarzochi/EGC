@@ -12,7 +12,10 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { agentPromptBody, driftReport, writePrompts } = require('../../scripts/opencode-agent-prompts');
+const {
+  agentPromptBody, driftReport, writePrompts,
+  agentFrontmatter, registryEntry, registryDrift, writeRegistry, CONFIG_FILE,
+} = require('../../scripts/opencode-agent-prompts');
 
 const ROOT = path.join(__dirname, '..', '..');
 let passed = 0;
@@ -73,6 +76,69 @@ test('writePrompts creates a missing prompt and rewrites a drifted one, and leav
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('a registry entry carries the description, the model tier, the prompt file and the tool toggles of its definition', () => {
+  const pro = registryEntry('x', '---\nname: x\ndescription: Does x. Use for x.\ntools: ["Read", "Grep", "Glob", "Bash"]\nmodel: gemini-3.1-pro\n---\nYou are x.\n');
+  assert.deepStrictEqual(pro, {
+    description: 'Does x. Use for x.',
+    mode: 'subagent',
+    model: 'pro',
+    prompt: '{file:prompts/agents/x.txt}',
+    tools: { read: true, bash: true, write: false, edit: false },
+  });
+  const flash = registryEntry('y', '---\nname: y\ndescription: Does y\ntools: [Read, Write, Edit]\nmodel: gemini-3.6-flash\n---\nYou are y.\n');
+  assert.strictEqual(flash.model, 'flash', 'a flash model is the fast tier');
+  assert.deepStrictEqual(flash.tools, { read: true, bash: false, write: true, edit: true }, 'an unquoted list reads the same as a quoted one');
+  const bare = registryEntry('z', '---\nname: z\ndescription: Does z\nmodel: sonnet\n---\nYou are z.\n');
+  assert.strictEqual(bare.model, 'pro', 'any other model is the pro tier');
+  assert.ok(!Object.hasOwn(bare, 'tools'), 'no tools field leaves the toggles to OpenCode');
+  assert.deepStrictEqual(agentFrontmatter('No frontmatter at all'), {});
+});
+
+test('writeRegistry keeps the primary agents and the other sections, registers every definition and drops an entry without an agent', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-opencode-registry-'));
+  try {
+    fs.mkdirSync(path.join(root, 'agents'));
+    fs.writeFileSync(path.join(root, 'agents', 'one.md'), '---\nname: one\ndescription: Does one\ntools: ["Read", "Bash"]\nmodel: gemini-3.1-pro\n---\nYou are one.\n');
+    fs.writeFileSync(path.join(root, 'agents', 'two.md'), '---\nname: two\ndescription: Does two\ntools: ["Read", "Write", "Edit", "Bash"]\n---\nYou are two.\n');
+    fs.mkdirSync(path.join(root, '.opencode'), { recursive: true });
+    const build = { description: 'Primary coding agent', mode: 'primary', model: 'flash', tools: { write: true, edit: true, bash: true, read: true } };
+    fs.writeFileSync(path.join(root, CONFIG_FILE), JSON.stringify({
+      $schema: 'https://opencode.ai/config.json',
+      model: 'flash',
+      agent: {
+        build,
+        two: { description: 'edited by hand', mode: 'subagent', model: 'pro', prompt: '{file:prompts/agents/two.txt}' },
+        gone: { description: 'no agent', mode: 'subagent', model: 'pro', prompt: '{file:prompts/agents/gone.txt}' },
+      },
+      command: { plan: { description: 'p', template: 't', agent: 'planner' } },
+      permission: { 'mcp_*': 'ask' },
+    }, null, 2));
+
+    assert.deepStrictEqual(registryDrift(root), { missing: ['one'], drifted: ['two'], orphans: ['gone'], total: 3 });
+    assert.deepStrictEqual(writeRegistry(root), { written: true, total: 3 });
+
+    const config = JSON.parse(fs.readFileSync(path.join(root, CONFIG_FILE), 'utf8'));
+    assert.deepStrictEqual(Object.keys(config), ['$schema', 'model', 'agent', 'command', 'permission'], 'the other sections stay in their place');
+    assert.deepStrictEqual(Object.keys(config.agent), ['build', 'one', 'two'], 'the primary agent first, then one entry per definition, the stray one gone');
+    assert.deepStrictEqual(config.agent.build, build, 'the primary agent is kept as written');
+    assert.strictEqual(config.agent.two.description, 'Does two');
+    assert.deepStrictEqual(config.agent.one.tools, { read: true, bash: true, write: false, edit: false });
+    assert.deepStrictEqual(config.command, { plan: { description: 'p', template: 't', agent: 'planner' } });
+    assert.deepStrictEqual(writeRegistry(root), { written: false, total: 3 }, 'a second run writes nothing');
+    assert.deepStrictEqual(registryDrift(root), { missing: [], drifted: [], orphans: [], total: 3 });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('every agent is registered in opencode.json, no entry drifted and no entry is without an agent', () => {
+  const report = registryDrift(ROOT);
+  assert.ok(report.total >= 60, `expected the agent library plus the primary agent, found ${report.total}`);
+  assert.deepStrictEqual(report.missing, [], `agents without a registry entry: ${report.missing.join(', ')}`);
+  assert.deepStrictEqual(report.drifted, [], `registry entries drifted from agents/: ${report.drifted.join(', ')}`);
+  assert.deepStrictEqual(report.orphans, [], `registry entries without an agent: ${report.orphans.join(', ')}`);
 });
 
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
