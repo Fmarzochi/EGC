@@ -107,9 +107,22 @@ function finiteNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-/** Aggregate totals and command-kind savings for a set of ledger rows. */
+// The layer that produced a row: 'shim' when the binary shim in ~/.egc/bin
+// compressed a command the harness ran on its own, 'run' when the command
+// was prefixed with egc run (by hand or by a hook rewrite). Rows written
+// before the field existed are reported as unlabeled rather than guessed.
+const UNLABELED_LAYER = 'unlabeled';
+const LAYERS = new Set(['shim', 'run']);
+
+// Only the two layers the product writes become keys of byLayer: any other
+// value in a row (older, hand-edited, or a key like __proto__) is unlabeled.
+function layerOf(entry) {
+  return LAYERS.has(entry.layer) ? entry.layer : UNLABELED_LAYER;
+}
+
+/** Aggregate totals, command-kind and layer savings for a set of ledger rows. */
 function aggregate(entries) {
-  const totals = { runs: 0, bytesIn: 0, bytesOut: 0, tokensSaved: 0, byKind: {} };
+  const totals = { runs: 0, bytesIn: 0, bytesOut: 0, tokensSaved: 0, byKind: {}, byLayer: {} };
   for (const rawEntry of entries) {
     const entry = normalizeEntry(rawEntry);
     totals.runs += 1;
@@ -120,6 +133,10 @@ function aggregate(entries) {
     totals.byKind[kind] = totals.byKind[kind] || { runs: 0, tokensSaved: 0 };
     totals.byKind[kind].runs += 1;
     totals.byKind[kind].tokensSaved += finiteNumber(entry.tokensSaved);
+    const layer = layerOf(entry);
+    totals.byLayer[layer] = totals.byLayer[layer] || { runs: 0, tokensSaved: 0 };
+    totals.byLayer[layer].runs += 1;
+    totals.byLayer[layer].tokensSaved += finiteNumber(entry.tokensSaved);
   }
   return totals;
 }

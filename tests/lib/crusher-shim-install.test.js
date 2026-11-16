@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { install, uninstall, status, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER } = require('../../scripts/lib/crusher/shim-install');
+const { install, uninstall, status, verify, describeVerification, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER } = require('../../scripts/lib/crusher/shim-install');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -88,8 +88,134 @@ function runTests() {
             const mode = fs.statSync(launcherPath).mode & 0o777;
             assert.ok(mode & 0o100, `${name} launcher must be executable`);
           }
-          assert.ok(manifest[name] && fs.existsSync(manifest[name]), `manifest entry for ${name} must point at a real file`);
+          assert.ok(manifest.binaries[name] && fs.existsSync(manifest.binaries[name]), `manifest entry for ${name} must point at a real file`);
         }
+      });
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('install() pins the shim: the manifest carries the package version, the dispatch hash and one hash per launcher, and verify() says ok (#2137)', () => {
+    const dir = createTempDir('egc-shim-install-');
+    try {
+      withHome(dir, () => {
+        const result = install();
+        const manifest = JSON.parse(fs.readFileSync(path.join(result.dir, 'manifest.json'), 'utf8'));
+        assert.strictEqual(manifest.version, require('../../package.json').version);
+        assert.match(manifest.dispatch, /^[0-9a-f]{64}$/, 'the dispatch module hash is a sha256');
+        for (const name of result.installed) {
+          assert.match(manifest.launchers[name], /^[0-9a-f]{64}$/, `launcher hash missing for ${name}`);
+        }
+        const report = verify();
+        assert.strictEqual(report.installed, true);
+        assert.strictEqual(report.state, 'ok', JSON.stringify(report));
+        assert.deepStrictEqual(report.altered, []);
+        assert.strictEqual(status().state, 'ok', 'status() carries the verification');
+      });
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('verify() names a launcher whose content changed on disk (#2137)', () => {
+    const dir = createTempDir('egc-shim-install-');
+    try {
+      withHome(dir, () => {
+        const result = install();
+        const name = result.installed[0];
+        const launcherPath = process.platform === 'win32' ? path.join(result.dir, `${name}.cmd`) : path.join(result.dir, name);
+        fs.appendFileSync(launcherPath, process.platform === 'win32' ? '\r\nrem altered' : '\n# altered\n');
+        const report = verify();
+        assert.strictEqual(report.state, 'altered');
+        assert.deepStrictEqual(report.altered, [name]);
+      });
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('verify() reports a shim written by another EGC version as stale (#2137)', () => {
+    const dir = createTempDir('egc-shim-install-');
+    try {
+      withHome(dir, () => {
+        const result = install();
+        const manifestFile = path.join(result.dir, 'manifest.json');
+        const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+        fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: '0.0.1' }));
+        const report = verify();
+        assert.strictEqual(report.state, 'stale');
+        assert.strictEqual(report.version, '0.0.1');
+        assert.strictEqual(report.expectedVersion, require('../../package.json').version);
+        assert.strictEqual(report.reason, 'version');
+        assert.strictEqual(describeVerification(report), `it was written by EGC 0.0.1, this is ${report.expectedVersion}`);
+      });
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('verify() treats a manifest that cannot be read, or lacks a hash, as a shim to rewrite and says why (#2137)', () => {
+    const dir = createTempDir('egc-shim-install-');
+    try {
+      withHome(dir, () => {
+        const shim = path.join(dir, '.egc', 'bin');
+        fs.mkdirSync(shim, { recursive: true });
+        const manifestFile = path.join(shim, 'manifest.json');
+        fs.writeFileSync(manifestFile, '{not json');
+        const corrupt = verify();
+        assert.strictEqual(corrupt.installed, true, 'a manifest that exists is an install to repair');
+        assert.strictEqual(corrupt.state, 'stale');
+        assert.strictEqual(corrupt.reason, 'corrupt');
+        assert.strictEqual(describeVerification(corrupt), 'its manifest cannot be read');
+
+        const version = require('../../package.json').version;
+        fs.writeFileSync(manifestFile, JSON.stringify({ version, dispatch: null, binaries: { git: '/usr/bin/git' }, launchers: {} }));
+        const incomplete = verify();
+        assert.strictEqual(incomplete.state, 'stale');
+        assert.strictEqual(incomplete.reason, 'incomplete');
+        assert.strictEqual(describeVerification(incomplete), 'its manifest lacks a hash');
+
+        const stray = SHIM_BINARY_NAMES[0];
+        fs.writeFileSync(manifestFile, JSON.stringify({ version, dispatch: 'f'.repeat(64), binaries: {}, launchers: {} }));
+        fs.writeFileSync(path.join(shim, process.platform === 'win32' ? `${stray}.cmd` : stray), 'left behind\n');
+        const unlisted = verify();
+        assert.strictEqual(unlisted.state, 'stale');
+        assert.strictEqual(unlisted.reason, 'unlisted');
+        assert.deepStrictEqual(unlisted.altered, [stray]);
+        assert.strictEqual(describeVerification(unlisted), `a launcher on disk is not in its manifest: ${stray}`);
+
+        assert.strictEqual(verify(path.join(dir, 'nowhere')).state, 'missing');
+      });
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('verify() reports a manifest from before the pinning as legacy, and status() still lists its binaries (#2137)', () => {
+    const dir = createTempDir('egc-shim-install-');
+    try {
+      withHome(dir, () => {
+        const shim = path.join(dir, '.egc', 'bin');
+        fs.mkdirSync(shim, { recursive: true });
+        fs.writeFileSync(path.join(shim, 'manifest.json'), JSON.stringify({ git: process.execPath }));
+        const report = verify();
+        assert.strictEqual(report.installed, true);
+        assert.strictEqual(report.state, 'legacy');
+        assert.deepStrictEqual(status().shimmed, ['git']);
+      });
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('verify() reports missing when no shim was ever installed (#2137)', () => {
+    const dir = createTempDir('egc-shim-install-');
+    try {
+      withHome(dir, () => {
+        const report = verify();
+        assert.strictEqual(report.installed, false);
+        assert.strictEqual(report.state, 'missing');
       });
     } finally {
       cleanup(dir);
