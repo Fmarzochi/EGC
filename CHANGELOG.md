@@ -4,6 +4,8 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+## [1.1.24] - 2026-11-16
+
 ### Added
 
 - **The Team Brain syncs at the turn boundary of the tools that have no session hook** (the line of the 1.1.24 list in `docs/VISION.md`): Antigravity, Codex, Trae, Amp and Kiro load the shared mesh notice at each prompt and had no moment for the sync around the session; `mesh-events-inject.js` takes a `--team-sync` flag (and an option for the hosts that call it in-process) that runs `scripts/lib/team-autosync-turn.js`: a sync once per session before its first prompt is answered (a pull of what the other machine pushed, and a push of what this machine has that the remote lacks), so the state the agent restores is the shared one, and on the later turns a push when a state document changed, each with 6 seconds and a whole wait under the 10 seconds of the strictest host, in a child process (`team-autosync-run.js`) so handlers that cannot wait on a promise can wait on it. The Antigravity and Trae adapters and the Amp plugin turn it on, Kiro's hook command carries the flag, and Codex registers a host adapter (`codex-mesh-notice-adapter.js`) the way Trae does; the helpers of the sync travel with the mesh script to those roots. A session the host does not name syncs whole again after ten minutes, a first sync the server or the budget denied is tried again at the next prompt, the mark of a synced session is named by a hash of its id, and the floor between pulls covers these pulls too.
