@@ -4,7 +4,7 @@ This document is the release-by-release record of EGC (Extended Global Context):
 
 ## Unreleased
 
-## v1.1.25: The Thirteen Debts (Released 2026-11-16)
+## v1.1.25: The Fourteen Debts (Released 2026-11-16)
 - Every MCP tool of both servers is rate limited: the memory server gets the per-tool, per-project limiter the Guardian had (120 calls a minute for the memory server, 60 for the Guardian, each tool and project counted apart), a caller over the limit gets an error that names the tool, the limit and the variable that raises it, the refusal goes to the audit log, and `EGC_MCP_RATE_MAX_CALLS` and `EGC_MCP_RATE_WINDOW_MS` set the limit for both servers; `session_wait` is one call however long it parks (#2142).
 - State files are read-only once written: the memory server and the hooks publish each state file through a temporary file that is already 0400 when the rename lands, where the filesystem keeps POSIX modes (Windows keeps its ACLs), so a tool that writes memory straight to disk cannot open it in place; `egc doctor` reports a state file still writable or readable by other users, with the command that fixes it (#2143).
 - The encryption key can live where the person chooses: `EGC_ENCRYPTION_KEY_FILE` points the memory server, the hooks and the CLI at a key file elsewhere, created private and refused when another user can read it, a leading `~` is the home, a configured path with nothing at it while the default key exists is refused, and `egc doctor` reports a key readable by others, a key behind a link and a configured key file that does not exist; the threat model says where the key lives and how to move it (#2144).
