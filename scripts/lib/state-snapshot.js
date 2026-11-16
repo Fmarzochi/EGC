@@ -147,6 +147,13 @@ function loadState(projectPath, headState) {
 // Always encrypts (matching writeStateFile() in encryption.ts) and writes
 // atomically via temp-file-then-rename so a reader never observes a
 // partially-written file.
+// Read-only once written (#2143), as the memory server leaves it: the next
+// save replaces the file through a temp file and a rename. Windows keeps its ACLs.
+function lockDownStateFile(filePath) {
+  if (process.platform === 'win32') return;
+  try { fs.chmodSync(filePath, 0o400); } catch { /* a filesystem without POSIX bits */ }
+}
+
 function saveState(filePath, content) {
   // The integrity key is loaded before anything is written: a key that
   // cannot be persisted or kept private stops the write instead of leaving
@@ -161,6 +168,7 @@ function saveState(filePath, content) {
     fs.writeFileSync(tmpPath, encrypted, { flag: 'wx', mode: 0o600 });
     try { fs.chmodSync(tmpPath, 0o600); } catch { /* chmod not supported on Windows */ }
     fs.renameSync(tmpPath, filePath);
+    lockDownStateFile(filePath);
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }
   }

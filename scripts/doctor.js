@@ -9,7 +9,9 @@ const { getKnownHarnessDirs } = require('./lib/utils');
 const { resolveStateStorePath } = require('./lib/state-store/path');
 const { parseTargetArgs } = require('./lib/cli-target-args');
 const { consolidateCommand, shellQuote } = require('./lib/doctor-summary');
-const { findPlaintextStateFiles } = require('./lib/state-plaintext');
+const { findPlaintextStateFiles, listStateMarkdown, stateRoot } = require('./lib/state-plaintext');
+const { defaultKeyPath } = require('./lib/state-crypto');
+const { getStateDir } = require('./lib/branch-state');
 const {
   DEFAULT_PROBE_TIMEOUT_MS,
   buildMcpReport,
@@ -212,6 +214,80 @@ const PLAINTEXT_STATE_SHOWN = 5;
 // pasted from wherever doctor was invoked.
 const ENCRYPT_SCRIPT = path.join(__dirname, 'maintenance', 'encrypt-plaintext-state.js');
 
+// The key that opens the state (#2144): where it is (EGC_ENCRYPTION_KEY_FILE
+// or ~/.egc/encryption.key), whether a configured file exists while the
+// default one does, and whether other users can read it. Windows has no
+// mode bits to judge.
+function checkEncryptionKey(homeDir) {
+  const configured = (process.env.EGC_ENCRYPTION_KEY_FILE || '').trim();
+  const keyPath = defaultKeyPath();
+  const defaultPath = path.join(homeDir, '.egc', 'encryption.key');
+  const problems = [];
+  let stat;
+  try {
+    stat = fs.lstatSync(keyPath);
+  } catch {
+    stat = null;
+  }
+  if (configured && !stat && fs.existsSync(defaultPath)) {
+    problems.push(`EGC_ENCRYPTION_KEY_FILE names ${keyPath}, which does not exist, while ${defaultPath} does: move the key there or unset the variable, or the encrypted state will not open`);
+  }
+  if (stat && stat.isSymbolicLink()) problems.push(`${keyPath} is a symbolic link; the key must be a regular file`);
+  if (stat && !stat.isSymbolicLink() && process.platform !== 'win32' && (stat.mode & 0o077) !== 0) {
+    problems.push(`${keyPath} is readable by other users (mode ${(stat.mode & 0o777).toString(8)}); run chmod 600 on it`);
+  }
+  return problems.length === 0 ? null : { path: keyPath, configured: configured || null, problems };
+}
+
+function printEncryptionKeyReport(report) {
+  console.log('\nEncryption key:');
+  for (const problem of report.problems) console.log(`  WARNING: ${problem}`);
+}
+
+const STATE_MODE_SHOWN = 5;
+
+// State files are written read-only since 1.1.25 (#2143): one still writable
+// was written before that, or by a tool that bypassed the memory server, and
+// one readable by other users is exposed. POSIX bits only.
+function checkStateFileModes(homeDir) {
+  if (process.platform === 'win32') return null;
+  const stateDir = getStateDir(homeDir);
+  const root = stateRoot(stateDir);
+  if (!root) return null;
+  const files = listStateMarkdown(stateDir, 1);
+  const writable = [];
+  const exposed = [];
+  for (const file of files) {
+    let stat;
+    try {
+      stat = fs.lstatSync(file);
+    } catch {
+      continue;
+    }
+    if (!stat.isFile()) continue;
+    if ((stat.mode & 0o044) !== 0) exposed.push(file);
+    else if ((stat.mode & 0o222) !== 0) writable.push(file);
+  }
+  if (writable.length === 0 && exposed.length === 0) return null;
+  return { stateDir, checked: files.length, writable, exposed, warningCount: (writable.length > 0 ? 1 : 0) + (exposed.length > 0 ? 1 : 0) };
+}
+
+function printStateFileModesReport(report) {
+  const shown = files => files.slice(0, STATE_MODE_SHOWN).map(file => `    ${file}`).join('\n')
+    + (files.length > STATE_MODE_SHOWN ? `\n    and ${files.length - STATE_MODE_SHOWN} more` : '');
+  console.log('\nState file modes:');
+  if (report.exposed.length > 0) {
+    console.log(`  WARNING: ${report.exposed.length} of ${report.checked} state files under ${report.stateDir} are readable by other users:`);
+    console.log(shown(report.exposed));
+  }
+  if (report.writable.length > 0) {
+    console.log(`  WARNING: ${report.writable.length} of ${report.checked} state files under ${report.stateDir} are writable (written before 1.1.25, or by a tool that bypassed the memory server):`);
+    console.log(shown(report.writable));
+  }
+  console.log('  The next save by the memory server makes a file read-only; to do it now:');
+  console.log(`    chmod 0400 ${[...report.exposed, ...report.writable].slice(0, STATE_MODE_SHOWN).map(shellQuote).join(' ')}`);
+}
+
 function checkPlaintextState(homeDir) {
   const report = findPlaintextStateFiles(homeDir);
   if (report.count === 0) return null;
@@ -300,7 +376,10 @@ async function main() {
     // The Team Brain of this machine: files and one read of the remote, no
     // server. Its warnings join the doctor's total; it raises no error.
     const team = buildTeamReport(homeDir);
-    const summary = { ...report.summary, warningCount: report.summary.warningCount + team.warningCount };
+    const encryptionKey = checkEncryptionKey(homeDir);
+    const stateFileModes = checkStateFileModes(homeDir);
+    const diskWarnings = (encryptionKey ? encryptionKey.problems.length : 0) + (stateFileModes ? stateFileModes.warningCount : 0);
+    const summary = { ...report.summary, warningCount: report.summary.warningCount + team.warningCount + diskWarnings };
     const hooks = buildHookReport(report.results, { homeDir, timeoutMs: probeTimeoutMs(process.env) });
     // Warnings are informative: drift and version skew are worth reporting but
     // do not mean the install is broken, and a warnings-only run is a healthy
@@ -313,6 +392,8 @@ async function main() {
       const out = { ...report, summary, mcp, team, hooks };
       if (stateDb) out.stateDb = stateDb;
       if (plaintextState) out.plaintextStateFiles = plaintextState;
+      if (encryptionKey) out.encryptionKey = encryptionKey;
+      if (stateFileModes) out.stateFileModes = stateFileModes;
       console.log(JSON.stringify(out, null, 2));
     } else {
       printHuman({ ...report, summary });
@@ -321,6 +402,8 @@ async function main() {
       printHookReport(hooks);
       if (stateDb) printStateStoreReport(stateDb);
       if (plaintextState) printPlaintextStateReport(plaintextState);
+      if (encryptionKey) printEncryptionKeyReport(encryptionKey);
+      if (stateFileModes) printStateFileModesReport(stateFileModes);
     }
 
     process.exitCode = hasFailures ? 1 : 0;

@@ -7,6 +7,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, McpError, ErrorCode } fr
 import { Database } from 'sqlite';
 import { z } from 'zod';
 import { log } from './memory-logging';
+import { createRateLimiter, rateLimitSettings } from './rate-limit';
 import { closeDb, getDb } from './memory-db';
 import { TOOL_DEFINITIONS } from './memory-tool-definitions';
 import { handleGetState, handleUpdateState } from './memory-state-tools';
@@ -72,14 +73,32 @@ const TOOL_HANDLERS = {
 // database closes. A client that writes its last call and then closes the pipe
 // reads the response from a server that is still working, not from one that has
 // already shut down.
+// Per tool and project (#2142): an honest session never reaches the default,
+// a looping caller gets a clear refusal, and the refusal goes to the audit log.
+// session_wait is one call however long it parks, so it counts as one.
+const RATE_LIMIT = rateLimitSettings(process.env, { windowMs: 60_000, maxCalls: 120 });
+const rateLimiter = createRateLimiter(RATE_LIMIT);
+
+function refuseOverRateLimit(tool: string, args: unknown): void {
+  const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
+  const projectPath = typeof record.project_path === 'string' ? record.project_path : undefined;
+  if (rateLimiter.check(tool, projectPath)) return;
+  log('AUDIT', 'RATE_LIMIT_EXCEEDED', { tool, project_path: projectPath, limit: RATE_LIMIT.maxCalls, window_ms: RATE_LIMIT.windowMs });
+  throw new McpError(
+    ErrorCode.InvalidRequest,
+    `Rate limit exceeded for tool '${tool}': at most ${RATE_LIMIT.maxCalls} calls per ${Math.round(RATE_LIMIT.windowMs / 1000)}s for one tool and project. Wait a moment; EGC_MCP_RATE_MAX_CALLS raises the limit.`
+  );
+}
+
 let inFlightRequests = 0;
 const idleWaiters: Array<() => void> = [];
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   inFlightRequests++;
   try {
-    const db = await getDb();
     const name = request.params.name;
+    refuseOverRateLimit(name, request.params.arguments);
+    const db = await getDb();
     try {
       if (!Object.hasOwn(TOOL_HANDLERS, name)) {
         throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);

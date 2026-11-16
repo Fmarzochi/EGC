@@ -28,7 +28,12 @@ const MAGIC = 'EGC1:';
 // call. That divergence is what let a state file get encrypted under one
 // key and later fail decryption under another, long after the key file
 // itself had stopped changing.
+// EGC_ENCRYPTION_KEY_FILE moves the key out of the data directory (#2144): an
+// encrypted volume, a path a keychain agent materializes. The same checks
+// apply to it: a regular file, private, reached through no link.
 function defaultEncKeyPath(): string {
+  const configured = process.env.EGC_ENCRYPTION_KEY_FILE?.trim();
+  if (configured) return path.resolve(configured);
   return path.join(resolveHome(), '.egc', 'encryption.key');
 }
 
@@ -283,6 +288,15 @@ export function readStateFile(filePath: string, key: Buffer): string {
  * Write a state file atomically, always encrypting.
  * Writes to a temp file then renames to prevent partial-write corruption.
  */
+// Read-only once written (#2143): a tool that writes memory straight to disk
+// instead of through this server cannot open the file in place, and the next
+// write here replaces it through a temp file and a rename, which needs the
+// directory, not the file. Windows keeps its ACLs.
+function lockDownStateFile(filePath: string): void {
+  if (process.platform === 'win32') return;
+  try { fs.chmodSync(filePath, 0o400); } catch { /* a filesystem without POSIX bits */ }
+}
+
 export function writeStateFile(filePath: string, plaintext: string, key: Buffer): void {
   const encrypted = encryptState(plaintext, key);
   // Unique per call, not just per file: a fixed `${filePath}.tmp` name lets
@@ -299,6 +313,7 @@ export function writeStateFile(filePath: string, plaintext: string, key: Buffer)
   try {
     writePrivateTemp(tmpPath, encrypted);
     fs.renameSync(tmpPath, filePath);
+    lockDownStateFile(filePath);
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* already renamed away; best-effort cleanup */ }
   }

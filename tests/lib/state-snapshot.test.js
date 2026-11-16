@@ -17,7 +17,7 @@ const os = require('os');
 const path = require('path');
 
 const { decryptStateBuffer, isEncryptedBuffer } = require('../../scripts/lib/state-crypto');
-const { writeSnapshotToDisk, applyMinedMemory, withStateFileLockSync } = require('../../scripts/lib/state-snapshot');
+const { writeSnapshotToDisk, applyMinedMemory, withStateFileLockSync, saveState } = require('../../scripts/lib/state-snapshot');
 
 function test(name, fn) {
   try {
@@ -191,6 +191,30 @@ function runTests() {
       assert.ok(!fs.existsSync(`${stateFile}.merge.lock`), 'the lock file is released after the callback');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
+    }
+  })) passed++; else failed++;
+
+  if (test('saveState leaves the state file read-only and the next save still replaces it (#2143)', () => {
+    if (process.platform === 'win32') return;
+    const { home } = setupHome('egc-snapshot-mode-');
+    const previousHome = process.env.HOME;
+    const previousProfile = process.env.USERPROFILE;
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    try {
+      const filePath = path.join(home, '.egc', 'state', 'demo', 'main.md');
+      saveState(filePath, '# Project State\nproject: demo\n\n## Context\nfirst\n');
+      assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o400, 'read-only once written');
+      saveState(filePath, '# Project State\nproject: demo\n\n## Context\nsecond\n');
+      assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o400, 'still read-only after the second save');
+      const raw = fs.readFileSync(filePath);
+      assert.ok(isEncryptedBuffer(raw));
+      assert.match(decryptStateBuffer(raw, path.join(home, '.egc', 'encryption.key')), /second/);
+    } finally {
+      process.env.HOME = previousHome;
+      if (previousProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousProfile;
+      cleanup(home);
     }
   })) passed++; else failed++;
 

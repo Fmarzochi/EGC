@@ -205,6 +205,25 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('EGC_ENCRYPTION_KEY_FILE is where defaultKeyPath() points and where loadOrCreateKeySync() creates the key (#2144)', () => {
+    const stateCrypto = require('../../scripts/lib/state-crypto');
+    const dir = createTempDir('egc-key-file-');
+    const configured = path.join(dir, 'elsewhere', 'egc.key');
+    const previous = process.env.EGC_ENCRYPTION_KEY_FILE;
+    process.env.EGC_ENCRYPTION_KEY_FILE = configured;
+    try {
+      assert.strictEqual(stateCrypto.defaultKeyPath(), configured);
+      const key = stateCrypto.loadOrCreateKeySync();
+      assert.strictEqual(key.length, 32);
+      assert.ok(fs.existsSync(configured), 'the key is created at the configured path');
+      assert.ok(stateCrypto.loadKey().equals(key), 'loadKey() reads the configured key');
+    } finally {
+      if (previous === undefined) delete process.env.EGC_ENCRYPTION_KEY_FILE;
+      else process.env.EGC_ENCRYPTION_KEY_FILE = previous;
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }

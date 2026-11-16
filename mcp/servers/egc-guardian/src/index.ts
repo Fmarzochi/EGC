@@ -21,7 +21,7 @@ import { validateCommand, validateWrite, isProtectedPath, secretPathChecker, res
 import { redactPayload, redactText, writeAuditEntry } from './audit-log.js';
 import { scanForInjection } from './prompt-injection-scanner.js';
 import { runCompressionPipeline, splitAlreadyCrushed } from './compression-pipeline.js';
-import { createRateLimiter } from './rate-limit.js';
+import { createRateLimiter, rateLimitSettings } from './rate-limit.js';
 import { autoLearn } from './learn-writer.js';
 import { compressViaHeadroom } from './headroom-client.js';
 import { buildRelevantContext, resolveRoot } from './graph-context.js';
@@ -326,8 +326,9 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
   };
 });
 
-const RATE_WINDOW_MS = 60_000;
-const RATE_MAX_CALLS = 60;
+// 60 calls per tool and project per minute by default; EGC_MCP_RATE_MAX_CALLS
+// and EGC_MCP_RATE_WINDOW_MS change it, here and in the memory server (#2142).
+const { windowMs: RATE_WINDOW_MS, maxCalls: RATE_MAX_CALLS } = rateLimitSettings(process.env, { windowMs: 60_000, maxCalls: 60 });
 const rateLimiter = createRateLimiter({ windowMs: RATE_WINDOW_MS, maxCalls: RATE_MAX_CALLS });
 
 function checkRateLimit(tool: string, projectPath?: string | null): boolean {

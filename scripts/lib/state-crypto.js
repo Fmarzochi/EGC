@@ -34,7 +34,11 @@ const ALGORITHM = 'aes-256-gcm';
 // wrong key, and failed to decrypt (Windows-only CI failures on PR #1168).
 // getHomeDir() is the same HOME-then-USERPROFILE-then-os.homedir() formula
 // already shared by every other caller in this directory.
+// EGC_ENCRYPTION_KEY_FILE moves the key out of the data directory (#2144), the
+// same variable the memory server reads; the key checks apply to it as well.
 function defaultKeyPath() {
+  const configured = (process.env.EGC_ENCRYPTION_KEY_FILE || '').trim();
+  if (configured) return path.resolve(configured);
   return path.join(getHomeDir(), '.egc', 'encryption.key');
 }
 
