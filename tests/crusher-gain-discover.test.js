@@ -61,6 +61,36 @@ run('gain --history --json returns the raw ledger entries', () => {
   assert.strictEqual(entries[0].tokensSaved, entry.tokensSaved, 'savings carry through');
 });
 
+run('gain reports the savings by layer: the shim, the egc run prefix, and the rows written before layers (#2136)', () => {
+  const home = tempDir('egc-gain-home-');
+  const ledgerDir = path.join(home, '.egc', 'metrics');
+  fs.mkdirSync(ledgerDir, { recursive: true });
+  const rows = [
+    { ts: '2026-11-16T01:00:00Z', kind: 'git-log', cmd: 'git', layer: 'shim', tokensSaved: 3000, bytesIn: 50000, bytesOut: 1000 },
+    { ts: '2026-11-16T01:01:00Z', kind: 'git-diff', cmd: 'git', layer: 'shim', tokensSaved: 2000, bytesIn: 30000, bytesOut: 800 },
+    { ts: '2026-11-16T01:02:00Z', kind: 'test-runner', cmd: 'npm', layer: 'run', tokensSaved: 4000, bytesIn: 60000, bytesOut: 900 },
+    { ts: '2026-11-16T01:03:00Z', kind: 'gh-json', cmd: 'gh', tokensSaved: 500, bytesIn: 9000, bytesOut: 700 },
+  ];
+  fs.writeFileSync(path.join(ledgerDir, 'crusher.jsonl'), rows.map(row => JSON.stringify(row)).join('\n') + '\n');
+  const env = { ...process.env, HOME: home, USERPROFILE: home, EGC_CRUSHER_METRICS_FILE: path.join(ledgerDir, 'crusher.jsonl') };
+
+  const text = spawnSync('node', [GAIN], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, env });
+  assert.strictEqual(text.status, 0, text.stderr);
+  assert.match(text.stdout, /By layer/, 'the report has a layer section');
+  assert.match(text.stdout, /shim\s+2 runs\s+~\s*5\.0K/, `the shim layer sums its two rows: ${text.stdout}`);
+  assert.match(text.stdout, /run\s+1 runs\s+~\s*4\.0K/, 'the egc run layer has its row');
+  assert.match(text.stdout, /unlabeled\s+1 runs/, 'a row written before layers is reported as unlabeled, not dropped');
+
+  const json = spawnSync('node', [GAIN, '--json'], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, env });
+  assert.strictEqual(json.status, 0, json.stderr);
+  const report = JSON.parse(json.stdout);
+  assert.deepStrictEqual(report.byLayer, {
+    shim: { runs: 2, tokensSaved: 5000 },
+    run: { runs: 1, tokensSaved: 4000 },
+    unlabeled: { runs: 1, tokensSaved: 500 },
+  });
+});
+
 run('gain --history prints local time with its offset and leaves the ledger in UTC (#1659)', () => {
   const row = { ts: '2026-07-26T04:00:00Z', kind: 'git-log', cmd: 'git log --stat', tokensSaved: 5000, bytesIn: 100000, bytesOut: 2000 };
   const line = `${JSON.stringify(row)}\n`;

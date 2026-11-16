@@ -19,13 +19,14 @@ const SPAWN_OPTIONS = {
   maxBuffer: 64 * 1024 * 1024,
 };
 
-function runCommand(commandArgs, shell, raw) {
+function runCommand(commandArgs, shell) {
   // A command covered by the PATH-level binary shim (git, npm, ...) resolves
-  // to the shim, not the real binary, regardless of this flag: the shim runs
-  // as an independent child process and would compress the output itself
-  // before crush-run.js ever sees it. EGC_CRUSHER_RAW tells the shim to
-  // passthrough instead, so --raw actually reaches stdout raw end-to-end.
-  const options = raw ? { ...SPAWN_OPTIONS, env: { ...process.env, EGC_CRUSHER_RAW: '1' } } : SPAWN_OPTIONS;
+  // to the shim, not the real binary: the shim runs as an independent child
+  // process and would compress the output itself before crush-run.js ever
+  // sees it. EGC_CRUSHER_RAW tells the shim to pass through, so --raw reaches
+  // stdout raw end-to-end and, without --raw, the compression happens once,
+  // here, and the ledger row carries layer run instead of shim (#2136).
+  const options = { ...SPAWN_OPTIONS, env: { ...process.env, EGC_CRUSHER_RAW: '1' } };
   if (shell) {
     // The rewrite hook passes the full command line as a single argument, so the
     // platform shell (/bin/sh on POSIX, cmd.exe on Windows) re-parses it exactly
@@ -47,7 +48,7 @@ function main() {
     process.exit(commandArgs.length === 0 ? 1 : 0);
   }
 
-  const result = runCommand(commandArgs, shell, raw);
+  const result = runCommand(commandArgs, shell);
 
   if (result.error) {
     console.error(`egc run: ${result.error.message}`);
@@ -69,6 +70,7 @@ function main() {
     record({
       cmd: commandLine.trim().split(/\s+/)[0],
       kind: crushed.kind,
+      layer: 'run',
       bytesIn: crushed.bytesIn,
       bytesOut: crushed.bytesOut,
       tokensSaved: crushed.tokensSaved,

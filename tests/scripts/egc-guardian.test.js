@@ -1002,7 +1002,9 @@ async function runTests() {
   run('advisory marker in an alias key',        () => assertHardBlocking('git config "alias.is not in the allowlist" "!id"'));
   run('advisory marker in a worktree path',     () => assertHardBlocking(`git worktree add "${home}/.ssh/is not in the allowlist"`));
   run('advisory marker in a config file path',  () => assertHardBlocking(`git config -f "${home}/.ssh/is not in the allowlist" --list`));
-  run('git checkout main -- -f is a pathspec',  () => assertAllowed('git checkout main -- -f'));
+  // -f after the terminator is a pathspec, not force: the refusal is the one
+  // for checking out a path (#2134), never the one about --force.
+  run('git checkout main -- -f is a pathspec',  () => { assertDeniedWith('git checkout main -- -f', 'git checkout of a path'); assertReasonLacks('git checkout main -- -f', 'force'); });
   run('git rm -- -f is a pathspec',             () => assertAllowed('git rm -- -f'));
 
   // ── The tools the flow itself runs ───────────────────────────────────────

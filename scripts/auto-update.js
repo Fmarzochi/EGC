@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { samePath } = require('./lib/utils');
 const { spawnSync } = require('node:child_process');
 const { version: PKG_VERSION } = require('../package.json');
 
@@ -280,6 +281,34 @@ function resolveRepoRootForRecords(records, requestedRepoRoot, results) {
   };
 }
 
+// A shim that could not be rewritten is an error of the run: egc auto-update
+// exits 1 for it as for a target that failed to reinstall.
+function shimErrorCount(crusherShim) {
+  return crusherShim && crusherShim.state === 'error' ? 1 : 0;
+}
+
+// The shim in ~/.egc/bin is pinned to the EGC version that wrote it. Once the
+// installs are reapplied, a shim another version wrote, or one edited on
+// disk, is rewritten so its launchers match the package now installed. It
+// belongs to the package, not to a target, so it is refreshed even when no
+// managed install is found.
+function refreshCrusherShim(options, dependencies) {
+  if (options.dryRun) return null;
+  // The shim lives in the real home. An update run for another home (a test,
+  // a staged install) leaves it alone unless a stub is handed in.
+  const realHome = !options.homeDir || samePath(options.homeDir, os.homedir());
+  const shimInstall = dependencies.shimInstall || (realHome ? require('./lib/crusher/shim-install') : null);
+  if (!shimInstall) return { state: 'skipped', refreshed: false };
+  try {
+    const before = shimInstall.verify();
+    if (!before.installed || before.state === 'ok') return { state: before.state, refreshed: false };
+    const result = shimInstall.install();
+    return { state: before.state, version: before.version, refreshed: true, installed: result.installed };
+  } catch (error) {
+    return { state: 'error', refreshed: false, error: error.message };
+  }
+}
+
 function runAutoUpdate(options = {}, dependencies = {}) {
   const discover = dependencies.discoverInstalledStates || discoverInstalledStates;
   const execute = dependencies.runExternalCommand || runExternalCommand;
@@ -316,14 +345,16 @@ function runAutoUpdate(options = {}, dependencies = {}) {
     }).filter(record => record.exists);
 
   if (records.length === 0) {
+    const crusherShim = refreshCrusherShim(options, dependencies);
     return {
       dryRun: Boolean(options.dryRun),
       repoRoot: requestedRepoRoot,
+      crusherShim,
       results,
       summary: {
         checkedCount: results.length,
         updatedCount: 0,
-        errorCount: 0,
+        errorCount: shimErrorCount(crusherShim),
       },
     };
   }
@@ -355,23 +386,37 @@ function runAutoUpdate(options = {}, dependencies = {}) {
   const cognitiveBootstrap = options.dryRun ? null : runCognitiveBootstrap(repoRoot, env, execute);
 
   results.push(...applyInstalls(validRecords, options, repoRoot, env, execute));
+  const crusherShim = refreshCrusherShim(options, dependencies);
 
   return {
     dryRun: Boolean(options.dryRun),
     repoRoot,
     cognitiveBootstrap,
+    crusherShim,
     results,
     summary: {
       checkedCount: results.length,
       updatedCount: results.filter(result => result.status === 'updated' || result.status === 'planned').length,
-      errorCount: results.filter(result => result.status === 'error').length,
+      errorCount: results.filter(result => result.status === 'error').length + shimErrorCount(crusherShim),
     },
   };
+}
+
+function printCrusherShim(result) {
+  if (result.crusherShim?.refreshed) {
+    const wrote = result.crusherShim.version ? `EGC ${result.crusherShim.version}` : 'an install before the pinning';
+    console.log(`Token Crusher shim: refreshed (the one on disk was ${result.crusherShim.state}, written by ${wrote})\n`);
+  } else if (result.crusherShim?.error) {
+    console.log(`Token Crusher shim: not refreshed (${result.crusherShim.error})\n`);
+  }
 }
 
 function printHuman(result) {
   if (result.results.length === 0) {
     console.log('No EGC install-state files found for the current home/project context.');
+    // The shim is refreshed on this path too, and a failed refresh is the
+    // reason the command exits 1, so it is said here.
+    printCrusherShim(result);
     return;
   }
 
@@ -390,6 +435,8 @@ function printHuman(result) {
     }
     console.log('');
   }
+
+  printCrusherShim(result);
 
   for (const entry of result.results) {
     console.log(`- ${entry.adapter.id}`);
@@ -445,5 +492,6 @@ module.exports = {
   determineInstallCwd,
   npmUpgradeHint,
   runCognitiveBootstrap,
+  refreshCrusherShim,
   runAutoUpdate,
 };

@@ -142,6 +142,9 @@ function checkGitForceFlag(args: string[], subcommandIdx: number, cwd?: string):
   // Nothing after the option terminator is an option.
   const terminator = rest.indexOf('--');
   const options = terminator >= 0 ? rest.slice(0, terminator) : rest;
+  // A forced delete of a branch is refused by checkGitDiscardingWork with the
+  // reason that names the branch and its commits, not by the generic one here.
+  if (subcommand === 'branch' && hasOption(options, '--delete', 'd')) return null;
   const hasLongForce = options.some(isLongGitForceFlag);
   const hasShortForce = options.some(a => a === '-f' || hasShortForceCluster(a));
   const refused = GIT_FORCE_REFUSED.get(subcommand);
@@ -604,6 +607,122 @@ function checkGitCommandOptions(subcommand: string, rest: string[], cwd?: string
   return null;
 }
 
+// The git commands that throw work away with no remote copy, no confirmation
+// and nothing but the reflog or the stash list to remember it: a reset that
+// rewrites the worktree, a branch deleted unmerged, a tag deleted, a restore
+// or a checkout that overwrites a path, a stash dropped or cleared. Each
+// refusal says what would be lost and the form that keeps it.
+const GIT_DISCARD_REASONS = {
+  resetHard: 'git reset --hard is forbidden: it throws away every change you have not committed, and the commits the branch moves off. Commit or stash the changes first, and move the branch with git reset --soft or --keep.',
+  resetMerge: 'git reset --merge is forbidden: it throws away the changes in the files the reset touches. Commit or stash them first.',
+  branchDelete: 'git branch -D is forbidden: it deletes a branch whose commits are merged nowhere, and only the reflog remembers them. Merge the branch, or delete it with git branch -d once it is merged.',
+  tagDelete: 'git tag -d is forbidden: a deleted tag has to be recreated on the exact commit it marked, and a release tag is what other people installed. Leave the tag in place.',
+  restore: 'git restore of the worktree is forbidden: it overwrites the changes in those files with the committed version, with no way to get them back. Commit or stash first; git restore --staged, which only unstages, stays allowed.',
+  checkoutPath: 'git checkout of a path is forbidden: it overwrites the changes in those files with the committed version, with no way to get them back. Commit or stash first; checking out a branch stays allowed.',
+  checkoutPatch: 'git checkout --patch is forbidden: it discards hunks of the worktree one by one, with no way to get them back. Commit or stash first.',
+  branchReset: 'git checkout -B and git switch -C are forbidden: they move an existing branch to another commit, and the commits it pointed at are left to the reflog. Create a new branch with git checkout -b or git switch -c, or move the branch once it is merged.',
+  stashDrop: 'git stash drop is forbidden: it deletes stashed work that only the stash list holds. Apply or pop the stash instead.',
+  stashClear: 'git stash clear is forbidden: it deletes every stash at once. Apply or pop the stashes you want and leave the rest.',
+};
+
+function shortFlagCluster(token: string, letter: string): boolean {
+  return /^-[A-Za-z]+$/.test(token) && token.includes(letter);
+}
+
+// Git accepts any unambiguous prefix of a long option (--har for --hard, --del
+// for --delete), so the long form is matched the way the force flags are.
+function hasOption(options: string[], longName: string, shortLetter: string | null): boolean {
+  return options.some(token => abbreviates(token.toLowerCase(), longName)
+    || (shortLetter !== null && shortFlagCluster(token, shortLetter)));
+}
+
+// The operands of a git command: the tokens that are not options, with the
+// value a value-taking option consumes skipped, up to the option terminator.
+function gitOperands(tokens: string[], valueOptions: string[]): string[] {
+  const operands: string[] = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token === '--') break;
+    if (token.startsWith('-')) {
+      if (valueOptions.includes(token)) index++;
+      continue;
+    }
+    operands.push(token);
+  }
+  return operands;
+}
+
+// Each check sees the options before the terminator, every token, and where
+// the terminator is; it answers with the reason to refuse, or null.
+type DiscardCheck = (options: string[], exact: string[], terminator: number) => string | null;
+
+function resetDiscard(options: string[]): string | null {
+  if (hasOption(options, '--hard', null)) return GIT_DISCARD_REASONS.resetHard;
+  if (hasOption(options, '--merge', null)) return GIT_DISCARD_REASONS.resetMerge;
+  return null;
+}
+
+function branchDiscard(options: string[]): string | null {
+  const forcedDelete = options.some(token => shortFlagCluster(token, 'D'))
+    || (hasOption(options, '--delete', 'd') && hasOption(options, '--force', 'f'));
+  return forcedDelete ? GIT_DISCARD_REASONS.branchDelete : null;
+}
+
+function tagDiscard(options: string[]): string | null {
+  return hasOption(options, '--delete', 'd') ? GIT_DISCARD_REASONS.tagDelete : null;
+}
+
+function restoreDiscard(options: string[]): string | null {
+  const staged = hasOption(options, '--staged', 'S');
+  const worktree = hasOption(options, '--worktree', 'W');
+  return staged && !worktree ? null : GIT_DISCARD_REASONS.restore;
+}
+
+// Patch mode throws hunks away with no operand at all, and -B moves a branch
+// that exists. For paths: a single operand is a branch to Git before it is a
+// path, and the validator cannot resolve refs; a second operand, or the
+// terminator, can only mean paths.
+function checkoutDiscard(options: string[], exact: string[], terminator: number): string | null {
+  if (options.some(token => shortFlagCluster(token, 'p') || abbreviates(token.toLowerCase(), '--patch'))) return GIT_DISCARD_REASONS.checkoutPatch;
+  if (options.some(token => shortFlagCluster(token, 'B'))) return GIT_DISCARD_REASONS.branchReset;
+  if (terminator !== -1) return GIT_DISCARD_REASONS.checkoutPath;
+  return gitOperands(exact, ['-b', '--orphan']).length > 1 ? GIT_DISCARD_REASONS.checkoutPath : null;
+}
+
+function switchDiscard(options: string[]): string | null {
+  return options.some(token => shortFlagCluster(token, 'C') || abbreviates(token.toLowerCase(), '--force-create'))
+    ? GIT_DISCARD_REASONS.branchReset
+    : null;
+}
+
+function stashDiscard(_options: string[], exact: string[]): string | null {
+  const action = gitOperands(exact, ['-m', '--message'])[0]?.toLowerCase();
+  if (action === 'drop') return GIT_DISCARD_REASONS.stashDrop;
+  if (action === 'clear') return GIT_DISCARD_REASONS.stashClear;
+  return null;
+}
+
+const GIT_DISCARD_CHECKS = new Map<string, DiscardCheck>([
+  ['reset', resetDiscard],
+  ['branch', branchDiscard],
+  ['tag', tagDiscard],
+  ['restore', restoreDiscard],
+  ['checkout', checkoutDiscard],
+  ['switch', switchDiscard],
+  ['stash', stashDiscard],
+]);
+
+function checkGitDiscardingWork(subcommand: string, rest: string[]): ValidationResult | null {
+  const check = GIT_DISCARD_CHECKS.get(subcommand);
+  if (!check) return null;
+  const exact = rest.map(stripQuotes);
+  // Everything after the terminator is a path, however much it looks like an option.
+  const terminator = exact.indexOf('--');
+  const options = terminator === -1 ? exact : exact.slice(0, terminator);
+  const reason = check(options, exact, terminator);
+  return reason ? { allowed: false, reason, trust_level: 'DANGEROUS' } : null;
+}
+
 export function validateGitArgs(args: string[], cwd?: string): ValidationResult {
   const subcommandIdx = findGitSubcommandIndex(args);
   const forceDenial = checkGitForceFlag(args, subcommandIdx, cwd);
@@ -620,6 +739,8 @@ export function validateGitArgs(args: string[], cwd?: string): ValidationResult 
   if (directoryDenial) return directoryDenial;
   const subcommand = bareToken(args[subcommandIdx]);
   const rest = args.slice(subcommandIdx + 1);
+  const discardDenial = checkGitDiscardingWork(subcommand, rest);
+  if (discardDenial) return discardDenial;
   const fileDenial = checkGitFileOperands(subcommand, rest, cwd);
   if (fileDenial) return fileDenial;
   const commandDenial = checkGitCommandOptions(subcommand, rest, cwd) ?? checkNewRepositorySettings(subcommand, rest, cwd);

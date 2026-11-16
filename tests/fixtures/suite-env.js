@@ -30,6 +30,12 @@ function suiteEnv(env) {
   // The pool mark is for the children the pool starts; the runner sets it per
   // child (tests/fixtures/run-jobs.js) and a serial child must not inherit it.
   delete copy.EGC_TEST_POOL;
+  // egc run hands its child EGC_CRUSHER_RAW=1 so the shim steps aside; a suite
+  // started through egc run must not inherit it, or its crusher tests would
+  // see a shim that passes everything through.
+  for (const key of Object.keys(copy)) {
+    if (key.toUpperCase() === 'EGC_CRUSHER_RAW') delete copy[key];
+  }
   return copy;
 }
 

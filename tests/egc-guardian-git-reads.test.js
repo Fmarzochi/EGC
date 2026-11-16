@@ -186,7 +186,7 @@ allowed('git check-ignore -v .env');
 allowed('git rm --cached .env');
 allowed('git reset .env');
 allowed('git restore --staged .env');
-allowed('git checkout -- .env');
+denied('git checkout -- .env', /git checkout of a path is forbidden/);
 allowed('git add .env.example');
 allowed('git diff --no-index a.txt b.txt');
 allowed('git show HEAD:README.md');
