@@ -18,6 +18,7 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..', '..');
 const index = require(path.join(ROOT, 'scripts', 'lib', 'skill-index.json'));
+const { parseFrontmatter } = require(path.join(ROOT, 'scripts', 'build-skill-index.js'));
 const GUARDIAN_SRC = path.join(ROOT, 'mcp', 'servers', 'egc-guardian', 'src');
 const MAX_GENERATED_LINES = 800;
 const PART_FILE_RE = /^catalog-(?:skills|agents|rules)-\d+\.ts$/;
@@ -98,6 +99,20 @@ run('the TypeScript catalog is parts under 800 lines, all imported by the aggreg
 run('every entry has a non-empty name and description', () => {
   const empty = index.entries.filter(e => !e.name || !(e.description || '').trim());
   assert.strictEqual(empty.length, 0, `entries missing name/description: ${empty.length}`);
+});
+
+// The index is generated at build time, so a definition edited without a
+// regeneration leaves the committed twin behind: the e2e-runner description
+// changed in #2151 and the index kept the old text until the next pack.
+run('every agent and skill entry carries the name and description its source file declares today', () => {
+  const drifted = index.entries
+    .filter(e => e.kind === 'agent' || e.kind === 'skill')
+    .filter(e => {
+      const fm = parseFrontmatter(fs.readFileSync(path.join(ROOT, e.source), 'utf8')) || {};
+      return String(fm.name) !== e.name || String(fm.description) !== e.description;
+    })
+    .map(e => e.name);
+  assert.deepStrictEqual(drifted, [], `entries out of step with their source, run node scripts/build-skill-index.js: ${drifted.join(', ')}`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

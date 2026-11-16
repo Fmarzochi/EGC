@@ -119,7 +119,7 @@ export const CATALOG_AGENTS_1: ReadonlyArray<CatalogEntry> = [
   {
     "kind": "agent",
     "name": "e2e-runner",
-    "description": "End-to-end testing specialist using Vercel Agent Browser (preferred) with Playwright fallback. Use PROACTIVELY for generating, maintaining, and running E2E tests. Manages test journeys, quarantines flaky tests, uploads artifacts (screenshots, videos, traces), and ensures critical user flows work.",
+    "description": "End-to-end testing specialist that explores flows with Vercel Agent Browser and writes and runs them as Playwright tests. Use PROACTIVELY for generating, maintaining, and running E2E tests. Manages test journeys, quarantines flaky tests, uploads artifacts (screenshots, videos, traces), and ensures critical user flows work.",
     "source": "agents/e2e-runner.md"
   },
   {
