@@ -303,6 +303,8 @@ export function readStateFile(filePath: string, key: Buffer): string {
   return raw.toString('utf-8');
 }
 
+const PUBLISHED_STATE_MODE = process.platform === 'win32' ? 0o600 : 0o400;
+
 /**
  * Write a state file atomically, always encrypting.
  * Writes to a temp file then renames to prevent partial-write corruption.
@@ -326,8 +328,10 @@ export function writeStateFile(filePath: string, plaintext: string, key: Buffer)
     // straight to disk cannot open it in place; the next write here replaces
     // it through another temp file, which needs the directory, not the file.
     // Where the filesystem keeps no POSIX modes the chmod changes nothing and
-    // egc doctor reports the file; Windows keeps its ACLs.
-    writePrivateTemp(tmpPath, encrypted, 0o400);
+    // egc doctor reports the file. Windows keeps its ACLs and stays 0600: a
+    // mode without write bits becomes the read-only attribute there, and a
+    // rename onto a read-only file is refused, so the next save would fail.
+    writePrivateTemp(tmpPath, encrypted, PUBLISHED_STATE_MODE);
     fs.renameSync(tmpPath, filePath);
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* already renamed away; best-effort cleanup */ }
