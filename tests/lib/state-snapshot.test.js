@@ -85,8 +85,9 @@ function runTests() {
 
   let passed = 0;
   let failed = 0;
+  const tally = ok => { if (ok) passed++; else failed++; };
 
-  if (test('writeSnapshotToDisk preserves content and re-encrypts correctly', () => {
+  tally(test('writeSnapshotToDisk preserves content and re-encrypts correctly', () => {
     const { home, projectPath, key } = setupHome('state-snapshot-fix-');
     try {
       const filePath = stateFilePath(home, projectPath);
@@ -106,9 +107,9 @@ function runTests() {
       cleanup(home);
       cleanup(projectPath);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('applyMinedMemory preserves content and re-encrypts correctly', () => {
+  tally(test('applyMinedMemory preserves content and re-encrypts correctly', () => {
     const { home, projectPath, key } = setupHome('state-snapshot-mine-');
     try {
       const filePath = stateFilePath(home, projectPath);
@@ -126,9 +127,9 @@ function runTests() {
       cleanup(home);
       cleanup(projectPath);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('reproduces the old bug: plain UTF-8 read-modify-write corrupts the ciphertext', () => {
+  tally(test('reproduces the old bug: plain UTF-8 read-modify-write corrupts the ciphertext', () => {
     const { home, projectPath, key } = setupHome('state-snapshot-oldbug-');
     try {
       const filePath = stateFilePath(home, projectPath);
@@ -144,9 +145,9 @@ function runTests() {
       cleanup(home);
       cleanup(projectPath);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('a genuinely undecryptable file is never silently overwritten', () => {
+  tally(test('a genuinely undecryptable file is never silently overwritten', () => {
     const { home, projectPath, key } = setupHome('state-snapshot-guard-');
     try {
       const filePath = stateFilePath(home, projectPath);
@@ -164,9 +165,9 @@ function runTests() {
       cleanup(home);
       cleanup(projectPath);
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('the lock timeout names no path and honors a short retry budget: a lock held by a live process is reported by its role only', () => {
+  tally(test('the lock timeout names no path and honors a short retry budget: a lock held by a live process is reported by its role only', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-lock-msg-'));
     try {
       const stateFile = path.join(dir, 'state.md');
@@ -180,9 +181,9 @@ function runTests() {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('a null or out-of-range options argument is accepted: the callback runs and the lock is released', () => {
+  tally(test('a null or out-of-range options argument is accepted: the callback runs and the lock is released', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-lock-opts-'));
     try {
       const stateFile = path.join(dir, 'state.md');
@@ -192,9 +193,9 @@ function runTests() {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  })) passed++; else failed++;
+  }));
 
-  if (test('saveState leaves the state file read-only and the next save still replaces it (#2143)', () => {
+  tally(test('saveState leaves the state file read-only and the next save still replaces it (#2143)', () => {
     if (process.platform === 'win32') return;
     const { home } = setupHome('egc-snapshot-mode-');
     const previousHome = process.env.HOME;
@@ -221,7 +222,31 @@ function runTests() {
       if (previousKeyFile !== undefined) process.env.EGC_ENCRYPTION_KEY_FILE = previousKeyFile;
       cleanup(home);
     }
-  })) passed++; else failed++;
+  }));
+
+  tally(test('on Windows saveState keeps the state file writable, so the next save is not refused (#2143)', () => {
+    if (process.platform !== 'win32') return;
+    const { home } = setupHome('egc-snapshot-mode-win-');
+    const previousHome = process.env.HOME;
+    const previousProfile = process.env.USERPROFILE;
+    const previousKeyFile = process.env.EGC_ENCRYPTION_KEY_FILE;
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    delete process.env.EGC_ENCRYPTION_KEY_FILE;
+    try {
+      const filePath = path.join(home, '.egc', 'state', 'demo', 'main.md');
+      saveState(filePath, '# Project State\nproject: demo\n\n## Context\nfirst\n');
+      assert.notStrictEqual(fs.statSync(filePath).mode & 0o200, 0, 'no read-only attribute: Windows keeps its ACLs');
+      saveState(filePath, '# Project State\nproject: demo\n\n## Context\nsecond\n');
+      assert.match(decryptStateBuffer(fs.readFileSync(filePath), path.join(home, '.egc', 'encryption.key')), /second/);
+    } finally {
+      process.env.HOME = previousHome;
+      if (previousProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousProfile;
+      if (previousKeyFile !== undefined) process.env.EGC_ENCRYPTION_KEY_FILE = previousKeyFile;
+      cleanup(home);
+    }
+  }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);

@@ -442,6 +442,22 @@ if (test('writeStateFile leaves the file read-only, and a second write still rep
   }
 })) passed++; else failed++;
 
+if (test('on Windows the state file stays writable, so the rename of the next write is not refused (#2143)', () => {
+  if (process.platform !== 'win32') return;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-state-mode-win-'));
+  try {
+    const filePath = path.join(tmpDir, 'state.md');
+    const key = crypto.randomBytes(32);
+    writeStateFile(filePath, 'first', key);
+    assert.notStrictEqual(fs.statSync(filePath).mode & 0o200, 0, 'no read-only attribute: Windows keeps its ACLs');
+    writeStateFile(filePath, 'second', key);
+    assert.strictEqual(readStateFile(filePath, key), 'second', 'the next write replaced the file');
+    assert.notStrictEqual(fs.statSync(filePath).mode & 0o200, 0, 'and left it writable for the write after it');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
 console.log(`\nPassed: ${passed}`);
 console.log(`Failed: ${failed}`);
 process.exitCode = failed > 0 ? 1 : 0;
