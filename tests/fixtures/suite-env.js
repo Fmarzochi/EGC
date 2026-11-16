@@ -27,6 +27,9 @@ function suiteEnv(env) {
   copy.GIT_CONFIG_PARAMETERS = existing ? `${existing} ${NO_AUTO_MAINTENANCE}` : NO_AUTO_MAINTENANCE;
   copy.EGC_GUARDIAN_TIMEOUT_MS = String(CLI_TIMEOUT_MS);
   delete copy.EGC_TEST_JOBS;
+  // The pool mark is for the children the pool starts; the runner sets it per
+  // child (tests/fixtures/run-jobs.js) and a serial child must not inherit it.
+  delete copy.EGC_TEST_POOL;
   // egc run hands its child EGC_CRUSHER_RAW=1 so the shim steps aside; a suite
   // started through egc run must not inherit it, or its crusher tests would
   // see a shim that passes everything through.

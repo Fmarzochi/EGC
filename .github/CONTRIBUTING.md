@@ -135,7 +135,7 @@ Every pull request runs the following automated checks. Your PR must pass all of
 | **CLA** | First-time contributors have signed the CLA | Post the sign comment when the bot asks |
 | **DCO** | Every commit has `Signed-off-by` | Use `git commit -s` on every commit |
 | **CI / test** | `node tests/run-all.js` on Linux, macOS, Windows with Node 20 and 22, using npm, yarn, and bun | Run `node tests/run-all.js` locally before opening a PR |
-| **CI / lint** | ESLint on `scripts/` and `tests/`; markdownlint on all `.md` files in `agents/`, `skills/`, `commands/`, `rules/` | Run `npx markdownlint "agents/**/*.md"` if you added or edited Markdown files |
+| **CI / lint** | ESLint on the whole tree through `npm run lint` (`eslint .`: `scripts/`, `tests/`, the MCP server sources and the config files, minus the ignores in `eslint.config.js`), the same command the CI Lint job runs; markdownlint on all `.md` files in `agents/`, `skills/`, `commands/`, `rules/` through `npm run lint:md` | Run `npm run lint` before pushing, and `npm run lint:md` if you added or edited Markdown under `agents/`, `skills/`, `commands/` or `rules/` (the folders that script covers) |
 | **CI / validate** | Structure validators: agents, hooks, skills, commands, install manifests, rules, unicode safety | Run `node scripts/ci/validate-skills.js` (or the equivalent for your component type) |
 | **CI / security** | `npm audit --audit-level=high` | Run `npm audit --audit-level=high` locally; do not introduce packages with known high or critical vulnerabilities |
 | **Dependency Review** | Blocks dependencies with incompatible licenses or known CVEs | Check the license of any package you add |

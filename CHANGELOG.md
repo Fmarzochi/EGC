@@ -4,6 +4,12 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+### Changed (tests and CI)
+
+- **The Windows lanes of the test job run the independent test files four at a time** (#2147): the study of the last `main` run put 34 of the 35 minutes of a Windows lane in the suite itself (2051 s against 467 s on Linux), with the dependency installs and the two server builds under a minute, so caching had nothing to cut; the lane now runs `tests/run-all.js` with four workers on the 4 vCPU runner, Linux and macOS stay serial, and a repository variable `EGC_TEST_JOBS` still sets every lane. The slowest lane, windows-latest with Node 20 and yarn, went from 35 minutes on the last `main` run before the change to 17 on the first run of the pull request, and the Windows lanes with Node 22 take 10 to 12.
+- **The subprocess budgets of the suite stretch under the pool** (#2145): the runner marks a pooled child with `EGC_TEST_POOL`, `tests/fixtures/subprocess-timeouts.js` doubles `FULL_INSTALL_TIMEOUT_MS` and `CLI_TIMEOUT_MS` under that mark and keeps them alone and in the serial group, the Guardian budget a pooled child receives (`EGC_GUARDIAN_TIMEOUT_MS`) stretches with them, and the full install case of `install-sh.test.js` says, when it fails, how long it ran against which budget.
+- **One ledger fixture for the Crusher suites, and the CI Lint job running the same `npm run lint` as a developer machine** (#2146): `tests/fixtures/crusher-ledger.js` seeds the ledger and returns the environment a child needs, used by the gain and the parity suites instead of four copies of the same mkdir and write; `npm run lint` keeps linting the whole tree (`eslint .`) and the CI Lint job now calls it, plus `npm run lint:md` for the Markdown, so the local gate and the CI gate cannot drift and the job covers the files its three globs left out.
+
 ### Added (Guardian and hooks)
 
 - **The Guardian refuses the git commands that discard work** (#2134): `git reset --hard` and `--merge`, `git branch -D`, `git tag -d`, `git restore` of the worktree, `git checkout` of a path and `git stash drop` or `clear` are refused with a reason that says what each one would throw away and the form that keeps it (`reset --soft` or `--keep`, `branch -d`, `restore --staged`, checkout of a branch, `stash pop` or `apply`), next to the force flags and `git clean` the validator already refused. `tests/egc-guardian-git-destructive.test.js` pins both lists.
