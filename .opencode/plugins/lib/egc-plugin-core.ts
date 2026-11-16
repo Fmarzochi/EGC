@@ -22,7 +22,7 @@ import {
   type ToolArgs,
 } from "./guardian-bridge.js"
 
-export const EGC_VERSION = "1.1.24"
+export const EGC_VERSION = "1.1.25"
 
 export type HookProfile = "minimal" | "standard" | "strict"
 export type ToolStatus = "success" | "error"
