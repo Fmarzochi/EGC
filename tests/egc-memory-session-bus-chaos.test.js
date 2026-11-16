@@ -17,12 +17,12 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { loadTypescriptDetail, loadSqliteDriver, describeTypescriptCandidates, describeSqliteCandidates } = require('./lib/egc-memory-src');
 
 const IS_WORKER = process.argv.includes('--chaos-worker');
 const REPO_ROOT = path.resolve(__dirname, '..');
 const EGC_MEMORY_ROOT = path.join(REPO_ROOT, 'mcp', 'servers', 'egc-memory');
 const SESSION_BUS_SOURCE = path.join(EGC_MEMORY_ROOT, 'src', 'session-bus.ts');
-const MODULE_RESOLVE_PATHS = [REPO_ROOT, EGC_MEMORY_ROOT];
 const RPC_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 25;
 
@@ -42,11 +42,12 @@ async function pollUntil(fn, { timeoutMs, intervalMs = POLL_INTERVAL_MS, label }
 }
 
 function loadSqlite() {
-  // Root CI installs these before tests/run-all.js. Requiring by package name
-  // makes this harness independent from the nested MCP build/node_modules.
-  const sqlite3 = require('sqlite3');
-  const { open } = require('sqlite');
-  return { sqlite3, open };
+  // The same resolver the parent process used, so a worker never picks a
+  // driver the parent's SKIP already ruled out. Requiring by package name
+  // would resolve from this file's directory only.
+  const driver = loadSqliteDriver();
+  if (!driver) throw new Error(`sqlite driver unavailable: ${describeSqliteCandidates()}`);
+  return driver;
 }
 
 async function openBusDb(dbPath) {
@@ -57,14 +58,6 @@ async function openBusDb(dbPath) {
   await db.exec('PRAGMA foreign_keys = ON;');
   await db.exec('PRAGMA busy_timeout = 5000;');
   return db;
-}
-
-function loadTypescript() {
-  try {
-    return require(require.resolve('typescript', { paths: MODULE_RESOLVE_PATHS }));
-  } catch {
-    return null;
-  }
 }
 
 function compileProductionBus(tempDir, ts) {
@@ -430,9 +423,16 @@ async function runHarness() {
     return;
   }
 
-  const ts = loadTypescript();
+  const { ts, candidates } = loadTypescriptDetail();
   if (!ts) {
-    console.log('[SKIP] #1254 chaos harness could not resolve TypeScript from the repo root or egc-memory server install.');
+    console.log(`[SKIP] #1254 chaos harness needs a TypeScript compiler API: ${describeTypescriptCandidates(candidates)}`);
+    return;
+  }
+
+  // Workers open the same store through the same resolver, so a parent that
+  // cannot load a driver skips here instead of failing every spawned worker.
+  if (!loadSqliteDriver()) {
+    console.log(`[SKIP] #1254 chaos harness needs a loadable sqlite driver: ${describeSqliteCandidates()}`);
     return;
   }
 

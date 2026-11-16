@@ -12,6 +12,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { startMemoryServer, initialize, callTool } = require('../fixtures/memory-server-client');
+const { loadSqliteDriver } = require('../lib/egc-memory-src');
 
 const SERVER_ROOT = path.join(__dirname, '../../mcp/servers/egc-memory');
 const SERVER = path.join(SERVER_ROOT, 'build', 'index.js');
@@ -98,8 +99,7 @@ async function runTests() {
     })) passed++; else failed++;
 
     if (await test('the native engine is still the default when it loads', async () => {
-      let native = true;
-      try { require('sqlite3'); } catch { native = false; }
+      const native = Boolean(loadSqliteDriver());
       const server = startServer(home, projectDir, '');
       try {
         await initialize(server, 'fallback-test');
@@ -150,8 +150,7 @@ async function runTests() {
     })) passed++; else failed++;
 
     if (await test('back on the native engine, the FTS5 index is rebuilt and finds the decision stored on the portable engine', async () => {
-      let native = true;
-      try { require('sqlite3'); } catch { native = false; }
+      const native = Boolean(loadSqliteDriver());
       if (!native) {
         console.log('    - native sqlite3 does not load here; the rebuild path is not exercised');
         return;

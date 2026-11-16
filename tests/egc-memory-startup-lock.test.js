@@ -23,13 +23,17 @@ if (!fs.existsSync(SERVER)) {
   process.exit(0);
 }
 
-let sqlite3;
-try {
-  sqlite3 = require(path.join(serverDir, 'node_modules', 'sqlite3'));
-} catch {
-  console.log('[SKIP] sqlite driver not installed. Run sh install.sh first.');
+const { loadSqliteDriver, describeSqliteCandidates } = require('./lib/egc-memory-src');
+
+// The holder needs a driver that actually loads, from the root or from the
+// server's own node_modules, not merely one that resolves: a root sqlite3
+// whose native build was skipped resolves and then throws on require.
+const driver = loadSqliteDriver();
+if (!driver) {
+  console.log(`[SKIP] no loadable sqlite driver to hold the store lock: ${describeSqliteCandidates()}`);
   process.exit(0);
 }
+const sqlite3 = driver.sqlite3;
 
 // The native driver already waits 1000 ms for a lock on its own, so the
 // lock is held longer than that once the server is at the store, and well

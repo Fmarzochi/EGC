@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { openCompatDatabase, isNativeLoadFailure, normalizeParams, mutates, splitStatements } = require('../../scripts/lib/state-store/sqlite-compat');
+const { openCompatDatabase, selectedEngine, isNativeLoadFailure, normalizeParams, mutates, splitStatements } = require('../../scripts/lib/state-store/sqlite-compat');
 
 const { permissionBitsEnforced, withDirMode } = require('../fixtures/dir-permissions');
 
@@ -41,6 +41,18 @@ async function withoutPackages(names, fn) {
     for (const key of compatModulePaths()) delete require.cache[key];
     for (const [key, value] of cached) require.cache[key] = value;
   }
+}
+
+// A resolution root holding a sqlite3 package whose body runs on require, so a
+// case can steer what loading the driver there does without touching the real
+// one.
+function fakeSqliteRoot(body) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-root-'));
+  const pkg = path.join(dir, 'node_modules', 'sqlite3');
+  fs.mkdirSync(pkg, { recursive: true });
+  fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'sqlite3', version: '0.0.0', main: 'index.js' }));
+  fs.writeFileSync(path.join(pkg, 'index.js'), body);
+  return dir;
 }
 
 async function test(name, fn) {
@@ -517,6 +529,51 @@ async function runTests() {
     assert.ok(row.v);
     assert.strictEqual(typeof db.configure === 'function', native, 'the sqlite package Database carries configure; the portable facade does not');
     await db.close();
+  });
+
+  // A caller that names its own resolution roots is the memory server, which
+  // under yarn finds the native build only in its own node_modules. The roots
+  // are consulted before the copy this file would resolve, a load failure
+  // there degrades like any other, and a root without the package is skipped
+  // rather than turned into a failure.
+  await run('a supplied resolution root whose driver cannot load falls back to the portable engine', async () => {
+    delete process.env.EGC_SQLITE_ENGINE;
+    const root = fakeSqliteRoot("throw new Error('Could not locate the bindings file. Tried:\\n -> /root/node_sqlite3.node');");
+    try {
+      const db = await openCompatDatabase(':memory:', 'test', { nativeResolvePaths: [root] });
+      assert.strictEqual(selectedEngine(), 'wasm', 'a root that resolves without a native build must not stop the open');
+      await db.close();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  await run('with the native engine forced, the unloadable driver at that root is the error the caller sees', async () => {
+    process.env.EGC_SQLITE_ENGINE = 'native';
+    const root = fakeSqliteRoot("throw new Error('Could not locate the bindings file. Tried:\\n -> /root/node_sqlite3.node');");
+    try {
+      await assert.rejects(
+        () => openCompatDatabase(':memory:', 'test', { nativeResolvePaths: [root] }),
+        /Could not locate the bindings file/
+      );
+    } finally {
+      delete process.env.EGC_SQLITE_ENGINE;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  await run('a supplied resolution root without the driver falls back to normal resolution', async () => {
+    delete process.env.EGC_SQLITE_ENGINE;
+    let native = true;
+    try { require('sqlite3'); } catch { native = false; }
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sqlite-compat-root-'));
+    try {
+      const db = await openCompatDatabase(':memory:', 'test', { nativeResolvePaths: [root] });
+      assert.strictEqual(typeof db.configure === 'function', native, 'the chooser still resolves from itself when the supplied root has nothing');
+      await db.close();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   const missing = await runMissingPackageTests();

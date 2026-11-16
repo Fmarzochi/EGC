@@ -43,14 +43,32 @@ function announceFallback(serverName, error) {
 // every open; with no other connection open, closing folds that log into the
 // file, as the owner's next start would. The mode is passed whole, so it
 // names the full mutex the driver otherwise adds by itself.
+//
+// options.nativeResolvePaths names the roots to resolve the native driver
+// from, most specific first. The memory server passes its own package root:
+// under yarn's node-modules linker the root copy of sqlite3 resolves but has
+// no native build, since yarn runs no dependency build scripts, while the
+// copy the server's own install left in its node_modules does. A caller that
+// passes nothing resolves from this file, exactly as before.
+function loadNativeModule(id, resolvePaths) {
+  if (!Array.isArray(resolvePaths) || resolvePaths.length === 0) return require(id);
+  try {
+    return require(require.resolve(id, { paths: resolvePaths }));
+  } catch (error) {
+    if (error?.code !== 'MODULE_NOT_FOUND') throw error;
+    return require(id);
+  }
+}
+
 async function openCompatDatabase(filename, serverName, options = {}) {
   const engine = process.env.EGC_SQLITE_ENGINE;
   const reader = options.reader === true;
+  const resolvePaths = options.nativeResolvePaths;
   let nativeError = null;
   if (engine !== 'wasm') {
     try {
-      const sqlite3 = require('sqlite3');
-      const { open } = require('sqlite');
+      const sqlite3 = loadNativeModule('sqlite3', resolvePaths);
+      const { open } = loadNativeModule('sqlite', resolvePaths);
       const mode = reader ? { mode: sqlite3.OPEN_READWRITE | sqlite3.OPEN_FULLMUTEX } : {};
       const db = await open({ filename, driver: sqlite3.Database, ...mode });
       // The driver answers SQLITE_BUSY at once while another connection holds
