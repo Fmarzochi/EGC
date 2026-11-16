@@ -81,13 +81,18 @@ rm -rf .next node_modules/.cache && npm run build
 
 # Reinstall dependencies from the lockfile, with the project's own manager,
 # read from the lockfile the project ships (npm when there is none)
-PACKAGE_MANAGER=npm
-[ -f pnpm-lock.yaml ] && PACKAGE_MANAGER=pnpm
-[ -f yarn.lock ] && PACKAGE_MANAGER=yarn
-{ [ -f bun.lockb ] || [ -f bun.lock ]; } && PACKAGE_MANAGER=bun
+if [ -f pnpm-lock.yaml ]; then
+  PACKAGE_MANAGER=pnpm
+elif [ -f bun.lockb ] || [ -f bun.lock ]; then
+  PACKAGE_MANAGER=bun
+elif [ -f yarn.lock ]; then
+  PACKAGE_MANAGER=yarn
+else
+  PACKAGE_MANAGER=npm
+fi
 rm -rf node_modules
 case "${PACKAGE_MANAGER:-npm}" in
-  npm) npm ci ;;
+  npm) if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else npm install; fi ;;
   pnpm) pnpm install --frozen-lockfile ;;
   yarn) yarn install --immutable ;;
   bun) bun install --frozen-lockfile ;;
