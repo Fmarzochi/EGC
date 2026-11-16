@@ -34,8 +34,23 @@ const ALGORITHM = 'aes-256-gcm';
 // wrong key, and failed to decrypt (Windows-only CI failures on PR #1168).
 // getHomeDir() is the same HOME-then-USERPROFILE-then-os.homedir() formula
 // already shared by every other caller in this directory.
-function defaultKeyPath() {
+// EGC_ENCRYPTION_KEY_FILE moves the key out of the data directory (#2144), the
+// same variable the memory server reads; the key checks apply to it as well.
+// A leading ~ is the home: a .mcp.json or a hook env block has no shell to
+// expand it.
+function configuredKeyPath() {
+  const configured = (process.env.EGC_ENCRYPTION_KEY_FILE || '').trim();
+  if (!configured) return null;
+  if (configured === '~' || configured.startsWith('~/')) return path.join(getHomeDir(), configured.slice(1));
+  return path.resolve(configured);
+}
+
+function homeKeyPath() {
   return path.join(getHomeDir(), '.egc', 'encryption.key');
+}
+
+function defaultKeyPath() {
+  return configuredKeyPath() ?? homeKeyPath();
 }
 
 function isEncryptedBuffer(data) {
@@ -182,6 +197,11 @@ function loadOrCreateKeySync(keyPath) {
   if (present(resolvedPath)) {
     return loadKey(resolvedPath);
   }
+  // The same refusal as the memory server: a configured path with nothing at
+  // it while the default key exists gets no second key.
+  if (resolvedPath === configuredKeyPath() && present(homeKeyPath())) {
+    throw new Error(`[EGC] EGC_ENCRYPTION_KEY_FILE names ${resolvedPath}, which does not exist, while ${homeKeyPath()} does. Copy the key there with mode 600, or unset the variable; no key was created.`);
+  }
 
   const key = crypto.randomBytes(32);
   const tmpPath = `${resolvedPath}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
@@ -254,6 +274,8 @@ function readStateFileDecrypted(filePath, keyPath) {
 module.exports = {
   assertPrivateKeyFile,
   defaultKeyPath,
+  configuredKeyPath,
+  homeKeyPath,
   loadKey,
   MAGIC,
   isEncryptedBuffer,

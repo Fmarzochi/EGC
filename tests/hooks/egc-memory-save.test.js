@@ -243,7 +243,7 @@ function runTests() {
     });
   });
 
-  run('state file is chmod 600 on non-Windows', () => {
+  run('state file is read-only (0400) on non-Windows', () => {
     if (process.platform === 'win32') { console.log('      (skipped on Windows)'); passed++; return; }
     withTmpDir(projectPath => {
       const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-home-'));
@@ -251,7 +251,7 @@ function runTests() {
         runScript({}, { PWD: projectPath, HOME: home });
         const filePath = stateFileFor(path.join(home, '.egc', 'state'), projectPath);
         const mode = fs.statSync(filePath).mode & 0o777;
-        assert.strictEqual(mode, 0o600);
+        assert.strictEqual(mode, 0o400, "read-only once written (#2143)");
       } finally {
         fs.rmSync(home, { recursive: true, force: true });
       }

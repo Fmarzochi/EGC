@@ -140,7 +140,7 @@ function runTests() {
         assert.strictEqual(readStateFileDecrypted(filePath, keyPath), original[name], `${name} must decrypt back to the exact original`);
         assert.ok(fs.existsSync(`${filePath}.hmac`), `${name} must get the integrity sidecar the server checks`);
         if (process.platform !== 'win32') {
-          assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o600, `${name} must be private`);
+          assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o400, `${name} must be read-only once encrypted (#2143)`);
         }
       }
       assert.ok(Buffer.compare(fs.readFileSync(seeded.sealed), SEALED) === 0, 'an already encrypted file is never rewritten');

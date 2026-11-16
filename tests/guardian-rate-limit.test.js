@@ -18,7 +18,7 @@ if (!fs.existsSync(buildPath)) {
   console.log('[SKIP] build not found. Run npm run build in mcp/servers/egc-guardian first.');
   process.exit(0);
 }
-const { createRateLimiter } = require(buildPath);
+const { createRateLimiter, rateLimitSettings } = require(buildPath);
 
 function test(name, fn) {
   try {
@@ -97,6 +97,13 @@ tally(test('a key whose newest call left the window is evicted on the next check
   limiter.check('validate_command', '/fresh', 11_600);
   assert.strictEqual(limiter.size(), 1, 'every idle key went; only the fresh one remains');
   assert.strictEqual(limiter.check('validate_command', '/project-0', 11_601), true, 'an evicted key starts again with a clean count');
+}));
+
+tally(test('rateLimitSettings reads EGC_MCP_RATE_MAX_CALLS and EGC_MCP_RATE_WINDOW_MS and keeps the defaults for a bad value (#2142)', () => {
+  const defaults = { windowMs: 60_000, maxCalls: 60 };
+  assert.deepStrictEqual(rateLimitSettings({}, defaults), defaults);
+  assert.deepStrictEqual(rateLimitSettings({ EGC_MCP_RATE_MAX_CALLS: '200', EGC_MCP_RATE_WINDOW_MS: '30000' }, defaults), { windowMs: 30_000, maxCalls: 200 });
+  assert.deepStrictEqual(rateLimitSettings({ EGC_MCP_RATE_WINDOW_MS: '0', EGC_MCP_RATE_MAX_CALLS: 'lots' }, defaults), defaults);
 }));
 
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

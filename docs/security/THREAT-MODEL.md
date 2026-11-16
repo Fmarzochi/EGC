@@ -107,6 +107,17 @@ EGC is a local-first AI memory and orchestration runtime. It has no network serv
 - Images run as a non-root user via a multi-stage build that keeps the build toolchain out of the final image (v1.1.16, #1036)
 - `.dockerignore` keeps `.git`, `.env`, and `node_modules` out of the build context (v1.1.16, #1028)
 
+### 9. Key and State Exposure on Disk
+
+**Threat:** With `EGC_ENCRYPTION_KEY_FILE` unset, the encryption key sits next to the data it protects, so a copy of `~/.egc` carries both; a state file left writable can be overwritten in place by a tool that bypasses the memory server; a key or a state file readable by other users of the machine is exposed.
+
+**Mitigations:**
+- `EGC_ENCRYPTION_KEY_FILE` points the memory server, the hooks and the CLI at a key kept elsewhere (an encrypted volume, a path a keychain agent materializes); the key is created private (0600), opened without following links, and refused when another user can read it, where the platform has POSIX bits; a leading `~` is the home, and a configured path with nothing at it while the default key exists is refused rather than given a new key (v1.1.25, #2144)
+- To move an existing key: copy `~/.egc/encryption.key` to the new place and `chmod 600` it, set `EGC_ENCRYPTION_KEY_FILE` to that path in the environment of every tool that runs EGC (the MCP server entries, the hook env blocks, the shell), run `egc doctor`, then remove the old file
+- State files are written through a temporary file that is already read-only (0400) when the rename publishes it, where the filesystem keeps POSIX modes; where it does not, the file stays as the rename left it and `egc doctor` reports it; the next write replaces the file instead of opening it (v1.1.25, #2143)
+- `egc doctor` reports a key readable by other users, a key named by `EGC_ENCRYPTION_KEY_FILE` that does not exist while the default one does, and a state file that is writable or readable by other users (v1.1.25, #2143, #2144)
+- OS keychain integration is not done here: it belongs to the team service step, where one key per person is issued and revoked
+
 ## Critical Code Paths
 
 | Path | Risk | Protection |

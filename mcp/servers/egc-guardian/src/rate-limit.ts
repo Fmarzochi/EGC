@@ -47,3 +47,23 @@ export function createRateLimiter({ windowMs, maxCalls }: { windowMs: number; ma
 
   return { check, size: () => calls.size };
 }
+
+export interface RateLimitSettings {
+  windowMs: number;
+  maxCalls: number;
+}
+
+// The default is generous for an honest session; EGC_MCP_RATE_MAX_CALLS and
+// EGC_MCP_RATE_WINDOW_MS change it, for this server and the memory server
+// alike. A value that is not a whole positive number keeps the default rather
+// than turning the limit off (#2142).
+export function rateLimitSettings(env: NodeJS.ProcessEnv, defaults: RateLimitSettings): RateLimitSettings {
+  const whole = (value: string | undefined, fallback: number): number => {
+    const parsed = Number(value);
+    return typeof value === 'string' && value.trim() !== '' && Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  };
+  return {
+    windowMs: whole(env.EGC_MCP_RATE_WINDOW_MS, defaults.windowMs),
+    maxCalls: whole(env.EGC_MCP_RATE_MAX_CALLS, defaults.maxCalls),
+  };
+}

@@ -303,7 +303,7 @@ if (test('writeStateFile: a umask that strips the owner bits still leaves the st
   try {
     writeStateFile(filePath, 'secret', key);
     process.umask(oldUmask);
-    assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o600);
+    assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o400, 'read-only, and readable by its owner (#2143)');
     assert.strictEqual(readStateFile(filePath, key), 'secret');
   } finally {
     process.umask(oldUmask);
@@ -328,7 +328,7 @@ if (test('writeStateFile: the temp file is private and exclusive from its creati
   try {
     writeStateFile(filePath, 'secret', key);
     assert.deepStrictEqual(opened, [{ flags: 'wx', mode: 0o600 }], 'one exclusive open, private from the first byte');
-    if (process.platform !== 'win32') assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o600);
+    if (process.platform !== 'win32') assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o400, 'the file is left read-only (#2143)');
     assert.strictEqual(readStateFile(filePath, key), 'secret');
   } finally {
     process.umask(oldUmask);
@@ -364,6 +364,95 @@ if (test('quarantineUndecryptableStateFile: renames the corrupted file to a back
     assert.ok(fs.existsSync(backupPath), 'backup must exist so the corrupted bytes are not lost');
     assert.ok(backupPath.startsWith(`${filePath}.corrupted-backup-`), 'backup path must be a sibling of the original, clearly marked as corrupted');
     assert.strictEqual(fs.readFileSync(backupPath, 'utf-8'), 'garbage-not-decryptable', 'backup must preserve the original bytes untouched');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('EGC_ENCRYPTION_KEY_FILE moves the key: loadOrCreateEncKey() creates it there, private, and reads it back (#2144)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-key-file-'));
+  const configured = path.join(tmpDir, 'vault', 'egc.key');
+  const previous = { key: process.env.EGC_ENCRYPTION_KEY_FILE, home: process.env.HOME, profile: process.env.USERPROFILE };
+  // A home of its own: the machine's ~/.egc/encryption.key must not be in play.
+  process.env.HOME = tmpDir;
+  process.env.USERPROFILE = tmpDir;
+  process.env.EGC_ENCRYPTION_KEY_FILE = configured;
+  try {
+    const key = loadOrCreateEncKey();
+    assert.strictEqual(key.length, 32);
+    assert.ok(fs.existsSync(configured), 'the key is created at the configured path');
+    if (process.platform !== 'win32') assert.strictEqual(fs.statSync(configured).mode & 0o777, 0o600, 'the configured key is private');
+    assert.ok(loadOrCreateEncKey().equals(key), 'the second call reads the same key back');
+  } finally {
+    if (previous.key === undefined) delete process.env.EGC_ENCRYPTION_KEY_FILE;
+    else process.env.EGC_ENCRYPTION_KEY_FILE = previous.key;
+    process.env.HOME = previous.home;
+    if (previous.profile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previous.profile;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('EGC_ENCRYPTION_KEY_FILE expands a leading ~, and a configured path with nothing at it is refused while the home key exists (#2144)', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-key-home-'));
+  const previousKey = process.env.EGC_ENCRYPTION_KEY_FILE;
+  const previousHome = process.env.HOME;
+  const previousProfile = process.env.USERPROFILE;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  try {
+    const { configuredKeyPath } = require(buildPath);
+    process.env.EGC_ENCRYPTION_KEY_FILE = '~/vault/egc.key';
+    assert.strictEqual(configuredKeyPath(), path.join(home, 'vault', 'egc.key'), 'a leading ~ is the home');
+
+    delete process.env.EGC_ENCRYPTION_KEY_FILE;
+    const homeKey = loadOrCreateEncKey();
+    assert.strictEqual(homeKey.length, 32, 'the default key is created under the home');
+
+    process.env.EGC_ENCRYPTION_KEY_FILE = path.join(home, 'vault', 'missing.key');
+    assert.throws(() => loadOrCreateEncKey(), /names .*missing\.key, which does not exist, while .*encryption\.key does/, 'no second key for a typo or an unmounted volume');
+    assert.ok(!fs.existsSync(path.join(home, 'vault', 'missing.key')), 'nothing was created at the configured path');
+  } finally {
+    if (previousKey === undefined) delete process.env.EGC_ENCRYPTION_KEY_FILE;
+    else process.env.EGC_ENCRYPTION_KEY_FILE = previousKey;
+    process.env.HOME = previousHome;
+    if (previousProfile === undefined) delete process.env.USERPROFILE;
+    else process.env.USERPROFILE = previousProfile;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('writeStateFile leaves the file read-only, and a second write still replaces it (#2143)', () => {
+  if (process.platform === 'win32') return;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-state-mode-'));
+  try {
+    const filePath = path.join(tmpDir, 'state.md');
+    const key = crypto.randomBytes(32);
+    writeStateFile(filePath, 'first', key);
+    assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o400, 'read-only once written');
+    // root writes through any mode, so the refusal is asserted for everyone else.
+    if (typeof process.getuid !== 'function' || process.getuid() !== 0) {
+      assert.throws(() => fs.writeFileSync(filePath, 'in place'), /EACCES|EPERM/, 'nothing opens it in place');
+    }
+    writeStateFile(filePath, 'second', key);
+    assert.strictEqual(readStateFile(filePath, key), 'second', 'the next write replaces the file');
+    assert.strictEqual(fs.statSync(filePath).mode & 0o777, 0o400, 'and leaves it read-only again');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+})) passed++; else failed++;
+
+if (test('on Windows the state file stays writable, so the rename of the next write is not refused (#2143)', () => {
+  if (process.platform !== 'win32') return;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-state-mode-win-'));
+  try {
+    const filePath = path.join(tmpDir, 'state.md');
+    const key = crypto.randomBytes(32);
+    writeStateFile(filePath, 'first', key);
+    assert.notStrictEqual(fs.statSync(filePath).mode & 0o200, 0, 'no read-only attribute: Windows keeps its ACLs');
+    writeStateFile(filePath, 'second', key);
+    assert.strictEqual(readStateFile(filePath, key), 'second', 'the next write replaced the file');
+    assert.notStrictEqual(fs.statSync(filePath).mode & 0o200, 0, 'and left it writable for the write after it');
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

@@ -159,7 +159,15 @@ function saveState(filePath, content) {
     // Exclusive and private from the first byte: the temp file is never
     // written through anything already sitting at its name.
     fs.writeFileSync(tmpPath, encrypted, { flag: 'wx', mode: 0o600 });
-    try { fs.chmodSync(tmpPath, 0o600); } catch { /* chmod not supported on Windows */ }
+    // Published read-only in one step (#2143), as the memory server does: the
+    // temp file is 0400 when the rename makes it the state file. Where the
+    // filesystem keeps no POSIX modes the chmod changes nothing and egc doctor
+    // reports the file. Windows keeps its ACLs and stays 0600: a mode without
+    // write bits becomes the read-only attribute there, and a rename onto a
+    // read-only file is refused, so the next save would fail.
+    if (process.platform !== 'win32') {
+      try { fs.chmodSync(tmpPath, 0o400); } catch { /* a filesystem without POSIX modes */ }
+    }
     fs.renameSync(tmpPath, filePath);
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* already renamed away */ }

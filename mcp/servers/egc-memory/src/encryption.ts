@@ -28,8 +28,23 @@ const MAGIC = 'EGC1:';
 // call. That divergence is what let a state file get encrypted under one
 // key and later fail decryption under another, long after the key file
 // itself had stopped changing.
-function defaultEncKeyPath(): string {
+// EGC_ENCRYPTION_KEY_FILE moves the key out of the data directory (#2144): an
+// encrypted volume, a path a keychain agent materializes. The same checks
+// apply to it: a regular file, private, reached through no link. A leading ~
+// is the home, since a .mcp.json or a hook env block has no shell to expand it.
+export function configuredKeyPath(): string | null {
+  const configured = process.env.EGC_ENCRYPTION_KEY_FILE?.trim();
+  if (!configured) return null;
+  if (configured === '~' || configured.startsWith('~/')) return path.join(resolveHome(), configured.slice(1));
+  return path.resolve(configured);
+}
+
+export function homeKeyPath(): string {
   return path.join(resolveHome(), '.egc', 'encryption.key');
+}
+
+function defaultEncKeyPath(): string {
+  return configuredKeyPath() ?? homeKeyPath();
 }
 
 /**
@@ -160,10 +175,10 @@ function writeAll(fd: number, bytes: Buffer): void {
 // The umask can only narrow the creation mode, so the descriptor is set to
 // exactly 0600 before the first byte: a umask that strips the owner's own
 // bits would otherwise leave a file its writer cannot read back.
-export function writePrivateTemp(tmpPath: string, content: string | Buffer): void {
+export function writePrivateTemp(tmpPath: string, content: string | Buffer, mode: number = 0o600): void {
   const fd = fs.openSync(tmpPath, 'wx', 0o600);
   try {
-    try { fs.fchmodSync(fd, 0o600); } catch { /* Windows has no mode bits to set */ }
+    try { fs.fchmodSync(fd, mode); } catch { /* Windows has no mode bits to set */ }
     writeAll(fd, typeof content === 'string' ? Buffer.from(content, 'utf-8') : content);
   } finally {
     fs.closeSync(fd);
@@ -172,9 +187,12 @@ export function writePrivateTemp(tmpPath: string, content: string | Buffer): voi
 
 export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffer {
   const dir = path.dirname(keyPath);
+  // Only the default ~/.egc is tightened: a configured directory may be
+  // shared with other users or tools, and its mode is theirs to set.
+  const configured = keyPath === configuredKeyPath();
   try {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    try { fs.chmodSync(dir, 0o700); } catch { /* best-effort */ }
+    if (!configured) { try { fs.chmodSync(dir, 0o700); } catch { /* best-effort */ } }
   } catch {
     // directory may already exist
   }
@@ -195,7 +213,13 @@ export function loadOrCreateEncKey(keyPath: string = defaultEncKeyPath()): Buffe
     return readExistingKey();
   }
 
-  try { fs.chmodSync(dir, 0o700); } catch { /* best-effort */ }
+  // A configured path with nothing at it while the default key exists is a
+  // typo or an unmounted volume, not a request for a second key: a fresh key
+  // there would leave every existing state file unreadable.
+  if (configured && pathPresent(homeKeyPath())) {
+    throw new Error(`[EGC encryption] EGC_ENCRYPTION_KEY_FILE names ${keyPath}, which does not exist, while ${homeKeyPath()} does. Copy the key there with mode 600, or unset the variable; no key was created.`);
+  }
+  if (!configured) { try { fs.chmodSync(dir, 0o700); } catch { /* best-effort */ } }
 
   // Key file does not exist — generate a fresh one. A concurrent process
   // (e.g. a background agent's own egc-memory process starting up before
@@ -279,6 +303,8 @@ export function readStateFile(filePath: string, key: Buffer): string {
   return raw.toString('utf-8');
 }
 
+const PUBLISHED_STATE_MODE = process.platform === 'win32' ? 0o600 : 0o400;
+
 /**
  * Write a state file atomically, always encrypting.
  * Writes to a temp file then renames to prevent partial-write corruption.
@@ -297,7 +323,15 @@ export function writeStateFile(filePath: string, plaintext: string, key: Buffer)
   // so no other user can open it between its creation and the rename.
   const tmpPath = `${filePath}.tmp-${process.pid}-${crypto.randomUUID()}`;
   try {
-    writePrivateTemp(tmpPath, encrypted);
+    // Published read-only in one step (#2143): the temp file is already 0400
+    // when the rename makes it the state file, so a tool that writes memory
+    // straight to disk cannot open it in place; the next write here replaces
+    // it through another temp file, which needs the directory, not the file.
+    // Where the filesystem keeps no POSIX modes the chmod changes nothing and
+    // egc doctor reports the file. Windows keeps its ACLs and stays 0600: a
+    // mode without write bits becomes the read-only attribute there, and a
+    // rename onto a read-only file is refused, so the next save would fail.
+    writePrivateTemp(tmpPath, encrypted, PUBLISHED_STATE_MODE);
     fs.renameSync(tmpPath, filePath);
   } finally {
     try { fs.unlinkSync(tmpPath); } catch { /* already renamed away; best-effort cleanup */ }
