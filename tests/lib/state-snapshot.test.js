@@ -197,7 +197,7 @@ function runTests() {
 
   tally(test('saveState leaves the state file read-only and the next save still replaces it (#2143)', () => {
     if (process.platform === 'win32') return;
-    const { home } = setupHome('egc-snapshot-mode-');
+    const { home, projectPath } = setupHome('egc-snapshot-mode-');
     const previousHome = process.env.HOME;
     const previousProfile = process.env.USERPROFILE;
     const previousKeyFile = process.env.EGC_ENCRYPTION_KEY_FILE;
@@ -221,12 +221,13 @@ function runTests() {
       else process.env.USERPROFILE = previousProfile;
       if (previousKeyFile !== undefined) process.env.EGC_ENCRYPTION_KEY_FILE = previousKeyFile;
       cleanup(home);
+      cleanup(projectPath);
     }
   }));
 
   tally(test('on Windows saveState keeps the state file writable, so the next save is not refused (#2143)', () => {
     if (process.platform !== 'win32') return;
-    const { home } = setupHome('egc-snapshot-mode-win-');
+    const { home, projectPath } = setupHome('egc-snapshot-mode-win-');
     const previousHome = process.env.HOME;
     const previousProfile = process.env.USERPROFILE;
     const previousKeyFile = process.env.EGC_ENCRYPTION_KEY_FILE;
@@ -245,6 +246,7 @@ function runTests() {
       else process.env.USERPROFILE = previousProfile;
       if (previousKeyFile !== undefined) process.env.EGC_ENCRYPTION_KEY_FILE = previousKeyFile;
       cleanup(home);
+      cleanup(projectPath);
     }
   }));
 
