@@ -12,6 +12,7 @@ const {
 } = require('../../scripts/lib/state-store');
 const {
   openCompatDatabase,
+  selectedEngine,
   enableWalBestEffort,
 } = require('../../scripts/lib/state-store/sqlite-compat');
 
@@ -877,6 +878,7 @@ async function runTests() {
         assert.ok(fs.existsSync(dbPath), 'egc-memory state.db must exist');
 
         const db = await openCompatDatabase(dbPath, 'verify-mcp', { nativeResolvePaths: [serverDir] });
+        assert.strictEqual(selectedEngine(), 'native', 'Expected openCompatDatabase to use the native driver');
         try {
           const integrityRows = await db.all('PRAGMA integrity_check');
           const integrityStatus = integrityRows[0] ? (integrityRows[0].integrity_check || Object.values(integrityRows[0])[0]) : null;

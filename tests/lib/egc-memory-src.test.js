@@ -10,6 +10,9 @@
  */
 
 const assert = require('assert');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const {
   missingTypescriptApi,
@@ -18,7 +21,8 @@ const {
   loadTypescriptDetail,
   loadTypescript,
   loadSqliteDriver,
-  resolvePaths
+  sqliteCandidates,
+  serverDir
 } = require('./egc-memory-src');
 
 function test(name, fn) {
@@ -36,6 +40,35 @@ function test(name, fn) {
 // The shape typescript 7 ships: version metadata and no compiler API.
 const NATIVE_SHAPE = { version: '7.0.2' };
 const USABLE_SHAPE = { version: '6.0.3', transpileModule: () => ({}), ModuleKind: { CommonJS: 1 } };
+
+// A package body that runs on require, so a case can choose what loading the
+// module from one root does without touching the real install.
+function fakePackage(root, name, body) {
+  const dir = path.join(root, 'node_modules', name);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name, version: '0.0.0', main: 'index.js' }));
+  fs.writeFileSync(path.join(dir, 'index.js'), body);
+  return root;
+}
+
+function withTempRoots(fn) {
+  const roots = [];
+  const root = () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-memory-src-'));
+    roots.push(dir);
+    return dir;
+  };
+  try {
+    return fn(root);
+  } finally {
+    for (const dir of roots) fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const NATIVE_TS_BODY = `module.exports = { version: '7.0.2' };`;
+const USABLE_TS_BODY = `module.exports = { version: '6.0.3', transpileModule: function () { return {}; }, ModuleKind: { CommonJS: 1 } };`;
+const UNLOADABLE_SQLITE_BODY = `throw new Error('Could not locate the bindings file. Tried:\\n -> /root/node_sqlite3.node');`;
+const LOADABLE_SQLITE_BODY = `module.exports = { Database: class Database {} };`;
 
 function runTests() {
   console.log('\n=== Testing tests/lib/egc-memory-src.js ===\n');
@@ -88,6 +121,27 @@ function runTests() {
     assert.match(described, /sqlite3 not installed under \/repo\/mcp\/servers\/egc-memory/);
   });
 
+  check('skips a native typescript in front of a usable one instead of stopping at the first candidate', () => {
+    withTempRoots(root => {
+      const native = fakePackage(root(), 'typescript', NATIVE_TS_BODY);
+      const usable = fakePackage(root(), 'typescript', USABLE_TS_BODY);
+      const { ts, candidates } = loadTypescriptDetail([native, usable]);
+      assert.strictEqual(ts, require(path.join(usable, 'node_modules', 'typescript')));
+      assert.deepStrictEqual(candidates[0].missing, ['transpileModule', 'ModuleKind.CommonJS']);
+      assert.deepStrictEqual(candidates[1].missing, []);
+    });
+  });
+
+  check('skips a sqlite3 that resolves but cannot load, the yarn shape, and uses the next root', () => {
+    withTempRoots(root => {
+      const unloadable = fakePackage(root(), 'sqlite3', UNLOADABLE_SQLITE_BODY);
+      const loadable = fakePackage(root(), 'sqlite3', LOADABLE_SQLITE_BODY);
+      const driver = loadSqliteDriver([unloadable, loadable]);
+      assert.strictEqual(driver.sqlite3, require(path.join(loadable, 'node_modules', 'sqlite3')));
+      assert.strictEqual(typeof driver.open, 'function');
+    });
+  });
+
   // The two checks below depend on what this checkout installed. A missing
   // toolchain is reported, not failed: the guard above already proves the
   // selection logic, and a developer running the file without an install
@@ -111,11 +165,17 @@ function runTests() {
       assert.strictEqual(typeof driver.sqlite3.Database, 'function');
     });
 
-    check('falls through when an earlier resolution path cannot load sqlite', () => {
-      const fallback = loadSqliteDriver(['/nonexistent-root-path', ...resolvePaths]);
-      assert.strictEqual(fallback !== null, true);
-      assert.strictEqual(typeof fallback.open, 'function');
-    });
+    // The server asks the chooser to resolve sqlite3 from its own package root
+    // first, so a suite that holds a store lock must hold it with that copy,
+    // not with a root copy that may be another build.
+    const fromServer = sqliteCandidates([serverDir])[0];
+    if (!fromServer.loaded) {
+      console.log(`  [SKIP] the server tree holds no loadable sqlite3 here: ${describeSqliteCandidates([fromServer])}`);
+    } else {
+      check('uses the sqlite3 the server resolves, not the root copy', () => {
+        assert.strictEqual(driver.sqlite3, fromServer.loaded);
+      });
+    }
   }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);

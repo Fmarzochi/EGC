@@ -2,8 +2,8 @@
 // Compiles egc-memory TypeScript sources on the fly so root-suite tests can
 // exercise the real src/ modules without a prior `npm run build`. TypeScript
 // and the sqlite driver are resolved from wherever the active package manager
-// actually placed them: root hoisting first, then the server's own
-// node_modules. Anything missing means the caller should SKIP rather than
+// actually placed them, in the order the consumer uses them (see the two root
+// lists below). Anything missing means the caller should SKIP rather than
 // crash: yarn's node-modules linker, unlike npm and bun, does not hoist the
 // server's devDependencies to the root (see the discussion on PR #1271).
 //
@@ -19,7 +19,16 @@ const path = require('node:path');
 
 const repoRoot = path.resolve(__dirname, '..', '..');
 const serverDir = path.join(repoRoot, 'mcp', 'servers', 'egc-memory');
+// TypeScript is looked for at the root first: the suites need a compiler API,
+// and the server's own devDependency is the 7.x native distribution, which
+// has none. The sqlite driver is the other way round, because the memory
+// server asks the chooser to resolve it from its own package root first
+// (`nativeResolvePaths` in `mcp/servers/egc-memory/src/sqlite-compat.ts`): a
+// suite that holds a store lock has to hold it with the driver the spawned
+// server opens the store with, not with a root copy that may be another
+// build.
 const resolvePaths = [repoRoot, serverDir];
+const sqliteResolvePaths = [serverDir, repoRoot];
 
 function tryRequireFrom(id, dirs) {
   for (const dir of dirs) {
@@ -106,7 +115,7 @@ function describeTypescriptCandidates(candidates = typescriptCandidates()) {
 // whose native build was skipped still resolves from the root and throws
 // "Could not locate the bindings file" on require. Candidates are therefore
 // judged by loading them, not by resolution.
-function sqliteCandidates(paths = resolvePaths) {
+function sqliteCandidates(paths = sqliteResolvePaths) {
   return paths.map(dir => {
     const candidate = { dir, resolved: null, loaded: null, error: null };
     try {
@@ -132,11 +141,11 @@ function describeSqliteCandidates(candidates = sqliteCandidates()) {
   return parts.join('; ');
 }
 
-function loadSqliteDriver(paths = resolvePaths) {
+function loadSqliteDriver(paths = sqliteResolvePaths) {
   const candidates = sqliteCandidates(paths);
   const usable = candidates.find(candidate => candidate.loaded);
   if (!usable) return null;
-  const sqlite = tryRequireFrom('sqlite', [usable.dir, ...paths]);
+  const sqlite = tryRequireFrom('sqlite', [usable.dir, ...paths, ...resolvePaths]);
   if (!sqlite) return null;
   return { sqlite3: usable.loaded, open: sqlite.open };
 }
