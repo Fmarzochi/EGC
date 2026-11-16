@@ -11,6 +11,7 @@
 // module only edits config, it cannot change the PATH of the process that
 // invoked it (or any already-running shell).
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -20,11 +21,25 @@ const {
   shimDir,
   manifestPath,
   readManifest,
+  readManifestRecord,
   pathEnvKey,
   resolveWithoutShim,
 } = require('./shim-paths');
 
 const DISPATCH_MODULE = path.join(__dirname, 'shim-dispatch.js');
+const PACKAGE_VERSION = require('../../../package.json').version;
+
+function sha256File(filePath) {
+  try {
+    return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
+function launcherPath(dir, name) {
+  return process.platform === 'win32' ? path.join(dir, `${name}.cmd`) : path.join(dir, name);
+}
 const PATH_MARKER = 'EGC Token Crusher shim';
 const RC_CANDIDATES = ['.bashrc', '.zshrc', '.bash_profile', '.profile'];
 
@@ -175,7 +190,8 @@ function install() {
   const dir = shimDir();
   fs.mkdirSync(dir, { recursive: true });
 
-  const manifest = {};
+  const binaries = {};
+  const launchers = {};
   const installed = [];
   const skipped = [];
 
@@ -185,11 +201,15 @@ function install() {
       skipped.push(name);
       continue;
     }
-    manifest[name] = realPath;
+    binaries[name] = realPath;
     writeLauncher(dir, name);
+    launchers[name] = sha256File(launcherPath(dir, name));
     installed.push(name);
   }
 
+  // The version and the hashes pin the shim to this install: verify() tells a
+  // launcher another version wrote, or one edited on disk, from a healthy one.
+  const manifest = { version: PACKAGE_VERSION, dispatch: sha256File(DISPATCH_MODULE), binaries, launchers };
   fs.writeFileSync(manifestPath(), JSON.stringify(manifest, null, 2));
   const pathResult = process.platform === 'win32' ? installWindowsPath(dir) : installPosixPath(dir);
 
@@ -238,6 +258,27 @@ function isPathPersisted(dir = shimDir()) {
  *
  * @returns {{ dir: string, dirExists: boolean, shimmed: string[], activeInCurrentShell: boolean, pathPersisted: boolean }}
  */
+/**
+ * Compares the shim on disk with what this package would write: the version
+ * that wrote the manifest, the dispatch module hash and the hash of every
+ * launcher. missing: nothing installed; legacy: a manifest from before the
+ * pinning; stale: another version or another dispatch module; altered: a
+ * launcher whose content changed; ok: all of it matches.
+ */
+function verify(dir = shimDir()) {
+  const record = readManifestRecord(dir);
+  const base = { dir, expectedVersion: PACKAGE_VERSION, version: record ? record.version : null, altered: [] };
+  if (!record) return { ...base, installed: false, state: 'missing' };
+  if (record.legacy) return { ...base, installed: true, state: 'legacy' };
+  const altered = Object.keys(record.binaries)
+    .filter(name => record.launchers[name] !== sha256File(launcherPath(dir, name)));
+  if (record.version !== PACKAGE_VERSION || record.dispatch !== sha256File(DISPATCH_MODULE)) {
+    return { ...base, installed: true, state: 'stale', altered };
+  }
+  if (altered.length > 0) return { ...base, installed: true, state: 'altered', altered };
+  return { ...base, installed: true, state: 'ok' };
+}
+
 function status() {
   const dir = shimDir();
   const manifest = readManifest();
@@ -246,6 +287,7 @@ function status() {
     .split(path.delimiter)
     .some(p => p && path.resolve(p) === path.resolve(dir));
   const pathPersisted = isPathPersisted(dir);
+  const { state, version, expectedVersion, altered } = verify(dir);
 
   return {
     dir,
@@ -253,7 +295,11 @@ function status() {
     shimmed: Object.keys(manifest),
     activeInCurrentShell,
     pathPersisted,
+    state,
+    version,
+    expectedVersion,
+    altered,
   };
 }
 
-module.exports = { install, uninstall, status, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER };
+module.exports = { install, uninstall, status, verify, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER };

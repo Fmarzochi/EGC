@@ -358,7 +358,16 @@ function reportCrusherStatus() {
     } else {
       msg = 'shim installed, not yet on PATH';
     }
-    ok('token crusher', msg);
+    if (shim.state && shim.state !== 'ok') {
+      // A shim another version wrote, or one edited on disk, still runs; it is
+      // reported so the person refreshes it instead of trusting it blindly.
+      const why = shim.state === 'altered'
+        ? `launcher changed on disk: ${shim.altered.join(', ')}`
+        : `written by EGC ${shim.version || 'before 1.1.25'}, this is ${shim.expectedVersion}`;
+      warn('token crusher', `${msg}; ${why}. Run egc crusher-shim install to refresh it.`);
+    } else {
+      ok('token crusher', msg);
+    }
   } else {
     skip('token crusher', 'shim not installed; egc install adds it');
   }

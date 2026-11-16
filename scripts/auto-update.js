@@ -280,6 +280,25 @@ function resolveRepoRootForRecords(records, requestedRepoRoot, results) {
   };
 }
 
+// The shim in ~/.egc/bin is pinned to the EGC version that wrote it. Once the
+// installs are reapplied, a shim another version wrote, or one edited on
+// disk, is rewritten so its launchers match the package now installed.
+function refreshCrusherShim(options, dependencies) {
+  // The shim lives in the real home. An update run for another home (a test,
+  // a staged install) leaves it alone unless a stub is handed in.
+  const realHome = !options.homeDir || path.resolve(options.homeDir) === path.resolve(os.homedir());
+  const shimInstall = dependencies.shimInstall || (realHome ? require('./lib/crusher/shim-install') : null);
+  if (!shimInstall) return { state: 'skipped', refreshed: false };
+  try {
+    const before = shimInstall.verify();
+    if (!before.installed || before.state === 'ok') return { state: before.state, refreshed: false };
+    const result = shimInstall.install();
+    return { state: before.state, version: before.version, refreshed: true, installed: result.installed };
+  } catch (error) {
+    return { state: 'error', refreshed: false, error: error.message };
+  }
+}
+
 function runAutoUpdate(options = {}, dependencies = {}) {
   const discover = dependencies.discoverInstalledStates || discoverInstalledStates;
   const execute = dependencies.runExternalCommand || runExternalCommand;
@@ -355,11 +374,13 @@ function runAutoUpdate(options = {}, dependencies = {}) {
   const cognitiveBootstrap = options.dryRun ? null : runCognitiveBootstrap(repoRoot, env, execute);
 
   results.push(...applyInstalls(validRecords, options, repoRoot, env, execute));
+  const crusherShim = options.dryRun ? null : refreshCrusherShim(options, dependencies);
 
   return {
     dryRun: Boolean(options.dryRun),
     repoRoot,
     cognitiveBootstrap,
+    crusherShim,
     results,
     summary: {
       checkedCount: results.length,
@@ -389,6 +410,13 @@ function printHuman(result) {
       console.log(`  Error: ${result.cognitiveBootstrap.error}`);
     }
     console.log('');
+  }
+
+  if (result.crusherShim?.refreshed) {
+    const wrote = result.crusherShim.version ? `EGC ${result.crusherShim.version}` : 'an install before the pinning';
+    console.log(`Token Crusher shim: refreshed (the one on disk was ${result.crusherShim.state}, written by ${wrote})\n`);
+  } else if (result.crusherShim?.error) {
+    console.log(`Token Crusher shim: not refreshed (${result.crusherShim.error})\n`);
   }
 
   for (const entry of result.results) {
@@ -445,5 +473,6 @@ module.exports = {
   determineInstallCwd,
   npmUpgradeHint,
   runCognitiveBootstrap,
+  refreshCrusherShim,
   runAutoUpdate,
 };

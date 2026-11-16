@@ -16,6 +16,7 @@ const {
   determineInstallCwd,
   npmUpgradeHint,
   runCognitiveBootstrap,
+  refreshCrusherShim,
   runAutoUpdate,
 } = require('../../scripts/auto-update');
 const {
@@ -1090,6 +1091,42 @@ function runTests() {
 
     assert.strictEqual(result.status, 1);
     assert.ok(result.stderr.includes('Error: Unknown argument: --bogus'), result.stderr);
+  }));
+
+  tally(test('refreshCrusherShim rewrites a shim another version wrote and leaves a healthy one alone (#2137)', () => {
+    const calls = [];
+    const stale = {
+      verify: () => ({ installed: true, state: 'stale', version: '1.1.23' }),
+      install: () => { calls.push('install'); return { installed: ['git', 'npm'] }; },
+    };
+    assert.deepStrictEqual(refreshCrusherShim({}, { shimInstall: stale }), {
+      state: 'stale', version: '1.1.23', refreshed: true, installed: ['git', 'npm'],
+    });
+    assert.deepStrictEqual(calls, ['install']);
+
+    const healthy = { verify: () => ({ installed: true, state: 'ok' }), install: () => { throw new Error('must not run'); } };
+    assert.deepStrictEqual(refreshCrusherShim({}, { shimInstall: healthy }), { state: 'ok', refreshed: false });
+
+    const absent = { verify: () => ({ installed: false, state: 'missing' }), install: () => { throw new Error('must not run'); } };
+    assert.deepStrictEqual(refreshCrusherShim({}, { shimInstall: absent }), { state: 'missing', refreshed: false });
+  }));
+
+  tally(test('refreshCrusherShim reports an installer failure instead of throwing, and skips a home that is not the real one (#2137)', () => {
+    const broken = {
+      verify: () => ({ installed: true, state: 'legacy', version: null }),
+      install: () => { throw new Error('EACCES: permission denied'); },
+    };
+    const outcome = refreshCrusherShim({}, { shimInstall: broken });
+    assert.strictEqual(outcome.state, 'error');
+    assert.strictEqual(outcome.refreshed, false);
+    assert.match(outcome.error, /EACCES/);
+
+    const other = createTempDir('auto-update-home-');
+    try {
+      assert.deepStrictEqual(refreshCrusherShim({ homeDir: other }, {}), { state: 'skipped', refreshed: false });
+    } finally {
+      cleanup(other);
+    }
   }));
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
