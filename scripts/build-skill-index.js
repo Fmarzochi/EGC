@@ -107,8 +107,6 @@ function walkMd(dir, results = []) {
   return results;
 }
 
-const entries = [];
-
 // The repository-relative path of a component, as the install state records
 // it in each copy operation: the router matches installed components by it.
 function sourceOf(file) {
@@ -141,39 +139,56 @@ function cutOnWordBoundary(body) {
   return end === 0 ? head : head.slice(0, end).trimEnd();
 }
 
-for (const f of listSkillMd(path.join(root, 'skills'))) {
-  try {
-    const content = fs.readFileSync(f, 'utf8');
-    const fm = parseFrontmatter(content);
-    if (fm?.name && fm?.description) {
-      const entry = { kind: 'skill', name: String(fm.name), description: String(fm.description), source: sourceOf(f) };
-      const triggers = triggersOf(content);
-      if (triggers) entry.triggers = triggers;
-      entries.push(entry);
-    }
-  } catch (_) { /* ignore: unreadable file is safely skipped */ } // NOSONAR
+function skillEntries() {
+  const entries = [];
+  for (const f of listSkillMd(path.join(root, 'skills'))) {
+    try {
+      const content = fs.readFileSync(f, 'utf8');
+      const fm = parseFrontmatter(content);
+      if (fm?.name && fm?.description) {
+        const entry = { kind: 'skill', name: String(fm.name), description: String(fm.description), source: sourceOf(f) };
+        const triggers = triggersOf(content);
+        if (triggers) entry.triggers = triggers;
+        entries.push(entry);
+      }
+    } catch (_) { /* ignore: unreadable file is safely skipped */ } // NOSONAR
+  }
+  return entries;
 }
 
-for (const f of walkMd(path.join(root, 'agents'))) {
-  try {
-    const fm = parseFrontmatter(fs.readFileSync(f, 'utf8'));
-    if (fm?.name && fm?.description) {
-      entries.push({ kind: 'agent', name: String(fm.name), description: String(fm.description), source: sourceOf(f) });
-    }
-  } catch (_) { /* ignore: unreadable file is safely skipped */ } // NOSONAR
+function agentEntries() {
+  const entries = [];
+  for (const f of walkMd(path.join(root, 'agents'))) {
+    try {
+      const fm = parseFrontmatter(fs.readFileSync(f, 'utf8'));
+      if (fm?.name && fm?.description) {
+        entries.push({ kind: 'agent', name: String(fm.name), description: String(fm.description), source: sourceOf(f) });
+      }
+    } catch (_) { /* ignore: unreadable file is safely skipped */ } // NOSONAR
+  }
+  return entries;
 }
 
-const rulesRoot = path.join(root, 'rules');
-for (const f of walkMd(rulesRoot)) {
-  try {
-    if (path.basename(f) === 'README.md') continue;
-    const content = fs.readFileSync(f, 'utf8');
-    const h1 = content.match(/^#\s+(.+)$/m); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
-    if (!h1) continue;
-    const rel = path.relative(rulesRoot, f);
-    const name = rel.replace(/[\\/]/g, '-').replace(/\.md$/, '').toLowerCase();
-    entries.push({ kind: 'rule', name, description: h1[1].trim(), source: sourceOf(f) });
-  } catch (_) { /* ignore: unreadable file is safely skipped */ } // NOSONAR
+function ruleEntries() {
+  const entries = [];
+  const rulesRoot = path.join(root, 'rules');
+  for (const f of walkMd(rulesRoot)) {
+    try {
+      if (path.basename(f) === 'README.md') continue;
+      const content = fs.readFileSync(f, 'utf8');
+      const h1 = content.match(/^#\s+(.+)$/m); // NOSONAR: superlinear risk accepted: input is repo-owned or local state content, never network-controlled
+      if (!h1) continue;
+      const rel = path.relative(rulesRoot, f);
+      const name = rel.replace(/[\\/]/g, '-').replace(/\.md$/, '').toLowerCase();
+      entries.push({ kind: 'rule', name, description: h1[1].trim(), source: sourceOf(f) });
+    } catch (_) { /* ignore: unreadable file is safely skipped */ } // NOSONAR
+  }
+  return entries;
+}
+
+/** Every skill, agent and rule of the checkout, in generation order. */
+function collectEntries() {
+  return [...skillEntries(), ...agentEntries(), ...ruleEntries()];
 }
 
 // The catalog is emitted in parts so no generated file passes 800 lines: one
@@ -197,32 +212,34 @@ function partsOf(list) {
   return parts;
 }
 
-const partModules = [];
-for (const [kind, plural] of PART_KINDS) {
-  partsOf(entries.filter(entry => entry.kind === kind)).forEach((part, index) => {
-    partModules.push({ name: `catalog-${plural}-${index + 1}`, constName: `CATALOG_${plural.toUpperCase()}_${index + 1}`, part });
-  });
-}
+/** Writes the TypeScript parts, the aggregator and the JSON twin for the entries given. */
+function writeCatalog(entries) {
+  const partModules = [];
+  for (const [kind, plural] of PART_KINDS) {
+    partsOf(entries.filter(entry => entry.kind === kind)).forEach((part, index) => {
+      partModules.push({ name: `catalog-${plural}-${index + 1}`, constName: `CATALOG_${plural.toUpperCase()}_${index + 1}`, part });
+    });
+  }
 
-const guardianSrc = path.dirname(outFile);
-for (const { name, constName, part } of partModules) {
-  const text = `${GENERATED_HEADER}import type { CatalogEntry } from './catalog-index.js';
+  const guardianSrc = path.dirname(outFile);
+  for (const { name, constName, part } of partModules) {
+    const text = `${GENERATED_HEADER}import type { CatalogEntry } from './catalog-index.js';
 
 export const ${constName}: ReadonlyArray<CatalogEntry> = ${JSON.stringify(part, null, 2)};
 `;
-  fs.writeFileSync(path.join(guardianSrc, `${name}.ts`), text, 'utf8');
-}
+    fs.writeFileSync(path.join(guardianSrc, `${name}.ts`), text, 'utf8');
+  }
 
-// A part file this run did not write is left over from a larger catalog; in
-// place, it would still be compiled into the build as a dead module.
-const written = new Set(partModules.map(module => `${module.name}.ts`));
-for (const name of fs.readdirSync(guardianSrc)) {
-  if (PART_FILE_RE.test(name) && !written.has(name)) fs.unlinkSync(path.join(guardianSrc, name));
-}
+  // A part file this run did not write is left over from a larger catalog; in
+  // place, it would still be compiled into the build as a dead module.
+  const written = new Set(partModules.map(module => `${module.name}.ts`));
+  for (const name of fs.readdirSync(guardianSrc)) {
+    if (PART_FILE_RE.test(name) && !written.has(name)) fs.unlinkSync(path.join(guardianSrc, name));
+  }
 
-const imports = partModules.map(module => `import { ${module.constName} } from './${module.name}.js';`).join('\n');
-const spreads = partModules.map(module => `  ...${module.constName},`).join('\n');
-const out = `${GENERATED_HEADER}${imports}
+  const imports = partModules.map(module => `import { ${module.constName} } from './${module.name}.js';`).join('\n');
+  const spreads = partModules.map(module => `  ...${module.constName},`).join('\n');
+  const out = `${GENERATED_HEADER}${imports}
 
 export type CatalogEntry = ${CATALOG_ENTRY_TYPE};
 
@@ -231,13 +248,24 @@ ${spreads}
 ];
 `;
 
-fs.writeFileSync(outFile, out, 'utf8');
+  fs.writeFileSync(outFile, out, 'utf8');
 
-// JSON twin of the catalog for plain-JS consumers: the prompt-router hook
-// reads it to offer in-session routing without depending on the guardian
-// build. Lives in scripts/lib so the hooks-runtime module installs it
-// alongside the hook libs.
-const jsonOutFile = path.join(root, 'scripts', 'lib', 'skill-index.json');
-fs.writeFileSync(jsonOutFile, `${JSON.stringify({ entries }, null, 2)}\n`, 'utf8');
+  // JSON twin of the catalog for plain-JS consumers: the prompt-router hook
+  // reads it to offer in-session routing without depending on the guardian
+  // build. Lives in scripts/lib so the hooks-runtime module installs it
+  // alongside the hook libs.
+  const jsonOutFile = path.join(root, 'scripts', 'lib', 'skill-index.json');
+  fs.writeFileSync(jsonOutFile, `${JSON.stringify({ entries }, null, 2)}\n`, 'utf8');
 
-process.stderr.write(`build-skill-index: ${entries.length} entries written to catalog-index.ts (${partModules.length} parts) and skill-index.json\n`);
+  process.stderr.write(`build-skill-index: ${entries.length} entries written to catalog-index.ts (${partModules.length} parts) and skill-index.json\n`);
+}
+
+function main() {
+  writeCatalog(collectEntries());
+}
+
+// The parser is shared with tests/ci/skill-index-integrity.test.js, which
+// reads every source file again and fails when the committed index drifted.
+if (require.main === module) main();
+
+module.exports = { parseFrontmatter, triggersOf, collectEntries, main };

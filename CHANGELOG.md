@@ -8,6 +8,10 @@ All notable changes to EGC are documented here.
 
 - **The OpenCode agent registry is generated from `agents/` too** (follow-up of #2141): `node scripts/opencode-agent-prompts.js` now also rewrites the `agent` block of `.opencode/opencode.json`, one subagent per definition with its description, its model tier (`flash` for a flash model, `pro` for the rest) and its tool toggles read from the frontmatter (an MCP tool the definition names stays enabled under its own key), while keeping the primary agents the file already has in their place, so the 37 agents the hand-written block never listed are available to OpenCode by intent and no subagent entry is kept by hand; `--check` and `tests/ci/opencode-agent-prompts.test.js` report a missing, drifted or orphan entry the way they do for the prompts.
 
+### Fixed
+
+- **The committed catalog index follows the agent definitions again**: the description of `e2e-runner` changed in #2151 and `scripts/lib/skill-index.json` and its TypeScript twin kept the old text, because the index is generated at build time and nothing compared the committed copy with the sources; both are regenerated, `scripts/build-skill-index.js` exposes its collector instead of running on require, and `tests/ci/skill-index-integrity.test.js` fails when the committed index differs from what the skills, agents and rules generate today (an entry missing, stale, changed or out of order) or when the TypeScript parts no longer carry the entries of the JSON twin.
+
 ## [1.1.25] - 2026-11-16
 
 ### Security (memory hardening)
