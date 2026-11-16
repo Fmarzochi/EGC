@@ -69,6 +69,7 @@ function main() {
     record({
       cmd: commandLine.trim().split(/\s+/)[0],
       kind: crushed.kind,
+      layer: 'run',
       bytesIn: crushed.bytesIn,
       bytesOut: crushed.bytesOut,
       tokensSaved: crushed.tokensSaved,
