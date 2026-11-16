@@ -280,9 +280,17 @@ function resolveRepoRootForRecords(records, requestedRepoRoot, results) {
   };
 }
 
+// A shim that could not be rewritten is an error of the run: egc auto-update
+// exits 1 for it as for a target that failed to reinstall.
+function shimErrorCount(crusherShim) {
+  return crusherShim && crusherShim.state === 'error' ? 1 : 0;
+}
+
 // The shim in ~/.egc/bin is pinned to the EGC version that wrote it. Once the
 // installs are reapplied, a shim another version wrote, or one edited on
-// disk, is rewritten so its launchers match the package now installed.
+// disk, is rewritten so its launchers match the package now installed. It
+// belongs to the package, not to a target, so it is refreshed even when no
+// managed install is found.
 function refreshCrusherShim(options, dependencies) {
   if (options.dryRun) return null;
   // The shim lives in the real home. An update run for another home (a test,
@@ -336,14 +344,16 @@ function runAutoUpdate(options = {}, dependencies = {}) {
     }).filter(record => record.exists);
 
   if (records.length === 0) {
+    const crusherShim = refreshCrusherShim(options, dependencies);
     return {
       dryRun: Boolean(options.dryRun),
       repoRoot: requestedRepoRoot,
+      crusherShim,
       results,
       summary: {
         checkedCount: results.length,
         updatedCount: 0,
-        errorCount: 0,
+        errorCount: shimErrorCount(crusherShim),
       },
     };
   }
@@ -386,7 +396,7 @@ function runAutoUpdate(options = {}, dependencies = {}) {
     summary: {
       checkedCount: results.length,
       updatedCount: results.filter(result => result.status === 'updated' || result.status === 'planned').length,
-      errorCount: results.filter(result => result.status === 'error').length,
+      errorCount: results.filter(result => result.status === 'error').length + shimErrorCount(crusherShim),
     },
   };
 }

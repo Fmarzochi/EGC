@@ -142,6 +142,9 @@ function checkGitForceFlag(args: string[], subcommandIdx: number, cwd?: string):
   // Nothing after the option terminator is an option.
   const terminator = rest.indexOf('--');
   const options = terminator >= 0 ? rest.slice(0, terminator) : rest;
+  // A forced delete of a branch is refused by checkGitDiscardingWork with the
+  // reason that names the branch and its commits, not by the generic one here.
+  if (subcommand === 'branch' && hasOption(options, '--delete', 'd')) return null;
   const hasLongForce = options.some(isLongGitForceFlag);
   const hasShortForce = options.some(a => a === '-f' || hasShortForceCluster(a));
   const refused = GIT_FORCE_REFUSED.get(subcommand);
@@ -624,37 +627,92 @@ function shortFlagCluster(token: string, letter: string): boolean {
   return /^-[A-Za-z]+$/.test(token) && token.includes(letter);
 }
 
-function checkGitDiscardingWork(subcommand: string, rest: string[]): ValidationResult | null {
-  const exact = rest.map(stripQuotes);
-  const lower = exact.map(token => token.toLowerCase());
-  const deny = (reason: string): ValidationResult => ({ allowed: false, reason, trust_level: 'DANGEROUS' });
-  switch (subcommand) {
-    case 'reset':
-      if (lower.includes('--hard')) return deny(GIT_DISCARD_REASONS.resetHard);
-      if (lower.includes('--merge')) return deny(GIT_DISCARD_REASONS.resetMerge);
-      return null;
-    case 'branch':
-      return exact.some(token => shortFlagCluster(token, 'D')) ? deny(GIT_DISCARD_REASONS.branchDelete) : null;
-    case 'tag':
-      return lower.includes('--delete') || exact.some(token => shortFlagCluster(token, 'd'))
-        ? deny(GIT_DISCARD_REASONS.tagDelete)
-        : null;
-    case 'restore': {
-      const staged = exact.some(token => token === '--staged' || shortFlagCluster(token, 'S'));
-      const worktree = exact.some(token => token === '--worktree' || shortFlagCluster(token, 'W'));
-      return staged && !worktree ? null : deny(GIT_DISCARD_REASONS.restore);
+// Git accepts any unambiguous prefix of a long option (--har for --hard, --del
+// for --delete), so a refusal that compared the whole word let the
+// abbreviation through. One letter after the dashes is the shortest Git takes.
+function longOption(token: string, name: string): boolean {
+  return token.startsWith('--') && token.length >= 3 && name.startsWith(token);
+}
+
+function hasOption(options: string[], longName: string, shortLetter: string | null): boolean {
+  return options.some(token => longOption(token.toLowerCase(), longName)
+    || (shortLetter !== null && shortFlagCluster(token, shortLetter)));
+}
+
+// The operands of a git command: the tokens that are not options, with the
+// value a value-taking option consumes skipped, up to the option terminator.
+function gitOperands(tokens: string[], valueOptions: string[]): string[] {
+  const operands: string[] = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (token === '--') break;
+    if (token.startsWith('-')) {
+      if (valueOptions.includes(token)) index++;
+      continue;
     }
-    case 'checkout':
-      return exact.includes('--') ? deny(GIT_DISCARD_REASONS.checkoutPath) : null;
-    case 'stash': {
-      const action = lower.find(token => !token.startsWith('-'));
-      if (action === 'drop') return deny(GIT_DISCARD_REASONS.stashDrop);
-      if (action === 'clear') return deny(GIT_DISCARD_REASONS.stashClear);
-      return null;
-    }
-    default:
-      return null;
+    operands.push(token);
   }
+  return operands;
+}
+
+// Each check sees the options before the terminator, every token, and where
+// the terminator is; it answers with the reason to refuse, or null.
+type DiscardCheck = (options: string[], exact: string[], terminator: number) => string | null;
+
+function resetDiscard(options: string[]): string | null {
+  if (hasOption(options, '--hard', null)) return GIT_DISCARD_REASONS.resetHard;
+  if (hasOption(options, '--merge', null)) return GIT_DISCARD_REASONS.resetMerge;
+  return null;
+}
+
+function branchDiscard(options: string[]): string | null {
+  const forcedDelete = options.some(token => shortFlagCluster(token, 'D'))
+    || (hasOption(options, '--delete', 'd') && hasOption(options, '--force', 'f'));
+  return forcedDelete ? GIT_DISCARD_REASONS.branchDelete : null;
+}
+
+function tagDiscard(options: string[]): string | null {
+  return hasOption(options, '--delete', 'd') ? GIT_DISCARD_REASONS.tagDelete : null;
+}
+
+function restoreDiscard(options: string[]): string | null {
+  const staged = hasOption(options, '--staged', 'S');
+  const worktree = hasOption(options, '--worktree', 'W');
+  return staged && !worktree ? null : GIT_DISCARD_REASONS.restore;
+}
+
+// A single operand is a branch to Git before it is a path, and the validator
+// cannot resolve refs; a second operand, or the terminator, can only mean paths.
+function checkoutDiscard(_options: string[], exact: string[], terminator: number): string | null {
+  if (terminator !== -1) return GIT_DISCARD_REASONS.checkoutPath;
+  return gitOperands(exact, ['-b', '-B', '--orphan']).length > 1 ? GIT_DISCARD_REASONS.checkoutPath : null;
+}
+
+function stashDiscard(_options: string[], exact: string[]): string | null {
+  const action = gitOperands(exact, ['-m', '--message'])[0]?.toLowerCase();
+  if (action === 'drop') return GIT_DISCARD_REASONS.stashDrop;
+  if (action === 'clear') return GIT_DISCARD_REASONS.stashClear;
+  return null;
+}
+
+const GIT_DISCARD_CHECKS = new Map<string, DiscardCheck>([
+  ['reset', resetDiscard],
+  ['branch', branchDiscard],
+  ['tag', tagDiscard],
+  ['restore', restoreDiscard],
+  ['checkout', checkoutDiscard],
+  ['stash', stashDiscard],
+]);
+
+function checkGitDiscardingWork(subcommand: string, rest: string[]): ValidationResult | null {
+  const check = GIT_DISCARD_CHECKS.get(subcommand);
+  if (!check) return null;
+  const exact = rest.map(stripQuotes);
+  // Everything after the terminator is a path, however much it looks like an option.
+  const terminator = exact.indexOf('--');
+  const options = terminator === -1 ? exact : exact.slice(0, terminator);
+  const reason = check(options, exact, terminator);
+  return reason ? { allowed: false, reason, trust_level: 'DANGEROUS' } : null;
 }
 
 export function validateGitArgs(args: string[], cwd?: string): ValidationResult {

@@ -112,9 +112,12 @@ function finiteNumber(value) {
 // was prefixed with egc run (by hand or by a hook rewrite). Rows written
 // before the field existed are reported as unlabeled rather than guessed.
 const UNLABELED_LAYER = 'unlabeled';
+const LAYERS = new Set(['shim', 'run']);
 
+// Only the two layers the product writes become keys of byLayer: any other
+// value in a row (older, hand-edited, or a key like __proto__) is unlabeled.
 function layerOf(entry) {
-  return typeof entry.layer === 'string' && entry.layer ? entry.layer : UNLABELED_LAYER;
+  return LAYERS.has(entry.layer) ? entry.layer : UNLABELED_LAYER;
 }
 
 /** Aggregate totals, command-kind and layer savings for a set of ledger rows. */

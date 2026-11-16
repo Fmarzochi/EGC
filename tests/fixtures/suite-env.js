@@ -27,6 +27,10 @@ function suiteEnv(env) {
   copy.GIT_CONFIG_PARAMETERS = existing ? `${existing} ${NO_AUTO_MAINTENANCE}` : NO_AUTO_MAINTENANCE;
   copy.EGC_GUARDIAN_TIMEOUT_MS = String(CLI_TIMEOUT_MS);
   delete copy.EGC_TEST_JOBS;
+  // egc run hands its child EGC_CRUSHER_RAW=1 so the shim steps aside; a suite
+  // started through egc run must not inherit it, or its crusher tests would
+  // see a shim that passes everything through.
+  delete copy.EGC_CRUSHER_RAW;
   return copy;
 }
 

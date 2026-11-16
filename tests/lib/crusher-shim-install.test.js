@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { install, uninstall, status, verify, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER } = require('../../scripts/lib/crusher/shim-install');
+const { install, uninstall, status, verify, describeVerification, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER } = require('../../scripts/lib/crusher/shim-install');
 
 function createTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -147,6 +147,36 @@ function runTests() {
         assert.strictEqual(report.state, 'stale');
         assert.strictEqual(report.version, '0.0.1');
         assert.strictEqual(report.expectedVersion, require('../../package.json').version);
+        assert.strictEqual(report.reason, 'version');
+        assert.strictEqual(describeVerification(report), `it was written by EGC 0.0.1, this is ${report.expectedVersion}`);
+      });
+    } finally {
+      cleanup(dir);
+    }
+  })) passed++; else failed++;
+
+  if (test('verify() treats a manifest that cannot be read, or lacks a hash, as a shim to rewrite and says why (#2137)', () => {
+    const dir = createTempDir('egc-shim-install-');
+    try {
+      withHome(dir, () => {
+        const shim = path.join(dir, '.egc', 'bin');
+        fs.mkdirSync(shim, { recursive: true });
+        const manifestFile = path.join(shim, 'manifest.json');
+        fs.writeFileSync(manifestFile, '{not json');
+        const corrupt = verify();
+        assert.strictEqual(corrupt.installed, true, 'a manifest that exists is an install to repair');
+        assert.strictEqual(corrupt.state, 'stale');
+        assert.strictEqual(corrupt.reason, 'corrupt');
+        assert.strictEqual(describeVerification(corrupt), 'its manifest cannot be read');
+
+        const version = require('../../package.json').version;
+        fs.writeFileSync(manifestFile, JSON.stringify({ version, dispatch: null, binaries: { git: '/usr/bin/git' }, launchers: {} }));
+        const incomplete = verify();
+        assert.strictEqual(incomplete.state, 'stale');
+        assert.strictEqual(incomplete.reason, 'incomplete');
+        assert.strictEqual(describeVerification(incomplete), 'its manifest lacks a hash');
+
+        assert.strictEqual(verify(path.join(dir, 'nowhere')).state, 'missing');
       });
     } finally {
       cleanup(dir);

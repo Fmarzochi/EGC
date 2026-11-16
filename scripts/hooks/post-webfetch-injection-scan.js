@@ -47,7 +47,10 @@ function toolNameOf(rawInput) {
     const input = typeof rawInput === 'string' ? JSON.parse(rawInput) : rawInput;
     return typeof input?.tool_name === 'string' ? input.tool_name : '';
   } catch {
-    return '';
+    // A payload truncated by the 1MB stdin cap of run-with-flags.js is no
+    // longer JSON, but it still starts with the tool name.
+    const match = typeof rawInput === 'string' ? /"tool_name"\s*:\s*"([^"]*)"/.exec(rawInput) : null;
+    return match ? match[1] : '';
   }
 }
 

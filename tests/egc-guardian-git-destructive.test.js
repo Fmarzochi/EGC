@@ -51,6 +51,8 @@ test('git reset --hard and --merge are refused, the index-only resets stay allow
   denied('git reset --hard', 'git reset --hard');
   denied('git reset --hard HEAD~1', 'git reset --hard');
   denied('git reset --merge', 'git reset --merge');
+  denied('git reset --har HEAD~1', 'git reset --hard');
+  denied('git reset --mer', 'git reset --merge');
   passes('git reset');
   passes('git reset --soft HEAD~1');
   passes('git reset HEAD src/app.js');
@@ -59,7 +61,9 @@ test('git reset --hard and --merge are refused, the index-only resets stay allow
 
 test('git branch -D is refused, the safe delete and the rest of branch stay allowed', () => {
   denied('git branch -D feature/x', 'git branch -D');
-  denied('git branch --delete --force feature/x', 'force');
+  denied('git branch --delete --force feature/x', 'git branch -D');
+  denied('git branch -d -f feature/x', 'git branch -D');
+  denied('git branch --del --force feature/x', 'git branch -D');
   passes('git branch -d feature/x');
   passes('git branch feature/x');
   passes('git branch --list');
@@ -69,6 +73,7 @@ test('git branch -D is refused, the safe delete and the rest of branch stay allo
 test('git tag -d is refused, creating and listing tags stay allowed', () => {
   denied('git tag -d v1.0.0', 'git tag -d');
   denied('git tag --delete v1.0.0', 'git tag -d');
+  denied('git tag --del v1.0.0', 'git tag -d');
   passes('git tag v1.0.0');
   passes('git tag -a v1.0.0 -m release');
   passes('git tag -l');
@@ -80,7 +85,11 @@ test('git restore of the worktree is refused, unstaging with --staged stays allo
   denied('git restore --source=HEAD~1 src/app.js', 'git restore');
   denied('git restore --worktree src/app.js', 'git restore');
   denied('git restore -SW src/app.js', 'git restore');
+  denied('git restore --work src/app.js', 'git restore');
+  denied('git restore -- --staged', 'git restore');
   passes('git restore --staged src/app.js');
+  passes('git restore --stag src/app.js');
+  passes('git restore --staged -- --worktree');
   passes('git restore -S src/app.js');
 });
 
@@ -88,7 +97,11 @@ test('git checkout of a path is refused, checkout of a branch stays allowed', ()
   denied('git checkout -- src/app.js', 'git checkout');
   denied('git checkout HEAD -- src/app.js', 'git checkout');
   denied('git checkout -- .', 'git checkout');
+  denied('git checkout HEAD src/app.js', 'git checkout');
+  denied('git checkout main src/a.js src/b.js', 'git checkout');
   passes('git checkout main');
+  passes('git checkout -B feature/x origin/main');
+  passes('git checkout --orphan gh-pages');
   passes('git checkout -b feature/x');
   passes('git checkout -b feature/x origin/main');
   passes('git checkout --detach HEAD~1');
@@ -100,6 +113,9 @@ test('git stash drop and clear are refused, the stash forms that keep the work s
   denied('git stash clear', 'git stash clear');
   passes('git stash');
   passes('git stash push -m wip');
+  passes('git stash push -m drop');
+  passes('git stash -m clear');
+  passes('git stash push --message clear');
   passes('git stash push -u -m draft -- tests/lib/x.js');
   passes('git stash pop');
   passes('git stash apply stash@{0}');

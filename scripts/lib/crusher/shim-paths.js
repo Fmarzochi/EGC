@@ -35,15 +35,22 @@ function manifestPath() {
 // manifest from before the pinning is a flat name-to-path map and still
 // reads, so an older install keeps working until it is refreshed.
 function readManifestRecord(dir = shimDir()) {
+  const file = path.join(dir, 'manifest.json');
+  if (!fs.existsSync(file)) return null;
   let parsed;
   try {
-    parsed = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
-    return null;
+    parsed = null;
   }
-  if (!parsed || typeof parsed !== 'object') return null;
+  // A manifest that exists and cannot be read is a shim to rewrite, not an
+  // absent one: the launchers next to it may still be on PATH.
+  if (!parsed || typeof parsed !== 'object') {
+    return { corrupt: true, legacy: false, version: null, dispatch: null, binaries: {}, launchers: {} };
+  }
   if (parsed.binaries && typeof parsed.binaries === 'object') {
     return {
+      corrupt: false,
       legacy: false,
       version: typeof parsed.version === 'string' ? parsed.version : null,
       dispatch: typeof parsed.dispatch === 'string' ? parsed.dispatch : null,
@@ -51,7 +58,7 @@ function readManifestRecord(dir = shimDir()) {
       launchers: parsed.launchers && typeof parsed.launchers === 'object' ? parsed.launchers : {},
     };
   }
-  return { legacy: true, version: null, dispatch: null, binaries: parsed, launchers: {} };
+  return { corrupt: false, legacy: true, version: null, dispatch: null, binaries: parsed, launchers: {} };
 }
 
 function readManifest(dir = shimDir()) {

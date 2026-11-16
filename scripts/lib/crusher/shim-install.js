@@ -27,7 +27,14 @@ const {
 } = require('./shim-paths');
 
 const DISPATCH_MODULE = path.join(__dirname, 'shim-dispatch.js');
-const PACKAGE_VERSION = require('../../../package.json').version;
+const PACKAGE_JSON = path.join(__dirname, '..', '..', '..', 'package.json');
+
+// Read on every call rather than cached at require time: egc auto-update
+// pulls a git-clone install before it verifies the shim, and the version the
+// module loaded with would be the one from before the pull.
+function packageVersion() {
+  return JSON.parse(fs.readFileSync(PACKAGE_JSON, 'utf8')).version;
+}
 
 function sha256File(filePath) {
   try {
@@ -187,6 +194,10 @@ function uninstallWindowsPath(dir) {
 }
 
 function install() {
+  // Without the dispatch hash the manifest could not be verified later, and a
+  // shim whose launchers cannot load their module is worse than none.
+  const dispatch = sha256File(DISPATCH_MODULE);
+  if (!dispatch) throw new Error(`Token Crusher dispatch module unreadable at ${DISPATCH_MODULE}; the shim was not written`);
   const dir = shimDir();
   fs.mkdirSync(dir, { recursive: true });
 
@@ -209,7 +220,7 @@ function install() {
 
   // The version and the hashes pin the shim to this install: verify() tells a
   // launcher another version wrote, or one edited on disk, from a healthy one.
-  const manifest = { version: PACKAGE_VERSION, dispatch: sha256File(DISPATCH_MODULE), binaries, launchers };
+  const manifest = { version: packageVersion(), dispatch, binaries, launchers };
   fs.writeFileSync(manifestPath(), JSON.stringify(manifest, null, 2));
   const pathResult = process.platform === 'win32' ? installWindowsPath(dir) : installPosixPath(dir);
 
@@ -254,31 +265,52 @@ function isPathPersisted(dir = shimDir()) {
 }
 
 /**
- * Inspects the current installation and PATH status of Token Crusher binary shims.
- *
- * @returns {{ dir: string, dirExists: boolean, shimmed: string[], activeInCurrentShell: boolean, pathPersisted: boolean }}
- */
-/**
  * Compares the shim on disk with what this package would write: the version
  * that wrote the manifest, the dispatch module hash and the hash of every
  * launcher. missing: nothing installed; legacy: a manifest from before the
- * pinning; stale: another version or another dispatch module; altered: a
- * launcher whose content changed; ok: all of it matches.
+ * pinning; stale: a manifest that cannot be read or lacks a hash, another
+ * version or another dispatch module; altered: a launcher whose content
+ * changed; ok: all of it matches. reason names which of those it was.
+ *
+ * @returns {{ installed: boolean, state: string, reason: string|null, version: string|null, expectedVersion: string, altered: string[], dir: string }}
  */
 function verify(dir = shimDir()) {
+  const expectedVersion = packageVersion();
   const record = readManifestRecord(dir);
-  const base = { dir, expectedVersion: PACKAGE_VERSION, version: record ? record.version : null, altered: [] };
+  const base = { dir, expectedVersion, version: record ? record.version : null, altered: [], reason: null };
   if (!record) return { ...base, installed: false, state: 'missing' };
-  if (record.legacy) return { ...base, installed: true, state: 'legacy' };
-  const altered = Object.keys(record.binaries)
-    .filter(name => record.launchers[name] !== sha256File(launcherPath(dir, name)));
-  if (record.version !== PACKAGE_VERSION || record.dispatch !== sha256File(DISPATCH_MODULE)) {
-    return { ...base, installed: true, state: 'stale', altered };
+  if (record.corrupt) return { ...base, installed: true, state: 'stale', reason: 'corrupt' };
+  if (record.legacy) return { ...base, installed: true, state: 'legacy', reason: 'legacy' };
+  const names = Object.keys(record.binaries);
+  if (!record.dispatch || names.some(name => typeof record.launchers[name] !== 'string')) {
+    return { ...base, installed: true, state: 'stale', reason: 'incomplete' };
   }
-  if (altered.length > 0) return { ...base, installed: true, state: 'altered', altered };
+  const altered = names.filter(name => record.launchers[name] !== sha256File(launcherPath(dir, name)));
+  if (record.version !== expectedVersion) return { ...base, installed: true, state: 'stale', altered, reason: 'version' };
+  if (record.dispatch !== sha256File(DISPATCH_MODULE)) return { ...base, installed: true, state: 'stale', altered, reason: 'dispatch' };
+  if (altered.length > 0) return { ...base, installed: true, state: 'altered', altered, reason: 'launchers' };
   return { ...base, installed: true, state: 'ok' };
 }
 
+// One clause for egc init and egc doctor: why the shim on disk is not the one
+// this package writes.
+function describeVerification(report) {
+  switch (report.reason) {
+    case 'corrupt': return 'its manifest cannot be read';
+    case 'legacy': return 'its manifest predates the version pinning';
+    case 'incomplete': return 'its manifest lacks a hash';
+    case 'version': return `it was written by EGC ${report.version}, this is ${report.expectedVersion}`;
+    case 'dispatch': return 'the dispatch module changed since it was written';
+    case 'launchers': return `a launcher changed on disk: ${report.altered.join(', ')}`;
+    default: return '';
+  }
+}
+
+/**
+ * Inspects the current installation and PATH status of Token Crusher binary shims.
+ *
+ * @returns {{ dir: string, dirExists: boolean, shimmed: string[], activeInCurrentShell: boolean, pathPersisted: boolean, state: string, reason: string|null, version: string|null, expectedVersion: string, altered: string[] }}
+ */
 function status() {
   const dir = shimDir();
   const manifest = readManifest();
@@ -287,7 +319,7 @@ function status() {
     .split(path.delimiter)
     .some(p => p && path.resolve(p) === path.resolve(dir));
   const pathPersisted = isPathPersisted(dir);
-  const { state, version, expectedVersion, altered } = verify(dir);
+  const { state, reason, version, expectedVersion, altered } = verify(dir);
 
   return {
     dir,
@@ -296,10 +328,11 @@ function status() {
     activeInCurrentShell,
     pathPersisted,
     state,
+    reason,
     version,
     expectedVersion,
     altered,
   };
 }
 
-module.exports = { install, uninstall, status, verify, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER };
+module.exports = { install, uninstall, status, verify, describeVerification, isPathPersisted, SHIM_BINARY_NAMES, powershellSingleQuote, PATH_MARKER };

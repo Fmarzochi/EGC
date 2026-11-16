@@ -111,6 +111,12 @@ if (process.platform !== 'win32') {
       const result = spawnSync(process.execPath, [CRUSH_RUN, 'git', 'log', '--stat'], { encoding: 'utf8', env });
       assert.strictEqual(result.status, 0, result.stderr);
       assert.ok(result.stdout.includes('[egc-crusher] saved'), 'expected the crusher marker when --raw is not passed');
+      // The shim steps aside for the child of egc run, so the output is
+      // compressed once and the one ledger row carries layer run (#2136).
+      assert.strictEqual(result.stdout.split('[egc-crusher]').length - 1, 1, 'compressed exactly once');
+      const ledger = path.join(home, '.egc', 'metrics', 'crusher.jsonl');
+      const rows = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+      assert.deepStrictEqual(rows.map(row => row.layer), ['run'], JSON.stringify(rows));
     } finally {
       cleanup(home, realBinDir);
     }
