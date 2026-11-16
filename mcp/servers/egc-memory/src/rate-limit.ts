@@ -1,69 +1,50 @@
-// Per-tool, per-project call counter behind every tool of the server:
-// a key is `<project>::<tool>` when the call names a project, `<tool>`
-// otherwise, and a call is allowed while the key holds at most maxCalls
-// timestamps inside the window.
-export interface RateLimiter {
-  check(tool: string, projectPath?: string | null, now?: number): boolean;
-  size(): number;
-}
-
-interface Entry {
-  stamps: number[];
-  // The newest call ever recorded for the key, kept apart from the array
-  // because a clock that steps backwards can push an older stamp last.
-  newest: number;
-}
-
-export function createRateLimiter({ windowMs, maxCalls }: { windowMs: number; maxCalls: number }): RateLimiter {
-  const calls = new Map<string, Entry>();
-  let lastSweep = Number.NEGATIVE_INFINITY;
-
-  // Runs at most once per window, so a check costs one map lookup and
-  // the sweep is spread over the calls of the window: a key whose newest
-  // call already left the window holds nothing the next check can use,
-  // so it goes, and the map stays bounded by the keys active in the
-  // last two windows instead of growing for the life of the process
-  // (#1682). A clock that stepped backwards sweeps at once instead of
-  // waiting to catch up with the last sweep; `newest` keeps the live
-  // keys safe.
-  function sweep(now: number): void {
-    if (now >= lastSweep && now - lastSweep < windowMs) return;
-    lastSweep = now;
-    for (const [key, entry] of calls) {
-      if (now - entry.newest >= windowMs) calls.delete(key);
-    }
-  }
-
-  function check(tool: string, projectPath?: string | null, now: number = Date.now()): boolean {
-    sweep(now);
-    const trimmed = projectPath ? projectPath.trim() : '';
-    const key = trimmed !== '' ? `${trimmed}::${tool}` : tool;
-    const entry = calls.get(key);
-    const stamps = (entry?.stamps ?? []).filter(t => now - t < windowMs);
-    stamps.push(now);
-    calls.set(key, { stamps, newest: Math.max(entry?.newest ?? now, now) });
-    return stamps.length <= maxCalls;
-  }
-
-  return { check, size: () => calls.size };
-}
+// A per-tool, per-project limit on the calls this server answers (#2142): an
+// honest session never reaches it, a looping agent or a runaway script gets a
+// clear refusal instead of hammering the state store or the session bus. One
+// sliding window per key, the keys of callers that went quiet dropped as the
+// others are looked at, so the map never outgrows the live callers.
 
 export interface RateLimitSettings {
   windowMs: number;
   maxCalls: number;
 }
 
-// The default is generous for an honest session; EGC_MCP_RATE_MAX_CALLS and
-// EGC_MCP_RATE_WINDOW_MS change it, for this server and the Guardian alike.
-// A value that is not a whole positive number keeps the default rather than
-// turning the limit off (#2142).
+export interface RateLimiter {
+  check(tool: string, projectPath?: string | null, now?: number): boolean;
+  size(): number;
+}
+
+const ENV_NAMES: Array<[keyof RateLimitSettings, string]> = [
+  ['maxCalls', 'EGC_MCP_RATE_MAX_CALLS'],
+  ['windowMs', 'EGC_MCP_RATE_WINDOW_MS'],
+];
+
+// The same two variables the Guardian reads. A value that is not a whole
+// positive number keeps the default rather than turning the limit off.
 export function rateLimitSettings(env: NodeJS.ProcessEnv, defaults: RateLimitSettings): RateLimitSettings {
-  const whole = (value: string | undefined, fallback: number): number => {
-    const parsed = Number(value);
-    return typeof value === 'string' && value.trim() !== '' && Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-  };
-  return {
-    windowMs: whole(env.EGC_MCP_RATE_WINDOW_MS, defaults.windowMs),
-    maxCalls: whole(env.EGC_MCP_RATE_MAX_CALLS, defaults.maxCalls),
-  };
+  const settings = { ...defaults };
+  for (const [field, name] of ENV_NAMES) {
+    const raw = env[name];
+    if (typeof raw !== 'string' || raw.trim() === '') continue;
+    const value = Number(raw);
+    if (Number.isInteger(value) && value > 0) settings[field] = value;
+  }
+  return settings;
+}
+
+export function createRateLimiter(settings: RateLimitSettings): RateLimiter {
+  const recent = new Map<string, number[]>();
+
+  function check(tool: string, projectPath?: string | null, now: number = Date.now()): boolean {
+    const key = `${(projectPath ?? '').trim()}::${tool}`;
+    const live = (recent.get(key) ?? []).filter(stamp => now - stamp < settings.windowMs);
+    live.push(now);
+    recent.set(key, live);
+    for (const [other, stamps] of recent) {
+      if (other !== key && now - stamps[stamps.length - 1] >= settings.windowMs) recent.delete(other);
+    }
+    return live.length <= settings.maxCalls;
+  }
+
+  return { check, size: () => recent.size };
 }

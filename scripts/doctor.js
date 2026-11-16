@@ -232,7 +232,7 @@ function checkEncryptionKey(homeDir) {
   if (configured && !stat && fs.existsSync(defaultPath)) {
     problems.push(`EGC_ENCRYPTION_KEY_FILE names ${keyPath}, which does not exist, while ${defaultPath} does: move the key there or unset the variable, or the encrypted state will not open`);
   }
-  if (stat && stat.isSymbolicLink()) problems.push(`${keyPath} is a symbolic link; the key must be a regular file`);
+  if (stat?.isSymbolicLink()) problems.push(`${keyPath} is a symbolic link; the key must be a regular file`);
   if (stat && !stat.isSymbolicLink() && process.platform !== 'win32' && (stat.mode & 0o077) !== 0) {
     problems.push(`${keyPath} is readable by other users (mode ${(stat.mode & 0o777).toString(8)}); run chmod 600 on it`);
   }
@@ -285,7 +285,7 @@ function printStateFileModesReport(report) {
     console.log(shown(report.writable));
   }
   console.log('  The next save by the memory server makes a file read-only; to do it now:');
-  console.log(`    chmod 0400 ${[...report.exposed, ...report.writable].slice(0, STATE_MODE_SHOWN).map(shellQuote).join(' ')}`);
+  console.log(`    chmod 0400 ${[...report.exposed, ...report.writable].slice(0, STATE_MODE_SHOWN).map(file => shellQuote(file)).join(' ')}`);
 }
 
 function checkPlaintextState(homeDir) {
@@ -356,6 +356,36 @@ function printStateStoreReport(stateDb) {
   }
 }
 
+// The checks on the files under ~/.egc: the state stores, plain-text state,
+// the key and the state file modes. Each one is null when there is nothing to say.
+function checkLocalFiles(homeDir) {
+  const encryptionKey = checkEncryptionKey(homeDir);
+  const stateFileModes = checkStateFileModes(homeDir);
+  return {
+    stateDb: checkStateDb(homeDir),
+    plaintextState: checkPlaintextState(homeDir),
+    encryptionKey,
+    stateFileModes,
+    warningCount: (encryptionKey ? encryptionKey.problems.length : 0) + (stateFileModes ? stateFileModes.warningCount : 0),
+  };
+}
+
+function localFilesJson(files) {
+  const out = {};
+  if (files.stateDb) out.stateDb = files.stateDb;
+  if (files.plaintextState) out.plaintextStateFiles = files.plaintextState;
+  if (files.encryptionKey) out.encryptionKey = files.encryptionKey;
+  if (files.stateFileModes) out.stateFileModes = files.stateFileModes;
+  return out;
+}
+
+function printLocalFilesReports(files) {
+  if (files.stateDb) printStateStoreReport(files.stateDb);
+  if (files.plaintextState) printPlaintextStateReport(files.plaintextState);
+  if (files.encryptionKey) printEncryptionKeyReport(files.encryptionKey);
+  if (files.stateFileModes) printStateFileModesReport(files.stateFileModes);
+}
+
 async function main() {
   try {
     const options = parseArgs(process.argv);
@@ -370,16 +400,12 @@ async function main() {
       projectRoot: process.cwd(),
       targets: options.targets,
     });
-    const stateDb = checkStateDb(homeDir);
-    const plaintextState = checkPlaintextState(homeDir);
+    const localFiles = checkLocalFiles(homeDir);
     const mcp = await buildMcpReport(homeDir, { timeoutMs: probeTimeoutMs(process.env) });
     // The Team Brain of this machine: files and one read of the remote, no
     // server. Its warnings join the doctor's total; it raises no error.
     const team = buildTeamReport(homeDir);
-    const encryptionKey = checkEncryptionKey(homeDir);
-    const stateFileModes = checkStateFileModes(homeDir);
-    const diskWarnings = (encryptionKey ? encryptionKey.problems.length : 0) + (stateFileModes ? stateFileModes.warningCount : 0);
-    const summary = { ...report.summary, warningCount: report.summary.warningCount + team.warningCount + diskWarnings };
+    const summary = { ...report.summary, warningCount: report.summary.warningCount + team.warningCount + localFiles.warningCount };
     const hooks = buildHookReport(report.results, { homeDir, timeoutMs: probeTimeoutMs(process.env) });
     // Warnings are informative: drift and version skew are worth reporting but
     // do not mean the install is broken, and a warnings-only run is a healthy
@@ -389,21 +415,13 @@ async function main() {
     const hasFailures = report.summary.errorCount > 0 || mcp.errorCount > 0 || hooks.errorCount > 0;
 
     if (options.json) {
-      const out = { ...report, summary, mcp, team, hooks };
-      if (stateDb) out.stateDb = stateDb;
-      if (plaintextState) out.plaintextStateFiles = plaintextState;
-      if (encryptionKey) out.encryptionKey = encryptionKey;
-      if (stateFileModes) out.stateFileModes = stateFileModes;
-      console.log(JSON.stringify(out, null, 2));
+      console.log(JSON.stringify({ ...report, summary, mcp, team, hooks, ...localFilesJson(localFiles) }, null, 2));
     } else {
       printHuman({ ...report, summary });
       printMcpReport(mcp);
       printTeamReport(team);
       printHookReport(hooks);
-      if (stateDb) printStateStoreReport(stateDb);
-      if (plaintextState) printPlaintextStateReport(plaintextState);
-      if (encryptionKey) printEncryptionKeyReport(encryptionKey);
-      if (stateFileModes) printStateFileModesReport(stateFileModes);
+      printLocalFilesReports(localFiles);
     }
 
     process.exitCode = hasFailures ? 1 : 0;
