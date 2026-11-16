@@ -38,8 +38,8 @@ jobs:
       # absent (build/ is gitignored). Build them here so those defense tests
       # actually run under coverage instead of silently skipping to a false
       # green. This job stays Ubuntu-only for its coverage report; the test
-      # matrix builds the memory server as well, on the lanes where its suites
-      # pass (#2101, #2102).
+      # matrix builds the memory server as well, on every lane since #2104
+      # (Windows) and #2130 (Yarn 4).
       - name: Build MCP servers
         run: |
           npm --prefix mcp/servers/egc-guardian ci
