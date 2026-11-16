@@ -101,7 +101,7 @@ Adapt to the project's chosen architecture (Clean Architecture, MVVM, feature-fi
 - **Missing `const` constructors**: Widgets with all-final fields must declare `const` to prevent unnecessary rebuilds
 - **Object allocation in parameters**: Inline `TextStyle(...)` without `const` causes rebuilds
 - **`StatefulWidget` overuse**: Prefer `StatelessWidget` when no mutable local state is needed
-- **Missing `key` in list items**: `ListView.builder` items without stable `ValueKey` cause state bugs
+- **Missing `key` in list items**: `ListView.builder` items whose identity can change or whose descendants hold state need a stable `ValueKey`; a stateless, position-based list needs none
 - **Hardcoded colors/text styles**: Use `Theme.of(context).colorScheme`/`textTheme`; hardcoded styles break dark mode
 - **Hardcoded spacing**: Prefer design tokens or named constants over magic numbers
 
@@ -145,7 +145,7 @@ Adapt to the project's chosen architecture (Clean Architecture, MVVM, feature-fi
 
 ### Error Handling (HIGH)
 
-- **Missing global error capture**: Both `FlutterError.onError` and `PlatformDispatcher.instance.onError` must be set
+- **Missing global error capture**: The app or its reporting service must cover Flutter framework errors (`FlutterError.onError`) and uncaught platform errors (`PlatformDispatcher.instance.onError`); when the reporting setup already covers a channel, do not demand the handler as well
 - **No error reporting service**: Crashlytics/Sentry or equivalent should be integrated with non-fatal reporting
 - **Missing state management error observer**: Wire errors to reporting (BlocObserver, ProviderObserver, etc.)
 - **Red screen in production**: `ErrorWidget.builder` not customized for release mode

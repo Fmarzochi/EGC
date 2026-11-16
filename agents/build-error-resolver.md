@@ -87,8 +87,25 @@ For each error:
 # Nuclear option: clear all caches
 rm -rf .next node_modules/.cache && npm run build
 
-# Reinstall dependencies
-rm -rf node_modules package-lock.json && npm install
+# Reinstall dependencies from the lockfile, with the project's own manager,
+# read from the lockfile the project ships (npm when there is none)
+if [ -f pnpm-lock.yaml ]; then
+  PACKAGE_MANAGER=pnpm
+elif [ -f bun.lockb ] || [ -f bun.lock ]; then
+  PACKAGE_MANAGER=bun
+elif [ -f yarn.lock ]; then
+  PACKAGE_MANAGER=yarn
+else
+  PACKAGE_MANAGER=npm
+fi
+rm -rf node_modules
+case "${PACKAGE_MANAGER:-npm}" in
+  npm) if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then npm ci; else npm install; fi ;;
+  pnpm) pnpm install --frozen-lockfile ;;
+  yarn) yarn install --immutable ;;
+  bun) bun install --frozen-lockfile ;;
+  *) echo "Unsupported package manager: ${PACKAGE_MANAGER}" >&2; exit 1 ;;
+esac
 
 # Fix ESLint auto-fixable
 npx eslint . --fix

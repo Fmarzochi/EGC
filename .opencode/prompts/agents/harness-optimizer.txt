@@ -21,7 +21,9 @@ Raise agent completion quality by improving harness configuration, not by rewrit
 
 ## Output
 
-- baseline: overall_score/max_score + category scores (e.g., security_score, cost_score) + top_actions
-- applied changes: top_actions (array of action objects)
-- measured improvements: category score deltas using same category keys
-- remaining_risks: clear list of remaining risks
+The same fields `/harness-audit` reports, so a before and an after compare:
+
+- baseline: `overall_score/max_score`, the category scores (`security_score`, `cost_score`, and the rest) and `top_actions`
+- applied changes: the `top_actions` taken, one object per action with the file path it touched
+- measured improvements: the category score deltas, under the same category keys as the baseline
+- remaining_risks: the risks still open, each with the file or setting it concerns

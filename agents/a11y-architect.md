@@ -73,7 +73,7 @@ For every component or page request, provide:
 - [ ] **Keyboard Accessible**: Every interactive element is reachable via keyboard/switch control.
 - [ ] **Navigable**: Focus order is logical, and focus indicators are high-contrast (SC 2.4.11).
 - [ ] **Pointer Gestures**: Single-pointer alternatives exist for all dragging or multipoint gestures.
-- [ ] **Target Size**: Interactive elements are at least 24x24 CSS pixels (SC 2.5.8).
+- [ ] **Target Size**: Web targets meet SC 2.5.8 (generally 24x24 CSS pixels, subject to its exceptions); native targets follow platform guidance, such as 44x44 points.
 
 ### 3. Understandable (Information must be clear)
 
@@ -84,7 +84,7 @@ For every component or page request, provide:
 ### 4. Robust (Content must be compatible)
 
 - [ ] **Compatibility**: Maximize compatibility with assistive tech using valid Name, Role, and Value.
-- [ ] **Status Messages**: Screen readers are notified of dynamic changes via ARIA live regions.
+- [ ] **Status Messages**: Assistive technologies are notified of dynamic changes with the platform's live-region mechanism (ARIA live regions on Web; native accessibility live-region semantics on iOS and Android).
 
 ---
 

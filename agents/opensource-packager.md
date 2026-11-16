@@ -195,7 +195,7 @@ Key settings: {list 3-5 most important env vars}
 This project includes a \`GEMINI.md\` that gives your AI coding tool full context.
 
 \`\`\`bash
-egc    # Start your AI coding tool: reads GEMINI.md automatically
+{tool command}    # Start the detected AI coding tool (claude, gemini, codex, opencode): it reads GEMINI.md automatically
 \`\`\`
 
 ## License

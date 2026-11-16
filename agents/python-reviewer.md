@@ -66,7 +66,7 @@ mypy .                                     # Type checking
 ruff check .                               # Fast linting
 black --check .                            # Format check
 bandit -r .                                # Security scan
-pytest --cov=app --cov-report=term-missing # Test coverage
+pytest --cov="${COV_TARGET:-.}" --cov-report=term-missing # Test coverage: COV_TARGET is the package to measure, the whole tree by default
 ```
 
 ## Review Output Format
