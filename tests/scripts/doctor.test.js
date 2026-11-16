@@ -1409,6 +1409,30 @@ function runTests() {
     }
   }));
 
+  tally(test('doctor warns about a Token Crusher shim written by another EGC version and names the refresh command (#2137)', () => {
+    const homeDir = createTempDir('doctor-home-');
+    const projectRoot = createTempDir('doctor-project-');
+    try {
+      const shimDir = path.join(homeDir, '.egc', 'bin');
+      fs.mkdirSync(shimDir, { recursive: true });
+      fs.writeFileSync(path.join(shimDir, 'manifest.json'), JSON.stringify({
+        version: '0.0.1', dispatch: 'f'.repeat(64), binaries: { git: GIT_BIN }, launchers: { git: 'f'.repeat(64) },
+      }));
+      const human = run([], { cwd: projectRoot, homeDir });
+      assert.strictEqual(human.code, 0, 'a shim warning never fails the doctor');
+      assert.ok(human.stdout.includes('WARNING: Token Crusher shim in'), human.stdout);
+      assert.ok(human.stdout.includes(`it was written by EGC 0.0.1, this is ${CURRENT_PACKAGE_VERSION}`), human.stdout);
+      assert.ok(human.stdout.includes('Run egc crusher-shim install to refresh it.'), human.stdout);
+      const parsed = JSON.parse(run(['--json'], { cwd: projectRoot, homeDir }).stdout);
+      assert.strictEqual(parsed.crusherShim.state, 'stale');
+      assert.strictEqual(parsed.crusherShim.reason, 'version');
+      assert.strictEqual(parsed.summary.warningCount, 1);
+    } finally {
+      cleanup(homeDir);
+      cleanup(projectRoot);
+    }
+  }));
+
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
   process.exit(failed > 0 ? 1 : 0);
 }
