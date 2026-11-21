@@ -12,10 +12,12 @@
     "simple-git": "^4.0.2",
     "sqlite": "^5.1.1",
     "sqlite3": "^6.0.1",
+    "ws": "^8.23.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
     "typescript": "^7.0.2"
   },
   "engines": {

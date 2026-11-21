@@ -20,7 +20,7 @@ function isSidecar(filePath: string): boolean {
   return filePath.endsWith(SIDECAR_SUFFIX);
 }
 
-const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
+export const TEAM_CONFIG_PATH = path.join(os.homedir(), '.egc', 'team.json');
 
 // What never leaves the machine, whatever the document says: a credential
 // pasted into the state is refused on the way out, and the person is told
