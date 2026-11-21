@@ -181,13 +181,19 @@ async function runTests() {
       teamCli(homeA, ['autosync', 'off']);
       try {
         const before = remoteHead(remote);
+        const listener = start(homeA, { EGC_MEMORY_PUSH_DELAY_MS: '300' });
+        await initialize(listener, 'listener');
+        await callTool(listener, 'session_announce', { project_path: project, territory: 'listening' });
+        await callTool(listener, 'session_events', { project_path: project });
         const server = start(homeA, { EGC_MEMORY_PUSH_DELAY_MS: '300' });
         await initialize(server, 'quiet-writer');
-        await callTool(server, 'update_state', { project_path: project, context: 'Written with the autosync off.' });
+        assert.ok((await callTool(server, 'update_state', { project_path: project, context: 'Written with the autosync off.' })).includes('Project memory updated'), 'the write itself succeeds');
+        await until(async () => parseEvents(await callTool(listener, 'session_events', { project_path: project, peek: true })).some(event => event.kind === 'memory:changed'), 'the notice to reach the listener: the write is told even with the switch off');
         await new Promise(resolve => setTimeout(resolve, 1500));
         assert.strictEqual(remoteHead(remote), before, 'the remote did not move: the switch is off');
         await server.stop();
-        assert.strictEqual(remoteHead(remote), before, 'nor did the stop sync it');
+        await listener.stop();
+        assert.strictEqual(remoteHead(remote), before, 'nor did the stops sync it');
       } finally {
         teamCli(homeA, ['autosync', 'on']);
       }
