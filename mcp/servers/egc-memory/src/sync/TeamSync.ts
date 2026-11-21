@@ -211,7 +211,9 @@ export async function teamSync(): Promise<SyncResult> {
     if (judged.verdict === 'damaged') result.warnings.push(judged.message);
 
     // Step 2: Merge into local state; only verified team envelopes count.
-    const merge = mergeTeamStateFrom(SYNC_STATE_DIR, LOCAL_STATE_DIR, teamKey, personalKey, loadOrCreateIntegrityKey());
+    const integrityKey = loadOrCreateIntegrityKey();
+    const merges: TreeMerge[] = SYNC_TREES.map(tree => ({ tree, outcome: mergeTeamStateFrom(tree.sync, tree.local, teamKey, personalKey, integrityKey) }));
+    const merge = combineMerges(merges);
     const refused = [...merge.rejected, ...merge.unopened];
     result.rejectedCount = refused.length;
     for (const rejected of refused) {
@@ -227,7 +229,7 @@ export async function teamSync(): Promise<SyncResult> {
     if (keyNotProven(merge)) {
       result.errors.push(keyNotProvenMessage(merge.unopened.length));
     } else {
-      await pushSealedState(instance, teamKey, personalKey, merge.unopened, result);
+      await pushSealedState(instance, teamKey, personalKey, merges, result);
     }
 
     // Step 4: Check for conflicts.
@@ -269,6 +271,31 @@ export async function teamStatus(): Promise<SyncStatus> {
 const SYNC_CHECKOUT_DIR = path.join(os.homedir(), '.egc', 'team-sync');
 const SYNC_STATE_DIR = path.join(SYNC_CHECKOUT_DIR, 'state');
 const LOCAL_STATE_DIR = path.join(os.homedir(), '.egc', 'state');
+
+// The trees the sync carries, each sealed and merged document by document:
+// the project states, and the user-wide memory update_state writes with
+// scope "global", which one person's machines share as they share the rest.
+interface SyncTree { label: string; sync: string; local: string }
+const SYNC_TREES: readonly SyncTree[] = [
+  { label: 'state', sync: SYNC_STATE_DIR, local: LOCAL_STATE_DIR },
+  { label: 'global', sync: path.join(SYNC_CHECKOUT_DIR, 'global'), local: path.join(os.homedir(), '.egc', 'global') },
+];
+type TreeMerge = { tree: SyncTree; outcome: TeamMergeOutcome };
+
+// The merges of every tree as one outcome; a path outside the project
+// states is named with its tree, so a message says which file it was.
+function combineMerges(merges: readonly TreeMerge[]): TeamMergeOutcome {
+  const combined: TeamMergeOutcome = { opened: 0, merged: 0, rejected: [], unopened: [], unreadable: [] };
+  for (const { tree, outcome } of merges) {
+    const named = (relativePath: string): string => (tree.sync === SYNC_STATE_DIR ? relativePath : `${tree.label}/${relativePath}`);
+    combined.opened += outcome.opened;
+    combined.merged += outcome.merged;
+    combined.rejected.push(...outcome.rejected.map(named));
+    combined.unopened.push(...outcome.unopened.map(named));
+    combined.unreadable.push(...outcome.unreadable.map(named));
+  }
+  return combined;
+}
 
 function keyNotProven(merge: TeamMergeOutcome): boolean {
   return merge.opened === 0 && merge.unopened.length > 0;
@@ -356,7 +383,7 @@ function isRegularFile(filePath: string): boolean {
 // a link, the same guard the merge applies before it walks the tree.
 function stateFilesOf(syncStateDir: string): string[] {
   if (linkedDirectoryTowards(syncStateDir) || !fs.existsSync(syncStateDir)) return [];
-  return walkEntries(syncStateDir).files.filter(file => !isSidecar(file) && !isHiddenEntry(file, syncStateDir));
+  return walkEntries(syncStateDir).files.filter(file => isStateDocument(file) && !isHiddenEntry(file, syncStateDir));
 }
 
 // Whether the key opens at least one envelope of the sync tree, reading
@@ -419,12 +446,14 @@ function keyNotProvenMessage(count: number): string {
   return `This team key opened none of the remote state (${files}), so nothing was pushed and the shared state was left as it was. If the key is wrong, run egc team init again with the key of the team; if the key is right, the files on the remote are damaged and have to be removed from the repository by hand.`;
 }
 
-async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalKey: Buffer, unopened: readonly string[], result: SyncResult): Promise<void> {
+async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalKey: Buffer, merges: readonly TreeMerge[], result: SyncResult): Promise<void> {
   try {
-    const refusals: StagingRefusal[] = [];
-    stageTeamState(LOCAL_STATE_DIR, SYNC_STATE_DIR, teamKey, personalKey, new Set(unopened), refusals);
-    for (const refusal of refusals) {
-      result.warnings.push(`Not pushed: state/${refusal.path} ${refusal.reason}. Rewrite that document on this machine (update_state rewrites it) and sync again; the version pushed before, if any, stays on the remote.`);
+    for (const { tree, outcome } of merges) {
+      const refusals: StagingRefusal[] = [];
+      stageTeamState(tree.local, tree.sync, teamKey, personalKey, new Set(outcome.unopened), refusals);
+      for (const refusal of refusals) {
+        result.warnings.push(`Not pushed: ${tree.label}/${refusal.path} ${refusal.reason}. Rewrite that document on this machine (update_state rewrites it) and sync again; the version pushed before, if any, stays on the remote.`);
+      }
     }
     // The key is the team's here (it opened a file, or the repository holds
     // no state yet): a repository without the marker, or with a damaged
@@ -638,7 +667,7 @@ export function mergeTeamStateFrom(syncStateDir: string, localStateDir: string, 
   // written locally.
   for (const stray of entries.files.filter(file => isSidecar(file) || isHiddenEntry(file, syncStateDir))) removeSyncFile(stray);
   const context: MergeContext = { syncStateDir, localStateDir, teamKey, personalKey, integrityKey, outcome, legacy: indexLegacyDocuments(localStateDir, personalKey) };
-  for (const syncFile of entries.files.filter(file => !isSidecar(file) && !isHiddenEntry(file, syncStateDir))) mergeOneSyncFile(syncFile, context);
+  for (const syncFile of entries.files.filter(file => isStateDocument(file) && !isHiddenEntry(file, syncStateDir))) mergeOneSyncFile(syncFile, context);
   // A team sync never removes local state files: a file absent from the sync
   // repo may be one this machine created and has not pushed yet, and deleting
   // it would be silent, unrecoverable memory loss. Remote deletions therefore
@@ -732,7 +761,7 @@ function indexLegacyDocuments(localStateDir: string, personalKey: Buffer): Map<s
   const index = new Map<string, LegacyDocument>();
   if (!fs.existsSync(localStateDir)) return index;
   for (const file of walkEntries(localStateDir).files) {
-    if (isSidecar(file)) continue;
+    if (!isStateDocument(file)) continue;
     let content: string;
     try {
       content = readStateFile(file, personalKey);
@@ -772,7 +801,7 @@ function refusalFor(plaintext: string, bytes: number, stagedBytes: number, limit
 function collectDocuments(context: StageContext): Map<string, string> {
   const byPath = new Map<string, string>();
   for (const localFile of walkEntries(context.localStateDir).files) {
-    if (isSidecar(localFile) || isHiddenEntry(localFile, context.localStateDir)) continue;
+    if (!isStateDocument(localFile) || isHiddenEntry(localFile, context.localStateDir)) continue;
     let plaintext: string;
     try {
       plaintext = readStateFile(localFile, context.personalKey);
@@ -838,6 +867,15 @@ export function stageTeamState(localStateDir: string, syncStateDir: string, team
 
   const context: StageContext = { localStateDir, syncStateDir, teamKey, personalKey, keep, refused: refusals, limits };
   return sealDocuments(collectDocuments(context), context);
+}
+
+// A state document is a Markdown file. What else sits in a state tree (the
+// lock beside a document while update_state writes it, the backup of a
+// document that did not open) belongs to its machine: it is neither shared
+// nor merged, and a file of that kind already in the shared tree is left
+// where it is.
+function isStateDocument(filePath: string): boolean {
+  return filePath.endsWith('.md');
 }
 
 // A hidden entry under the state tree is not a state document: the hooks
