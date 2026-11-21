@@ -247,7 +247,8 @@ async function runTests() {
     for (const bridge of bridges) await bridge.stop();
     await hub.close();
     for (const db of databases) await db.close?.();
-    fs.rmSync(root, { recursive: true, force: true });
+    // Windows releases the handles of a closed database a moment later.
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
