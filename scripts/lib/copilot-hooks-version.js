@@ -13,6 +13,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { HOOK_OPERATION_KIND, readSettingsFile } = require('./claude-settings-hook-core');
+const { replaceFileWith } = require('./install/preserving-write');
 
 const COPILOT_HOOKS_VERSION = 1;
 const COPILOT_HOOKS_VERSION_TAG = 'copilot:hooks-version';
@@ -34,7 +35,10 @@ function applyCopilotHooksVersionToFile(hooksFilePath) {
   const current = readSettingsFile(hooksFilePath);
   if (current.version === COPILOT_HOOKS_VERSION && isPlainObject(current.hooks)) return { changed: false };
   fs.mkdirSync(path.dirname(hooksFilePath), { recursive: true });
-  fs.writeFileSync(hooksFilePath, `${JSON.stringify(withVersion(current), null, 2)}\n`, 'utf8');
+  // The same atomic replacement every managed file gets: a link planted at
+  // the path is replaced, never written through.
+  const text = `${JSON.stringify(withVersion(current), null, 2)}\n`;
+  replaceFileWith(hooksFilePath, descriptor => fs.writeFileSync(descriptor, text, 'utf8'));
   return { changed: true };
 }
 

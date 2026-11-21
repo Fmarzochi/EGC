@@ -2916,6 +2916,25 @@ function runTests() {
     assert.strictEqual(hooksFileOperations.at(-1).hookEvent, 'copilot:hooks-version', 'the version of the Copilot hooks file is written after every entry');
   }));
 
+  tally(test('COPILOT_HOME moves the whole Copilot root: the hooks file, the skills and the managed roots', () => {
+    const repoRoot = path.join(__dirname, '..', '..');
+    const homeDir = '/Users/example';
+    const custom = '/Volumes/work/copilot-home';
+    const previous = process.env.COPILOT_HOME;
+    process.env.COPILOT_HOME = custom;
+    try {
+      const plan = planInstallTargetScaffold({ target: 'copilot', repoRoot, homeDir, modules: [] });
+      const hooksFilePath = path.join(custom, 'hooks', 'hooks.json');
+      assert.ok(plan.operations.some(operation => operation.destinationPath === hooksFilePath && operation.hookEvent === 'SessionStart'), 'SessionStart is registered under COPILOT_HOME');
+      assert.ok(!plan.operations.some(operation => operation.destinationPath.startsWith(path.join(homeDir, '.copilot'))), 'nothing is planned under ~/.copilot when COPILOT_HOME is set');
+      const adapter = getInstallTargetAdapter('copilot');
+      assert.deepStrictEqual(adapter.resolveManagedRoots({ homeDir, repoRoot }, adapter), [path.join(homeDir, '.github'), custom], 'retirement and uninstall look under COPILOT_HOME');
+    } finally {
+      if (previous === undefined) delete process.env.COPILOT_HOME;
+      else process.env.COPILOT_HOME = previous;
+    }
+  }));
+
   // Antigravity has no Token Crusher hook: its hooks answer a decision, never
   // a rewritten command (tests/lib/antigravity-mesh-hooks.test.js).
   tally(test('crusher hook is registered on Bash and scaffolded for Copilot', () => {

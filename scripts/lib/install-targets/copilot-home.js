@@ -29,6 +29,7 @@ const {
   createPreToolUseBashGuardianHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
+  resolveCopilotHome: resolveCopilotRoot,
   resolveCopilotHooksFilePath,
 } = require('../copilot-settings-hooks');
 const { createCopilotHooksVersionOperation } = require('../copilot-hooks-version');
@@ -76,9 +77,11 @@ const GATEGUARD_SCRIPT_SIBLING_SOURCE_RELATIVE_PATHS = [
   'scripts/hooks/gateguard-retry-judge.js',
 ];
 
+// The ~/.copilot root (or COPILOT_HOME), resolved once for the skills, the
+// hooks and the managed roots alike.
 function resolveCopilotHome(input) {
   const home = typeof input === 'string' ? input : input?.homeDir;
-  return path.join(home || os.homedir(), '.copilot');
+  return resolveCopilotRoot(home || os.homedir());
 }
 
 function isSymbolicLink(target) {

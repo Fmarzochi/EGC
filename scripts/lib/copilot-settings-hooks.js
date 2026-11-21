@@ -37,14 +37,19 @@ const SESSION_HOOK_MODULE_ID = 'egc-copilot-session-hook';
 const SESSION_START_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/copilot-session-start.js';
 const STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/team-sync-stop.js';
 
-// The user-level hooks file Copilot reads: under COPILOT_HOME when the
-// person set it, else under ~/.copilot (the CLI reference lists
+// The root Copilot keeps its user-level files under (skills, hooks): the
+// directory COPILOT_HOME names when the person set it, else ~/.copilot. One
+// resolution for every Copilot destination, so an install with a custom
+// home is whole, and its retirement and uninstall find what it wrote.
+function resolveCopilotHome(homeDir) {
+  const custom = typeof process.env.COPILOT_HOME === 'string' ? process.env.COPILOT_HOME.trim() : '';
+  return custom ? path.resolve(custom) : path.join(homeDir, '.copilot');
+}
+
+// The user-level hooks file Copilot reads (the CLI reference lists
 // `$COPILOT_HOME/hooks/` beside `~/.copilot/hooks/`).
 function resolveCopilotHooksFilePath(homeDir) {
-  const copilotHome = typeof process.env.COPILOT_HOME === 'string' && process.env.COPILOT_HOME.trim()
-    ? path.resolve(process.env.COPILOT_HOME.trim())
-    : path.join(homeDir, '.copilot');
-  return path.join(copilotHome, 'hooks', 'hooks.json');
+  return path.join(resolveCopilotHome(homeDir), 'hooks', 'hooks.json');
 }
 
 function resolveSessionStartHookScriptDestination(targetRoot) {
@@ -118,6 +123,7 @@ module.exports = {
   createPreToolUseBashGuardianHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
+  resolveCopilotHome,
   resolveCopilotHooksFilePath,
   resolveSessionStartHookScriptDestination,
   resolveStopHookScriptDestination,
