@@ -517,7 +517,7 @@ function walkEntries(dir: string): { files: string[]; links: string[] } {
   return found;
 }
 
-function isLink(filePath: string): boolean {
+export function isLink(filePath: string): boolean {
   try {
     return fs.lstatSync(filePath).isSymbolicLink();
   } catch {
@@ -527,7 +527,7 @@ function isLink(filePath: string): boolean {
 
 // Whether any directory between `root` (exclusive) and `filePath`
 // (exclusive) is a link: a write there would land elsewhere.
-function hasLinkedAncestor(filePath: string, root: string): boolean {
+export function hasLinkedAncestor(filePath: string, root: string): boolean {
   let probe = path.dirname(filePath);
   const top = path.resolve(root);
   while (probe !== top && probe.startsWith(top + path.sep)) {
@@ -553,7 +553,7 @@ function descendantPrefix(root: string): string {
 
 // The first directory between a trusted root (exclusive) and `dir`
 // (inclusive) that is a link, or null when the whole chain is real.
-function linkedDirectoryTowards(dir: string): string | null {
+export function linkedDirectoryTowards(dir: string): string | null {
   const resolved = path.resolve(dir);
   const root = trustedRoots().find(candidate => resolved.startsWith(descendantPrefix(candidate)));
 

@@ -347,7 +347,7 @@ export class MeshBridge {
   private forwardStateDocument(event: SharedEvent, to: string): boolean {
     if (event.kind !== MEMORY_CHANGED_KIND) return true;
     const notice = parseMemoryChange(event.payload);
-    if (!notice || notice.kind !== 'state') return true;
+    if (notice?.kind !== 'state') return true;
     let envelope;
     try {
       envelope = sealStateDocument(this.options.home, this.keys, this.options.teamKey, notice);
@@ -499,11 +499,19 @@ export class MeshBridge {
       return;
     }
     if (type === 'state-envelope') {
-      const outcome = receiveStateEnvelope(this.options.home, this.keys, this.options.teamKey, body);
-      if (outcome && outcome.merged > 0) this.log(`mesh: state from ${from.slice(0, 8)} merged into this machine`);
+      this.applyStateEnvelope(from, body);
       return;
     }
     if (type === 'event') await this.applyEvent(body);
+  }
+
+  // A sealed state document another machine sent: merged into the state of
+  // this machine, or refused with the reason in the log.
+  private applyStateEnvelope(from: string, body: unknown): void {
+    const outcome = receiveStateEnvelope(this.options.home, this.keys, this.options.teamKey, body);
+    if (!outcome) return;
+    if (outcome.merged > 0) this.log(`mesh: state from ${from.slice(0, 8)} merged into this machine`);
+    if (outcome.rejected.length > 0) this.log(`mesh: state from ${from.slice(0, 8)} refused: ${outcome.rejected.join(', ')}`);
   }
 
   // An event for a session here, filed on the bus. Memory changed on another
