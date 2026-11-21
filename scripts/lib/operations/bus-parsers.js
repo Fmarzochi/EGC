@@ -50,7 +50,7 @@ function _tokenEnd(text, i) {
 // the line apart (its closing delimiter, whitespace in a token, the percent
 // sign itself); this undoes exactly that, and leaves any other text alone.
 function _decodeField(value) {
-  return value.replace(/%([0-9A-Fa-f]{2})/g, (match, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+  return value.replace(/%([0-9A-Fa-f]{2})/g, (match, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
 }
 
 // An optional bracketed field: at least one whitespace, the opener, then the

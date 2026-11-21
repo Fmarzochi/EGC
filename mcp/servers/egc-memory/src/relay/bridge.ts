@@ -228,7 +228,7 @@ export class MeshBridge {
     // is up yet or not. The boundary is the time of this start, taken here
     // and now, not a snapshot of the queue read later: an event written while
     // the bridge starts is after the boundary and leaves.
-    if (this.startedAt === null) this.startedAt = new Date(this.now()).toISOString();
+    this.startedAt ??= new Date(this.now()).toISOString();
     this.connect();
   }
 
@@ -295,7 +295,7 @@ export class MeshBridge {
   // look: direct events for their sessions, broadcasts, and a change in the
   // locks this machine holds, told at once instead of with the next presence.
   async forward(): Promise<void> {
-    if (this.forwardRun || !this.connected) return;
+    if (this.forwardRun !== null || !this.connected) return;
     this.forwardRun = this.forwardOnce().finally(() => {
       this.forwardRun = null;
     });
