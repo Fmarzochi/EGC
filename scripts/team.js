@@ -339,7 +339,9 @@ async function handleInvite(args) {
     announce: !args.includes('--no-announce'),
     confirm: askSameCode(pairing),
     onReady: info => {
-      const where = info.addresses.length > 0 ? info.addresses.map(address => `${address}:${info.port}`).join('  or  ') : `<this machine>:${info.port}`;
+      // An IPv6 address goes in brackets before the port, as join reads it.
+      const shown = address => (address.includes(':') && !address.startsWith('[') ? `[${address}]` : address);
+      const where = info.addresses.length > 0 ? info.addresses.map(address => `${shown(address)}:${info.port}`).join('  or  ') : `<this machine>:${info.port}`;
       const found = info.announced ? '\n  egc team join                 (finds this machine on the local network)' : '';
       console.log(`Waiting for your other machine (5 min). On it, run:${found}\n  egc team join ${where}`);
     },
@@ -356,6 +358,12 @@ async function handleJoin(args) {
   const existing = readTeamConfig();
   if (existing && TEAM_KEY_RE.test(existing.teamKey ?? '')) {
     console.error(`This machine already has a team (${displayRemote(existing.remote)}): run \`egc team leave\` first to join another.`);
+    process.exit(1);
+  }
+  // A configuration that is there but does not read as a team is not
+  // written over: it may be damaged team data the person wants back.
+  if (fs.existsSync(TEAM_CONFIG_PATH)) {
+    console.error(`This machine has a team configuration that cannot be read as a team (${TEAM_CONFIG_PATH}): look at it, or run \`egc team leave\` to set it aside, before joining.`);
     process.exit(1);
   }
   const address = args[1] && !args[1].startsWith('--') ? args[1] : undefined;

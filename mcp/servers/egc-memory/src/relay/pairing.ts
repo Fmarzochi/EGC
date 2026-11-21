@@ -1,13 +1,14 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import { Bonjour } from 'bonjour-service';
 import type { Service } from 'bonjour-service';
 
 import type { SyncConfig } from '../sync/SyncBackend';
-import { writeTeamConfig } from '../sync/TeamSync';
+import { TEAM_CONFIG_PATH, writeTeamConfig } from '../sync/TeamSync';
 import { pickAddress } from './discovery';
-import { writeMeshConfig } from './mesh-config';
+import { clearMeshConfig, writeMeshConfig } from './mesh-config';
 import { newHexId, openBox, sealBox } from './protocol';
 
 // A new machine joins the team by a short code. The machine that is in the
@@ -29,6 +30,11 @@ const MAX_LINE_BYTES = 64 * 1024;
 const PUBLIC_KEY_BYTES = 32;
 const DONE_GRACE_MS = 10_000;
 const MAX_SERVICE_NAME = 63;
+// Frames kept for a side that has not asked for the next one yet (the
+// person is reading the code); a peer that sends more is cut off.
+const MAX_QUEUED_FRAMES = 8;
+// How long a connection has to say hello before the invitation is free again.
+const HELLO_TIMEOUT_MS = 10_000;
 
 export interface PairingKeys {
   publicKey: Buffer;
@@ -54,6 +60,16 @@ function publicKeyFromRaw(raw: Buffer): crypto.KeyObject {
 
 export function sharedSecret(mine: PairingKeys, theirs: Buffer): Buffer {
   return crypto.diffieHellman({ privateKey: mine.privateKey, publicKey: publicKeyFromRaw(theirs) });
+}
+
+// Null for 32 bytes that are not a key of the curve: the exchange is
+// refused, nothing derived from it.
+function sharedSecretOrNull(mine: PairingKeys, theirs: Buffer): Buffer | null {
+  try {
+    return sharedSecret(mine, theirs);
+  } catch {
+    return null;
+  }
 }
 
 // The two public keys in one order, whichever side derives: the code and
@@ -120,6 +136,7 @@ class Wire {
   private buffer = '';
   private readonly queue: Frame[] = [];
   private readonly waiting: Array<(frame: Frame | null) => void> = [];
+  private readonly closeWatchers: Array<() => void> = [];
   private closed = false;
   private readonly timer: NodeJS.Timeout;
 
@@ -131,14 +148,19 @@ class Wire {
     this.timer = setTimeout(() => this.end(), timeoutMs);
   }
 
+  get isClosed(): boolean {
+    return this.closed;
+  }
+
   private onData(chunk: string): void {
+    if (this.closed) return;
     this.buffer += chunk;
     if (this.buffer.length > MAX_LINE_BYTES) {
       this.end();
       return;
     }
     let at = this.buffer.indexOf('\n');
-    while (at !== -1) {
+    while (at !== -1 && !this.closed) {
       const line = this.buffer.slice(0, at).trim();
       this.buffer = this.buffer.slice(at + 1);
       if (line) this.deliver(parseFrame(line));
@@ -146,17 +168,34 @@ class Wire {
     }
   }
 
+  // A frame to whoever waits for one, or kept for the next call; a peer
+  // that sends more than a reading person can take is cut off.
   private deliver(frame: Frame | null): void {
     const waiter = this.waiting.shift();
-    if (waiter) waiter(frame);
-    else if (frame) this.queue.push(frame);
+    if (waiter) {
+      waiter(frame);
+      return;
+    }
+    if (!frame) return;
+    if (this.queue.length >= MAX_QUEUED_FRAMES) {
+      this.end();
+      return;
+    }
+    this.queue.push(frame);
   }
 
-  // The next frame, or null when the wire closed or the budget ran out.
+  // The next frame, or null once the wire closed or the budget ran out: a
+  // frame that arrived before the close is not read after it.
   next(): Promise<Frame | null> {
-    if (this.queue.length > 0) return Promise.resolve(this.queue.shift() ?? null);
     if (this.closed) return Promise.resolve(null);
+    if (this.queue.length > 0) return Promise.resolve(this.queue.shift() ?? null);
     return new Promise(resolve => this.waiting.push(resolve));
+  }
+
+  // Settles when the wire closes, for a wait on the person to stop with it.
+  whenClosed(): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    return new Promise(resolve => this.closeWatchers.push(resolve));
   }
 
   send(frame: Frame): void {
@@ -167,10 +206,26 @@ class Wire {
     if (this.closed) return;
     this.closed = true;
     clearTimeout(this.timer);
+    this.queue.splice(0);
     for (const waiter of this.waiting.splice(0)) waiter(null);
+    for (const watcher of this.closeWatchers.splice(0)) watcher();
     this.socket.end();
     setTimeout(() => this.socket.destroy(), 1000).unref();
   }
+}
+
+// The answer of the person, or false once the wire closed (the other
+// machine left, or the budget ran out): nobody waits on a question whose
+// answer no longer matters. isClosed tells the two apart.
+function confirmWhileOpen(wire: Wire, confirm: (code: string) => Promise<boolean>, code: string): Promise<boolean> {
+  return Promise.race([confirm(code), wire.whenClosed().then(() => false)]);
+}
+
+// The public key of a connection that says hello in time, or null for one
+// that does not: a connection alone takes no invitation.
+async function awaitHello(wire: Wire, timeoutMs: number): Promise<Buffer | null> {
+  const hello = await Promise.race([wire.next(), new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs).unref())]);
+  return hello?.t === 'hello' ? publicKeyOf(hello) : null;
 }
 
 export interface PairOutcome {
@@ -232,6 +287,7 @@ export async function invite(options: InviteOptions): Promise<PairOutcome> {
   const shown = wildcard ? lanAddresses() : [host.includes(':') ? `[${host}]` : host];
   options.onReady?.({ port, addresses: shown, announced: announcement !== null });
 
+  const wires = new Set<Wire>();
   const outcome = await new Promise<PairOutcome>(resolve => {
     let taken = false;
     const deadline = setTimeout(() => resolve(refused('no machine joined in time')), timeoutMs);
@@ -240,31 +296,44 @@ export async function invite(options: InviteOptions): Promise<PairOutcome> {
         socket.end(`${JSON.stringify({ t: 'abort', reason: 'another machine is pairing' })}\n`);
         return;
       }
-      taken = true;
-      clearTimeout(deadline);
-      hostExchange(new Wire(socket, timeoutMs), keys, options).then(resolve, error => resolve(refused(error instanceof Error ? error.message : String(error))));
+      // The invitation goes to the first connection that says hello in
+      // time; one that only holds the socket is dropped, and the next may come.
+      const wire = new Wire(socket, timeoutMs);
+      wires.add(wire);
+      wire.whenClosed().then(() => wires.delete(wire));
+      awaitHello(wire, HELLO_TIMEOUT_MS).then(theirs => {
+        if (!theirs || taken) {
+          if (theirs) wire.send({ t: 'abort', reason: 'another machine is pairing' });
+          wire.end();
+          return;
+        }
+        taken = true;
+        clearTimeout(deadline);
+        hostExchange(wire, theirs, keys, options).then(resolve, error => resolve(refused(error instanceof Error ? error.message : String(error))));
+      });
     });
   });
+  for (const wire of wires) wire.end();
   await announcement?.stop();
   await new Promise<void>(resolve => server.close(() => resolve()));
   return outcome;
 }
 
-async function hostExchange(wire: Wire, keys: PairingKeys, options: InviteOptions): Promise<PairOutcome> {
+async function hostExchange(wire: Wire, theirs: Buffer, keys: PairingKeys, options: InviteOptions): Promise<PairOutcome> {
   try {
-    const hello = await wire.next();
-    const theirs = hello?.t === 'hello' ? publicKeyOf(hello) : null;
-    if (!theirs) return refused('the other machine did not start the exchange');
     wire.send({ t: 'hello', v: PAIR_PROTOCOL_VERSION, pub: keys.publicKey.toString('base64') });
-    const shared = sharedSecret(keys, theirs);
+    const shared = sharedSecretOrNull(keys, theirs);
+    if (!shared) return refused('the key the other machine sent is not a valid key: nothing was shared');
     const code = pairingCode(shared, keys.publicKey, theirs);
-    // The other side answers while the person reads the code here; the
-    // team crosses only with a yes from both.
-    const [mine, answer] = await Promise.all([options.confirm(code), wire.next()]);
+    // The person reads the code here while the other side answers; the wait
+    // ends with the wire, and the team crosses only with a yes from both.
+    const mine = await confirmWhileOpen(wire, options.confirm, code);
     if (!mine) {
+      if (wire.isClosed) return refused('the other machine left before you answered: nothing was shared');
       wire.send({ t: 'abort', reason: 'refused on the inviting machine' });
       return refused('you said the codes differ: nothing was shared');
     }
+    const answer = await wire.next();
     if (answer?.t !== 'confirm') {
       return refused(answer?.t === 'abort' ? 'the other machine said the codes differ: nothing was shared' : 'the other machine left before confirming');
     }
@@ -353,9 +422,26 @@ function cleanTeam(value: unknown): { team: TeamConfig; central: string | null }
   return { team: handed, central };
 }
 
+// The team and its central land together: the team first, the central
+// next, and a central that will not be written puts the team file back as it
+// was, so a failure never leaves half a join. A team without a central clears
+// the central a previous team left, so the bridge does not go back to it.
 function writeTeam(team: TeamConfig, central: string | null): void {
+  let previous: Buffer | null;
+  try {
+    previous = fs.readFileSync(TEAM_CONFIG_PATH);
+  } catch {
+    previous = null;
+  }
   writeTeamConfig(team);
-  if (central) writeMeshConfig(central);
+  try {
+    if (central) writeMeshConfig(central);
+    else clearMeshConfig();
+  } catch (error) {
+    if (previous === null) fs.rmSync(TEAM_CONFIG_PATH, { force: true });
+    else fs.writeFileSync(TEAM_CONFIG_PATH, previous);
+    throw error;
+  }
 }
 
 function parseAddress(address: string): { host: string; port: number } | null {
@@ -381,39 +467,57 @@ async function resolveInvitation(options: JoinOptions): Promise<{ host: string; 
 export async function join(options: JoinOptions): Promise<JoinOutcome> {
   const target = await resolveInvitation(options);
   if ('paired' in target) return target;
-  const timeoutMs = options.timeoutMs ?? PAIR_TIMEOUT_MS;
   const keys = newPairingKeys();
   const socket = net.connect({ host: target.host, port: target.port });
-  const wire = new Wire(socket, timeoutMs);
+  const wire = new Wire(socket, options.timeoutMs ?? PAIR_TIMEOUT_MS);
   try {
     const connected = await new Promise<boolean>(resolve => {
       socket.once('connect', () => resolve(true));
       socket.once('error', () => resolve(false));
     });
     if (!connected) return joinRefused(`${target.host}:${target.port} did not answer`);
-    wire.send({ t: 'hello', v: PAIR_PROTOCOL_VERSION, pub: keys.publicKey.toString('base64') });
-    const hello = await wire.next();
-    if (hello?.t === 'abort') return joinRefused(hello.reason ?? 'the invitation refused');
-    const theirs = hello?.t === 'hello' ? publicKeyOf(hello) : null;
-    if (!theirs) return joinRefused('the inviting machine did not answer the exchange');
-    const shared = sharedSecret(keys, theirs);
-    const code = pairingCode(shared, keys.publicKey, theirs);
-    if (!(await options.confirm(code))) {
-      wire.send({ t: 'abort', reason: 'refused on the joining machine' });
-      return joinRefused('you said the codes differ: nothing was written');
-    }
-    wire.send({ t: 'confirm' });
-    const frame = await wire.next();
-    if (frame?.t !== 'team') {
-      return joinRefused(frame?.t === 'abort' ? 'the inviting machine said the codes differ: nothing was written' : 'the inviting machine left before sharing the team');
-    }
-    const opened = openBox(pairingSealKey(shared, keys.publicKey, theirs), { from: theirs.toString('base64'), to: keys.publicKey.toString('base64'), id: frame.id }, frame.box);
-    const handed = opened?.message.type === 'team' ? cleanTeam(opened.message.body) : null;
-    if (!handed) return joinRefused('what the inviting machine sent did not open as a team: nothing was written');
-    (options.write ?? writeTeam)(handed.team, handed.central);
-    wire.send({ t: 'done' });
-    return { paired: true, reason: null, team: { backend: handed.team.backend, remote: handed.team.remote, branch: handed.team.branch }, central: handed.central };
+    return await joinExchange(wire, keys, options);
   } finally {
     wire.end();
   }
+}
+
+// The exchange from the joining side: hello, the code, a yes from the
+// person while the wire is open, then the team sealed by the exchange.
+async function joinExchange(wire: Wire, keys: PairingKeys, options: JoinOptions): Promise<JoinOutcome> {
+  wire.send({ t: 'hello', v: PAIR_PROTOCOL_VERSION, pub: keys.publicKey.toString('base64') });
+  const hello = await wire.next();
+  if (hello?.t === 'abort') return joinRefused(hello.reason ?? 'the invitation refused');
+  const theirs = hello?.t === 'hello' ? publicKeyOf(hello) : null;
+  if (!theirs) return joinRefused('the inviting machine did not answer the exchange');
+  const shared = sharedSecretOrNull(keys, theirs);
+  if (!shared) return joinRefused('the key the inviting machine sent is not a valid key: nothing was written');
+  const code = pairingCode(shared, keys.publicKey, theirs);
+  const yes = await confirmWhileOpen(wire, options.confirm, code);
+  if (!yes) {
+    if (wire.isClosed) return joinRefused('the inviting machine left before you answered: nothing was written');
+    wire.send({ t: 'abort', reason: 'refused on the joining machine' });
+    return joinRefused('you said the codes differ: nothing was written');
+  }
+  wire.send({ t: 'confirm' });
+  const frame = await wire.next();
+  if (frame?.t !== 'team') {
+    return joinRefused(frame?.t === 'abort' ? 'the inviting machine said the codes differ: nothing was written' : 'the inviting machine left before sharing the team');
+  }
+  const opened = openBox(pairingSealKey(shared, keys.publicKey, theirs), { from: theirs.toString('base64'), to: keys.publicKey.toString('base64'), id: frame.id }, frame.box);
+  const handed = opened?.message.type === 'team' ? cleanTeam(opened.message.body) : null;
+  if (!handed) return joinRefused('what the inviting machine sent did not open as a team: nothing was written');
+  return writeHanded(wire, handed, options);
+}
+
+// The team written where the caller keeps it; a write that fails leaves the
+// machine as it was and is told as a refusal, not thrown at the person.
+function writeHanded(wire: Wire, handed: { team: TeamConfig; central: string | null }, options: JoinOptions): JoinOutcome {
+  try {
+    (options.write ?? writeTeam)(handed.team, handed.central);
+  } catch (error) {
+    return joinRefused(`the team could not be written (${error instanceof Error ? error.message : String(error)}): this machine is as it was`);
+  }
+  wire.send({ t: 'done' });
+  return { paired: true, reason: null, team: { backend: handed.team.backend, remote: handed.team.remote, branch: handed.team.branch }, central: handed.central };
 }
