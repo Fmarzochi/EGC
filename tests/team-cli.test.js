@@ -89,11 +89,12 @@ function treeDigest(root) {
   return digest;
 }
 
-function teamCli(args) {
+function teamCli(args, input) {
   return spawnSync(process.execPath, [TEAM_CLI, ...args], {
     encoding: 'utf8',
     env: TEST_ENV,
     timeout: CLI_TIMEOUT_MS,
+    input,
   });
 }
 
@@ -232,6 +233,34 @@ function runTests() {
         assert.strictEqual(run.status, 1, `an init the checkout does not follow exits 1:\n${run.stdout}\n${run.stderr}`);
         assert.ok(`${run.stdout}\n${run.stderr}`.includes('Remove that directory'), `${run.stdout}\n${run.stderr}`);
         assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is put back');
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
+    });
+
+    run('team init with --key alone reads the key typed without showing it, and never prints it', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      const key = JSON.parse(saved).teamKey;
+      try {
+        const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--key'], `${key}\n`);
+        assert.strictEqual(run.status, 0, `the typed key is accepted:\n${run.stdout}\n${run.stderr}`);
+        assert.ok(run.stderr.includes('Team key (64 hexadecimal characters, not shown):'), `the prompt is shown:\n${run.stderr}`);
+        assert.ok(!run.stdout.includes(key) && !run.stderr.includes(key), 'the key is never printed');
+        assert.strictEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')).teamKey, key, 'the typed key is the key of the configuration');
+      } finally {
+        fs.writeFileSync(configPath, saved);
+      }
+    });
+
+    run('team init with --key alone and a value that is not a key exits 1 and writes nothing', () => {
+      const configPath = path.join(HOME, '.egc', 'team.json');
+      const saved = fs.readFileSync(configPath, 'utf8');
+      try {
+        const run = teamCli(['init', '--backend', 'git', '--remote', REMOTE, '--key'], 'not-a-key\n');
+        assert.strictEqual(run.status, 1, `${run.stdout}\n${run.stderr}`);
+        assert.ok(run.stderr.includes('the key typed is not 64 hexadecimal characters'), run.stderr);
+        assert.strictEqual(fs.readFileSync(configPath, 'utf8'), saved, 'the configuration this machine had is untouched');
       } finally {
         fs.writeFileSync(configPath, saved);
       }
