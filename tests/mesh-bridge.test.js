@@ -79,6 +79,7 @@ async function runTests() {
   const meshConfig = await import(pathToFileURL(path.join(BUILD, 'relay', 'mesh-config.js')).href);
   const { openCompatDatabase } = await import(pathToFileURL(path.join(BUILD, 'sqlite-compat.js')).href);
   const bus = await import(pathToFileURL(path.join(BUILD, 'session-bus.js')).href);
+  const notify = await import(pathToFileURL(path.join(BUILD, 'memory-notify.js')).href);
 
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'egc-mesh-bridge-'));
   const teamKey = Buffer.alloc(32, 5);
@@ -264,6 +265,33 @@ async function runTests() {
       await first.stop();
       await second.stop();
       assert.ok(!fs.existsSync(lockFile), 'the stopped bridge released its lock');
+    });
+
+    await test('a word that memory changed on another machine pulls the team state here, sooner than a write of our own would push', async () => {
+      const pulls = [];
+      notify.configureMemorySync({ sync: async () => { pulls.push(Date.now()); }, enabled: () => true, pullDelayMs: 100, pushDelayMs: 60_000 });
+      try {
+        const d = await machine('home-d');
+        const f = await machine('home-f');
+        const bridgeD = bridgeFor(d);
+        const bridgeF = bridgeFor(f);
+        bridgeD.start();
+        bridgeF.start();
+        await until(() => bridgeD.connected && bridgeF.connected, 'D and F to connect');
+        await bus.announce(d.db, { sessionId: 'tab-on-d', projectPath: projectOnA, territory: 'writing' });
+        await bus.announce(f.db, { sessionId: 'tab-on-f', projectPath: projectOnB, territory: 'reading' });
+        await until(async () => (await bus.listRemoteSessions(d.db)).some(session => session.id === 'tab-on-f'), 'the presence of F to reach D');
+        const told = await bus.sendEvent(d.db, { fromSession: 'tab-on-d', projectPath: projectOnA, kind: notify.MEMORY_CHANGED_KIND, payload: JSON.stringify({ kind: 'state', projectPath: projectOnA, branch: 'main', scope: 'project' }) });
+        assert.strictEqual(told.ok, true);
+        const sentAt = Date.now();
+        await until(() => pulls.length >= 1, 'F to pull after the word from D');
+        assert.ok(pulls[0] - sentAt < 8000, 'the pull came within the budget');
+        await until(async () => (await bus.readEvents(f.db, { sessionId: 'tab-on-f', projectPath: projectOnB })).some(event => event.kind === notify.MEMORY_CHANGED_KIND), 'the notice to be on the bus of F for its sessions');
+        await bridgeD.stop();
+        await bridgeF.stop();
+      } finally {
+        notify.configureMemorySync();
+      }
     });
 
     await test('egc mesh connect, status, label and disconnect keep the configuration and the identity', () => {

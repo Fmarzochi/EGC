@@ -7,6 +7,8 @@ import { writeArbitrator, isLessonsSearchIndexReady } from './memory-db';
 import { resolveProjectPath } from './memory-project-path';
 import { searchLessons } from './search.js';
 import { sanitize, sanitizeStrings } from './sanitize.js';
+import { BUS_SESSION_ID } from './memory-session-bus';
+import { notifyMemoryChanged } from './memory-notify';
 
 const LESSON_REINFORCE_DELTA = 0.15;
 const LESSON_DECAY_DELTA_PER_WEEK = 0.05;
@@ -118,13 +120,17 @@ export async function handleLessonSave(db: Database, args: unknown) {
   }
 
   // Exact-match deduplication: reinforce an identical lesson instead of duplicating.
-  const duplicate = await db.get<{id: string}>(
-    'SELECT id FROM lessons WHERE content = ? AND context = ? AND archived = 0',
+  const duplicate = await db.get<{ id: string; project_path: string | null }>(
+    'SELECT id, project_path FROM lessons WHERE content = ? AND context = ? AND archived = 0',
     [content, context]
   );
   if (duplicate) {
     log('INFO', 'Lesson deduplicated via exact match, reinforcing', { id: duplicate.id });
-    return await handleLessonReinforce(db, { id: duplicate.id });
+    const reinforced = await handleLessonReinforce(db, { id: duplicate.id });
+    // The notice names the project of the lesson that changed, which may not
+    // be the project of the caller.
+    await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'lesson', projectPath: duplicate.project_path ?? null });
+    return reinforced;
   }
 
   const id = generateLessonId();
@@ -137,6 +143,7 @@ export async function handleLessonSave(db: Database, args: unknown) {
       [id, content, context, initial_confidence, now, normalizedTags, projPath, authorName]
     );
   });
+  await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'lesson', projectPath: projPath ?? null });
   log('INFO', 'Lesson saved', { id, context, author: authorName });
   return { content: [{ type: "text", text: JSON.stringify({ id, content, context, confidence: initial_confidence, tags: normalizedTags, createdAt: now, author: authorName }, null, 2) }] };
 }
