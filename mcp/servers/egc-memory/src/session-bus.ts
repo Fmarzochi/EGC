@@ -341,15 +341,7 @@ export async function recordInboundEvent(db: BusDb, value: unknown, nowMs: numbe
 // a broadcast with no repository reaches every session. null when nobody
 // here would read it.
 function inboundDestinations(event: SharedEvent, sessions: Record<string, unknown>[]): Array<string | null> | null {
-  if (event.to_session) {
-    const target = sessions.find(row => rowText(row.id) === event.to_session);
-    if (!target) return null;
-    const targetPath = target.project_path ? rowText(target.project_path) : null;
-    // A direct event names its repository; the target session has to be in
-    // that repository, not merely carry the id the sender asked for.
-    if (event.project_key && projectKeyOf(targetPath) !== event.project_key) return null;
-    return [targetPath];
-  }
+  if (event.to_session) return directDestination(event, sessions);
   if (!event.project_key) return [null];
   const checkouts = new Set<string>();
   for (const row of sessions) {
@@ -357,6 +349,16 @@ function inboundDestinations(event: SharedEvent, sessions: Record<string, unknow
     if (projectPath && projectKeyOf(projectPath) === event.project_key) checkouts.add(projectPath);
   }
   return checkouts.size > 0 ? [...checkouts] : null;
+}
+
+// A direct event names its repository; the target session has to be in
+// that repository, not merely carry the id the sender asked for.
+function directDestination(event: SharedEvent, sessions: Record<string, unknown>[]): Array<string | null> | null {
+  const target = sessions.find(row => rowText(row.id) === event.to_session);
+  if (!target) return null;
+  const targetPath = target.project_path ? rowText(target.project_path) : null;
+  if (event.project_key && projectKeyOf(targetPath) !== event.project_key) return null;
+  return [targetPath];
 }
 
 // The remote sessions as session_peers lists them: those of the machines
