@@ -194,6 +194,15 @@ Team summary: warnings=0
 
 Without a team the block is one line, `Team: not configured (egc team init --backend git --remote <url>, with --key <team key> to join a team)`, and no warning. `Last sync` is the time of the last commit of `~/.egc/team-sync/` (`never` before the first sync), `Local state` counts the documents under `~/.egc/state/` the next sync would seal (hidden entries and `.hmac` sidecars left out), and `Remote` is one `git ls-remote` with a budget of 5 seconds, `reachable, no branch pushed yet` before the first sync of the team, skipped with `not checked` when no network interface is up. A remote URL that carries a credential is shown without it, in the block and in the warnings. These are warnings, counted in the doctor's total and never errors: a team key missing or not 64 hexadecimal characters, a `~/.egc/team.json` that exists but cannot be read as a configuration, a backend other than git, a `~/.egc/team-sync/` that is not a git repository or that follows another remote or branch than `team.json` (the next sync would refuse it), and a remote that cannot be read or did not answer within the budget, with the reason git gave. The warnings about the configuration and the checkout name the init to run with `--key <team key>`, since an init without the key starts a new team; the remote warning carries the reason alone, since no init fixes a remote that does not answer. The block reads files and runs git; it never calls the memory server.
 
+A `Mesh` block follows the Team block, from files alone (no server, no network): the central this machine points at and who the machine is on the mesh, whether its bridge runs and is connected (or is moving to a central changed with `egc mesh connect`), and how many other machines it sees. Its warnings are the things that keep the bridge off: a `~/.egc/mesh.json` without a central, a central configured on a machine without a team, a bridge that cannot reach its central. Without a mesh configuration (no `~/.egc/mesh.json`) the block is one line, `Mesh: not configured (egc mesh connect <address> joins the central of your team; egc mesh serve starts one)`, and no warning. A `mesh.json` that holds no address the mesh accepts (another scheme, a user name in it, no host) is reported as `Mesh: configuration unreadable (~/.egc/mesh.json)`, with a warning that says what to run.
+
+```text
+Mesh: central ws://192.168.1.50:47470, this machine desk (a1b2c3d4)
+  Bridge: connected (pid 41822)
+  Online: 2 other machine(s)
+Mesh summary: warnings=0
+```
+
 ## Troubleshooting
 
 ### `Error: Team not initialized. Run "egc team init" first.`

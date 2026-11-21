@@ -20,6 +20,7 @@ const {
   registrationSeverity,
 } = require('./lib/doctor-mcp');
 const { buildTeamReport, printTeamReport } = require('./lib/doctor-team');
+const { buildMeshReport, printMeshReport } = require('./lib/doctor-mesh');
 const { buildHookReport } = require('./lib/doctor-hooks');
 
 // Printed as an absolute path: the hint is read from wherever the person ran
@@ -416,8 +417,11 @@ async function main() {
     // The Team Brain of this machine: files and one read of the remote, no
     // server. Its warnings join the doctor's total; it raises no error.
     const team = buildTeamReport(homeDir);
+    // The mesh of this machine: the central it points at and the bridge,
+    // from files alone. Its warnings join the total; it raises no error.
+    const mesh = buildMeshReport(homeDir);
     const crusherShim = checkCrusherShim(homeDir);
-    const summary = { ...report.summary, warningCount: report.summary.warningCount + team.warningCount + localFiles.warningCount + (crusherShim ? 1 : 0) };
+    const summary = { ...report.summary, warningCount: report.summary.warningCount + team.warningCount + mesh.warningCount + localFiles.warningCount + (crusherShim ? 1 : 0) };
     const hooks = buildHookReport(report.results, { homeDir, timeoutMs: probeTimeoutMs(process.env) });
     // Warnings are informative: drift and version skew are worth reporting but
     // do not mean the install is broken, and a warnings-only run is a healthy
@@ -427,13 +431,14 @@ async function main() {
     const hasFailures = report.summary.errorCount > 0 || mcp.errorCount > 0 || hooks.errorCount > 0;
 
     if (options.json) {
-      const out = { ...report, summary, mcp, team, hooks, ...localFilesJson(localFiles) };
+      const out = { ...report, summary, mcp, team, mesh, hooks, ...localFilesJson(localFiles) };
       if (crusherShim) out.crusherShim = crusherShim;
       console.log(JSON.stringify(out, null, 2));
     } else {
       printHuman({ ...report, summary });
       printMcpReport(mcp);
       printTeamReport(team);
+      printMeshReport(mesh);
       printHookReport(hooks);
       printLocalFilesReports(localFiles);
       if (crusherShim) printCrusherShimReport(crusherShim);
