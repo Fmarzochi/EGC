@@ -151,10 +151,13 @@ function territoryNote(territory: unknown): string {
   return text ? ` (territory: ${sanitize(text).value})` : '';
 }
 
+// A session of another machine of the team carries the label of its machine.
 function describePeer(p: Record<string, unknown>): string {
   const project = rowText(p.project_path);
   const projectNote = project ? ` [${project}]` : '';
-  return `- ${rowText(p.id)}${projectNote}${territoryNote(p.territory)} since ${rowText(p.started_at)}`;
+  const machine = rowText(p.machine_label);
+  const machineNote = machine ? ` on ${sanitize(machine).value}` : '';
+  return `- ${rowText(p.id)}${machineNote}${projectNote}${territoryNote(p.territory)} since ${rowText(p.started_at)}`;
 }
 
 export async function handleClaimPath(db: Database, toolArgs: unknown) {

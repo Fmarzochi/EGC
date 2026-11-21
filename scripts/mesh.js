@@ -8,26 +8,130 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SERVE_RELATIVE = ['mcp', 'servers', 'egc-memory', 'build', 'relay', 'serve.js'];
+const RELAY_RELATIVE = ['mcp', 'servers', 'egc-memory', 'build', 'relay'];
 const USAGE = [
-  'Usage: egc mesh serve [--port <0-65535>] [--host <address>]',
+  'Usage: egc mesh <serve | connect <address> | disconnect | status | label <name>>',
   '',
-  '  serve   Run the central that relays between your machines (port 47470 by default).',
-  '          It lets in the machines that hold the key of this machine\'s team (egc team init).',
+  '  serve             Run the central that relays between your machines (port 47470 by default).',
+  '                    It lets in the machines that hold the key of this machine\'s team (egc team init).',
+  '  connect <addr>    Point this machine at a central (host:port, or a ws:// or wss:// URL).',
+  '                    The memory servers connect from their next start.',
+  '  disconnect        Forget the central: the machine works alone again.',
+  '  status            This machine on the mesh: identity, central, connection, machines online.',
+  '  label <name>      Rename this machine as the other machines see it.',
 ].join('\n');
+const NOT_BUILT = 'The memory server is not built, so the mesh cannot run: in a checkout of EGC run `bash scripts/install.sh`, which builds the servers, or `npm run build` in mcp/servers/egc-memory.\n';
 
-// The built central: the one of the EGC root this file runs from, else the
-// one the shared resolver finds for an install elsewhere; null when the
-// memory server was not built.
-function serveScript() {
-  const local = path.join(__dirname, '..', ...SERVE_RELATIVE);
+// The built relay modules: the ones of the EGC root this file runs from,
+// else the ones the shared resolver finds for an install elsewhere; null
+// when the memory server was not built.
+function relayModule(name) {
+  const relative = [...RELAY_RELATIVE, `${name}.js`];
+  const local = path.join(__dirname, '..', ...relative);
   if (fs.existsSync(local)) return local;
   try {
     const { resolveEGCRoot } = require('./lib/resolve-egc-root');
-    const candidate = path.join(resolveEGCRoot({ probe: SERVE_RELATIVE.join('/') }), ...SERVE_RELATIVE);
+    const candidate = path.join(resolveEGCRoot({ probe: relative.join('/') }), ...relative);
     return fs.existsSync(candidate) ? candidate : null;
   } catch {
     return null;
+  }
+}
+
+function loadRelay(name) {
+  const script = relayModule(name);
+  return script ? require(script) : null;
+}
+
+function readStatusFile(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function showStatus() {
+  const machineModule = loadRelay('machine');
+  const configModule = loadRelay('mesh-config');
+  const bridgeModule = loadRelay('bridge');
+  if (!machineModule || !configModule || !bridgeModule) {
+    process.stderr.write(NOT_BUILT);
+    process.exitCode = 1;
+    return;
+  }
+  const machine = machineModule.loadOrCreateMachine();
+  const config = configModule.readMeshConfig();
+  const status = readStatusFile(bridgeModule.bridgeStatusPath());
+  const lines = [
+    `Machine: ${machine.label} (${machine.id})`,
+    `Central: ${config ? config.central : 'none (egc mesh connect <address> to join one)'}`,
+  ];
+  if (config) {
+    const live = Boolean(status) && Date.now() - Date.parse(status.updatedAt) < 2 * 60 * 1000;
+    lines.push(`Bridge:  ${describeBridge(status, live)}`);
+    lines.push(`Online:  ${describeOnline(status, live)}`);
+  }
+  process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+// The bridge as its status file last described it; a status older than two
+// minutes belongs to a server that is gone.
+function describeBridge(status, live) {
+  if (!live) return 'not running (starts with the next memory server)';
+  const pid = `pid ${status.pid}`;
+  return status.connected ? `connected (${pid})` : `reconnecting (${pid})`;
+}
+
+function describeOnline(status, live) {
+  if (!live || status.online.length === 0) return 'no other machine seen';
+  return `${status.online.length} other machine(s)`;
+}
+
+function connectCentral(address) {
+  const configModule = loadRelay('mesh-config');
+  if (!configModule) {
+    process.stderr.write(NOT_BUILT);
+    process.exitCode = 1;
+    return;
+  }
+  if (!address) {
+    process.stderr.write(`connect needs the address of the central.\n${USAGE}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  try {
+    const config = configModule.writeMeshConfig(address);
+    process.stdout.write(`Central: ${config.central}\nThe memory servers of this machine connect from their next start; egc mesh status shows the connection.\n`);
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 2;
+  }
+}
+
+function disconnectCentral() {
+  const configModule = loadRelay('mesh-config');
+  if (!configModule) {
+    process.stderr.write(NOT_BUILT);
+    process.exitCode = 1;
+    return;
+  }
+  process.stdout.write(configModule.clearMeshConfig() ? 'Central forgotten: this machine works alone from the next start of its memory servers.\n' : 'No central was configured.\n');
+}
+
+function relabel(name) {
+  const machineModule = loadRelay('machine');
+  if (!machineModule) {
+    process.stderr.write(NOT_BUILT);
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    const machine = machineModule.setMachineLabel(name || '');
+    process.stdout.write(`Machine: ${machine.label} (${machine.id})\n`);
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n${USAGE}\n`);
+    process.exitCode = 2;
   }
 }
 
@@ -37,18 +141,22 @@ async function main(argv) {
     process.stdout.write(`${USAGE}\n`);
     return;
   }
+  if (subcommand === 'status') return showStatus();
+  if (subcommand === 'connect') return connectCentral(rest[0]);
+  if (subcommand === 'disconnect') return disconnectCentral();
+  if (subcommand === 'label') return relabel(rest.join(' '));
   if (subcommand !== 'serve') {
     process.stderr.write(`Unknown subcommand ${subcommand}.\n${USAGE}\n`);
     process.exitCode = 2;
     return;
   }
-  const script = serveScript();
-  if (!script) {
-    process.stderr.write('The memory server is not built, so the mesh central cannot run: in a checkout of EGC run `bash scripts/install.sh`, which builds the servers, or `npm run build` in mcp/servers/egc-memory.\n');
+  const serve = loadRelay('serve');
+  if (!serve) {
+    process.stderr.write(NOT_BUILT);
     process.exitCode = 1;
     return;
   }
-  await require(script).main(rest);
+  await serve.main(rest);
 }
 
 main(process.argv.slice(2)).catch(error => {

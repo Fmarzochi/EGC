@@ -4,6 +4,7 @@
 // to each other (direct or broadcast) through a durable pub/sub table, with
 // a per-session read cursor so every session consumes each event once.
 
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 // Text form of a column read from a bus row: rows arrive as loosely typed
@@ -44,6 +45,12 @@ export async function createSessionBusTables(db: BusDb): Promise<void> {
       session_id TEXT NOT NULL,
       acquired_at TEXT NOT NULL,
       ttl_seconds INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS mesh_machines (
+      machine_id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      sessions TEXT NOT NULL,
+      seen_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS bus_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,11 +110,132 @@ export async function announce(
   );
 }
 
+// The sessions of this machine and, after them, the sessions the other
+// machines of the team reported through the mesh, each with the label of
+// its machine. A project filter matches a remote session by the identity
+// of its repository, since the same project sits in another folder there.
 export async function listPeers(db: BusDb, projectPath?: string): Promise<Record<string, unknown>[]> {
-  if (projectPath) {
-    return db.all('SELECT * FROM bus_sessions WHERE project_path = ? ORDER BY started_at', projectPath);
+  const local = projectPath
+    ? await db.all('SELECT * FROM bus_sessions WHERE project_path = ? ORDER BY started_at', projectPath)
+    : await db.all('SELECT * FROM bus_sessions ORDER BY started_at');
+  return [...local, ...await listRemoteSessions(db, projectPath)];
+}
+
+// A session as the mesh carries it, with the identity of its project so
+// another machine can match it against its own checkouts.
+export interface RemoteSession {
+  id: string;
+  project_path: string | null;
+  project_key: string | null;
+  territory: string | null;
+  started_at: string;
+  heartbeat_at: string;
+}
+
+export const REMOTE_MACHINE_TTL_SECONDS = SESSION_TTL_SECONDS;
+const MAX_REMOTE_SESSIONS = 50;
+
+// The identity of a project (branch-state), loaded when first needed: the
+// bus is also run on its own, by the test harnesses that copy this module
+// alone, and there a session simply carries no project key.
+type ProjectIdentityFn = (projectPath: string) => { key: string };
+let projectIdentityFn: ProjectIdentityFn | null | undefined;
+
+function projectKeyOf(projectPath: string | null): string | null {
+  if (!projectPath) return null;
+  if (projectIdentityFn === undefined) {
+    try {
+      const load = createRequire(__filename);
+      projectIdentityFn = (load('./branch-state') as { projectIdentity: ProjectIdentityFn }).projectIdentity;
+    } catch {
+      projectIdentityFn = null;
+    }
   }
-  return db.all('SELECT * FROM bus_sessions ORDER BY started_at');
+  if (!projectIdentityFn) return null;
+  try {
+    return projectIdentityFn(projectPath).key;
+  } catch {
+    return null;
+  }
+}
+
+// The sessions alive on this machine (heartbeat within the session TTL).
+export async function listLiveSessions(db: BusDb, nowMs: number = Date.now()): Promise<RemoteSession[]> {
+  const cutoff = new Date(nowMs - SESSION_TTL_SECONDS * 1000).toISOString();
+  const rows = await db.all('SELECT id, project_path, territory, started_at, heartbeat_at FROM bus_sessions WHERE heartbeat_at >= ? ORDER BY started_at', cutoff);
+  return rows.map(row => {
+    const projectPath = row.project_path ? rowText(row.project_path) : null;
+    return {
+      id: rowText(row.id),
+      project_path: projectPath,
+      project_key: projectKeyOf(projectPath),
+      territory: row.territory ? rowText(row.territory) : null,
+      started_at: rowText(row.started_at),
+      heartbeat_at: rowText(row.heartbeat_at),
+    };
+  });
+}
+
+// Only the fields the mesh defines, each cut to its size, go into the table:
+// what another machine sends is data, never a trusted shape.
+function cleanRemoteSession(value: unknown): RemoteSession | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const text = (field: unknown, max: number): string | null => (typeof field === 'string' && field ? field.slice(0, max) : null);
+  const id = text(record.id, 200);
+  if (!id) return null;
+  return {
+    id,
+    project_path: text(record.project_path, 1000),
+    project_key: text(record.project_key, 300),
+    territory: text(record.territory, 500),
+    started_at: text(record.started_at, 40) ?? '',
+    heartbeat_at: text(record.heartbeat_at, 40) ?? '',
+  };
+}
+
+export async function recordRemotePresence(db: BusDb, machineId: string, label: string, sessions: unknown[], nowMs: number = Date.now()): Promise<void> {
+  const clean = sessions.map(cleanRemoteSession).filter((session): session is RemoteSession => session !== null).slice(0, MAX_REMOTE_SESSIONS);
+  await db.run(
+    `INSERT INTO mesh_machines (machine_id, label, sessions, seen_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(machine_id) DO UPDATE SET label = excluded.label, sessions = excluded.sessions, seen_at = excluded.seen_at`,
+    machineId, label.slice(0, 64), JSON.stringify(clean), new Date(nowMs).toISOString()
+  );
+}
+
+export async function forgetRemoteMachine(db: BusDb, machineId: string): Promise<void> {
+  await db.run('DELETE FROM mesh_machines WHERE machine_id = ?', machineId);
+}
+
+export async function sweepRemoteMachines(db: BusDb, nowMs: number = Date.now()): Promise<void> {
+  await db.run('DELETE FROM mesh_machines WHERE seen_at < ?', new Date(nowMs - REMOTE_MACHINE_TTL_SECONDS * 1000).toISOString());
+}
+
+function parseSessions(raw: unknown): unknown[] {
+  try {
+    const parsed: unknown = JSON.parse(rowText(raw));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// The remote sessions as session_peers lists them: those of the machines
+// seen within the TTL, each with its machine's id and label; with a project
+// filter, those of the same repository identity.
+export async function listRemoteSessions(db: BusDb, projectPath?: string, nowMs: number = Date.now()): Promise<Record<string, unknown>[]> {
+  const cutoff = new Date(nowMs - REMOTE_MACHINE_TTL_SECONDS * 1000).toISOString();
+  const machines = await db.all('SELECT machine_id, label, sessions FROM mesh_machines WHERE seen_at >= ? ORDER BY label', cutoff);
+  const wanted = projectPath ? projectKeyOf(projectPath) : null;
+  const rows: Record<string, unknown>[] = [];
+  for (const machine of machines) {
+    for (const session of parseSessions(machine.sessions).map(cleanRemoteSession)) {
+      if (!session) continue;
+      if (projectPath && (!wanted || session.project_key !== wanted)) continue;
+      rows.push({ ...session, machine_id: rowText(machine.machine_id), machine_label: rowText(machine.label) });
+    }
+  }
+  return rows;
 }
 
 export interface ClaimResult {

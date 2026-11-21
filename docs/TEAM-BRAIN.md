@@ -280,6 +280,18 @@ This machine already has a checkout made for another remote (as `origin`, for fe
 
 The command line talks to the memory server. Run `egc doctor`, and `npm run build` in `mcp/servers/egc-memory/` when you work from a source checkout. When the line continues with `The memory server did not answer team_sync within 60 s; the server wrote: ...` or `The memory server exited with code <n> before answering ...`, the server started and the quoted lines are the last thing it logged; the troubleshooting guide covers both, including the usual cause of the first with a server from before v1.1.24, a git remote that stopped to ask a question, and the budget `EGC_TEAM_CALL_TIMEOUT_MS` raises for a slow remote.
 
+## Your machines in real time: the mesh (first steps)
+
+The git sync carries the memory between sessions. The mesh carries, in seconds, what the open sessions of your machines need from each other: today, who is online and which sessions each machine has; next, the events, the locks and the state as it changes. It is optional: without it, every machine works alone with the git sync, as before.
+
+1. **Run the central on one of your machines** (one with the team key, for now your own computer or a device of yours that stays on): `egc mesh serve` listens on port 47470 (`--port` and `--host` change it) and lets in only the machines that answer its challenge with the key of the team; it never holds the key that opens what they say to each other.
+2. **Point each machine at it:** `egc mesh connect 192.168.1.50:47470` (or a `ws://` or `wss://` URL). From their next start, the memory servers of that machine elect one of themselves to hold the connection, and `egc mesh status` shows the identity of the machine, the central, whether the bridge is connected and how many other machines are online.
+3. **Name your machines:** `egc mesh label "desk at home"`; the label is what the other machines show next to a session.
+
+With two machines connected, `session_peers` on one lists the sessions of the other after its own, each with the label of its machine; a project filter matches them by the identity of the repository, since the same project sits in another folder there. A machine that leaves disappears from the others when the central says so, or after ten minutes of silence. `egc mesh disconnect` forgets the central.
+
+What travels through the central is sealed with a key derived from the team key and bound to its sender, its addressee and its moment: the central, and anyone watching the network, sees only who talks to whom and when. The address the central listens on is yours to choose: a home network, a VPN such as Tailscale or WireGuard, or a rented server; the guides for each come with the next steps of the mesh, together with the discovery of the central on the home network and the pairing of a new machine by a short code.
+
 ## Current limitations
 
 - **Documents from before the remote identity keep their old name on the machine that wrote them.** A directory named after the folder path (`Projects--app`), written by a version before #2063, is still read there, and the sync shares its documents under the key of the repository as long as that machine still has the repository and no keyed document of the same branch exists yet, so your other machines read them for their own checkouts; the next `update_state` writes under the key, and the old directory is left as it is. A repository whose `origin` is declared only through an `include` of the git config, or that has no `origin`, is keyed by its path as before.
