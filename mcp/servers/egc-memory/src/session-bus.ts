@@ -708,8 +708,8 @@ export async function sendEvent(
     if (!target) {
       // A session of another machine, in the same repository, is reached
       // through the bridge, which forwards what is queued for it here.
-      const remote = (await listRemoteSessions(db, input.projectPath, nowMs)).find(row => row.id === input.toSession);
-      if (!remote) return { ok: false, reason: `session ${input.toSession} is not live on the bus` };
+      const known = (await listRemoteSessions(db, input.projectPath, nowMs)).some(row => row.id === input.toSession);
+      if (!known) return { ok: false, reason: `session ${input.toSession} is not live on the bus` };
     } else if ((target.project_path ?? null) !== (input.projectPath ?? null)) {
       // A direct event stays inside the sender's project, like a broadcast;
       // a sender without a project only reaches a session without one.
