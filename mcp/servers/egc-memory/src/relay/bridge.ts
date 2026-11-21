@@ -470,9 +470,9 @@ export class MeshBridge {
     if (type !== 'event') return;
     const filed = await recordInboundEvent(this.options.db, body, this.now());
     // Memory changed on another machine: the sessions here will read the
-    // notice from the bus, and the state it speaks of is pulled first.
-    // A pull of the team state follows a change of state alone: the other
-    // kinds of memory do not travel with the sync yet.
+    // notice from the bus, and when it speaks of state, the team state is
+    // pulled first; the other kinds of memory do not travel with the sync
+    // yet, so they pull nothing.
     const event = body as Partial<SharedEvent> | undefined;
     if (filed && event?.kind === MEMORY_CHANGED_KIND && parseMemoryChange(event.payload)?.kind === 'state') scheduleMemoryPull();
   }
