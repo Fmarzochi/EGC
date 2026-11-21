@@ -10,7 +10,8 @@ import { resolveProjectPath } from './memory-project-path';
 import { resolveHeadState, resolveStateRead, resolveStateWrite } from './branch-state';
 import { GLOBAL_APPENDIX_SECTIONS, buildGlobalAppendix, globalStateFilePath } from './global-state';
 import { resolveHome } from './home';
-import { announcePresenceBestEffort } from './memory-session-bus';
+import { BUS_SESSION_ID, announcePresenceBestEffort } from './memory-session-bus';
+import { notifyMemoryChanged } from './memory-notify';
 import { loadOrCreateKey, writeHmac, verifyHmac } from './integrity';
 import { loadOrCreateEncKey, readStateFile, writeStateFile, quarantineUndecryptableStateFile } from './encryption';
 import { propagateStateToTools } from './propagate';
@@ -218,6 +219,22 @@ function readExistingStateOrRecover(filePath: string, force: boolean | undefined
   }
 }
 
+// The user-wide memory: one document for every project, told to every
+// session of the bus and to the other machines once written.
+async function updateGlobalState(db: Database, args: z.infer<typeof UpdateStateSchema>) {
+  const globalFile = getGlobalStateFile();
+  const written = await withStateMergeLock(globalFile, () => {
+    const existingGlobal = readExistingStateOrRecover(globalFile, args.force, 'global');
+    writeStateDoc(globalFile, 'global', args, existingGlobal, null);
+    const writtenGlobal = readStateFile(globalFile, getEncKey());
+    writeHmac(globalFile, writtenGlobal, getIntegrityKey());
+    log('INFO', 'Global state updated', { decisions: args.decisions?.length || 0 });
+    return { content: [{ type: "text", text: `Global memory updated (shared across all projects).\nFile: ${globalFile}\nDecisions saved: ${args.decisions?.length || 0}` }] };
+  });
+  await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'state', projectPath: null, scope: 'global' });
+  return written;
+}
+
 export async function handleUpdateState(db: Database, toolArgs: unknown) {
   const args = UpdateStateSchema.parse(toolArgs || {});
   const check = sanitizeStateFields(args);
@@ -240,17 +257,7 @@ export async function handleUpdateState(db: Database, toolArgs: unknown) {
     }
   } catch (_) { /* non-fatal */ } // NOSONAR: legacy flat-state merge is best-effort
 
-  if (args.scope === 'global') {
-    const globalFile = getGlobalStateFile();
-    return withStateMergeLock(globalFile, () => {
-      const existingGlobal = readExistingStateOrRecover(globalFile, args.force, 'global');
-      writeStateDoc(globalFile, 'global', args, existingGlobal, null);
-      const writtenGlobal = readStateFile(globalFile, getEncKey());
-      writeHmac(globalFile, writtenGlobal, getIntegrityKey());
-      log('INFO', 'Global state updated', { decisions: args.decisions?.length || 0 });
-      return { content: [{ type: "text", text: `Global memory updated (shared across all projects).\nFile: ${globalFile}\nDecisions saved: ${args.decisions?.length || 0}` }] };
-    });
-  }
+  if (args.scope === 'global') return updateGlobalState(db, args);
 
   const filePath = resolveStateWrite(getStateDir(), projPath, branch, detachedCommit);
 
@@ -276,6 +283,7 @@ export async function handleUpdateState(db: Database, toolArgs: unknown) {
   const propagatedTools = Object.entries(propagated)
     .filter(([, p]) => p !== null)
     .map(([tool]) => tool);
+  await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'state', projectPath: projPath, branch, scope: 'project' });
 
   log('INFO', 'Project state updated', { project: projPath, branch: branch || 'none', decisions: args.decisions?.length || 0, propagated: propagatedTools });
   const branchLine = branch ? `Branch: ${branch}\n` : '';

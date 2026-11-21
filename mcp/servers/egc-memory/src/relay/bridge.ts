@@ -4,6 +4,7 @@ import WebSocket from 'ws';
 import type { RawData } from 'ws';
 
 import { resolveHome } from '../home';
+import { MEMORY_CHANGED_KIND, scheduleMemoryPull } from '../memory-notify';
 import {
   forgetRemoteMachine,
   listLiveSessions,
@@ -466,7 +467,11 @@ export class MeshBridge {
       await recordRemoteLocks(this.options.db, from, Array.isArray(locks) ? locks : []);
       return;
     }
-    if (type === 'event') await recordInboundEvent(this.options.db, body, this.now());
+    if (type !== 'event') return;
+    const filed = await recordInboundEvent(this.options.db, body, this.now());
+    // Memory changed on another machine: the sessions here will read the
+    // notice from the bus, and the state it speaks of is pulled first.
+    if (filed && (body as Partial<SharedEvent> | undefined)?.kind === MEMORY_CHANGED_KIND) scheduleMemoryPull();
   }
 
   // Each tick sends the presence, sweeps the machines that fell silent and
