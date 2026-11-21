@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import WebSocket from 'ws';
@@ -13,6 +12,7 @@ import { CLOSE_REPLACED } from './hub';
 import { loadOrCreateMachine } from './machine';
 import type { MachineIdentity } from './machine';
 import { readMeshConfig } from './mesh-config';
+import { privateJson, writePrivateFile } from './private-file';
 import {
   BROADCAST,
   MESH_PROTOCOL_VERSION,
@@ -77,23 +77,8 @@ export function bridgeStatusPath(home: string = resolveHome()): string {
   return path.join(meshDir(home), 'bridge.json');
 }
 
-// Private, and through a temporary file created exclusively (a link planted
-// at its name is refused) and renamed over the target.
 function writePrivateJson(file: string, value: unknown): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  const descriptor = fs.openSync(temporary, 'wx', 0o600);
-  try {
-    fs.writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-  } finally {
-    fs.closeSync(descriptor);
-  }
-  try {
-    fs.renameSync(temporary, file);
-  } catch (error) {
-    fs.rmSync(temporary, { force: true });
-    throw error;
-  }
+  writePrivateFile(file, privateJson(value));
 }
 
 function processAlive(pid: number): boolean {

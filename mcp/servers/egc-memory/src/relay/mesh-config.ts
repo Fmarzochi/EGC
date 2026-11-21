@@ -1,8 +1,8 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
 import { resolveHome } from '../home';
+import { privateJson, writePrivateFile } from './private-file';
 
 // Where this machine's bridge finds the central: ~/.egc/mesh.json, written
 // by `egc mesh connect <address>` and read by the memory server when it
@@ -53,23 +53,7 @@ export function writeMeshConfig(central: string, home: string = resolveHome()): 
   const normalized = normalizeCentralAddress(central);
   if (!normalized) throw new Error(`Not an address of a mesh central: ${central}. Give a host and a port, such as 192.168.1.50:47470, or a ws:// or wss:// URL.`);
   const config: MeshConfig = { central: normalized, connectedAt: new Date().toISOString() };
-  const file = meshConfigPath(home);
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  // The temporary file is created exclusively, so a link planted at its name
-  // is refused, never followed.
-  const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  const descriptor = fs.openSync(temporary, 'wx', 0o600);
-  try {
-    fs.writeFileSync(descriptor, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
-  } finally {
-    fs.closeSync(descriptor);
-  }
-  try {
-    fs.renameSync(temporary, file);
-  } catch (error) {
-    fs.rmSync(temporary, { force: true });
-    throw error;
-  }
+  writePrivateFile(meshConfigPath(home), privateJson(config));
   return config;
 }
 
