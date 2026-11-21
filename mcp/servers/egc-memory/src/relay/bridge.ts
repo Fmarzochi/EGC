@@ -163,6 +163,7 @@ export class MeshBridge {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private backoffMs = RECONNECT_MIN_MS;
   private stopped = false;
+  private inbound: Promise<void> = Promise.resolve();
   private readonly replay: ReplayGuard;
   private readonly authKey: Buffer;
   private readonly sealKey: Buffer;
@@ -272,8 +273,15 @@ export class MeshBridge {
       return;
     }
     this.socket = socket;
+    // Frames are handled one after the other, in the order the central sent
+    // them: a presence that is being written to the bus while the central
+    // says the same machine left would otherwise land after the removal.
     socket.on('message', (data: RawData, isBinary: boolean) => {
-      if (!isBinary) this.onFrame(data.toString()).catch(error => this.log(`mesh: a frame was not handled: ${error instanceof Error ? error.message : String(error)}`));
+      if (isBinary) return;
+      const raw = data.toString();
+      this.inbound = this.inbound
+        .then(() => this.onFrame(raw))
+        .catch(error => this.log(`mesh: a frame was not handled: ${error instanceof Error ? error.message : String(error)}`));
     });
     socket.on('close', code => this.onClose(socket, code));
     socket.on('error', error => this.log(`mesh: connection error: ${error.message}`));

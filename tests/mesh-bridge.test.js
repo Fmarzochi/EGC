@@ -147,9 +147,11 @@ async function runTests() {
       bridgeC.start();
       await until(() => bridgeC.connected, 'C to connect');
       assert.ok(bridgeA.send(bridgeC.machine.id, { type: 'event', body: { text: 'hello C' } }), 'A hands the box to the central');
-      await until(() => received.length > 0, 'C to receive the box');
-      assert.strictEqual(received[0].from, a.identity.id);
-      assert.deepStrictEqual(received[0].message, { type: 'event', body: { text: 'hello C' } });
+      // The presences of the other machines reach C through the same callback.
+      const event = () => received.find(item => item.message.type === 'event');
+      await until(() => Boolean(event()), 'C to receive the box');
+      assert.strictEqual(event().from, a.identity.id);
+      assert.deepStrictEqual(event().message, { type: 'event', body: { text: 'hello C' } });
       await until(() => readStatus(a.home).online.includes(bridgeC.machine.id), 'the status of A to list C');
       const status = readStatus(a.home);
       assert.strictEqual(status.connected, true);
