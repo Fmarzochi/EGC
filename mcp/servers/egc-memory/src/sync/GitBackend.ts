@@ -176,11 +176,13 @@ export class GitBackend extends SyncBackend {
 
     // State files are staged by TeamSync as sealed team envelopes before
     // push() runs; the raw (personally encrypted) files never enter the repo.
-    // The memory database under ~/.egc/memory (lessons, decisions, the
-    // session bus, working memory) never leaves the machine either: earlier
-    // versions mirrored it here in the clear, so a memory/ tree in the
-    // checkout is retired and the commit below removes it from the shared
-    // repository. History already pushed is rewritten by hand, if at all.
+    // The memory database under ~/.egc/memory never leaves the machine as a
+    // file: its lessons, decisions and working memory travel as sealed
+    // records under records/, staged by TeamSync, and the session bus stays
+    // home. Earlier versions mirrored the database here in the clear, so a
+    // memory/ tree in the checkout is retired and the commit below removes
+    // it from the shared repository. History already pushed is rewritten by
+    // hand, if at all.
     GitBackend.retireMirroredMemory(this.repoDir);
 
     // Add, commit, and push.

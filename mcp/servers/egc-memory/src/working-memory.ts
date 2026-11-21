@@ -1,5 +1,6 @@
 import type { Database } from 'sqlite';
 import { randomUUID } from 'node:crypto';
+import { machineLabel, projectKeyOf } from './sync/records';
 
 // TTL used when the caller does not supply one: one calendar day in seconds.
 // Entries without an explicit TTL are swept by the next get_state or working
@@ -75,17 +76,24 @@ export async function setWorkingMemory(
   const expiresAt = Math.floor(Date.now() / 1000) + ttl;
   const id = randomUUID();
 
-  // Upsert: replace any existing entry for the same project+key.
+  // Upsert: replace any existing entry for the same project+key. The key of
+  // the project and the name of this machine travel with the entry.
   await db.run(
-    `INSERT INTO working_memory (id, project_path, key, value, expires_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO working_memory (id, project_path, project_key, key, value, expires_at, machine_label)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(project_path, key) DO UPDATE SET
-       id         = excluded.id,
-       value      = excluded.value,
-       expires_at = excluded.expires_at`,
-    [id, projectPath, key, value, expiresAt]
+       id            = excluded.id,
+       project_key   = excluded.project_key,
+       value         = excluded.value,
+       expires_at    = excluded.expires_at,
+       machine_label = excluded.machine_label`,
+    [id, projectPath, projectKeyOf(projectPath), key, value, expiresAt, machineLabel()]
   );
 }
+
+// The entries of a project: the ones written under this path, and the ones
+// another machine wrote for the same repository under its own path.
+const SAME_PROJECT = '(project_path = ? OR (project_key IS NOT NULL AND project_key = ?))';
 
 export async function getWorkingMemory(
   db: Database,
@@ -95,8 +103,8 @@ export async function getWorkingMemory(
   await sweepExpiredOnRead(db);
   const now = Math.floor(Date.now() / 1000);
   const row = await db.get<WorkingMemoryEntry>(
-    'SELECT * FROM working_memory WHERE project_path = ? AND key = ? AND expires_at > ?',
-    [projectPath, key, now]
+    `SELECT * FROM working_memory WHERE ${SAME_PROJECT} AND key = ? AND expires_at > ? ORDER BY expires_at DESC LIMIT 1`,
+    [projectPath, projectKeyOf(projectPath), key, now]
   );
   return row ?? null;
 }
@@ -107,8 +115,12 @@ export async function listWorkingMemory(
 ): Promise<WorkingMemoryEntry[]> {
   await sweepExpiredOnRead(db);
   const now = Math.floor(Date.now() / 1000);
-  return db.all<WorkingMemoryEntry[]>(
-    'SELECT * FROM working_memory WHERE project_path = ? AND expires_at > ? ORDER BY key',
-    [projectPath, now]
+  const rows = await db.all<WorkingMemoryEntry[]>(
+    `SELECT * FROM working_memory WHERE ${SAME_PROJECT} AND expires_at > ? ORDER BY key, expires_at DESC`,
+    [projectPath, projectKeyOf(projectPath), now]
   );
+  // One entry per key: the newest, when this machine and another wrote the
+  // same key for the same repository.
+  const seen = new Set<string>();
+  return rows.filter(row => (seen.has(row.key) ? false : seen.add(row.key)));
 }

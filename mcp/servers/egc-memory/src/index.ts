@@ -126,6 +126,10 @@ async function run() {
   // Pre-warm: open DB and run migrations before accepting MCP requests.
   // Eliminates first-call latency that caused first-run failures in AGY.
   const db = await getDb();
+  // The lessons, the decisions and the working memory travel with the team
+  // sync from this store, written in order through the write arbiter.
+  const { registerRecordsSource } = await import('./sync/TeamSync.js');
+  registerRecordsSource({ db, enqueue: work => writeArbitrator.enqueue(work) });
   transport = new StdioServerTransport();
   await server.connect(transport);
   log('INFO', 'egc-memory-orchestrator initialized with Write Arbitration');

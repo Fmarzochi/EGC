@@ -6,6 +6,8 @@ import fs from 'node:fs';
 import { SyncBackend } from './SyncBackend';
 import { GitBackend } from './GitBackend';
 import type { SyncConfig, SyncStatus, SyncResult } from './SyncBackend';
+import type { Database } from 'sqlite';
+import { RECORDS_DIR, collectRecords, machineLabel, mergeRecords, stageRecords } from './records';
 import { isEncrypted, loadOrCreateEncKey, readPrivateKeyFile, readStateFile, writeStateFile } from '../encryption';
 import { loadOrCreateKey as loadOrCreateIntegrityKey, writeHmac } from '../integrity';
 import { branchStateKey, projectIdentity, projectSlug } from '../branch-state';
@@ -156,6 +158,17 @@ export async function teamInit(backend: string, remote: string, branch: string =
   }
 }
 
+// The records of the other machines, merged by id into the store of this
+// server; nothing to do for a sync that runs without a store.
+async function mergeTeamRecords(teamKey: Buffer, result: SyncResult): Promise<void> {
+  if (!recordsSource) return;
+  const records = await mergeRecords(recordsSource.db, SYNC_RECORDS_DIR, teamKey, { enqueue: recordsSource.enqueue });
+  result.recordsMerged = records.merged;
+  for (const refused of [...records.rejected, ...records.unopened]) {
+    result.errors.push(`Rejected sync record (not a verified team record for its path): ${RECORDS_DIR}/${refused}`);
+  }
+}
+
 export async function teamSync(): Promise<SyncResult> {
   const config = getTeamConfig();
   if (!config) {
@@ -228,6 +241,7 @@ export async function teamSync(): Promise<SyncResult> {
     for (const unreadable of merge.unreadable) {
       result.errors.push(`Local state file could not be decrypted and was left untouched: ${unreadable}`);
     }
+    await mergeTeamRecords(teamKey, result);
     // Step 3: Stage local state as sealed envelopes and push. A key that
     // opened none of the files on the remote is not shown to be the team's
     // key, and a push with it would put envelopes the teammates cannot open
@@ -289,6 +303,18 @@ const SYNC_TREES: readonly SyncTree[] = [
 ];
 const SYNC_TREE_DIRS: readonly string[] = SYNC_TREES.map(tree => tree.sync);
 type TreeMerge = { tree: SyncTree; outcome: TeamMergeOutcome };
+
+// The memory store of the server that runs the sync: with it, the lessons,
+// the decisions and the working memory travel as sealed records next to the
+// state, one file per record under records/; a sync run without a store
+// carries the state alone.
+interface RecordsSource { db: Database; enqueue?: <T>(work: () => Promise<T>) => Promise<T> }
+let recordsSource: RecordsSource | null = null;
+const SYNC_RECORDS_DIR = path.join(SYNC_CHECKOUT_DIR, RECORDS_DIR);
+
+export function registerRecordsSource(source: RecordsSource | null): void {
+  recordsSource = source;
+}
 
 // The merges of every tree as one outcome; a path outside the project
 // states is named with its tree, so a message says which file it was.
@@ -475,6 +501,14 @@ async function pushSealedState(instance: SyncBackend, teamKey: Buffer, personalK
       stageTeamState(tree.local, tree.sync, teamKey, personalKey, new Set(outcome.unopened), refusals, DEFAULT_LIMITS, ledger);
       for (const refusal of refusals) {
         result.warnings.push(`Not pushed: ${tree.label}/${refusal.path} ${refusal.reason}. Rewrite that document on this machine (update_state rewrites it) and sync again; the version pushed before, if any, stays on the remote.`);
+      }
+    }
+    // The records of this machine, one sealed file each, in the same push.
+    if (recordsSource) {
+      const staging = stageRecords(await collectRecords(recordsSource.db, machineLabel() ?? 'this machine'), SYNC_RECORDS_DIR, teamKey, { secretShape: secretShapeIn });
+      result.recordsStaged = staging.staged;
+      for (const refusal of staging.refused) {
+        result.warnings.push(`Not pushed: ${RECORDS_DIR}/${refusal.path} ${refusal.reason}.`);
       }
     }
     // The key is the team's here (it opened a file, or the repository holds
