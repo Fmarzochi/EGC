@@ -7,16 +7,19 @@ import { getTeamConfig, teamSync } from './sync/TeamSync';
 
 // Wrote, told: whenever a tool writes memory (update_state, store_decision,
 // lesson_save, working_memory_set), the server itself tells the sessions of
-// this machine through the bus, the bridge carries the word to the other
-// machines that have the repository open, and a sync with the team remote
-// is scheduled, so the tools without a hook push too and the sync no longer
-// depends on the start and the end of a session alone. Several writes close
-// together become one sync; a word from another machine pulls sooner.
+// this machine through the bus and the bridge forwards the notice to the
+// other machines that have the repository open. After a write of state a
+// sync with the team remote is scheduled too, so the tools without a hook
+// push and the sync no longer depends on the start and the end of a session
+// alone; the other kinds stay on the machine until they travel as well.
+// Several writes close together become one sync; a notice of state from
+// another machine pulls sooner.
 export const MEMORY_CHANGED_KIND = 'memory:changed';
 export const PUSH_DELAY_MS = 30_000;
 export const PULL_DELAY_MS = 2_000;
-// The notices of one server kept on the bus: an older one says nothing a
-// newer one does not, and the bus caps what one sender may hold.
+// The notices of one server kept on the bus for one project (or for the
+// global memory): an older one says nothing a newer one does not, and the
+// bus caps what one sender may hold.
 const NOTICES_KEPT = 20;
 
 export type MemoryChangeKind = 'state' | 'decision' | 'lesson' | 'working-memory';
@@ -82,23 +85,29 @@ export function parseMemoryChange(payload: unknown): MemoryChangeNotice | null {
 
 // Tells the bus that memory changed: a broadcast inside the project (or to
 // every session, for the global memory), from the session of this server.
-// Then the sync is scheduled. Nothing here can fail a memory call.
+// Then, for a change of state, the sync is scheduled. Nothing here can fail
+// a memory call.
 export async function notifyMemoryChanged(db: Database, sessionId: string, change: MemoryChange): Promise<void> {
   const notice: MemoryChangeNotice = { ...change, at: new Date().toISOString(), hint: HINT };
+  const projectPath = change.projectPath ?? null;
   try {
     await writeArbitrator.enqueue(async () => {
+      // The cap holds per project, so the notices of one project never push
+      // out the unread notices of another.
       await db.run(
-        `DELETE FROM bus_events WHERE from_session = ? AND kind = ? AND id NOT IN (
-           SELECT id FROM bus_events WHERE from_session = ? AND kind = ? ORDER BY id DESC LIMIT ?)`,
-        [sessionId, MEMORY_CHANGED_KIND, sessionId, MEMORY_CHANGED_KIND, NOTICES_KEPT - 1]
+        `DELETE FROM bus_events WHERE from_session = ? AND kind = ? AND project_path IS ? AND id NOT IN (
+           SELECT id FROM bus_events WHERE from_session = ? AND kind = ? AND project_path IS ? ORDER BY id DESC LIMIT ?)`,
+        [sessionId, MEMORY_CHANGED_KIND, projectPath, sessionId, MEMORY_CHANGED_KIND, projectPath, NOTICES_KEPT - 1]
       );
-      const sent = await sendEvent(db, { fromSession: sessionId, projectPath: change.projectPath ?? undefined, kind: MEMORY_CHANGED_KIND, payload: JSON.stringify(notice) });
+      const sent = await sendEvent(db, { fromSession: sessionId, projectPath: projectPath ?? undefined, kind: MEMORY_CHANGED_KIND, payload: JSON.stringify(notice) });
       if (!sent.ok) log('WARN', 'memory change notice not sent', { reason: sent.reason });
     });
   } catch (error) {
     log('WARN', 'memory change notice not sent', { error: String(error) });
   }
-  scheduleMemorySync(options.pushDelayMs);
+  // Only the state trees travel with the team sync today; a lesson, a
+  // decision or a working memory entry is told, and syncs once it travels.
+  if (change.kind === 'state') scheduleMemorySync(options.pushDelayMs);
 }
 
 // A sync with the team remote within `delayMs`, when the machine has one:

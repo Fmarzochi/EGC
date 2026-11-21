@@ -4,7 +4,7 @@ import WebSocket from 'ws';
 import type { RawData } from 'ws';
 
 import { resolveHome } from '../home';
-import { MEMORY_CHANGED_KIND, scheduleMemoryPull } from '../memory-notify';
+import { MEMORY_CHANGED_KIND, parseMemoryChange, scheduleMemoryPull } from '../memory-notify';
 import {
   forgetRemoteMachine,
   listLiveSessions,
@@ -471,7 +471,10 @@ export class MeshBridge {
     const filed = await recordInboundEvent(this.options.db, body, this.now());
     // Memory changed on another machine: the sessions here will read the
     // notice from the bus, and the state it speaks of is pulled first.
-    if (filed && (body as Partial<SharedEvent> | undefined)?.kind === MEMORY_CHANGED_KIND) scheduleMemoryPull();
+    // A pull of the team state follows a change of state alone: the other
+    // kinds of memory do not travel with the sync yet.
+    const event = body as Partial<SharedEvent> | undefined;
+    if (filed && event?.kind === MEMORY_CHANGED_KIND && parseMemoryChange(event.payload)?.kind === 'state') scheduleMemoryPull();
   }
 
   // Each tick sends the presence, sweeps the machines that fell silent and

@@ -90,7 +90,7 @@ function remoteCommits(remote) {
 }
 
 function parseEvents(text) {
-  return [...text.matchAll(/^- #\d+ \[([^\]]+)\] from (\S+)/gm)].map(match => ({ kind: match[1], from: match[2] }));
+  return [...text.matchAll(/^- #(\d+) \[([^\]]+)\] from (\S+)/gm)].map(match => ({ id: Number(match[1]), kind: match[2], from: match[3] }));
 }
 
 async function runTests() {
@@ -146,8 +146,11 @@ async function runTests() {
         await callTool(writer, 'working_memory_set', { project_path: project, key: `k${index}`, value: 'v' });
       }
       const text = await callTool(reader, 'session_events', { project_path: project });
-      const count = parseEvents(text).filter(event => event.kind === 'memory:changed').length;
-      assert.strictEqual(count, 20, `twenty-five writes against a cap of twenty leave exactly twenty, got ${count}`);
+      const ids = parseEvents(text).filter(event => event.kind === 'memory:changed').map(event => event.id);
+      assert.strictEqual(ids.length, 20, `twenty-five writes against a cap of twenty leave exactly twenty, got ${ids.length}`);
+      // The ids of the bus grow with every event: twenty survivors spanning
+      // nineteen are the twenty newest, with none of the older ones kept.
+      assert.strictEqual(Math.max(...ids) - Math.min(...ids), 19, `the twenty kept are the newest, consecutive ids: ${ids.join(', ')}`);
     });
 
     await writer.stop();
@@ -161,12 +164,14 @@ async function runTests() {
       teamCli(homeA, ['init', '--backend', 'git', '--remote', remote]);
       const before = remoteHead(remote);
       const commitsBefore = remoteCommits(remote);
-      const server = start(homeA, { EGC_MEMORY_PUSH_DELAY_MS: '400' });
+      // Two seconds between the first write and the sync: room for the
+      // second write on a slow runner, so the two become one sync.
+      const server = start(homeA, { EGC_MEMORY_PUSH_DELAY_MS: '2000' });
       await initialize(server, 'pusher');
       await callTool(server, 'update_state', { project_path: project, context: 'Pushed by the write.' });
       await callTool(server, 'update_state', { project_path: project, decisions: [{ what: 'second write', why: 'joins the first' }] });
       await until(() => remoteHead(remote) !== null && remoteHead(remote) !== before, 'the remote to receive the sync scheduled by the writes');
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      await new Promise(resolve => setTimeout(resolve, 2500));
       assert.strictEqual(remoteCommits(remote) - commitsBefore, 1, 'two writes within the delay became one sync, one commit on the remote, and nothing syncs again without a write');
       await server.stop();
     });
