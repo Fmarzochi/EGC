@@ -14,6 +14,13 @@ function draft(file: string, text: string): string {
   const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   const descriptor = fs.openSync(temporary, 'wx', 0o600);
   try {
+    // The mode given to open is masked by the umask; the owner gets it back
+    // before the first byte. Windows has no mode bits to set.
+    try {
+      fs.fchmodSync(descriptor, 0o600);
+    } catch {
+      // best-effort
+    }
     fs.writeFileSync(descriptor, text, 'utf8');
     fs.closeSync(descriptor);
   } catch (error) {
