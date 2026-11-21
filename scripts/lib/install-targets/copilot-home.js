@@ -29,7 +29,9 @@ const {
   createPreToolUseBashGuardianHookMergeOperation,
   createSessionStartHookMergeOperation,
   createStopHookMergeOperation,
+  resolveCopilotHooksFilePath,
 } = require('../copilot-settings-hooks');
+const { createCopilotHooksVersionOperation } = require('../copilot-hooks-version');
 
 // What the session hooks load, copied with their paths kept so the requires
 // resolve from ~/.github/scripts/hooks: the shared session adapter and what
@@ -203,6 +205,9 @@ function createSessionHookOperations(adapter, targetRoot, homeDir, plannedDestin
     ...copies,
     createSessionStartHookMergeOperation(targetRoot, homeDir),
     createStopHookMergeOperation(targetRoot, homeDir),
+    // Last, after every entry is merged: the `version` Copilot requires of
+    // the file, without which it ignores the gates and the session hooks.
+    createCopilotHooksVersionOperation(resolveCopilotHooksFilePath(homeDir)),
   ];
 }
 

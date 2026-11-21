@@ -37,8 +37,14 @@ const SESSION_HOOK_MODULE_ID = 'egc-copilot-session-hook';
 const SESSION_START_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/copilot-session-start.js';
 const STOP_HOOK_SCRIPT_SOURCE_RELATIVE_PATH = 'scripts/hooks/team-sync-stop.js';
 
+// The user-level hooks file Copilot reads: under COPILOT_HOME when the
+// person set it, else under ~/.copilot (the CLI reference lists
+// `$COPILOT_HOME/hooks/` beside `~/.copilot/hooks/`).
 function resolveCopilotHooksFilePath(homeDir) {
-  return path.join(homeDir, '.copilot', 'hooks', 'hooks.json');
+  const copilotHome = typeof process.env.COPILOT_HOME === 'string' && process.env.COPILOT_HOME.trim()
+    ? path.resolve(process.env.COPILOT_HOME.trim())
+    : path.join(homeDir, '.copilot');
+  return path.join(copilotHome, 'hooks', 'hooks.json');
 }
 
 function resolveSessionStartHookScriptDestination(targetRoot) {

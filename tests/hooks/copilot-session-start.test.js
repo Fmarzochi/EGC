@@ -111,6 +111,25 @@ try {
     assert.deepStrictEqual(parseJson(result.stdout), {});
   });
 
+  test('the Copilot hooks file gets the version Copilot requires, after the entries and without losing them', () => {
+    const core = require(path.join(REPO_ROOT, 'scripts', 'lib', 'claude-settings-hook-core.js'));
+    const versioned = require(path.join(REPO_ROOT, 'scripts', 'lib', 'copilot-hooks-version.js'));
+    const hooksFile = path.join(root, 'copilot-hooks', 'hooks.json');
+    core.applyHookEntryToFile(hooksFile, 'SessionStart', '/opt/egc/copilot-session-start.js');
+    assert.strictEqual(versioned.inspectCopilotHooksVersionFile(hooksFile), 'drifted', 'the generic merge writes no version');
+    assert.deepStrictEqual(versioned.applyCopilotHooksVersionToFile(hooksFile), { changed: true });
+    const written = JSON.parse(fs.readFileSync(hooksFile, 'utf8'));
+    assert.strictEqual(Object.keys(written)[0], 'version', 'the version comes first');
+    assert.strictEqual(written.version, 1);
+    assert.strictEqual(written.hooks.SessionStart.length, 1, 'the entry merged before is kept');
+    assert.deepStrictEqual(versioned.applyCopilotHooksVersionToFile(hooksFile), { changed: false }, 'a versioned file is left alone');
+    core.applyHookEntryToFile(hooksFile, 'Stop', '/opt/egc/team-sync-stop.js');
+    assert.strictEqual(JSON.parse(fs.readFileSync(hooksFile, 'utf8')).version, 1, 'a later merge keeps the version');
+    assert.strictEqual(versioned.inspectCopilotHooksVersionFile(hooksFile), 'ok');
+    assert.deepStrictEqual(versioned.applyCopilotHooksVersionToFile(path.join(root, 'copilot-hooks', 'fresh.json')), { changed: true });
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(root, 'copilot-hooks', 'fresh.json'), 'utf8')), { version: 1, hooks: {} }, 'a file created by this step alone is complete');
+  });
+
   test('the hooks run from the layout the Copilot install writes, with the runtime kept under scripts/', () => {
     const installed = path.join(root, 'home-installed');
     fs.mkdirSync(path.join(installed, '.egc', 'state'), { recursive: true });

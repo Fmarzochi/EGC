@@ -2912,6 +2912,8 @@ function runTests() {
     }
     const destinations = plan.operations.map(operation => operation.destinationPath).filter(destination => destination !== hooksFilePath);
     assert.strictEqual(new Set(destinations).size, destinations.length, 'no file is planned twice');
+    const hooksFileOperations = plan.operations.filter(operation => operation.destinationPath === hooksFilePath);
+    assert.strictEqual(hooksFileOperations.at(-1).hookEvent, 'copilot:hooks-version', 'the version of the Copilot hooks file is written after every entry');
   }));
 
   // Antigravity has no Token Crusher hook: its hooks answer a decision, never
