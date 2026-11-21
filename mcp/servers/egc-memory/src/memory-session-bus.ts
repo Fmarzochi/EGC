@@ -166,6 +166,17 @@ function describePeer(p: Record<string, unknown>): string {
   return `- ${id}${machineNote}${projectNote}${territoryNote(p.territory)} since ${since}`;
 }
 
+// A lock a session of another machine holds carries the path relative to
+// its project and the machine, as "(machine: <label>)" at the end; its
+// fields came over the network and are scrubbed the way the peers are.
+function describeLock(l: Record<string, unknown>): string {
+  const machine = sanitize(rowText(l.machine_label)).value.replaceAll(/[()\r\n]/g, ' ').trim();
+  if (!machine) return `- ${rowText(l.path)} held by ${rowText(l.session_id)} (ttl ${rowText(l.ttl_seconds)}s)`;
+  const lockPath = sanitize(rowText(l.path)).value.replaceAll(/\s+/g, '_');
+  const holder = sanitize(rowText(l.session_id)).value.replaceAll(/\s+/g, '_');
+  return `- ${lockPath} held by ${holder} (ttl ${Math.trunc(Number(l.ttl_seconds)) || 0}s) (machine: ${machine})`;
+}
+
 export async function handleClaimPath(db: Database, toolArgs: unknown) {
   const args = ClaimPathSchema.parse(toolArgs || {});
   const foreign = foreignSessionRefusal(args.session_id);
@@ -204,7 +215,7 @@ export async function handleSessionPeers(db: Database, toolArgs: unknown) {
   // holder of the same path, and this list is where a session sees who.
   const locks = await busListLocks(db);
   const peerLines = peers.map(describePeer);
-  const lockLines = locks.map(l => `- ${rowText(l.path)} held by ${rowText(l.session_id)} (ttl ${rowText(l.ttl_seconds)}s)`);
+  const lockLines = locks.map(describeLock);
   return { content: [{ type: "text", text: `Live sessions: ${peers.length}\n${peerLines.join('\n') || '(none)'}\n\nActive locks: ${locks.length}\n${lockLines.join('\n') || '(none)'}` }] };
 }
 

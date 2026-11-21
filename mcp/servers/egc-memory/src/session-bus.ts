@@ -56,6 +56,15 @@ export async function createSessionBusTables(db: BusDb): Promise<void> {
       box_id TEXT PRIMARY KEY,
       seen_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS mesh_locks (
+      machine_id TEXT NOT NULL,
+      project_key TEXT NOT NULL,
+      relative_path TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      acquired_at TEXT NOT NULL,
+      ttl_seconds INTEGER NOT NULL,
+      PRIMARY KEY (machine_id, project_key, relative_path)
+    );
     CREATE TABLE IF NOT EXISTS bus_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       from_session TEXT NOT NULL,
@@ -236,6 +245,89 @@ function parseSessions(raw: unknown): unknown[] {
   }
 }
 
+// An event as the mesh carries it: with the identity of its project, so the
+// machine that receives it files it under its own checkout.
+export interface SharedEvent {
+  event_id: number;
+  from_session: string;
+  to_session: string | null;
+  project_key: string | null;
+  kind: string;
+  payload: string;
+  created_at: string;
+}
+
+// The events queued here since `afterId` that another machine should see: a
+// broadcast, or a direct event for a session that is not on this machine.
+// An event that came from another machine (its sender is a remote session)
+// is never sent back out.
+export async function listOutboundEvents(db: BusDb, afterId: number, nowMs: number = Date.now()): Promise<{ lastId: number; events: SharedEvent[] }> {
+  const rows = await db.all('SELECT id, from_session, to_session, project_path, kind, payload, created_at FROM bus_events WHERE id > ? ORDER BY id LIMIT 200', afterId);
+  if (rows.length === 0) return { lastId: afterId, events: [] };
+  const remoteIds = new Set((await listRemoteSessions(db, undefined, nowMs)).map(row => rowText(row.id)));
+  const localIds = new Set((await db.all('SELECT id FROM bus_sessions')).map(row => rowText(row.id)));
+  const events: SharedEvent[] = [];
+  for (const row of rows) {
+    const from = rowText(row.from_session);
+    const to = row.to_session ? rowText(row.to_session) : null;
+    if (remoteIds.has(from) && !localIds.has(from)) continue;
+    if (to !== null && localIds.has(to)) continue;
+    events.push({
+      event_id: Number(row.id),
+      from_session: from,
+      to_session: to,
+      project_key: projectKeyOf(row.project_path ? rowText(row.project_path) : null),
+      kind: rowText(row.kind),
+      payload: rowText(row.payload),
+      created_at: rowText(row.created_at),
+    });
+  }
+  return { lastId: Number(rows.at(-1)?.id ?? afterId), events };
+}
+
+export async function latestEventId(db: BusDb): Promise<number> {
+  const row = await db.get('SELECT MAX(id) AS id FROM bus_events');
+  return Number(row?.id ?? 0) || 0;
+}
+
+function cleanSharedEvent(value: unknown): SharedEvent | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const text = (field: unknown, max: number): string | null => (typeof field === 'string' && field ? field.slice(0, max) : null);
+  const from = text(record.from_session, 200);
+  const kind = text(record.kind, 200);
+  if (!from || !kind) return null;
+  const payload = typeof record.payload === 'string' ? record.payload : '';
+  if (Buffer.byteLength(payload, 'utf8') > MAX_EVENT_PAYLOAD_BYTES) return null;
+  return { event_id: Number(record.event_id) || 0, from_session: from, to_session: text(record.to_session, 200), project_key: text(record.project_key, 300), kind, payload, created_at: text(record.created_at, 40) ?? '' };
+}
+
+// Files an event another machine sent under this machine's checkout of its
+// repository (a broadcast reaches every local session of that repository; a
+// direct event reaches its session when it is here). An event for a
+// repository this machine does not have, or for a session that is not here,
+// is dropped: nobody would read it.
+export async function recordInboundEvent(db: BusDb, value: unknown, nowMs: number = Date.now()): Promise<boolean> {
+  const event = cleanSharedEvent(value);
+  if (!event) return false;
+  const sessions = await db.all('SELECT id, project_path FROM bus_sessions');
+  let projectPath: string | null = null;
+  if (event.to_session) {
+    const target = sessions.find(row => rowText(row.id) === event.to_session);
+    if (!target) return false;
+    projectPath = target.project_path ? rowText(target.project_path) : null;
+  } else if (event.project_key) {
+    const match = sessions.find(row => row.project_path && projectKeyOf(rowText(row.project_path)) === event.project_key);
+    if (!match) return false;
+    projectPath = rowText(match.project_path);
+  }
+  await db.run(
+    `INSERT INTO bus_events (from_session, to_session, project_path, kind, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    event.from_session, event.to_session, projectPath, event.kind, event.payload, new Date(nowMs).toISOString()
+  );
+  return true;
+}
+
 // The remote sessions as session_peers lists them: those of the machines
 // seen within the TTL, each with its machine's id and label; with a project
 // filter, those of the same repository identity.
@@ -352,6 +444,11 @@ export async function claimPath(
   // renews it, and the order of the two decides which one stays.
   const held = await db.get('SELECT session_id FROM bus_locks WHERE path = ? AND session_id = ?', key, input.sessionId);
   if (blocking.length > 0 && !held) return refusedBy(blocking[0]);
+  // A path a session of another machine holds, in the same repository, is
+  // refused the way a local one is: the lock reached here with that
+  // machine's presence, and the refusal names the machine.
+  const remote = held ? null : await remoteLockOn(db, project, key, nowMs);
+  if (remote) return { ok: false, holder: remote.session_id, holderTerritory: remote.territory, reason: `held by ${remote.session_id} on ${remote.machine_label}` };
   const claimed = await claimExactPath(db, { ...input, path: key }, nowMs);
   return claimed.ok ? yieldToEarlierOverlap(db, key, input.sessionId) : claimed;
 }
@@ -415,8 +512,108 @@ export async function releasePath(db: BusDb, input: { sessionId: string; path: s
   return true;
 }
 
-export async function listLocks(db: BusDb): Promise<Record<string, unknown>[]> {
-  return db.all('SELECT * FROM bus_locks ORDER BY acquired_at');
+// The locks of this machine and, after them, the live locks of the other
+// machines of the team, each with the label of its machine and the path
+// relative to its project.
+export async function listLocks(db: BusDb, nowMs: number = Date.now()): Promise<Record<string, unknown>[]> {
+  const local = await db.all('SELECT * FROM bus_locks ORDER BY acquired_at');
+  const remote = await liveRemoteLocks(db, nowMs);
+  return [...local, ...remote.map(lock => ({ path: lock.relative_path, session_id: lock.session_id, acquired_at: lock.acquired_at, ttl_seconds: lock.ttl_seconds, machine_id: lock.machine_id, machine_label: lock.machine_label, project_key: lock.project_key }))];
+}
+
+// A lock as the mesh carries it: the repository it belongs to and the path
+// relative to the project, so another machine compares it against its own
+// checkout of that repository.
+export interface SharedLock {
+  project_key: string;
+  relative_path: string;
+  session_id: string;
+  acquired_at: string;
+  ttl_seconds: number;
+}
+
+interface RemoteLockRow extends SharedLock { machine_id: string; machine_label: string }
+
+function relativeLockPath(project: string, key: string): string | null {
+  if (!project) return null;
+  const relative = path.relative(claimKeyOf('', project), key);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
+  return relative.split(path.sep).join('/');
+}
+
+// The locks of this machine that another machine can relate to: those on a
+// path inside a project with a repository identity.
+export async function listSharedLocks(db: BusDb, nowMs: number = Date.now()): Promise<SharedLock[]> {
+  const rows = await db.all(
+    `SELECT l.path, l.session_id, l.acquired_at, l.ttl_seconds, s.project_path FROM bus_locks l
+     JOIN bus_sessions s ON s.id = l.session_id ORDER BY l.acquired_at`
+  );
+  const shared: SharedLock[] = [];
+  for (const row of rows) {
+    const acquired = Date.parse(rowText(row.acquired_at));
+    if (Number.isFinite(acquired) && acquired + Number(row.ttl_seconds) * 1000 < nowMs) continue;
+    const project = row.project_path ? rowText(row.project_path) : '';
+    const projectKey = projectKeyOf(project || null);
+    const relative = relativeLockPath(project, rowText(row.path));
+    if (!projectKey || relative === null) continue;
+    shared.push({ project_key: projectKey, relative_path: relative, session_id: rowText(row.session_id), acquired_at: rowText(row.acquired_at), ttl_seconds: Number(row.ttl_seconds) });
+  }
+  return shared;
+}
+
+function cleanSharedLock(value: unknown): SharedLock | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  const text = (field: unknown, max: number): string | null => (typeof field === 'string' && field ? field.slice(0, max) : null);
+  const projectKey = text(record.project_key, 300);
+  const relative = text(record.relative_path, 1000);
+  const sessionId = text(record.session_id, 200);
+  const acquiredAt = text(record.acquired_at, 40);
+  const ttl = Number(record.ttl_seconds);
+  if (!projectKey || !relative || !sessionId || !acquiredAt || !Number.isFinite(ttl)) return null;
+  return { project_key: projectKey, relative_path: relative, session_id: sessionId, acquired_at: acquiredAt, ttl_seconds: Math.min(Math.max(Math.trunc(ttl), 1), MAX_LOCK_TTL_SECONDS) };
+}
+
+// What a machine says it holds replaces what it said before: a lock it
+// released is gone with the next word from it.
+export async function recordRemoteLocks(db: BusDb, machineId: string, locks: unknown[]): Promise<void> {
+  const clean = locks.map(cleanSharedLock).filter((lock): lock is SharedLock => lock !== null).slice(0, MAX_REMOTE_SESSIONS);
+  await db.run('DELETE FROM mesh_locks WHERE machine_id = ?', machineId);
+  await Promise.all(clean.map(lock => db.run(
+    `INSERT OR REPLACE INTO mesh_locks (machine_id, project_key, relative_path, session_id, acquired_at, ttl_seconds) VALUES (?, ?, ?, ?, ?, ?)`,
+    machineId, lock.project_key, lock.relative_path, lock.session_id, lock.acquired_at, lock.ttl_seconds
+  )));
+}
+
+async function liveRemoteLocks(db: BusDb, nowMs: number): Promise<RemoteLockRow[]> {
+  const cutoff = new Date(nowMs - REMOTE_MACHINE_TTL_SECONDS * 1000).toISOString();
+  const rows = await db.all(
+    `SELECT l.machine_id, m.label, l.project_key, l.relative_path, l.session_id, l.acquired_at, l.ttl_seconds FROM mesh_locks l
+     JOIN mesh_machines m ON m.machine_id = l.machine_id WHERE m.seen_at >= ? ORDER BY l.acquired_at`,
+    cutoff
+  );
+  return rows
+    .filter(row => {
+      const acquired = Date.parse(rowText(row.acquired_at));
+      return !Number.isFinite(acquired) || acquired + Number(row.ttl_seconds) * 1000 >= nowMs;
+    })
+    .map(row => ({ machine_id: rowText(row.machine_id), machine_label: rowText(row.label), project_key: rowText(row.project_key), relative_path: rowText(row.relative_path), session_id: rowText(row.session_id), acquired_at: rowText(row.acquired_at), ttl_seconds: Number(row.ttl_seconds) }));
+}
+
+function overlapsRelative(a: string, b: string): boolean {
+  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+}
+
+// The lock a session of another machine holds on this path (or on a path
+// above or below it) in the same repository, or null.
+async function remoteLockOn(db: BusDb, project: string, key: string, nowMs: number): Promise<{ session_id: string; machine_label: string; territory?: string } | null> {
+  const projectKey = projectKeyOf(project || null);
+  const relative = relativeLockPath(project, key);
+  if (!projectKey || relative === null) return null;
+  const match = (await liveRemoteLocks(db, nowMs)).find(lock => lock.project_key === projectKey && overlapsRelative(lock.relative_path, relative));
+  if (!match) return null;
+  const session = (await listRemoteSessions(db, undefined, nowMs)).find(row => row.id === match.session_id && row.machine_id === match.machine_id);
+  return { session_id: match.session_id, machine_label: match.machine_label, territory: session?.territory ? rowText(session.territory) : undefined };
 }
 
 export interface SendResult {
@@ -448,11 +645,13 @@ export async function sendEvent(
   if (input.toSession) {
     const target = await db.get('SELECT id, project_path FROM bus_sessions WHERE id = ?', input.toSession);
     if (!target) {
-      return { ok: false, reason: `session ${input.toSession} is not live on the bus` };
-    }
-    // A direct event stays inside the sender's project, like a broadcast;
-    // a sender without a project only reaches a session without one.
-    if ((target.project_path ?? null) !== (input.projectPath ?? null)) {
+      // A session of another machine, in the same repository, is reached
+      // through the bridge, which forwards what is queued for it here.
+      const remote = (await listRemoteSessions(db, input.projectPath, nowMs)).find(row => row.id === input.toSession);
+      if (!remote) return { ok: false, reason: `session ${input.toSession} is not live on the bus` };
+    } else if ((target.project_path ?? null) !== (input.projectPath ?? null)) {
+      // A direct event stays inside the sender's project, like a broadcast;
+      // a sender without a project only reaches a session without one.
       return { ok: false, reason: `session ${input.toSession} is not live in this project` };
     }
   }

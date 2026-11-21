@@ -97,10 +97,19 @@ function _parsePeerLine(line) {
   return i === line.length ? peer : null;
 }
 
+// The tail of a lock line: "(machine: <label>)" when a session of another
+// machine holds the lock, nothing for a local one.
+function _readLockMachine(rest) {
+  const tail = rest.trim();
+  const opener = '(machine:';
+  if (!tail.startsWith(opener) || !tail.endsWith(')')) return null;
+  return tail.slice(opener.length, -1).trim() || null;
+}
+
 /**
  * Parse the text output of session_peers into { peers, locks }.
  * Each peer: { id, machine_label, project_path, territory, started_at }
- * Each lock: { path, session_id, ttl_seconds }
+ * Each lock: { path, session_id, ttl_seconds, machine_label }
  */
 function _parsePeersText(text) {
   if (typeof text !== 'string') return { peers: [], locks: [] };
@@ -122,9 +131,10 @@ function _parsePeersText(text) {
     const m = /^-\s+(\S+)\s+held by\s+(\S+)\s+\(ttl\s+(\d+)s\)/.exec(line);
     if (m) {
       locks.push({
-        path:        m[1],
-        session_id:  m[2],
-        ttl_seconds: Number(m[3]),
+        path:          m[1],
+        session_id:    m[2],
+        ttl_seconds:   Number(m[3]),
+        machine_label: _readLockMachine(line.slice(m[0].length)),
       });
     }
   }
