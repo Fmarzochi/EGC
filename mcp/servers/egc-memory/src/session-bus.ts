@@ -570,9 +570,14 @@ function relativeLockPath(project: string, key: string): string | null {
 // The locks of this machine that another machine can relate to: those on a
 // path inside a project with a repository identity.
 export async function listSharedLocks(db: BusDb, nowMs: number = Date.now()): Promise<SharedLock[]> {
+  // A lock of a session that fell silent is not the machine's to tell: the
+  // sweep removes it here, and the other machines stop refusing it with the
+  // next word from this one.
+  const liveSince = new Date(nowMs - SESSION_TTL_SECONDS * 1000).toISOString();
   const rows = await db.all(
     `SELECT l.path, l.session_id, l.acquired_at, l.ttl_seconds, s.project_path FROM bus_locks l
-     JOIN bus_sessions s ON s.id = l.session_id ORDER BY l.acquired_at`
+     JOIN bus_sessions s ON s.id = l.session_id WHERE s.heartbeat_at >= ? ORDER BY l.acquired_at`,
+    liveSince
   );
   const shared: SharedLock[] = [];
   for (const row of rows) {
