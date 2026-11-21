@@ -23,6 +23,10 @@ const {
   removeCursorCrusherHookFromFile,
 } = require('./cursor-crusher-hooks');
 const {
+  COPILOT_HOOKS_VERSION_TAG,
+  COPILOT_HOOKS_VERSION_HANDLERS,
+} = require('./copilot-hooks-version');
+const {
   PRE_TOOL_USE_EVENT: KIRO_PRE_TOOL_USE_EVENT,
   applyKiroGuardianHookToFile,
   inspectKiroGuardianHookFile,
@@ -192,6 +196,10 @@ const HOOK_EVENT_OPERATION_HANDLERS = {
     remove: operation => removeCursorCrusherHookFromFile(operation.destinationPath, operation.hookScriptPath),
     inspect: operation => inspectCursorCrusherHookFile(operation.destinationPath, operation.hookScriptPath),
   },
+  // The `version` field of the Copilot hooks file, owned by one operation
+  // per install (copilot-hooks-version.js): without it Copilot rejects the
+  // file and every entry EGC merged into it.
+  [COPILOT_HOOKS_VERSION_TAG]: COPILOT_HOOKS_VERSION_HANDLERS,
   [KIRO_PRE_TOOL_USE_EVENT]: {
     apply: operation => applyKiroGuardianHookToFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
     remove: operation => removeKiroGuardianHookFromFile(operation.destinationPath, operation.hookEvent, operation.hookScriptPath),
