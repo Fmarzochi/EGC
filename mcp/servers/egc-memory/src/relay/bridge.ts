@@ -163,7 +163,6 @@ export class MeshBridge {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private backoffMs = RECONNECT_MIN_MS;
   private stopped = false;
-  private inbound: Promise<void> = Promise.resolve();
   private readonly replay: ReplayGuard;
   private readonly authKey: Buffer;
   private readonly sealKey: Buffer;
@@ -273,26 +272,30 @@ export class MeshBridge {
       return;
     }
     this.socket = socket;
-    // Frames are handled one after the other, in the order the central sent
-    // them: a presence that is being written to the bus while the central
-    // says the same machine left would otherwise land after the removal.
+    // The frames of a connection are handled one after the other, in the
+    // order the central sent them: a presence that is being written to the
+    // bus while the central says the same machine left would otherwise land
+    // after the removal. The queue belongs to this connection: what a
+    // connection that is no longer current still has queued is dropped, so
+    // it neither delays the challenge of the next one nor touches its state.
+    let inbound: Promise<void> = Promise.resolve();
     socket.on('message', (data: RawData, isBinary: boolean) => {
       if (isBinary) return;
       const raw = data.toString();
-      this.inbound = this.inbound
-        .then(() => this.onFrame(raw))
+      inbound = inbound
+        .then(() => (this.socket === socket ? this.onFrame(raw, socket) : undefined))
         .catch(error => this.log(`mesh: a frame was not handled: ${error instanceof Error ? error.message : String(error)}`));
     });
     socket.on('close', code => this.onClose(socket, code));
     socket.on('error', error => this.log(`mesh: connection error: ${error.message}`));
   }
 
-  private async onFrame(raw: string): Promise<void> {
+  private async onFrame(raw: string, socket: WebSocket): Promise<void> {
     const frame = parseHubFrame(raw);
-    if (!frame || !this.socket) return;
+    if (!frame || this.socket !== socket) return;
     switch (frame.t) {
       case 'challenge':
-        this.socket.send(JSON.stringify({ t: 'hello', v: MESH_PROTOCOL_VERSION, machine: this.identity.id, proof: helloProof(this.authKey, frame.challenge, this.identity.id) }));
+        socket.send(JSON.stringify({ t: 'hello', v: MESH_PROTOCOL_VERSION, machine: this.identity.id, proof: helloProof(this.authKey, frame.challenge, this.identity.id) }));
         return;
       case 'welcome':
         this.connected = true;
