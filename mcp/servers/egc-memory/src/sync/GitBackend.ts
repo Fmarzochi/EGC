@@ -1,12 +1,14 @@
 import { simpleGit, SimpleGit } from 'simple-git';
 import type { RemoteWithRefs } from 'simple-git';
 import path from 'node:path';
-import os from 'node:os';
 import fs from 'node:fs';
 import { InitOptions, SyncBackend, SyncConfig, SyncStatus } from './SyncBackend';
 import { GIT_ENVIRONMENT_KEYS, gitEnvironment } from './git-env';
+import { resolveHome } from '../home';
 
-const SYNC_STATE_DIR = path.join(os.homedir(), '.egc', 'team-sync');
+// The checkout lives under the home the rest of the server resolves, so the
+// state it syncs is the state update_state writes, on Windows too.
+const SYNC_STATE_DIR = path.join(resolveHome(), '.egc', 'team-sync');
 
 // The first line git gave for a failure, without the "fatal:" prefix.
 function gitReason(error: unknown): string {
