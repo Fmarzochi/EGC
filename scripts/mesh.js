@@ -6,9 +6,6 @@
 // the built memory server, which the machines' bridges share it with.
 
 const fs = require('node:fs');
-const path = require('node:path');
-
-const RELAY_RELATIVE = ['mcp', 'servers', 'egc-memory', 'build', 'relay'];
 const USAGE = [
   'Usage: egc mesh <serve [--port <n>] [--host <address>] [--no-announce] | connect [<address>] | find | disconnect | status | label <name>>',
   '',
@@ -25,28 +22,7 @@ const USAGE = [
   '  status            This machine on the mesh: identity, central, connection, machines online.',
   '  label <name>      Rename this machine as the other machines see it.',
 ].join('\n');
-const NOT_BUILT = 'The memory server is not built, so the mesh cannot run: in a checkout of EGC run `bash scripts/install.sh`, which builds the servers, or `npm run build` in mcp/servers/egc-memory.\n';
-
-// The built relay modules: the ones of the EGC root this file runs from,
-// else the ones the shared resolver finds for an install elsewhere; null
-// when the memory server was not built.
-function relayModule(name) {
-  const relative = [...RELAY_RELATIVE, `${name}.js`];
-  const local = path.join(__dirname, '..', ...relative);
-  if (fs.existsSync(local)) return local;
-  try {
-    const { resolveEGCRoot } = require('./lib/resolve-egc-root');
-    const candidate = path.join(resolveEGCRoot({ probe: relative.join('/') }), ...relative);
-    return fs.existsSync(candidate) ? candidate : null;
-  } catch {
-    return null;
-  }
-}
-
-function loadRelay(name) {
-  const script = relayModule(name);
-  return script ? require(script) : null;
-}
+const { NOT_BUILT, loadRelay } = require('./lib/relay-module');
 
 function readStatusFile(file) {
   try {

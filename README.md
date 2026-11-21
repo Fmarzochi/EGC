@@ -56,6 +56,7 @@ To keep your project state in step across your own machines, point EGC at a priv
 
 ```bash
 egc team init --backend git --remote https://github.com/you/egc-memory.git
+egc team invite   # on that machine when another of yours joins; on the new one, on the same network: egc team join. The same six digits on both screens, you confirm on both, no key to copy
 egc team init --backend git --remote https://github.com/you/egc-memory.git --key <team key>   # on each other machine; the key shows in the process list and stays in shell history, so clear that line and avoid shared machines
 egc team sync   # by hand; the sessions also sync by themselves from init (egc team autosync off turns that off)
 ```
