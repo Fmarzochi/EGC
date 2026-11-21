@@ -16,11 +16,15 @@ export function meshConfigPath(home: string = resolveHome()): string {
   return path.join(home, '.egc', 'mesh.json');
 }
 
-// A WebSocket address with a host; a bare host:port is read as ws://.
+// A WebSocket address with a host; a bare host:port is read as ws://, and an
+// address that names another scheme (http://, for one) is refused rather
+// than read as a host called "http".
 export function normalizeCentralAddress(value: string): string | null {
   const text = String(value ?? '').trim();
   if (!text) return null;
-  const candidate = /^wss?:\/\//i.test(text) ? text : `ws://${text}`;
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(text);
+  if (scheme && !/^wss?$/i.test(scheme[1])) return null;
+  const candidate = scheme ? text : `ws://${text}`;
   let url: URL;
   try {
     url = new URL(candidate);
@@ -57,11 +61,15 @@ export function writeMeshConfig(central: string, home: string = resolveHome()): 
   return config;
 }
 
+// True when a central was forgotten, false when none was configured; a file
+// that exists and cannot be removed is an error, so the caller never reports
+// a machine as alone while it still has its central.
 export function clearMeshConfig(home: string = resolveHome()): boolean {
   try {
     fs.rmSync(meshConfigPath(home));
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }

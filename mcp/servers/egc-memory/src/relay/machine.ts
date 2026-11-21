@@ -56,15 +56,41 @@ function writeMachineFile(file: string, identity: MachineIdentity): void {
   fs.renameSync(temporary, file);
 }
 
-// The identity of this machine, created on the first call. Two servers
-// creating it at once both end with the same file: the one that lost the
-// rename reads the winner's identity back.
+// The first identity is published by linking the finished temporary file to
+// its name, which fails when the name exists: of two servers creating it at
+// once, exactly one wins and the other reads the winner back. A file system
+// without hard links falls back to the rename.
+function publishMachineFile(file: string, identity: MachineIdentity): boolean {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(temporary, `${JSON.stringify(identity, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  try {
+    fs.linkSync(temporary, file);
+    fs.rmSync(temporary, { force: true });
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      fs.rmSync(temporary, { force: true });
+      return false;
+    }
+  }
+  try {
+    fs.renameSync(temporary, file);
+    return true;
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw error;
+  }
+}
+
+// The identity of this machine, created on the first call and the same for
+// every server of the machine from then on.
 export function loadOrCreateMachine(home: string = resolveHome()): MachineIdentity {
   const file = machineFilePath(home);
   const existing = readMachineFile(file);
   if (existing) return existing;
   const fresh: MachineIdentity = { id: crypto.randomBytes(16).toString('hex'), label: defaultLabel(), createdAt: new Date().toISOString() };
-  writeMachineFile(file, fresh);
+  if (!publishMachineFile(file, fresh)) return readMachineFile(file) ?? loadOrCreateMachine(home);
   return readMachineFile(file) ?? fresh;
 }
 

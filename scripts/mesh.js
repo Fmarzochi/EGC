@@ -10,13 +10,15 @@ const path = require('node:path');
 
 const RELAY_RELATIVE = ['mcp', 'servers', 'egc-memory', 'build', 'relay'];
 const USAGE = [
-  'Usage: egc mesh <serve | connect <address> | disconnect | status | label <name>>',
+  'Usage: egc mesh <serve [--port <n>] [--host <address>] | connect <address> | disconnect | status | label <name>>',
   '',
-  '  serve             Run the central that relays between your machines (port 47470 by default).',
+  '  serve             Run the central that relays between your machines (port 47470 by default;',
+  '                    --port and --host change where it listens).',
   '                    It lets in the machines that hold the key of this machine\'s team (egc team init).',
   '  connect <addr>    Point this machine at a central (host:port, or a ws:// or wss:// URL).',
   '                    The memory servers connect from their next start.',
-  '  disconnect        Forget the central: the machine works alone again.',
+  '  disconnect        Forget the central: the machine works alone again, and a running bridge',
+  '                    steps down within half a minute.',
   '  status            This machine on the mesh: identity, central, connection, machines online.',
   '  label <name>      Rename this machine as the other machines see it.',
 ].join('\n');
@@ -45,10 +47,28 @@ function loadRelay(name) {
 
 function readStatusFile(file) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
     return null;
   }
+}
+
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
+// The bridge refreshes its status file with every presence (30 s): a file
+// older than two minutes, or whose process is gone, belongs to a bridge that
+// is gone.
+function isLiveStatus(status) {
+  if (!status || typeof status.updatedAt !== 'string' || !Number.isInteger(status.pid)) return false;
+  return Date.now() - Date.parse(status.updatedAt) < 2 * 60 * 1000 && processAlive(status.pid);
 }
 
 function showStatus() {
@@ -68,24 +88,23 @@ function showStatus() {
     `Central: ${config ? config.central : 'none (egc mesh connect <address> to join one)'}`,
   ];
   if (config) {
-    const live = Boolean(status) && Date.now() - Date.parse(status.updatedAt) < 2 * 60 * 1000;
+    const live = isLiveStatus(status);
     lines.push(`Bridge:  ${describeBridge(status, live)}`);
     lines.push(`Online:  ${describeOnline(status, live)}`);
   }
   process.stdout.write(`${lines.join('\n')}\n`);
 }
 
-// The bridge as its status file last described it; a status older than two
-// minutes belongs to a server that is gone.
 function describeBridge(status, live) {
   if (!live) return 'not running (starts with the next memory server)';
   const pid = `pid ${status.pid}`;
-  return status.connected ? `connected (${pid})` : `reconnecting (${pid})`;
+  return status.connected === true ? `connected (${pid})` : `reconnecting (${pid})`;
 }
 
 function describeOnline(status, live) {
-  if (!live || status.online.length === 0) return 'no other machine seen';
-  return `${status.online.length} other machine(s)`;
+  const online = live && Array.isArray(status.online) ? status.online : [];
+  if (online.length === 0) return 'no other machine seen';
+  return `${online.length} other machine(s)`;
 }
 
 function connectCentral(address) {
@@ -116,7 +135,12 @@ function disconnectCentral() {
     process.exitCode = 1;
     return;
   }
-  process.stdout.write(configModule.clearMeshConfig() ? 'Central forgotten: this machine works alone from the next start of its memory servers.\n' : 'No central was configured.\n');
+  try {
+    process.stdout.write(configModule.clearMeshConfig() ? 'Central forgotten: a running bridge steps down within half a minute, and the memory servers start alone from now on.\n' : 'No central was configured.\n');
+  } catch (error) {
+    process.stderr.write(`The central could not be forgotten: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  }
 }
 
 function relabel(name) {

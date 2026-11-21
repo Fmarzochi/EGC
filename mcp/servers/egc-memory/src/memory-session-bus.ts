@@ -151,13 +151,19 @@ function territoryNote(territory: unknown): string {
   return text ? ` (territory: ${sanitize(text).value})` : '';
 }
 
-// A session of another machine of the team carries the label of its machine.
+// A session of another machine of the team carries the label of its machine,
+// as "(machine: <label>)" after the id. Every field of such a session came
+// over the network, so each one is scrubbed on the way out, and the label
+// loses the parentheses and line breaks that would break the line apart for
+// the parsers of this text (scripts/lib/operations/bus-parsers.js).
 function describePeer(p: Record<string, unknown>): string {
-  const project = rowText(p.project_path);
+  const id = sanitize(rowText(p.id)).value.replaceAll(/\s+/g, '_');
+  const project = sanitize(rowText(p.project_path)).value;
   const projectNote = project ? ` [${project}]` : '';
-  const machine = rowText(p.machine_label);
-  const machineNote = machine ? ` on ${sanitize(machine).value}` : '';
-  return `- ${rowText(p.id)}${machineNote}${projectNote}${territoryNote(p.territory)} since ${rowText(p.started_at)}`;
+  const machine = sanitize(rowText(p.machine_label)).value.replaceAll(/[()\r\n]/g, ' ').trim();
+  const machineNote = machine ? ` (machine: ${machine})` : '';
+  const since = sanitize(rowText(p.started_at)).value.replaceAll(/\s+/g, '_');
+  return `- ${id}${machineNote}${projectNote}${territoryNote(p.territory)} since ${since}`;
 }
 
 export async function handleClaimPath(db: Database, toolArgs: unknown) {

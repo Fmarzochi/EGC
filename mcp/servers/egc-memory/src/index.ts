@@ -134,12 +134,14 @@ async function run() {
   // that cannot start is a log line, never a server that does not answer.
   try {
     const { startBridgeIfElected } = await import('./relay/bridge.js');
-    startBridgeIfElected({ db, log: line => log('INFO', line) });
+    bridgeHandle = startBridgeIfElected({ db, log: line => log('INFO', line) });
   } catch (error) {
     log('WARN', 'The mesh bridge did not start', { error: String(error) });
   }
 }
 
+// The bridge to the mesh, stopped before the database closes under it.
+let bridgeHandle: { stop(): Promise<void> } | null = null;
 let shuttingDown = false;
 
 async function shutdown() {
@@ -154,6 +156,10 @@ async function shutdown() {
     await new Promise<void>(resolve => idleWaiters.push(resolve));
   }
   closeMeshTransport();
+  if (bridgeHandle) {
+    await bridgeHandle.stop().catch(() => undefined);
+    bridgeHandle = null;
+  }
   await closeDb();
   if (transport) {
     await server.close();

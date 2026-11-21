@@ -52,6 +52,10 @@ export async function createSessionBusTables(db: BusDb): Promise<void> {
       sessions TEXT NOT NULL,
       seen_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS mesh_boxes (
+      box_id TEXT PRIMARY KEY,
+      seen_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS bus_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       from_session TEXT NOT NULL,
@@ -68,6 +72,18 @@ export async function createSessionBusTables(db: BusDb): Promise<void> {
       last_event_id INTEGER NOT NULL
     );
   `);
+}
+
+// A box the bridge took from the mesh, by its id, kept for a day: true the
+// first time, false for a repeat, so a bridge that restarts or replaces the
+// one that took it refuses it the way the running one does.
+export const BOX_MEMORY_SECONDS = 24 * 60 * 60;
+
+export async function rememberBox(db: BusDb, boxId: string, nowMs: number = Date.now()): Promise<boolean> {
+  const now = new Date(nowMs).toISOString();
+  await db.run('DELETE FROM mesh_boxes WHERE seen_at < ?', new Date(nowMs - BOX_MEMORY_SECONDS * 1000).toISOString());
+  const result = await db.run('INSERT OR IGNORE INTO mesh_boxes (box_id, seen_at) VALUES (?, ?)', boxId, now);
+  return typeof (result as { changes?: number })?.changes === 'number' && (result as { changes: number }).changes > 0;
 }
 
 // Lazy GC: dead sessions release their presence and every lock they held.

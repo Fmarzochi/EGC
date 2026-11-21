@@ -14,7 +14,9 @@
 // and any future callers get a stable, typed result.
 //
 // handleSessionPeers text format:
-//   "Live sessions: N\n- id [path] (territory: t) since ts\n\nActive locks: M\n- path held by sid (ttl Xs)"
+//   "Live sessions: N\n- id (machine: m) [path] (territory: t) since ts\n\nActive locks: M\n- path held by sid (ttl Xs)"
+//   The "(machine: m)" field names the machine of a session that another
+//   machine of the team announced over the mesh; a local session has none.
 //
 // handleSessionSend text format (ok):
 //   "Event #42 sent to session s2: [handoff]"
@@ -66,7 +68,7 @@ function _readSince(line, i) {
 
 /**
  * Parse one peer line of session_peers:
- *   "- <id>[ [<project_path>]][ (territory: <territory>)][ since <started_at>]"
+ *   "- <id>[ (machine: <machine_label>)][ [<project_path>]][ (territory: <territory>)][ since <started_at>]"
  * Returns null for anything else (headers, "(none)", trailing junk).
  */
 function _parsePeerLine(line) {
@@ -74,8 +76,12 @@ function _parsePeerLine(line) {
   if (!line.startsWith('-') || idStart === 1) return null;
   const idEnd = _tokenEnd(line, idStart);
   if (idEnd === idStart) return null;
-  const peer = { id: line.slice(idStart, idEnd), project_path: null, territory: null, started_at: null };
+  const peer = { id: line.slice(idStart, idEnd), machine_label: null, project_path: null, territory: null, started_at: null };
   let i = idEnd;
+
+  const machine = _readBracketed(line, i, '(machine:', ')');
+  if (machine?.invalid) return null;
+  if (machine) { peer.machine_label = machine.value.trim() || null; i = machine.next; }
 
   const project = _readBracketed(line, i, '[', ']');
   if (project?.invalid) return null;
@@ -93,7 +99,7 @@ function _parsePeerLine(line) {
 
 /**
  * Parse the text output of session_peers into { peers, locks }.
- * Each peer: { id, project_path, territory, started_at }
+ * Each peer: { id, machine_label, project_path, territory, started_at }
  * Each lock: { path, session_id, ttl_seconds }
  */
 function _parsePeersText(text) {

@@ -5,7 +5,7 @@ import WebSocket from 'ws';
 import type { RawData } from 'ws';
 
 import { resolveHome } from '../home';
-import { listLiveSessions, recordRemotePresence, forgetRemoteMachine, sweepRemoteMachines } from '../session-bus';
+import { forgetRemoteMachine, listLiveSessions, recordRemotePresence, rememberBox, sweepRemoteMachines } from '../session-bus';
 import type { BusDb, RemoteSession } from '../session-bus';
 import { parseTeamKey } from '../sync/envelope';
 import { getTeamConfig } from '../sync/TeamSync';
@@ -119,30 +119,48 @@ export class BridgeLock {
   }
 
   claim(): boolean {
-    const current = readLock(this.file);
-    if (current && current.token !== this.token) {
-      const fresh = this.now() - Date.parse(current.heartbeatAt) < LOCK_STALE_MS;
-      if (fresh && (current.pid === process.pid || processAlive(current.pid))) return false;
+    try {
+      const current = readLock(this.file);
+      if (current && current.token !== this.token) {
+        const fresh = this.now() - Date.parse(current.heartbeatAt) < LOCK_STALE_MS;
+        if (fresh && (current.pid === process.pid || processAlive(current.pid))) return false;
+      }
+      writePrivateJson(this.file, { pid: process.pid, token: this.token, heartbeatAt: new Date(this.now()).toISOString() });
+      return readLock(this.file)?.token === this.token;
+    } catch {
+      return false;
     }
-    writePrivateJson(this.file, { pid: process.pid, token: this.token, heartbeatAt: new Date(this.now()).toISOString() });
-    return readLock(this.file)?.token === this.token;
   }
 
+  // The heartbeat is written only while the file still carries this token
+  // and read back afterwards, so a holder that lost the lock to a
+  // replacement between the two steps learns it here and steps down. A
+  // heartbeat that cannot be written counts as a lost lock, never as an
+  // exception thrown from a timer.
   renew(): boolean {
-    const current = readLock(this.file);
-    if (!current || current.token !== this.token) return false;
-    writePrivateJson(this.file, { ...current, heartbeatAt: new Date(this.now()).toISOString() });
-    return true;
+    try {
+      const current = readLock(this.file);
+      if (!current || current.token !== this.token) return false;
+      writePrivateJson(this.file, { ...current, heartbeatAt: new Date(this.now()).toISOString() });
+      return readLock(this.file)?.token === this.token;
+    } catch {
+      return false;
+    }
   }
 
   release(): void {
-    if (readLock(this.file)?.token === this.token) fs.rmSync(this.file, { force: true });
+    try {
+      if (readLock(this.file)?.token === this.token) fs.rmSync(this.file, { force: true });
+    } catch {
+      // a lock that cannot be removed expires by its heartbeat
+    }
   }
 }
 
 export class MeshBridge {
   readonly online = new Set<string>();
   connected = false;
+  private identity: MachineIdentity;
   private socket: WebSocket | null = null;
   private presenceTimer: NodeJS.Timeout | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
@@ -155,6 +173,7 @@ export class MeshBridge {
   private readonly log: (line: string) => void;
 
   constructor(private readonly options: BridgeOptions) {
+    this.identity = options.machine;
     this.now = options.now ?? Date.now;
     this.log = options.log ?? (() => undefined);
     this.replay = new ReplayGuard(this.now);
@@ -163,7 +182,17 @@ export class MeshBridge {
   }
 
   get machine(): MachineIdentity {
-    return this.options.machine;
+    return this.identity;
+  }
+
+  get central(): string {
+    return this.options.central;
+  }
+
+  // True once the bridge is down for good: after stop(), or when another
+  // process of this machine took the connection over.
+  get isStopped(): boolean {
+    return this.stopped;
   }
 
   start(): void {
@@ -192,20 +221,23 @@ export class MeshBridge {
   status(): BridgeStatus {
     return {
       pid: process.pid,
-      machine: this.options.machine,
+      machine: this.identity,
       central: this.options.central,
       connected: this.connected,
-      online: [...this.online].sort(),
+      online: [...this.online].sort((left, right) => left.localeCompare(right)),
       updatedAt: new Date(this.now()).toISOString(),
     };
   }
 
   // Sends the presence of this machine now: the sessions alive on the local
-  // bus, under the machine's label, sealed for everyone.
+  // bus, under the machine's label, sealed for everyone. The identity is
+  // read again first, so a label changed with `egc mesh label` travels with
+  // the next presence.
   async announce(): Promise<boolean> {
     if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
+    this.refreshIdentity();
     const sessions = (await listLiveSessions(this.options.db, this.now())).slice(0, MAX_SESSIONS_IN_PRESENCE);
-    const body: PresenceBody = { label: this.options.machine.label, sessions, at: new Date(this.now()).toISOString() };
+    const body: PresenceBody = { label: this.identity.label, sessions, at: new Date(this.now()).toISOString() };
     this.send(BROADCAST, { type: 'presence', body });
     return true;
   }
@@ -215,9 +247,18 @@ export class MeshBridge {
   send(to: string, message: MeshMessage): boolean {
     if (!this.connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) return false;
     const id = newHexId();
-    const box = sealBox(this.sealKey, { from: this.options.machine.id, to, id }, message, this.now());
+    const box = sealBox(this.sealKey, { from: this.identity.id, to, id }, message, this.now());
     this.socket.send(JSON.stringify({ t: 'send', v: MESH_PROTOCOL_VERSION, to, id, box }));
     return true;
+  }
+
+  private refreshIdentity(): void {
+    try {
+      const current = loadOrCreateMachine(this.options.home);
+      if (current.id === this.identity.id) this.identity = current;
+    } catch {
+      // the file is unreadable right now; the identity in memory stands
+    }
   }
 
   private connect(): void {
@@ -242,7 +283,7 @@ export class MeshBridge {
     if (!frame || !this.socket) return;
     switch (frame.t) {
       case 'challenge':
-        this.socket.send(JSON.stringify({ t: 'hello', v: MESH_PROTOCOL_VERSION, machine: this.options.machine.id, proof: helloProof(this.authKey, frame.challenge, this.options.machine.id) }));
+        this.socket.send(JSON.stringify({ t: 'hello', v: MESH_PROTOCOL_VERSION, machine: this.identity.id, proof: helloProof(this.authKey, frame.challenge, this.identity.id) }));
         return;
       case 'welcome':
         this.connected = true;
@@ -272,11 +313,15 @@ export class MeshBridge {
     }
   }
 
+  // A box is taken once: the guard in memory refuses the repeats this process
+  // saw, and the bus remembers the id for a day, so a bridge that restarts or
+  // replaces this one refuses them too.
   private async onDeliver(from: string, to: string, id: string, box: string): Promise<void> {
-    if (to !== BROADCAST && to !== this.options.machine.id) return;
-    if (from === this.options.machine.id) return;
+    if (to !== BROADCAST && to !== this.identity.id) return;
+    if (from === this.identity.id) return;
     const opened = openBox(this.sealKey, { from, to, id }, box);
     if (!opened || !this.replay.accept(id, opened.ts)) return;
+    if (!(await rememberBox(this.options.db, id, this.now()))) return;
     if (opened.message.type === 'presence') {
       const body = opened.message.body as Partial<PresenceBody> | undefined;
       const label = typeof body?.label === 'string' ? body.label : from.slice(0, 8);
@@ -288,11 +333,15 @@ export class MeshBridge {
     this.options.onMessage?.(from, opened.message);
   }
 
+  // Each tick sends the presence, sweeps the machines that fell silent and
+  // refreshes the status file, whose age tells `egc mesh status` whether this
+  // bridge is alive.
   private startPresence(): void {
     if (this.presenceTimer) clearInterval(this.presenceTimer);
     const tick = (): void => {
       this.announce().catch(error => this.log(`mesh: presence was not sent: ${error instanceof Error ? error.message : String(error)}`));
       sweepRemoteMachines(this.options.db, this.now()).catch(() => undefined);
+      this.writeStatus();
     };
     tick();
     this.presenceTimer = setInterval(tick, this.options.presenceMs ?? PRESENCE_INTERVAL_MS);
@@ -339,36 +388,90 @@ export interface StartBridgeOptions {
   db: BusDb;
   home?: string;
   log?: (line: string) => void;
+  // The tests hand the key in and shorten the periods; a server reads the
+  // key from team.json and runs the periods above.
+  teamKey?: Buffer;
+  electionMs?: number;
+  presenceMs?: number;
+  reconnectMaxMs?: number;
+  now?: () => number;
 }
 
-// The bridge of this server, when the machine has a central configured, a
-// team key, and the election went to this process; null in every other
-// case, and the server runs as it always did. The lock is renewed with each
-// presence tick, so a holder that froze is replaced within LOCK_STALE_MS.
-export function startBridgeIfElected(options: StartBridgeOptions): MeshBridge | null {
+export interface BridgeHandle {
+  // The bridge this process holds right now; null while another process of
+  // the machine holds it, or while no central is configured.
+  readonly bridge: MeshBridge | null;
+  stop(): Promise<void>;
+}
+
+// The bridge of this server. Every period the server looks again: without a
+// bridge it stands for the election, so a holder that froze is replaced by
+// the next server within LOCK_STALE_MS and a central configured after the
+// start is joined; with a bridge it renews the lock and checks that the
+// central is still configured and the same, and steps down otherwise, which
+// is how `egc mesh disconnect` reaches a running bridge. Without a team key
+// the bridge stays down and the log says so once. Nothing here can keep the
+// server from answering.
+export function startBridgeIfElected(options: StartBridgeOptions): BridgeHandle {
   const home = options.home ?? resolveHome();
-  const config = readMeshConfig(home);
-  if (!config) return null;
-  const teamKey = parseTeamKey(getTeamConfig()?.teamKey);
-  if (!teamKey) {
-    options.log?.('mesh: a central is configured but this machine has no team key; the bridge stays down');
-    return null;
-  }
-  const lock = new BridgeLock(home);
-  if (!lock.claim()) return null;
-  const bridge = new MeshBridge({ home, db: options.db, teamKey, central: config.central, machine: loadOrCreateMachine(home), log: options.log });
-  const renew = setInterval(() => {
-    if (!lock.renew()) {
-      clearInterval(renew);
-      bridge.stop().catch(() => undefined);
-    }
-  }, PRESENCE_INTERVAL_MS);
-  renew.unref();
-  const release = (): void => {
-    clearInterval(renew);
-    lock.release();
+  const log = options.log ?? (() => undefined);
+  const now = options.now ?? Date.now;
+  let bridge: MeshBridge | null = null;
+  let lock: BridgeLock | null = null;
+  let stopped = false;
+  let warnedNoKey = false;
+
+  const stepDown = (): Promise<void> => {
+    const current = bridge;
+    bridge = null;
+    lock?.release();
+    lock = null;
+    return current ? current.stop() : Promise.resolve();
   };
-  process.once('exit', release);
-  bridge.start();
-  return bridge;
+
+  const stand = (): void => {
+    const config = readMeshConfig(home);
+    if (!config) return;
+    const teamKey = options.teamKey ?? parseTeamKey(getTeamConfig()?.teamKey);
+    if (!teamKey) {
+      if (!warnedNoKey) log('mesh: a central is configured but this machine has no team key; the bridge stays down');
+      warnedNoKey = true;
+      return;
+    }
+    const candidate = new BridgeLock(home, now);
+    if (!candidate.claim()) return;
+    lock = candidate;
+    bridge = new MeshBridge({ home, db: options.db, teamKey, central: config.central, machine: loadOrCreateMachine(home), log, now, presenceMs: options.presenceMs, reconnectMaxMs: options.reconnectMaxMs });
+    bridge.start();
+  };
+
+  const tick = (): void => {
+    if (stopped) return;
+    try {
+      if (!bridge) {
+        stand();
+        return;
+      }
+      const config = readMeshConfig(home);
+      const keeps = lock?.renew() === true && config !== null && config.central === bridge.central && !bridge.isStopped;
+      if (!keeps) stepDown().catch(() => undefined);
+    } catch (error) {
+      log(`mesh: the bridge election failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const timer = setInterval(tick, options.electionMs ?? PRESENCE_INTERVAL_MS);
+  timer.unref();
+  process.once('exit', () => lock?.release());
+  tick();
+  return {
+    get bridge() {
+      return bridge;
+    },
+    async stop() {
+      stopped = true;
+      clearInterval(timer);
+      await stepDown();
+    },
+  };
 }
