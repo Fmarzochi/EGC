@@ -111,7 +111,10 @@ async function pullTeamState() {
   }
 }
 
-async function runSessionStartAdapter({ host, projectEnv }) {
+// A host wrapper that already read its own payload from stdin (a host that
+// names its fields another way) passes it as `input`, in this adapter's
+// shape: cwd, session_id, hook_event_name.
+async function runSessionStartAdapter({ host, projectEnv, input: providedInput }) {
   const normalizedHost = typeof host === 'string' && host ? host : 'unknown';
   try {
     migrateLegacyLearningStore();
@@ -119,7 +122,9 @@ async function runSessionStartAdapter({ host, projectEnv }) {
     // best-effort, like the rest of this adapter: a migration failure must
     // never block session startup
   }
-  const input = readStdinJson();
+  const input = providedInput && typeof providedInput === 'object' && !Array.isArray(providedInput)
+    ? providedInput
+    : readStdinJson();
   const projectPath = resolveProjectPath(input, projectEnv);
   // The sync belongs to the start of a session. Claude Code runs this same
   // hook after a compaction (PostCompact), and a compaction is no moment to
