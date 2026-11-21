@@ -73,7 +73,7 @@ const HOST_CONFIG_PATH_OVERRIDES = ['XDG_CONFIG_HOME', 'KIMI_CODE_HOME', 'CRUSH_
 // What resolveHarnessDirFromEnv (scripts/lib/utils-paths.js) reads: present
 // in the shell of an AI tool, they would point the doctor at that tool's
 // folder instead of the temporary home of a case.
-const HARNESS_ENV_OVERRIDES = ['CLAUDECODE', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT', 'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN', 'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV'];
+const HARNESS_ENV_OVERRIDES = ['EGC_DIR', 'CLAUDECODE', 'CLAUDE_PROJECT_DIR', 'CLAUDE_PLUGIN_ROOT', 'GEMINI_PROJECT_DIR', 'GEMINI_PLUGIN_ROOT', 'CODEBUDDY_PROJECT_DIR', 'CODEBUDDY_PLUGIN_ROOT', 'VSCODE_AGENT', 'GITHUB_COPILOT_API_TOKEN', 'KIRO_HOOK_FILE', 'KIRO_FILE_PATH', 'TRAE_ENV'];
 
 function run(args = [], options = {}) {
   const env = {

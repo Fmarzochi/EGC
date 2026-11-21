@@ -69,13 +69,17 @@ function runTests() {
       assert.strictEqual(lines(report), '\nMesh: not configured (egc mesh connect <address> joins the central of your team; egc mesh serve starts one)');
     })),
 
-    test('a mesh.json without a central is one warning', () => withHome(home => {
-      fs.writeFileSync(path.join(home, '.egc', 'mesh.json'), '{"central": ""}');
-      const report = buildMeshReport(home);
-      assert.strictEqual(report.unreadable, true);
-      assert.strictEqual(report.warningCount, 1);
-      assert.ok(lines(report).includes('Mesh: configuration unreadable (~/.egc/mesh.json)'));
-      assert.ok(lines(report).includes('[WARNING] the mesh configuration at ~/.egc/mesh.json holds no central'));
+    test('a mesh.json without a central, or with an address the mesh refuses, is one warning', () => withHome(home => {
+      for (const content of ['{"central": ""}', '{"central": "http://mesh.example.com:47470"}', '{"central": "ws://user:pw@mesh.example.com"}', 'not json']) {
+        fs.writeFileSync(path.join(home, '.egc', 'mesh.json'), content);
+        const report = buildMeshReport(home);
+        assert.strictEqual(report.unreadable, true, content);
+        assert.strictEqual(report.warningCount, 1, content);
+        assert.ok(lines(report).includes('Mesh: configuration unreadable (~/.egc/mesh.json)'), content);
+        assert.ok(lines(report).includes('[WARNING] the mesh configuration at ~/.egc/mesh.json holds no address the mesh accepts'), content);
+      }
+      fs.writeFileSync(path.join(home, '.egc', 'mesh.json'), '{"central": "mesh.example.com"}');
+      assert.strictEqual(buildMeshReport(home).central, 'ws://mesh.example.com:47470', 'a bare host is read as the runtime reads it');
     })),
 
     test('a central with no bridge running says so, names this machine from machine.json, and warns of nothing', () => withHome(home => {
@@ -124,6 +128,10 @@ function runTests() {
       assert.strictEqual(buildMeshReport(home).bridge.live, false, 'a stale status');
       writeBridge(home, { pid: 2 ** 22 - 7 });
       assert.strictEqual(buildMeshReport(home).bridge.live, false, 'a process that is gone');
+      for (const pid of [0, -1, 1.5, '42']) {
+        writeBridge(home, { pid });
+        assert.strictEqual(buildMeshReport(home).bridge.live, false, `a pid of ${JSON.stringify(pid)} is no process`);
+      }
       assert.strictEqual(buildMeshReport(home).warningCount, 0);
     })),
 
@@ -147,7 +155,7 @@ function runTests() {
   const passed = results.filter(Boolean).length;
   const failed = results.length - passed;
   console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
-  process.exit(failed > 0 ? 1 : 0);
+  process.exitCode = failed > 0 ? 1 : 0;
 }
 
 runTests();

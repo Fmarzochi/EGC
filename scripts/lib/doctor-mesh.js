@@ -12,7 +12,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 
 const { readTeamConfig } = require('./team-config');
-const { bridgeStatusPath, describeBridge, describeOnline, isLiveStatus, machineFilePath, meshConfigPath, onlineCount, readJsonObject } = require('./mesh-status');
+const { bridgeStatusPath, describeBridge, describeOnline, isLiveStatus, machineFilePath, meshConfigPath, normalizeCentralAddress, onlineCount, readJsonObject } = require('./mesh-status');
 
 const TEAM_KEY_PATTERN = /^[0-9a-f]{64}$/i;
 const CONFIG_PATH_SHOWN = '~/.egc/mesh.json';
@@ -21,8 +21,10 @@ const SHORT_ID = 8;
 function readCentral(homeDir) {
   const file = meshConfigPath(homeDir);
   if (!fs.existsSync(file)) return { configured: false, unreadable: false, central: null };
+  // Judged as the runtime judges it: a value the bridge would refuse leaves
+  // the machine without a bridge, so it is an unreadable configuration.
   const config = readJsonObject(file);
-  const central = typeof config?.central === 'string' && config.central.trim() ? config.central.trim() : null;
+  const central = typeof config?.central === 'string' ? normalizeCentralAddress(config.central) : null;
   return central ? { configured: true, unreadable: false, central } : { configured: true, unreadable: true, central: null };
 }
 
@@ -44,7 +46,7 @@ function buildMeshReport(homeDir = os.homedir(), now = Date.now()) {
   const warnings = [];
   if (!configured) return { configured, unreadable, central, machine: null, bridge: null, warnings, warningCount: 0 };
   if (unreadable) {
-    warnings.push(`the mesh configuration at ${CONFIG_PATH_SHOWN} holds no central: run egc mesh connect <address> again, or egc mesh disconnect to forget it`);
+    warnings.push(`the mesh configuration at ${CONFIG_PATH_SHOWN} holds no address the mesh accepts (ws:// or wss://, a host, no user name): run egc mesh connect <address> again, or egc mesh disconnect to forget it`);
     return { configured, unreadable, central, machine: null, bridge: null, warnings, warningCount: warnings.length };
   }
   const status = readJsonObject(bridgeStatusPath(homeDir));
