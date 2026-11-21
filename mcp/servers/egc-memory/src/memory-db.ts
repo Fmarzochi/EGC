@@ -254,6 +254,14 @@ async function runMigrations(db: Database, dbDir: string) {
       await db.run('INSERT INTO schema_migrations (version) VALUES (13)');
     }
 
+    // Migration 14: mesh_locks, the paths the sessions of the other machines
+    // hold, as their presence tells them.
+    const hasV14 = await db.get('SELECT version FROM schema_migrations WHERE version = 14');
+    if (!hasV14) {
+      await createSessionBusTables(db);
+      await db.run('INSERT INTO schema_migrations (version) VALUES (14)');
+    }
+
     const bootRow = await db.get<{value: string}>('SELECT value FROM operational_state WHERE id = ?', ['server_boot_count']);
     const bootCount = bootRow ? Number.parseInt(bootRow.value, 10) + 1 : 1;
     await db.run('INSERT OR REPLACE INTO operational_state (id, value) VALUES (?, ?)', ['server_boot_count', String(bootCount)]);

@@ -46,6 +46,13 @@ function _tokenEnd(text, i) {
   return p;
 }
 
+// The server percent encodes, in a field, the characters that would break
+// the line apart (its closing delimiter, whitespace in a token, the percent
+// sign itself); this undoes exactly that, and leaves any other text alone.
+function _decodeField(value) {
+  return value.replace(/%([0-9A-Fa-f]{2})/g, (match, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
+}
+
 // An optional bracketed field: at least one whitespace, the opener, then the
 // text up to the closer. null when the field is absent, { invalid } when it
 // opens but never closes.
@@ -54,7 +61,7 @@ function _readBracketed(line, i, opener, closer) {
   if (w === i || !line.startsWith(opener, w)) return null;
   const close = line.indexOf(closer, w + opener.length);
   if (close < 0) return { invalid: true };
-  return { value: line.slice(w + opener.length, close), next: close + 1 };
+  return { value: _decodeField(line.slice(w + opener.length, close)), next: close + 1 };
 }
 
 // The optional trailing " since <started_at>" of a peer line.
@@ -63,7 +70,7 @@ function _readSince(line, i) {
   if (w === i || !line.startsWith('since', w)) return null;
   const valueStart = _skipWs(line, w + 'since'.length);
   if (valueStart === w + 'since'.length) return { invalid: true };
-  return { value: line.slice(valueStart).trim() || null };
+  return { value: _decodeField(line.slice(valueStart).trim()) || null };
 }
 
 /**
@@ -76,7 +83,7 @@ function _parsePeerLine(line) {
   if (!line.startsWith('-') || idStart === 1) return null;
   const idEnd = _tokenEnd(line, idStart);
   if (idEnd === idStart) return null;
-  const peer = { id: line.slice(idStart, idEnd), machine_label: null, project_path: null, territory: null, started_at: null };
+  const peer = { id: _decodeField(line.slice(idStart, idEnd)), machine_label: null, project_path: null, territory: null, started_at: null };
   let i = idEnd;
 
   const machine = _readBracketed(line, i, '(machine:', ')');
@@ -97,10 +104,19 @@ function _parsePeerLine(line) {
   return i === line.length ? peer : null;
 }
 
+// The tail of a lock line: "(machine: <label>)" when a session of another
+// machine holds the lock, nothing for a local one.
+function _readLockMachine(rest) {
+  const tail = rest.trim();
+  const opener = '(machine:';
+  if (!tail.startsWith(opener) || !tail.endsWith(')')) return null;
+  return _decodeField(tail.slice(opener.length, -1)).trim() || null;
+}
+
 /**
  * Parse the text output of session_peers into { peers, locks }.
  * Each peer: { id, machine_label, project_path, territory, started_at }
- * Each lock: { path, session_id, ttl_seconds }
+ * Each lock: { path, session_id, ttl_seconds, machine_label }
  */
 function _parsePeersText(text) {
   if (typeof text !== 'string') return { peers: [], locks: [] };
@@ -122,9 +138,10 @@ function _parsePeersText(text) {
     const m = /^-\s+(\S+)\s+held by\s+(\S+)\s+\(ttl\s+(\d+)s\)/.exec(line);
     if (m) {
       locks.push({
-        path:        m[1],
-        session_id:  m[2],
-        ttl_seconds: Number(m[3]),
+        path:          _decodeField(m[1]),
+        session_id:    _decodeField(m[2]),
+        ttl_seconds:   Number(m[3]),
+        machine_label: _readLockMachine(line.slice(m[0].length)),
       });
     }
   }

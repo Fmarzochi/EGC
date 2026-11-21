@@ -148,22 +148,41 @@ export async function handleSessionAnnounce(db: Database, toolArgs: unknown) {
 // A territory stored before the scan existed is scrubbed on the way out too.
 function territoryNote(territory: unknown): string {
   const text = rowText(territory);
-  return text ? ` (territory: ${sanitize(text).value})` : '';
+  return text ? ` (territory: ${lineSafe(sanitize(text).value, /[)%]/g)})` : '';
+}
+
+// The characters that would break a peer or lock line apart for the parsers
+// of this text (scripts/lib/operations/bus-parsers.js) travel percent
+// encoded, and the parsers decode them: the field keeps its value and the
+// line keeps its shape. Line breaks become spaces.
+function lineSafe(value: string, delimiters: RegExp): string {
+  return value.replaceAll(/[\r\n]+/g, ' ').replaceAll(delimiters, character => `%${(character.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(2, '0')}`);
 }
 
 // A session of another machine of the team carries the label of its machine,
 // as "(machine: <label>)" after the id. Every field of such a session came
-// over the network, so each one is scrubbed on the way out, and the label
-// loses the parentheses and line breaks that would break the line apart for
-// the parsers of this text (scripts/lib/operations/bus-parsers.js).
+// over the network, so each one is scrubbed on the way out.
 function describePeer(p: Record<string, unknown>): string {
-  const id = sanitize(rowText(p.id)).value.replaceAll(/\s+/g, '_');
-  const project = sanitize(rowText(p.project_path)).value;
+  const id = lineSafe(sanitize(rowText(p.id)).value, /[\s%]/g);
+  const project = lineSafe(sanitize(rowText(p.project_path)).value, /[\]%]/g);
   const projectNote = project ? ` [${project}]` : '';
-  const machine = sanitize(rowText(p.machine_label)).value.replaceAll(/[()\r\n]/g, ' ').trim();
+  const machine = lineSafe(sanitize(rowText(p.machine_label)).value, /[()%]/g).trim();
   const machineNote = machine ? ` (machine: ${machine})` : '';
-  const since = sanitize(rowText(p.started_at)).value.replaceAll(/\s+/g, '_');
+  const since = lineSafe(sanitize(rowText(p.started_at)).value, /[\s%]/g);
   return `- ${id}${machineNote}${projectNote}${territoryNote(p.territory)} since ${since}`;
+}
+
+// A lock a session of another machine holds carries the path relative to
+// its project and the machine, as "(machine: <label>)" at the end; its
+// fields came over the network and are scrubbed the way the peers are, and
+// a space in the path travels percent encoded, so the path read back is the
+// path that is locked.
+function describeLock(l: Record<string, unknown>): string {
+  const machine = lineSafe(sanitize(rowText(l.machine_label)).value, /[()%]/g).trim();
+  if (!machine) return `- ${rowText(l.path)} held by ${rowText(l.session_id)} (ttl ${rowText(l.ttl_seconds)}s)`;
+  const lockPath = lineSafe(sanitize(rowText(l.path)).value, /[\s%]/g);
+  const holder = lineSafe(sanitize(rowText(l.session_id)).value, /[\s%]/g);
+  return `- ${lockPath} held by ${holder} (ttl ${Math.trunc(Number(l.ttl_seconds)) || 0}s) (machine: ${machine})`;
 }
 
 export async function handleClaimPath(db: Database, toolArgs: unknown) {
@@ -204,7 +223,7 @@ export async function handleSessionPeers(db: Database, toolArgs: unknown) {
   // holder of the same path, and this list is where a session sees who.
   const locks = await busListLocks(db);
   const peerLines = peers.map(describePeer);
-  const lockLines = locks.map(l => `- ${rowText(l.path)} held by ${rowText(l.session_id)} (ttl ${rowText(l.ttl_seconds)}s)`);
+  const lockLines = locks.map(describeLock);
   return { content: [{ type: "text", text: `Live sessions: ${peers.length}\n${peerLines.join('\n') || '(none)'}\n\nActive locks: ${locks.length}\n${lockLines.join('\n') || '(none)'}` }] };
 }
 

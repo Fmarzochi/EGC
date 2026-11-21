@@ -8,7 +8,7 @@ import { Database } from 'sqlite';
 import { z } from 'zod';
 import { log } from './memory-logging';
 import { createRateLimiter, rateLimitSettings } from './rate-limit';
-import { closeDb, getDb } from './memory-db';
+import { closeDb, getDb, writeArbitrator } from './memory-db';
 import { TOOL_DEFINITIONS } from './memory-tool-definitions';
 import { handleGetState, handleUpdateState } from './memory-state-tools';
 import { handleLessonRecall, handleLessonReinforce, handleLessonSave } from './memory-lessons';
@@ -136,7 +136,7 @@ async function run() {
     const { startBridgeIfElected } = await import('./relay/bridge.js');
     // A shutdown that began while the module loaded has closed the database
     // already: no bridge starts over it.
-    if (!shuttingDown) bridgeHandle = startBridgeIfElected({ db, log: line => log('INFO', line) });
+    if (!shuttingDown) bridgeHandle = startBridgeIfElected({ db, log: line => log('INFO', line), enqueue: work => writeArbitrator.enqueue(work) });
   } catch (error) {
     log('WARN', 'The mesh bridge did not start', { error: String(error) });
   }

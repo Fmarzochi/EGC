@@ -16,9 +16,14 @@ export function meshConfigPath(home: string = resolveHome()): string {
   return path.join(home, '.egc', 'mesh.json');
 }
 
-// A WebSocket address with a host; a bare host:port is read as ws://, and an
-// address that names another scheme (http://, for one) is refused rather
-// than read as a host called "http".
+export const DEFAULT_CENTRAL_PORT = 47470;
+
+// A WebSocket address with a host. A bare host, or host:port, is read as
+// ws:// and a host alone gets the port of the central (47470); a ws:// or
+// wss:// URL is taken as written, so a central behind a proxy keeps the port
+// of its scheme. An address that names another scheme (http://, for one) is
+// refused rather than read as a host called "http", and so is one that
+// carries a user name or a password, which would end up in every status line.
 export function normalizeCentralAddress(value: string): string | null {
   const text = String(value ?? '').trim();
   if (!text) return null;
@@ -32,6 +37,8 @@ export function normalizeCentralAddress(value: string): string | null {
     return null;
   }
   if (!/^wss?:$/.test(url.protocol) || !url.hostname) return null;
+  if (url.username || url.password) return null;
+  if (!scheme && !url.port) url.port = String(DEFAULT_CENTRAL_PORT);
   return url.toString().replace(/\/$/, '');
 }
 
@@ -51,7 +58,7 @@ export function readMeshConfig(home: string = resolveHome()): MeshConfig | null 
 
 export function writeMeshConfig(central: string, home: string = resolveHome()): MeshConfig {
   const normalized = normalizeCentralAddress(central);
-  if (!normalized) throw new Error(`Not an address of a mesh central: ${central}. Give a host and a port, such as 192.168.1.50:47470, or a ws:// or wss:// URL.`);
+  if (!normalized) throw new Error(`Not an address of a mesh central: ${central}. Give a host and a port, such as 192.168.1.50:47470, or a ws:// or wss:// URL, without a user name or a password in it.`);
   const config: MeshConfig = { central: normalized, connectedAt: new Date().toISOString() };
   writePrivateFile(meshConfigPath(home), privateJson(config));
   return config;

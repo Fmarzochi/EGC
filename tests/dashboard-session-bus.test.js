@@ -88,8 +88,9 @@ const PEERS_TEXT_2 =
   '- s2 [/proj] since 2026-08-13T10:01:00.000Z\n' +
   '- s3 (machine: desk at home) [/proj] (territory: docs/) since 2026-08-13T10:02:00.000Z\n' +
   '\n' +
-  'Active locks: 1\n' +
-  '- /proj/src held by s1 (ttl 900s)';
+  'Active locks: 2\n' +
+  '- /proj/src held by s1 (ttl 900s)\n' +
+  '- src/my%20parser.ts held by s3 (ttl 600s) (machine: desk at home)';
 
 const PEERS_TEXT_EMPTY =
   'Live sessions: 0\n' +
@@ -266,7 +267,7 @@ async function main() {
   // -- Text parser unit tests -----------------------------------------------
   console.log('');
 
-  await test('_parsePeersText: 2 local peers, 1 peer of another machine, 1 lock', async () => {
+  await test('_parsePeersText: 2 local peers, 1 peer of another machine, 2 locks (one of another machine)', async () => {
     stubBusText(PEERS_TEXT_2);
     let result;
     try {
@@ -285,10 +286,15 @@ async function main() {
     assert.equal(result.peers[2].project_path, '/proj');
     assert.equal(result.peers[2].territory, 'docs/');
     assert.equal(result.peers[2].started_at, '2026-08-13T10:02:00.000Z');
-    assert.equal(result.locks.length, 1);
+    assert.equal(result.locks.length, 2);
     assert.equal(result.locks[0].path, '/proj/src');
     assert.equal(result.locks[0].session_id, 's1');
     assert.equal(result.locks[0].ttl_seconds, 900);
+    assert.equal(result.locks[0].machine_label, null);
+    assert.equal(result.locks[1].path, 'src/my parser.ts', 'a space the server percent encoded comes back as the path that is locked');
+    assert.equal(result.locks[1].session_id, 's3');
+    assert.equal(result.locks[1].ttl_seconds, 600);
+    assert.equal(result.locks[1].machine_label, 'desk at home');
   });
 
   await test('_parsePeersText: 0 peers, 0 locks', async () => {
@@ -499,7 +505,8 @@ async function main() {
       assert.equal(payload.result.peers.length, 3);
       assert.equal(payload.result.peers[0].id, 's1');
       assert.equal(payload.result.peers[2].machine_label, 'desk at home');
-      assert.equal(payload.result.locks.length, 1);
+      assert.equal(payload.result.locks.length, 2);
+      assert.equal(payload.result.locks[1].machine_label, 'desk at home');
     } finally { clearBusStub(); await server.close(); }
   });
 

@@ -15,8 +15,8 @@ const USAGE = [
   '  serve             Run the central that relays between your machines (port 47470 by default;',
   '                    --port and --host change where it listens).',
   '                    It lets in the machines that hold the key of this machine\'s team (egc team init).',
-  '  connect <addr>    Point this machine at a central (host:port, or a ws:// or wss:// URL).',
-  '                    The memory servers connect from their next start.',
+  '  connect <addr>    Point this machine at a central (host:port, a host alone for port 47470,',
+  '                    or a ws:// or wss:// URL). The memory servers connect from their next start.',
   '  disconnect        Forget the central: the machine works alone again, and a running bridge',
   '                    steps down within half a minute.',
   '  status            This machine on the mesh: identity, central, connection, machines online.',
@@ -89,15 +89,19 @@ function showStatus() {
   ];
   if (config) {
     const live = isLiveStatus(status);
-    lines.push(`Bridge:  ${describeBridge(status, live)}`);
+    lines.push(`Bridge:  ${describeBridge(status, live, config.central)}`);
     lines.push(`Online:  ${describeOnline(status, live)}`);
   }
   process.stdout.write(`${lines.join('\n')}\n`);
 }
 
-function describeBridge(status, live) {
+// A live bridge still attached to a central that is no longer the configured
+// one is in transition: it steps down and the new central is joined within
+// one election period.
+function describeBridge(status, live, central) {
   if (!live) return 'not running (starts with the next memory server)';
   const pid = `pid ${status.pid}`;
+  if (status.central !== central) return `moving to the new central (pid ${status.pid}, still on ${status.central}; the change takes up to half a minute)`;
   return status.connected === true ? `connected (${pid})` : `reconnecting (${pid})`;
 }
 

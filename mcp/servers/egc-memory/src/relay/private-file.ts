@@ -15,11 +15,12 @@ function draft(file: string, text: string): string {
   const descriptor = fs.openSync(temporary, 'wx', 0o600);
   try {
     // The mode given to open is masked by the umask; the owner gets it back
-    // before the first byte. Windows has no mode bits to set.
+    // before the first byte. Windows has no mode bits to set, and only there
+    // is a failure to set them not an error.
     try {
       fs.fchmodSync(descriptor, 0o600);
-    } catch {
-      // best-effort
+    } catch (error) {
+      if (process.platform !== 'win32') throw error;
     }
     fs.writeFileSync(descriptor, text, 'utf8');
     fs.closeSync(descriptor);
@@ -48,25 +49,26 @@ export function writePrivateFile(file: string, text: string): void {
 // Publishes the file only if the name is free: the finished draft is linked
 // to its name, which fails with EEXIST when another process got there first,
 // and then false is returned with nothing changed. A file system without
-// hard links falls back to the rename.
+// hard links falls back to an exclusive copy, which keeps the guarantee that
+// a name already taken is never overwritten.
 export function publishPrivateFile(file: string, text: string): boolean {
   const temporary = draft(file, text);
   try {
-    fs.linkSync(temporary, file);
-    fs.rmSync(temporary, { force: true });
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-      fs.rmSync(temporary, { force: true });
-      return false;
+    try {
+      fs.linkSync(temporary, file);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
     }
-  }
-  try {
-    fs.renameSync(temporary, file);
-    return true;
-  } catch (error) {
+    try {
+      fs.copyFileSync(temporary, file, fs.constants.COPYFILE_EXCL);
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      throw error;
+    }
+  } finally {
     fs.rmSync(temporary, { force: true });
-    throw error;
   }
 }
 
