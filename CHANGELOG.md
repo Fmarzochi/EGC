@@ -4,6 +4,10 @@ All notable changes to EGC are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **The central of the mesh between your machines** (`egc mesh serve`), the first step of the real-time mesh across machines: a small WebSocket server (port 47470 by default, `--port` and `--host` to change it) that lets in a machine only when it answers a challenge with a key derived from the team key for that purpose, passes each box to the machine it is addressed to or to every machine of the team, keeps a box for a machine that is off for up to a day (200 per sender at most), and gives way to a newer connection of the same machine. What a machine says travels in a box sealed with AES-256-GCM under another key derived from the team key, bound to its sender, its addressee, its id and the moment it was sealed, and a machine accepts a message once, within its day; the central never holds the key that opens a box, so a central on a rented server can neither read nor forge what it passes. The team key is read from `~/.egc/team.json`, never from the command line. The protocol and the central live in the memory server (`src/relay`), which gains `ws` as a dependency, for the bridge each machine runs in the next steps. `tests/mesh-relay.test.js` covers the keys, the challenge, the seal, the replay refusal, the central with real WebSocket clients and the CLI.
+
 ### Changed
 
 - **The OpenCode agent registry is generated from `agents/` too** (follow-up of #2141): `node scripts/opencode-agent-prompts.js` now also rewrites the `agent` block of `.opencode/opencode.json`, one subagent per definition with its description, its model tier (`flash` for a flash model, `pro` for the rest) and its tool toggles read from the frontmatter (an MCP tool the definition names stays enabled under its own key), while keeping the primary agents the file already has in their place, so the 37 agents the hand-written block never listed are available to OpenCode by intent and no subagent entry is kept by hand; `--check` and `tests/ci/opencode-agent-prompts.test.js` report a missing, drifted or orphan entry the way they do for the prompts.
