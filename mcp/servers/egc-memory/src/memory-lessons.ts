@@ -126,7 +126,9 @@ export async function handleLessonSave(db: Database, args: unknown) {
   );
   if (duplicate) {
     log('INFO', 'Lesson deduplicated via exact match, reinforcing', { id: duplicate.id });
-    return await handleLessonReinforce(db, { id: duplicate.id });
+    const reinforced = await handleLessonReinforce(db, { id: duplicate.id });
+    await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'lesson', projectPath: resolveProjectPath() ?? null });
+    return reinforced;
   }
 
   const id = generateLessonId();

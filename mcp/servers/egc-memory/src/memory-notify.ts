@@ -45,7 +45,9 @@ interface SyncOptions {
 // The delays can be shortened through the environment, which is how a test
 // that drives the built server proves them without waiting half a minute.
 function delayFromEnv(name: string, fallback: number): number {
-  const value = Number(process.env[name]);
+  const raw = (process.env[name] ?? '').trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
@@ -58,7 +60,7 @@ const defaults: SyncOptions = {
 let options: SyncOptions = { ...defaults };
 let timer: NodeJS.Timeout | null = null;
 let dueAt = 0;
-let running = false;
+let activeRun: Promise<void> | null = null;
 let again = false;
 
 // The tests hand in the sync and shorter delays; a server runs the defaults.
@@ -131,26 +133,37 @@ export function cancelScheduledSync(): void {
 // The pending sync run now, before the server closes, so a write of the
 // last minute does not wait for the next session.
 export async function flushScheduledSync(): Promise<void> {
-  if (!timer) return;
+  // A sync already running is waited for; one still scheduled runs now; a
+  // repetition one of them asked for is taken by the call that follows.
+  const pending = timer !== null;
   cancelScheduledSync();
-  await runSync();
+  if (activeRun) await activeRun;
+  else if (pending) await runSync();
+  if (timer !== null || activeRun !== null) await flushScheduledSync();
+}
+
+function reportSync(result: unknown): void {
+  const errors = (result as { errors?: unknown } | null)?.errors;
+  if (Array.isArray(errors) && errors.length > 0) log('WARN', 'memory sync after a write reported errors', { errors });
 }
 
 async function runSync(): Promise<void> {
-  if (running) {
+  if (activeRun) {
     again = true;
     return;
   }
-  running = true;
-  try {
-    await options.sync();
-  } catch (error) {
-    log('WARN', 'memory sync after a write failed', { error: error instanceof Error ? error.message : String(error) });
-  } finally {
-    running = false;
+  activeRun = (async () => {
+    try {
+      reportSync(await options.sync());
+    } catch (error) {
+      log('WARN', 'memory sync after a write failed', { error: error instanceof Error ? error.message : String(error) });
+    }
+  })().finally(() => {
+    activeRun = null;
     if (again) {
       again = false;
       scheduleMemorySync(0);
     }
-  }
+  });
+  await activeRun;
 }

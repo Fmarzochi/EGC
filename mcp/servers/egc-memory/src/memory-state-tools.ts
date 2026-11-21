@@ -270,6 +270,9 @@ export async function handleUpdateState(db: Database, toolArgs: unknown) {
     const writtenContent = readStateFile(filePath, getEncKey());
     writeHmac(filePath, writtenContent, getIntegrityKey());
   });
+  // Told as soon as the document is written: a propagation that fails on a
+  // context file of a tool must not keep the sessions and the team from it.
+  await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'state', projectPath: projPath, branch, scope: 'project' });
   const mergedForPropagation = readStateDoc(filePath).sections;
   const scrubbed = scrubStateFields({
     context: (mergedForPropagation['Context'] ?? []).join('\n') || undefined,
@@ -283,7 +286,6 @@ export async function handleUpdateState(db: Database, toolArgs: unknown) {
   const propagatedTools = Object.entries(propagated)
     .filter(([, p]) => p !== null)
     .map(([tool]) => tool);
-  await notifyMemoryChanged(db, BUS_SESSION_ID, { kind: 'state', projectPath: projPath, branch, scope: 'project' });
 
   log('INFO', 'Project state updated', { project: projPath, branch: branch || 'none', decisions: args.decisions?.length || 0, propagated: propagatedTools });
   const branchLine = branch ? `Branch: ${branch}\n` : '';

@@ -144,15 +144,21 @@ function runTests() {
 
     run('team sync completes through the memory server, reports the counts and ships only sealed state', () => {
       writeProjectState();
+      // The server that wrote the state syncs on its own when it stops, so
+      // the remote may already hold the document by the time the CLI syncs:
+      // what the CLI reports as pushed is what it added to the remote itself.
+      const remoteCommits = () => {
+        try { return Number(git(['rev-list', '--count', 'main'], REMOTE).trim()) || 0; } catch { return 0; }
+      };
+      const commitsBefore = remoteCommits();
       const run = teamCli(['sync']);
       assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
       assert.ok(!run.stderr.includes('No response from memory server'), run.stderr);
       assert.ok(run.stdout.includes('Sync complete:'), run.stdout);
-      // The server that wrote the state syncs on its own when it stops, so
-      // the remote may already hold the document by the time the CLI syncs:
-      // then the CLI pulls what it already has and pushes nothing new.
       assert.match(run.stdout, /Pulled: \d+ files/, `the sync reports what it pulled:\n${run.stdout}`);
-      assert.match(run.stdout, /Pushed: \d+ commits/, `the sync reports what it pushed:\n${run.stdout}`);
+      const pushed = /Pushed: (\d+) commits/.exec(run.stdout);
+      assert.ok(pushed, `the sync reports what it pushed:\n${run.stdout}`);
+      assert.strictEqual(Number(pushed[1]), remoteCommits() - commitsBefore, `the pushed count is the number of commits the CLI added to the remote:\n${run.stdout}`);
       const tree = remoteTree(REMOTE, 'main');
       assert.ok(tree.some(entry => entry.startsWith('state/')), `the sealed state reaches the remote, got: ${tree.join(', ') || 'nothing'}`);
       assert.deepStrictEqual(tree.filter(entry => entry.startsWith('memory/')), [], 'the memory database never ships');

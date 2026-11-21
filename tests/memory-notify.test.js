@@ -81,6 +81,14 @@ function remoteHead(remote) {
   }
 }
 
+function remoteCommits(remote) {
+  try {
+    return Number(git(remote, ['rev-list', '--count', 'main'])) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 function parseEvents(text) {
   return [...text.matchAll(/^- #\d+ \[([^\]]+)\] from (\S+)/gm)].map(match => ({ kind: match[1], from: match[2] }));
 }
@@ -139,8 +147,7 @@ async function runTests() {
       }
       const text = await callTool(reader, 'session_events', { project_path: project });
       const count = parseEvents(text).filter(event => event.kind === 'memory:changed').length;
-      assert.ok(count <= 20, `at most twenty notices are kept, got ${count}`);
-      assert.ok(count > 0, 'the newest writes are among them');
+      assert.strictEqual(count, 20, `twenty-five writes against a cap of twenty leave exactly twenty, got ${count}`);
     });
 
     await writer.stop();
@@ -153,14 +160,14 @@ async function runTests() {
       git(remote, ['symbolic-ref', 'HEAD', 'refs/heads/main']);
       teamCli(homeA, ['init', '--backend', 'git', '--remote', remote]);
       const before = remoteHead(remote);
+      const commitsBefore = remoteCommits(remote);
       const server = start(homeA, { EGC_MEMORY_PUSH_DELAY_MS: '400' });
       await initialize(server, 'pusher');
       await callTool(server, 'update_state', { project_path: project, context: 'Pushed by the write.' });
       await callTool(server, 'update_state', { project_path: project, decisions: [{ what: 'second write', why: 'joins the first' }] });
       await until(() => remoteHead(remote) !== null && remoteHead(remote) !== before, 'the remote to receive the sync scheduled by the writes');
-      const head = remoteHead(remote);
       await new Promise(resolve => setTimeout(resolve, 1200));
-      assert.strictEqual(remoteHead(remote), head, 'two writes within the delay became one sync, and nothing syncs again without a write');
+      assert.strictEqual(remoteCommits(remote) - commitsBefore, 1, 'two writes within the delay became one sync, one commit on the remote, and nothing syncs again without a write');
       await server.stop();
     });
 
