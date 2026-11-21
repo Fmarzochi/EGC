@@ -160,11 +160,13 @@ async function handleInit(args) {
   const backend = optionValue(args, '--backend', 'git');
   const remote = optionValue(args, '--remote', null);
   const branch = optionValue(args, '--branch', 'main');
-  const { teamKey, provided } = await teamKeyForInit(args);
+  // The remote is checked before any prompt: a missing option is told at
+  // once, not after the person typed a key.
   if (!remote) {
     console.error('Error: --remote is required for team init');
     process.exit(1);
   }
+  const { teamKey, provided } = await teamKeyForInit(args);
 
   // On from init: the sync around the session is what a team of machines is
   // for; --no-autosync leaves it off on a machine that syncs by hand.
@@ -319,15 +321,24 @@ function readHidden(prompt) {
   process.stderr.write(prompt);
   return new Promise((resolve, reject) => {
     let typed = '';
-    const finish = value => {
+    // The terminal is put back (echo on) whichever way the read ends: a
+    // line, the end of the input, or an error of the input.
+    const restore = () => {
       input.removeListener('data', onData);
       input.removeListener('end', onEnd);
-      input.removeListener('error', reject);
+      input.removeListener('error', onError);
       if (input.isTTY) input.setRawMode(false);
       input.pause();
       if (typeof input.unref === 'function') input.unref();
       process.stderr.write('\n');
+    };
+    const finish = value => {
+      restore();
       resolve(value);
+    };
+    const onError = error => {
+      restore();
+      reject(error);
     };
     const onEnd = () => finish(typed);
     const onData = chunk => {
@@ -348,7 +359,7 @@ function readHidden(prompt) {
     if (input.isTTY) input.setRawMode(true);
     input.on('data', onData);
     input.on('end', onEnd);
-    input.on('error', reject);
+    input.on('error', onError);
     input.resume();
   });
 }
