@@ -65,10 +65,11 @@ Sync complete:
 
 On the same network, nothing is copied. On the first machine run `egc team invite`; on the new one run `egc team join` (it finds the invitation by itself; where it does not, `egc team invite` prints the address to give it, `egc team join 192.168.1.50:51234`). The two machines exchange keys (X25519) and both screens show the same six digits taken from that exchange: read them side by side and answer yes on both. Only then does the team cross, sealed by the exchange, with the address of the central when the first machine has one. Different digits on the two screens mean someone stands between the machines: answer no, and nothing is shared. The new machine then syncs from its next session; `egc team sync` pulls the state at once.
 
-Where the machines are not on the same network, copy the team key from the first machine by a channel you trust (a password manager, a message to yourself over an encrypted app). Then run the same `init` with `--key`. The command line is the only way to pass the key, so it is visible in the process list while the command runs and is saved in your shell history. Remove that line from the history afterwards, and do not run it on a shared machine.
+Where the machines are not on the same network, copy the team key from the first machine by a channel you trust (a password manager, a message to yourself over an encrypted app). Then run the same `init` with `--key` alone: it asks for the key and does not show it as you type, so the key reaches neither the process list nor your shell history. `--key <64 hexadecimal characters>` on the command line still works, for a script, and then the key shows in both: remove that line from the history afterwards, and do not run it on a shared machine.
 
 ```text
-$ egc team init --backend git --remote https://github.com/you/egc-memory.git --key <64 hexadecimal characters>
+$ egc team init --backend git --remote https://github.com/you/egc-memory.git --key
+Team key (64 hexadecimal characters, not shown):
 Team initialized:
   Backend: git
   Remote:  https://github.com/you/egc-memory.git
