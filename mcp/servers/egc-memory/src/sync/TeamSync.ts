@@ -24,8 +24,9 @@ function isSidecar(filePath: string): boolean {
 
 // Every path of this machine comes from the home the rest of the server
 // resolves (HOME, then USERPROFILE, then the OS): the state the sync reads
-// is the state update_state writes, on Windows too.
-const TEAM_CONFIG_PATH = path.join(resolveHome(), '.egc', 'team.json');
+// is the state update_state writes, on Windows too. The path is exported
+// for the mesh central, which names it when the file is damaged.
+export const TEAM_CONFIG_PATH = path.join(resolveHome(), '.egc', 'team.json');
 
 // What never leaves the machine, whatever the document says: a credential
 // pasted into the state is refused on the way out, and the person is told

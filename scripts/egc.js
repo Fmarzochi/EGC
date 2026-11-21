@@ -121,6 +121,10 @@ const COMMANDS = {
     script: 'team.js',
     description: 'Team memory sync: init, sync, autosync, or status. Share state across your machines.',
   },
+  mesh: {
+    script: 'mesh.js',
+    description: 'Real-time mesh between your machines: serve runs the central that relays for them.',
+  },
   budget: {
     script: 'budget.js',
     description: 'Budget guardian: set, status, reset token/cost limits per session.',
@@ -188,6 +192,7 @@ const PRIMARY_COMMANDS = [
   'telemetry',
   'dashboard',
   'team',
+  'mesh',
   'budget',
   'plugin',
   'run',
