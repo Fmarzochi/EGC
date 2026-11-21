@@ -3,6 +3,7 @@ import type { Database } from 'sqlite';
 import { log } from './memory-logging';
 import { writeArbitrator } from './memory-db';
 import { sendEvent } from './session-bus';
+import type { SyncConfig } from './sync/SyncBackend';
 import { getTeamConfig, teamSync } from './sync/TeamSync';
 
 // Wrote, told: whenever a tool writes memory (update_state, store_decision,
@@ -54,9 +55,16 @@ function delayFromEnv(name: string, fallback: number): number {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
+// The sync after a write follows the switch of the sync around the session
+// (`egc team autosync`): off, a write is told and nothing syncs by itself.
+function autosyncOn(): boolean {
+  const config = getTeamConfig() as (SyncConfig & { autosync?: boolean }) | null;
+  return config?.autosync === true;
+}
+
 const defaults: SyncOptions = {
   sync: () => teamSync(),
-  enabled: () => getTeamConfig() !== null,
+  enabled: autosyncOn,
   pushDelayMs: delayFromEnv('EGC_MEMORY_PUSH_DELAY_MS', PUSH_DELAY_MS),
   pullDelayMs: delayFromEnv('EGC_MEMORY_PULL_DELAY_MS', PULL_DELAY_MS),
 };

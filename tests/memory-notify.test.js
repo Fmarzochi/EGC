@@ -176,6 +176,23 @@ async function runTests() {
       await server.stop();
     });
 
+    await test('with the sync around the session off, a write is told and nothing syncs by itself', async () => {
+      const remote = path.join(root, 'team-remote');
+      teamCli(homeA, ['autosync', 'off']);
+      try {
+        const before = remoteHead(remote);
+        const server = start(homeA, { EGC_MEMORY_PUSH_DELAY_MS: '300' });
+        await initialize(server, 'quiet-writer');
+        await callTool(server, 'update_state', { project_path: project, context: 'Written with the autosync off.' });
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        assert.strictEqual(remoteHead(remote), before, 'the remote did not move: the switch is off');
+        await server.stop();
+        assert.strictEqual(remoteHead(remote), before, 'nor did the stop sync it');
+      } finally {
+        teamCli(homeA, ['autosync', 'on']);
+      }
+    });
+
     await test('a sync still pending when the server stops runs before it closes', async () => {
       const remote = path.join(root, 'team-remote');
       const before = remoteHead(remote);
